@@ -7,7 +7,7 @@ Autonomous crypto trading bot powered by Claude AI. OrcAgent analyzes market dat
 ## Features
 
 - AI-driven decisions via Claude (RSI, SMA, price trend)
-- Supports Binance, Coinbase Advanced, Kraken, Bybit
+- Supports Kraken, Binance, Coinbase Advanced, Bybit
 - Automatic stop-loss and take-profit
 - Live dashboard with price chart and AI reasoning
 - Fully configurable system prompt
@@ -26,13 +26,11 @@ python orcagent.py
 
 ## Configuration
 
-Edit the variables at the top of `orcagent.py`:
-
 | Variable | Default | Description |
 |---|---|---|
-| `EXCHANGE_ID` | `binance` | Exchange name |
-| `PAIR` | `BTC/USDT` | Trading pair |
-| `MAX_USDT` | `50` | Max position size |
+| `EXCHANGE_ID` | `kraken` | Exchange name |
+| `PAIR` | `BTC/USD` | Trading pair |
+| `MAX_USD` | `50` | Max position size |
 | `STOP_LOSS` | `0.03` | 3% stop-loss |
 | `TAKE_PROFIT` | `0.05` | 5% take-profit |
 | `INTERVAL` | `900` | Analysis interval (sec) |
