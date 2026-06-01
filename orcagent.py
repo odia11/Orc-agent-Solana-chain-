@@ -4,11 +4,11 @@ import os
 
 load_dotenv()
 
-EXCHANGE_ID = "binance"
+EXCHANGE_ID = "kraken"
 API_KEY     = os.getenv("EXCHANGE_API_KEY")
 API_SECRET  = os.getenv("EXCHANGE_API_SECRET")
-PAIR        = "BTC/USDT"
-MAX_USDT    = 50
+PAIR        = "BTC/USD"
+MAX_USD     = 50
 STOP_LOSS   = 0.03
 TAKE_PROFIT = 0.05
 INTERVAL    = 900
@@ -34,7 +34,7 @@ def get_indicators():
 def ai_decision(ind, cash, position):
     prompt = f"""Pair: {PAIR} | Price: {ind['price']:.2f}
 RSI: {ind['rsi']:.1f} | SMA7: {ind['sma7']:.2f} | SMA20: {ind['sma20']:.2f}
-Change: {ind['change']:.2f}% | Cash: {cash:.2f} USDT | Position: {position}
+Change: {ind['change']:.2f}% | Cash: {cash:.2f} USD | Position: {position}
 Respond ONLY in JSON: {{"decision":"BUY|SELL|HOLD","reasoning":"...","confidence":0.0-1.0,"amount_pct":0.1-1.0}}"""
     msg = client.messages.create(
         model="claude-sonnet-4-20250514", max_tokens=300,
@@ -44,15 +44,16 @@ Respond ONLY in JSON: {{"decision":"BUY|SELL|HOLD","reasoning":"...","confidence
 
 def run():
     position = avg_price = 0.0
-    cash = exchange.fetch_balance()["USDT"]["free"]
-    print(f"👹 OrcAgent started | Cash: {cash:.2f} USDT")
+    balance  = exchange.fetch_balance()
+    cash     = balance.get("USD", {"free": 0})["free"]
+    print(f"👹 OrcAgent started | Cash: {cash:.2f} USD")
     while True:
         try:
             ind    = get_indicators()
             result = ai_decision(ind, cash, position)
             print(f"[{result['decision']}] {result['reasoning'][:80]}")
             if result["decision"] == "BUY" and cash > 10:
-                amt = min(cash * result["amount_pct"], MAX_USDT) / ind["price"]
+                amt = min(cash * result["amount_pct"], MAX_USD) / ind["price"]
                 exchange.create_market_buy_order(PAIR, amt)
                 position = amt; avg_price = ind["price"]
                 cash -= amt * ind["price"]
