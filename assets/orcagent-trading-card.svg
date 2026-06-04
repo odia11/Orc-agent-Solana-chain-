@@ -1,0 +1,33 @@
+<svg width="680" height="240" viewBox="0 0 680 240" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>OrcAgent trading card</title>
+<rect width="680" height="240" fill="#080808" rx="12"/>
+<rect x="20" y="20" width="300" height="200" fill="#111" stroke="#1D9E75" stroke-width="1" rx="12"/>
+<rect x="340" y="20" width="320" height="90" fill="#111" stroke="#222" stroke-width="0.5" rx="8"/>
+<rect x="340" y="125" width="155" height="95" fill="#111" stroke="#222" stroke-width="0.5" rx="8"/>
+<rect x="505" y="125" width="155" height="95" fill="#111" stroke="#222" stroke-width="0.5" rx="8"/>
+<text x="40" y="55" font-size="22" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">OrcAgent</text>
+<text x="40" y="74" font-size="10" letter-spacing="3" fill="#555" font-family="monospace">SOLANA AUTO-TRADE</text>
+<rect x="40" y="85" width="260" height="0.5" fill="#222"/>
+<text x="40" y="110" font-size="11" fill="#555" font-family="monospace">SOL/USDC</text>
+<text x="40" y="132" font-size="28" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">$69.63</text>
+<text x="150" y="132" font-size="13" fill="#1D9E75" font-family="-apple-system,sans-serif">+2.4%</text>
+<polyline points="40,170 70,160 100,165 130,148 160,152 190,138 220,130 250,118 280,105" stroke="#1D9E75" fill="none" stroke-width="1.5"/>
+<circle cx="280" cy="105" r="3" fill="#1D9E75"/>
+<text x="40" y="200" font-size="10" fill="#555" font-family="monospace">RSI 54.2</text>
+<text x="100" y="200" font-size="10" fill="#555" font-family="monospace">SMA7 68.1</text>
+<text x="175" y="200" font-size="10" fill="#555" font-family="monospace">SMA20 70.1</text>
+<text x="355" y="45" font-size="10" fill="#555" font-family="monospace">AI decision</text>
+<text x="355" y="70" font-size="26" font-weight="500" fill="#1D9E75" font-family="-apple-system,sans-serif">HOLD</text>
+<text x="355" y="88" font-size="10" fill="#555" font-family="monospace">confidence: 0.72</text>
+<text x="595" y="45" font-size="10" fill="#555" font-family="monospace" text-anchor="end">Jupiter</text>
+<text x="595" y="70" font-size="26" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif" text-anchor="end">Ready</text>
+<text x="595" y="88" font-size="10" fill="#555" font-family="monospace" text-anchor="end">swap engine</text>
+<text x="355" y="150" font-size="10" fill="#555" font-family="monospace">SOL balance</text>
+<text x="355" y="172" font-size="20" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">0.0444</text>
+<text x="355" y="188" font-size="10" fill="#555" font-family="monospace">approx $3.09</text>
+<text x="355" y="207" font-size="9" fill="#555" font-family="monospace">57ENjX...vGw6</text>
+<text x="520" y="150" font-size="10" fill="#555" font-family="monospace">USDC balance</text>
+<text x="520" y="172" font-size="20" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">5.42</text>
+<text x="520" y="188" font-size="10" fill="#1D9E75" font-family="monospace">available</text>
+<text x="520" y="207" font-size="9" fill="#555" font-family="monospace">SL 3% / TP 5%</text>
+</svg>

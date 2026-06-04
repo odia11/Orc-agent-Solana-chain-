@@ -1,0 +1,49 @@
+<svg width="680" height="300" viewBox="0 0 680 300" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>OrcAgent dark poster</title>
+<rect width="680" height="300" fill="#080808"/>
+<rect x="0" y="0" width="4" height="300" fill="#1D9E75"/>
+<text x="24" y="54" font-size="48" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">OrcAgent</text>
+<text x="26" y="76" font-size="12" letter-spacing="5" fill="#444" font-family="monospace">AUTONOMOUS SOLANA TRADING</text>
+<rect x="24" y="90" width="300" height="0.5" fill="#1D9E75" opacity="0.4"/>
+<text x="24" y="112" font-size="13" fill="#444" font-family="monospace">4 tokens · Claude AI · Jupiter swaps</text>
+<text x="24" y="132" font-size="13" fill="#444" font-family="monospace">Stop-loss · Take-profit · Auto-execute</text>
+<rect x="24" y="150" width="60" height="24" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="12"/>
+<text x="54" y="167" text-anchor="middle" font-size="10" fill="#1D9E75" font-family="monospace">Python</text>
+<rect x="92" y="150" width="70" height="24" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="12"/>
+<text x="127" y="167" text-anchor="middle" font-size="10" fill="#1D9E75" font-family="monospace">Free API</text>
+<rect x="170" y="150" width="80" height="24" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="12"/>
+<text x="210" y="167" text-anchor="middle" font-size="10" fill="#1D9E75" font-family="monospace">Open source</text>
+<rect x="24" y="195" width="300" height="80" fill="#111" stroke="#1a1a1a" stroke-width="0.5" rx="6"/>
+<polyline points="36,258 76,240 116,248 156,225 196,232 236,210 276,198 312,182" stroke="#1D9E75" fill="none" stroke-width="1.5"/>
+<polygon points="36,258 76,240 116,248 156,225 196,232 236,210 276,198 312,182 312,275 36,275" fill="#0a2e1e" opacity="0.5"/>
+<circle cx="312" cy="182" r="3" fill="#1D9E75"/>
+<text x="36" y="212" font-size="9" fill="#444" font-family="monospace">SOL price 24h</text>
+<rect x="350" y="20" width="310" height="260" fill="#111" stroke="#1a1a1a" stroke-width="0.5" rx="8"/>
+<text x="370" y="48" font-size="11" fill="#444" font-family="monospace" letter-spacing="2">TOKEN SIGNALS</text>
+<rect x="370" y="56" width="270" height="0.5" fill="#1a1a1a"/>
+<text x="370" y="84" font-size="11" fill="#444" font-family="monospace">TOKEN1</text>
+<text x="510" y="84" font-size="11" fill="#444" font-family="monospace">$0.0000716</text>
+<rect x="608" y="72" width="38" height="16" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="8"/>
+<text x="627" y="84" text-anchor="middle" font-size="9" fill="#1D9E75" font-family="monospace">HOLD</text>
+<text x="370" y="114" font-size="11" fill="#444" font-family="monospace">TOKEN2</text>
+<text x="510" y="114" font-size="11" fill="#444" font-family="monospace">$0.0000113</text>
+<rect x="608" y="102" width="38" height="16" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="8"/>
+<text x="627" y="114" text-anchor="middle" font-size="9" fill="#1D9E75" font-family="monospace">HOLD</text>
+<text x="370" y="144" font-size="11" fill="#444" font-family="monospace">TOKEN3</text>
+<text x="510" y="144" font-size="11" fill="#444" font-family="monospace">$0.0000173</text>
+<rect x="608" y="132" width="38" height="16" fill="#1a0a0a" stroke="#E24B4A" stroke-width="0.5" rx="8"/>
+<text x="627" y="144" text-anchor="middle" font-size="9" fill="#E24B4A" font-family="monospace">SELL</text>
+<text x="370" y="174" font-size="11" fill="#444" font-family="monospace">TOKEN4</text>
+<text x="510" y="174" font-size="11" fill="#444" font-family="monospace">$0.000526</text>
+<rect x="608" y="162" width="38" height="16" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="8"/>
+<text x="627" y="174" text-anchor="middle" font-size="9" fill="#1D9E75" font-family="monospace">BUY</text>
+<rect x="370" y="200" width="270" height="0.5" fill="#1a1a1a"/>
+<text x="370" y="222" font-size="10" fill="#444" font-family="monospace">Wallet</text>
+<text x="620" y="222" text-anchor="end" font-size="10" fill="#444" font-family="monospace">57ENjX...vGw6</text>
+<text x="370" y="242" font-size="10" fill="#444" font-family="monospace">USDC</text>
+<text x="620" y="242" text-anchor="end" font-size="14" font-weight="500" fill="#1D9E75" font-family="-apple-system,sans-serif">5.42</text>
+<text x="370" y="262" font-size="10" fill="#444" font-family="monospace">Next cycle</text>
+<text x="620" y="262" text-anchor="end" font-size="10" fill="#444" font-family="monospace">14:32</text>
+<circle cx="640" cy="272" r="3" fill="#1D9E75"/>
+<text x="340" y="290" text-anchor="middle" font-size="9" fill="#333" font-family="monospace">github.com/odia11/Orc-agent-Solana-chain-</text>
+</svg>

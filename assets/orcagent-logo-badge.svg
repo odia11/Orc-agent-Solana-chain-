@@ -1,0 +1,35 @@
+<svg width="680" height="220" viewBox="0 0 680 220" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>OrcAgent logo badge</title>
+<rect width="680" height="220" fill="#0e0e0e" rx="12"/>
+<circle cx="110" cy="110" r="90" fill="#111" stroke="#1D9E75" stroke-width="1.5"/>
+<circle cx="110" cy="110" r="82" fill="none" stroke="#1D9E75" stroke-width="0.5" opacity="0.3"/>
+<circle cx="110" cy="110" r="74" fill="none" stroke="#1D9E75" stroke-width="0.5" opacity="0.15"/>
+<ellipse cx="110" cy="120" rx="28" ry="30" fill="#2d4a1e" stroke="#3a6028" stroke-width="1"/>
+<rect x="96" y="110" width="28" height="28" fill="#1a1a1a" stroke="#333" stroke-width="0.5" rx="4"/>
+<ellipse cx="110" cy="96" rx="24" ry="22" fill="#2d4a1e" stroke="#3a6028" stroke-width="1"/>
+<ellipse cx="110" cy="92" rx="18" ry="18" fill="#3a6028"/>
+<ellipse cx="102" cy="89" rx="5" ry="6" fill="#111"/>
+<ellipse cx="118" cy="89" rx="5" ry="6" fill="#111"/>
+<circle cx="102" cy="88" r="3" fill="#ff4444"/>
+<circle cx="118" cy="88" r="3" fill="#ff4444"/>
+<path d="M104 100 Q110 107 116 100" fill="none" stroke="#1a3010" stroke-width="1.5"/>
+<path d="M104 103 L101 112" stroke="#e8d5a0" stroke-width="2" stroke-linecap="round"/>
+<path d="M116 103 L119 112" stroke="#e8d5a0" stroke-width="2" stroke-linecap="round"/>
+<ellipse cx="88" cy="98" rx="6" ry="12" fill="#2d4a1e" stroke="#3a6028" stroke-width="1"/>
+<ellipse cx="132" cy="98" rx="6" ry="12" fill="#2d4a1e" stroke="#3a6028" stroke-width="1"/>
+<rect x="96" y="56" width="28" height="8" fill="#1a1a1a" stroke="#333" stroke-width="0.5" rx="2"/>
+<path d="M96 56 L92 46 L98 50 L96 42 L102 48 L110 40 L118 48 L124 42 L122 50 L128 46 L124 56" fill="#1a1a1a" stroke="#333" stroke-width="0.5"/>
+<text x="110" y="158" text-anchor="middle" font-size="16" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">OrcAgent</text>
+<text x="110" y="172" text-anchor="middle" font-size="8" letter-spacing="3" fill="#555" font-family="monospace">SOLANA</text>
+<text x="280" y="80" font-size="32" font-weight="500" fill="#f0f0f0" font-family="-apple-system,sans-serif">OrcAgent</text>
+<text x="280" y="105" font-size="14" fill="#1D9E75" font-family="monospace">Solana</text>
+<rect x="280" y="115" width="340" height="0.5" fill="#222"/>
+<text x="280" y="138" font-size="13" fill="#555" font-family="monospace">Autonomous meme coin trading bot</text>
+<text x="280" y="156" font-size="13" fill="#555" font-family="monospace">powered by Claude AI</text>
+<rect x="280" y="172" width="60" height="18" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="9"/>
+<text x="310" y="185" text-anchor="middle" font-size="9" fill="#1D9E75" font-family="monospace">Brutal</text>
+<rect x="348" y="172" width="50" height="18" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="9"/>
+<text x="373" y="185" text-anchor="middle" font-size="9" fill="#1D9E75" font-family="monospace">Fast</text>
+<rect x="406" y="172" width="80" height="18" fill="#0a2e1e" stroke="#1D9E75" stroke-width="0.5" rx="9"/>
+<text x="446" y="185" text-anchor="middle" font-size="9" fill="#1D9E75" font-family="monospace">Profitable</text>
+</svg>
