@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrcAgent Solana — Setup</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8f8f7;color:#1a1a1a;min-height:100vh;padding:2rem 1rem}
+.container{max-width:640px;margin:0 auto}
+.header{margin-bottom:2rem;text-align:center}
+.logo{display:flex;align-items:center;justify-content:center;gap:10px;margin-bottom:8px}
+.dot{width:8px;height:8px;border-radius:50%;background:#1D9E75;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+h1{font-size:22px;font-weight:500;color:#1a1a1a}
+.sub{font-size:13px;color:#888;margin-top:4px}
+.card{background:#fff;border:1px solid #e8e8e6;border-radius:12px;padding:1.5rem;margin-bottom:1rem}
+.steps{display:flex;border:1px solid #e8e8e6;border-radius:10px;overflow:hidden;margin-bottom:1.5rem}
+.step{flex:1;padding:10px;text-align:center;cursor:pointer;border-right:1px solid #e8e8e6;transition:background .15s}
+.step:last-child{border-right:none}
+.step.active{background:#f3f3f1}
+.step.done .snum{color:#1D9E75;font-weight:500}
+.snum{font-size:11px;color:#aaa;margin-bottom:2px}
+.sname{font-size:12px;font-weight:500;color:#666}
+.step.active .sname{color:#1a1a1a}
+.panel{display:none}
+.panel.active{display:block}
+.field{margin-bottom:1.25rem}
+label{font-size:12px;font-weight:500;color:#555;display:block;margin-bottom:6px}
+.hint{font-size:11px;color:#aaa;margin-top:4px}
+input[type=text],input[type=password],input[type=number]{width:100%;padding:8px 12px;border:1px solid #e8e8e6;border-radius:8px;font-size:13px;font-family:monospace;background:#fff;color:#1a1a1a;outline:none;transition:border .15s}
+input[type=text]:focus,input[type=password]:focus,input[type=number]:focus{border-color:#378ADD}
+input[type=number]{width:110px;font-family:-apple-system,sans-serif}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.warn{background:#FAEEDA;border:1px solid #EF9F27;border-radius:8px;padding:10px 14px;font-size:12px;color:#633806;margin-bottom:1.25rem;display:flex;gap:8px;align-items:flex-start}
+.success{background:#E1F5EE;border:1px solid #5DCAA5;border-radius:8px;padding:10px 14px;font-size:12px;color:#085041;margin-bottom:1.25rem;display:flex;gap:8px;align-items:flex-start}
+.token-row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.token-row input{flex:1;font-family:monospace;font-size:12px}
+.tlabel{font-size:12px;color:#666;min-width:58px}
+.add-btn{width:100%;padding:8px;border:1px dashed #ccc;border-radius:8px;background:none;font-size:12px;color:#888;cursor:pointer;margin-top:4px}
+.add-btn:hover{background:#f3f3f1}
+.nav{display:flex;justify-content:space-between;margin-top:1.5rem}
+button{padding:8px 18px;border:1px solid #e8e8e6;border-radius:8px;background:#fff;font-size:13px;cursor:pointer;color:#1a1a1a;transition:background .15s}
+button:hover{background:#f3f3f1}
+.btn-primary{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn-primary:hover{background:#333}
+.btn-green{background:#1D9E75;color:#fff;border-color:#1D9E75}
+.btn-green:hover{background:#0F6E56}
+.output-box{background:#f3f3f1;border-radius:8px;padding:16px;font-family:monospace;font-size:12px;color:#333;line-height:1.8;white-space:pre-wrap;margin-bottom:1rem;border:1px solid #e8e8e6;max-height:320px;overflow-y:auto}
+.cmd{background:#1a1a1a;color:#a8ff78;border-radius:8px;padding:10px 14px;font-family:monospace;font-size:12px;margin-bottom:8px}
+.sec-label{font-size:11px;color:#aaa;letter-spacing:.06em;margin-bottom:10px;margin-top:1.5rem;text-transform:uppercase}
+.links{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+a.btn{display:inline-flex;align-items:center;gap:6px;padding:8px 16px;border:1px solid #e8e8e6;border-radius:8px;background:#fff;font-size:12px;color:#1a1a1a;text-decoration:none;transition:background .15s}
+a.btn:hover{background:#f3f3f1}
+.rmv-btn{font-size:12px;padding:5px 10px;color:#A32D2D;border-color:#F09595;background:#FCEBEB}
+.rmv-btn:hover{background:#F7C1C1}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">
+      <div class="dot"></div>
+      <h1>OrcAgent Solana</h1>
+    </div>
+    <div class="sub">Autonomous meme coin trading bot — setup wizard</div>
+  </div>
+
+  <div class="steps">
+    <div class="step active" id="s1"><div class="snum" id="sn1">step 1</div><div class="sname">API keys</div></div>
+    <div class="step" id="s2"><div class="snum" id="sn2">step 2</div><div class="sname">Wallet & tokens</div></div>
+    <div class="step" id="s3"><div class="snum" id="sn3">step 3</div><div class="sname">Settings</div></div>
+    <div class="step" id="s4"><div class="snum" id="sn4">step 4</div><div class="sname">Get config</div></div>
+  </div>
+
+  <div class="card">
+    <div class="panel active" id="p1">
+      <div class="warn"><i class="ti ti-lock"></i><span>Your keys stay in your browser only — nothing is sent to any server.</span></div>
+      <div class="field">
+        <label>Anthropic API key</label>
+        <input type="password" id="anthropic_key" placeholder="sk-ant-api03-..." />
+        <div class="hint">Get yours at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a> → API keys → Create key</div>
+      </div>
+      <div class="field">
+        <label>Birdeye API key <span style="font-weight:400;color:#aaa">(optional)</span></label>
+        <input type="password" id="birdeye_key" placeholder="dde8ed1a..." />
+        <div class="hint">Get yours at <a href="https://birdeye.so" target="_blank">birdeye.so</a> → sign in → user settings → API key</div>
+      </div>
+      <div class="nav"><span></span><button class="btn-primary" onclick="goStep(2)">Next &rarr;</button></div>
+    </div>
+
+    <div class="panel" id="p2">
+      <div class="field">
+        <label>Wallet public address</label>
+        <input type="text" id="wallet_addr" placeholder="57ENjXjh7ro1aVtT97NUsvf3NoYesBwp4gUjET22vGw6" />
+        <div class="hint">Your Solana wallet public key — safe to share</div>
+      </div>
+      <div class="field">
+        <label>Wallet private key</label>
+        <input type="password" id="wallet_pk" placeholder="your private key..." />
+        <div class="hint" style="color:#A32D2D">Never share this with anyone. Needed for auto-trading only.</div>
+      </div>
+      <div class="sec-label">Tokens to trade</div>
+      <div id="token-list">
+        <div class="token-row"><span class="tlabel">Token 1</span><input type="text" placeholder="contract address (mint)" class="tmint" /><input type="text" placeholder="label e.g. BONK" class="tlbl" style="width:100px;flex:none" /></div>
+        <div class="token-row"><span class="tlabel">Token 2</span><input type="text" placeholder="contract address (mint)" class="tmint" /><input type="text" placeholder="label" class="tlbl" style="width:100px;flex:none" /></div>
+      </div>
+      <button class="add-btn" onclick="addToken()">+ add another token</button>
+      <div class="nav">
+        <button onclick="goStep(1)">&larr; Back</button>
+        <button class="btn-primary" onclick="goStep(3)">Next &rarr;</button>
+      </div>
+    </div>
+
+    <div class="panel" id="p3">
+      <div class="row2">
+        <div class="field">
+          <label>Max USDC per trade</label>
+          <input type="number" id="max_usdc" value="50" min="1" max="1000" step="1" />
+          <div class="hint">Max spent per token per trade</div>
+        </div>
+        <div class="field">
+          <label>Interval (seconds)</label>
+          <input type="number" id="interval" value="900" min="60" max="3600" step="60" />
+          <div class="hint">How often the bot checks prices</div>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>Stop loss %</label>
+          <input type="number" id="stop_loss" value="3" min="1" max="50" step="1" />
+          <div class="hint">Auto-sell if price drops this %</div>
+        </div>
+        <div class="field">
+          <label>Take profit %</label>
+          <input type="number" id="take_profit" value="5" min="1" max="100" step="1" />
+          <div class="hint">Auto-sell if price rises this %</div>
+        </div>
+      </div>
+      <div class="nav">
+        <button onclick="goStep(2)">&larr; Back</button>
+        <button class="btn-green" onclick="generate()">Generate config &rarr;</button>
+      </div>
+    </div>
+
+    <div class="panel" id="p4">
+      <div class="success"><i class="ti ti-check"></i><span>Your config is ready! Copy it into your .env file in the Orc-agent folder.</span></div>
+      <div class="output-box" id="env-output"></div>
+      <button class="btn-green" onclick="copyEnv()" style="display:flex;align-items:center;gap:6px"><i class="ti ti-copy"></i> <span id="copy-label">Copy .env content</span></button>
+
+      <div class="sec-label">How to run the bot</div>
+      <div class="cmd">cd C:\Users\YourName\Orc-agent</div>
+      <div class="cmd">notepad .env &nbsp;&nbsp;&larr; paste your config here, save</div>
+      <div class="cmd">python orcagent_solana.py</div>
+
+      <div class="sec-label">Need the bot files?</div>
+      <div class="links">
+        <a class="btn" href="https://github.com/odia11/Orc-agent-Solana-chain-" target="_blank"><i class="ti ti-brand-github"></i> View on GitHub</a>
+        <a class="btn" href="https://console.anthropic.com" target="_blank"><i class="ti ti-key"></i> Get Anthropic key</a>
+        <a class="btn" href="https://birdeye.so" target="_blank"><i class="ti ti-eye"></i> Get Birdeye key</a>
+      </div>
+
+      <div class="nav" style="margin-top:1.5rem">
+        <button onclick="goStep(3)">&larr; Back</button>
+        <span></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let tokenCount = 2;
+function goStep(n) {
+  for (let i = 1; i <= 4; i++) {
+    document.getElementById('p'+i).classList.toggle('active', i===n);
+    document.getElementById('s'+i).classList.toggle('active', i===n);
+    document.getElementById('s'+i).classList.toggle('done', i<n);
+    document.getElementById('sn'+i).textContent = i < n ? '✓' : 'step '+i;
+  }
+}
+function addToken() {
+  tokenCount++;
+  const div = document.createElement('div');
+  div.className = 'token-row';
+  div.innerHTML = '<span class="tlabel">Token '+tokenCount+'</span><input type="text" placeholder="contract address (mint)" class="tmint" /><input type="text" placeholder="label" class="tlbl" style="width:100px;flex:none" /><button class="rmv-btn" onclick="this.parentElement.remove()">remove</button>';
+  document.getElementById('token-list').appendChild(div);
+}
+function generate() {
+  const ak = document.getElementById('anthropic_key').value.trim();
+  const bk = document.getElementById('birdeye_key').value.trim();
+  const wa = document.getElementById('wallet_addr').value.trim();
+  const wpk = document.getElementById('wallet_pk').value.trim();
+  const mu = document.getElementById('max_usdc').value;
+  const sl = (parseFloat(document.getElementById('stop_loss').value)/100).toFixed(2);
+  const tp = (parseFloat(document.getElementById('take_profit').value)/100).toFixed(2);
+  const iv = document.getElementById('interval').value;
+  const mints = document.querySelectorAll('.tmint');
+  const lbls = document.querySelectorAll('.tlbl');
+  let tokenLines = '';
+  mints.forEach((m, i) => {
+    if (m.value.trim()) {
+      const lbl = lbls[i] ? (lbls[i].value.trim() || ('TOKEN'+(i+1))) : ('TOKEN'+(i+1));
+      tokenLines += '# '+lbl+'\nTOKEN_MINT_'+(i+1)+'='+m.value.trim()+'\nTOKEN_LABEL_'+(i+1)+'='+lbl+'\n\n';
+    }
+  });
+  const lines = [
+    '# OrcAgent Solana — generated config',
+    '# github.com/odia11/Orc-agent-Solana-chain-',
+    '',
+    '# API keys',
+    'ANTHROPIC_API_KEY='+(ak||'your_anthropic_key_here'),
+  ];
+  if (bk) lines.push('BIRDEYE_API_KEY='+bk);
+  lines.push('', '# Wallet', 'WALLET_ADDRESS='+(wa||'your_public_wallet_address'), 'WALLET_PRIVATE_KEY='+(wpk||'your_private_key_here'), '', '# Trading settings', 'MAX_USDC='+mu, 'STOP_LOSS='+sl, 'TAKE_PROFIT='+tp, 'INTERVAL='+iv, '', '# Tokens to trade');
+  if (tokenLines) lines.push(tokenLines.trim());
+  document.getElementById('env-output').textContent = lines.join('\n');
+  goStep(4);
+}
+function copyEnv() {
+  const text = document.getElementById('env-output').textContent;
+  navigator.clipboard.writeText(text).then(() => {
+    document.getElementById('copy-label').textContent = 'Copied!';
+    setTimeout(() => document.getElementById('copy-label').textContent = 'Copy .env content', 2000);
+  });
+}
+</script>
+</body>
+</html>
