@@ -24,16 +24,13 @@ JUPITER_QUOTE = 'https://api.jup.ag/swap/v1/quote'
 JUPITER_SWAP = 'https://api.jup.ag/swap/v1/swap'
 USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 TOKENS = [
-    {'mint': 'HMfERpVKozrefwou3dvZEegMdmyiKzeWBBDcsijDpump', 'label': 'TOKEN1'},
     {'mint': 'AqQtvEvV6wTGYjxSmzzWB11K2kmWBwbdfKCNkkW3pump', 'label': 'TOKEN2'},
     {'mint': '6xUoG8JtjYxKfBD3nsLGp8n9pGzKUigF5WTwWyy1pump', 'label': 'TOKEN3'},
-    {'mint': 'uuxWwFL6G9UjiYRZvWxJrSB18V1oKBgYrmueamREK57', 'label': 'TOKEN4'},
     {'mint': '6KHeDqkeGc5JKAM9u5UKXZ1uqTeV4o45PAjAruHNpump', 'label': 'TOKEN5'},
     {'mint': 'Ac8EScJ4ufRo8PiFkun7diUrcCCktg4JvArb3mPmpump', 'label': 'TOKEN6'},
     {'mint': 'aLqb3HVkpHardDE992xHf1NBnw55C2f88hkEZ3mpump', 'label': 'TOKEN7'},
     {'mint': '7sgtaBCjEyo1LsPWfsfZXhj7H8q4SX1TJgyBZ7c5pump', 'label': 'TOKEN8'},
     {'mint': 'FeMbDoX7R1Psc4GEcvJdsbNbZA3bfztcyDCatJVJpump', 'label': 'TOKEN9'},
-    {'mint': 'ACtfUWtgvaXrQGNMiohTusi5jcx5RJf5zwu9aAxkpump', 'label': 'TOKEN10'},
     {'mint': '78B31QV1rtyoe2EYvVNjBVjeowyrtcH5FPTE4tCypump', 'label': 'TOKEN11'},
     {'mint': 'FzMe8rQ54FRg31KH1sHUbrdPEMMMJbLjNJ8miV8Tpump', 'label': 'TOKEN12'},
 ]
@@ -99,7 +96,7 @@ def ai_decision(label, data, usdc):
     return result
 
 def execute_swap(input_mint, output_mint, amount):
-    quote = requests.get(JUPITER_QUOTE, params={'inputMint': input_mint, 'outputMint': output_mint, 'amount': int(amount), 'slippageBps': 150}, timeout=10).json()
+    quote = requests.get(JUPITER_QUOTE, params={'inputMint': input_mint, 'outputMint': output_mint, 'amount': int(amount), 'slippageBps': 300, 'maxAccounts': 20}, timeout=10).json()
     if 'error' in quote:
         raise Exception('Jupiter quote error: ' + str(quote['error']))
     swap_resp = requests.post(JUPITER_SWAP, json={'quoteResponse': quote, 'userPublicKey': WALLET_ADDRESS, 'wrapAndUnwrapSol': True}, timeout=10).json()
