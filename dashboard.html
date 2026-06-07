@@ -455,7 +455,7 @@ let lastLogCount=0;
 async function fetchState() {
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
-  document.getElementById('s-usdc').textContent='$'+r.usdc.toFixed(2);document.getElementById('s-sol').textContent=r.sol;
+  if(phantomKey){refreshPhantomBalances();}else{document.getElementById('s-usdc').innerHTML='<span style="font-size:11px;color:var(--muted)">— connect wallet —</span>';document.getElementById('s-sol').innerHTML='<span style="font-size:11px;color:var(--muted)">— connect wallet —</span>';}
   document.getElementById('s-pos').textContent=r.positions+'/3';
   document.getElementById('s-queue').textContent=r.queue_count;
   traderOn=r.trader_running;sniperOn=r.sniper_running;
