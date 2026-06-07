@@ -3,4 +3,4 @@ requests
 python-dotenv
 solders
 anthropic
-gunicorngunicorn 
+gunicorn
