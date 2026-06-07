@@ -284,8 +284,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="stat-lbl">USDC Balance</div><div class="stat-val g" id="s-usdc">—</div><div class="stat-sub">available</div></div>
-    <div class="stat"><div class="stat-lbl">SOL Balance</div><div class="stat-val b" id="s-sol">—</div><div class="stat-sub">for fees</div></div>
+    <div class="stat"><div class="stat-lbl">USDC Balance</div><div class="stat-val g" id="s-usdc"><span id='usdc-lock' style='font-size:13px;color:var(--muted)'>Connect wallet</span></div><div class="stat-sub">available</div></div>
+    <div class="stat"><div class="stat-lbl">SOL Balance</div><div class="stat-val b" id="s-sol"><span id='sol-lock' style='font-size:13px;color:var(--muted)'>Connect wallet</span></div><div class="stat-sub">for fees</div></div>
     <div class="stat"><div class="stat-lbl">Open Positions</div><div class="stat-val y" id="s-pos">—</div><div class="stat-sub">max 3</div></div>
     <div class="stat"><div class="stat-lbl">Snipe Queue</div><div class="stat-val" style="color:var(--purple)" id="s-queue">—</div><div class="stat-sub">pending</div></div>
   </div>
@@ -410,6 +410,7 @@ async function connectXOnboard() {
 function launchApp() {
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
+  if(phantomKey) refreshPhantomBalances();
   fetchState();
 }
 
