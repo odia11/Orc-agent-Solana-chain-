@@ -410,7 +410,6 @@ async function connectXOnboard() {
 function launchApp() {
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
-  if(phantomKey) refreshPhantomBalances();
   fetchState();
 }
 
@@ -456,7 +455,7 @@ let lastLogCount=0;
 async function fetchState() {
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
-  if(!phantomKey){document.getElementById('s-usdc').textContent='$'+r.usdc.toFixed(2);document.getElementById('s-sol').textContent=r.sol;}
+  document.getElementById('s-usdc').textContent='$'+r.usdc.toFixed(2);document.getElementById('s-sol').textContent=r.sol;
   document.getElementById('s-pos').textContent=r.positions+'/3';
   document.getElementById('s-queue').textContent=r.queue_count;
   traderOn=r.trader_running;sniperOn=r.sniper_running;
