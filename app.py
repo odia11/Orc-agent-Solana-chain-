@@ -24,6 +24,7 @@ state = {
     'log_lines': [],
     'tokens': [],
     'queue_items': [],
+    'market_tokens': [],
     'configured': False,
 }
 
@@ -148,6 +149,46 @@ def balance_loop():
             state['configured'] = True
         time.sleep(30)
 
+def get_token_name(mint):
+    try:
+        r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        pairs = r.json().get('pairs', [])
+        if pairs:
+            base = pairs[0].get('baseToken', {})
+            return base.get('symbol', '???'), base.get('name', '???')
+        return '???', '???'
+    except: return '???', '???'
+
+def fetch_market_tokens():
+    try:
+        r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=8)
+        if r.status_code != 200: return
+        items = r.json() if isinstance(r.json(), list) else []
+        out = []
+        for item in items[:20]:
+            if item.get('chainId') != 'solana': continue
+            mint = item.get('tokenAddress', '')
+            if not mint: continue
+            data = get_token_data(mint)
+            if not data or data['price'] <= 0: continue
+            sym, name = get_token_name(mint)
+            liq = data.get('liquidity', 0)
+            out.append({
+                'mint': mint[:12]+'...',
+                'symbol': sym,
+                'name': name,
+                'price': data['price'],
+                'change5m': data['change5m'],
+                'change1h': data['change1h'],
+                'volume1h': data['volume1h'],
+                'liquidity': liq,
+                'score': score_token(data),
+            })
+            if len(out) >= 10: break
+        state['market_tokens'] = out
+    except Exception as e:
+        pass
+
 def token_loop():
     while True:
         try:
@@ -156,10 +197,13 @@ def token_loop():
                 data = get_token_data(t['mint'])
                 if data:
                     sc = score_token(data)
-                    out.append({'label': t['label'], 'price': data['price'], 'change5m': data['change5m'], 'score': sc})
+                    sym, name = get_token_name(t['mint'])
+                    label = sym if sym != '???' else t['label']
+                    out.append({'label': label, 'name': name, 'price': data['price'], 'change5m': data['change5m'], 'score': sc})
             state['tokens'] = out
+            fetch_market_tokens()
         except: pass
-        time.sleep(60)
+        time.sleep(30)
 
 def trader_loop(stop_event, cfg):
     add_log('Trader started — scanning every ' + str(cfg.get('interval', 300)) + 's')
@@ -282,6 +326,7 @@ def api_state():
         'configured': is_configured(),
         'wallet': os.getenv('WALLET_ADDRESS', ''),
         'queue_items': [{'mint': q['mint'], 'pct': min(100, round((time.time()-q['queued'])/q['delay']*100)), 'remaining': max(0, int(q['delay']-(time.time()-q['queued'])))} for q in state['queue_items']],
+        'market_tokens': state['market_tokens'],
     })
 
 @app.route('/api/setup', methods=['POST'])
@@ -326,6 +371,64 @@ def stop_sniper():
     state['sniper_running'] = False
     state['queue_items'] = []
     return jsonify({'ok': True})
+
+X_CLIENT_ID = 'b0NvWGZpUWZJYnN0cWdvUzdEWjk6MTpjaQ'
+X_CLIENT_SECRET = os.getenv('X_CLIENT_SECRET', '')
+x_state = {'connected': False, 'username': '', 'access_token': '', 'refresh_token': '', 'verifier': ''}
+
+@app.route('/api/x/verifier', methods=['POST'])
+def store_verifier():
+    x_state['verifier'] = request.json.get('verifier', '')
+    return jsonify({'ok': True})
+
+@app.route('/x-callback')
+def x_callback():
+    code = request.args.get('code')
+    if not code:
+        return '<script>window.close()</script>'
+    try:
+        verifier = request.args.get('state', 'orcagent')
+        verifier = x_state.get('verifier', 'challenge')
+        resp = requests.post('https://api.twitter.com/2/oauth2/token', data={
+            'code': code,
+            'grant_type': 'authorization_code',
+            'client_id': X_CLIENT_ID,
+            'redirect_uri': 'http://localhost:5000/x-callback',
+            'code_verifier': verifier,
+        }, auth=(X_CLIENT_ID, X_CLIENT_SECRET), timeout=10)
+        tokens = resp.json()
+        if 'access_token' in tokens:
+            x_state['access_token'] = tokens['access_token']
+            x_state['refresh_token'] = tokens.get('refresh_token', '')
+            me = requests.get('https://api.twitter.com/2/users/me', headers={'Authorization': 'Bearer ' + tokens['access_token']}, timeout=10).json()
+            x_state['username'] = me.get('data', {}).get('username', 'user')
+            x_state['connected'] = True
+            add_log('X connected: @' + x_state['username'])
+    except Exception as e:
+        add_log('X OAuth error: ' + str(e))
+    return '<html><body style="background:#000;color:#0f0;font-family:monospace;text-align:center;padding:2rem"><h2>✅ Connected to X!</h2><p>You can close this window.</p><script>setTimeout(()=>window.close(),2000)</script></body></html>'
+
+@app.route('/api/x/status')
+def x_status():
+    return jsonify({'connected': x_state['connected'], 'username': x_state['username']})
+
+@app.route('/api/x/tweet', methods=['POST'])
+def x_tweet():
+    if not x_state['connected'] or not x_state['access_token']:
+        return jsonify({'ok': False, 'error': 'Not connected'})
+    try:
+        text = request.json.get('text', '')
+        resp = requests.post('https://api.twitter.com/2/tweets',
+            json={'text': text},
+            headers={'Authorization': 'Bearer ' + x_state['access_token'], 'Content-Type': 'application/json'},
+            timeout=10)
+        return jsonify({'ok': resp.status_code == 201, 'data': resp.json()})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)})
+
+@app.route('/api/market')
+def api_market():
+    return jsonify({'tokens': state['market_tokens'], 'watched': state['tokens']})
 
 @app.route('/api/log')
 def api_log():
