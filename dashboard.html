@@ -69,7 +69,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .x-pill{display:flex;align-items:center;gap:6px;background:#000;border-radius:20px;padding:6px 14px;font-size:11px;color:white;cursor:pointer}
 .x-pill:hover{background:#222}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:2rem}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:2rem}@media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.modes{grid-template-columns:1fr!important}.cfg-row{grid-template-columns:1fr!important}.panels{grid-template-columns:1fr!important}.market-grid{grid-template-columns:repeat(2,1fr)!important}.bottom{flex-wrap:wrap}.bot-btn{flex:1 1 40%}.stat-val{font-size:18px!important}.brand{font-size:14px!important}}
 .stat{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
 .stat-val{font-family:'Orbitron',monospace;font-size:22px;font-weight:700}
