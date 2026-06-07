@@ -1,91 +1,135 @@
-# 👹 OrcAgent Solana
+# 🐋 OrcAgent — Solana Smart Scalper + Sniper
 
-> Brutal. Fast. Profitable.
+> Autonomous Solana meme coin trading bot with AI-powered decision making, new token sniping, and a live dashboard.
 
-Autonomous Solana meme coin trading bot powered by Claude AI. OrcAgent monitors multiple tokens, analyzes price data and automatically executes swaps via Jupiter.
-
----
-
-## Features
-
-- AI-driven BUY/SELL/HOLD decisions via Claude
-- Trades any Solana token (pump.fun, meme coins, SPL tokens)
-- Auto-executes swaps via Jupiter aggregator
-- Stop-loss and take-profit on every position
-- Price data via DexScreener (free, no API key needed)
-- Easy setup wizard — no coding required
+![OrcAgent Dashboard](assets/preview.png)
 
 ---
 
-## Quick start
+## ⚡ Quick Start (Windows)
 
-### 1. Install Python dependencies
+### Option 1 — Download the App (Easiest)
+1. Go to [Releases](../../releases) and download `OrcAgent.exe`
+2. Double-click to run
+3. If Windows shows a SmartScreen warning → click **"More info"** → **"Run anyway"** (normal for unsigned apps)
+4. Browser opens automatically at `http://localhost:5000`
+5. Fill in the setup wizard and click **Launch OrcAgent**
 
+### Option 2 — Run from Source (Advanced)
 ```bash
-pip install anthropic python-dotenv requests solders solana
-```
-
-### 2. Clone the repo
-
-```bash
-git clone https://github.com/odia11/Orc-agent-Solana-chain-
+git clone https://github.com/odia11/Orc-agent-Solana-chain-.git
 cd Orc-agent-Solana-chain-
+pip install -r requirements.txt
+python app.py
+```
+Then open `http://localhost:5000` in your browser.
+
+---
+
+## 🔧 Setup
+
+You'll need:
+
+| Field | Where to get it |
+|---|---|
+| **Anthropic API Key** | [console.anthropic.com](https://console.anthropic.com) → API Keys |
+| **Wallet Address** | Your Solana wallet public key (e.g. from Phantom) |
+| **Private Key** | Phantom → Settings → Export Private Key |
+
+> ⚠️ Your private key is stored **only on your local PC** in a `.env` file. It is never sent anywhere except to sign transactions on the Solana blockchain.
+
+---
+
+## 🤖 Features
+
+### Trade Mode
+- Scans **7 Solana meme coins** every 5 minutes
+- Uses **Claude AI (Haiku)** to score each token on momentum, volume, buy/sell ratio, and liquidity
+- Auto-buys when score exceeds threshold
+- Auto-exits at:
+  - ✅ **15% Take Profit**
+  - 🛑 **5% Stop Loss**
+  - 📉 **3% Trailing Stop**
+
+### Snipe Mode
+- Watches **DexScreener** every 15 seconds for brand new token launches
+- Queues tokens for a configurable delay (default 10 min)
+- Runs safety checks before buying:
+  - ❌ Skips tokens with freeze authority set (rug risk)
+  - ❌ Skips tokens with liquidity too low or too high
+  - ✅ Buys tokens that pass all checks
+- Auto-sells sniped tokens at same TP/SL/trailing levels
+
+### Dashboard
+- 🐋 Live ORC logo and dancing animation on every trade
+- Connect **Phantom wallet** for live balance updates
+- Real-time log of all bot activity
+- Token signal scores updated every minute
+- Sniper queue with countdown timers
+
+---
+
+## ⚙️ Configuration
+
+All settings configurable from the dashboard or via `.env`:
+
+```env
+ANTHROPIC_API_KEY=sk-ant-...
+WALLET_ADDRESS=57ENjXjh...
+WALLET_PRIVATE_KEY=your_base58_key
+
+# Trading
+STOP_LOSS=0.05          # 5% stop loss
+TAKE_PROFIT=0.15        # 15% take profit
+TRAILING_STOP=0.03      # 3% trailing stop
+MAX_TRADE_PCT=0.20      # max 20% of balance per trade
+MAX_OPEN_POSITIONS=3    # max simultaneous positions
+MIN_USDC_RESERVE=3.0    # always keep $3 in reserve
+INTERVAL=300            # scan every 300 seconds
+
+# Sniper
+SNIPER_AMOUNT=1.0       # USDC per snipe
+SNIPER_MIN_LIQ=1000     # min liquidity to snipe ($)
+SNIPER_MAX_LIQ=50000    # max liquidity to snipe ($)
+SNIPER_DELAY=600        # seconds to wait before buying
 ```
 
-### 3. Configure your .env
+---
 
-Open `orcagent_setup.html` in your browser to generate your config automatically, or copy `.env.example` to `.env` and fill in your details:
+## 📦 Requirements (Source)
 
 ```
-ANTHROPIC_API_KEY=sk-ant-api03-...
-WALLET_ADDRESS=your_solana_public_key
-WALLET_PRIVATE_KEY=your_private_key
-MAX_USDC=50
-STOP_LOSS=0.03
-TAKE_PROFIT=0.05
-INTERVAL=900
+anthropic
+solders
+requests
+python-dotenv
+flask
 ```
 
-### 4. Run the bot
-
+Install with:
 ```bash
-python orcagent_solana.py
+pip install anthropic solders requests python-dotenv flask
 ```
 
 ---
 
-## Setup wizard
+## ⚠️ Disclaimer
 
-Open `orcagent_setup.html` in any browser — fill in your API keys, wallet, and token contracts to generate your `.env` file automatically.
+This bot trades real money on the Solana blockchain. Meme coin trading is extremely high risk. You can lose your entire balance. Use only money you can afford to lose. This is not financial advice.
 
----
-
-## Getting API keys
-
-| Key | Where to get it |
-|-----|----------------|
-| Anthropic API key | [console.anthropic.com](https://console.anthropic.com) → API keys |
-| Solana wallet | [phantom.app](https://phantom.app) — create a new wallet |
+- Start with small amounts ($1–5 per trade)
+- Monitor the bot regularly
+- Keep most of your funds off the trading wallet
 
 ---
 
-## How it works
+## 🔗 Links
 
-1. Every 15 minutes the bot fetches token prices from DexScreener
-2. Claude AI analyzes the data and returns a BUY/SELL/HOLD decision
-3. If BUY — the bot gets a quote from Jupiter and executes the swap
-4. Stop-loss (3%) and take-profit (5%) are checked every cycle
-
----
-
-## Warning
-
-- Meme coins are extremely risky — only trade what you can afford to lose
-- Never share your private key with anyone
-- This bot is for educational purposes — trade at your own risk
+- [Solscan](https://solscan.io) — verify your transactions
+- [Jupiter](https://jup.ag) — swap tokens manually
+- [DexScreener](https://dexscreener.com) — token charts
+- [Phantom](https://phantom.app) — Solana wallet
 
 ---
 
-## License
-
-MIT
+Made with 🐋 by [@degentrader1990](https://github.com/odia11)
