@@ -274,4 +274,4 @@ if __name__ == '__main__':
     add_log('OrcAgent dashboard server started')
     add_log('Wallet: ' + WALLET_ADDRESS[:20] + '...')
     print('OrcAgent Dashboard running at http://localhost:5000')
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host='0.0.0.0', port=int(os.environ.get(chr(80)+chr(79)+chr(82)+chr(84),5000)), debug=False)
