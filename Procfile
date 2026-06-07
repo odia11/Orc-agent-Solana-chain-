@@ -1,1 +1,1 @@
-worker: python orcagent_solana.py 
+web: python orcagent_solana.py
