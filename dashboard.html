@@ -279,7 +279,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
       <div class="x-pill" id="x-pill" style="display:none" onclick="postToX()"><span>𝕏</span><span id="x-username">@user</span></div>
-      <button style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⚙ Settings</button><button style="background:var(--bg2);border:1px solid var(--red);border-radius:8px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--red);cursor:pointer" onclick="logout()">⏻ Logout</button>
+      <button style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⚙ Settings</button><button style="background:var(--bg2);border:1px solid var(--red);border-radius:8px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--red);cursor:pointer" onclick="localStorage.clear();location.reload();">⏻ Logout</button>
     </div>
   </div>
 
@@ -455,7 +455,7 @@ let lastLogCount=0;
 async function fetchState() {
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
-  if(phantomKey){refreshPhantomBalances();}else{document.getElementById('s-usdc').innerHTML='<span style="font-size:11px;color:var(--muted)">— connect wallet —</span>';document.getElementById('s-sol').innerHTML='<span style="font-size:11px;color:var(--muted)">— connect wallet —</span>';}
+  if(phantomKey){refreshPhantomBalances();}else{document.getElementById("s-usdc").textContent="—";document.getElementById("s-sol").textContent="—";}
   document.getElementById('s-pos').textContent=r.positions+'/3';
   document.getElementById('s-queue').textContent=r.queue_count;
   traderOn=r.trader_running;sniperOn=r.sniper_running;
@@ -545,7 +545,7 @@ document.addEventListener('DOMContentLoaded',()=>{
   if(savedPhantom||savedX){launchApp();}
 });
 
-function logout(){
+function logout(){console.log('logout called');console.log('logout called');
   localStorage.removeItem('phantom-key');
   localStorage.removeItem('x-user');
   phantomKey=null;
@@ -561,7 +561,7 @@ function logout(){
 }
 document.addEventListener('keydown',e=>{if(e.key==='t')showOrcDance('TEST TRADE! 🚀','TOKEN9 $1.23 — score +5');});
 
-function logout(){
+function logout(){console.log('logout called');console.log('logout called');
   localStorage.removeItem('phantom-key');
   localStorage.removeItem('x-user');
   phantomKey=null;xUser=null;
