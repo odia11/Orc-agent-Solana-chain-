@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OrcAgent Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Courier New',monospace;background:#0a0f1e;color:#e2e8f0;min-height:100vh;padding:1.5rem}
+.dash{max-width:900px;margin:0 auto}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid #1e293b}
+.logo{display:flex;align-items:center;gap:12px}
+.logo-icon{width:40px;height:40px;background:#0f172a;border:1px solid #1e3a2f;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px}
+.brand{font-size:14px;font-weight:700;color:#4ade80;letter-spacing:.08em}
+.brand-sub{font-size:10px;color:#64748b;margin-top:2px}
+.live{display:flex;align-items:center;gap:6px;font-size:11px;color:#64748b}
+.dot{width:8px;height:8px;border-radius:50%;background:#4ade80;animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.85)}}
+
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.5rem}
+.stat{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:14px}
+.stat-lbl{font-size:10px;color:#64748b;letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}
+.stat-val{font-size:22px;font-weight:700;color:#e2e8f0}
+.stat-sub{font-size:10px;color:#64748b;margin-top:3px}
+.green{color:#4ade80}
+.red{color:#f87171}
+.yellow{color:#fbbf24}
+
+.modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem}
+.mode{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:1.25rem;transition:border-color .2s}
+.mode.active-trade{border-color:#3b82f6;background:#0a1628}
+.mode.active-snipe{border-color:#4ade80;background:#071a0f}
+.mode-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.mode-icon{font-size:24px}
+.mode-badge{font-size:10px;padding:3px 10px;border-radius:20px;font-weight:600}
+.badge-idle{background:#1e293b;color:#64748b}
+.badge-run{background:#1a3a2a;color:#4ade80}
+.mode-title{font-size:15px;font-weight:700;color:#e2e8f0;margin-bottom:6px}
+.mode-desc{font-size:11px;color:#64748b;line-height:1.6;margin-bottom:14px}
+.mode-btn{width:100%;padding:10px;font-size:13px;font-weight:700;border-radius:8px;border:none;cursor:pointer;letter-spacing:.04em;transition:all .15s;font-family:'Courier New',monospace}
+.trade-btn{background:#3b82f6;color:white}
+.trade-btn:hover{background:#2563eb}
+.trade-btn.on{background:#1d4ed8}
+.snipe-btn{background:#4ade80;color:#0a0f1e}
+.snipe-btn:hover{background:#22c55e}
+.snipe-btn.on{background:#16a34a;color:white}
+
+.cfg-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.5rem}
+.cfg{background:#0f172a;border:1px solid #1e293b;border-radius:10px;padding:12px}
+.cfg-lbl{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.06em;margin-bottom:6px}
+.cfg input{width:100%;background:transparent;border:none;border-bottom:1px solid #1e293b;color:#4ade80;font-family:'Courier New',monospace;font-size:15px;font-weight:700;padding:3px 0;outline:none}
+.cfg input:focus{border-bottom-color:#4ade80}
+
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem}
+.panel{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:14px}
+.panel-title{font-size:10px;color:#64748b;text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.panel-btn{font-size:10px;color:#64748b;cursor:pointer;background:none;border:none;font-family:'Courier New',monospace}
+.panel-btn:hover{color:#e2e8f0}
+
+.log-body{height:180px;overflow-y:auto;font-size:11px;line-height:1.8}
+.log-line{display:flex;gap:8px;padding:1px 0;border-bottom:1px solid #0f1829}
+.log-t{color:#334155;flex-shrink:0;width:58px}
+.c-buy{color:#4ade80}
+.c-sell{color:#f87171}
+.c-snipe{color:#fbbf24}
+.c-info{color:#94a3b8}
+.c-skip{color:#475569}
+
+.token-list{display:flex;flex-direction:column;gap:6px}
+.tok{display:flex;align-items:center;justify-content:space-between;background:#070d1a;border-radius:8px;padding:8px 10px}
+.tok-name{font-size:12px;font-weight:700;color:#e2e8f0}
+.tok-price{font-size:10px;color:#64748b}
+.tok-score{font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700}
+.s-buy{background:#1a3a2a;color:#4ade80}
+.s-sell{background:#3a1a1a;color:#f87171}
+.s-hold{background:#1e293b;color:#64748b}
+
+.queue-panel{background:#0f172a;border:1px solid #1e293b;border-radius:12px;padding:14px;margin-bottom:1.5rem;display:none}
+.q-item{display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid #0f1829}
+.q-item:last-child{border-bottom:none}
+.q-mint{font-size:11px;color:#64748b}
+.q-timer{font-size:12px;font-weight:700;color:#4ade80}
+.q-bar{height:3px;background:#1e293b;border-radius:2px;margin-top:4px;overflow:hidden;width:140px}
+.q-fill{height:100%;background:#4ade80;border-radius:2px;transition:width 1s linear}
+
+.bottom{display:flex;gap:8px}
+.bottom button{flex:1;padding:9px;font-size:12px;font-family:'Courier New',monospace;background:#0f172a;border:1px solid #1e293b;color:#94a3b8;border-radius:8px;cursor:pointer;transition:all .15s}
+.bottom button:hover{border-color:#4ade80;color:#4ade80}
+</style>
+</head>
+<body>
+<div class="dash">
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">🐋</div>
+      <div>
+        <div class="brand">ORCAGENT</div>
+        <div class="brand-sub">Solana Smart Scalper v4 + Sniper</div>
+      </div>
+    </div>
+    <div class="live" id="wallet-area">
+      <button id="phantom-btn" onclick="connectPhantom()" style="background:#4ade80;color:#0a0f1e;border:none;border-radius:8px;padding:6px 14px;font-family:'Courier New',monospace;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.04em">Connect Phantom</button>
+      <div id="wallet-connected" style="display:none;align-items:center;gap:6px"><div class="dot"></div><span id="wallet-addr" style="font-size:11px;color:#64748b"></span></div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-lbl">USDC</div><div class="stat-val green" id="s-usdc">—</div><div class="stat-sub">available</div></div>
+    <div class="stat"><div class="stat-lbl">SOL</div><div class="stat-val" id="s-sol">—</div><div class="stat-sub">for fees</div></div>
+    <div class="stat"><div class="stat-lbl">Positions</div><div class="stat-val" id="s-pos">—</div><div class="stat-sub">open / 3 max</div></div>
+    <div class="stat"><div class="stat-lbl">Snipe queue</div><div class="stat-val yellow" id="s-queue">—</div><div class="stat-sub">pending</div></div>
+  </div>
+
+  <div class="modes">
+    <div class="mode" id="trade-card">
+      <div class="mode-top">
+        <div class="mode-icon">📈</div>
+        <div class="mode-badge badge-idle" id="trade-badge">Idle</div>
+      </div>
+      <div class="mode-title">Trade</div>
+      <div class="mode-desc">Scans 7 tokens every 5 min. Buys on score &gt;4, sells at 15% TP / 5% SL / 3% trailing stop.</div>
+      <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ Start trading</button>
+    </div>
+    <div class="mode" id="snipe-card">
+      <div class="mode-top">
+        <div class="mode-icon">⚡</div>
+        <div class="mode-badge badge-idle" id="snipe-badge">Idle</div>
+      </div>
+      <div class="mode-title">Snipe</div>
+      <div class="mode-desc">Watches for new token launches every 15s. Queues for delay period, safety checks, then buys.</div>
+      <button class="mode-btn snipe-btn" id="snipe-btn" onclick="toggleSniper()">▶ Start sniping</button>
+    </div>
+  </div>
+
+  <div class="cfg-row">
+    <div class="cfg"><div class="cfg-lbl">Snipe amount (USDC)</div><input type="number" id="cfg-amt" value="1.0" step="0.5" min="0.5"></div>
+    <div class="cfg"><div class="cfg-lbl">Min liquidity ($)</div><input type="number" id="cfg-liq" value="1000" step="500" min="100"></div>
+    <div class="cfg"><div class="cfg-lbl">Snipe delay (sec)</div><input type="number" id="cfg-delay" value="600" step="60" min="60"></div>
+  </div>
+
+  <div class="queue-panel" id="queue-panel">
+    <div class="panel-title">Sniper queue</div>
+    <div id="queue-list"></div>
+  </div>
+
+  <div class="panels">
+    <div class="panel">
+      <div class="panel-title">Live log <button class="panel-btn" onclick="clearLog()">Clear</button></div>
+      <div class="log-body" id="log-body"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">Token signals</div>
+      <div class="token-list" id="token-list"><div style="color:#475569;font-size:11px">Loading token data...</div></div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <button onclick="location.reload()">↺ Refresh</button>
+    <button onclick="window.open('https://solscan.io/account/' + document.getElementById('wallet-addr').textContent)">Solscan ↗</button>
+    <button onclick="window.open('https://jup.ag')">Jupiter ↗</button>
+    <button onclick="window.open('https://dexscreener.com')">DexScreener ↗</button>
+  </div>
+</div>
+
+<script>
+let traderOn = false;
+let sniperOn = false;
+
+async function fetchState() {
+  try {
+    const r = await fetch('/api/state');
+    const d = await r.json();
+    document.getElementById('s-usdc').textContent = '$' + d.usdc.toFixed(2);
+    document.getElementById('s-sol').textContent = d.sol;
+    document.getElementById('s-pos').textContent = d.positions + '/3';
+    document.getElementById('s-queue').textContent = d.queue_count;
+    if (d.log_lines) renderLog(d.log_lines);
+    if (d.tokens) renderTokens(d.tokens);
+    if (d.queue_items) renderQueue(d.queue_items);
+    traderOn = d.trader_running;
+    sniperOn = d.sniper_running;
+    updateButtons();
+  } catch(e) {}
+}
+
+function renderLog(lines) {
+  const el = document.getElementById('log-body');
+  el.innerHTML = lines.map(l => {
+    let cls = 'c-info';
+    if (l.msg.includes('BUY')) cls = 'c-buy';
+    else if (l.msg.includes('SELL') || l.msg.includes('STOP')) cls = 'c-sell';
+    else if (l.msg.includes('SNIPER')) cls = 'c-snipe';
+    else if (l.msg.includes('SKIP') || l.msg.includes('error')) cls = 'c-skip';
+    return `<div class="log-line"><span class="log-t">${l.t}</span><span class="${cls}">${l.msg}</span></div>`;
+  }).join('');
+}
+
+function renderTokens(tokens) {
+  const el = document.getElementById('token-list');
+  if (!tokens.length) { el.innerHTML = '<div style="color:#475569;font-size:11px">No data yet</div>'; return; }
+  el.innerHTML = tokens.map(t => {
+    const sc = t.score;
+    const cls = sc >= 4 ? 's-buy' : sc <= -2 ? 's-sell' : 's-hold';
+    const chg = (t.change5m >= 0 ? '+' : '') + t.change5m.toFixed(2) + '%';
+    const chgcol = t.change5m >= 0 ? 'green' : 'red';
+    return `<div class="tok">
+      <div><div class="tok-name">${t.label}</div><div class="tok-price">$${t.price < 0.001 ? t.price.toExponential(2) : t.price.toFixed(6)}</div></div>
+      <div style="text-align:right"><div class="${chgcol}" style="font-size:11px">${chg}</div><div class="tok-score ${cls}">score ${sc > 0 ? '+' : ''}${sc}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderQueue(items) {
+  const panel = document.getElementById('queue-panel');
+  const list = document.getElementById('queue-list');
+  if (!items.length) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  list.innerHTML = items.map(q => `<div class="q-item">
+    <div><div class="q-mint">${q.mint}</div><div class="q-bar"><div class="q-fill" style="width:${q.pct}%"></div></div></div>
+    <div class="q-timer">${Math.floor(q.remaining/60)}:${String(q.remaining%60).padStart(2,'0')}</div>
+  </div>`).join('');
+}
+
+function updateButtons() {
+  const tb = document.getElementById('trade-btn');
+  const sb = document.getElementById('snipe-btn');
+  const tbadge = document.getElementById('trade-badge');
+  const sbadge = document.getElementById('snipe-badge');
+  const tc = document.getElementById('trade-card');
+  const sc = document.getElementById('snipe-card');
+  if (traderOn) {
+    tb.textContent = '■ Stop trading'; tb.className = 'mode-btn trade-btn on';
+    tbadge.textContent = 'Running'; tbadge.className = 'mode-badge badge-run';
+    tc.className = 'mode active-trade';
+  } else {
+    tb.textContent = '▶ Start trading'; tb.className = 'mode-btn trade-btn';
+    tbadge.textContent = 'Idle'; tbadge.className = 'mode-badge badge-idle';
+    tc.className = 'mode';
+  }
+  if (sniperOn) {
+    sb.textContent = '■ Stop sniping'; sb.className = 'mode-btn snipe-btn on';
+    sbadge.textContent = 'Running'; sbadge.className = 'mode-badge badge-run';
+    sc.className = 'mode active-snipe';
+  } else {
+    sb.textContent = '▶ Start sniping'; sb.className = 'mode-btn snipe-btn';
+    sbadge.textContent = 'Idle'; sbadge.className = 'mode-badge badge-idle';
+    sc.className = 'mode';
+  }
+}
+
+async function toggleTrader() {
+  const cfg = {interval: 300, trade_pct: 0.20, snipe_amount: parseFloat(document.getElementById('cfg-amt').value)};
+  const url = traderOn ? '/api/trader/stop' : '/api/trader/start';
+  await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg)});
+  fetchState();
+}
+
+async function toggleSniper() {
+  const cfg = {
+    snipe_amount: parseFloat(document.getElementById('cfg-amt').value),
+    min_liq: parseFloat(document.getElementById('cfg-liq').value),
+    max_liq: 50000,
+    delay: parseInt(document.getElementById('cfg-delay').value),
+  };
+  const url = sniperOn ? '/api/sniper/stop' : '/api/sniper/start';
+  await fetch(url, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(cfg)});
+  fetchState();
+}
+
+function clearLog() {
+  document.getElementById('log-body').innerHTML = '';
+}
+
+fetchState();
+setInterval(fetchState, 5000);
+setInterval(refreshPhantomBalances, 15000);
+
+let phantomPubkey = null;
+
+async function connectPhantom() {
+  if (!window.solana || !window.solana.isPhantom) {
+    alert('Phantom wallet not found!\nInstall it from phantom.app');
+    return;
+  }
+  try {
+    const resp = await window.solana.connect();
+    phantomPubkey = resp.publicKey.toString();
+    document.getElementById('wallet-addr').textContent = phantomPubkey.slice(0,6) + '...' + phantomPubkey.slice(-4);
+    document.getElementById('phantom-btn').style.display = 'none';
+    document.getElementById('wallet-connected').style.display = 'flex';
+    await refreshPhantomBalances();
+  } catch(e) {
+    console.error('Phantom connect failed', e);
+  }
+}
+
+async function refreshPhantomBalances() {
+  if (!phantomPubkey) return;
+  try {
+    const RPC = 'https://api.mainnet-beta.solana.com';
+    const USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+
+    // SOL balance
+    const solRes = await fetch(RPC, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[phantomPubkey]})});
+    const solData = await solRes.json();
+    const sol = (solData.result.value / 1e9).toFixed(4);
+    document.getElementById('s-sol').textContent = sol;
+
+    // USDC balance
+    const usdcRes = await fetch(RPC, {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({jsonrpc:'2.0',id:1,method:'getTokenAccountsByOwner',
+        params:[phantomPubkey,{mint:USDC_MINT},{encoding:'jsonParsed'}]})});
+    const usdcData = await usdcRes.json();
+    const accounts = usdcData.result?.value || [];
+    const usdc = accounts.length > 0 ? parseFloat(accounts[0].account.data.parsed.info.tokenAmount.uiAmount || 0) : 0;
+    document.getElementById('s-usdc').textContent = '$' + usdc.toFixed(2);
+
+    // Update solscan link
+    document.querySelector('.bottom button:nth-child(2)').onclick = () => window.open('https://solscan.io/account/' + phantomPubkey);
+  } catch(e) {
+    console.error('Balance refresh failed', e);
+  }
+}
+
+// Auto-connect if previously connected
+window.addEventListener('load', async () => {
+  if (window.solana?.isPhantom) {
+    try {
+      const resp = await window.solana.connect({onlyIfTrusted: true});
+      phantomPubkey = resp.publicKey.toString();
+      document.getElementById('wallet-addr').textContent = phantomPubkey.slice(0,6) + '...' + phantomPubkey.slice(-4);
+      document.getElementById('phantom-btn').style.display = 'none';
+      document.getElementById('wallet-connected').style.display = 'flex';
+      await refreshPhantomBalances();
+    } catch(e) {}
+  }
+});
+</script>
+</body>
+</html>
