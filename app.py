@@ -40,15 +40,7 @@ SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
 JUPITER_QUOTE = 'https://api.jup.ag/swap/v1/quote'
 JUPITER_SWAP = 'https://api.jup.ag/swap/v1/swap'
 
-TOKENS = [
-    {'mint': 'AqQtvEvV6wTGYjxSmzzWB11K2kmWBwbdfKCNkkW3pump', 'label': 'TOKEN2'},
-    {'mint': '6xUoG8JtjYxKfBD3nsLGp8n9pGzKUigF5WTwWyy1pump', 'label': 'TOKEN3'},
-    {'mint': '6KHeDqkeGc5JKAM9u5UKXZ1uqTeV4o45PAjAruHNpump', 'label': 'TOKEN5'},
-    {'mint': 'Ac8EScJ4ufRo8PiFkun7diUrcCCktg4JvArb3mPmpump', 'label': 'TOKEN6'},
-    {'mint': '7sgtaBCjEyo1LsPWfsfZXhj7H8q4SX1TJgyBZ7c5pump', 'label': 'TOKEN8'},
-    {'mint': 'FeMbDoX7R1Psc4GEcvJdsbNbZA3bfztcyDCatJVJpump', 'label': 'TOKEN9'},
-    {'mint': 'FzMe8rQ54FRg31KH1sHUbrdPEMMMJbLjNJ8miV8Tpump', 'label': 'TOKEN12'},
-]
+TOKENS = []  # Dynamically loaded from live market
 
 def add_log(msg):
     t = time.strftime('%H:%M:%S')
@@ -170,7 +162,7 @@ def fetch_market_tokens():
             mint = item.get('tokenAddress', '')
             if not mint: continue
             data = get_token_data(mint)
-            if not data or data['price'] <= 0: continue
+            
             sym, name = get_token_name(mint)
             liq = data.get('liquidity', 0)
             out.append({
@@ -207,7 +199,7 @@ def token_loop():
 
 def trader_loop(stop_event, cfg):
     add_log('Trader started — scanning every ' + str(cfg.get('interval', 300)) + 's')
-    positions = {t['mint']: {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0} for t in TOKENS}
+    positions = {}
     SL = float(os.getenv('STOP_LOSS', 0.05))
     TP = float(os.getenv('TAKE_PROFIT', 0.15))
     TR = float(os.getenv('TRAILING_STOP', 0.03))
@@ -217,10 +209,13 @@ def trader_loop(stop_event, cfg):
             open_pos = sum(1 for p in positions.values() if p['amount'] > 0)
             state['positions'] = open_pos
             add_log('--- SOL:' + str(state['sol']) + ' USDC:' + str(usdc) + ' Positions:' + str(open_pos) + '/3 ---')
-            for t in TOKENS:
+            live_tokens = [{'mint': t['mint'], 'label': t['symbol']} for t in state['market_tokens'] if t.get('liquidity', 0) >= 1000]
+            for t in live_tokens:
                 if stop_event.is_set(): break
+                if t['mint'] not in positions:
+                    positions[t['mint']] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0}
                 data = get_token_data(t['mint'])
-                if not data or data['price'] <= 0: continue
+                
                 sc = score_token(data)
                 pos = positions[t['mint']]
                 decision = 'BUY' if sc >= 5 else ('SELL' if sc <= -3 else 'HOLD')

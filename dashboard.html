@@ -8,146 +8,143 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#04080f;--bg2:#080f1a;--bg3:#0d1829;--bg4:#111f33;
-  --green:#00ff88;--green2:#00cc66;--blue:#00aaff;--red:#ff4466;--yellow:#ffcc00;--purple:#aa44ff;
-  --text:#c8e6ff;--muted:#4a7aaa;--border:#0d2040;
-  --glow:0 0 20px rgba(0,255,136,.3);--glow2:0 0 40px rgba(0,255,136,.15);
+  --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8eef5;--bg4:#dde6f0;
+  --green:#00a854;--green2:#007a3d;--blue:#1a6fd4;--red:#e02444;--yellow:#d4820a;--purple:#7c2fd4;
+  --text:#0f1f35;--muted:#5a7a9a;--border:#c8d8e8;
+  --glow:0 0 20px rgba(0,168,84,.2);
 }
-html,body{min-height:100vh;background:var(--bg)}
-body{font-family:'Share Tech Mono',monospace;color:var(--text);overflow-x:hidden}
+html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',monospace;color:var(--text)}
 
-/* animated bg grid */
-body::before{content:'';position:fixed;inset:0;background:
-  linear-gradient(rgba(0,255,136,.03) 1px,transparent 1px),
-  linear-gradient(90deg,rgba(0,255,136,.03) 1px,transparent 1px);
-  background-size:40px 40px;pointer-events:none;z-index:0}
-body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(0,170,255,.05) 0%,transparent 60%),radial-gradient(ellipse at 80% 20%,rgba(0,255,136,.07) 0%,transparent 50%);pointer-events:none;z-index:0}
+/* ONBOARDING */
+#onboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center}
+#onboard.hide{display:none}
+.ob-box{background:var(--bg2);border:2px solid var(--green);border-radius:20px;padding:2.5rem;width:420px;max-width:95vw;box-shadow:0 8px 40px rgba(0,168,84,.15);text-align:center}
+.ob-orc{font-size:56px;margin-bottom:.5rem;animation:float 3s ease-in-out infinite}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.ob-title{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--green);margin-bottom:.25rem}
+.ob-sub{font-size:11px;color:var(--muted);margin-bottom:2rem;line-height:1.6}
+.ob-step{display:none}
+.ob-step.active{display:block}
+.ob-btn{width:100%;padding:14px;border:none;border-radius:10px;font-family:'Orbitron',monospace;font-size:13px;font-weight:900;cursor:pointer;letter-spacing:.06em;transition:all .2s;margin-bottom:10px}
+.btn-phantom{background:#ab9ff2;color:white}
+.btn-phantom:hover{background:#9580e8;box-shadow:0 4px 20px rgba(171,159,242,.4)}
+.btn-x{background:#000;color:white;display:flex;align-items:center;justify-content:center;gap:8px}
+.btn-x:hover{background:#222;box-shadow:0 4px 20px rgba(0,0,0,.2)}
+.btn-skip{background:transparent;color:var(--muted);border:1px solid var(--border);font-size:11px;padding:10px}
+.btn-skip:hover{border-color:var(--muted);color:var(--text)}
+.ob-connected{background:rgba(0,168,84,.1);border:1px solid rgba(0,168,84,.3);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.ob-check{width:28px;height:28px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0}
+.ob-conn-text{text-align:left}
+.ob-conn-name{font-size:13px;font-weight:700;color:var(--text)}
+.ob-conn-sub{font-size:10px;color:var(--muted)}
+.ob-progress{display:flex;gap:6px;justify-content:center;margin-bottom:1.5rem}
+.ob-dot{width:8px;height:8px;border-radius:50%;background:var(--border);transition:background .3s}
+.ob-dot.done{background:var(--green)}
+.ob-dot.active{background:var(--blue)}
 
-.wrap{position:relative;z-index:1;max-width:1100px;margin:0 auto;padding:1.5rem}
-
-/* ═══ ORC DANCE OVERLAY ═══ */
-#orc-overlay{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(0,0,0,.85);backdrop-filter:blur(4px)}
+/* ORC DANCE */
+#orc-overlay{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(240,244,248,.92);backdrop-filter:blur(8px)}
 #orc-overlay.show{display:flex}
 .orc-stage{position:relative;width:280px;height:280px}
 .orc-body{position:absolute;bottom:0;left:50%;transform:translateX(-50%);animation:orcDance .4s ease-in-out infinite alternate}
-@keyframes orcDance{
-  0%{transform:translateX(-50%) rotate(-8deg) translateY(0)}
-  100%{transform:translateX(-50%) rotate(8deg) translateY(-20px)}
-}
-.orc-shadow{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:80px;height:16px;background:rgba(0,255,136,.2);border-radius:50%;animation:shadow .4s ease-in-out infinite alternate}
+@keyframes orcDance{0%{transform:translateX(-50%) rotate(-8deg) translateY(0)}100%{transform:translateX(-50%) rotate(8deg) translateY(-20px)}}
+.orc-shadow{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:80px;height:16px;background:rgba(0,168,84,.2);border-radius:50%;animation:shadow .4s ease-in-out infinite alternate}
 @keyframes shadow{0%{width:90px;opacity:.4}100%{width:60px;opacity:.15}}
-.trade-flash{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:var(--green);text-shadow:0 0 30px var(--green),0 0 60px var(--green);margin-top:1.5rem;animation:flashIn .3s ease-out;letter-spacing:.1em}
+.trade-flash{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:var(--green);margin-top:1.5rem;animation:flashIn .3s ease-out;letter-spacing:.1em}
 .trade-detail{font-size:13px;color:var(--text);margin-top:.5rem;opacity:.7}
 @keyframes flashIn{0%{opacity:0;transform:scale(.7)}100%{opacity:1;transform:scale(1)}}
-.orc-coins{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none}
 .coin{position:absolute;font-size:20px;animation:coinFly 1s ease-out forwards}
 @keyframes coinFly{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(-120px) rotate(720deg)}}
 
-/* ═══ SETUP WIZARD ═══ */
-#setup{display:none;position:fixed;inset:0;z-index:100;align-items:center;justify-content:center;background:var(--bg)}
-#setup.show{display:flex}
-.setup-box{background:var(--bg2);border:1px solid var(--green);border-radius:16px;padding:2.5rem;width:500px;max-width:95vw;box-shadow:var(--glow2)}
-.setup-orc{text-align:center;margin-bottom:1rem}
-.setup-title{font-family:'Orbitron',monospace;text-align:center;font-size:20px;color:var(--green);margin-bottom:.25rem;text-shadow:0 0 20px var(--green)}
-.setup-sub{text-align:center;font-size:11px;color:var(--muted);margin-bottom:2rem}
-.field{margin-bottom:1.2rem}
-.field-lbl{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
-.field input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--green);font-family:'Share Tech Mono',monospace;font-size:13px;padding:11px 14px;outline:none;transition:border-color .2s,box-shadow .2s}
-.field input:focus{border-color:var(--green);box-shadow:0 0 12px rgba(0,255,136,.2)}
-.warn{font-size:10px;color:var(--yellow);margin-top:5px}
-.setup-btn{width:100%;padding:13px;background:var(--green);color:#04080f;font-family:'Orbitron',monospace;font-size:13px;font-weight:900;border:none;border-radius:8px;cursor:pointer;letter-spacing:.08em;transition:all .2s;margin-top:.5rem}
-.setup-btn:hover{background:var(--green2);box-shadow:var(--glow)}
-
-/* ═══ HEADER ═══ */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;padding-bottom:1rem;border-bottom:1px solid var(--border)}
-.logo-row{display:flex;align-items:center;gap:14px}
-.logo-svg{filter:drop-shadow(0 0 12px rgba(0,255,136,.6))}
-.brand{font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:var(--green);letter-spacing:.08em;text-shadow:0 0 20px rgba(0,255,136,.5)}
-.brand-sub{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
-.wallet-area{display:flex;align-items:center;gap:10px}
-#phantom-btn{background:transparent;color:var(--green);border:1px solid var(--green);border-radius:8px;padding:8px 16px;font-family:'Share Tech Mono',monospace;font-size:11px;cursor:pointer;transition:all .2s;letter-spacing:.04em}
-#phantom-btn:hover{background:var(--green);color:var(--bg);box-shadow:var(--glow)}
-#wallet-info{display:none;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
-.dot{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 8px var(--green);animation:blink 2s infinite}
+/* MAIN APP */
+.wrap{max-width:1100px;margin:0 auto;padding:1.5rem}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:2rem;padding-bottom:1rem;border-bottom:2px solid var(--border)}
+.logo-row{display:flex;align-items:center;gap:12px}
+.brand{font-family:'Orbitron',monospace;font-size:18px;font-weight:900;color:var(--green)}
+.brand-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.header-right{display:flex;align-items:center;gap:10px}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-size:11px;color:var(--muted)}
+.dot-green{width:8px;height:8px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 2s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.x-pill{display:flex;align-items:center;gap:6px;background:#000;border-radius:20px;padding:6px 14px;font-size:11px;color:white;cursor:pointer}
+.x-pill:hover{background:#222}
 
-/* ═══ STATS ═══ */
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:2rem}
-.stat{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;position:relative;overflow:hidden;transition:border-color .3s}
-.stat::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--green),transparent);opacity:.4}
-.stat:hover{border-color:rgba(0,255,136,.3)}
-.stat-lbl{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
+.stat{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
 .stat-val{font-family:'Orbitron',monospace;font-size:22px;font-weight:700}
 .stat-sub{font-size:10px;color:var(--muted);margin-top:4px}
-.g{color:var(--green);text-shadow:0 0 15px rgba(0,255,136,.5)}
-.r{color:var(--red)}
-.y{color:var(--yellow)}
-.b{color:var(--blue)}
+.g{color:var(--green)}.r{color:var(--red)}.y{color:var(--yellow)}.b{color:var(--blue)}
 
-/* ═══ MODE CARDS ═══ */
 .modes{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:2rem}
-.mode{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:1.75rem;transition:all .3s;position:relative;overflow:hidden}
-.mode::after{content:'';position:absolute;inset:0;opacity:0;transition:opacity .3s;pointer-events:none}
-.mode.active-trade{border-color:var(--blue);box-shadow:0 0 30px rgba(0,170,255,.15)}
-.mode.active-trade::after{background:radial-gradient(ellipse at top left,rgba(0,170,255,.08),transparent 60%);opacity:1}
-.mode.active-snipe{border-color:var(--green);box-shadow:0 0 30px rgba(0,255,136,.15)}
-.mode.active-snipe::after{background:radial-gradient(ellipse at top left,rgba(0,255,136,.08),transparent 60%);opacity:1}
+.mode{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:1.75rem;transition:all .3s;box-shadow:0 2px 12px rgba(0,0,0,.06)}
+.mode.active-trade{border-color:var(--blue);box-shadow:0 0 20px rgba(26,111,212,.1)}
+.mode.active-snipe{border-color:var(--green);box-shadow:0 0 20px rgba(0,168,84,.1)}
 .mode-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem}
-.mode-icon{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px;position:relative}
-.mode-icon-trade{background:rgba(0,170,255,.1);border:1px solid rgba(0,170,255,.2)}
-.mode-icon-snipe{background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.2)}
+.mode-icon{width:52px;height:52px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:26px}
+.mode-icon-trade{background:rgba(26,111,212,.1);border:1px solid rgba(26,111,212,.2)}
+.mode-icon-snipe{background:rgba(0,168,84,.1);border:1px solid rgba(0,168,84,.2)}
 .badge{font-size:10px;padding:4px 12px;border-radius:20px;font-weight:700;letter-spacing:.06em;font-family:'Orbitron',monospace}
 .badge-idle{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
-.badge-trade{background:rgba(0,170,255,.15);color:var(--blue);border:1px solid rgba(0,170,255,.3)}
-.badge-snipe{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.3)}
+.badge-trade{background:rgba(26,111,212,.1);color:var(--blue);border:1px solid rgba(26,111,212,.2)}
+.badge-snipe{background:rgba(0,168,84,.1);color:var(--green);border:1px solid rgba(0,168,84,.2)}
 .mode-title{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;margin-bottom:8px}
 .mode-desc{font-size:11px;color:var(--muted);line-height:1.7;margin-bottom:1.25rem}
-.mode-btn{width:100%;padding:12px;font-size:12px;font-weight:700;border-radius:9px;border:none;cursor:pointer;letter-spacing:.06em;transition:all .2s;font-family:'Orbitron',monospace;position:relative;overflow:hidden}
-.trade-btn{background:var(--blue);color:white;box-shadow:0 4px 20px rgba(0,170,255,.3)}
-.trade-btn:hover{box-shadow:0 4px 30px rgba(0,170,255,.5);transform:translateY(-1px)}
-.snipe-btn{background:var(--green);color:#04080f;box-shadow:0 4px 20px rgba(0,255,136,.3)}
-.snipe-btn:hover{box-shadow:0 4px 30px rgba(0,255,136,.5);transform:translateY(-1px)}
+.mode-btn{width:100%;padding:12px;font-size:12px;font-weight:700;border-radius:9px;border:none;cursor:pointer;letter-spacing:.06em;transition:all .2s;font-family:'Orbitron',monospace}
+.trade-btn{background:var(--blue);color:white;box-shadow:0 4px 15px rgba(26,111,212,.25)}
+.trade-btn:hover{box-shadow:0 4px 25px rgba(26,111,212,.4);transform:translateY(-1px)}
+.snipe-btn{background:var(--green);color:white;box-shadow:0 4px 15px rgba(0,168,84,.25)}
+.snipe-btn:hover{box-shadow:0 4px 25px rgba(0,168,84,.4);transform:translateY(-1px)}
 .mode-btn:active{transform:scale(.98)}
-.mode-btn.on{opacity:.85}
 
-/* ═══ CONFIG ═══ */
 .cfg-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:2rem}
-.cfg{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;transition:border-color .2s}
-.cfg:focus-within{border-color:rgba(0,255,136,.3)}
-.cfg-lbl{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px}
-.cfg input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--border);color:var(--green);font-family:'Orbitron',monospace;font-size:15px;font-weight:700;padding:3px 0;outline:none;transition:border-color .2s}
-.cfg input:focus{border-bottom-color:var(--green)}
+.cfg{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+.cfg-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px}
+.cfg input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--green);font-family:'Orbitron',monospace;font-size:15px;font-weight:700;padding:6px 8px;outline:none}
+.cfg input:focus{border-color:var(--green)}
 
-/* ═══ PANELS ═══ */
-.panels{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:2rem}
-.panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px}
-.panel-hdr{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between}
-.panel-hdr::before{content:'';width:3px;height:12px;background:var(--green);border-radius:2px;margin-right:8px;box-shadow:0 0 8px var(--green)}
-.clr{background:none;border:none;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:color .2s}
-.clr:hover{color:var(--text)}
-.log-body{height:220px;overflow-y:auto;font-size:11px;line-height:1.9}
-.log-line{display:flex;gap:10px;padding:1px 0;border-bottom:1px solid rgba(13,32,64,.5)}
-.lt{color:#1e3a5f;flex-shrink:0;width:60px}
-.c-buy{color:var(--green);text-shadow:0 0 8px rgba(0,255,136,.4)}
-.c-sell{color:var(--red)}
-.c-snipe{color:var(--yellow)}
-.c-info{color:#4a7aaa}
-.c-skip{color:#2a4a6a}
-
-.tok-list{display:flex;flex-direction:column;gap:6px;max-height:220px;overflow-y:auto}
-.tok{display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border-radius:8px;padding:9px 12px;border:1px solid var(--border);transition:border-color .2s}
-.tok:hover{border-color:rgba(0,255,136,.2)}
-.tok-left{display:flex;align-items:center;gap:10px}
-.tok-dot{width:8px;height:8px;border-radius:50%}
-.tok-name{font-size:12px;font-weight:700;color:var(--text)}
-.tok-price{font-size:10px;color:var(--muted);margin-top:1px}
-.sc{font-size:10px;padding:2px 10px;border-radius:10px;font-weight:700;font-family:'Orbitron',monospace}
-.sc-buy{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.2);text-shadow:0 0 8px rgba(0,255,136,.4)}
-.sc-sell{background:rgba(255,68,102,.1);color:var(--red);border:1px solid rgba(255,68,102,.2)}
+.market-panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:2rem;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.panel-hdr{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.panel-hdr::before{content:'';width:3px;height:12px;background:var(--green);border-radius:2px}
+.ticker-wrap{overflow:hidden;border-bottom:1px solid var(--border);padding-bottom:10px;margin-bottom:12px}
+.ticker-track{display:flex;gap:2rem;animation:tickScroll 25s linear infinite;white-space:nowrap}
+.ticker-track:hover{animation-play-state:paused}
+@keyframes tickScroll{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.tick-item{font-size:11px;display:inline-flex;align-items:center;gap:6px;color:var(--muted)}
+.tick-sym{color:var(--text);font-weight:700;font-family:'Orbitron',monospace;font-size:10px}
+.market-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.mkt-card{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;cursor:pointer;transition:all .2s;box-shadow:0 1px 4px rgba(0,0,0,.05)}
+.mkt-card:hover{transform:translateY(-2px);border-color:rgba(0,168,84,.3)}
+.mkt-card.hot{border-color:rgba(0,168,84,.3);background:rgba(0,168,84,.05)}
+.mkt-card.cold{border-color:rgba(224,36,68,.2)}
+.mkt-sym{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--text);margin-bottom:2px}
+.mkt-name{font-size:9px;color:var(--muted);margin-bottom:6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mkt-price{font-size:11px;color:var(--text);margin-bottom:3px}
+.mkt-chg{font-size:11px;font-weight:700}
+.mkt-liq{font-size:9px;color:var(--muted);margin-top:4px}
+.mkt-score{font-size:9px;padding:1px 6px;border-radius:6px;margin-top:4px;display:inline-block;font-family:'Orbitron',monospace}
+.sc-buy{background:rgba(0,168,84,.1);color:var(--green);border:1px solid rgba(0,168,84,.2)}
+.sc-sell{background:rgba(224,36,68,.1);color:var(--red);border:1px solid rgba(224,36,68,.2)}
 .sc-hold{background:var(--bg4);color:var(--muted);border:1px solid var(--border)}
 
-/* ═══ QUEUE ═══ */
-.queue-panel{background:var(--bg2);border:1px solid rgba(0,255,136,.2);border-radius:12px;padding:16px;margin-bottom:2rem}
+.panels{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:2rem}
+.panel{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.clr{background:none;border:none;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer}
+.log-body{height:200px;overflow-y:auto;font-size:11px;line-height:1.9;background:var(--bg3);border-radius:8px;padding:6px 8px}
+.log-line{display:flex;gap:10px;padding:1px 0;border-bottom:1px solid rgba(0,0,0,.05)}
+.lt{color:#8aa8c8;flex-shrink:0;width:60px}
+.c-buy{color:var(--green);font-weight:700}
+.c-sell{color:var(--red)}
+.c-snipe{color:var(--yellow)}
+.c-info{color:#3a6090}
+.c-skip{color:#8aaac0}
+
+.x-panel-inner{padding:.5rem}
+.x-tweet-box{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;padding:10px;outline:none;resize:none;height:80px}
+.x-post-btn{width:100%;margin-top:8px;padding:10px;background:#000;color:white;border:none;border-radius:8px;font-family:'Share Tech Mono',monospace;font-size:12px;cursor:pointer;font-weight:700;display:flex;align-items:center;justify-content:center;gap:6px}
+.x-post-btn:hover{background:#222}
+
+.queue-panel{background:var(--bg2);border:1px solid rgba(0,168,84,.2);border-radius:12px;padding:16px;margin-bottom:2rem}
 .q-item{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
 .q-item:last-child{border-bottom:none}
 .q-mint{font-size:11px;color:var(--muted)}
@@ -155,69 +152,49 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
 .q-bar{height:3px;background:var(--border);border-radius:2px;margin-top:5px;width:130px;overflow:hidden}
 .q-fill{height:100%;background:linear-gradient(90deg,var(--green),var(--blue));border-radius:2px;transition:width 1s linear}
 
-/* ═══ BOTTOM ═══ */
-.bottom{display:flex;gap:10px}
-.bot-btn{flex:1;padding:10px;font-size:11px;font-family:'Share Tech Mono',monospace;background:var(--bg2);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;transition:all .2s;letter-spacing:.04em}
-.bot-btn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 12px rgba(0,255,136,.1)}
+.bottom{display:flex;gap:10px;margin-bottom:2rem}
+.bot-btn{flex:1;padding:10px;font-size:11px;font-family:'Share Tech Mono',monospace;background:var(--bg2);border:1px solid var(--border);color:var(--muted);border-radius:8px;cursor:pointer;transition:all .2s}
+.bot-btn:hover{border-color:var(--green);color:var(--green)}
 
-/* ═══ TRADE TICKER ═══ */
-.ticker{position:fixed;bottom:0;left:0;right:0;background:rgba(4,8,15,.9);border-top:1px solid var(--border);padding:8px 2rem;font-size:11px;color:var(--muted);display:flex;gap:2rem;overflow:hidden;z-index:50}
-.tick-item{white-space:nowrap;animation:tickMove 30s linear infinite}
-@keyframes tickMove{0%{transform:translateX(100vw)}100%{transform:translateX(-100%)}}
-
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-thumb{background:var(--muted);border-radius:2px;opacity:.5}
 </style>
 </head>
 <body>
 
-<!-- ORC DANCE OVERLAY -->
+<!-- ORC DANCE -->
 <div id="orc-overlay">
   <div class="orc-stage">
-    <div class="orc-coins" id="orc-coins"></div>
+    <div id="orc-coins" style="position:absolute;width:100%;height:100%;pointer-events:none"></div>
     <svg class="orc-body" width="160" height="200" viewBox="0 0 160 200">
-      <!-- body -->
       <ellipse cx="80" cy="130" rx="45" ry="55" fill="#1a4a2a"/>
-      <!-- belly -->
       <ellipse cx="80" cy="140" rx="28" ry="35" fill="#2a6a3a"/>
-      <!-- head -->
       <ellipse cx="80" cy="75" rx="42" ry="40" fill="#1a4a2a"/>
-      <!-- ears -->
       <ellipse cx="40" cy="60" rx="12" ry="18" fill="#1a4a2a"/>
       <ellipse cx="120" cy="60" rx="12" ry="18" fill="#1a4a2a"/>
       <ellipse cx="40" cy="60" rx="7" ry="11" fill="#ff6688"/>
       <ellipse cx="120" cy="60" rx="7" ry="11" fill="#ff6688"/>
-      <!-- eyes (happy/dancing) -->
       <ellipse cx="62" cy="72" rx="10" ry="11" fill="white"/>
       <ellipse cx="98" cy="72" rx="10" ry="11" fill="white"/>
-      <ellipse cx="64" cy="74" rx="6" ry="7" fill="#00ff88"/>
-      <ellipse cx="100" cy="74" rx="6" ry="7" fill="#00ff88"/>
+      <ellipse cx="64" cy="74" rx="6" ry="7" fill="#00a854"/>
+      <ellipse cx="100" cy="74" rx="6" ry="7" fill="#00a854"/>
       <circle cx="66" cy="72" r="2.5" fill="black"/>
       <circle cx="102" cy="72" r="2.5" fill="black"/>
-      <!-- shine -->
       <circle cx="68" cy="70" r="2" fill="white" opacity=".8"/>
       <circle cx="104" cy="70" r="2" fill="white" opacity=".8"/>
-      <!-- smile -->
-      <path d="M 60 88 Q 80 102 100 88" stroke="#00ff88" stroke-width="3" fill="none" stroke-linecap="round"/>
-      <!-- teeth -->
+      <path d="M 60 88 Q 80 102 100 88" stroke="#00a854" stroke-width="3" fill="none" stroke-linecap="round"/>
       <rect x="70" y="88" width="8" height="6" rx="1" fill="white"/>
       <rect x="82" y="88" width="8" height="6" rx="1" fill="white"/>
-      <!-- tusks -->
       <path d="M 58 90 L 50 106 L 60 102 Z" fill="white"/>
       <path d="M 102 90 L 110 106 L 100 102 Z" fill="white"/>
-      <!-- arms dancing -->
-      <path d="M 35 120 Q 10 90 20 70" stroke="#1a4a2a" stroke-width="18" fill="none" stroke-linecap="round" class="arm-l"/>
-      <path d="M 125 120 Q 150 90 140 70" stroke="#1a4a2a" stroke-width="18" fill="none" stroke-linecap="round" class="arm-r"/>
-      <!-- hands -->
+      <path d="M 35 120 Q 10 90 20 70" stroke="#1a4a2a" stroke-width="18" fill="none" stroke-linecap="round"/>
+      <path d="M 125 120 Q 150 90 140 70" stroke="#1a4a2a" stroke-width="18" fill="none" stroke-linecap="round"/>
       <circle cx="20" cy="70" r="10" fill="#1a4a2a"/>
       <circle cx="140" cy="70" r="10" fill="#1a4a2a"/>
-      <!-- legs -->
       <path d="M 60 178 Q 50 195 42 198" stroke="#1a4a2a" stroke-width="16" fill="none" stroke-linecap="round"/>
       <path d="M 100 178 Q 110 195 118 198" stroke="#1a4a2a" stroke-width="16" fill="none" stroke-linecap="round"/>
-      <!-- feet -->
       <ellipse cx="40" cy="198" rx="14" ry="7" fill="#0d3a1a"/>
       <ellipse cx="120" cy="198" rx="14" ry="7" fill="#0d3a1a"/>
-      <!-- chest symbol -->
-      <text x="80" y="138" text-anchor="middle" font-size="18" fill="#00ff88" opacity=".7">$</text>
+      <text x="80" y="138" text-anchor="middle" font-size="18" fill="#00a854" opacity=".7">$</text>
     </svg>
     <div class="orc-shadow"></div>
   </div>
@@ -225,42 +202,63 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
   <div class="trade-detail" id="orc-trade-detail"></div>
 </div>
 
-<!-- SETUP WIZARD -->
-<div id="setup">
-  <div class="setup-box">
-    <div class="setup-orc">
-      <svg width="80" height="80" viewBox="0 0 160 160" style="filter:drop-shadow(0 0 16px rgba(0,255,136,.6))">
-        <ellipse cx="80" cy="100" rx="40" ry="45" fill="#1a4a2a"/>
-        <ellipse cx="80" cy="75" rx="38" ry="36" fill="#1a4a2a"/>
-        <ellipse cx="80" cy="82" rx="24" ry="30" fill="#2a6a3a"/>
-        <ellipse cx="42" cy="58" rx="11" ry="16" fill="#1a4a2a"/>
-        <ellipse cx="118" cy="58" rx="11" ry="16" fill="#1a4a2a"/>
-        <ellipse cx="62" cy="70" rx="9" ry="10" fill="white"/>
-        <ellipse cx="98" cy="70" rx="9" ry="10" fill="white"/>
-        <ellipse cx="64" cy="72" rx="5" ry="6" fill="#00ff88"/>
-        <ellipse cx="100" cy="72" rx="5" ry="6" fill="#00ff88"/>
-        <circle cx="65" cy="71" r="2" fill="black"/>
-        <circle cx="101" cy="71" r="2" fill="black"/>
-        <path d="M 58 84 Q 80 96 102 84" stroke="#00ff88" stroke-width="3" fill="none" stroke-linecap="round"/>
-        <path d="M 56 88 L 48 102 L 58 98 Z" fill="white"/>
-        <path d="M 104 88 L 112 102 L 102 98 Z" fill="white"/>
-      </svg>
+<!-- ONBOARDING -->
+<div id="onboard">
+  <div class="ob-box">
+    <div class="ob-orc">🐋</div>
+    <div class="ob-title">ORCAGENT</div>
+    <div class="ob-sub">Connect your Phantom wallet and X account to start trading Solana meme coins automatically.</div>
+    <div class="ob-progress">
+      <div class="ob-dot active" id="dot-0"></div>
+      <div class="ob-dot" id="dot-1"></div>
+      <div class="ob-dot" id="dot-2"></div>
     </div>
-    <div class="setup-title">ORCAGENT SETUP</div>
-    <div class="setup-sub">Configure your trading bot. All data stored locally on your PC.</div>
-    <div class="field"><div class="field-lbl">Anthropic API Key</div><input id="s-anthropic" type="password" placeholder="sk-ant-..."/></div>
-    <div class="field"><div class="field-lbl">Wallet Address (Public Key)</div><input id="s-wallet" type="text" placeholder="57ENjXjh...vGw6"/></div>
-    <div class="field"><div class="field-lbl">Wallet Private Key</div><input id="s-privkey" type="password" placeholder="Base58 private key"/><div class="warn">⚠ Stored only on your local PC. Never shared.</div></div>
-    <button class="setup-btn" onclick="saveSetup()">LAUNCH ORCAGENT ▶</button>
+
+    <!-- Step 1: Phantom -->
+    <div class="ob-step active" id="step-0">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Phantom Wallet</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1.25rem">Your wallet is used to execute trades. Your private key stays in Phantom — we never touch it.</div>
+      <div id="phantom-connected" style="display:none" class="ob-connected">
+        <div class="ob-check">✓</div>
+        <div class="ob-conn-text"><div class="ob-conn-name" id="phantom-addr">Connected</div><div class="ob-conn-sub">Phantom wallet</div></div>
+      </div>
+      <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectPhantomOnboard()">
+        🔮 Connect Phantom
+      </button>
+      <button class="ob-btn btn-skip" onclick="nextStep(0)">Skip for now →</button>
+    </div>
+
+    <!-- Step 2: X -->
+    <div class="ob-step" id="step-1">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 2 — Connect X Account</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1.25rem">Optional — post your winning trades to X automatically and flex your gains to followers.</div>
+      <div id="x-ob-connected" style="display:none" class="ob-connected">
+        <div class="ob-check">✓</div>
+        <div class="ob-conn-text"><div class="ob-conn-name" id="x-ob-name">Connected</div><div class="ob-conn-sub">X account</div></div>
+      </div>
+      <button class="ob-btn btn-x" id="x-ob-btn" onclick="connectXOnboard()">
+        <span style="font-size:16px">𝕏</span> Sign in with X
+      </button>
+      <button class="ob-btn btn-skip" onclick="nextStep(1)">Skip for now →</button>
+    </div>
+
+    <!-- Step 3: Ready -->
+    <div class="ob-step" id="step-2">
+      <div style="font-size:36px;margin-bottom:1rem">🚀</div>
+      <div style="font-size:14px;font-weight:700;color:var(--text);margin-bottom:.5rem">You're all set!</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1.5rem;line-height:1.6">OrcAgent is ready to trade. Press <strong>Start Trading</strong> to activate the AI scalper or <strong>Start Sniping</strong> to hunt new token launches.</div>
+      <button class="ob-btn" style="background:var(--green);color:white" onclick="launchApp()">
+        Launch OrcAgent ▶
+      </button>
+    </div>
   </div>
 </div>
 
 <!-- MAIN APP -->
 <div class="wrap" id="app" style="display:none">
-
   <div class="header">
     <div class="logo-row">
-      <svg class="logo-svg" width="48" height="48" viewBox="0 0 160 160">
+      <svg width="42" height="42" viewBox="0 0 160 160" style="filter:drop-shadow(0 0 8px rgba(0,168,84,.4))">
         <ellipse cx="80" cy="105" rx="42" ry="47" fill="#1a4a2a"/>
         <ellipse cx="80" cy="78" rx="40" ry="38" fill="#1a4a2a"/>
         <ellipse cx="80" cy="86" rx="26" ry="32" fill="#2a6a3a"/>
@@ -268,49 +266,41 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
         <ellipse cx="118" cy="60" rx="12" ry="18" fill="#1a4a2a"/>
         <ellipse cx="64" cy="73" rx="10" ry="11" fill="white"/>
         <ellipse cx="96" cy="73" rx="10" ry="11" fill="white"/>
-        <ellipse cx="66" cy="75" rx="6" ry="7" fill="#00ff88"/>
-        <ellipse cx="98" cy="75" rx="6" ry="7" fill="#00ff88"/>
+        <ellipse cx="66" cy="75" rx="6" ry="7" fill="#00a854"/>
+        <ellipse cx="98" cy="75" rx="6" ry="7" fill="#00a854"/>
         <circle cx="67" cy="74" r="2.5" fill="black"/>
         <circle cx="99" cy="74" r="2.5" fill="black"/>
-        <path d="M 60 88 Q 80 100 100 88" stroke="#00ff88" stroke-width="3" fill="none" stroke-linecap="round"/>
+        <path d="M 60 88 Q 80 100 100 88" stroke="#00a854" stroke-width="3" fill="none" stroke-linecap="round"/>
         <path d="M 57 92 L 49 108 L 60 104 Z" fill="white"/>
         <path d="M 103 92 L 111 108 L 100 104 Z" fill="white"/>
       </svg>
-      <div>
-        <div class="brand">ORCAGENT</div>
-        <div class="brand-sub">SOLANA SMART SCALPER v4 + SNIPER</div>
-      </div>
+      <div><div class="brand">ORCAGENT</div><div class="brand-sub">SOLANA SMART SCALPER v4 + SNIPER</div></div>
     </div>
-    <div class="wallet-area">
-      <button id="phantom-btn" onclick="connectPhantom()">🔗 CONNECT PHANTOM</button>
-      <div id="wallet-info"><div class="dot"></div><span id="wallet-addr"></span></div>
+    <div class="header-right">
+      <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
+      <div class="x-pill" id="x-pill" style="display:none" onclick="postToX()"><span>𝕏</span><span id="x-username">@user</span></div>
+      <button style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⚙ Settings</button>
     </div>
   </div>
 
   <div class="stats">
-    <div class="stat"><div class="stat-lbl">USDC Balance</div><div class="stat-val g" id="s-usdc">—</div><div class="stat-sub">available to trade</div></div>
-    <div class="stat"><div class="stat-lbl">SOL Balance</div><div class="stat-val b" id="s-sol">—</div><div class="stat-sub">for tx fees</div></div>
-    <div class="stat"><div class="stat-lbl">Open Positions</div><div class="stat-val y" id="s-pos">—</div><div class="stat-sub">max 3 simultaneous</div></div>
-    <div class="stat"><div class="stat-lbl">Snipe Queue</div><div class="stat-val" style="color:var(--purple)" id="s-queue">—</div><div class="stat-sub">pending tokens</div></div>
+    <div class="stat"><div class="stat-lbl">USDC Balance</div><div class="stat-val g" id="s-usdc">—</div><div class="stat-sub">available</div></div>
+    <div class="stat"><div class="stat-lbl">SOL Balance</div><div class="stat-val b" id="s-sol">—</div><div class="stat-sub">for fees</div></div>
+    <div class="stat"><div class="stat-lbl">Open Positions</div><div class="stat-val y" id="s-pos">—</div><div class="stat-sub">max 3</div></div>
+    <div class="stat"><div class="stat-lbl">Snipe Queue</div><div class="stat-val" style="color:var(--purple)" id="s-queue">—</div><div class="stat-sub">pending</div></div>
   </div>
 
   <div class="modes">
     <div class="mode" id="trade-card">
-      <div class="mode-top">
-        <div class="mode-icon mode-icon-trade">📈</div>
-        <div class="badge badge-idle" id="trade-badge">IDLE</div>
-      </div>
+      <div class="mode-top"><div class="mode-icon mode-icon-trade">📈</div><div class="badge badge-idle" id="trade-badge">IDLE</div></div>
       <div class="mode-title" style="color:var(--blue)">TRADE MODE</div>
       <div class="mode-desc">AI-powered scalper scans 7 Solana meme coins every 5 minutes. Buys when score &gt; 4 with strong momentum. Auto-exits at 15% take profit, 5% stop loss, or 3% trailing stop.</div>
       <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ START TRADING</button>
     </div>
     <div class="mode" id="snipe-card">
-      <div class="mode-top">
-        <div class="mode-icon mode-icon-snipe">⚡</div>
-        <div class="badge badge-idle" id="snipe-badge">IDLE</div>
-      </div>
+      <div class="mode-top"><div class="mode-icon mode-icon-snipe">⚡</div><div class="badge badge-idle" id="snipe-badge">IDLE</div></div>
       <div class="mode-title" style="color:var(--green)">SNIPE MODE</div>
-      <div class="mode-desc">Watches DexScreener every 15s for brand new token launches. Queues tokens for safety checks — freeze authority, liquidity range — then executes lightning-fast buys.</div>
+      <div class="mode-desc">Watches DexScreener every 15s for new token launches. Queues for 10 min, runs safety checks (freeze authority + liquidity), then executes lightning-fast buys.</div>
       <button class="mode-btn snipe-btn" id="snipe-btn" onclick="toggleSniper()">⚡ START SNIPING</button>
     </div>
   </div>
@@ -326,92 +316,108 @@ body::after{content:'';position:fixed;inset:0;background:radial-gradient(ellipse
     <div id="queue-list"></div>
   </div>
 
+  <div class="market-panel">
+    <div class="panel-hdr">🔥 Live Solana Market <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:4px">newest tokens</span></div>
+    <div class="ticker-wrap"><div class="ticker-track" id="ticker-track"></div></div>
+    <div class="market-grid" id="market-grid"><div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:8px 0">Loading live market...</div></div>
+  </div>
+
   <div class="panels">
     <div class="panel">
       <div class="panel-hdr">Live Log <button class="clr" onclick="document.getElementById('log-body').innerHTML=''">CLEAR</button></div>
       <div class="log-body" id="log-body"></div>
     </div>
     <div class="panel">
-      <div class="panel-hdr">Token Signals</div>
-      <div class="tok-list" id="tok-list"><div style="color:var(--muted);font-size:11px;padding:8px 0">Awaiting first scan...</div></div>
+      <div class="panel-hdr">𝕏 Post to X</div>
+      <div class="x-panel-inner">
+        <textarea class="x-tweet-box" id="x-tweet-box">🐋 OrcAgent is live! Autonomous Solana meme coin trading bot. #Solana #DeFi #OrcAgent</textarea>
+        <button class="x-post-btn" onclick="postToX()"><span>𝕏</span> Post to X</button>
+        <div style="margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+          <label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer">
+            <input type="checkbox" id="x-autopost" style="width:16px;height:16px;accent-color:var(--green)"> Auto-post winning trades
+          </label>
+        </div>
+      </div>
     </div>
   </div>
 
   <div class="bottom">
-    <button class="bot-btn" onclick="location.reload()">↺ REFRESH</button>
-    <button class="bot-btn" id="btn-solscan">SOLSCAN ↗</button>
-    <button class="bot-btn" onclick="window.open('https://jup.ag')">JUPITER ↗</button>
-    <button class="bot-btn" onclick="window.open('https://dexscreener.com')">DEXSCREENER ↗</button>
-    <button class="bot-btn" onclick="showSetup()">⚙ SETTINGS</button>
+    <button class="bot-btn" onclick="location.reload()">↺ Refresh</button>
+    <button class="bot-btn" id="btn-solscan">Solscan ↗</button>
+    <button class="bot-btn" onclick="window.open('https://jup.ag')">Jupiter ↗</button>
+    <button class="bot-btn" onclick="window.open('https://dexscreener.com')">DexScreener ↗</button>
   </div>
 </div>
 
 <script>
-let traderOn=false,sniperOn=false,phantomKey=null;
-let lastLogCount=0;
+let traderOn=false, sniperOn=false, phantomKey=null, xUser=null, currentStep=0;
+const X_CLIENT_ID='b0NvWGZpUWZJYnN0cWdvUzdEWjk6MTpjaQ';
 
-function showOrcDance(text, detail) {
-  const overlay = document.getElementById('orc-overlay');
-  document.getElementById('orc-trade-text').textContent = text;
-  document.getElementById('orc-trade-detail').textContent = detail || '';
-  overlay.classList.add('show');
-  spawnCoins();
-  setTimeout(()=>overlay.classList.remove('show'), 3500);
+// ── ONBOARDING ──
+function showStep(n) {
+  document.querySelectorAll('.ob-step').forEach((s,i)=>s.classList.toggle('active',i===n));
+  document.querySelectorAll('.ob-dot').forEach((d,i)=>{
+    d.classList.toggle('done',i<n);
+    d.classList.toggle('active',i===n);
+  });
 }
+function nextStep(n) { currentStep=n+1; showStep(currentStep); }
 
-function spawnCoins() {
-  const container = document.getElementById('orc-coins');
-  container.innerHTML = '';
-  const emojis = ['💰','💎','🚀','✨','💸','🤑','⚡'];
-  for (let i=0;i<12;i++) {
-    const coin = document.createElement('div');
-    coin.className = 'coin';
-    coin.textContent = emojis[Math.floor(Math.random()*emojis.length)];
-    coin.style.left = (Math.random()*220)+'px';
-    coin.style.top = (100+Math.random()*100)+'px';
-    coin.style.animationDelay = (Math.random()*0.6)+'s';
-    container.appendChild(coin);
-  }
-}
-
-async function init() {
+async function connectPhantomOnboard() {
+  if (!window.solana?.isPhantom) { alert('Phantom not installed!\nGet it at phantom.app'); return; }
   try {
-    const r = await fetch('/api/state').then(r=>r.json());
-    if (!r.configured) { showSetup(); return; }
-    document.getElementById('app').style.display='block';
-    document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+r.wallet);
-    if (window.solana?.isPhantom) {
-      try { const resp=await window.solana.connect({onlyIfTrusted:true}); phantomKey=resp.publicKey.toString(); showWallet(phantomKey); } catch(e){}
-    }
-    updateState(r);
-  } catch(e){ showSetup(); }
+    const r = await window.solana.connect();
+    phantomKey = r.publicKey.toString();
+    document.getElementById('phantom-addr').textContent = phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
+    document.getElementById('phantom-connected').style.display='flex';
+    document.getElementById('phantom-ob-btn').textContent='✓ Connected — Continue →';
+    document.getElementById('phantom-ob-btn').onclick = ()=>nextStep(0);
+    document.getElementById('wallet-pill').style.display='flex';
+    document.getElementById('wallet-short').textContent = phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
+    document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey);
+    refreshPhantomBalances();
+    localStorage.setItem('phantom-key', phantomKey);
+  } catch(e) { console.error(e); }
 }
 
-function showSetup() { document.getElementById('setup').classList.add('show'); }
-
-async function saveSetup() {
-  const data={ANTHROPIC_API_KEY:document.getElementById('s-anthropic').value.trim(),WALLET_ADDRESS:document.getElementById('s-wallet').value.trim(),WALLET_PRIVATE_KEY:document.getElementById('s-privkey').value.trim()};
-  if (!data.ANTHROPIC_API_KEY||!data.WALLET_ADDRESS||!data.WALLET_PRIVATE_KEY){alert('Fill in all fields');return;}
-  await fetch('/api/setup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
-  document.getElementById('setup').classList.remove('show');
+async function connectXOnboard() {
+  const verifier = generateVerifier();
+  const encoder = new TextEncoder();
+  const data = encoder.encode(verifier);
+  const digest = await crypto.subtle.digest('SHA-256', data);
+  const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+    .replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
+  await fetch('/api/x/verifier',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verifier})});
+  const authUrl='https://twitter.com/i/oauth2/authorize?response_type=code&client_id='+X_CLIENT_ID+'&redirect_uri='+encodeURIComponent(location.origin+'/x-callback')+'&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=orcagent&code_challenge='+challenge+'&code_challenge_method=S256';
+  const w=600,h=700,left=screen.width/2-300,top=screen.height/2-350;
+  window.open(authUrl,'X Login','width='+w+',height='+h+',left='+left+',top='+top);
+  const poll=setInterval(async()=>{
+    const r=await fetch('/api/x/status').then(r=>r.json()).catch(()=>null);
+    if(r?.connected){
+      clearInterval(poll);
+      xUser='@'+r.username;
+      document.getElementById('x-ob-name').textContent=xUser;
+      document.getElementById('x-ob-connected').style.display='flex';
+      document.getElementById('x-ob-btn').textContent='✓ Connected — Continue →';
+      document.getElementById('x-ob-btn').onclick=()=>nextStep(1);
+      document.getElementById('x-pill').style.display='flex';
+      document.getElementById('x-username').textContent=xUser;
+      localStorage.setItem('x-user',xUser);
+    }
+  },2000);
+  setTimeout(()=>clearInterval(poll),120000);
+}
+function launchApp() {
+  document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
   fetchState();
 }
 
-async function connectPhantom() {
-  if (!window.solana?.isPhantom){alert('Phantom not found!\nInstall from phantom.app');return;}
-  try { const r=await window.solana.connect(); phantomKey=r.publicKey.toString(); showWallet(phantomKey); refreshPhantomBalances(); } catch(e){}
-}
+function generateVerifier(){const a=new Uint8Array(32);crypto.getRandomValues(a);return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
 
-function showWallet(key) {
-  document.getElementById('phantom-btn').style.display='none';
-  const wi=document.getElementById('wallet-info'); wi.style.display='flex';
-  document.getElementById('wallet-addr').textContent=key.slice(0,6)+'...'+key.slice(-4);
-  document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+key);
-}
-
+// ── PHANTOM BALANCES ──
 async function refreshPhantomBalances() {
-  if (!phantomKey) return;
+  if(!phantomKey) return;
   try {
     const RPC='https://api.mainnet-beta.solana.com',USDC='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
     const sr=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[phantomKey]})}).then(r=>r.json());
@@ -423,112 +429,126 @@ async function refreshPhantomBalances() {
   } catch(e){}
 }
 
+// ── X POST ──
+function postToX() {
+  const text=document.getElementById('x-tweet-box').value;
+  window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank');
+}
+
+function showOrcDance(text,detail) {
+  const o=document.getElementById('orc-overlay');
+  document.getElementById('orc-trade-text').textContent=text;
+  document.getElementById('orc-trade-detail').textContent=detail||'';
+  o.classList.add('show');
+  const c=document.getElementById('orc-coins');c.innerHTML='';
+  const em=['💰','💎','🚀','✨','💸','🤑','⚡'];
+  for(let i=0;i<12;i++){const d=document.createElement('div');d.className='coin';d.textContent=em[Math.floor(Math.random()*em.length)];d.style.cssText='left:'+(Math.random()*220)+'px;top:'+(100+Math.random()*100)+'px;animation-delay:'+(Math.random()*.6)+'s';c.appendChild(d);}
+  if(xUser&&document.getElementById('x-autopost')?.checked){
+    const t='🐋 OrcAgent just executed a trade! '+detail+' #Solana #DeFi #OrcAgent';
+    setTimeout(()=>window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(t),'_blank'),1000);
+  }
+  setTimeout(()=>o.classList.remove('show'),3500);
+}
+
+// ── STATE ──
+let lastLogCount=0;
 async function fetchState() {
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
-  if (r) updateState(r);
-}
-
-function updateState(d) {
-  if (!phantomKey) { document.getElementById('s-usdc').textContent='$'+d.usdc.toFixed(2); document.getElementById('s-sol').textContent=d.sol; }
-  document.getElementById('s-pos').textContent=d.positions+'/3';
-  document.getElementById('s-queue').textContent=d.queue_count;
-  traderOn=d.trader_running; sniperOn=d.sniper_running;
+  if(!r) return;
+  if(!phantomKey){document.getElementById('s-usdc').textContent='$'+r.usdc.toFixed(2);document.getElementById('s-sol').textContent=r.sol;}
+  document.getElementById('s-pos').textContent=r.positions+'/3';
+  document.getElementById('s-queue').textContent=r.queue_count;
+  traderOn=r.trader_running;sniperOn=r.sniper_running;
   updateBtns();
-  if (d.log_lines) {
-    checkForTrades(d.log_lines);
-    renderLog(d.log_lines);
-  }
-  if (d.tokens) renderTokens(d.tokens);
-  if (d.queue_items) renderQueue(d.queue_items);
+  if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
+  if(r.queue_items)renderQueue(r.queue_items);
 }
 
-function checkForTrades(lines) {
-  if (!lines.length) return;
-  const latest = lines[0];
-  if (lastLogCount > 0 && latest.msg) {
-    const m = latest.msg;
-    if (m.startsWith('BUY ') && !m.includes('FAILED') && !m.includes('SIZE')) {
-      const parts = m.split(' ');
-      showOrcDance('BUY EXECUTED! 🚀', parts.slice(0,3).join(' '));
-    } else if (m.includes('TAKE PROFIT')) {
-      showOrcDance('TAKE PROFIT! 💎', m.substring(0,50));
-    } else if (m.includes('SNIPER: BUY ') && !m.includes('FAILED')) {
-      showOrcDance('SNIPE LANDED! ⚡', m.substring(0,50));
-    }
-  }
-  lastLogCount = lines.length;
+async function fetchMarketOnly(){
+  const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
+  if(r?.tokens)renderMarket(r.tokens);
 }
 
-function renderLog(lines) {
+function checkForTrades(lines){
+  if(!lines.length||lastLogCount===0){lastLogCount=lines.length;return;}
+  const m=lines[0]?.msg||'';
+  if(m.startsWith('BUY ')&&!m.includes('FAILED')&&!m.includes('SIZE'))showOrcDance('BUY EXECUTED! 🚀',m.substring(0,50));
+  else if(m.includes('TAKE PROFIT'))showOrcDance('TAKE PROFIT! 💎',m.substring(0,50));
+  else if(m.includes('SNIPER: BUY ')&&!m.includes('FAILED'))showOrcDance('SNIPE LANDED! ⚡',m.substring(0,50));
+  lastLogCount=lines.length;
+}
+
+function renderLog(lines){
   const el=document.getElementById('log-body');
   el.innerHTML=lines.map(l=>{
-    let cls='c-info';
-    const m=l.msg||'';
-    if ((m.startsWith('BUY ')||m.includes('TAKE PROFIT'))&&!m.includes('FAILED')&&!m.includes('SIZE')) cls='c-buy';
-    else if (m.includes('SELL')||m.includes('STOP LOSS')) cls='c-sell';
-    else if (m.includes('SNIPER')) cls='c-snipe';
-    else if (m.includes('SKIP')||m.includes('error')||m.includes('FAILED')) cls='c-skip';
-    return `<div class="log-line"><span class="lt">${l.t}</span><span class="${cls}">${m}</span></div>`;
+    let cls='c-info';const m=l.msg||'';
+    if((m.startsWith('BUY ')||m.includes('TAKE PROFIT'))&&!m.includes('FAILED')&&!m.includes('SIZE'))cls='c-buy';
+    else if(m.includes('SELL')||m.includes('STOP LOSS'))cls='c-sell';
+    else if(m.includes('SNIPER'))cls='c-snipe';
+    else if(m.includes('SKIP')||m.includes('error')||m.includes('FAILED'))cls='c-skip';
+    return '<div class="log-line"><span class="lt">'+l.t+'</span><span class="'+cls+'">'+m+'</span></div>';
   }).join('');
 }
 
-function renderTokens(tokens) {
-  const el=document.getElementById('tok-list');
-  if (!tokens.length){el.innerHTML='<div style="color:var(--muted);font-size:11px;padding:8px 0">Waiting for scan...</div>';return;}
-  el.innerHTML=tokens.map(t=>{
-    const sc=t.score;
-    const cls=sc>=4?'sc-buy':sc<=-2?'sc-sell':'sc-hold';
-    const dot=sc>=4?'#00ff88':sc<=-2?'#ff4466':'#4a7aaa';
-    const chg=(t.change5m>=0?'+':'')+t.change5m.toFixed(2)+'%';
-    const chgcol=t.change5m>=0?'var(--green)':'var(--red)';
-    const px=t.price<0.001?t.price.toExponential(2):t.price.toFixed(6);
-    return `<div class="tok">
-      <div class="tok-left"><div class="tok-dot" style="background:${dot};box-shadow:0 0 6px ${dot}"></div>
-      <div><div class="tok-name">${t.label}</div><div class="tok-price">$${px}</div></div></div>
-      <div style="text-align:right"><div style="font-size:11px;color:${chgcol};margin-bottom:3px">${chg}</div><div class="sc ${cls}">+${sc>0?'+':''}${sc}</div></div>
-    </div>`;
+function fmtPrice(p){if(!p)return '$0';if(p<0.000001)return '$'+p.toExponential(2);if(p<0.001)return '$'+p.toFixed(7);if(p<1)return '$'+p.toFixed(4);return '$'+p.toFixed(2);}
+function fmtNum(n){if(n>=1e6)return '$'+(n/1e6).toFixed(1)+'M';if(n>=1e3)return '$'+(n/1e3).toFixed(1)+'K';return '$'+Math.round(n);}
+
+function renderMarket(tokens){
+  const grid=document.getElementById('market-grid'),ticker=document.getElementById('ticker-track');
+  if(!tokens?.length){grid.innerHTML='<div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:8px 0">Waiting for first scan...</div>';return;}
+  grid.innerHTML=tokens.map(t=>{
+    const chg=t.change5m,chgStr=(chg>=0?'+':'')+chg.toFixed(2)+'%';
+    const chgCol=chg>=2?'var(--green)':chg>=0?'#2a8a4a':chg>-5?'var(--red)':'#c01030';
+    const hot=t.score>=4,cold=t.score<=-3;
+    const cls=hot?'mkt-card hot':cold?'mkt-card cold':'mkt-card';
+    const scCls=hot?'mkt-score sc-buy':cold?'mkt-score sc-sell':'mkt-score sc-hold';
+    return '<div class="'+cls+'" onclick="window.open(\'https://dexscreener.com/solana/\'+\''+t.mint+'\')"><div class="mkt-sym">'+t.symbol+'</div><div class="mkt-name">'+t.name+'</div><div class="mkt-price">'+fmtPrice(t.price)+'</div><div class="mkt-chg" style="color:'+chgCol+'">'+chgStr+'</div><div class="mkt-liq">Liq: '+fmtNum(t.liquidity)+'</div><div class="'+scCls+'">'+( t.score>0?'+':'')+t.score+'</div></div>';
   }).join('');
+  const tickHtml=tokens.map(t=>'<span class="tick-item"><span class="tick-sym">'+t.symbol+'</span><span>'+fmtPrice(t.price)+'</span><span style="color:'+(t.change5m>=0?'var(--green)':'var(--red)')+'">'+( t.change5m>=0?'+':'')+t.change5m.toFixed(2)+'%</span></span>').join('');
+  ticker.innerHTML=tickHtml+tickHtml;
 }
 
-function renderQueue(items) {
-  const panel=document.getElementById('queue-panel');
-  const list=document.getElementById('queue-list');
+function renderQueue(items){
+  const panel=document.getElementById('queue-panel'),list=document.getElementById('queue-list');
   document.getElementById('q-count').textContent=items.length;
-  if (!items.length){panel.style.display='none';return;}
+  if(!items.length){panel.style.display='none';return;}
   panel.style.display='block';
-  list.innerHTML=items.map(q=>`<div class="q-item">
-    <div><div class="q-mint">${q.mint}</div><div class="q-bar"><div class="q-fill" style="width:${q.pct}%"></div></div></div>
-    <div class="q-timer">${Math.floor(q.remaining/60)}:${String(q.remaining%60).padStart(2,'0')}</div>
-  </div>`).join('');
+  list.innerHTML=items.map(q=>'<div class="q-item"><div><div class="q-mint">'+q.mint+'</div><div class="q-bar"><div class="q-fill" style="width:'+q.pct+'%"></div></div></div><div class="q-timer">'+Math.floor(q.remaining/60)+':'+String(q.remaining%60).padStart(2,'0')+'</div></div>').join('');
 }
 
-function updateBtns() {
+function updateBtns(){
   const tb=document.getElementById('trade-btn'),sb=document.getElementById('snipe-btn');
   const tbadge=document.getElementById('trade-badge'),sbadge=document.getElementById('snipe-badge');
   const tc=document.getElementById('trade-card'),sc=document.getElementById('snipe-card');
-  if (traderOn) { tb.textContent='■ STOP TRADING'; tb.className='mode-btn trade-btn on'; tbadge.textContent='RUNNING'; tbadge.className='badge badge-trade'; tc.className='mode active-trade'; }
-  else { tb.textContent='▶ START TRADING'; tb.className='mode-btn trade-btn'; tbadge.textContent='IDLE'; tbadge.className='badge badge-idle'; tc.className='mode'; }
-  if (sniperOn) { sb.textContent='■ STOP SNIPING'; sb.className='mode-btn snipe-btn on'; sbadge.textContent='RUNNING'; sbadge.className='badge badge-snipe'; sc.className='mode active-snipe'; }
-  else { sb.textContent='⚡ START SNIPING'; sb.className='mode-btn snipe-btn'; sbadge.textContent='IDLE'; sbadge.className='badge badge-idle'; sc.className='mode'; }
+  if(traderOn){tb.textContent='■ STOP TRADING';tbadge.textContent='RUNNING';tbadge.className='badge badge-trade';tc.className='mode active-trade';}
+  else{tb.textContent='▶ START TRADING';tbadge.textContent='IDLE';tbadge.className='badge badge-idle';tc.className='mode';}
+  if(sniperOn){sb.textContent='■ STOP SNIPING';sbadge.textContent='RUNNING';sbadge.className='badge badge-snipe';sc.className='mode active-snipe';}
+  else{sb.textContent='⚡ START SNIPING';sbadge.textContent='IDLE';sbadge.className='badge badge-idle';sc.className='mode';}
 }
 
-async function toggleTrader() {
-  const cfg={interval:300,trade_pct:0.20,max_usdc:12.5};
-  await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
+async function toggleTrader(){
+  await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:12.5})});
   fetchState();
 }
-
-async function toggleSniper() {
+async function toggleSniper(){
   const cfg={snipe_amount:parseFloat(document.getElementById('cfg-amt').value)||1,min_liq:parseFloat(document.getElementById('cfg-liq').value)||1000,max_liq:50000,delay:parseInt(document.getElementById('cfg-delay').value)||600};
   await fetch(sniperOn?'/api/sniper/stop':'/api/sniper/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
   fetchState();
 }
 
-// test dance button (remove in prod)
-document.addEventListener('keydown', e=>{ if(e.key==='t') showOrcDance('TEST TRADE! 🚀','TOKEN9 $1.23 — score +5'); });
+// Restore session
+document.addEventListener('DOMContentLoaded',()=>{
+  const savedPhantom=localStorage.getItem('phantom-key');
+  const savedX=localStorage.getItem('x-user');
+  if(savedPhantom){phantomKey=savedPhantom;document.getElementById('wallet-pill').style.display='flex';document.getElementById('wallet-short').textContent=savedPhantom.slice(0,6)+'...'+savedPhantom.slice(-4);document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+savedPhantom);refreshPhantomBalances();}
+  if(savedX){xUser=savedX;document.getElementById('x-pill').style.display='flex';document.getElementById('x-username').textContent=savedX;}
+  if(savedPhantom||savedX){launchApp();}
+});
 
-init();
+document.addEventListener('keydown',e=>{if(e.key==='t')showOrcDance('TEST TRADE! 🚀','TOKEN9 $1.23 — score +5');});
+
 setInterval(fetchState,5000);
+setInterval(fetchMarketOnly,5000);
 setInterval(refreshPhantomBalances,15000);
 </script>
 </body>
