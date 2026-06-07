@@ -562,6 +562,18 @@ function logout(){
 }
 document.addEventListener('keydown',e=>{if(e.key==='t')showOrcDance('TEST TRADE! 🚀','TOKEN9 $1.23 — score +5');});
 
+function logout(){
+  localStorage.removeItem('phantom-key');
+  localStorage.removeItem('x-user');
+  phantomKey=null;xUser=null;
+  document.getElementById('wallet-pill').style.display='none';
+  document.getElementById('x-pill').style.display='none';
+  document.getElementById('app').style.display='none';
+  document.getElementById('onboard').classList.remove('hide');
+  currentStep=0;showStep(0);
+  document.getElementById('s-usdc').innerHTML='<span style="font-size:13px;color:var(--muted)">Connect wallet</span>';
+  document.getElementById('s-sol').innerHTML='<span style="font-size:13px;color:var(--muted)">Connect wallet</span>';
+}
 setInterval(fetchState,5000);
 setInterval(fetchMarketOnly,5000);
 setInterval(refreshPhantomBalances,15000);
