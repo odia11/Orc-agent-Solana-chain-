@@ -513,6 +513,7 @@ async function fetchState(){
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
   if(r.queue_items)renderQueue(r.queue_items);
+  if(r.tokens&&r.tokens.length)renderMarket(r.tokens);
 }
 
 async function fetchMarketOnly(){

@@ -81,8 +81,10 @@ def get_token_data(mint):
         pairs = r.json().get('pairs', [])
         if not pairs: return None
         p = pairs[0]
+        base = p.get('baseToken', {})
         return {
-            'name': p.get('baseToken', {}).get('symbol', '') or '',
+            'symbol': base.get('symbol', '') or '',
+            'name': base.get('name', '') or '',
             'price': float(p.get('priceUsd', 0) or 0),
             'change5m': float(p.get('priceChange', {}).get('m5', 0) or 0),
             'change1h': float(p.get('priceChange', {}).get('h1', 0) or 0),
@@ -129,9 +131,14 @@ def token_loop():
                 if data:
                     sc = score_token(data)
                     tokens_data.append({
-                        'label': data.get('name') or t['label'],
+                        'mint': t['mint'],
+                        'symbol': data['symbol'] or t['label'],
+                        'name': data['name'] or data['symbol'] or t['label'],
                         'price': data['price'],
                         'change5m': data['change5m'],
+                        'change1h': data['change1h'],
+                        'volume1h': data['volume1h'],
+                        'liquidity': data['liquidity'],
                         'score': sc,
                     })
             state['tokens'] = tokens_data
@@ -152,11 +159,12 @@ def trader_loop(stop_event, config):
                 data = get_token_data(t['mint'])
                 if not data: continue
                 sc = score_token(data)
+                label = data['symbol'] or data['name'] or t['label']
                 decision = 'BUY' if sc >= 5 else ('SELL' if sc <= -3 else 'HOLD')
-                add_log(t['label'] + ' $' + str(round(data['price'], 8)) + ' score:' + str(sc) + ' [' + decision + ']')
+                add_log(label + ' $' + str(round(data['price'], 8)) + ' score:' + str(sc) + ' [' + decision + ']')
                 if decision == 'BUY' and usdc > 3 and open_pos < 3 and positions[t['mint']]['amount'] == 0:
                     spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('snipe_amount', 1.0) * 3), 2)
-                    add_log('BUY ' + t['label'] + ' $' + str(spend) + ' (executing via orcagent_solana.py)')
+                    add_log('BUY ' + label + ' $' + str(spend) + ' (executing via orcagent_solana.py)')
                     os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + t['mint'] + ' ' + str(spend) + ' &')
         except Exception as e:
             add_log('Trader error: ' + str(e))
@@ -271,6 +279,10 @@ def stop_sniper():
     state['sniper_running'] = False
     state['queue_items'] = []
     return jsonify({'ok': True})
+
+@app.route('/api/market')
+def api_market():
+    return jsonify({'tokens': state['tokens']})
 
 @app.route('/api/log')
 def api_log():
