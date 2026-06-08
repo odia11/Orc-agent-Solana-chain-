@@ -296,11 +296,22 @@ def api_log():
 
 # ── X OAUTH 2.0 WITH PKCE ──
 
+@app.route('/api/x/config')
+def x_config():
+    """Exposes public OAuth config so frontend uses same values as backend."""
+    if not X_CLIENT_ID:
+        print('[X OAuth] WARNING: X_CLIENT_ID env var is not set!', flush=True)
+    if not X_CALLBACK_URL:
+        print('[X OAuth] WARNING: X_CALLBACK_URL env var is not set!', flush=True)
+    return jsonify({'client_id': X_CLIENT_ID, 'callback_url': X_CALLBACK_URL})
+
 @app.route('/api/x/verifier', methods=['POST'])
 def x_store_verifier():
     data = request.json or {}
     x_state['verifier']     = data.get('verifier')
     x_state['redirect_uri'] = data.get('redirect_uri', '')
+    print(f'[X OAuth] /api/x/verifier  verifier={repr(x_state["verifier"][:10] + "..." if x_state["verifier"] else None)}  redirect_uri={repr(x_state["redirect_uri"])}', flush=True)
+    add_log('X OAuth: verifier stored | redirect_uri=' + (x_state['redirect_uri'] or 'NONE'))
     return jsonify({'ok': True})
 
 _CLOSE_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#00a854;
@@ -315,17 +326,39 @@ setTimeout(function(){{window.location.href='/'}},800)}},1500);
 def x_callback():
     code  = request.args.get('code')
     error = request.args.get('error')
+
+    # ── DEBUG: print everything ──────────────────────────────────────────────
+    verifier_ok = bool(x_state.get('verifier'))
+    stored_redirect = x_state.get('redirect_uri', '')
+    print(f'[X callback] full URL       = {request.url}', flush=True)
+    print(f'[X callback] code           = {"YES (" + code[:8] + "...)" if code else "MISSING"}', flush=True)
+    print(f'[X callback] error          = {error}', flush=True)
+    print(f'[X callback] verifier       = {"SET (" + x_state["verifier"][:8] + "...)" if verifier_ok else "MISSING — did /api/x/verifier fire?"}', flush=True)
+    print(f'[X callback] stored redirect= {repr(stored_redirect)}', flush=True)
+    print(f'[X callback] X_CALLBACK_URL = {repr(X_CALLBACK_URL)}', flush=True)
+    print(f'[X callback] X_CLIENT_ID    = {repr(X_CLIENT_ID[:10] + "..." if X_CLIENT_ID else "MISSING")}', flush=True)
+    if stored_redirect and X_CALLBACK_URL and stored_redirect != X_CALLBACK_URL:
+        print(f'[X callback] ⚠️  MISMATCH: stored redirect_uri != X_CALLBACK_URL', flush=True)
+    add_log('X callback: code=' + ('YES' if code else 'NO') +
+            ' verifier=' + ('OK' if verifier_ok else 'MISSING') +
+            ' redirect=' + (stored_redirect or 'NONE') +
+            ' env_cb=' + (X_CALLBACK_URL or 'NOT SET'))
+    # ────────────────────────────────────────────────────────────────────────
+
     if error:
-        add_log('X OAuth error from Twitter: ' + error)
+        add_log('X OAuth denied/error: ' + error)
         return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='Twitter returned: ' + error)
     if not code:
         return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='No code returned.')
-    if not x_state.get('verifier'):
-        add_log('X OAuth: callback arrived but verifier is missing (server restart?)')
-        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='Session expired — please try again.')
+    if not verifier_ok:
+        add_log('X OAuth: verifier missing — server restart between auth and callback?')
+        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed',
+                                  msg='Session lost (server restart?). Please try again.')
 
-    # Use the redirect_uri the frontend actually sent to Twitter
-    redirect_uri = x_state.get('redirect_uri') or (request.url_root.rstrip('/') + '/x-callback')
+    # Prefer X_CALLBACK_URL env var (registered in Twitter dev portal);
+    # fall back to what the frontend sent, then derive from request URL.
+    redirect_uri = X_CALLBACK_URL or stored_redirect or (request.url_root.rstrip('/') + '/x-callback')
+    print(f'[X callback] using redirect_uri = {repr(redirect_uri)}', flush=True)
 
     try:
         r = requests.post(
@@ -339,12 +372,14 @@ def x_callback():
             },
             timeout=10,
         )
+        print(f'[X callback] token exchange status={r.status_code} body={r.text[:300]}', flush=True)
         tokens = r.json()
         access_token = tokens.get('access_token')
         if not access_token:
-            add_log('X OAuth token exchange failed: ' + str(tokens))
+            err_detail = tokens.get('error_description') or tokens.get('error') or str(tokens)
+            add_log('X OAuth token exchange failed: ' + err_detail)
             return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed',
-                                      msg='Token exchange failed — check X app settings.')
+                                      msg='Token exchange failed: ' + err_detail)
         me = requests.get(
             'https://api.twitter.com/2/users/me',
             headers={'Authorization': 'Bearer ' + access_token},
@@ -357,8 +392,10 @@ def x_callback():
         x_state['verifier']      = None
         x_state['redirect_uri']  = None
         add_log('X connected: @' + x_state['username'])
+        print(f'[X callback] ✅ connected as @{x_state["username"]}', flush=True)
     except Exception as e:
         add_log('X OAuth error: ' + str(e))
+        print(f'[X callback] exception: {e}', flush=True)
         return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg=str(e))
     return _CLOSE_PAGE.format(icon='✅', title='X Connected!', msg='You can close this window.')
 
