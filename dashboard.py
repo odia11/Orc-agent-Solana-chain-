@@ -1,9 +1,12 @@
 import threading, time, json, os, sys, subprocess, requests, logging
+from urllib.parse import urlparse, urlunparse
 from flask import Flask, jsonify, request, send_from_directory, redirect
+from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
@@ -296,14 +299,28 @@ def api_log():
 
 # ── X OAUTH 2.0 WITH PKCE ──
 
+def _callback_url():
+    """Return the OAuth callback URL with path always forced to /x-callback.
+
+    Takes the scheme+host from X_CALLBACK_URL env var when set (ignoring
+    whatever path may have been stored there), falling back to the current
+    request origin.  ProxyFix ensures request.url_root is https:// on Railway.
+    """
+    if X_CALLBACK_URL:
+        p = urlparse(X_CALLBACK_URL)
+        return urlunparse((p.scheme, p.netloc, '/x-callback', '', '', ''))
+    return request.url_root.rstrip('/') + '/x-callback'
+
 @app.route('/api/x/config')
 def x_config():
     """Exposes public OAuth config so frontend uses same values as backend."""
     if not X_CLIENT_ID:
         print('[X OAuth] WARNING: X_CLIENT_ID env var is not set!', flush=True)
     if not X_CALLBACK_URL:
-        print('[X OAuth] WARNING: X_CALLBACK_URL env var is not set!', flush=True)
-    return jsonify({'client_id': X_CLIENT_ID, 'callback_url': X_CALLBACK_URL})
+        print('[X OAuth] WARNING: X_CALLBACK_URL env var is not set — deriving from request', flush=True)
+    cb = _callback_url()
+    print(f'[X OAuth] /api/x/config callback_url={cb}', flush=True)
+    return jsonify({'client_id': X_CLIENT_ID, 'callback_url': cb})
 
 @app.route('/api/x/verifier', methods=['POST'])
 def x_store_verifier():
@@ -370,9 +387,7 @@ def x_callback():
         return _ERROR_PAGE.format(title='X Auth Failed',
                                   msg='Session lost — server may have restarted. Please try again.')
 
-    # Prefer X_CALLBACK_URL env var (registered in Twitter dev portal);
-    # fall back to what the frontend sent, then derive from request URL.
-    redirect_uri = X_CALLBACK_URL or stored_redirect or (request.url_root.rstrip('/') + '/x-callback')
+    redirect_uri = _callback_url()
     print(f'[X callback] using redirect_uri = {repr(redirect_uri)}', flush=True)
 
     try:
