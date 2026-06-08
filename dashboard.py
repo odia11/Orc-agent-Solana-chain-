@@ -1,5 +1,4 @@
 import threading, time, json, os, sys, subprocess, requests, logging
-from urllib.parse import urlparse, urlunparse
 from flask import Flask, jsonify, request, send_from_directory, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
@@ -37,7 +36,7 @@ SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
 
 X_CLIENT_ID     = os.getenv('X_CLIENT_ID', '')
 X_CLIENT_SECRET = os.getenv('X_CLIENT_SECRET', '')
-X_CALLBACK_URL  = os.getenv('X_CALLBACK_URL', '')
+CALLBACK_URL    = 'https://orc-agent-solana-chain-production.up.railway.app/x-callback'
 
 x_state = {
     'verifier':      None,
@@ -299,28 +298,12 @@ def api_log():
 
 # ── X OAUTH 2.0 WITH PKCE ──
 
-def _callback_url():
-    """Return the OAuth callback URL with path always forced to /x-callback.
-
-    Takes the scheme+host from X_CALLBACK_URL env var when set (ignoring
-    whatever path may have been stored there), falling back to the current
-    request origin.  ProxyFix ensures request.url_root is https:// on Railway.
-    """
-    if X_CALLBACK_URL:
-        p = urlparse(X_CALLBACK_URL)
-        return urlunparse((p.scheme, p.netloc, '/x-callback', '', '', ''))
-    return request.url_root.rstrip('/') + '/x-callback'
-
 @app.route('/api/x/config')
 def x_config():
-    """Exposes public OAuth config so frontend uses same values as backend."""
     if not X_CLIENT_ID:
         print('[X OAuth] WARNING: X_CLIENT_ID env var is not set!', flush=True)
-    if not X_CALLBACK_URL:
-        print('[X OAuth] WARNING: X_CALLBACK_URL env var is not set — deriving from request', flush=True)
-    cb = _callback_url()
-    print(f'[X OAuth] /api/x/config callback_url={cb}', flush=True)
-    return jsonify({'client_id': X_CLIENT_ID, 'callback_url': cb})
+    print(f'[X OAuth] /api/x/config callback_url={CALLBACK_URL}', flush=True)
+    return jsonify({'client_id': X_CLIENT_ID, 'callback_url': CALLBACK_URL})
 
 @app.route('/api/x/verifier', methods=['POST'])
 def x_store_verifier():
@@ -366,15 +349,11 @@ def x_callback():
     print(f'[X callback] code           = {"YES (" + code[:8] + "...)" if code else "MISSING"}', flush=True)
     print(f'[X callback] error          = {error}', flush=True)
     print(f'[X callback] verifier       = {"SET (" + x_state["verifier"][:8] + "...)" if verifier_ok else "MISSING — did /api/x/verifier fire?"}', flush=True)
-    print(f'[X callback] stored redirect= {repr(stored_redirect)}', flush=True)
-    print(f'[X callback] X_CALLBACK_URL = {repr(X_CALLBACK_URL)}', flush=True)
+    print(f'[X callback] CALLBACK_URL   = {repr(CALLBACK_URL)}', flush=True)
     print(f'[X callback] X_CLIENT_ID    = {repr(X_CLIENT_ID[:10] + "..." if X_CLIENT_ID else "MISSING")}', flush=True)
-    if stored_redirect and X_CALLBACK_URL and stored_redirect != X_CALLBACK_URL:
-        print(f'[X callback] ⚠️  MISMATCH: stored redirect_uri != X_CALLBACK_URL', flush=True)
     add_log('X callback: code=' + ('YES' if code else 'NO') +
             ' verifier=' + ('OK' if verifier_ok else 'MISSING') +
-            ' redirect=' + (stored_redirect or 'NONE') +
-            ' env_cb=' + (X_CALLBACK_URL or 'NOT SET'))
+            ' callback=' + CALLBACK_URL)
     # ────────────────────────────────────────────────────────────────────────
 
     if error:
@@ -387,7 +366,7 @@ def x_callback():
         return _ERROR_PAGE.format(title='X Auth Failed',
                                   msg='Session lost — server may have restarted. Please try again.')
 
-    redirect_uri = _callback_url()
+    redirect_uri = CALLBACK_URL
     print(f'[X callback] using redirect_uri = {repr(redirect_uri)}', flush=True)
 
     try:
