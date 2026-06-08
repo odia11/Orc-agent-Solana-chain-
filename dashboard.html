@@ -347,7 +347,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 
 <script>
 let traderOn=false, sniperOn=false, phantomKey=null, xUser=null, currentStep=0, xPoll=null;
-const X_CLIENT_ID='b0NvWGZpUWZJYnN0cWdvUzdEWjk6MTpjaQ';
 
 // ── LOGOUT ──
 function doLogout(){
@@ -418,23 +417,12 @@ function handleXConnected(username){
 }
 
 async function connectXOnboard(){
-  // Fetch OAuth config from server so client_id and redirect_uri always match backend
-  const cfg=await fetch('/api/x/config').then(r=>r.json()).catch(()=>null);
-  const clientId=(cfg&&cfg.client_id)||X_CLIENT_ID;
-  // Use server's registered callback URL when set; fall back to origin-derived URL
-  const redirectUri=(cfg&&cfg.callback_url)||location.origin+'/x-callback';
-  console.log('[X OAuth] clientId='+clientId+' redirectUri='+redirectUri);
-
-  const verifier=generateVerifier();
-  const encoder=new TextEncoder();
-  const data=encoder.encode(verifier);
-  const digest=await crypto.subtle.digest('SHA-256',data);
-  const challenge=btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
-  await fetch('/api/x/verifier',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verifier,redirect_uri:redirectUri})});
-  const authUrl='https://twitter.com/i/oauth2/authorize?response_type=code&client_id='+clientId+'&redirect_uri='+encodeURIComponent(redirectUri)+'&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=orcagent&code_challenge='+challenge+'&code_challenge_method=S256';
-  const w=600,h=700,left=screen.width/2-300,top=screen.height/2-350;
-  const popup=window.open(authUrl,'X Login','width='+w+',height='+h+',left='+left+',top='+top);
-  // Polling fallback — fires if postMessage doesn't arrive (e.g. cross-origin popup blocked)
+  // Server generates PKCE verifier and returns the full Twitter auth URL
+  const cfg=await fetch('/api/x/auth').then(r=>r.json()).catch(()=>null);
+  if(!cfg?.auth_url){alert('Failed to start X login — please try again.');return;}
+  console.log('[X OAuth] opening popup to server-built auth URL');
+  const w=600,h=700,left=Math.round(screen.width/2-300),top=Math.round(screen.height/2-350);
+  window.open(cfg.auth_url,'X Login','width='+w+',height='+h+',left='+left+',top='+top);
   if(xPoll)clearInterval(xPoll);
   xPoll=setInterval(async()=>{
     const r=await fetch('/api/x/status').then(r=>r.json()).catch(()=>null);
@@ -442,8 +430,6 @@ async function connectXOnboard(){
   },2000);
   setTimeout(()=>{if(xPoll){clearInterval(xPoll);xPoll=null;}},120000);
 }
-
-function generateVerifier(){const a=new Uint8Array(32);crypto.getRandomValues(a);return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
 
 function launchApp(){
   document.getElementById('onboard').classList.add('hide');

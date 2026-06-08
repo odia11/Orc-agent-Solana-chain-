@@ -1,4 +1,5 @@
-import threading, time, json, os, sys, subprocess, requests, logging
+import threading, time, json, os, sys, subprocess, requests, logging, hashlib, base64
+from urllib.parse import urlencode
 from flask import Flask, jsonify, request, send_from_directory, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
@@ -40,7 +41,6 @@ CALLBACK_URL    = 'https://orc-agent-solana-chain-production.up.railway.app/x-ca
 
 x_state = {
     'verifier':      None,
-    'redirect_uri':  None,
     'access_token':  None,
     'refresh_token': None,
     'username':      None,
@@ -298,21 +298,31 @@ def api_log():
 
 # ── X OAUTH 2.0 WITH PKCE ──
 
+@app.route('/api/x/auth')
+def x_auth_start():
+    """Generate PKCE verifier server-side, return complete Twitter auth URL."""
+    if not X_CLIENT_ID:
+        print('[X OAuth] ERROR: X_CLIENT_ID not set', flush=True)
+        return jsonify({'error': 'X_CLIENT_ID not configured on server'}), 500
+    verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode()
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
+    x_state['verifier'] = verifier
+    auth_url = 'https://twitter.com/i/oauth2/authorize?' + urlencode({
+        'response_type':         'code',
+        'client_id':             X_CLIENT_ID,
+        'redirect_uri':          CALLBACK_URL,
+        'scope':                 'tweet.read tweet.write users.read offline.access',
+        'state':                 'orcagent',
+        'code_challenge':        challenge,
+        'code_challenge_method': 'S256',
+    })
+    print(f'[X OAuth] /api/x/auth → redirect_uri={CALLBACK_URL}', flush=True)
+    add_log('X OAuth: auth started, redirect_uri=' + CALLBACK_URL)
+    return jsonify({'auth_url': auth_url})
+
 @app.route('/api/x/config')
 def x_config():
-    if not X_CLIENT_ID:
-        print('[X OAuth] WARNING: X_CLIENT_ID env var is not set!', flush=True)
-    print(f'[X OAuth] /api/x/config callback_url={CALLBACK_URL}', flush=True)
     return jsonify({'client_id': X_CLIENT_ID, 'callback_url': CALLBACK_URL})
-
-@app.route('/api/x/verifier', methods=['POST'])
-def x_store_verifier():
-    data = request.json or {}
-    x_state['verifier']     = data.get('verifier')
-    x_state['redirect_uri'] = data.get('redirect_uri', '')
-    print(f'[X OAuth] /api/x/verifier  verifier={repr(x_state["verifier"][:10] + "..." if x_state["verifier"] else None)}  redirect_uri={repr(x_state["redirect_uri"])}', flush=True)
-    add_log('X OAuth: verifier stored | redirect_uri=' + (x_state['redirect_uri'] or 'NONE'))
-    return jsonify({'ok': True})
 
 _ERROR_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#ff5555;
 font-family:monospace;text-align:center;padding:3rem">
@@ -342,19 +352,9 @@ def x_callback():
     code  = request.args.get('code')
     error = request.args.get('error')
 
-    # ── DEBUG: print everything ──────────────────────────────────────────────
     verifier_ok = bool(x_state.get('verifier'))
-    stored_redirect = x_state.get('redirect_uri', '')
-    print(f'[X callback] full URL       = {request.url}', flush=True)
-    print(f'[X callback] code           = {"YES (" + code[:8] + "...)" if code else "MISSING"}', flush=True)
-    print(f'[X callback] error          = {error}', flush=True)
-    print(f'[X callback] verifier       = {"SET (" + x_state["verifier"][:8] + "...)" if verifier_ok else "MISSING — did /api/x/verifier fire?"}', flush=True)
-    print(f'[X callback] CALLBACK_URL   = {repr(CALLBACK_URL)}', flush=True)
-    print(f'[X callback] X_CLIENT_ID    = {repr(X_CLIENT_ID[:10] + "..." if X_CLIENT_ID else "MISSING")}', flush=True)
-    add_log('X callback: code=' + ('YES' if code else 'NO') +
-            ' verifier=' + ('OK' if verifier_ok else 'MISSING') +
-            ' callback=' + CALLBACK_URL)
-    # ────────────────────────────────────────────────────────────────────────
+    print(f'[X callback] code={("YES " + code[:8] + "...") if code else "MISSING"}  error={error}  verifier={"SET" if verifier_ok else "MISSING"}  callback={CALLBACK_URL}', flush=True)
+    add_log('X callback: code=' + ('YES' if code else 'NO') + ' verifier=' + ('OK' if verifier_ok else 'MISSING'))
 
     if error:
         add_log('X OAuth denied/error: ' + error)
@@ -463,7 +463,7 @@ def x_post_tweet():
 @app.route('/api/x/logout', methods=['POST'])
 def x_logout():
     x_state.update({'access_token': None, 'refresh_token': None,
-                    'username': None, 'connected': False, 'verifier': None, 'redirect_uri': None})
+                    'username': None, 'connected': False, 'verifier': None})
     return jsonify({'ok': True})
 
 # Start background threads on import so gunicorn picks them up
