@@ -417,18 +417,9 @@ function handleXConnected(username){
 }
 
 async function connectXOnboard(){
-  // Server generates PKCE verifier and returns the full Twitter auth URL
   const cfg=await fetch('/api/x/auth').then(r=>r.json()).catch(()=>null);
   if(!cfg?.auth_url){alert('Failed to start X login — please try again.');return;}
-  console.log('[X OAuth] opening popup to server-built auth URL');
-  const w=600,h=700,left=Math.round(screen.width/2-300),top=Math.round(screen.height/2-350);
-  window.open(cfg.auth_url,'X Login','width='+w+',height='+h+',left='+left+',top='+top);
-  if(xPoll)clearInterval(xPoll);
-  xPoll=setInterval(async()=>{
-    const r=await fetch('/api/x/status').then(r=>r.json()).catch(()=>null);
-    if(r?.connected)handleXConnected(r.username);
-  },2000);
-  setTimeout(()=>{if(xPoll){clearInterval(xPoll);xPoll=null;}},120000);
+  window.location.href=cfg.auth_url;
 }
 
 function launchApp(){
@@ -585,11 +576,6 @@ async function toggleSniper(){
   await fetch(sniperOn?'/api/sniper/stop':'/api/sniper/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
   fetchState();
 }
-
-// ── X OAuth: receive postMessage from popup ──────────────────────────────
-window.addEventListener('message',function(e){
-  if(e.data&&e.data.type==='x_connected')handleXConnected(e.data.username);
-});
 
 // ── X OAuth: same-tab redirect returns with /?x=1 ────────────────────────
 (async function(){
