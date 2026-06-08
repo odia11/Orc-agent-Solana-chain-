@@ -548,17 +548,27 @@ async function toggleSniper(){
 }
 
 // ── RESTORE SESSION ──
-document.addEventListener('DOMContentLoaded',()=>{
+document.addEventListener('DOMContentLoaded',async()=>{
   const savedPhantom=localStorage.getItem('phantom-key');
   const savedX=localStorage.getItem('x-user');
-  if(savedPhantom){
-    phantomKey=savedPhantom;
-    document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+savedPhantom);
+  if(savedPhantom&&window.solana?.isPhantom){
+    try{
+      const resp=await window.solana.connect({onlyIfTrusted:true});
+      const currentKey=resp.publicKey.toString();
+      if(currentKey===savedPhantom){
+        phantomKey=savedPhantom;
+        document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+savedPhantom);
+        if(savedX) xUser=savedX;
+        launchApp();
+        return;
+      }
+    }catch(e){
+      // Phantom rejected silent reconnect — fall through to onboarding
+    }
+    localStorage.removeItem('phantom-key');
+    localStorage.removeItem('x-user');
   }
-  if(savedX) xUser=savedX;
-  if(savedPhantom||savedX){
-    launchApp();
-  }
+  // No verified Phantom connection — show onboarding
 });
 
 setInterval(fetchState,5000);
