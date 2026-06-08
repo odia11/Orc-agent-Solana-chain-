@@ -1,6 +1,5 @@
 flask
 requests
 python-dotenv
-solders
 anthropic
 gunicorn
