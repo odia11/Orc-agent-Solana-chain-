@@ -1,5 +1,5 @@
 import threading, time, json, os, sys, subprocess, requests, logging
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_from_directory, redirect
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -31,6 +31,18 @@ sniper_stop = threading.Event()
 WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
+
+X_CLIENT_ID     = os.getenv('X_CLIENT_ID', '')
+X_CLIENT_SECRET = os.getenv('X_CLIENT_SECRET', '')
+X_CALLBACK_URL  = os.getenv('X_CALLBACK_URL', '')
+
+x_state = {
+    'verifier':      None,
+    'access_token':  None,
+    'refresh_token': None,
+    'username':      None,
+    'connected':     False,
+}
 
 TOKENS = [
     {'mint': 'AqQtvEvV6wTGYjxSmzzWB11K2kmWBwbdfKCNkkW3pump', 'label': 'TOKEN2'},
@@ -268,6 +280,106 @@ def api_log():
         return jsonify({'lines': [l.strip() for l in reversed(lines)]})
     except:
         return jsonify({'lines': []})
+
+# ── X OAUTH 2.0 WITH PKCE ──
+
+@app.route('/api/x/verifier', methods=['POST'])
+def x_store_verifier():
+    data = request.json or {}
+    x_state['verifier'] = data.get('verifier')
+    return jsonify({'ok': True})
+
+@app.route('/x-callback')
+def x_callback():
+    code  = request.args.get('code')
+    error = request.args.get('error')
+    if error or not code or not x_state.get('verifier'):
+        return '<script>window.close()</script>'
+    try:
+        r = requests.post(
+            'https://api.twitter.com/2/oauth2/token',
+            auth=(X_CLIENT_ID, X_CLIENT_SECRET),
+            data={
+                'code':          code,
+                'grant_type':    'authorization_code',
+                'redirect_uri':  X_CALLBACK_URL,
+                'code_verifier': x_state['verifier'],
+            },
+            timeout=10,
+        )
+        tokens = r.json()
+        access_token = tokens.get('access_token')
+        if not access_token:
+            return '<script>window.close()</script>'
+        me = requests.get(
+            'https://api.twitter.com/2/users/me',
+            headers={'Authorization': 'Bearer ' + access_token},
+            timeout=8,
+        ).json()
+        x_state['access_token']  = access_token
+        x_state['refresh_token'] = tokens.get('refresh_token')
+        x_state['username']      = me.get('data', {}).get('username', 'user')
+        x_state['connected']     = True
+        x_state['verifier']      = None
+    except Exception as e:
+        add_log('X OAuth error: ' + str(e))
+    return '<script>window.close()</script>'
+
+@app.route('/api/x/status')
+def x_status():
+    return jsonify({
+        'connected': x_state['connected'],
+        'username':  x_state.get('username', ''),
+    })
+
+def _x_refresh():
+    if not x_state.get('refresh_token'):
+        return False
+    try:
+        r = requests.post(
+            'https://api.twitter.com/2/oauth2/token',
+            auth=(X_CLIENT_ID, X_CLIENT_SECRET),
+            data={'grant_type': 'refresh_token', 'refresh_token': x_state['refresh_token']},
+            timeout=10,
+        )
+        t = r.json()
+        if t.get('access_token'):
+            x_state['access_token']  = t['access_token']
+            x_state['refresh_token'] = t.get('refresh_token', x_state['refresh_token'])
+            return True
+    except:
+        pass
+    return False
+
+@app.route('/api/x/tweet', methods=['POST'])
+def x_post_tweet():
+    if not x_state['connected'] or not x_state.get('access_token'):
+        return jsonify({'ok': False, 'msg': 'Not connected to X'})
+    text = (request.json or {}).get('text', '').strip()
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Empty text'})
+    if len(text) > 280:
+        text = text[:277] + '...'
+    def _post(token):
+        return requests.post(
+            'https://api.twitter.com/2/tweets',
+            headers={'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json'},
+            json={'text': text},
+            timeout=10,
+        )
+    r = _post(x_state['access_token'])
+    if r.status_code == 401 and _x_refresh():
+        r = _post(x_state['access_token'])
+    if r.status_code in (200, 201):
+        add_log('X: posted — ' + text[:60])
+        return jsonify({'ok': True})
+    return jsonify({'ok': False, 'msg': r.text[:200]})
+
+@app.route('/api/x/logout', methods=['POST'])
+def x_logout():
+    x_state.update({'access_token': None, 'refresh_token': None,
+                    'username': None, 'connected': False, 'verifier': None})
+    return jsonify({'ok': True})
 
 if __name__ == '__main__':
     threading.Thread(target=balance_loop, daemon=True).start()

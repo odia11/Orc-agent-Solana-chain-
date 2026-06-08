@@ -254,7 +254,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
-      <div class="x-pill" id="x-pill" style="display:none"><span>𝕏</span><span id="x-username">@user</span></div>
+      <div class="x-pill" id="x-pill" style="display:none;cursor:pointer" title="Click to disconnect X" onclick="disconnectX()"><span>𝕏</span><span id="x-username">@user</span><span style="opacity:.5;margin-left:4px;font-size:9px">✕</span></div>
       <button class="hdr-btn" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⚙ Settings</button>
       <button class="hdr-btn-red" id="logout-btn" onclick="doLogout()">⏻ Logout</button>
     </div>
@@ -441,9 +441,25 @@ async function refreshPhantomBalances(){
 }
 
 // ── X POST ──
-function postToX(){
-  const text=document.getElementById('x-tweet-box').value;
-  window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank');
+async function postToX(){
+  const text=document.getElementById('x-tweet-box').value.trim();
+  if(!text) return;
+  if(xUser){
+    const btn=document.querySelector('.x-post-btn');
+    btn.textContent='Posting...';
+    const r=await fetch('/api/x/tweet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})}).then(r=>r.json()).catch(()=>null);
+    if(r?.ok){btn.innerHTML='✓ Posted!';setTimeout(()=>{btn.innerHTML='<span>𝕏</span> Post to X'},2000);}
+    else{btn.innerHTML='<span>𝕏</span> Post to X';alert('Post failed: '+(r?.msg||'unknown error'));}
+  } else {
+    window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank');
+  }
+}
+
+async function disconnectX(){
+  await fetch('/api/x/logout',{method:'POST'});
+  xUser=null;
+  localStorage.removeItem('x-user');
+  document.getElementById('x-pill').style.display='none';
 }
 
 // ── ORC DANCE ──
@@ -457,7 +473,7 @@ function showOrcDance(text,detail){
   for(let i=0;i<12;i++){const d=document.createElement('div');d.className='coin';d.textContent=em[Math.floor(Math.random()*em.length)];d.style.cssText='left:'+(Math.random()*200)+'px;top:'+(80+Math.random()*100)+'px;animation-delay:'+(Math.random()*.6)+'s';c.appendChild(d);}
   if(xUser&&document.getElementById('x-autopost')?.checked){
     const t='🐋 OrcAgent just executed a trade! '+detail+' #Solana #DeFi #OrcAgent';
-    setTimeout(()=>window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(t),'_blank'),1000);
+    setTimeout(()=>fetch('/api/x/tweet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}),1000);
   }
   setTimeout(()=>o.classList.remove('show'),3500);
 }
