@@ -30,6 +30,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .btn-x{background:#000;color:white;display:flex;align-items:center;justify-content:center;gap:8px}
 .btn-x:hover{background:#222}
 .btn-skip{background:transparent;color:var(--muted);border:1px solid var(--border);font-size:11px;padding:10px}
+.btn-solflare{background:#fc7227;color:white}
+.btn-solflare:hover{background:#e8661f}
 .ob-connected{background:rgba(0,168,84,.1);border:1px solid rgba(0,168,84,.3);border-radius:10px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .ob-check{width:28px;height:28px;background:var(--green);border-radius:50%;display:flex;align-items:center;justify-content:center;color:white;font-size:14px;flex-shrink:0}
 .ob-conn-text{text-align:left}
@@ -196,7 +198,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
   <div class="ob-box">
     <div class="ob-orc">🐋</div>
     <div class="ob-title">ORCAGENT</div>
-    <div class="ob-sub">Connect your Phantom wallet to start trading Solana meme coins automatically.</div>
+    <div class="ob-sub">Connect your Phantom or Solflare wallet to start trading Solana meme coins automatically.</div>
     <div class="ob-progress">
       <div class="ob-dot active" id="dot-0"></div>
       <div class="ob-dot" id="dot-1"></div>
@@ -204,13 +206,14 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
     </div>
 
     <div class="ob-step active" id="step-0">
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Phantom Wallet</div>
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Your wallet is used to show your balances. Trades run via the server.</div>
-      <div id="phantom-connected" style="display:none" class="ob-connected">
+      <div id="wallet-connected" style="display:none" class="ob-connected">
         <div class="ob-check">✓</div>
-        <div class="ob-conn-text"><div class="ob-conn-name" id="phantom-addr">Connected</div><div class="ob-conn-sub">Phantom wallet</div></div>
+        <div class="ob-conn-text"><div class="ob-conn-name" id="wallet-addr">Connected</div><div class="ob-conn-sub" id="wallet-type">Wallet</div></div>
       </div>
-      <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectPhantomOnboard()">🔮 Connect Phantom</button>
+      <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
+      <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
     </div>
 
     <div class="ob-step" id="step-1">
@@ -364,15 +367,25 @@ function showStep(n){
 }
 function nextStep(n){currentStep=n+1;showStep(currentStep);}
 
-async function connectPhantomOnboard(){
-  if(!window.solana?.isPhantom){alert('Phantom not installed!\nGet it at phantom.app');return;}
+async function connectWalletOnboard(type){
+  const isPhantom=type==='phantom';
+  const provider=isPhantom?window.solana:window.solflare;
+  const name=isPhantom?'Phantom':'Solflare';
+  const url=isPhantom?'phantom.app':'solflare.com';
+  const check=isPhantom?provider?.isPhantom:provider?.isSolflare;
+  if(!check){alert(name+' not installed!\nGet it at '+url);return;}
   try{
-    const r=await window.solana.connect();
-    phantomKey=r.publicKey.toString();
-    document.getElementById('phantom-addr').textContent=phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
-    document.getElementById('phantom-connected').style.display='flex';
-    document.getElementById('phantom-ob-btn').textContent='✓ Connected — Continue →';
-    document.getElementById('phantom-ob-btn').onclick=()=>nextStep(0);
+    await provider.connect();
+    phantomKey=provider.publicKey.toString();
+    document.getElementById('wallet-addr').textContent=phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
+    document.getElementById('wallet-type').textContent=name+' wallet';
+    document.getElementById('wallet-connected').style.display='flex';
+    const btn=document.getElementById(type+'-ob-btn');
+    btn.textContent='✓ Connected — Continue →';
+    btn.onclick=()=>nextStep(0);
+    const otherId=isPhantom?'solflare-ob-btn':'phantom-ob-btn';
+    const other=document.getElementById(otherId);
+    other.disabled=true;other.style.opacity='0.35';
   }catch(e){console.error(e);}
 }
 
