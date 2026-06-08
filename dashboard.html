@@ -411,8 +411,9 @@ async function connectXOnboard(){
   const data=encoder.encode(verifier);
   const digest=await crypto.subtle.digest('SHA-256',data);
   const challenge=btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');
-  await fetch('/api/x/verifier',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verifier})});
-  const authUrl='https://twitter.com/i/oauth2/authorize?response_type=code&client_id='+X_CLIENT_ID+'&redirect_uri='+encodeURIComponent(location.origin+'/x-callback')+'&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=orcagent&code_challenge='+challenge+'&code_challenge_method=S256';
+  const redirectUri=location.origin+'/x-callback';
+  await fetch('/api/x/verifier',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({verifier,redirect_uri:redirectUri})});
+  const authUrl='https://twitter.com/i/oauth2/authorize?response_type=code&client_id='+X_CLIENT_ID+'&redirect_uri='+encodeURIComponent(redirectUri)+'&scope=tweet.read%20tweet.write%20users.read%20offline.access&state=orcagent&code_challenge='+challenge+'&code_challenge_method=S256';
   const w=600,h=700,left=screen.width/2-300,top=screen.height/2-350;
   window.open(authUrl,'X Login','width='+w+',height='+h+',left='+left+',top='+top);
   const poll=setInterval(async()=>{

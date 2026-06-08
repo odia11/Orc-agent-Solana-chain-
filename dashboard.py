@@ -38,6 +38,7 @@ X_CALLBACK_URL  = os.getenv('X_CALLBACK_URL', '')
 
 x_state = {
     'verifier':      None,
+    'redirect_uri':  None,
     'access_token':  None,
     'refresh_token': None,
     'username':      None,
@@ -298,15 +299,34 @@ def api_log():
 @app.route('/api/x/verifier', methods=['POST'])
 def x_store_verifier():
     data = request.json or {}
-    x_state['verifier'] = data.get('verifier')
+    x_state['verifier']     = data.get('verifier')
+    x_state['redirect_uri'] = data.get('redirect_uri', '')
     return jsonify({'ok': True})
+
+_CLOSE_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#00a854;
+font-family:monospace;text-align:center;padding:3rem">
+<h2>{icon} {title}</h2><p>{msg}</p>
+<script>try{{window.close()}}catch(e){{}}
+setTimeout(function(){{try{{window.close()}}catch(e){{}}
+setTimeout(function(){{window.location.href='/'}},800)}},1500);
+</script></body></html>'''
 
 @app.route('/x-callback')
 def x_callback():
     code  = request.args.get('code')
     error = request.args.get('error')
-    if error or not code or not x_state.get('verifier'):
-        return '<script>window.close()</script>'
+    if error:
+        add_log('X OAuth error from Twitter: ' + error)
+        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='Twitter returned: ' + error)
+    if not code:
+        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='No code returned.')
+    if not x_state.get('verifier'):
+        add_log('X OAuth: callback arrived but verifier is missing (server restart?)')
+        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='Session expired — please try again.')
+
+    # Use the redirect_uri the frontend actually sent to Twitter
+    redirect_uri = x_state.get('redirect_uri') or (request.url_root.rstrip('/') + '/x-callback')
+
     try:
         r = requests.post(
             'https://api.twitter.com/2/oauth2/token',
@@ -314,7 +334,7 @@ def x_callback():
             data={
                 'code':          code,
                 'grant_type':    'authorization_code',
-                'redirect_uri':  X_CALLBACK_URL,
+                'redirect_uri':  redirect_uri,
                 'code_verifier': x_state['verifier'],
             },
             timeout=10,
@@ -322,7 +342,9 @@ def x_callback():
         tokens = r.json()
         access_token = tokens.get('access_token')
         if not access_token:
-            return '<script>window.close()</script>'
+            add_log('X OAuth token exchange failed: ' + str(tokens))
+            return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed',
+                                      msg='Token exchange failed — check X app settings.')
         me = requests.get(
             'https://api.twitter.com/2/users/me',
             headers={'Authorization': 'Bearer ' + access_token},
@@ -333,9 +355,12 @@ def x_callback():
         x_state['username']      = me.get('data', {}).get('username', 'user')
         x_state['connected']     = True
         x_state['verifier']      = None
+        x_state['redirect_uri']  = None
+        add_log('X connected: @' + x_state['username'])
     except Exception as e:
         add_log('X OAuth error: ' + str(e))
-    return '<script>window.close()</script>'
+        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg=str(e))
+    return _CLOSE_PAGE.format(icon='✅', title='X Connected!', msg='You can close this window.')
 
 @app.route('/api/x/status')
 def x_status():
@@ -390,7 +415,7 @@ def x_post_tweet():
 @app.route('/api/x/logout', methods=['POST'])
 def x_logout():
     x_state.update({'access_token': None, 'refresh_token': None,
-                    'username': None, 'connected': False, 'verifier': None})
+                    'username': None, 'connected': False, 'verifier': None, 'redirect_uri': None})
     return jsonify({'ok': True})
 
 # Start background threads on import so gunicorn picks them up
