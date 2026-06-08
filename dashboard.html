@@ -346,7 +346,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 </div>
 
 <script>
-let traderOn=false, sniperOn=false, phantomKey=null, xUser=null, currentStep=0, xPoll=null;
+let traderOn=false, sniperOn=false, phantomKey=null, xUser=null, currentStep=0;
 
 // ── LOGOUT ──
 function doLogout(){
@@ -405,7 +405,6 @@ function resetWallet(){
 }
 
 function handleXConnected(username){
-  if(xPoll){clearInterval(xPoll);xPoll=null;}
   xUser='@'+username;
   document.getElementById('x-ob-name').textContent=xUser;
   document.getElementById('x-ob-connected').style.display='flex';
@@ -416,11 +415,7 @@ function handleXConnected(username){
   document.getElementById('x-username').textContent=xUser;
 }
 
-async function connectXOnboard(){
-  const cfg=await fetch('/api/x/auth').then(r=>r.json()).catch(()=>null);
-  if(!cfg?.auth_url){alert('Failed to start X login — please try again.');return;}
-  window.location.href=cfg.auth_url;
-}
+function connectXOnboard(){ window.location.href='/api/x/auth'; }
 
 function launchApp(){
   document.getElementById('onboard').classList.add('hide');

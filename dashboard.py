@@ -301,14 +301,13 @@ def api_log():
 
 @app.route('/api/x/auth')
 def x_auth_start():
-    """Generate PKCE verifier server-side, return complete Twitter auth URL."""
     if not X_CLIENT_ID:
         print('[X OAuth] ERROR: X_CLIENT_ID not set', flush=True)
-        return jsonify({'error': 'X_CLIENT_ID not configured on server'}), 500
+        return 'X_CLIENT_ID not configured on server', 500
     verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
-    x_state['verifier'] = verifier
-    session['x_verifier'] = verifier   # survive worker restarts
+    session['x_verifier'] = verifier
+    x_state['verifier']   = verifier
     auth_url = 'https://twitter.com/i/oauth2/authorize?' + urlencode({
         'response_type':         'code',
         'client_id':             X_CLIENT_ID,
@@ -318,13 +317,9 @@ def x_auth_start():
         'code_challenge':        challenge,
         'code_challenge_method': 'S256',
     })
-    print(f'[X OAuth] /api/x/auth → redirect_uri={CALLBACK_URL}', flush=True)
-    add_log('X OAuth: auth started, redirect_uri=' + CALLBACK_URL)
-    return jsonify({'auth_url': auth_url})
-
-@app.route('/api/x/config')
-def x_config():
-    return jsonify({'client_id': X_CLIENT_ID, 'callback_url': CALLBACK_URL})
+    print(f'[X OAuth] /api/x/auth → 302 to Twitter  redirect_uri={CALLBACK_URL}', flush=True)
+    add_log('X OAuth: redirecting to Twitter')
+    return redirect(auth_url)
 
 _ERROR_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#ff5555;
 font-family:monospace;text-align:center;padding:3rem">
@@ -334,20 +329,6 @@ color:#aaa;border:1px solid #444;border-radius:8px;font-family:monospace;cursor:
 font-size:13px">Close &amp; try again</button>
 </body></html>'''
 
-_SUCCESS_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#00a854;
-font-family:monospace;text-align:center;padding:3rem">
-<h2>&#x2705; X Connected!</h2><p>@{username}</p>
-<script>
-(function(){{
-  var u={username_json};
-  if(window.opener&&!window.opener.closed){{
-    try{{window.opener.postMessage({{type:'x_connected',username:u}},'*')}}catch(e){{}}
-    setTimeout(function(){{try{{window.close()}}catch(e){{window.location.href='/?x=1'}}}},400);
-  }}else{{
-    window.location.href='/?x=1';
-  }}
-}})();
-</script></body></html>'''
 
 @app.route('/x-callback')
 def x_callback():
@@ -450,16 +431,14 @@ def x_callback():
         print(f'[X callback] session[x_username]   = {session.get("x_username")}', flush=True)
         add_log('X connected: @' + username)
 
-        print('[X callback] ── STEP 6: serving success page → /?x=1 ──────────', flush=True)
+        print('[X callback] ── STEP 6: redirecting to /?x=1 ──────────────────', flush=True)
     except Exception as e:
         print(f'[X callback] ❌ EXCEPTION: {e}', flush=True)
         print(traceback.format_exc(), flush=True)
         add_log('X OAuth exception: ' + str(e))
         return _ERROR_PAGE.format(title='X Auth Failed', msg=str(e))
 
-    import json as _json
-    return _SUCCESS_PAGE.format(username=username,
-                                username_json=_json.dumps(username))
+    return redirect('/?x=1')
 
 @app.route('/api/x/status')
 def x_status():
