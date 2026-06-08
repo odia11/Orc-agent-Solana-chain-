@@ -346,8 +346,6 @@ const X_CLIENT_ID='b0NvWGZpUWZJYnN0cWdvUzdEWjk6MTpjaQ';
 
 // ── LOGOUT ──
 function doLogout(){
-  localStorage.removeItem('phantom-key');
-  localStorage.removeItem('x-user');
   phantomKey=null;
   xUser=null;
   document.getElementById('wallet-pill').style.display='none';
@@ -376,7 +374,6 @@ async function connectPhantomOnboard(){
     document.getElementById('phantom-connected').style.display='flex';
     document.getElementById('phantom-ob-btn').textContent='✓ Connected — Continue →';
     document.getElementById('phantom-ob-btn').onclick=()=>nextStep(0);
-    localStorage.setItem('phantom-key',phantomKey);
   }catch(e){console.error(e);}
 }
 
@@ -401,7 +398,6 @@ async function connectXOnboard(){
       document.getElementById('x-ob-btn').onclick=()=>nextStep(1);
       document.getElementById('x-pill').style.display='flex';
       document.getElementById('x-username').textContent=xUser;
-      localStorage.setItem('x-user',xUser);
     }
   },2000);
   setTimeout(()=>clearInterval(poll),120000);
@@ -458,7 +454,6 @@ async function postToX(){
 async function disconnectX(){
   await fetch('/api/x/logout',{method:'POST'});
   xUser=null;
-  localStorage.removeItem('x-user');
   document.getElementById('x-pill').style.display='none';
 }
 
@@ -563,29 +558,8 @@ async function toggleSniper(){
   fetchState();
 }
 
-// ── RESTORE SESSION ──
-document.addEventListener('DOMContentLoaded',async()=>{
-  const savedPhantom=localStorage.getItem('phantom-key');
-  const savedX=localStorage.getItem('x-user');
-  if(savedPhantom&&window.solana?.isPhantom){
-    try{
-      const resp=await window.solana.connect({onlyIfTrusted:true});
-      const currentKey=resp.publicKey.toString();
-      if(currentKey===savedPhantom){
-        phantomKey=savedPhantom;
-        document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+savedPhantom);
-        if(savedX) xUser=savedX;
-        launchApp();
-        return;
-      }
-    }catch(e){
-      // Phantom rejected silent reconnect — fall through to onboarding
-    }
-    localStorage.removeItem('phantom-key');
-    localStorage.removeItem('x-user');
-  }
-  // No verified Phantom connection — show onboarding
-});
+// Clear any stale session on every page load — onboarding is always required
+localStorage.clear();
 
 setInterval(fetchState,5000);
 setInterval(fetchMarketOnly,5000);
