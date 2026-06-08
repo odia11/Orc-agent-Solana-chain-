@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, hashlib, base64
+import threading, time, json, os, sys, subprocess, requests, logging, hashlib, base64, traceback
 from urllib.parse import urlencode
 from flask import Flask, jsonify, request, send_from_directory, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -351,27 +351,47 @@ font-family:monospace;text-align:center;padding:3rem">
 
 @app.route('/x-callback')
 def x_callback():
+    print('[X callback] ── STEP 1: request received ──────────────────────', flush=True)
+    print(f'[X callback] full URL     : {request.url}', flush=True)
+    print(f'[X callback] method       : {request.method}', flush=True)
+    print(f'[X callback] args         : {dict(request.args)}', flush=True)
+
     code  = request.args.get('code')
     error = request.args.get('error')
+    state_param = request.args.get('state')
 
-    # Prefer session-stored verifier (survives worker restarts); fall back to in-memory
-    verifier = session.get('x_verifier') or x_state.get('verifier')
+    print(f'[X callback] code         : {"YES (" + code[:12] + "...)" if code else "MISSING"}', flush=True)
+    print(f'[X callback] error        : {error!r}', flush=True)
+    print(f'[X callback] state        : {state_param!r}', flush=True)
+
+    print('[X callback] ── STEP 2: verifier lookup ────────────────────────', flush=True)
+    session_verifier  = session.get('x_verifier')
+    memory_verifier   = x_state.get('verifier')
+    verifier = session_verifier or memory_verifier
     verifier_ok = bool(verifier)
-    print(f'[X callback] code={("YES " + code[:8] + "...") if code else "MISSING"}  error={error}  verifier={"SET" if verifier_ok else "MISSING (session+memory both empty)"}', flush=True)
-    add_log('X callback: code=' + ('YES' if code else 'NO') + ' verifier=' + ('OK' if verifier_ok else 'MISSING'))
+    print(f'[X callback] session verifier : {"SET (" + session_verifier[:8] + "...)" if session_verifier else "NOT SET"}', flush=True)
+    print(f'[X callback] memory verifier  : {"SET (" + memory_verifier[:8] + "...)" if memory_verifier else "NOT SET"}', flush=True)
+    print(f'[X callback] using verifier   : {"YES" if verifier_ok else "NONE — will fail"}', flush=True)
+    add_log('X callback hit: code=' + ('YES' if code else 'NO') + ' verifier=' + ('OK' if verifier_ok else 'MISSING'))
 
     if error:
-        add_log('X OAuth denied/error: ' + error)
+        print(f'[X callback] ❌ Twitter returned error: {error}', flush=True)
+        add_log('X OAuth error from Twitter: ' + error)
         return _ERROR_PAGE.format(title='X Auth Failed', msg='Twitter returned: ' + error)
     if not code:
+        print('[X callback] ❌ no code param in request', flush=True)
         return _ERROR_PAGE.format(title='X Auth Failed', msg='No code returned by Twitter.')
     if not verifier_ok:
+        print('[X callback] ❌ verifier missing from both session and memory', flush=True)
         add_log('X OAuth: verifier missing — please try again')
         return _ERROR_PAGE.format(title='X Auth Failed',
                                   msg='Session lost — please go back and try again.')
 
-    redirect_uri = CALLBACK_URL
-    print(f'[X callback] using redirect_uri = {repr(redirect_uri)}', flush=True)
+    print('[X callback] ── STEP 3: token exchange ─────────────────────────', flush=True)
+    print(f'[X callback] POST https://api.twitter.com/2/oauth2/token', flush=True)
+    print(f'[X callback] redirect_uri  : {CALLBACK_URL}', flush=True)
+    print(f'[X callback] client_id     : {X_CLIENT_ID[:10] + "..." if X_CLIENT_ID else "MISSING"}', flush=True)
+    print(f'[X callback] client_secret : {"SET" if X_CLIENT_SECRET else "MISSING"}', flush=True)
 
     try:
         r = requests.post(
@@ -380,43 +400,62 @@ def x_callback():
             data={
                 'code':          code,
                 'grant_type':    'authorization_code',
-                'redirect_uri':  redirect_uri,
+                'redirect_uri':  CALLBACK_URL,
                 'code_verifier': verifier,
             },
             timeout=10,
         )
-        print(f'[X callback] token exchange status={r.status_code} body={r.text[:300]}', flush=True)
+        print(f'[X callback] token exchange HTTP status : {r.status_code}', flush=True)
+        print(f'[X callback] token exchange response    : {r.text[:500]}', flush=True)
+
         tokens = r.json()
         access_token = tokens.get('access_token')
+
         if not access_token:
             err_detail = tokens.get('error_description') or tokens.get('error') or str(tokens)
+            print(f'[X callback] ❌ no access_token in response: {err_detail}', flush=True)
             add_log('X OAuth token exchange failed: ' + err_detail)
             return _ERROR_PAGE.format(title='X Auth Failed',
                                       msg='Token exchange failed: ' + err_detail)
-        me = requests.get(
+
+        print(f'[X callback] ✅ access_token received (len={len(access_token)})', flush=True)
+
+        print('[X callback] ── STEP 4: fetch user info ────────────────────────', flush=True)
+        me_resp = requests.get(
             'https://api.twitter.com/2/users/me',
             headers={'Authorization': 'Bearer ' + access_token},
             timeout=8,
-        ).json()
+        )
+        print(f'[X callback] users/me HTTP status : {me_resp.status_code}', flush=True)
+        print(f'[X callback] users/me response    : {me_resp.text[:300]}', flush=True)
+        me = me_resp.json()
         username = me.get('data', {}).get('username', 'user')
+        print(f'[X callback] username : @{username}', flush=True)
+
+        print('[X callback] ── STEP 5: save state + session ───────────────────', flush=True)
         x_state['access_token']  = access_token
         x_state['refresh_token'] = tokens.get('refresh_token')
         x_state['username']      = username
         x_state['connected']     = True
         x_state['verifier']      = None
-        # Persist connected state in signed cookie so /?x=1 reload sees it
-        session['x_connected'] = True
-        session['x_username']  = username
+        session['x_connected']   = True
+        session['x_username']    = username
         session.pop('x_verifier', None)
+        print(f'[X callback] x_state[connected]   = {x_state["connected"]}', flush=True)
+        print(f'[X callback] session[x_connected]  = {session.get("x_connected")}', flush=True)
+        print(f'[X callback] session[x_username]   = {session.get("x_username")}', flush=True)
         add_log('X connected: @' + username)
-        print(f'[X callback] ✅ connected as @{username}', flush=True)
+
+        print('[X callback] ── STEP 6: serving success page → /?x=1 ──────────', flush=True)
     except Exception as e:
-        add_log('X OAuth error: ' + str(e))
-        print(f'[X callback] exception: {e}', flush=True)
+        print(f'[X callback] ❌ EXCEPTION: {e}', flush=True)
+        print(traceback.format_exc(), flush=True)
+        add_log('X OAuth exception: ' + str(e))
         return _ERROR_PAGE.format(title='X Auth Failed', msg=str(e))
+
     import json as _json
-    return _SUCCESS_PAGE.format(username=x_state['username'],
-                                username_json=_json.dumps(x_state['username']))
+    return _SUCCESS_PAGE.format(username=username,
+                                username_json=_json.dumps(username))
 
 @app.route('/api/x/status')
 def x_status():
