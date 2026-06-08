@@ -211,7 +211,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
         <div class="ob-conn-text"><div class="ob-conn-name" id="phantom-addr">Connected</div><div class="ob-conn-sub">Phantom wallet</div></div>
       </div>
       <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectPhantomOnboard()">🔮 Connect Phantom</button>
-      <button class="ob-btn btn-skip" onclick="nextStep(0)">Skip for now →</button>
     </div>
 
     <div class="ob-step" id="step-1">
@@ -406,6 +405,7 @@ async function connectXOnboard(){
 function generateVerifier(){const a=new Uint8Array(32);crypto.getRandomValues(a);return btoa(String.fromCharCode(...a)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=/g,'');}
 
 function launchApp(){
+  if(!phantomKey){currentStep=0;showStep(0);return;}
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
   // Show wallet pill if connected
