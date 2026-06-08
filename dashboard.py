@@ -381,10 +381,12 @@ def x_logout():
                     'username': None, 'connected': False, 'verifier': None})
     return jsonify({'ok': True})
 
+# Start background threads on import so gunicorn picks them up
+threading.Thread(target=balance_loop, daemon=True).start()
+threading.Thread(target=token_loop, daemon=True).start()
+add_log('OrcAgent started')
+
 if __name__ == '__main__':
-    threading.Thread(target=balance_loop, daemon=True).start()
-    threading.Thread(target=token_loop, daemon=True).start()
-    add_log('OrcAgent dashboard server started')
-    add_log('Wallet: ' + WALLET_ADDRESS[:20] + '...')
-    print('OrcAgent Dashboard running at http://localhost:5000')
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    port = int(os.environ.get('PORT', 5000))
+    print('OrcAgent Dashboard running on port', port)
+    app.run(host='0.0.0.0', port=port, debug=False, use_reloader=False)
