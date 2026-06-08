@@ -40,6 +40,11 @@ X_CLIENT_ID     = os.getenv('X_CLIENT_ID', '')
 X_CLIENT_SECRET = os.getenv('X_CLIENT_SECRET', '')
 CALLBACK_URL    = 'https://orc-agent-solana-chain-production.up.railway.app/x-callback'
 
+def _https(url):
+    """Force https:// — Railway terminates TLS at the proxy so request context
+    can produce http:// URLs; this ensures the OAuth redirect_uri is always https."""
+    return url.replace('http://', 'https://', 1) if url.startswith('http://') else url
+
 x_state = {
     'verifier':      None,
     'access_token':  None,
@@ -308,16 +313,17 @@ def x_auth_start():
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
     session['x_verifier'] = verifier
     x_state['verifier']   = verifier
+    callback = _https(CALLBACK_URL)
     auth_url = 'https://twitter.com/i/oauth2/authorize?' + urlencode({
         'response_type':         'code',
         'client_id':             X_CLIENT_ID,
-        'redirect_uri':          CALLBACK_URL,
+        'redirect_uri':          callback,
         'scope':                 'tweet.read tweet.write users.read offline.access',
         'state':                 'orcagent',
         'code_challenge':        challenge,
         'code_challenge_method': 'S256',
     })
-    print(f'[X OAuth] /api/x/auth → 302 to Twitter  redirect_uri={CALLBACK_URL}', flush=True)
+    print(f'[X OAuth] /api/x/auth → 302 to Twitter  redirect_uri={callback}', flush=True)
     add_log('X OAuth: redirecting to Twitter')
     return redirect(auth_url)
 
@@ -370,7 +376,8 @@ def x_callback():
 
     print('[X callback] ── STEP 3: token exchange ─────────────────────────', flush=True)
     print(f'[X callback] POST https://api.twitter.com/2/oauth2/token', flush=True)
-    print(f'[X callback] redirect_uri  : {CALLBACK_URL}', flush=True)
+    callback = _https(CALLBACK_URL)
+    print(f'[X callback] redirect_uri  : {callback}', flush=True)
     print(f'[X callback] client_id     : {X_CLIENT_ID[:10] + "..." if X_CLIENT_ID else "MISSING"}', flush=True)
     print(f'[X callback] client_secret : {"SET" if X_CLIENT_SECRET else "MISSING"}', flush=True)
 
@@ -385,7 +392,7 @@ def x_callback():
             data={
                 'code':          code,
                 'grant_type':    'authorization_code',
-                'redirect_uri':  CALLBACK_URL,
+                'redirect_uri':  callback,
                 'code_verifier': verifier,
             },
             timeout=10,
