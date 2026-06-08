@@ -314,12 +314,27 @@ def x_store_verifier():
     add_log('X OAuth: verifier stored | redirect_uri=' + (x_state['redirect_uri'] or 'NONE'))
     return jsonify({'ok': True})
 
-_CLOSE_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#00a854;
+_ERROR_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#ff5555;
 font-family:monospace;text-align:center;padding:3rem">
-<h2>{icon} {title}</h2><p>{msg}</p>
-<script>try{{window.close()}}catch(e){{}}
-setTimeout(function(){{try{{window.close()}}catch(e){{}}
-setTimeout(function(){{window.location.href='/'}},800)}},1500);
+<h2>❌ {title}</h2><p style="color:#aaa;font-size:13px">{msg}</p>
+<button onclick="window.close()" style="margin-top:1.5rem;padding:10px 24px;background:#222;
+color:#aaa;border:1px solid #444;border-radius:8px;font-family:monospace;cursor:pointer;
+font-size:13px">Close &amp; try again</button>
+</body></html>'''
+
+_SUCCESS_PAGE = '''<!DOCTYPE html><html><body style="background:#0f0f0f;color:#00a854;
+font-family:monospace;text-align:center;padding:3rem">
+<h2>&#x2705; X Connected!</h2><p>@{username}</p>
+<script>
+(function(){{
+  var u={username_json};
+  if(window.opener&&!window.opener.closed){{
+    try{{window.opener.postMessage({{type:'x_connected',username:u}},'*')}}catch(e){{}}
+    setTimeout(function(){{try{{window.close()}}catch(e){{window.location.href='/?x=1'}}}},400);
+  }}else{{
+    window.location.href='/?x=1';
+  }}
+}})();
 </script></body></html>'''
 
 @app.route('/x-callback')
@@ -347,13 +362,13 @@ def x_callback():
 
     if error:
         add_log('X OAuth denied/error: ' + error)
-        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='Twitter returned: ' + error)
+        return _ERROR_PAGE.format(title='X Auth Failed', msg='Twitter returned: ' + error)
     if not code:
-        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg='No code returned.')
+        return _ERROR_PAGE.format(title='X Auth Failed', msg='No code returned by Twitter.')
     if not verifier_ok:
         add_log('X OAuth: verifier missing — server restart between auth and callback?')
-        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed',
-                                  msg='Session lost (server restart?). Please try again.')
+        return _ERROR_PAGE.format(title='X Auth Failed',
+                                  msg='Session lost — server may have restarted. Please try again.')
 
     # Prefer X_CALLBACK_URL env var (registered in Twitter dev portal);
     # fall back to what the frontend sent, then derive from request URL.
@@ -378,7 +393,7 @@ def x_callback():
         if not access_token:
             err_detail = tokens.get('error_description') or tokens.get('error') or str(tokens)
             add_log('X OAuth token exchange failed: ' + err_detail)
-            return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed',
+            return _ERROR_PAGE.format(title='X Auth Failed',
                                       msg='Token exchange failed: ' + err_detail)
         me = requests.get(
             'https://api.twitter.com/2/users/me',
@@ -396,8 +411,10 @@ def x_callback():
     except Exception as e:
         add_log('X OAuth error: ' + str(e))
         print(f'[X callback] exception: {e}', flush=True)
-        return _CLOSE_PAGE.format(icon='❌', title='X Auth Failed', msg=str(e))
-    return _CLOSE_PAGE.format(icon='✅', title='X Connected!', msg='You can close this window.')
+        return _ERROR_PAGE.format(title='X Auth Failed', msg=str(e))
+    import json as _json
+    return _SUCCESS_PAGE.format(username=x_state['username'],
+                                username_json=_json.dumps(x_state['username']))
 
 @app.route('/api/x/status')
 def x_status():
