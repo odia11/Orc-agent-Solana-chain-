@@ -394,9 +394,13 @@ def x_callback():
     print(f'[X callback] client_secret : {"SET" if X_CLIENT_SECRET else "MISSING"}', flush=True)
 
     try:
+        credentials = base64.b64encode(f'{X_CLIENT_ID}:{X_CLIENT_SECRET}'.encode()).decode()
         r = requests.post(
             'https://api.twitter.com/2/oauth2/token',
-            auth=(X_CLIENT_ID, X_CLIENT_SECRET),
+            headers={
+                'Authorization': f'Basic {credentials}',
+                'Content-Type':  'application/x-www-form-urlencoded',
+            },
             data={
                 'code':          code,
                 'grant_type':    'authorization_code',
