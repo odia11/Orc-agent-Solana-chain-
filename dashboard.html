@@ -215,6 +215,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
       <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
       <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
       <button class="ob-btn" id="wallet-continue-btn" style="display:none;background:var(--green);color:white" onclick="nextStep(0)">Continue →</button>
+      <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
       <button class="ob-btn btn-skip" onclick="nextStep(0)">Skip for now →</button>
     </div>
 
@@ -324,7 +325,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
       <div class="panel-hdr">Live Log <button class="clr" onclick="document.getElementById('log-body').innerHTML=''">CLEAR</button></div>
       <div class="log-body" id="log-body"></div>
     </div>
-    <div class="panel">
+    <div class="panel" id="x-post-panel">
       <div class="panel-hdr">𝕏 Post to X</div>
       <textarea class="x-tweet-box" id="x-tweet-box">🐋 OrcAgent is live! Autonomous Solana meme coin trading bot. #Solana #DeFi #OrcAgent</textarea>
       <button class="x-post-btn" onclick="postToX()"><span>𝕏</span> Post to X</button>
@@ -389,7 +390,19 @@ async function connectWalletOnboard(type){
     document.getElementById('solflare-ob-btn').disabled=true;
     document.getElementById('solflare-ob-btn').style.opacity='0.35';
     document.getElementById('wallet-continue-btn').style.display='block';
+    document.getElementById('wallet-back-btn').style.display='block';
   }catch(e){console.error(e);}
+}
+
+function resetWallet(){
+  phantomKey=null;
+  document.getElementById('wallet-connected').style.display='none';
+  document.getElementById('phantom-ob-btn').disabled=false;
+  document.getElementById('phantom-ob-btn').style.opacity='1';
+  document.getElementById('solflare-ob-btn').disabled=false;
+  document.getElementById('solflare-ob-btn').style.opacity='1';
+  document.getElementById('wallet-continue-btn').style.display='none';
+  document.getElementById('wallet-back-btn').style.display='none';
 }
 
 async function connectXOnboard(){
@@ -432,6 +445,8 @@ function launchApp(){
   if(xUser){
     document.getElementById('x-pill').style.display='flex';
     document.getElementById('x-username').textContent=xUser;
+  } else {
+    document.getElementById('x-post-panel').style.display='none';
   }
   fetchState();
 }
