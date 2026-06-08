@@ -1,11 +1,12 @@
 import threading, time, json, os, sys, subprocess, requests, logging, hashlib, base64
 from urllib.parse import urlencode
-from flask import Flask, jsonify, request, send_from_directory, redirect
+from flask import Flask, jsonify, request, send_from_directory, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY', 'orcagent-dev-secret-change-in-prod')
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -307,6 +308,7 @@ def x_auth_start():
     verifier = base64.urlsafe_b64encode(os.urandom(32)).rstrip(b'=').decode()
     challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b'=').decode()
     x_state['verifier'] = verifier
+    session['x_verifier'] = verifier   # survive worker restarts
     auth_url = 'https://twitter.com/i/oauth2/authorize?' + urlencode({
         'response_type':         'code',
         'client_id':             X_CLIENT_ID,
@@ -352,8 +354,10 @@ def x_callback():
     code  = request.args.get('code')
     error = request.args.get('error')
 
-    verifier_ok = bool(x_state.get('verifier'))
-    print(f'[X callback] code={("YES " + code[:8] + "...") if code else "MISSING"}  error={error}  verifier={"SET" if verifier_ok else "MISSING"}  callback={CALLBACK_URL}', flush=True)
+    # Prefer session-stored verifier (survives worker restarts); fall back to in-memory
+    verifier = session.get('x_verifier') or x_state.get('verifier')
+    verifier_ok = bool(verifier)
+    print(f'[X callback] code={("YES " + code[:8] + "...") if code else "MISSING"}  error={error}  verifier={"SET" if verifier_ok else "MISSING (session+memory both empty)"}', flush=True)
     add_log('X callback: code=' + ('YES' if code else 'NO') + ' verifier=' + ('OK' if verifier_ok else 'MISSING'))
 
     if error:
@@ -362,9 +366,9 @@ def x_callback():
     if not code:
         return _ERROR_PAGE.format(title='X Auth Failed', msg='No code returned by Twitter.')
     if not verifier_ok:
-        add_log('X OAuth: verifier missing — server restart between auth and callback?')
+        add_log('X OAuth: verifier missing — please try again')
         return _ERROR_PAGE.format(title='X Auth Failed',
-                                  msg='Session lost — server may have restarted. Please try again.')
+                                  msg='Session lost — please go back and try again.')
 
     redirect_uri = CALLBACK_URL
     print(f'[X callback] using redirect_uri = {repr(redirect_uri)}', flush=True)
@@ -377,7 +381,7 @@ def x_callback():
                 'code':          code,
                 'grant_type':    'authorization_code',
                 'redirect_uri':  redirect_uri,
-                'code_verifier': x_state['verifier'],
+                'code_verifier': verifier,
             },
             timeout=10,
         )
@@ -394,14 +398,18 @@ def x_callback():
             headers={'Authorization': 'Bearer ' + access_token},
             timeout=8,
         ).json()
+        username = me.get('data', {}).get('username', 'user')
         x_state['access_token']  = access_token
         x_state['refresh_token'] = tokens.get('refresh_token')
-        x_state['username']      = me.get('data', {}).get('username', 'user')
+        x_state['username']      = username
         x_state['connected']     = True
         x_state['verifier']      = None
-        x_state['redirect_uri']  = None
-        add_log('X connected: @' + x_state['username'])
-        print(f'[X callback] ✅ connected as @{x_state["username"]}', flush=True)
+        # Persist connected state in signed cookie so /?x=1 reload sees it
+        session['x_connected'] = True
+        session['x_username']  = username
+        session.pop('x_verifier', None)
+        add_log('X connected: @' + username)
+        print(f'[X callback] ✅ connected as @{username}', flush=True)
     except Exception as e:
         add_log('X OAuth error: ' + str(e))
         print(f'[X callback] exception: {e}', flush=True)
@@ -412,10 +420,9 @@ def x_callback():
 
 @app.route('/api/x/status')
 def x_status():
-    return jsonify({
-        'connected': x_state['connected'],
-        'username':  x_state.get('username', ''),
-    })
+    connected = x_state['connected'] or session.get('x_connected', False)
+    username  = x_state.get('username') or session.get('x_username', '')
+    return jsonify({'connected': connected, 'username': username})
 
 def _x_refresh():
     if not x_state.get('refresh_token'):
@@ -464,6 +471,8 @@ def x_post_tweet():
 def x_logout():
     x_state.update({'access_token': None, 'refresh_token': None,
                     'username': None, 'connected': False, 'verifier': None})
+    session.pop('x_connected', None)
+    session.pop('x_username', None)
     return jsonify({'ok': True})
 
 # Start background threads on import so gunicorn picks them up
