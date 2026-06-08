@@ -70,6 +70,7 @@ def get_token_data(mint):
         if not pairs: return None
         p = pairs[0]
         return {
+            'name': p.get('baseToken', {}).get('symbol', '') or '',
             'price': float(p.get('priceUsd', 0) or 0),
             'change5m': float(p.get('priceChange', {}).get('m5', 0) or 0),
             'change1h': float(p.get('priceChange', {}).get('h1', 0) or 0),
@@ -116,7 +117,7 @@ def token_loop():
                 if data:
                     sc = score_token(data)
                     tokens_data.append({
-                        'label': t['label'],
+                        'label': data.get('name') or t['label'],
                         'price': data['price'],
                         'change5m': data['change5m'],
                         'score': sc,
@@ -274,4 +275,4 @@ if __name__ == '__main__':
     add_log('OrcAgent dashboard server started')
     add_log('Wallet: ' + WALLET_ADDRESS[:20] + '...')
     print('OrcAgent Dashboard running at http://localhost:5000')
-    app.run(host='0.0.0.0', port=int(os.environ.get(chr(80)+chr(79)+chr(82)+chr(84),5000)), debug=False)
+    app.run(host='0.0.0.0', port=5000, debug=False)
