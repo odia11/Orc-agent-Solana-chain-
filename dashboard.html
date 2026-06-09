@@ -177,6 +177,23 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .mkt-score-fill{height:100%;border-radius:2px;transition:width .5s ease}
 .mkt-score-label{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;flex-shrink:0;min-width:36px;text-align:right}
 
+/* ── TODAY'S PERFORMANCE ── */
+.perf-panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.perf-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:14px}
+.perf-stat{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.perf-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
+.perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px}
+.trade-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
+.trade-table{width:100%;border-collapse:collapse;font-size:10px;min-width:420px}
+.trade-table th{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:7px;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg3)}
+.trade-table td{padding:6px 10px;border-bottom:1px solid rgba(42,64,96,.4);color:var(--dim);font-family:'Share Tech Mono',monospace}
+.trade-table tr:last-child td{border-bottom:none}
+.trade-table tr:hover td{background:rgba(255,255,255,.02)}
+.td-sym{color:var(--text)!important;font-weight:700}
+.td-pos{color:var(--green)!important;font-weight:700}
+.td-neg{color:var(--red)!important;font-weight:700}
+
 /* ── TOKEN OF THE DAY ── */
 .totd-wrap{margin-bottom:1.25rem}
 .totd-card{
@@ -404,6 +421,48 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- TODAY'S PERFORMANCE -->
+  <div class="perf-panel">
+    <div class="panel-hdr">Today's Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span></div>
+    <div class="perf-stats">
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Total P&amp;L</div>
+        <div class="perf-stat-val" id="p-pnl">$0.00</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Return</div>
+        <div class="perf-stat-val" id="p-pct">0.00%</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Trades</div>
+        <div class="perf-stat-val" id="p-trades">0</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Win Rate</div>
+        <div class="perf-stat-val" id="p-wr">—</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Best Trade</div>
+        <div class="perf-stat-val td-pos" id="p-best">—</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Worst Trade</div>
+        <div class="perf-stat-val td-neg" id="p-worst">—</div>
+      </div>
+    </div>
+    <div class="perf-chart-wrap">
+      <svg id="pnl-chart" width="100%" height="110" viewBox="0 0 600 110" preserveAspectRatio="none" style="display:block"></svg>
+    </div>
+    <div class="trade-table-wrap">
+      <table class="trade-table">
+        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>P&amp;L</th></tr></thead>
+        <tbody id="trade-tbody">
+          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- TOKEN OF THE DAY -->
   <div class="totd-wrap" id="totd-wrap" style="display:none">
     <div class="totd-card" id="totd-card">
@@ -591,6 +650,7 @@ function launchApp(){
   }
   updateAuthBtns();
   fetchState();
+  fetchTrades();
 }
 
 // ── PHANTOM BALANCES ──
@@ -815,6 +875,91 @@ function renderTotd(tokens){
   card.onclick=()=>window.open('https://dexscreener.com/solana/'+t.mint);
 }
 
+// ── PERFORMANCE PANEL ──
+async function fetchTrades(){
+  if(!appVisible()) return;
+  const r=await fetch('/api/trades').then(r=>r.json()).catch(()=>null);
+  if(!r) return;
+  renderPerfPanel(r);
+}
+
+function renderPerfPanel(r){
+  const d=r.daily||{};
+  const pnl=d.total_pnl??0;
+  const pct=d.total_pnl_pct??0;
+  const trades=d.trades??0;
+  const wins=d.wins??0;
+
+  const pnlEl=document.getElementById('p-pnl');
+  pnlEl.textContent=(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2);
+  pnlEl.className='perf-stat-val '+(pnl>=0?'td-pos':'td-neg');
+
+  const pctEl=document.getElementById('p-pct');
+  pctEl.textContent=(pct>=0?'+':'')+pct.toFixed(2)+'%';
+  pctEl.className='perf-stat-val '+(pct>=0?'td-pos':'td-neg');
+
+  document.getElementById('p-trades').textContent=trades;
+  document.getElementById('p-wr').textContent=trades>0?Math.round(wins/trades*100)+'%':'—';
+  document.getElementById('p-best').textContent=d.best!=null?'+'+d.best.toFixed(1)+'%':'—';
+  document.getElementById('p-worst').textContent=d.worst!=null?d.worst.toFixed(1)+'%':'—';
+  document.getElementById('perf-date').textContent=d.date||'';
+
+  renderPnlChart(d.curve||[]);
+
+  const tbody=document.getElementById('trade-tbody');
+  const hist=(r.history||[]).slice().reverse();
+  if(!hist.length){
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
+    return;
+  }
+  tbody.innerHTML=hist.map(t=>{
+    const p=t.pnl??0, pp=t.pnl_pct??0;
+    const cls=p>=0?'td-pos':'td-neg';
+    const sign=p>=0?'+':'';
+    return `<tr>
+      <td>${t.time||'—'}</td>
+      <td class="td-sym">${t.symbol||'???'}</td>
+      <td>${fmtPrice(t.entry||0)}</td>
+      <td>${fmtPrice(t.exit||0)}</td>
+      <td class="${cls}">${sign}$${Math.abs(p).toFixed(2)} <span style="opacity:.6;font-size:9px">(${sign}${pp.toFixed(1)}%)</span></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderPnlChart(curve){
+  const svg=document.getElementById('pnl-chart');
+  const W=600,H=110,PAD=14;
+  if(!curve.length){
+    svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" dominant-baseline="middle" fill="var(--muted)" font-size="11" font-family="Share Tech Mono,monospace">No trades yet today</text>`;
+    return;
+  }
+  const pts=[{t:'start',v:0},...curve];
+  const vals=pts.map(p=>p.v);
+  const minV=Math.min(0,...vals), maxV=Math.max(0,...vals);
+  const range=Math.max(maxV-minV,0.001);
+  const mX=i=>PAD+(i/Math.max(pts.length-1,1))*(W-PAD*2);
+  const mY=v=>PAD+(1-(v-minV)/range)*(H-PAD*2);
+  const zY=mY(0);
+  const lastV=pts[pts.length-1].v;
+  const pos=lastV>=0;
+  const col=pos?'#00edaa':'#ff4d6a';
+  const lineStr=pts.map((p,i)=>mX(i)+','+mY(p.v)).join(' ');
+  const areaStr=mX(0)+','+zY+' '+lineStr+' '+mX(pts.length-1)+','+zY;
+  const zeroLine=(minV<0&&maxV>0)?`<line x1="${PAD}" y1="${zY}" x2="${W-PAD}" y2="${zY}" stroke="var(--border2)" stroke-width="1" stroke-dasharray="4,3"/>`:'' ;
+  svg.innerHTML=`
+    <defs>
+      <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${col}" stop-opacity="0.18"/>
+        <stop offset="100%" stop-color="${col}" stop-opacity="0.01"/>
+      </linearGradient>
+    </defs>
+    <polygon points="${areaStr}" fill="url(#cg)"/>
+    <polyline points="${lineStr}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+    ${zeroLine}
+    <circle cx="${mX(pts.length-1)}" cy="${mY(lastV)}" r="3.5" fill="${col}"/>
+  `;
+}
+
 function updateBtns(){
   const tb=document.getElementById('trade-btn');
   const tbadge=document.getElementById('trade-badge');
@@ -871,6 +1016,7 @@ localStorage.clear();
 
 setInterval(fetchState,5000);
 setInterval(fetchMarketOnly,5000);
+setInterval(fetchTrades,10000);
 setInterval(()=>{if(phantomKey)refreshPhantomBalances();},15000);
 </script>
 </body>

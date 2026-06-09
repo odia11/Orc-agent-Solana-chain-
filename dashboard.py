@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, hashlib, base64, traceback
+import threading, time, json, os, sys, subprocess, requests, logging, hashlib, base64, traceback, datetime
 from urllib.parse import urlencode
 from flask import Flask, jsonify, request, send_from_directory, redirect, session
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -22,6 +22,18 @@ SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
 trader_thread = None
 trader_stop = threading.Event()
 
+def _fresh_daily():
+    return {
+        'date': datetime.datetime.utcnow().strftime('%Y-%m-%d'),
+        'total_pnl': 0.0,
+        'total_pnl_pct': 0.0,
+        'trades': 0,
+        'wins': 0,
+        'best': None,
+        'worst': None,
+        'curve': [],
+    }
+
 state = {
     'trader_running': False,
     'usdc': 0.0,
@@ -30,6 +42,8 @@ state = {
     'log_lines': [],
     'tokens': [],
     'wallet': WALLET_ADDRESS,
+    'trades_history': [],
+    'daily_stats': _fresh_daily(),
 }
 
 X_CLIENT_ID     = os.getenv('X_CLIENT_ID', '')
@@ -179,11 +193,44 @@ def token_loop():
         except: pass
         time.sleep(120)
 
+def check_daily_reset():
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    if state['daily_stats']['date'] != today:
+        state['daily_stats'] = _fresh_daily()
+
+def record_trade(symbol, entry, exit_price, amount, spend):
+    check_daily_reset()
+    now = datetime.datetime.utcnow()
+    today = now.strftime('%Y-%m-%d')
+    pnl = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
+    pnl_pct = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
+    trade = {
+        'symbol': symbol, 'entry': entry, 'exit': exit_price,
+        'amount': amount, 'spend': spend,
+        'pnl': pnl, 'pnl_pct': pnl_pct,
+        'time': now.strftime('%H:%M'), 'date': today,
+        'ts': now.timestamp(),
+    }
+    state['trades_history'].append(trade)
+    if len(state['trades_history']) > 500:
+        state['trades_history'] = state['trades_history'][-500:]
+    ds = state['daily_stats']
+    ds['total_pnl'] = round(ds['total_pnl'] + pnl, 4)
+    ds['trades'] += 1
+    if pnl > 0:
+        ds['wins'] += 1
+    today_spend = sum(t['spend'] for t in state['trades_history'] if t['date'] == today)
+    ds['total_pnl_pct'] = round(ds['total_pnl'] / today_spend * 100, 2) if today_spend else 0.0
+    if ds['best'] is None or pnl_pct > ds['best']: ds['best'] = pnl_pct
+    if ds['worst'] is None or pnl_pct < ds['worst']: ds['worst'] = pnl_pct
+    ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['total_pnl']})
+
 def trader_loop(stop_event, config):
     add_log('Trader started — scanning every ' + str(config.get('interval', 300)) + 's')
     positions = {}
     while not stop_event.is_set():
         try:
+            check_daily_reset()
             usdc = state['usdc']
             open_pos = sum(1 for p in positions.values() if p['amount'] > 0)
             state['positions'] = open_pos
@@ -193,7 +240,7 @@ def trader_loop(stop_event, config):
                 if stop_event.is_set(): break
                 mint = t['mint']
                 if mint not in positions:
-                    positions[mint] = {'amount': 0.0, 'buy_price': 0.0}
+                    positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                 pos = positions[mint]
                 sc = t['score']
                 label = t['symbol'] or t['name'] or mint[:8]
@@ -205,12 +252,15 @@ def trader_loop(stop_event, config):
                     os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + mint + ' ' + str(spend) + ' &')
                     pos['amount'] = spend / t['price']
                     pos['buy_price'] = t['price']
+                    pos['spend'] = spend
                     usdc -= spend
                     open_pos += 1
                 elif decision == 'SELL' and pos['amount'] > 0:
-                    add_log('SELL ' + label + ' (executing via orcagent_solana.py)')
+                    record_trade(label, pos['buy_price'], t['price'], pos['amount'], pos['spend'])
+                    pnl = round(pos['amount'] * (t['price'] - pos['buy_price']), 4)
+                    add_log('SELL ' + label + ' PnL:' + ('+' if pnl >= 0 else '') + str(pnl) + ' (executing via orcagent_solana.py)')
                     os.system('cd "' + BASE + '" && python orcagent_solana.py sell ' + mint + ' ' + str(pos['amount']) + ' &')
-                    pos['amount'] = pos['buy_price'] = 0.0
+                    pos['amount'] = pos['buy_price'] = pos['spend'] = 0.0
                     open_pos -= 1
         except Exception as e:
             add_log('Trader error: ' + str(e))
@@ -268,6 +318,13 @@ def stop_trader():
 @app.route('/api/market')
 def api_market():
     return jsonify({'tokens': state['tokens']})
+
+@app.route('/api/trades')
+def api_trades():
+    check_daily_reset()
+    today = state['daily_stats']['date']
+    today_trades = [t for t in state['trades_history'] if t.get('date') == today]
+    return jsonify({'daily': state['daily_stats'], 'history': today_trades[-10:]})
 
 @app.route('/api/log')
 def api_log():
