@@ -15,6 +15,13 @@ BASE = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE = os.path.join(BASE, 'trades.log')
 STATE_FILE = os.path.join(BASE, 'bot_state.json')
 
+WALLET_ADDRESS = os.environ.get('WALLET_ADDRESS', '')
+USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
+
+trader_thread = None
+trader_stop = threading.Event()
+
 state = {
     'trader_running': False,
     'usdc': 0.0,
@@ -24,13 +31,6 @@ state = {
     'tokens': [],
     'wallet': WALLET_ADDRESS,
 }
-
-trader_thread = None
-trader_stop = threading.Event()
-
-WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
-USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
-SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
 
 X_CLIENT_ID     = os.getenv('X_CLIENT_ID', '')
 X_CLIENT_SECRET = os.getenv('X_CLIENT_SECRET', '')
