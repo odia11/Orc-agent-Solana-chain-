@@ -212,7 +212,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   background:linear-gradient(90deg,#ffc13a,#ffe080,#ffc13a,transparent);
 }
 .totd-card:hover{transform:translateY(-2px);border-color:rgba(255,193,58,.7);box-shadow:0 0 48px rgba(255,193,58,.18)}
-.totd-label{font-size:9px;color:#ffc13a;text-transform:uppercase;letter-spacing:.18em;font-family:'Share Tech Mono',monospace;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.totd-label{font-size:9px;color:#ffc13a;text-transform:uppercase;letter-spacing:.18em;font-family:'Share Tech Mono',monospace;margin-bottom:12px;display:flex;align-items:center;gap:7px;justify-content:space-between}
+.totd-countdown{font-size:8px;color:rgba(255,193,58,.5);letter-spacing:.06em;font-weight:400;text-transform:none;margin-left:auto;white-space:nowrap}
 .totd-label::before{content:'★';font-size:11px}
 .totd-body{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
 .totd-left{min-width:0;flex:1}
@@ -466,7 +467,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <!-- TOKEN OF THE DAY -->
   <div class="totd-wrap" id="totd-wrap" style="display:none">
     <div class="totd-card" id="totd-card">
-      <div class="totd-label">Token of the Day</div>
+      <div class="totd-label">Token of the Day <span class="totd-countdown" id="totd-countdown"></span></div>
       <div class="totd-body">
         <div class="totd-left">
           <div class="totd-sym" id="totd-sym">—</div>
@@ -651,6 +652,7 @@ function launchApp(){
   updateAuthBtns();
   fetchState();
   fetchTrades();
+  fetchTotd();
 }
 
 // ── PHANTOM BALANCES ──
@@ -728,13 +730,13 @@ async function fetchState(){
   traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
-  if(r.tokens&&r.tokens.length){renderMarket(r.tokens);renderTotd(r.tokens);}
+  if(r.tokens&&r.tokens.length) renderMarket(r.tokens);
 }
 
 async function fetchMarketOnly(){
   if(!appVisible()) return;
   const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
-  if(r?.tokens&&r.tokens.length){renderMarket(r.tokens);renderTotd(r.tokens);}
+  if(r?.tokens&&r.tokens.length) renderMarket(r.tokens);
 }
 
 function checkForTrades(lines){
@@ -842,37 +844,44 @@ function renderMarket(tokens){
 }
 
 // ── TOKEN OF THE DAY ──
-function renderTotd(tokens){
-  if(!tokens?.length) return;
-  const t=tokens.reduce((best,cur)=>{
-    const cv=(cur.volume24h||cur.volume1h||0);
-    const bv=(best.volume24h||best.volume1h||0);
-    return cv>bv?cur:best;
-  },tokens[0]);
+let _totdNextAt=0;
+
+async function fetchTotd(){
+  if(!appVisible()) return;
+  const r=await fetch('/api/totd').then(r=>r.json()).catch(()=>null);
+  if(!r?.token) return;
+  renderTotd(r.token);
+  _totdNextAt=Date.now()+(r.next_update_in||900)*1000;
+}
+
+function renderTotd(t){
   if(!t) return;
-
-  const wrap=document.getElementById('totd-wrap');
-  wrap.style.display='block';
-
+  document.getElementById('totd-wrap').style.display='block';
   document.getElementById('totd-sym').textContent=t.symbol||'???';
   document.getElementById('totd-name').textContent=t.name||t.symbol||'Unknown';
   document.getElementById('totd-price').textContent=fmtPrice(t.price);
   document.getElementById('totd-vol').textContent=fmtNum(t.volume24h||t.volume1h||0);
   document.getElementById('totd-liq').textContent=fmtNum(t.liquidity||0);
   document.getElementById('totd-mcap').textContent=fmtNum(t.fdv||0);
-
   const chg=t.change24h??t.change1h??0;
   const chgEl=document.getElementById('totd-chg');
   chgEl.textContent=(chg>=0?'▲ +':'▼ −')+Math.abs(chg).toFixed(2)+'%';
   chgEl.className='totd-chg '+(chg>=0?'up':'dn');
-
   const hot=t.score>=5, cold=t.score<=-3;
   const sigEl=document.getElementById('totd-sig');
   sigEl.textContent=hot?'BUY':cold?'SELL':'HOLD';
   sigEl.className='totd-sig '+(hot?'sig-buy':cold?'sig-sell':'sig-hold');
+  document.getElementById('totd-card').onclick=()=>window.open('https://dexscreener.com/solana/'+t.mint);
+}
 
-  const card=document.getElementById('totd-card');
-  card.onclick=()=>window.open('https://dexscreener.com/solana/'+t.mint);
+function _tickTotdCountdown(){
+  const el=document.getElementById('totd-countdown');
+  if(!el||!_totdNextAt) return;
+  const rem=Math.max(0,_totdNextAt-Date.now());
+  if(rem===0&&appVisible()){fetchTotd();return;}
+  const m=Math.floor(rem/60000);
+  const s=Math.floor((rem%60000)/1000);
+  el.textContent='rotates in '+m+':'+String(s).padStart(2,'0');
 }
 
 // ── PERFORMANCE PANEL ──
@@ -1023,6 +1032,8 @@ localStorage.clear();
 setInterval(fetchState,5000);
 setInterval(fetchMarketOnly,5000);
 setInterval(fetchTrades,10000);
+setInterval(fetchTotd,60000);
+setInterval(_tickTotdCountdown,1000);
 setInterval(()=>{if(phantomKey)refreshPhantomBalances();},15000);
 </script>
 </body>

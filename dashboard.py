@@ -44,6 +44,8 @@ state = {
     'wallet': WALLET_ADDRESS,
     'trades_history': [],
     'daily_stats': _fresh_daily(),
+    'token_of_the_day': None,
+    'totd_updated_at': 0.0,
 }
 
 X_CLIENT_ID     = os.getenv('X_CLIENT_ID', '')
@@ -155,6 +157,20 @@ def score_token(data):
     if data['liquidity'] < 1000: score -= 3
     elif data['liquidity'] > 10000: score += 1
     return score
+
+TOTD_INTERVAL = 900  # 15 minutes
+
+def totd_loop():
+    while True:
+        try:
+            tokens = state['tokens']
+            if tokens:
+                best = max(tokens, key=lambda t: t.get('change24h', 0))
+                state['token_of_the_day'] = best
+                state['totd_updated_at'] = time.time()
+                add_log('Token of the Day: ' + best.get('symbol', '?') + ' (' + ('+' if best.get('change24h', 0) >= 0 else '') + str(round(best.get('change24h', 0), 1)) + '% 24h)')
+        except: pass
+        time.sleep(TOTD_INTERVAL)
 
 def balance_loop():
     while True:
@@ -318,6 +334,16 @@ def stop_trader():
 @app.route('/api/market')
 def api_market():
     return jsonify({'tokens': state['tokens']})
+
+@app.route('/api/totd')
+def api_totd():
+    updated = state.get('totd_updated_at', 0)
+    next_in = max(0.0, TOTD_INTERVAL - (time.time() - updated)) if updated else 0.0
+    return jsonify({
+        'token': state.get('token_of_the_day'),
+        'updated_at': updated,
+        'next_update_in': round(next_in),
+    })
 
 @app.route('/api/trades')
 def api_trades():
@@ -540,6 +566,7 @@ def x_logout():
 # Start background threads on import so gunicorn picks them up
 threading.Thread(target=balance_loop, daemon=True).start()
 threading.Thread(target=token_loop, daemon=True).start()
+threading.Thread(target=totd_loop, daemon=True).start()
 add_log('OrcAgent started')
 
 if __name__ == '__main__':
