@@ -453,10 +453,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- BOTTOM LINKS -->
   <div class="bottom">
-    <button class="bot-btn" onclick="location.reload()">↺ Refresh</button>
-    <button class="bot-btn" id="btn-solscan">Solscan ↗</button>
-    <button class="bot-btn" onclick="window.open('https://jup.ag')">Jupiter ↗</button>
-    <button class="bot-btn" onclick="window.open('https://dexscreener.com')">DexScreener ↗</button>
+    <button class="bot-btn" onclick="fetchState();fetchMarketOnly()">↺ Refresh</button>
+    <button class="bot-btn" id="btn-solscan" onclick="window.open('https://solscan.io','_blank')">Solscan ↗</button>
+    <button class="bot-btn" onclick="window.open('https://jup.ag','_blank')">Jupiter ↗</button>
+    <button class="bot-btn" onclick="window.open('https://dexscreener.com','_blank')">DexScreener ↗</button>
   </div>
 
 </div><!-- /wrap -->
