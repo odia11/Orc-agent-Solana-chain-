@@ -66,7 +66,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.x-pill{display:flex;align-items:center;gap:6px;background:#000;border:1px solid #1a1a1a;border-radius:20px;padding:5px 12px;font-size:10px;color:#fff;cursor:pointer}
 .hdr-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
 .hdr-btn:hover{border-color:var(--green);color:var(--green)}
 .hdr-btn-red{background:transparent;border:1px solid rgba(241,52,75,.3);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--red);cursor:pointer;transition:all .15s}
@@ -247,11 +246,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .c-info{color:#4a7095}
 .c-skip{color:#3a5878}
 
-.x-tweet-box{width:100%;background:var(--bg);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;padding:10px;outline:none;resize:none;height:84px;transition:border-color .15s}
-.x-tweet-box:focus{border-color:var(--border2)}
-.x-post-btn{width:100%;margin-top:8px;padding:10px;background:#000;color:#fff;border:1px solid #1c1c1c;border-radius:7px;font-family:'Share Tech Mono',monospace;font-size:11px;cursor:pointer;font-weight:700;transition:background .15s}
-.x-post-btn:hover{background:#111}
-
 /* ── BOTTOM LINKS ── */
 .bottom{display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap}
 .bot-btn{flex:1;min-width:80px;padding:9px;font-size:9px;font-family:'Share Tech Mono',monospace;background:var(--bg2);border:1px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
@@ -335,12 +329,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="ob-orc">🐋</div>
     <div class="ob-title">ORCAGENT</div>
     <div class="ob-sub">Connect your Phantom or Solflare wallet to start trading Solana meme coins automatically.</div>
-    <div class="ob-progress">
-      <div class="ob-dot active" id="dot-0"></div>
-      <div class="ob-dot" id="dot-1"></div>
-      <div class="ob-dot" id="dot-2"></div>
-    </div>
-
     <div class="ob-step active" id="step-0">
       <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL &amp; USDC balances.</div>
@@ -354,28 +342,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div id="wallet-install-msg" style="display:none;font-size:11px;color:var(--red);background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;text-align:left;line-height:1.6"></div>
       <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
       <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
-      <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="phantomKey&&nextStep(0)">Continue →</button>
+      <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="phantomKey&&launchApp()">Launch OrcAgent ▶</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
       <button class="ob-btn btn-skip" onclick="skipToApp()">Skip — browse without connecting →</button>
     </div>
 
-    <div class="ob-step" id="step-1">
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 2 — Connect X Account</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Optional — post your winning trades to X automatically.</div>
-      <div id="x-ob-connected" style="display:none" class="ob-connected">
-        <div class="ob-check">✓</div>
-        <div class="ob-conn-text"><div class="ob-conn-name" id="x-ob-name">Connected</div><div class="ob-conn-sub">X account</div></div>
-      </div>
-      <button class="ob-btn btn-x" id="x-ob-btn" onclick="connectXOnboard()"><span style="font-size:16px">𝕏</span> Sign in with X</button>
-      <button class="ob-btn btn-skip" onclick="nextStep(1)">Skip for now →</button>
-    </div>
-
-    <div class="ob-step" id="step-2">
-      <div style="font-size:32px;margin-bottom:1rem">🚀</div>
-      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.5rem">You're all set!</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1.5rem;line-height:1.6">OrcAgent is ready to trade. Press Start Trading below.</div>
-      <button class="ob-btn" style="background:var(--green);color:#000;font-weight:900" onclick="launchApp()">Launch OrcAgent ▶</button>
-    </div>
   </div>
 </div>
 
@@ -384,16 +355,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div class="s-card">
     <button class="s-close" onclick="closeSettings()">✕</button>
     <div class="s-title">⚙ TRADING SETTINGS</div>
-    <div class="s-sub" id="s-user-label">Sign in with X to save per-account settings</div>
+    <div class="s-sub" id="s-user-label">Connect a wallet to save per-wallet settings</div>
 
     <div class="s-warn">
       <span style="font-size:15px;flex-shrink:0">⚠</span>
       <span>Use a dedicated trading wallet only. Never use your main wallet. Private keys are encrypted with Fernet symmetric encryption before storage — they are never exposed in API responses.</span>
-    </div>
-
-    <div class="s-field">
-      <label class="s-label">Trading Wallet Address (public key)</label>
-      <input id="s-wallet" class="s-input" type="text" placeholder="Solana public key (base58)" autocomplete="off">
     </div>
 
     <div class="s-field">
@@ -446,10 +412,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
-      <div class="x-pill" id="x-pill" style="display:none;cursor:pointer" title="Click to disconnect X" onclick="disconnectX()"><span>𝕏</span><span id="x-username">@user</span><span style="opacity:.4;margin-left:4px;font-size:9px">✕</span></div>
       <button class="hdr-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
-      <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Logout</button>
+      <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
     </div>
   </div>
 
@@ -565,21 +530,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- LOG + X POST -->
-  <div class="panels">
+  <!-- ACTIVITY LOG -->
+  <div class="panels" style="grid-template-columns:1fr">
     <div class="panel">
       <div class="panel-hdr">Activity Log &nbsp;<button class="clr" onclick="document.getElementById('log-body').innerHTML=''">CLEAR</button></div>
       <div class="log-body" id="log-body"></div>
-    </div>
-    <div class="panel" id="x-post-panel">
-      <div class="panel-hdr">𝕏 Post to X</div>
-      <textarea class="x-tweet-box" id="x-tweet-box">🐋 OrcAgent is live! Autonomous Solana meme coin trading bot. #Solana #DeFi #OrcAgent</textarea>
-      <button class="x-post-btn" onclick="postToX()"><span>𝕏</span> Post to X</button>
-      <div style="margin-top:10px;border-top:1px solid var(--border);padding-top:10px">
-        <label style="display:flex;align-items:center;gap:8px;font-size:10px;color:var(--dim);cursor:pointer">
-          <input type="checkbox" id="x-autopost" style="width:14px;height:14px;accent-color:var(--green)"> Auto-post winning trades
-        </label>
-      </div>
     </div>
   </div>
 
@@ -594,16 +549,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 </div><!-- /wrap -->
 
 <script>
-let traderOn=false, phantomKey=null, walletType=null, xUser=null, currentStep=0;
+let traderOn=false, phantomKey=null, walletType=null, currentStep=0;
 
 // ── LOGOUT ──
 function doLogout(){
-  phantomKey=null; walletType=null; xUser=null;
+  phantomKey=null; walletType=null;
   sessionStorage.removeItem('orcagent_wallet');
   updateAuthBtns();
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-pill').style.display='none';
-  document.getElementById('x-pill').style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('onboard').classList.remove('hide');
   document.getElementById('s-usdc').innerHTML='<span class="stat-placeholder">——</span>';
@@ -680,20 +634,6 @@ function skipToApp(){
   launchApp();
 }
 
-function handleXConnected(username){
-  xUser='@'+username;
-  updateAuthBtns();
-  document.getElementById('x-ob-name').textContent=xUser;
-  document.getElementById('x-ob-connected').style.display='flex';
-  const btn=document.getElementById('x-ob-btn');
-  btn.textContent='✓ Connected — Continue →';
-  btn.onclick=()=>nextStep(1);
-  document.getElementById('x-pill').style.display='flex';
-  document.getElementById('x-username').textContent=xUser;
-}
-
-function connectXOnboard(){ window.location.href='/api/x/auth'; }
-
 function launchApp(){
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
@@ -709,12 +649,6 @@ function launchApp(){
     // View-only: hide trade button, show notice
     const tb=document.getElementById('trade-btn');
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
-  }
-  if(xUser){
-    document.getElementById('x-pill').style.display='flex';
-    document.getElementById('x-username').textContent=xUser;
-  } else {
-    document.getElementById('x-post-panel').style.display='none';
   }
   updateAuthBtns();
   fetchState();
@@ -736,30 +670,8 @@ async function refreshPhantomBalances(){
   }catch(e){}
 }
 
-// ── X POST ──
-async function postToX(){
-  const text=document.getElementById('x-tweet-box').value.trim();
-  if(!text) return;
-  if(xUser){
-    const btn=document.querySelector('.x-post-btn');
-    btn.textContent='Posting...';
-    const r=await fetch('/api/x/tweet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text})}).then(r=>r.json()).catch(()=>null);
-    if(r?.ok){btn.innerHTML='✓ Posted!';setTimeout(()=>{btn.innerHTML='<span>𝕏</span> Post to X'},2000);}
-    else{btn.innerHTML='<span>𝕏</span> Post to X';alert('Post failed: '+(r?.msg||'unknown error'));}
-  } else {
-    window.open('https://twitter.com/intent/tweet?text='+encodeURIComponent(text),'_blank');
-  }
-}
-
-async function disconnectX(){
-  await fetch('/api/x/logout',{method:'POST'});
-  xUser=null;
-  document.getElementById('x-pill').style.display='none';
-  updateAuthBtns();
-}
-
 function updateAuthBtns(){
-  const authed=!!(phantomKey||xUser);
+  const authed=!!phantomKey;
   document.getElementById('logout-btn').style.display=authed?'':'none';
   document.getElementById('connect-btn').style.display=authed?'none':'';
 }
@@ -777,10 +689,6 @@ function showOrcDance(text,detail){
     d.textContent=em[Math.floor(Math.random()*em.length)];
     d.style.cssText='left:'+(Math.random()*200)+'px;top:'+(80+Math.random()*100)+'px;animation-delay:'+(Math.random()*.6)+'s';
     c.appendChild(d);
-  }
-  if(xUser&&document.getElementById('x-autopost')?.checked){
-    const t='🐋 OrcAgent just executed a trade! '+detail+' #Solana #DeFi #OrcAgent';
-    setTimeout(()=>fetch('/api/x/tweet',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:t})}),1000);
   }
   setTimeout(()=>o.classList.remove('show'),3500);
 }
@@ -1070,13 +978,8 @@ async function toggleTrader(){
   fetchState();
 }
 
-// ── STARTUP: restore session + handle OAuth return ──
+// ── STARTUP: restore session ──
 (async function initApp(){
-  const urlHasX=new URLSearchParams(location.search).has('x');
-  if(urlHasX) history.replaceState({},'','/');
-  const xr=await fetch('/api/x/status').then(r=>r.json()).catch(()=>null);
-  if(xr?.connected) handleXConnected(xr.username);
-
   // Restore wallet only if the extension confirms it is still connected
   const saved=JSON.parse(sessionStorage.getItem('orcagent_wallet')||'null');
   if(saved?.key){
@@ -1117,12 +1020,12 @@ async function openSettings(){
   const msgEl=document.getElementById('s-msg');
   msgEl.className='s-msg'; msgEl.textContent='';
   const saveBtn=document.getElementById('s-save-btn');
-  if(xUser){
-    document.getElementById('s-user-label').textContent='Settings for '+xUser;
+  if(phantomKey){
+    const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
+    document.getElementById('s-user-label').textContent='Settings for '+short;
     saveBtn.disabled=false; saveBtn.style.opacity='1';
     const r=await fetch('/api/settings').then(r=>r.json()).catch(()=>null);
     if(r?.ok){
-      document.getElementById('s-wallet').value=r.wallet_address||'';
       document.getElementById('s-maxusdc').value=r.max_trade_size||12.5;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
       const hint=document.getElementById('s-key-hint');
@@ -1130,7 +1033,7 @@ async function openSettings(){
       hint.textContent=r.has_key?'✓ key saved (encrypted)':'no key saved';
     }
   } else {
-    document.getElementById('s-user-label').textContent='Sign in with X to save per-account settings';
+    document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
     saveBtn.disabled=true; saveBtn.style.opacity='.45';
     document.getElementById('s-key-hint').textContent='';
   }
@@ -1148,8 +1051,7 @@ function togglePrivVis(){
 }
 
 async function saveSettings(){
-  if(!xUser){alert('Sign in with X first.');return;}
-  const wallet   =document.getElementById('s-wallet').value.trim();
+  if(!phantomKey){alert('Connect a wallet first.');return;}
   const pk       =document.getElementById('s-privkey').value.trim();
   const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||12.5;
   const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||50;
@@ -1160,7 +1062,7 @@ async function saveSettings(){
   const r=await fetch('/api/settings',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({wallet_address:wallet,private_key:pk,max_trade_size:maxUsdc,daily_loss_limit:lossLimit})
+    body:JSON.stringify({private_key:pk,max_trade_size:maxUsdc,daily_loss_limit:lossLimit})
   }).then(r=>r.json()).catch(()=>null);
   saveBtn.textContent='SAVE SETTINGS'; saveBtn.disabled=false;
 
@@ -1170,7 +1072,6 @@ async function saveSettings(){
     document.getElementById('s-privkey').value='';
     const hint=document.getElementById('s-key-hint');
     hint.style.color='var(--green)'; hint.textContent='✓ key saved (encrypted)';
-    if(wallet) fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:wallet})}).catch(()=>{});
   } else {
     msgEl.className='s-msg err';
     msgEl.textContent='✗ '+(r?.msg||'Save failed. Check server logs.');
