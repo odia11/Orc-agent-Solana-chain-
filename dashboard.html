@@ -257,6 +257,31 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .bot-btn{flex:1;min-width:80px;padding:9px;font-size:9px;font-family:'Share Tech Mono',monospace;background:var(--bg2);border:1px solid var(--border);color:var(--muted);border-radius:7px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
 .bot-btn:hover{border-color:var(--green);color:var(--green)}
 
+/* ── SETTINGS MODAL ── */
+.s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
+.s-modal.open{display:flex}
+.s-card{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:26px 24px;width:100%;max-width:480px;position:relative;box-shadow:0 0 60px rgba(0,0,0,.5)}
+.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
+.s-close:hover{color:var(--text)}
+.s-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.s-sub{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:18px}
+.s-warn{background:rgba(255,193,58,.06);border:1px solid rgba(255,193,58,.25);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-bottom:18px;display:flex;gap:8px;line-height:1.55}
+.s-field{margin-bottom:14px}
+.s-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;display:block;margin-bottom:5px}
+.s-input{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;padding:9px 12px;outline:none;transition:border-color .15s}
+.s-input:focus{border-color:var(--border2)}
+.s-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:18px}
+.s-key-wrap{position:relative}
+.s-key-wrap .s-input{padding-right:40px}
+.s-vis-btn{position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:13px;line-height:1}
+.s-msg{font-size:11px;padding:8px 12px;border-radius:6px;margin-bottom:12px;display:none}
+.s-msg.ok{background:rgba(0,237,170,.08);border:1px solid rgba(0,237,170,.25);color:var(--green);display:block}
+.s-msg.err{background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.25);color:var(--red);display:block}
+.s-save{width:100%;padding:12px;background:var(--green);color:#000;border:none;border-radius:8px;font-family:'Orbitron',monospace;font-size:11px;font-weight:900;cursor:pointer;letter-spacing:.06em;transition:filter .15s}
+.s-save:hover{filter:brightness(1.1)}
+.s-save:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;filter:none}
+.s-key-hint{font-size:8px;font-family:'Share Tech Mono',monospace;margin-left:8px}
+
 /* ── MOBILE ── */
 @media(max-width:720px){
   .stats{grid-template-columns:repeat(2,1fr)}
@@ -354,6 +379,48 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div>
 </div>
 
+<!-- SETTINGS MODAL -->
+<div class="s-modal" id="settings-modal" onclick="if(event.target===this)closeSettings()">
+  <div class="s-card">
+    <button class="s-close" onclick="closeSettings()">✕</button>
+    <div class="s-title">⚙ TRADING SETTINGS</div>
+    <div class="s-sub" id="s-user-label">Sign in with X to save per-account settings</div>
+
+    <div class="s-warn">
+      <span style="font-size:15px;flex-shrink:0">⚠</span>
+      <span>Use a dedicated trading wallet only. Never use your main wallet. Private keys are encrypted with Fernet symmetric encryption before storage — they are never exposed in API responses.</span>
+    </div>
+
+    <div class="s-field">
+      <label class="s-label">Trading Wallet Address (public key)</label>
+      <input id="s-wallet" class="s-input" type="text" placeholder="Solana public key (base58)" autocomplete="off">
+    </div>
+
+    <div class="s-field">
+      <label class="s-label">Private Key <span class="s-key-hint" id="s-key-hint"></span></label>
+      <div class="s-key-wrap">
+        <input id="s-privkey" class="s-input" type="password" placeholder="Leave blank to keep existing encrypted key" autocomplete="new-password">
+        <button class="s-vis-btn" id="s-vis-btn" onclick="togglePrivVis()">👁</button>
+      </div>
+    </div>
+
+    <div class="s-grid">
+      <div class="s-field" style="margin-bottom:0">
+        <label class="s-label">Max Trade Size (USDC)</label>
+        <input id="s-maxusdc" class="s-input" type="number" value="12.5" min="1" max="1000" step="0.5">
+      </div>
+      <div class="s-field" style="margin-bottom:0">
+        <label class="s-label">Daily Loss Limit (USDC)</label>
+        <input id="s-losslimit" class="s-input" type="number" value="50" min="1" max="10000" step="1">
+      </div>
+    </div>
+
+    <div style="height:14px"></div>
+    <div class="s-msg" id="s-msg"></div>
+    <button class="s-save" id="s-save-btn" onclick="saveSettings()" disabled>SAVE SETTINGS</button>
+  </div>
+</div>
+
 <!-- MAIN APP -->
 <div class="wrap" id="app" style="display:none">
 
@@ -380,7 +447,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
       <div class="x-pill" id="x-pill" style="display:none;cursor:pointer" title="Click to disconnect X" onclick="disconnectX()"><span>𝕏</span><span id="x-username">@user</span><span style="opacity:.4;margin-left:4px;font-size:9px">✕</span></div>
-      <button class="hdr-btn" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⚙ Settings</button>
+      <button class="hdr-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Logout</button>
     </div>
@@ -1042,6 +1109,73 @@ async function toggleTrader(){
 })();
 
 localStorage.clear();
+
+// ── SETTINGS MODAL ──
+async function openSettings(){
+  const modal=document.getElementById('settings-modal');
+  modal.classList.add('open');
+  const msgEl=document.getElementById('s-msg');
+  msgEl.className='s-msg'; msgEl.textContent='';
+  const saveBtn=document.getElementById('s-save-btn');
+  if(xUser){
+    document.getElementById('s-user-label').textContent='Settings for '+xUser;
+    saveBtn.disabled=false; saveBtn.style.opacity='1';
+    const r=await fetch('/api/settings').then(r=>r.json()).catch(()=>null);
+    if(r?.ok){
+      document.getElementById('s-wallet').value=r.wallet_address||'';
+      document.getElementById('s-maxusdc').value=r.max_trade_size||12.5;
+      document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
+      const hint=document.getElementById('s-key-hint');
+      hint.style.color=r.has_key?'var(--green)':'var(--muted)';
+      hint.textContent=r.has_key?'✓ key saved (encrypted)':'no key saved';
+    }
+  } else {
+    document.getElementById('s-user-label').textContent='Sign in with X to save per-account settings';
+    saveBtn.disabled=true; saveBtn.style.opacity='.45';
+    document.getElementById('s-key-hint').textContent='';
+  }
+}
+
+function closeSettings(){
+  document.getElementById('settings-modal').classList.remove('open');
+}
+
+function togglePrivVis(){
+  const inp=document.getElementById('s-privkey');
+  const btn=document.getElementById('s-vis-btn');
+  inp.type=inp.type==='password'?'text':'password';
+  btn.textContent=inp.type==='password'?'👁':'🙈';
+}
+
+async function saveSettings(){
+  if(!xUser){alert('Sign in with X first.');return;}
+  const wallet   =document.getElementById('s-wallet').value.trim();
+  const pk       =document.getElementById('s-privkey').value.trim();
+  const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||12.5;
+  const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||50;
+  const msgEl    =document.getElementById('s-msg');
+  const saveBtn  =document.getElementById('s-save-btn');
+
+  saveBtn.textContent='SAVING...'; saveBtn.disabled=true;
+  const r=await fetch('/api/settings',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({wallet_address:wallet,private_key:pk,max_trade_size:maxUsdc,daily_loss_limit:lossLimit})
+  }).then(r=>r.json()).catch(()=>null);
+  saveBtn.textContent='SAVE SETTINGS'; saveBtn.disabled=false;
+
+  if(r?.ok){
+    msgEl.className='s-msg ok';
+    msgEl.textContent='✓ Settings saved. Private key encrypted with Fernet and stored securely.';
+    document.getElementById('s-privkey').value='';
+    const hint=document.getElementById('s-key-hint');
+    hint.style.color='var(--green)'; hint.textContent='✓ key saved (encrypted)';
+    if(wallet) fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:wallet})}).catch(()=>{});
+  } else {
+    msgEl.className='s-msg err';
+    msgEl.textContent='✗ '+(r?.msg||'Save failed. Check server logs.');
+  }
+}
 
 setInterval(fetchState,5000);
 setInterval(fetchMarketOnly,5000);
