@@ -48,15 +48,31 @@ x_state = {
     'connected':     False,
 }
 
-TOKENS = [
-    {'mint': 'AqQtvEvV6wTGYjxSmzzWB11K2kmWBwbdfKCNkkW3pump', 'label': 'TOKEN2'},
-    {'mint': '6xUoG8JtjYxKfBD3nsLGp8n9pGzKUigF5WTwWyy1pump', 'label': 'TOKEN3'},
-    {'mint': '6KHeDqkeGc5JKAM9u5UKXZ1uqTeV4o45PAjAruHNpump', 'label': 'TOKEN5'},
-    {'mint': 'Ac8EScJ4ufRo8PiFkun7diUrcCCktg4JvArb3mPmpump', 'label': 'TOKEN6'},
-    {'mint': '7sgtaBCjEyo1LsPWfsfZXhj7H8q4SX1TJgyBZ7c5pump', 'label': 'TOKEN8'},
-    {'mint': 'FeMbDoX7R1Psc4GEcvJdsbNbZA3bfztcyDCatJVJpump', 'label': 'TOKEN9'},
-    {'mint': 'FzMe8rQ54FRg31KH1sHUbrdPEMMMJbLjNJ8miV8Tpump', 'label': 'TOKEN12'},
-]
+DISCOVERY_LIMIT = 20
+
+def discover_tokens():
+    mints = []
+    seen = {USDC_MINT}
+    try:
+        r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', timeout=10)
+        if r.status_code == 200:
+            for item in r.json():
+                if item.get('chainId') == 'solana':
+                    m = item.get('tokenAddress', '')
+                    if m and m not in seen:
+                        seen.add(m); mints.append(m)
+    except: pass
+    try:
+        r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
+        if r.status_code == 200:
+            items = r.json() if isinstance(r.json(), list) else []
+            for item in items:
+                if item.get('chainId') == 'solana':
+                    m = item.get('tokenAddress', '')
+                    if m and m not in seen:
+                        seen.add(m); mints.append(m)
+    except: pass
+    return mints[:DISCOVERY_LIMIT]
 
 def add_log(msg):
     t = time.strftime('%H:%M:%S')
@@ -129,15 +145,16 @@ def balance_loop():
 def token_loop():
     while True:
         try:
+            mints = discover_tokens()
             tokens_data = []
-            for t in TOKENS:
-                data = get_token_data(t['mint'])
-                if data:
+            for mint in mints:
+                data = get_token_data(mint)
+                if data and data['price'] > 0 and data['liquidity'] > 500:
                     sc = score_token(data)
                     tokens_data.append({
-                        'mint': t['mint'],
-                        'symbol': data['symbol'] or t['label'],
-                        'name': data['name'] or data['symbol'] or t['label'],
+                        'mint': mint,
+                        'symbol': data['symbol'] or mint[:8],
+                        'name': data['name'] or data['symbol'] or mint[:8],
                         'price': data['price'],
                         'change5m': data['change5m'],
                         'change1h': data['change1h'],
@@ -145,31 +162,45 @@ def token_loop():
                         'liquidity': data['liquidity'],
                         'score': sc,
                     })
-            state['tokens'] = tokens_data
+            if tokens_data:
+                state['tokens'] = tokens_data
+                add_log('Market refresh: ' + str(len(tokens_data)) + ' live tokens discovered')
         except: pass
-        time.sleep(60)
+        time.sleep(120)
 
 def trader_loop(stop_event, config):
     add_log('Trader started — scanning every ' + str(config.get('interval', 300)) + 's')
-    positions = {t['mint']: {'amount': 0.0, 'buy_price': 0.0} for t in TOKENS}
+    positions = {}
     while not stop_event.is_set():
         try:
             usdc = state['usdc']
             open_pos = sum(1 for p in positions.values() if p['amount'] > 0)
             state['positions'] = open_pos
-            add_log('--- SOL:' + str(state['sol']) + ' USDC:' + str(usdc) + ' Positions:' + str(open_pos) + '/3 ---')
-            for t in TOKENS:
+            live = state['tokens']
+            add_log('--- SOL:' + str(state['sol']) + ' USDC:' + str(usdc) + ' Positions:' + str(open_pos) + '/3 Tokens:' + str(len(live)) + ' ---')
+            for t in live:
                 if stop_event.is_set(): break
-                data = get_token_data(t['mint'])
-                if not data: continue
-                sc = score_token(data)
-                label = data['symbol'] or data['name'] or t['label']
+                mint = t['mint']
+                if mint not in positions:
+                    positions[mint] = {'amount': 0.0, 'buy_price': 0.0}
+                pos = positions[mint]
+                sc = t['score']
+                label = t['symbol'] or t['name'] or mint[:8]
                 decision = 'BUY' if sc >= 5 else ('SELL' if sc <= -3 else 'HOLD')
-                add_log(label + ' $' + str(round(data['price'], 8)) + ' score:' + str(sc) + ' [' + decision + ']')
-                if decision == 'BUY' and usdc > 3 and open_pos < 3 and positions[t['mint']]['amount'] == 0:
+                add_log(label + ' $' + str(round(t['price'], 8)) + ' score:' + str(sc) + ' [' + decision + ']')
+                if decision == 'BUY' and usdc > 3 and open_pos < 3 and pos['amount'] == 0:
                     spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('max_usdc', 12.5)), 2)
                     add_log('BUY ' + label + ' $' + str(spend) + ' (executing via orcagent_solana.py)')
-                    os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + t['mint'] + ' ' + str(spend) + ' &')
+                    os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + mint + ' ' + str(spend) + ' &')
+                    pos['amount'] = spend / t['price']
+                    pos['buy_price'] = t['price']
+                    usdc -= spend
+                    open_pos += 1
+                elif decision == 'SELL' and pos['amount'] > 0:
+                    add_log('SELL ' + label + ' (executing via orcagent_solana.py)')
+                    os.system('cd "' + BASE + '" && python orcagent_solana.py sell ' + mint + ' ' + str(pos['amount']) + ' &')
+                    pos['amount'] = pos['buy_price'] = 0.0
+                    open_pos -= 1
         except Exception as e:
             add_log('Trader error: ' + str(e))
         stop_event.wait(config.get('interval', 300))
