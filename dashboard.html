@@ -730,13 +730,19 @@ async function fetchState(){
   traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
-  if(r.tokens&&r.tokens.length) renderMarket(r.tokens);
+  if(r.tokens&&r.tokens.length){
+    renderMarket(r.tokens);
+    if(!_totdNextAt) fetchTotd();
+  }
 }
 
 async function fetchMarketOnly(){
   if(!appVisible()) return;
   const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
-  if(r?.tokens&&r.tokens.length) renderMarket(r.tokens);
+  if(r?.tokens&&r.tokens.length){
+    renderMarket(r.tokens);
+    if(!_totdNextAt) fetchTotd();
+  }
 }
 
 function checkForTrades(lines){
@@ -777,6 +783,7 @@ function fmtNum(n){
 
 // ── MARKET RENDER ──
 function renderMarket(tokens){
+  if(tokens?.length) _marketTokens=tokens;
   const grid=document.getElementById('market-grid');
   const ticker=document.getElementById('ticker-track');
   const count=document.getElementById('token-count');
@@ -845,13 +852,20 @@ function renderMarket(tokens){
 
 // ── TOKEN OF THE DAY ──
 let _totdNextAt=0;
+let _marketTokens=[];
 
 async function fetchTotd(){
   if(!appVisible()) return;
   const r=await fetch('/api/totd').then(r=>r.json()).catch(()=>null);
-  if(!r?.token) return;
-  renderTotd(r.token);
-  _totdNextAt=Date.now()+(r.next_update_in||900)*1000;
+  if(r?.token){
+    renderTotd(r.token);
+    _totdNextAt=Date.now()+(r.next_update_in||900)*1000;
+  } else if(_marketTokens.length){
+    // Backend hasn't set TOTD yet — pick best 24h token from cached market data
+    const best=_marketTokens.reduce((a,b)=>
+      (b.change24h??b.change1h??0)>(a.change24h??a.change1h??0)?b:a, _marketTokens[0]);
+    renderTotd(best);
+  }
 }
 
 function renderTotd(t){

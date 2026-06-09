@@ -161,6 +161,11 @@ def score_token(data):
 TOTD_INTERVAL = 900  # 15 minutes
 
 def totd_loop():
+    # Wait up to 10 minutes for token_loop to populate state['tokens'] before first pick
+    for _ in range(20):
+        if state['tokens']:
+            break
+        time.sleep(30)
     while True:
         try:
             tokens = state['tokens']
