@@ -567,6 +567,7 @@ function connectXOnboard(){ window.location.href='/api/x/auth'; }
 function launchApp(){
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
+  document.getElementById('s-pos').textContent='0/3';
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
@@ -646,10 +647,13 @@ function showOrcDance(text,detail){
 
 // ── STATE ──
 let lastLogCount=0;
+function appVisible(){ return document.getElementById('app').style.display!=='none'; }
+
 async function fetchState(){
+  if(!appVisible()) return;
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
-  document.getElementById('s-pos').textContent=r.positions+'/3';
+  document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
   traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
@@ -657,6 +661,7 @@ async function fetchState(){
 }
 
 async function fetchMarketOnly(){
+  if(!appVisible()) return;
   const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
   if(r?.tokens&&r.tokens.length){renderMarket(r.tokens);renderTotd(r.tokens);}
 }

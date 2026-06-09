@@ -239,7 +239,7 @@ def api_state():
         'trader_running': state['trader_running'],
         'usdc': state['usdc'],
         'sol': state['sol'],
-        'positions': state['positions'],
+        'positions': int(state.get('positions', 0)),
         'log_lines': state['log_lines'][:40],
         'tokens': state['tokens'],
         'wallet': state.get('wallet', ''),
