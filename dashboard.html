@@ -363,7 +363,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
       <div class="x-pill" id="x-pill" style="display:none;cursor:pointer" title="Click to disconnect X" onclick="disconnectX()"><span>𝕏</span><span id="x-username">@user</span><span style="opacity:.4;margin-left:4px;font-size:9px">✕</span></div>
       <button class="hdr-btn" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⚙ Settings</button>
-      <button class="hdr-btn-red" id="logout-btn" onclick="doLogout()">⏻ Logout</button>
+      <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
+      <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Logout</button>
     </div>
   </div>
 
@@ -472,6 +473,7 @@ let traderOn=false, phantomKey=null, walletType=null, xUser=null, currentStep=0;
 function doLogout(){
   phantomKey=null; walletType=null; xUser=null;
   sessionStorage.removeItem('orcagent_wallet');
+  updateAuthBtns();
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-pill').style.display='none';
   document.getElementById('x-pill').style.display='none';
@@ -553,6 +555,7 @@ function skipToApp(){
 
 function handleXConnected(username){
   xUser='@'+username;
+  updateAuthBtns();
   document.getElementById('x-ob-name').textContent=xUser;
   document.getElementById('x-ob-connected').style.display='flex';
   const btn=document.getElementById('x-ob-btn');
@@ -586,6 +589,7 @@ function launchApp(){
   } else {
     document.getElementById('x-post-panel').style.display='none';
   }
+  updateAuthBtns();
   fetchState();
 }
 
@@ -622,6 +626,13 @@ async function disconnectX(){
   await fetch('/api/x/logout',{method:'POST'});
   xUser=null;
   document.getElementById('x-pill').style.display='none';
+  updateAuthBtns();
+}
+
+function updateAuthBtns(){
+  const authed=!!(phantomKey||xUser);
+  document.getElementById('logout-btn').style.display=authed?'':'none';
+  document.getElementById('connect-btn').style.display=authed?'none':'';
 }
 
 // ── ORC DANCE ──
