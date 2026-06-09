@@ -17,20 +17,15 @@ STATE_FILE = os.path.join(BASE, 'bot_state.json')
 
 state = {
     'trader_running': False,
-    'sniper_running': False,
     'usdc': 0.0,
     'sol': 0.0,
     'positions': 0,
-    'queue_count': 0,
     'log_lines': [],
     'tokens': [],
-    'queue_items': [],
 }
 
 trader_thread = None
-sniper_thread = None
 trader_stop = threading.Event()
-sniper_stop = threading.Event()
 
 WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -172,7 +167,7 @@ def trader_loop(stop_event, config):
                 decision = 'BUY' if sc >= 5 else ('SELL' if sc <= -3 else 'HOLD')
                 add_log(label + ' $' + str(round(data['price'], 8)) + ' score:' + str(sc) + ' [' + decision + ']')
                 if decision == 'BUY' and usdc > 3 and open_pos < 3 and positions[t['mint']]['amount'] == 0:
-                    spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('snipe_amount', 1.0) * 3), 2)
+                    spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('max_usdc', 12.5)), 2)
                     add_log('BUY ' + label + ' $' + str(spend) + ' (executing via orcagent_solana.py)')
                     os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + t['mint'] + ' ' + str(spend) + ' &')
         except Exception as e:
@@ -180,57 +175,6 @@ def trader_loop(stop_event, config):
         stop_event.wait(config.get('interval', 300))
     add_log('Trader stopped')
 
-sniped = set()
-pending = {}
-
-def sniper_loop(stop_event, config):
-    add_log('Sniper started — watching for new launches every 15s')
-    add_log('Min liq: $' + str(config.get('min_liq', 1000)) + ' | Delay: ' + str(config.get('delay', 600)) + 's | Amount: $' + str(config.get('snipe_amount', 1.0)))
-    while not stop_event.is_set():
-        try:
-            r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=8)
-            if r.status_code == 200:
-                tokens = r.json() if isinstance(r.json(), list) else []
-                for t in tokens[:5]:
-                    mint = t.get('tokenAddress', '')
-                    if not mint or mint in sniped or mint in pending: continue
-                    if t.get('chainId') != 'solana': continue
-                    pending[mint] = time.time()
-                    state['queue_items'].append({'mint': mint[:16]+'...', 'queued': time.time(), 'delay': config.get('delay', 600)})
-                    state['queue_count'] = len([q for q in state['queue_items'] if time.time()-q['queued'] < config.get('delay',600)])
-                    add_log('SNIPER: Queued ' + mint[:16] + '... (buy in ' + str(config.get('delay',600)) + 's)')
-
-            now = time.time()
-            for mint in list(pending.keys()):
-                if mint in sniped: del pending[mint]; continue
-                if now - pending[mint] < config.get('delay', 600): continue
-                del pending[mint]
-                if state['usdc'] - 3.0 < config.get('snipe_amount', 1.0):
-                    add_log('SNIPER: SKIP ' + mint[:16] + '... not enough USDC')
-                    sniped.add(mint)
-                    continue
-                data = get_token_data(mint)
-                if not data:
-                    add_log('SNIPER: SKIP ' + mint[:16] + '... no data')
-                    sniped.add(mint)
-                    continue
-                liq = data.get('liquidity', 0)
-                if liq < config.get('min_liq', 1000):
-                    add_log('SNIPER: SKIP ' + mint[:16] + '... liq too low $' + str(round(liq)))
-                    sniped.add(mint)
-                    continue
-                if liq > config.get('max_liq', 50000):
-                    add_log('SNIPER: SKIP ' + mint[:16] + '... liq too high $' + str(round(liq)))
-                    sniped.add(mint)
-                    continue
-                add_log('SNIPER: PASS liq=$' + str(round(liq)) + ' — buying $' + str(config.get('snipe_amount', 1.0)))
-                os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + mint + ' ' + str(config.get('snipe_amount', 1.0)) + ' &')
-                sniped.add(mint)
-                state['queue_items'] = [q for q in state['queue_items'] if mint[:16] not in q['mint']]
-        except Exception as e:
-            add_log('Sniper error: ' + str(e))
-        stop_event.wait(15)
-    add_log('Sniper stopped')
 
 @app.route('/')
 def index():
@@ -240,14 +184,11 @@ def index():
 def api_state():
     return jsonify({
         'trader_running': state['trader_running'],
-        'sniper_running': state['sniper_running'],
         'usdc': state['usdc'],
         'sol': state['sol'],
         'positions': state['positions'],
-        'queue_count': len([q for q in state['queue_items'] if time.time()-q['queued'] < 600]),
         'log_lines': state['log_lines'][:40],
         'tokens': state['tokens'],
-        'queue_items': [{'mint': q['mint'], 'pct': min(100, round((time.time()-q['queued'])/q['delay']*100)), 'remaining': max(0, int(q['delay']-(time.time()-q['queued'])))} for q in state['queue_items']],
     })
 
 @app.route('/api/trader/start', methods=['POST'])
@@ -269,25 +210,6 @@ def stop_trader():
     state['trader_running'] = False
     return jsonify({'ok': True})
 
-@app.route('/api/sniper/start', methods=['POST'])
-def start_sniper():
-    global sniper_thread, sniper_stop
-    if state['sniper_running']:
-        return jsonify({'ok': False, 'msg': 'Already running'})
-    config = request.json or {}
-    sniper_stop = threading.Event()
-    sniper_thread = threading.Thread(target=sniper_loop, args=(sniper_stop, config), daemon=True)
-    sniper_thread.start()
-    state['sniper_running'] = True
-    return jsonify({'ok': True})
-
-@app.route('/api/sniper/stop', methods=['POST'])
-def stop_sniper():
-    global sniper_stop
-    sniper_stop.set()
-    state['sniper_running'] = False
-    state['queue_items'] = []
-    return jsonify({'ok': True})
 
 @app.route('/api/market')
 def api_market():

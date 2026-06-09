@@ -72,7 +72,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .hdr-btn-red{background:var(--bg2);border:1px solid var(--red);border-radius:8px;padding:7px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--red);cursor:pointer;transition:all .2s}
 .hdr-btn-red:hover{background:var(--red);color:white}
 
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:1.5rem}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.5rem}
 .stat{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:14px;box-shadow:0 2px 8px rgba(0,0,0,.05)}
 .stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;margin-bottom:6px}
 .stat-val{font-family:'Orbitron',monospace;font-size:20px;font-weight:700;min-height:28px;display:flex;align-items:center}
@@ -80,25 +80,20 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .stat-placeholder{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-weight:400}
 .g{color:var(--green)}.r{color:var(--red)}.y{color:var(--yellow)}.b{color:var(--blue)}
 
-.modes{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.5rem}
+.modes{display:grid;grid-template-columns:1fr;gap:12px;margin-bottom:1.5rem}
 .mode{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:1.5rem;transition:all .3s;box-shadow:0 2px 12px rgba(0,0,0,.06)}
 .mode.active-trade{border-color:var(--blue);box-shadow:0 0 20px rgba(26,111,212,.1)}
-.mode.active-snipe{border-color:var(--green);box-shadow:0 0 20px rgba(0,168,84,.1)}
 .mode-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1rem}
 .mode-icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:24px}
 .mode-icon-trade{background:rgba(26,111,212,.1);border:1px solid rgba(26,111,212,.2)}
-.mode-icon-snipe{background:rgba(0,168,84,.1);border:1px solid rgba(0,168,84,.2)}
 .badge{font-size:10px;padding:4px 10px;border-radius:20px;font-weight:700;letter-spacing:.06em;font-family:'Orbitron',monospace}
 .badge-idle{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
 .badge-trade{background:rgba(26,111,212,.1);color:var(--blue);border:1px solid rgba(26,111,212,.2)}
-.badge-snipe{background:rgba(0,168,84,.1);color:var(--green);border:1px solid rgba(0,168,84,.2)}
 .mode-title{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;margin-bottom:6px}
 .mode-desc{font-size:10px;color:var(--muted);line-height:1.7;margin-bottom:1rem}
 .mode-btn{width:100%;padding:12px;font-size:11px;font-weight:700;border-radius:9px;border:none;cursor:pointer;letter-spacing:.06em;transition:all .2s;font-family:'Orbitron',monospace}
 .trade-btn{background:var(--blue);color:white}
 .trade-btn:hover{opacity:.9;transform:translateY(-1px)}
-.snipe-btn{background:var(--green);color:white}
-.snipe-btn:hover{opacity:.9;transform:translateY(-1px)}
 
 .cfg-row{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.5rem}
 .cfg{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
@@ -137,7 +132,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .lt{color:#8aa8c8;flex-shrink:0;width:55px}
 .c-buy{color:var(--green);font-weight:700}
 .c-sell{color:var(--red)}
-.c-snipe{color:var(--yellow)}
 .c-info{color:#3a6090}
 .c-skip{color:#8aaac0}
 
@@ -151,10 +145,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 /* MOBILE */
 @media(max-width:640px){
   .stats{grid-template-columns:repeat(2,1fr)}
-  .modes{grid-template-columns:1fr}
   .market-grid{grid-template-columns:repeat(2,1fr)}
   .panels{grid-template-columns:1fr}
-  .cfg-row{grid-template-columns:1fr}
   .stat-val{font-size:16px}
   .brand{font-size:14px}
 }
@@ -233,7 +225,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
     <div class="ob-step" id="step-2">
       <div style="font-size:32px;margin-bottom:1rem">🚀</div>
       <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.5rem">You're all set!</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1.5rem;line-height:1.6">OrcAgent is ready to trade. Press Start Trading or Start Sniping below.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1.5rem;line-height:1.6">OrcAgent is ready to trade. Press Start Trading below.</div>
       <button class="ob-btn" style="background:var(--green);color:white" onclick="launchApp()">Launch OrcAgent ▶</button>
     </div>
   </div>
@@ -255,7 +247,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
         <circle cx="99" cy="74" r="2.5" fill="black"/>
         <path d="M 60 88 Q 80 100 100 88" stroke="#00a854" stroke-width="3" fill="none" stroke-linecap="round"/>
       </svg>
-      <div><div class="brand">ORCAGENT</div><div class="brand-sub">SOLANA SMART SCALPER v4 + SNIPER</div></div>
+      <div><div class="brand">ORCAGENT</div><div class="brand-sub">SOLANA SMART SCALPER v4</div></div>
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
@@ -281,11 +273,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
       <div class="stat-val y" id="s-pos"><span class="stat-placeholder">—</span></div>
       <div class="stat-sub">max 3</div>
     </div>
-    <div class="stat">
-      <div class="stat-lbl">Snipe Queue</div>
-      <div class="stat-val" style="color:var(--purple)" id="s-queue"><span class="stat-placeholder">—</span></div>
-      <div class="stat-sub">pending</div>
-    </div>
   </div>
 
   <div class="modes">
@@ -295,23 +282,6 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
       <div class="mode-desc">AI-powered scalper scans live Solana meme coins. Buys when score &gt; 4 with strong momentum. Auto-exits at 15% take profit, 5% stop loss, or 3% trailing stop.</div>
       <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ START TRADING</button>
     </div>
-    <div class="mode" id="snipe-card">
-      <div class="mode-top"><div class="mode-icon mode-icon-snipe">⚡</div><div class="badge badge-idle" id="snipe-badge">IDLE</div></div>
-      <div class="mode-title" style="color:var(--green)">SNIPE MODE</div>
-      <div class="mode-desc">Watches DexScreener every 15s for new token launches. Queues for 10 min, runs safety checks (liquidity ≥ $1K), then executes lightning-fast buys.</div>
-      <button class="mode-btn snipe-btn" id="snipe-btn" onclick="toggleSniper()">⚡ START SNIPING</button>
-    </div>
-  </div>
-
-  <div class="cfg-row">
-    <div class="cfg"><div class="cfg-lbl">Snipe Amount (USDC)</div><input type="number" id="cfg-amt" value="1.0" step="0.5" min="0.5"/></div>
-    <div class="cfg"><div class="cfg-lbl">Min Liquidity ($)</div><input type="number" id="cfg-liq" value="1000" step="500" min="100"/></div>
-    <div class="cfg"><div class="cfg-lbl">Snipe Delay (sec)</div><input type="number" id="cfg-delay" value="600" step="60" min="60"/></div>
-  </div>
-
-  <div id="queue-panel" class="market-panel" style="display:none">
-    <div class="panel-hdr">Sniper Queue &nbsp;<span class="y" id="q-count">0</span> pending</div>
-    <div id="queue-list"></div>
   </div>
 
   <div class="market-panel">
@@ -346,7 +316,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 </div>
 
 <script>
-let traderOn=false, sniperOn=false, phantomKey=null, xUser=null, currentStep=0;
+let traderOn=false, phantomKey=null, xUser=null, currentStep=0;
 
 // ── LOGOUT ──
 function doLogout(){
@@ -492,11 +462,9 @@ async function fetchState(){
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
   document.getElementById('s-pos').textContent=r.positions+'/3';
-  document.getElementById('s-queue').textContent=r.queue_count;
-  traderOn=r.trader_running;sniperOn=r.sniper_running;
+  traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
-  if(r.queue_items)renderQueue(r.queue_items);
   if(r.tokens&&r.tokens.length)renderMarket(r.tokens);
 }
 
@@ -510,7 +478,6 @@ function checkForTrades(lines){
   const m=lines[0]?.msg||'';
   if(m.startsWith('BUY ')&&!m.includes('FAILED'))showOrcDance('BUY EXECUTED! 🚀',m.substring(0,50));
   else if(m.includes('TAKE PROFIT'))showOrcDance('TAKE PROFIT! 💎',m.substring(0,50));
-  else if(m.includes('SNIPER: BUY ')&&!m.includes('FAILED'))showOrcDance('SNIPE LANDED! ⚡',m.substring(0,50));
   lastLogCount=lines.length;
 }
 
@@ -520,7 +487,6 @@ function renderLog(lines){
     let cls='c-info';const m=l.msg||'';
     if(m.startsWith('BUY ')&&!m.includes('FAILED'))cls='c-buy';
     else if(m.includes('SELL')||m.includes('STOP LOSS'))cls='c-sell';
-    else if(m.includes('SNIPER'))cls='c-snipe';
     else if(m.includes('SKIP')||m.includes('error')||m.includes('FAILED'))cls='c-skip';
     return '<div class="log-line"><span class="lt">'+l.t+'</span><span class="'+cls+'">'+m+'</span></div>';
   }).join('');
@@ -544,31 +510,16 @@ function renderMarket(tokens){
   ticker.innerHTML=tickHtml+tickHtml;
 }
 
-function renderQueue(items){
-  const panel=document.getElementById('queue-panel'),list=document.getElementById('queue-list');
-  document.getElementById('q-count').textContent=items.length;
-  if(!items.length){panel.style.display='none';return;}
-  panel.style.display='block';
-  list.innerHTML=items.map(q=>'<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)"><div><div style="font-size:11px;color:var(--muted)">'+q.mint+'</div><div style="height:3px;background:var(--border);border-radius:2px;margin-top:4px;width:130px;overflow:hidden"><div style="height:100%;background:var(--green);border-radius:2px;width:'+q.pct+'%"></div></div></div><div style="font-family:Orbitron,monospace;font-size:12px;font-weight:700;color:var(--yellow)">'+Math.floor(q.remaining/60)+':'+String(q.remaining%60).padStart(2,'0')+'</div></div>').join('');
-}
-
 function updateBtns(){
-  const tb=document.getElementById('trade-btn'),sb=document.getElementById('snipe-btn');
-  const tbadge=document.getElementById('trade-badge'),sbadge=document.getElementById('snipe-badge');
-  const tc=document.getElementById('trade-card'),sc=document.getElementById('snipe-card');
+  const tb=document.getElementById('trade-btn');
+  const tbadge=document.getElementById('trade-badge');
+  const tc=document.getElementById('trade-card');
   if(traderOn){tb.textContent='■ STOP TRADING';tbadge.textContent='RUNNING';tbadge.className='badge badge-trade';tc.className='mode active-trade';}
   else{tb.textContent='▶ START TRADING';tbadge.textContent='IDLE';tbadge.className='badge badge-idle';tc.className='mode';}
-  if(sniperOn){sb.textContent='■ STOP SNIPING';sbadge.textContent='RUNNING';sbadge.className='badge badge-snipe';sc.className='mode active-snipe';}
-  else{sb.textContent='⚡ START SNIPING';sbadge.textContent='IDLE';sbadge.className='badge badge-idle';sc.className='mode';}
 }
 
 async function toggleTrader(){
   await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:12.5})});
-  fetchState();
-}
-async function toggleSniper(){
-  const cfg={snipe_amount:parseFloat(document.getElementById('cfg-amt').value)||1,min_liq:parseFloat(document.getElementById('cfg-liq').value)||1000,max_liq:50000,delay:parseInt(document.getElementById('cfg-delay').value)||600};
-  await fetch(sniperOn?'/api/sniper/stop':'/api/sniper/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(cfg)});
   fetchState();
 }
 
