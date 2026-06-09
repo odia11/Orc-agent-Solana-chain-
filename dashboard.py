@@ -108,8 +108,11 @@ def get_token_data(mint):
             'price': float(p.get('priceUsd', 0) or 0),
             'change5m': float(p.get('priceChange', {}).get('m5', 0) or 0),
             'change1h': float(p.get('priceChange', {}).get('h1', 0) or 0),
+            'change24h': float(p.get('priceChange', {}).get('h24', 0) or 0),
             'liquidity': float(p.get('liquidity', {}).get('usd', 0) or 0),
             'volume1h': float(p.get('volume', {}).get('h1', 0) or 0),
+            'volume24h': float(p.get('volume', {}).get('h24', 0) or 0),
+            'fdv': float(p.get('fdv', 0) or p.get('marketCap', 0) or 0),
             'txns_buys': int(p.get('txns', {}).get('h1', {}).get('buys', 0) or 0),
             'txns_sells': int(p.get('txns', {}).get('h1', {}).get('sells', 0) or 0),
         }
@@ -158,8 +161,11 @@ def token_loop():
                         'price': data['price'],
                         'change5m': data['change5m'],
                         'change1h': data['change1h'],
+                        'change24h': data['change24h'],
                         'volume1h': data['volume1h'],
+                        'volume24h': data['volume24h'],
                         'liquidity': data['liquidity'],
+                        'fdv': data['fdv'],
                         'score': sc,
                     })
             if tokens_data:
