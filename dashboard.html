@@ -300,17 +300,20 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
     <div class="ob-step active" id="step-0">
       <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Your wallet is used to show your balances. Trades run via the server.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL &amp; USDC balances.</div>
       <div id="wallet-connected" style="display:none" class="ob-connected">
         <div class="ob-check">✓</div>
-        <div class="ob-conn-text"><div class="ob-conn-name" id="wallet-addr">Connected</div><div class="ob-conn-sub" id="wallet-type">Wallet</div></div>
+        <div class="ob-conn-text">
+          <div class="ob-conn-name" id="wallet-type-label">Phantom wallet</div>
+          <div class="ob-conn-sub" id="wallet-addr" style="font-family:monospace;font-size:10px;word-break:break-all;margin-top:2px"></div>
+        </div>
       </div>
       <div id="wallet-install-msg" style="display:none;font-size:11px;color:var(--red);background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;text-align:left;line-height:1.6"></div>
       <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
       <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
-      <button class="ob-btn" id="wallet-continue-btn" style="display:none;background:var(--green);color:#000" onclick="nextStep(0)">Continue →</button>
+      <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="phantomKey&&nextStep(0)">Continue →</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
-      <button class="ob-btn btn-skip" onclick="nextStep(0)">Skip for now →</button>
+      <button class="ob-btn btn-skip" onclick="skipToApp()">Skip — browse without connecting →</button>
     </div>
 
     <div class="ob-step" id="step-1">
@@ -514,14 +517,13 @@ async function connectWalletOnboard(type){
     walletType=name;
     sessionStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
     fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).catch(()=>{});
-    document.getElementById('wallet-addr').textContent=phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
-    document.getElementById('wallet-type').textContent=name+' wallet';
+    document.getElementById('wallet-type-label').textContent=name+' wallet connected';
+    document.getElementById('wallet-addr').textContent=phantomKey;
     document.getElementById('wallet-connected').style.display='flex';
-    document.getElementById('phantom-ob-btn').disabled=true;
-    document.getElementById('phantom-ob-btn').style.opacity='0.35';
-    document.getElementById('solflare-ob-btn').disabled=true;
-    document.getElementById('solflare-ob-btn').style.opacity='0.35';
-    document.getElementById('wallet-continue-btn').style.display='block';
+    document.getElementById('phantom-ob-btn').style.display='none';
+    document.getElementById('solflare-ob-btn').style.display='none';
+    const cb=document.getElementById('wallet-continue-btn');
+    cb.disabled=false; cb.style.cssText='background:var(--green);color:#000;cursor:pointer;opacity:1';
     document.getElementById('wallet-back-btn').style.display='block';
   }catch(e){
     msgEl.textContent='Connection rejected or failed — please try again.';
@@ -536,12 +538,17 @@ function resetWallet(){
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-install-msg').style.display='none';
   document.getElementById('wallet-connected').style.display='none';
-  document.getElementById('phantom-ob-btn').disabled=false;
-  document.getElementById('phantom-ob-btn').style.opacity='1';
-  document.getElementById('solflare-ob-btn').disabled=false;
-  document.getElementById('solflare-ob-btn').style.opacity='1';
-  document.getElementById('wallet-continue-btn').style.display='none';
+  document.getElementById('phantom-ob-btn').style.display='block';
+  document.getElementById('solflare-ob-btn').style.display='block';
+  const cb=document.getElementById('wallet-continue-btn');
+  cb.disabled=true; cb.style.cssText='background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5';
   document.getElementById('wallet-back-btn').style.display='none';
+}
+
+function skipToApp(){
+  // No wallet — launch in view-only mode (market data visible, trading disabled)
+  phantomKey=null; walletType=null;
+  launchApp();
 }
 
 function handleXConnected(username){
@@ -561,10 +568,16 @@ function launchApp(){
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
   if(phantomKey){
+    const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
-    document.getElementById('wallet-short').textContent=phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
+    document.getElementById('wallet-short').textContent=short;
+    document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
     refreshPhantomBalances();
+  } else {
+    // View-only: hide trade button, show notice
+    const tb=document.getElementById('trade-btn');
+    tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   }
   if(xUser){
     document.getElementById('x-pill').style.display='flex';
@@ -819,6 +832,15 @@ async function toggleTrader(){
   if(saved?.key){
     phantomKey=saved.key;
     walletType=saved.type||'Wallet';
+    // Repopulate onboarding display in case user later opens Settings
+    document.getElementById('wallet-type-label').textContent=walletType+' wallet connected';
+    document.getElementById('wallet-addr').textContent=phantomKey;
+    document.getElementById('wallet-connected').style.display='flex';
+    const cb=document.getElementById('wallet-continue-btn');
+    cb.disabled=false; cb.style.cssText='background:var(--green);color:#000;cursor:pointer;opacity:1';
+    document.getElementById('phantom-ob-btn').style.display='none';
+    document.getElementById('solflare-ob-btn').style.display='none';
+    document.getElementById('wallet-back-btn').style.display='block';
     // Re-register wallet with server (lost on server restart)
     fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).catch(()=>{});
     launchApp();
