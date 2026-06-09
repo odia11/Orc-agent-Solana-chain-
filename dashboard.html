@@ -112,7 +112,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .tick-div{color:var(--border2);margin:0 .5rem}
 
 /* ── TOKEN CARDS ── */
-.market-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px}
 
 .mkt-card{
   background:var(--bg3);
@@ -123,6 +123,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
   transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease;
   position:relative;
   overflow:hidden;
+  min-width:0;
 }
 .mkt-card::before{
   content:'';position:absolute;top:0;left:0;right:0;height:2px;
@@ -136,9 +137,10 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .mkt-card.cold:hover{border-color:rgba(241,52,75,.3);box-shadow:0 12px 32px rgba(241,52,75,.06)}
 
 /* card header */
-.mkt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:10px}
-.mkt-id .mkt-sym{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.04em;margin-bottom:3px}
-.mkt-id .mkt-name{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px}
+.mkt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:10px;min-width:0}
+.mkt-id{min-width:0;flex:1;overflow:hidden}
+.mkt-id .mkt-sym{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.04em;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mkt-id .mkt-name{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
 
 /* signal badge */
 .mkt-sig{font-size:7px;font-weight:700;padding:3px 7px;border-radius:3px;letter-spacing:.12em;font-family:'Orbitron',monospace;flex-shrink:0;margin-top:1px}
@@ -147,7 +149,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .sig-hold{background:rgba(74,102,128,.08);color:var(--muted);border:1px solid var(--border)}
 
 /* price & change */
-.mkt-price{font-family:'Orbitron',monospace;font-size:15px;font-weight:700;color:var(--text);display:block;margin-bottom:5px;letter-spacing:.01em}
+.mkt-price{font-family:'Orbitron',monospace;font-size:15px;font-weight:700;color:var(--text);display:block;margin-bottom:5px;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .mkt-chg-row{display:flex;align-items:center;gap:7px;margin-bottom:11px}
 .mkt-chg{font-size:12px;font-weight:700;letter-spacing:.02em}
 .mkt-chg.up{color:var(--green)}
@@ -162,7 +164,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .mkt-stat{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)}
 .mkt-stat:last-child{border-bottom:none;padding-bottom:0}
 .mkt-stat-lbl{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
-.mkt-stat-val{font-family:'Orbitron',monospace;font-size:9px;color:var(--dim);font-weight:700;text-align:right;white-space:nowrap}
+.mkt-stat-val{font-family:'Orbitron',monospace;font-size:9px;color:var(--dim);font-weight:700;text-align:right;white-space:nowrap;min-width:0}
 
 /* score bar */
 .mkt-score-row{display:flex;align-items:center;gap:7px}
@@ -196,16 +198,12 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 /* ── MOBILE ── */
 @media(max-width:720px){
   .stats{grid-template-columns:repeat(2,1fr)}
-  .market-grid{grid-template-columns:repeat(2,1fr)}
   .panels{grid-template-columns:1fr}
   .stat-val{font-size:17px}
   .brand{font-size:13px}
   .mode{flex-direction:column;align-items:flex-start}
   .mode-right{width:100%}
   .mode-btn{width:100%;text-align:center}
-}
-@media(max-width:420px){
-  .market-grid{grid-template-columns:1fr}
 }
 
 ::-webkit-scrollbar{width:4px}
