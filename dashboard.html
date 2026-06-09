@@ -157,11 +157,12 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 /* divider */
 .mkt-divider{height:1px;background:var(--border);margin-bottom:9px}
 
-/* data grid */
-.mkt-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:9px}
-.mkt-stat{background:var(--bg4);border-radius:4px;padding:5px 7px;border:1px solid var(--border)}
-.mkt-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px}
-.mkt-stat-val{font-family:'Orbitron',monospace;font-size:9px;color:var(--dim);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* data rows */
+.mkt-stats{margin-bottom:9px}
+.mkt-stat{display:flex;align-items:center;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border)}
+.mkt-stat:last-child{border-bottom:none;padding-bottom:0}
+.mkt-stat-lbl{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;flex-shrink:0}
+.mkt-stat-val{font-family:'Orbitron',monospace;font-size:9px;color:var(--dim);font-weight:700;text-align:right;white-space:nowrap}
 
 /* score bar */
 .mkt-score-row{display:flex;align-items:center;gap:7px}
@@ -638,9 +639,9 @@ function renderMarket(tokens){
   </div>
   <div class="mkt-divider"></div>
   <div class="mkt-stats">
-    <div class="mkt-stat"><div class="mkt-stat-lbl">Liquidity</div><div class="mkt-stat-val">${liq}</div></div>
-    <div class="mkt-stat"><div class="mkt-stat-lbl">Volume</div><div class="mkt-stat-val">${vol}</div></div>
-    <div class="mkt-stat"><div class="mkt-stat-lbl">Mkt Cap</div><div class="mkt-stat-val">${mcap}</div></div>
+    <div class="mkt-stat"><span class="mkt-stat-lbl">Liq</span><span class="mkt-stat-val">${liq}</span></div>
+    <div class="mkt-stat"><span class="mkt-stat-lbl">Vol</span><span class="mkt-stat-val">${vol}</span></div>
+    <div class="mkt-stat"><span class="mkt-stat-lbl">MCap</span><span class="mkt-stat-val">${mcap}</span></div>
   </div>
   <div class="mkt-score-row">
     <div class="mkt-score-track"><div class="mkt-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
