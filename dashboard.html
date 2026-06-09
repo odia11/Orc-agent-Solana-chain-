@@ -172,6 +172,45 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
 .mkt-score-fill{height:100%;border-radius:2px;transition:width .5s ease}
 .mkt-score-label{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;flex-shrink:0;min-width:36px;text-align:right}
 
+/* ── TOKEN OF THE DAY ── */
+.totd-wrap{margin-bottom:1.25rem}
+.totd-card{
+  background:linear-gradient(135deg,#12100a 0%,#1a1408 40%,#0f1208 100%);
+  border:1px solid rgba(245,166,35,.35);
+  border-radius:12px;
+  padding:20px 22px;
+  cursor:pointer;
+  position:relative;
+  overflow:hidden;
+  transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;
+  box-shadow:0 0 28px rgba(245,166,35,.07);
+}
+.totd-card::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:3px;
+  background:linear-gradient(90deg,#f5a623,#ffd166,#f5a623,transparent);
+}
+.totd-card:hover{transform:translateY(-2px);border-color:rgba(245,166,35,.6);box-shadow:0 0 42px rgba(245,166,35,.14)}
+.totd-label{font-size:9px;color:#f5a623;text-transform:uppercase;letter-spacing:.18em;font-family:'Share Tech Mono',monospace;margin-bottom:12px;display:flex;align-items:center;gap:7px}
+.totd-label::before{content:'★';font-size:11px}
+.totd-body{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.totd-left{min-width:0;flex:1}
+.totd-sym{font-family:'Orbitron',monospace;font-size:22px;font-weight:700;color:#ffd166;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
+.totd-name{font-size:10px;color:rgba(245,166,35,.55);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.totd-price-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
+.totd-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
+.totd-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
+.totd-chg.up{color:var(--green)}
+.totd-chg.dn{color:var(--red)}
+.totd-right{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
+.totd-sig{font-size:9px;font-weight:700;padding:5px 14px;border-radius:4px;letter-spacing:.14em;font-family:'Orbitron',monospace;margin-bottom:4px}
+.totd-sig.sig-buy{background:rgba(0,214,143,.14);color:var(--green);border:1px solid rgba(0,214,143,.35)}
+.totd-sig.sig-sell{background:rgba(241,52,75,.12);color:var(--red);border:1px solid rgba(241,52,75,.35)}
+.totd-sig.sig-hold{background:rgba(74,102,128,.1);color:var(--muted);border:1px solid var(--border)}
+.totd-stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid rgba(245,166,35,.15)}
+.totd-stat{display:flex;flex-direction:column;gap:3px}
+.totd-stat-lbl{font-size:7px;color:rgba(245,166,35,.5);text-transform:uppercase;letter-spacing:.1em}
+.totd-stat-val{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#ffd166}
+
 /* ── BOTTOM PANELS ── */
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.25rem}
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
@@ -351,6 +390,31 @@ html,body{min-height:100vh;background:var(--bg);font-family:'Share Tech Mono',mo
       <div class="mode-right">
         <div class="badge badge-idle" id="trade-badge">IDLE</div>
         <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ START TRADING</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOKEN OF THE DAY -->
+  <div class="totd-wrap" id="totd-wrap" style="display:none">
+    <div class="totd-card" id="totd-card">
+      <div class="totd-label">Token of the Day</div>
+      <div class="totd-body">
+        <div class="totd-left">
+          <div class="totd-sym" id="totd-sym">—</div>
+          <div class="totd-name" id="totd-name">—</div>
+          <div class="totd-price-row">
+            <span class="totd-price" id="totd-price">$0</span>
+            <span class="totd-chg up" id="totd-chg">+0.00%</span>
+          </div>
+          <div class="totd-stats">
+            <div class="totd-stat"><span class="totd-stat-lbl">Volume 24H</span><span class="totd-stat-val" id="totd-vol">—</span></div>
+            <div class="totd-stat"><span class="totd-stat-lbl">Liquidity</span><span class="totd-stat-val" id="totd-liq">—</span></div>
+            <div class="totd-stat"><span class="totd-stat-lbl">Market Cap</span><span class="totd-stat-val" id="totd-mcap">—</span></div>
+          </div>
+        </div>
+        <div class="totd-right">
+          <span class="totd-sig sig-hold" id="totd-sig">HOLD</span>
+        </div>
       </div>
     </div>
   </div>
@@ -545,12 +609,12 @@ async function fetchState(){
   traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
-  if(r.tokens&&r.tokens.length)renderMarket(r.tokens);
+  if(r.tokens&&r.tokens.length){renderMarket(r.tokens);renderTotd(r.tokens);}
 }
 
 async function fetchMarketOnly(){
   const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
-  if(r?.tokens&&r.tokens.length)renderMarket(r.tokens);
+  if(r?.tokens&&r.tokens.length){renderMarket(r.tokens);renderTotd(r.tokens);}
 }
 
 function checkForTrades(lines){
@@ -655,6 +719,40 @@ function renderMarket(tokens){
     return `<span class="tick-item"><span class="tick-sym">${t.symbol}</span><span>${fmtPrice(t.price)}</span><span style="color:${col}">${chg>=0?'+':''}${chg.toFixed(2)}%</span></span><span class="tick-div">·</span>`;
   }).join('');
   ticker.innerHTML=tickHtml+tickHtml;
+}
+
+// ── TOKEN OF THE DAY ──
+function renderTotd(tokens){
+  if(!tokens?.length) return;
+  const t=tokens.reduce((best,cur)=>{
+    const cv=(cur.volume24h||cur.volume1h||0);
+    const bv=(best.volume24h||best.volume1h||0);
+    return cv>bv?cur:best;
+  },tokens[0]);
+  if(!t) return;
+
+  const wrap=document.getElementById('totd-wrap');
+  wrap.style.display='block';
+
+  document.getElementById('totd-sym').textContent=t.symbol||'???';
+  document.getElementById('totd-name').textContent=t.name||t.symbol||'Unknown';
+  document.getElementById('totd-price').textContent=fmtPrice(t.price);
+  document.getElementById('totd-vol').textContent=fmtNum(t.volume24h||t.volume1h||0);
+  document.getElementById('totd-liq').textContent=fmtNum(t.liquidity||0);
+  document.getElementById('totd-mcap').textContent=fmtNum(t.fdv||0);
+
+  const chg=t.change24h??t.change1h??0;
+  const chgEl=document.getElementById('totd-chg');
+  chgEl.textContent=(chg>=0?'▲ +':'▼ −')+Math.abs(chg).toFixed(2)+'%';
+  chgEl.className='totd-chg '+(chg>=0?'up':'dn');
+
+  const hot=t.score>=5, cold=t.score<=-3;
+  const sigEl=document.getElementById('totd-sig');
+  sigEl.textContent=hot?'BUY':cold?'SELL':'HOLD';
+  sigEl.className='totd-sig '+(hot?'sig-buy':cold?'sig-sell':'sig-hold');
+
+  const card=document.getElementById('totd-card');
+  card.onclick=()=>window.open('https://dexscreener.com/solana/'+t.mint);
 }
 
 function updateBtns(){
