@@ -149,7 +149,7 @@ def token_loop():
             tokens_data = []
             for mint in mints:
                 data = get_token_data(mint)
-                if data and data['price'] > 0 and data['liquidity'] > 500:
+                if data and data['price'] > 0 and data['liquidity'] > 10000:
                     sc = score_token(data)
                     tokens_data.append({
                         'mint': mint,

@@ -146,6 +146,7 @@ def run():
             scored.sort(key=lambda x: x[0], reverse=True)
             for score, token, data in scored:
                 try:
+                    if data.get('liquidity', 0) < 10000: continue
                     pos = positions[token['mint']]
                     res = ai_decision(token['label'], data, usdc)
                     print(token['label'] + ' $' + str(data['price']) + ' 5m:' + str(data['change5m']) + '% score:' + str(score) + ' [' + res['decision'] + '] ' + res['reasoning'][:40])
