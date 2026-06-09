@@ -22,6 +22,7 @@ state = {
     'positions': 0,
     'log_lines': [],
     'tokens': [],
+    'wallet': WALLET_ADDRESS,
 }
 
 trader_thread = None
@@ -81,14 +82,18 @@ def add_log(msg):
         state['log_lines'].pop()
 
 def get_sol_balance():
+    addr = state.get('wallet') or WALLET_ADDRESS
+    if not addr: return state['sol']
     try:
-        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[WALLET_ADDRESS]}, timeout=8)
+        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[addr]}, timeout=8)
         return r.json()['result']['value'] / 1e9
     except: return state['sol']
 
 def get_usdc_balance():
+    addr = state.get('wallet') or WALLET_ADDRESS
+    if not addr: return state['usdc']
     try:
-        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[WALLET_ADDRESS,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=8)
+        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[addr,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=8)
         accounts = r.json().get('result',{}).get('value',[])
         if accounts:
             return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
@@ -217,6 +222,17 @@ def trader_loop(stop_event, config):
 def index():
     return send_from_directory(BASE, 'dashboard.html')
 
+@app.route('/api/wallet/set', methods=['POST'])
+def set_wallet():
+    address = (request.json or {}).get('address', '').strip()
+    if address:
+        state['wallet'] = address
+        add_log('Wallet connected: ' + address[:6] + '...' + address[-4:])
+    else:
+        state['wallet'] = WALLET_ADDRESS
+        add_log('Wallet disconnected')
+    return jsonify({'ok': True, 'wallet': state['wallet']})
+
 @app.route('/api/state')
 def api_state():
     return jsonify({
@@ -226,6 +242,7 @@ def api_state():
         'positions': state['positions'],
         'log_lines': state['log_lines'][:40],
         'tokens': state['tokens'],
+        'wallet': state.get('wallet', ''),
     })
 
 @app.route('/api/trader/start', methods=['POST'])

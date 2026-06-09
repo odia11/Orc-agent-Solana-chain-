@@ -305,6 +305,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="ob-check">✓</div>
         <div class="ob-conn-text"><div class="ob-conn-name" id="wallet-addr">Connected</div><div class="ob-conn-sub" id="wallet-type">Wallet</div></div>
       </div>
+      <div id="wallet-install-msg" style="display:none;font-size:11px;color:var(--red);background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;text-align:left;line-height:1.6"></div>
       <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
       <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
       <button class="ob-btn" id="wallet-continue-btn" style="display:none;background:var(--green);color:#000" onclick="nextStep(0)">Continue →</button>
@@ -462,11 +463,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 </div><!-- /wrap -->
 
 <script>
-let traderOn=false, phantomKey=null, xUser=null, currentStep=0;
+let traderOn=false, phantomKey=null, walletType=null, xUser=null, currentStep=0;
 
 // ── LOGOUT ──
 function doLogout(){
-  phantomKey=null; xUser=null;
+  phantomKey=null; walletType=null; xUser=null;
+  sessionStorage.removeItem('orcagent_wallet');
+  fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-pill').style.display='none';
   document.getElementById('x-pill').style.display='none';
   document.getElementById('app').style.display='none';
@@ -487,14 +490,30 @@ async function connectWalletOnboard(type){
   const isPhantom=type==='phantom';
   const provider=isPhantom?window.solana:window.solflare;
   const name=isPhantom?'Phantom':'Solflare';
-  const url=isPhantom?'phantom.app':'solflare.com';
+  const installUrl=isPhantom?'https://phantom.app':'https://solflare.com';
   const check=isPhantom?provider?.isPhantom:provider?.isSolflare;
-  if(!check){alert(name+' not installed!\nGet it at '+url);return;}
+  const msgEl=document.getElementById('wallet-install-msg');
+
+  if(!check){
+    const other=isPhantom?'Solflare':'Phantom';
+    const otherUrl=isPhantom?'https://solflare.com':'https://phantom.app';
+    msgEl.innerHTML=name+' wallet not detected. <a href="'+installUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">Install '+name+'</a> or try <a href="'+otherUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">'+other+'</a>.';
+    msgEl.style.display='block';
+    return;
+  }
+  msgEl.style.display='none';
   try{
     const resp=await provider.connect();
     const pubkey=provider.publicKey||resp?.publicKey;
-    if(!pubkey){alert('Could not get wallet address — try again.');return;}
+    if(!pubkey){
+      msgEl.textContent='Could not get wallet address — please try again.';
+      msgEl.style.display='block';
+      return;
+    }
     phantomKey=pubkey.toString();
+    walletType=name;
+    sessionStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
+    fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).catch(()=>{});
     document.getElementById('wallet-addr').textContent=phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-type').textContent=name+' wallet';
     document.getElementById('wallet-connected').style.display='flex';
@@ -504,11 +523,18 @@ async function connectWalletOnboard(type){
     document.getElementById('solflare-ob-btn').style.opacity='0.35';
     document.getElementById('wallet-continue-btn').style.display='block';
     document.getElementById('wallet-back-btn').style.display='block';
-  }catch(e){console.error(e);}
+  }catch(e){
+    msgEl.textContent='Connection rejected or failed — please try again.';
+    msgEl.style.display='block';
+    console.error(e);
+  }
 }
 
 function resetWallet(){
-  phantomKey=null;
+  phantomKey=null; walletType=null;
+  sessionStorage.removeItem('orcagent_wallet');
+  fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
+  document.getElementById('wallet-install-msg').style.display='none';
   document.getElementById('wallet-connected').style.display='none';
   document.getElementById('phantom-ob-btn').disabled=false;
   document.getElementById('phantom-ob-btn').style.opacity='1';
@@ -537,7 +563,7 @@ function launchApp(){
   if(phantomKey){
     document.getElementById('wallet-pill').style.display='flex';
     document.getElementById('wallet-short').textContent=phantomKey.slice(0,6)+'...'+phantomKey.slice(-4);
-    document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey);
+    document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
     refreshPhantomBalances();
   }
   if(xUser){
@@ -780,13 +806,27 @@ async function toggleTrader(){
   fetchState();
 }
 
-// ── X OAuth: same-tab redirect returns with /?x=1 ──
-(async function(){
-  if(new URLSearchParams(location.search).has('x')){
-    history.replaceState({},'','/');
-    const r=await fetch('/api/x/status').then(r=>r.json()).catch(()=>null);
-    if(r?.connected){handleXConnected(r.username);launchApp();}
+// ── STARTUP: restore session + handle OAuth return ──
+(async function initApp(){
+  // Always check X status (handles both fresh load and ?x=1 return)
+  const urlHasX=new URLSearchParams(location.search).has('x');
+  if(urlHasX) history.replaceState({},'','/');
+  const xr=await fetch('/api/x/status').then(r=>r.json()).catch(()=>null);
+  if(xr?.connected) handleXConnected(xr.username);
+
+  // Restore wallet from sessionStorage → skip onboarding entirely
+  const saved=JSON.parse(sessionStorage.getItem('orcagent_wallet')||'null');
+  if(saved?.key){
+    phantomKey=saved.key;
+    walletType=saved.type||'Wallet';
+    // Re-register wallet with server (lost on server restart)
+    fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).catch(()=>{});
+    launchApp();
+    return;
   }
+
+  // No saved wallet — if returning from X OAuth alone, stay on onboarding step 1
+  // (user still needs to connect a wallet)
 })();
 
 localStorage.clear();
