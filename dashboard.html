@@ -1029,8 +1029,8 @@ async function openSettings(){
       document.getElementById('s-maxusdc').value=r.max_trade_size||12.5;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
       const hint=document.getElementById('s-key-hint');
-      hint.style.color=r.has_key?'var(--green)':'var(--muted)';
-      hint.textContent=r.has_key?'✓ key saved (encrypted)':'no key saved';
+      hint.style.color='var(--green)';
+      hint.textContent=r.has_key?'✓ key saved (encrypted)':'';
     }
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
