@@ -152,6 +152,17 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .sig-sell{background:rgba(255,77,106,.13);color:var(--red);border:1px solid rgba(255,77,106,.35)}
 .sig-hold{background:rgba(106,143,175,.1);color:var(--dim);border:1px solid var(--border2)}
 
+/* pump badge */
+.pump-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(0,237,170,.12);border:1px solid rgba(0,237,170,.35);color:var(--green);font-size:7px;font-weight:700;letter-spacing:.12em;font-family:'Orbitron',monospace;padding:3px 8px;border-radius:3px;margin-bottom:7px}
+
+/* m5 momentum row */
+.m5-row{display:flex;align-items:baseline;gap:6px;margin-bottom:5px}
+.m5-val{font-family:'Orbitron',monospace;font-size:20px;font-weight:700;letter-spacing:.01em;line-height:1}
+.m5-val.up{color:var(--green)}
+.m5-val.dn{color:var(--red)}
+.m5-period{font-size:8px;font-weight:700;color:var(--muted);letter-spacing:.1em;background:var(--bg4);padding:2px 5px;border-radius:3px;border:1px solid var(--border)}
+.mkt-price-inline{font-family:'Orbitron',monospace;font-size:10px;color:var(--dim);margin-left:auto;white-space:nowrap}
+
 /* price & change */
 .mkt-price{font-family:'Orbitron',monospace;font-size:15px;font-weight:700;color:var(--text);display:block;margin-bottom:5px;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 .mkt-chg-row{display:flex;align-items:center;gap:7px;margin-bottom:11px}
@@ -499,7 +510,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <!-- TOKEN OF THE DAY -->
   <div class="totd-wrap" id="totd-wrap" style="display:none">
     <div class="totd-card" id="totd-card">
-      <div class="totd-label">Token of the Day <span class="totd-countdown" id="totd-countdown"></span></div>
+      <div class="totd-label">Hottest Token Right Now <span class="totd-countdown" id="totd-countdown"></span></div>
       <div class="totd-body">
         <div class="totd-left">
           <div class="totd-sym" id="totd-sym">—</div>
@@ -509,7 +520,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
             <span class="totd-chg up" id="totd-chg">+0.00%</span>
           </div>
           <div class="totd-stats">
-            <div class="totd-stat"><span class="totd-stat-lbl">Volume 24H</span><span class="totd-stat-val" id="totd-vol">—</span></div>
+            <div class="totd-stat"><span class="totd-stat-lbl">Volume 5M</span><span class="totd-stat-val" id="totd-vol">—</span></div>
             <div class="totd-stat"><span class="totd-stat-lbl">Liquidity</span><span class="totd-stat-val" id="totd-liq">—</span></div>
             <div class="totd-stat"><span class="totd-stat-lbl">Market Cap</span><span class="totd-stat-val" id="totd-mcap">—</span></div>
           </div>
@@ -771,24 +782,27 @@ function renderMarket(tokens){
   if(count) count.textContent=tokens.length+' tokens';
 
   grid.innerHTML=tokens.map(t=>{
-    const chg=t.change24h??t.change1h??0;
-    const chgAbs=Math.abs(chg).toFixed(2);
-    const chgStr=(chg>=0?'▲ +':'▼ −')+chgAbs+'%';
-    const chgCls=chg>=0?'up':'dn';
-    const hot=t.score>=5, cold=t.score<=-3;
+    const m5=t.change5m??0;
+    const h1=t.change1h??0;
+    const m5Abs=Math.abs(m5).toFixed(1);
+    const m5Str=(m5>=0?'+':'-')+m5Abs+'%';
+    const m5Cls=m5>=0?'up':'dn';
+    const hot=t.score>=7, warm=t.score>=5, cold=t.score<=2;
     const cardCls='mkt-card'+(hot?' hot':cold?' cold':'');
+    const pumping=m5>=20;
     const sigLabel=hot?'BUY':cold?'SELL':'HOLD';
     const sigCls=hot?'mkt-sig sig-buy':cold?'mkt-sig sig-sell':'mkt-sig sig-hold';
 
-    // score bar: map [-10,+10] → [0%,100%]
-    const barPct=Math.min(100,Math.max(0,(t.score+10)/20*100)).toFixed(1);
+    // score bar: map [0,10] → [0%,100%]
+    const barPct=Math.min(100,Math.max(0,t.score/10*100)).toFixed(1);
     const barColor=hot?'var(--green)':cold?'var(--red)':'var(--yellow)';
-    const scoreLbl=(t.score>0?'+':'')+t.score;
     const scoreCol=hot?'var(--green)':cold?'var(--red)':'var(--muted)';
 
-    const vol=fmtNum(t.volume24h||t.volume1h||0);
+    const vol5m=fmtNum(t.volume5m||0);
     const liq=fmtNum(t.liquidity||0);
     const mcap=fmtNum(t.fdv||0);
+    const h1Str=(h1>=0?'+':'')+h1.toFixed(1)+'%';
+    const h1Cls=h1>=0?'up':'dn';
 
     return `<div class="${cardCls}" onclick="window.open('https://dexscreener.com/solana/${t.mint}')">
   <div class="mkt-top">
@@ -798,20 +812,25 @@ function renderMarket(tokens){
     </div>
     <span class="${sigCls}">${sigLabel}</span>
   </div>
-  <span class="mkt-price">${fmtPrice(t.price)}</span>
-  <div class="mkt-chg-row">
-    <span class="mkt-chg ${chgCls}">${chgStr}</span>
-    <span class="mkt-period">24H</span>
+  ${pumping?`<div class="pump-badge">🚀 PUMPING</div>`:''}
+  <div class="m5-row">
+    <span class="m5-val ${m5Cls}">${m5Str}</span>
+    <span class="m5-period">5M</span>
+    <span class="mkt-price-inline">${fmtPrice(t.price)}</span>
+  </div>
+  <div class="mkt-chg-row" style="margin-bottom:9px">
+    <span class="mkt-chg ${h1Cls}" style="font-size:10px">${h1Str}</span>
+    <span class="mkt-period">1H</span>
   </div>
   <div class="mkt-divider"></div>
   <div class="mkt-stats">
+    <div class="mkt-stat"><span class="mkt-stat-lbl">Vol 5M</span><span class="mkt-stat-val">${vol5m}</span></div>
     <div class="mkt-stat"><span class="mkt-stat-lbl">Liq</span><span class="mkt-stat-val">${liq}</span></div>
-    <div class="mkt-stat"><span class="mkt-stat-lbl">Vol</span><span class="mkt-stat-val">${vol}</span></div>
     <div class="mkt-stat"><span class="mkt-stat-lbl">MCap</span><span class="mkt-stat-val">${mcap}</span></div>
   </div>
   <div class="mkt-score-row">
     <div class="mkt-score-track"><div class="mkt-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
-    <span class="mkt-score-label" style="color:${scoreCol}">${scoreLbl}</span>
+    <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
 </div>`;
   }).join('');
@@ -836,9 +855,8 @@ async function fetchTotd(){
     renderTotd(r.token);
     _totdNextAt=Date.now()+(r.next_update_in||900)*1000;
   } else if(_marketTokens.length){
-    // Backend hasn't set TOTD yet — pick best 24h token from cached market data
-    const best=_marketTokens.reduce((a,b)=>
-      (b.change24h??b.change1h??0)>(a.change24h??a.change1h??0)?b:a, _marketTokens[0]);
+    // Backend hasn't set TOTD yet — pick highest-scored token from cached market data
+    const best=_marketTokens.reduce((a,b)=>(b.score??0)>(a.score??0)?b:a, _marketTokens[0]);
     renderTotd(best);
   }
 }
@@ -849,14 +867,14 @@ function renderTotd(t){
   document.getElementById('totd-sym').textContent=t.symbol||'???';
   document.getElementById('totd-name').textContent=t.name||t.symbol||'Unknown';
   document.getElementById('totd-price').textContent=fmtPrice(t.price);
-  document.getElementById('totd-vol').textContent=fmtNum(t.volume24h||t.volume1h||0);
+  document.getElementById('totd-vol').textContent=fmtNum(t.volume5m||t.volume1h||0);
   document.getElementById('totd-liq').textContent=fmtNum(t.liquidity||0);
   document.getElementById('totd-mcap').textContent=fmtNum(t.fdv||0);
-  const chg=t.change24h??t.change1h??0;
+  const chg=t.change5m??t.change1h??0;
   const chgEl=document.getElementById('totd-chg');
   chgEl.textContent=(chg>=0?'▲ +':'▼ −')+Math.abs(chg).toFixed(2)+'%';
   chgEl.className='totd-chg '+(chg>=0?'up':'dn');
-  const hot=t.score>=5, cold=t.score<=-3;
+  const hot=t.score>=7, cold=t.score<=2;
   const sigEl=document.getElementById('totd-sig');
   sigEl.textContent=hot?'BUY':cold?'SELL':'HOLD';
   sigEl.className='totd-sig '+(hot?'sig-buy':cold?'sig-sell':'sig-hold');

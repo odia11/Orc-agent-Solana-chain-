@@ -1,25 +1,26 @@
-import anthropic, time, json, os, requests, base64
+import anthropic, sys, time, json, os, requests, base64
 from dotenv import load_dotenv
 from solders.keypair import Keypair
 from solders.transaction import VersionedTransaction
 from solders.message import to_bytes_versioned
 load_dotenv()
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-WALLET_ADDRESS = os.getenv('WALLET_ADDRESS')
-PRIVATE_KEY = os.getenv('WALLET_PRIVATE_KEY')
-MAX_USDC = float(os.getenv('MAX_USDC', 50))
-STOP_LOSS = float(os.getenv('STOP_LOSS', 0.05))
-TAKE_PROFIT = float(os.getenv('TAKE_PROFIT', 0.15))
-TRAILING_STOP = float(os.getenv('TRAILING_STOP', 0.03))
-INTERVAL = int(os.getenv('INTERVAL', 300))
-SOLANA_RPC = 'https://api.mainnet-beta.solana.com'
-JUPITER_QUOTE = 'https://api.jup.ag/swap/v1/quote'
-JUPITER_SWAP = 'https://api.jup.ag/swap/v1/swap'
-USDC_MINT = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
-def discover_tokens(limit=20):
+ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
+WALLET_ADDRESS    = os.getenv('WALLET_ADDRESS')
+PRIVATE_KEY       = os.getenv('WALLET_PRIVATE_KEY')
+MAX_USDC          = float(os.getenv('MAX_USDC', 50))
+STOP_LOSS         = float(os.getenv('STOP_LOSS', 0.05))    # 5%
+TAKE_PROFIT       = float(os.getenv('TAKE_PROFIT', 0.15))  # 15%
+TRAILING_STOP     = float(os.getenv('TRAILING_STOP', 0.03))
+INTERVAL          = int(os.getenv('INTERVAL', 60))
+SOLANA_RPC        = 'https://api.mainnet-beta.solana.com'
+JUPITER_QUOTE     = 'https://api.jup.ag/swap/v1/quote'
+JUPITER_SWAP      = 'https://api.jup.ag/swap/v1/swap'
+USDC_MINT         = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+
+def discover_tokens(limit=30):
     mints = []
-    seen = {USDC_MINT}
+    seen  = {USDC_MINT}
     try:
         r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', timeout=10)
         if r.status_code == 200:
@@ -40,8 +41,6 @@ def discover_tokens(limit=20):
                         seen.add(m); mints.append(m)
     except: pass
     return [{'mint': m, 'label': m[:8]} for m in mints[:limit]]
-client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
-keypair = Keypair.from_base58_string(PRIVATE_KEY)
 
 def get_token_data(mint):
     try:
@@ -49,145 +48,180 @@ def get_token_data(mint):
         r.raise_for_status()
         pairs = r.json().get('pairs', [])
         if not pairs: return None
-        p = pairs[0]
+        p    = pairs[0]
+        txns = p.get('txns', {})
+        m5b  = int(txns.get('m5', {}).get('buys',  0) or 0)
+        m5s  = int(txns.get('m5', {}).get('sells', 0) or 0)
+        h1b  = int(txns.get('h1', {}).get('buys',  0) or 0)
+        h1s  = int(txns.get('h1', {}).get('sells', 0) or 0)
         return {
-            'price': float(p.get('priceUsd', 0)),
-            'volume1h': float(p.get('volume', {}).get('h1', 0)),
-            'change5m': float(p.get('priceChange', {}).get('m5', 0)),
-            'change1h': float(p.get('priceChange', {}).get('h1', 0)),
-            'liquidity': float(p.get('liquidity', {}).get('usd', 0)),
-            'txns_buys': int(p.get('txns', {}).get('h1', {}).get('buys', 0)),
-            'txns_sells': int(p.get('txns', {}).get('h1', {}).get('sells', 0)),
+            'price':      float(p.get('priceUsd', 0) or 0),
+            'change5m':   float(p.get('priceChange', {}).get('m5', 0) or 0),
+            'change1h':   float(p.get('priceChange', {}).get('h1', 0) or 0),
+            'liquidity':  float(p.get('liquidity', {}).get('usd', 0) or 0),
+            'volume5m':   float(p.get('volume', {}).get('m5', 0) or 0),
+            'volume1h':   float(p.get('volume', {}).get('h1', 0) or 0),
+            'txns_buys':  m5b or h1b,
+            'txns_sells': m5s or h1s,
         }
     except: return None
 
+def score_token(data):
+    """Score 0–10. Momentum-focused: ≥7 = BUY signal."""
+    if data.get('price', 0) <= 0: return 0
+    score = 0.0
+    m5    = data.get('change5m', 0)
+    h1    = data.get('change1h', 0)
+    vol5m = data.get('volume5m', 0)
+    liq   = data.get('liquidity', 0)
+    buys  = data.get('txns_buys', 0)
+    sells = max(data.get('txns_sells', 1), 1)
+
+    if   m5 >= 50: score += 4.0
+    elif m5 >= 30: score += 3.0
+    elif m5 >= 20: score += 2.5
+    elif m5 >= 10: score += 1.5
+    elif m5 >=  5: score += 0.5
+
+    if   h1 >= 60: score += 2.0
+    elif h1 >= 30: score += 1.5
+    elif h1 >= 15: score += 1.0
+    elif h1 >=  5: score += 0.5
+
+    if   vol5m >= 50000: score += 2.0
+    elif vol5m >= 20000: score += 1.5
+    elif vol5m >=  5000: score += 1.0
+    elif vol5m >=  1000: score += 0.5
+
+    ratio = buys / sells
+    if   ratio >= 4.0: score += 2.0
+    elif ratio >= 2.5: score += 1.5
+    elif ratio >= 1.5: score += 1.0
+    elif ratio >= 1.0: score += 0.5
+
+    if   liq < 5000:  score = max(0, score - 4.0)
+    elif liq < 10000: score = max(0, score - 2.0)
+
+    return min(10.0, max(0.0, round(score, 1)))
+
 def get_balance():
-    r = requests.post(SOLANA_RPC, json={'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [WALLET_ADDRESS]}, timeout=10)
+    r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[WALLET_ADDRESS]}, timeout=10)
     return r.json()['result']['value'] / 1e9
 
 def get_usdc_balance():
-    r = requests.post(SOLANA_RPC, json={'jsonrpc': '2.0', 'id': 1, 'method': 'getTokenAccountsByOwner', 'params': [WALLET_ADDRESS, {'mint': USDC_MINT}, {'encoding': 'jsonParsed'}]}, timeout=10)
-    accounts = r.json().get('result', {}).get('value', [])
+    r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[WALLET_ADDRESS,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=10)
+    accounts = r.json().get('result',{}).get('value',[])
     if accounts:
         return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
     return 0.0
 
-def score_token(data):
-    score = 0
-    if data['change5m'] > 2: score += 3
-    elif data['change5m'] > 0: score += 1
-    else: score -= 2
-    if data['change1h'] > 5: score += 3
-    elif data['change1h'] > 0: score += 1
-    else: score -= 2
-    if data['volume1h'] > 10000: score += 2
-    elif data['volume1h'] > 1000: score += 1
-    buy_ratio = data['txns_buys'] / max(data['txns_sells'], 1)
-    if buy_ratio > 2: score += 3
-    elif buy_ratio > 1.2: score += 1
-    else: score -= 1
-    if data['liquidity'] < 1000: score -= 3
-    elif data['liquidity'] > 10000: score += 1
-    return score
-
-def ai_decision(label, data, usdc):
-    score = score_token(data)
-    prompt = ('Token:' + label + ' Price:$' + str(data['price']) + ' 5m:' + str(data['change5m']) + '% 1h:' + str(data['change1h']) + '% Vol1h:$' + str(data['volume1h']) + ' Buys:' + str(data['txns_buys']) + ' Sells:' + str(data['txns_sells']) + ' Liq:$' + str(data['liquidity']) + ' Score:' + str(score) + ' USDC:' + str(round(usdc,2)) + ' Reply ONLY JSON: {"decision":"BUY|SELL|HOLD","reasoning":"str","confidence":0.5,"amount_pct":0.3}')
-    msg = client.messages.create(model='claude-haiku-4-5-20251001', max_tokens=200, system='Aggressive Solana meme coin scalper. BUY when score>4 and momentum rising. SELL when dropping. JSON only.', messages=[{'role': 'user', 'content': prompt}])
-    raw = msg.content[0].text.strip()
-    if raw.startswith('```'): raw = raw.split('```')[1].lstrip('json')
-    result = json.loads(raw.strip())
-    if score >= 5 and result['decision'] == 'HOLD': result['decision'] = 'BUY'
-    if score <= -2 and result['decision'] == 'HOLD': result['decision'] = 'SELL'
-    return result
-
-def execute_swap(input_mint, output_mint, amount):
-    quote = requests.get(JUPITER_QUOTE, params={'inputMint': input_mint, 'outputMint': output_mint, 'amount': int(amount), 'slippageBps': 150}, timeout=10).json()
-    swap_resp = requests.post(JUPITER_SWAP, json={'quoteResponse': quote, 'userPublicKey': WALLET_ADDRESS, 'wrapAndUnwrapSol': True}, timeout=10).json()
-    tx_key = 'swapTransaction' if 'swapTransaction' in swap_resp else 'transaction'
-    raw_tx = base64.b64decode(swap_resp[tx_key])
-    tx = VersionedTransaction.from_bytes(raw_tx)
-    msg_bytes = to_bytes_versioned(tx.message)
-    sig = keypair.sign_message(msg_bytes)
+def execute_swap(input_mint, output_mint, amount_lamports):
+    """Execute a Jupiter swap. amount_lamports is in base units (e.g. micro-USDC for USDC)."""
+    keypair    = Keypair.from_base58_string(PRIVATE_KEY)
+    quote      = requests.get(JUPITER_QUOTE, params={'inputMint': input_mint, 'outputMint': output_mint,
+                               'amount': int(amount_lamports), 'slippageBps': 300, 'maxAccounts': 20}, timeout=10).json()
+    if 'error' in quote: raise Exception('Quote: ' + str(quote['error']))
+    swap_resp  = requests.post(JUPITER_SWAP, json={'quoteResponse': quote, 'userPublicKey': WALLET_ADDRESS,
+                                'wrapAndUnwrapSol': True}, timeout=10).json()
+    if 'error' in swap_resp: raise Exception('Swap: ' + str(swap_resp['error']))
+    tx_key     = 'swapTransaction' if 'swapTransaction' in swap_resp else 'transaction'
+    if tx_key not in swap_resp: raise Exception('No tx in response')
+    raw_tx     = base64.b64decode(swap_resp[tx_key])
+    tx         = VersionedTransaction.from_bytes(raw_tx)
+    msg_bytes  = to_bytes_versioned(tx.message)
+    sig        = keypair.sign_message(msg_bytes)
     tx.signatures[0] = sig
-    encoded = base64.b64encode(bytes(tx)).decode()
-    result = requests.post(SOLANA_RPC, json={'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction', 'params': [encoded, {'encoding': 'base64', 'skipPreflight': True}]}, timeout=30).json()
+    encoded    = base64.b64encode(bytes(tx)).decode()
+    result     = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'sendTransaction',
+                                'params':[encoded,{'encoding':'base64','skipPreflight': False}]}, timeout=30).json()
+    if 'error' in result: raise Exception('RPC: ' + str(result['error']))
     return result.get('result', str(result))
 
+def execute_single_swap(action, mint, amount_str):
+    """Called when invoked as: python orcagent_solana.py buy|sell MINT AMOUNT"""
+    amount = float(amount_str)
+    if action == 'buy':
+        # amount is USDC dollars; convert to micro-USDC (6 decimals)
+        tx = execute_swap(USDC_MINT, mint, int(amount * 1e6))
+        print('BUY ' + mint[:16] + ' $' + str(round(amount, 2)) + ' TX:' + str(tx))
+    elif action == 'sell':
+        # amount is token units; convert to micro-token (assume 6 decimals)
+        tx = execute_swap(mint, USDC_MINT, int(amount * 1e6))
+        print('SELL ' + mint[:16] + ' amt:' + str(round(amount, 4)) + ' TX:' + str(tx))
+    else:
+        print('Unknown action: ' + action)
+        sys.exit(1)
+
 def run():
-    print('OrcAgent Solana SMART SCALPER v4 started')
+    """Standalone trading loop (not used by dashboard.py but available for direct CLI use)."""
+    print('OrcAgent Solana — momentum scalper v5')
     print('Wallet: ' + str(WALLET_ADDRESS))
-    print('Live token discovery enabled | Interval: ' + str(INTERVAL) + 's')
-    print('SL: ' + str(STOP_LOSS*100) + '% | TP: ' + str(TAKE_PROFIT*100) + '% | Trailing: ' + str(TRAILING_STOP*100) + '%')
+    print('TP:' + str(TAKE_PROFIT * 100) + '% | SL:' + str(STOP_LOSS * 100) + '% | Interval:' + str(INTERVAL) + 's')
+    client    = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
     positions = {}
-    tokens = []
-    last_discovery = 0
     while True:
         try:
-            now = time.time()
-            if now - last_discovery > 300:
-                fresh = discover_tokens()
-                if fresh:
-                    tokens = fresh
-                    for t in tokens:
-                        if t['mint'] not in positions:
-                            positions[t['mint']] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0}
-                    print('Discovered ' + str(len(tokens)) + ' tokens from DexScreener')
-                last_discovery = now
-            sol = get_balance()
-            usdc = get_usdc_balance()
-            print('--- SOL:' + str(round(sol,4)) + ' USDC:' + str(round(usdc,2)) + ' Tokens:' + str(len(tokens)) + ' ---')
-            scored = []
-            for token in tokens:
+            tokens = discover_tokens()
+            sol    = get_balance()
+            usdc   = get_usdc_balance()
+            print('SOL:' + str(round(sol, 4)) + ' USDC:' + str(round(usdc, 2)))
+
+            # Score and filter for momentum
+            candidates = []
+            for t in tokens:
+                data = get_token_data(t['mint'])
+                if not data or data['price'] <= 0 or data['liquidity'] < 10000: continue
+                if data['change5m'] >= 20 or data['change1h'] >= 30:
+                    if data['volume5m'] >= 5000:
+                        sc = score_token(data)
+                        candidates.append((sc, t, data))
+            candidates.sort(key=lambda x: x[0], reverse=True)
+
+            for sc, token, data in candidates:
                 try:
-                    data = get_token_data(token['mint'])
-                    if data: scored.append((score_token(data), token, data))
-                except: pass
-            scored.sort(key=lambda x: x[0], reverse=True)
-            for score, token, data in scored:
-                try:
-                    if data.get('liquidity', 0) < 10000: continue
-                    pos = positions[token['mint']]
-                    res = ai_decision(token['label'], data, usdc)
-                    print(token['label'] + ' $' + str(data['price']) + ' 5m:' + str(data['change5m']) + '% score:' + str(score) + ' [' + res['decision'] + '] ' + res['reasoning'][:40])
-                    if res['decision'] == 'BUY' and usdc > 5:
-                        spend = min(usdc * res['amount_pct'], MAX_USDC / 4)
-                        tx = execute_swap(USDC_MINT, token['mint'], int(spend * 1e6))
-                        print('BUY ' + token['label'] + ' $' + str(round(spend,2)) + ' TX: ' + str(tx))
-                        pos['amount'] += spend / data['price']
-                        pos['buy_price'] = data['price']
-                        pos['peak_price'] = data['price']
-                        usdc -= spend
-                    elif res['decision'] == 'SELL' and pos['amount'] > 0:
-                        tx = execute_swap(token['mint'], USDC_MINT, int(pos['amount'] * 1e6))
-                        pnl = (data['price'] - pos['buy_price']) / pos['buy_price'] * 100
-                        print('SELL ' + token['label'] + ' PnL:' + str(round(pnl,1)) + '% TX: ' + str(tx))
-                        usdc += pos['amount'] * data['price']
-                        pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
+                    mint  = token['mint']
+                    label = token['label']
+                    m5    = data['change5m']
+                    if mint not in positions:
+                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0}
+                    pos = positions[mint]
+
+                    # Exit checks
                     if pos['amount'] > 0 and pos['buy_price'] > 0:
                         if data['price'] > pos['peak_price']: pos['peak_price'] = data['price']
                         chg = (data['price'] - pos['buy_price']) / pos['buy_price']
-                        trail = (data['price'] - pos['peak_price']) / pos['peak_price']
-                        if chg <= -STOP_LOSS:
-                            tx = execute_swap(token['mint'], USDC_MINT, int(pos['amount'] * 1e6))
-                            print('STOP LOSS ' + token['label'] + ' ' + str(round(chg*100,1)) + '%')
-                            usdc += pos['amount'] * data['price']
+                        if chg >= TAKE_PROFIT:
+                            tx = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            print('TAKE PROFIT ' + label + ' +' + str(round(chg * 100, 1)) + '% TX:' + str(tx))
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
-                        elif chg >= TAKE_PROFIT:
-                            tx = execute_swap(token['mint'], USDC_MINT, int(pos['amount'] * 1e6))
-                            print('TAKE PROFIT ' + token['label'] + ' +' + str(round(chg*100,1)) + '%')
-                            usdc += pos['amount'] * data['price']
+                        elif chg <= -STOP_LOSS:
+                            tx = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            print('STOP LOSS ' + label + ' ' + str(round(chg * 100, 1)) + '% TX:' + str(tx))
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
-                        elif trail <= -TRAILING_STOP and chg > 0:
-                            tx = execute_swap(token['mint'], USDC_MINT, int(pos['amount'] * 1e6))
-                            print('TRAILING STOP ' + token['label'] + ' locked:' + str(round(chg*100,1)) + '%')
-                            usdc += pos['amount'] * data['price']
+                        elif m5 < 5:
+                            tx = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            print('MOMENTUM DIED ' + label + ' m5=' + str(round(m5, 1)) + '% TX:' + str(tx))
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
+                        continue
+
+                    # Entry: score ≥ 7, still pumping
+                    if sc >= 7 and m5 >= 10 and usdc > 5:
+                        spend = min(usdc * 0.20, MAX_USDC / 4)
+                        tx    = execute_swap(USDC_MINT, mint, int(spend * 1e6))
+                        print('BUY ' + label + ' $' + str(round(spend, 2)) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '% TX:' + str(tx))
+                        pos['amount']     = spend / data['price']
+                        pos['buy_price']  = data['price']
+                        pos['peak_price'] = data['price']
+                        usdc -= spend
                 except Exception as e:
                     print(token['label'] + ' error: ' + str(e))
-            print('Sleeping ' + str(INTERVAL) + 's...')
         except Exception as e:
             print('Error: ' + str(e))
         time.sleep(INTERVAL)
 
-if __name__ == '__main__': run()
+if __name__ == '__main__':
+    if len(sys.argv) >= 4:
+        # Single swap mode: python orcagent_solana.py buy|sell MINT AMOUNT
+        execute_single_swap(sys.argv[1], sys.argv[2], sys.argv[3])
+    else:
+        run()
