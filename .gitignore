@@ -25,3 +25,12 @@ dist/
 
 # Editor / tooling
 .claude/
+
+# Temporary fix/patch scripts
+fix_*.py
+
+# Build artifacts / misc
+files/
+1.2
+1000
+10000

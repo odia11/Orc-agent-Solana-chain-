@@ -465,31 +465,6 @@ def check_daily_reset_user(us: dict):
     if us.get('daily_stats', {}).get('date') != today:
         us['daily_stats'] = _fresh_daily()
 
-def record_trade(symbol, entry, exit_price, amount, spend):
-    check_daily_reset()
-    now   = datetime.datetime.utcnow()
-    today = now.strftime('%Y-%m-%d')
-    pnl     = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
-    pnl_pct = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
-    trade   = {
-        'symbol': symbol, 'entry': entry, 'exit': exit_price,
-        'amount': amount, 'spend': spend,
-        'pnl': pnl, 'pnl_pct': pnl_pct,
-        'time': now.strftime('%H:%M'), 'date': today, 'ts': now.timestamp(),
-    }
-    state['trades_history'].append(trade)
-    if len(state['trades_history']) > 500:
-        state['trades_history'] = state['trades_history'][-500:]
-    ds = state['daily_stats']
-    ds['total_pnl'] = round(ds['total_pnl'] + pnl, 4)
-    ds['trades']   += 1
-    if pnl > 0: ds['wins'] += 1
-    today_spend = sum(t['spend'] for t in state['trades_history'] if t['date'] == today)
-    ds['total_pnl_pct'] = round(ds['total_pnl'] / today_spend * 100, 2) if today_spend else 0.0
-    if ds['best']  is None or pnl_pct > ds['best']:  ds['best']  = pnl_pct
-    if ds['worst'] is None or pnl_pct < ds['worst']: ds['worst'] = pnl_pct
-    ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['total_pnl']})
-
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float, amount: float, spend: float):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
@@ -536,69 +511,6 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
             add_log('Swap: ' + result.stdout.strip()[-80:])
     except Exception as e:
         add_log('Swap error: ' + str(e)[:80])
-
-# ── GLOBAL TRADER (no wallet connected) ──
-def trader_loop(stop_event, config):
-    add_log('Trader started — momentum strategy | TP:15% SL:5% | score≥7')
-    positions = {}
-    while not stop_event.is_set():
-        try:
-            check_daily_reset()
-            usdc     = state['usdc']
-            open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
-            state['positions'] = open_pos
-            live = state['tokens']
-            add_log('SOL:' + str(state['sol']) + ' USDC:' + str(usdc) + ' Pos:' + str(open_pos) + '/3 Tokens:' + str(len(live)))
-            for t in live:
-                if stop_event.is_set(): break
-                mint  = t['mint']
-                if mint not in positions:
-                    positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
-                pos   = positions[mint]
-                sc    = t['score']
-                m5    = t.get('change5m', 0)
-                label = t['symbol'] or t['name'] or mint[:8]
-
-                # ── Exit checks for open positions ──
-                if pos['amount'] > 0 and pos['buy_price'] > 0:
-                    price = t['price']
-                    if price > pos['peak_price']: pos['peak_price'] = price
-                    chg = (price - pos['buy_price']) / pos['buy_price']
-                    exit_reason = None
-                    if   chg >= 0.15:  exit_reason = 'TAKE PROFIT +' + str(round(chg * 100, 1)) + '%'
-                    elif chg <= -0.05: exit_reason = 'STOP LOSS '    + str(round(chg * 100, 1)) + '%'
-                    elif m5 < 5:       exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
-                    if exit_reason:
-                        add_log(exit_reason + ' ' + label)
-                        subprocess.Popen(
-                            [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), 'sell', mint, str(pos['amount'])],
-                            env=os.environ.copy()
-                        )
-                        record_trade(label, pos['buy_price'], price, pos['amount'], pos['spend'])
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
-                        open_pos -= 1
-                        continue
-
-                # ── Entry: score ≥ 7, still pumping ──
-                if sc >= 7 and m5 >= 10 and usdc > 1 and open_pos < 3 and pos['amount'] == 0:
-                    spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('max_usdc', 1.0)), 2)
-                    if spend < 1.0: continue
-                    add_log('BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
-                    subprocess.Popen(
-                        [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), 'buy', mint, str(spend)],
-                        env=os.environ.copy()
-                    )
-                    pos['amount']     = spend / t['price']
-                    pos['buy_price']  = t['price']
-                    pos['peak_price'] = t['price']
-                    pos['spend']      = spend
-                    usdc -= spend; open_pos += 1
-                else:
-                    add_log(label + ' score:' + str(sc) + ' m5:' + str(round(m5, 1)) + '% HOLD')
-        except Exception as e:
-            add_log('Trader error: ' + str(e))
-        stop_event.wait(config.get('interval', 60))
-    add_log('Trader stopped')
 
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
