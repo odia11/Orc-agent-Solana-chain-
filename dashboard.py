@@ -86,8 +86,9 @@ def get_or_create_user(wallet: str) -> int:
     return row[0] if row else None
 
 def _current_wallet() -> str:
-    """Returns the wallet address for the current session (per-user)."""
-    return session.get('wallet', '') or state.get('wallet', '')
+    """Returns the wallet address for the current session only.
+    Never falls back to shared state — that would leak one user's identity to another."""
+    return session.get('wallet', '')
 
 # ── GLOBAL STATE ──
 trader_thread = None
@@ -482,7 +483,10 @@ def trader_loop(stop_event, config):
                     elif m5 < 5:       exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
                     if exit_reason:
                         add_log(exit_reason + ' ' + label)
-                        os.system('cd "' + BASE + '" && python orcagent_solana.py sell ' + mint + ' ' + str(pos['amount']) + ' &')
+                        subprocess.Popen(
+                            [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), 'sell', mint, str(pos['amount'])],
+                            env=os.environ.copy()
+                        )
                         record_trade(label, pos['buy_price'], price, pos['amount'], pos['spend'])
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
@@ -492,7 +496,10 @@ def trader_loop(stop_event, config):
                 if sc >= 7 and m5 >= 10 and usdc > 3 and open_pos < 3 and pos['amount'] == 0:
                     spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('max_usdc', 12.5)), 2)
                     add_log('BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
-                    os.system('cd "' + BASE + '" && python orcagent_solana.py buy ' + mint + ' ' + str(spend) + ' &')
+                    subprocess.Popen(
+                        [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), 'buy', mint, str(spend)],
+                        env=os.environ.copy()
+                    )
                     pos['amount']     = spend / t['price']
                     pos['buy_price']  = t['price']
                     pos['peak_price'] = t['price']
@@ -700,42 +707,28 @@ def api_state():
 # ── TRADER START/STOP ──
 @app.route('/api/trader/start', methods=['POST'])
 def start_trader():
-    global trader_thread, trader_stop
     wallet = _current_wallet()
-    config = request.json or {}
-
-    if wallet:
-        us = get_user_state(wallet)
-        if us['trader_running']:
-            return jsonify({'ok': False, 'msg': 'Already running'})
-        us['trader_stop']   = threading.Event()
-        us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)
-        us['trader_thread'].start()
-        us['trader_running'] = True
-        return jsonify({'ok': True})
-
-    if state['trader_running']:
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    us = get_user_state(wallet)
+    if us['trader_running']:
         return jsonify({'ok': False, 'msg': 'Already running'})
-    trader_stop   = threading.Event()
-    trader_thread = threading.Thread(target=trader_loop, args=(trader_stop, config), daemon=True)
-    trader_thread.start()
-    state['trader_running'] = True
+    config = request.json or {}
+    us['trader_stop']   = threading.Event()
+    us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)
+    us['trader_thread'].start()
+    us['trader_running'] = True
     return jsonify({'ok': True})
 
 @app.route('/api/trader/stop', methods=['POST'])
 def stop_trader():
-    global trader_stop
     wallet = _current_wallet()
-
-    if wallet:
-        us = get_user_state(wallet)
-        if us.get('trader_stop'):
-            us['trader_stop'].set()
-        us['trader_running'] = False
-        return jsonify({'ok': True})
-
-    trader_stop.set()
-    state['trader_running'] = False
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    us = get_user_state(wallet)
+    if us.get('trader_stop'):
+        us['trader_stop'].set()
+    us['trader_running'] = False
     return jsonify({'ok': True})
 
 # ── MARKET / TOTD / TRADES ──

@@ -764,8 +764,20 @@ function renderLog(lines){
     if(m.startsWith('BUY ')&&!m.includes('FAILED'))cls='c-buy';
     else if(m.includes('SELL')||m.includes('STOP LOSS')||m.includes('TRAILING'))cls='c-sell';
     else if(m.includes('SKIP')||m.includes('error')||m.includes('FAILED'))cls='c-skip';
-    return '<div class="log-line"><span class="lt">'+l.t+'</span><span class="'+cls+'">'+m+'</span></div>';
+    return '<div class="log-line"><span class="lt">'+esc(l.t)+'</span><span class="'+cls+'">'+esc(m)+'</span></div>';
   }).join('');
+}
+
+// ── SECURITY HELPERS ──
+function esc(s){
+  // HTML-encode external data before injecting into innerHTML
+  return String(s==null?'':s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+function safeMint(m){
+  // Solana addresses are base58: 32–44 chars from a restricted alphabet
+  return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(String(m||''))?String(m):'';
 }
 
 // ── FORMATTING ──
@@ -813,11 +825,16 @@ function renderMarket(tokens){
     const scoreCol=hot?'var(--green)':cold?'var(--red)':'var(--muted)';
     const m5=t.change5m??0,h1=t.change1h??0,h6=t.change6h??0,h24=t.change24h??0;
     const pumping=h1>=50;
-    return `<div class="${baseCls}" onclick="window.open('https://dexscreener.com/solana/${t.mint}')">
+    // Sanitize all external data before injecting into innerHTML
+    const sym=esc(t.symbol||'???');
+    const name=esc(t.name||t.symbol||'Unknown');
+    const mint=safeMint(t.mint);
+    const clickAttr=mint?`onclick="window.open('https://dexscreener.com/solana/${mint}')"`:'';
+    return `<div class="${baseCls}" ${clickAttr}>
   <div class="mkt-top">
     <div class="mkt-id">
-      <div class="mkt-sym">${t.symbol||'???'}</div>
-      <div class="mkt-name">${t.name||t.symbol||'Unknown'}</div>
+      <div class="mkt-sym">${sym}</div>
+      <div class="mkt-name">${name}</div>
     </div>
     <span class="${sigCls}">${sigLabel}</span>
   </div>
@@ -856,7 +873,7 @@ function renderMarket(tokens){
   const tickHtml=tokens.map(t=>{
     const chg=t.change24h??t.change1h??0;
     const col=chg>=0?'var(--green)':'var(--red)';
-    return `<span class="tick-item"><span class="tick-sym">${t.symbol}</span><span>${fmtPrice(t.price)}</span><span style="color:${col}">${chg>=0?'+':''}${chg.toFixed(2)}%</span></span><span class="tick-div">·</span>`;
+    return `<span class="tick-item"><span class="tick-sym">${esc(t.symbol)}</span><span>${fmtPrice(t.price)}</span><span style="color:${col}">${chg>=0?'+':''}${chg.toFixed(2)}%</span></span><span class="tick-div">·</span>`;
   }).join('');
   ticker.innerHTML=tickHtml+tickHtml;
 }
@@ -1088,8 +1105,8 @@ function renderPerfPanel(r){
     const cls=p>=0?'td-pos':'td-neg';
     const sign=p>=0?'+':'';
     return `<tr>
-      <td>${t.time||'—'}</td>
-      <td class="td-sym">${t.symbol||'???'}</td>
+      <td>${esc(t.time||'—')}</td>
+      <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
       <td>${fmtPrice(t.exit||0)}</td>
       <td class="${cls}">${sign}$${Math.abs(p).toFixed(2)} <span style="opacity:.6;font-size:9px">(${sign}${pp.toFixed(1)}%)</span></td>
