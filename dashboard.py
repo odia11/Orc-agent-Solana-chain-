@@ -334,7 +334,7 @@ def get_token_data(mint):
     except: return None
 
 def score_token(data):
-    """Score 0–10. Momentum-focused: ≥7 = strong BUY signal."""
+    """Score 0–10. Momentum-focused: ≥4 = strong BUY signal."""
     if data.get('price', 0) <= 0: return 0
     score = 0.0
     m5    = data.get('change5m', 0)
@@ -543,7 +543,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_log('[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥7')
+    add_log('[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥4')
     positions = us['positions']
 
     try:
@@ -586,8 +586,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                             open_pos -= 1
                             continue
 
-                    # ── Entry: score ≥ 7, still pumping (m5 ≥ 10) ──
-                    if sc >= 7 and m5 >= 10 and us_usdc > 1 and open_pos < 3 and pos['amount'] == 0:
+                    # ── Entry: score ≥ 4, still pumping (m5 ≥ 10) ──
+                    if sc >= 4 and m5 >= 10 and us_usdc > 1 and open_pos < 3 and pos['amount'] == 0:
                         spend = round(min(us_usdc * config.get('trade_pct', 0.20), max_usdc), 2)
                         if spend < 1.0: continue
                         add_log('[' + short + '] BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')

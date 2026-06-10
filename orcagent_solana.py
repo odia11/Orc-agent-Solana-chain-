@@ -67,7 +67,7 @@ def get_token_data(mint):
     except: return None
 
 def score_token(data):
-    """Score 0–10. Momentum-focused: ≥7 = BUY signal."""
+    """Score 0–10. Momentum-focused: ≥4 = BUY signal."""
     if data.get('price', 0) <= 0: return 0
     score = 0.0
     m5    = data.get('change5m', 0)
@@ -204,8 +204,8 @@ def run():
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         continue
 
-                    # Entry: score ≥ 7, still pumping
-                    if sc >= 7 and m5 >= 10 and usdc > 5:
+                    # Entry: score ≥ 4, still pumping
+                    if sc >= 4 and m5 >= 10 and usdc > 5:
                         spend = min(usdc * 0.20, MAX_USDC / 4)
                         tx    = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print('BUY ' + label + ' $' + str(round(spend, 2)) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '% TX:' + str(tx))
