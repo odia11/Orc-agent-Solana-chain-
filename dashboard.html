@@ -199,7 +199,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .perf-stat{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
 .perf-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
 .perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
-.perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px}
+.perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center}
+.pos-panel{background:var(--bg2);border:1px solid rgba(0,237,170,.2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.pos-panel .panel-hdr{border-bottom:1px solid rgba(0,237,170,.12);padding-bottom:8px;margin-bottom:10px}
 .trade-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
 .trade-table{width:100%;border-collapse:collapse;font-size:10px;min-width:420px}
 .trade-table th{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:7px;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg3)}
@@ -460,6 +462,17 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- OPEN POSITIONS -->
+  <div class="pos-panel" id="positions-panel" style="display:none">
+    <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
+    <div class="trade-table-wrap">
+      <table class="trade-table">
+        <thead><tr><th>Token</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th></tr></thead>
+        <tbody id="positions-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
   <!-- TRADE MODE -->
   <div class="modes">
     <div class="mode" id="trade-card">
@@ -663,7 +676,7 @@ function skipToApp(){
   launchApp();
 }
 
-function launchApp(){
+async function launchApp(){
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
   document.getElementById('s-pos').textContent='0/3';
@@ -680,7 +693,7 @@ function launchApp(){
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   }
   updateAuthBtns();
-  fetchState();
+  await fetchState();
   fetchTrades();
   fetchTotd();
 }
@@ -734,10 +747,9 @@ async function fetchState(){
   traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
-  if(r.tokens&&r.tokens.length){
-    renderMarket(r.tokens);
-    if(!_totdNextAt) fetchTotd();
-  }
+  renderMarket(r.tokens||[]);
+  if((r.tokens||[]).length&&!_totdNextAt) fetchTotd();
+  renderPositions(r.positions_detail||[]);
 }
 
 async function fetchMarketOnly(){
@@ -805,7 +817,12 @@ function renderMarket(tokens){
   const count=document.getElementById('token-count');
 
   if(!tokens?.length){
-    grid.innerHTML='<div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>';
+    // Only replace if not already showing a token grid (avoids flicker on slow re-scan)
+    if(!_marketTokens.length)
+      grid.innerHTML='<div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>';
+    else
+      grid.innerHTML='<div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">NO QUALIFYING TOKENS RIGHT NOW — RESCANNING...</div>';
+    if(count) count.textContent='';
     return;
   }
 
@@ -895,6 +912,7 @@ async function fetchTotd(){
     const best=_marketTokens.reduce((a,b)=>(b.score??0)>(a.score??0)?b:a,_marketTokens[0]);
     renderTotd(best);
     _chartMint=best.mint;
+    _totdNextAt=Date.now()+900000;
   }
   if(_chartMint) loadChart(_chartMint);
 }
@@ -1118,7 +1136,7 @@ function renderPnlChart(curve){
   const svg=document.getElementById('pnl-chart');
   const W=600,H=110,PAD=14;
   if(!curve.length){
-    svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" dominant-baseline="middle" fill="var(--muted)" font-size="11" font-family="Share Tech Mono,monospace">No trades yet today</text>`;
+    svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" dominant-baseline="middle" fill="#4a7095" font-size="11" font-family="Share Tech Mono,monospace" letter-spacing="0.08em">NO TRADES YET TODAY</text>`;
     return;
   }
   const pts=[{t:'start',v:0},...curve];
@@ -1146,6 +1164,24 @@ function renderPnlChart(curve){
     ${zeroLine}
     <circle cx="${mX(pts.length-1)}" cy="${mY(lastV)}" r="3.5" fill="${col}"/>
   `;
+}
+
+function renderPositions(detail){
+  const panel=document.getElementById('positions-panel');
+  if(!detail||!detail.length){panel.style.display='none';return;}
+  panel.style.display='block';
+  document.getElementById('pos-count').textContent=detail.length+'/3';
+  document.getElementById('positions-tbody').innerHTML=detail.map(p=>{
+    const cls=p.pnl>=0?'td-pos':'td-neg';
+    const sign=p.pnl>=0?'+':'';
+    return `<tr>
+      <td class="td-sym">${esc(p.symbol||'???')}</td>
+      <td>${fmtPrice(p.entry||0)}</td>
+      <td>${fmtPrice(p.current||0)}</td>
+      <td>$${(p.spend||0).toFixed(2)}</td>
+      <td class="${cls}">${sign}$${Math.abs(p.pnl||0).toFixed(2)}<span style="opacity:.55;font-size:9px;margin-left:4px">(${sign}${(p.pnl_pct||0).toFixed(1)}%)</span></td>
+    </tr>`;
+  }).join('');
 }
 
 function updateBtns(){

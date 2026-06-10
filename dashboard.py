@@ -373,9 +373,9 @@ def score_token(data):
 
 # ── BACKGROUND LOOPS ──
 def totd_loop():
-    for _ in range(20):
+    for _ in range(60):
         if state['tokens']: break
-        time.sleep(30)
+        time.sleep(5)
     while True:
         try:
             tokens = state['tokens']
@@ -441,9 +441,11 @@ def token_loop():
                 all_tokens.append(entry)
             # Sort by 1h % descending — biggest 1h gainers first
             display = sorted(all_tokens, key=lambda t: t['change1h'], reverse=True)
+            state['tokens'] = display
             if display:
-                state['tokens'] = display
                 add_log('Market refresh: ' + str(len(display)) + ' trending tokens (h1≥50%)')
+            else:
+                add_log('Market refresh: no qualifying tokens yet (h1≥50% filter active)')
         except: pass
         time.sleep(90)
 
@@ -792,14 +794,31 @@ def api_state():
     if wallet:
         us       = get_user_state(wallet)
         open_pos = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+        live_map = {t['mint']: t for t in state.get('tokens', [])}
+        positions_detail = []
+        for mint, pos in us.get('positions', {}).items():
+            if pos.get('amount', 0) > 0:
+                live        = live_map.get(mint, {})
+                cur_price   = live.get('price', pos['buy_price'])
+                symbol      = live.get('symbol', mint[:8])
+                entry       = pos['buy_price']
+                pnl         = round(pos['amount'] * (cur_price - entry), 4) if entry > 0 else 0.0
+                pnl_pct     = round((cur_price - entry) / entry * 100, 2)   if entry > 0 else 0.0
+                positions_detail.append({
+                    'mint': mint, 'symbol': symbol,
+                    'entry': entry, 'current': cur_price,
+                    'spend': round(pos.get('spend', 0), 2),
+                    'pnl': pnl, 'pnl_pct': pnl_pct,
+                })
         return jsonify({
-            'trader_running': us.get('trader_running', False),
-            'usdc': us.get('usdc', 0.0),
-            'sol':  us.get('sol',  0.0),
-            'positions': open_pos,
-            'log_lines': state['log_lines'][:40],
-            'tokens':    state['tokens'],
-            'wallet':    wallet,
+            'trader_running':   us.get('trader_running', False),
+            'usdc':             us.get('usdc', 0.0),
+            'sol':              us.get('sol',  0.0),
+            'positions':        open_pos,
+            'positions_detail': positions_detail,
+            'log_lines':        state['log_lines'][:40],
+            'tokens':           state['tokens'],
+            'wallet':           wallet,
         })
     return jsonify({
         'trader_running': state['trader_running'],
