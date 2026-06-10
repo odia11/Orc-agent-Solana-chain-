@@ -295,7 +295,6 @@ def token_loop():
         try:
             mints      = discover_tokens()
             all_tokens = []
-            hot_tokens = []
             for mint in mints:
                 data = get_token_data(mint)
                 if not data or data['price'] <= 0 or data['liquidity'] < 10000:
@@ -317,15 +316,11 @@ def token_loop():
                     'score':     sc,
                 }
                 all_tokens.append(entry)
-                # Momentum filter: pumping RIGHT NOW
-                if (data['change5m'] >= 20 or data['change1h'] >= 30) and data['volume5m'] >= 5000:
-                    hot_tokens.append(entry)
-            # Show pumping tokens first; fall back to all tokens if none qualify
-            display = sorted(hot_tokens, key=lambda t: t['score'], reverse=True) or \
-                      sorted(all_tokens, key=lambda t: t['score'], reverse=True)
+            # Sort by m5 % descending — biggest pumpers first
+            display = sorted(all_tokens, key=lambda t: t['change5m'], reverse=True)
             if display:
                 state['tokens'] = display
-                pumping = len(hot_tokens)
+                pumping = sum(1 for t in display if t['change5m'] >= 20 or t['change1h'] >= 30)
                 add_log('Market refresh: ' + str(len(display)) + ' tokens' +
                         (' (' + str(pumping) + ' pumping)' if pumping else ' (none pumping)'))
         except: pass

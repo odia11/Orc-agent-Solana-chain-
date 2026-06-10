@@ -154,6 +154,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* pump badge */
 .pump-badge{display:inline-flex;align-items:center;gap:4px;background:rgba(0,237,170,.12);border:1px solid rgba(0,237,170,.35);color:var(--green);font-size:7px;font-weight:700;letter-spacing:.12em;font-family:'Orbitron',monospace;padding:3px 8px;border-radius:3px;margin-bottom:7px}
+/* dimmed / cooling tokens */
+.mkt-card.dim{opacity:0.28;filter:saturate(0.15);pointer-events:auto}
+.mkt-card.dim:hover{opacity:.55;filter:saturate(0.4)}
+.grid-sep{grid-column:1/-1;display:flex;align-items:center;gap:12px;padding:6px 2px}
+.grid-sep-line{flex:1;height:1px;background:var(--border)}
+.grid-sep-lbl{font-size:7px;color:var(--border2);text-transform:uppercase;letter-spacing:.14em;white-space:nowrap;font-family:'Orbitron',monospace}
 
 /* m5 momentum row */
 .m5-row{display:flex;align-items:baseline;gap:6px;margin-bottom:5px}
@@ -779,32 +785,31 @@ function renderMarket(tokens){
     return;
   }
 
-  if(count) count.textContent=tokens.length+' tokens';
+  // Split: positive = m5 ≥ 0 AND change24h ≥ 0 (both positive)
+  const posTokens=tokens.filter(t=>(t.change5m??0)>=0&&(t.change24h??0)>=0);
+  const negTokens=tokens.filter(t=>(t.change5m??0)<0||(t.change24h??0)<0);
+  if(count) count.textContent=posTokens.length+' active'+(negTokens.length?' · '+negTokens.length+' cooling':'');
 
-  grid.innerHTML=tokens.map(t=>{
+  const makeCard=(t,dim)=>{
     const m5=t.change5m??0;
     const h1=t.change1h??0;
     const m5Abs=Math.abs(m5).toFixed(1);
     const m5Str=(m5>=0?'+':'-')+m5Abs+'%';
     const m5Cls=m5>=0?'up':'dn';
-    const hot=t.score>=7, warm=t.score>=5, cold=t.score<=2;
-    const cardCls='mkt-card'+(hot?' hot':cold?' cold':'');
-    const pumping=m5>=20;
+    const hot=t.score>=7, cold=t.score<=2;
+    const baseCls='mkt-card'+(hot?' hot':cold?' cold':'')+(dim?' dim':'');
+    const pumping=m5>=20&&!dim;
     const sigLabel=hot?'BUY':cold?'SELL':'HOLD';
     const sigCls=hot?'mkt-sig sig-buy':cold?'mkt-sig sig-sell':'mkt-sig sig-hold';
-
-    // score bar: map [0,10] → [0%,100%]
     const barPct=Math.min(100,Math.max(0,t.score/10*100)).toFixed(1);
     const barColor=hot?'var(--green)':cold?'var(--red)':'var(--yellow)';
     const scoreCol=hot?'var(--green)':cold?'var(--red)':'var(--muted)';
-
     const vol5m=fmtNum(t.volume5m||0);
     const liq=fmtNum(t.liquidity||0);
     const mcap=fmtNum(t.fdv||0);
     const h1Str=(h1>=0?'+':'')+h1.toFixed(1)+'%';
     const h1Cls=h1>=0?'up':'dn';
-
-    return `<div class="${cardCls}" onclick="window.open('https://dexscreener.com/solana/${t.mint}')">
+    return `<div class="${baseCls}" onclick="window.open('https://dexscreener.com/solana/${t.mint}')">
   <div class="mkt-top">
     <div class="mkt-id">
       <div class="mkt-sym">${t.symbol||'???'}</div>
@@ -833,7 +838,14 @@ function renderMarket(tokens){
     <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
 </div>`;
-  }).join('');
+  };
+
+  let html=posTokens.map(t=>makeCard(t,false)).join('');
+  if(negTokens.length){
+    html+=`<div class="grid-sep"><div class="grid-sep-line"></div><span class="grid-sep-lbl">Cooling / Negative</span><div class="grid-sep-line"></div></div>`;
+    html+=negTokens.map(t=>makeCard(t,true)).join('');
+  }
+  grid.innerHTML=html;
 
   // ticker bar
   const tickHtml=tokens.map(t=>{
