@@ -1,6 +1,27 @@
+# Environment
 .env
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-.DS_Store
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
 *.log
+
+# PyInstaller
+build/
+dist/
+*.spec
+*.exe
+
+# Batch / OS
+*.bat
+.DS_Store
+
+# Editor / tooling
+.claude/

@@ -1,135 +1,106 @@
-# 🐋 OrcAgent — Solana Smart Scalper + Sniper
+# OrcAgent — Solana Meme Coin Trading Bot
 
-> Autonomous Solana meme coin trading bot with AI-powered decision making, new token sniping, and a live dashboard.
-
-![OrcAgent Dashboard](assets/preview.png)
+Autonomous Solana meme coin scalper with a live web dashboard. Deployed on Railway. Connect your Phantom or Solflare wallet to start trading.
 
 ---
 
-## ⚡ Quick Start (Windows)
+## How It Works
 
-### Option 1 — Download the App (Easiest)
-1. Go to [Releases](../../releases) and download `OrcAgent.exe`
-2. Double-click to run
-3. If Windows shows a SmartScreen warning → click **"More info"** → **"Run anyway"** (normal for unsigned apps)
-4. Browser opens automatically at `http://localhost:5000`
-5. Fill in the setup wizard and click **Launch OrcAgent**
+1. **Connect wallet** — Phantom or Solflare. Your wallet address is your user ID.
+2. **Add your trading private key** in Settings (encrypted with Fernet before storage).
+3. **Start Trading** — the bot scans live tokens from DexScreener every 2 minutes, scores them, and auto-buys/sells.
 
-### Option 2 — Run from Source (Advanced)
+Multi-user: each wallet address gets independent positions, P&L, and settings.
+
+---
+
+## Features
+
+- Live token discovery from DexScreener (top boosted + latest profiles)
+- Momentum scoring: 5m/1h price change, volume, buy/sell ratio, liquidity
+- Auto-buy at score ≥ 5, auto-sell at score ≤ −3
+- Per-user daily P&L tracking with SVG chart and trade history
+- Token of the Day — auto-rotates every 15 minutes to the top 24h performer
+- Live market grid with signal badges (BUY / SELL / HOLD)
+- Wallet balance (SOL + USDC) pulled directly from Solana RPC
+- Private keys encrypted with Fernet, decrypted only in memory during swaps, never exposed in API responses
+
+---
+
+## Deploy to Railway
+
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app)
+
+1. Fork this repo
+2. Create a new Railway project from your fork
+3. Set environment variables (see `.env.example`):
+   - `ANTHROPIC_API_KEY` — from [console.anthropic.com](https://console.anthropic.com)
+   - `ENCRYPTION_KEY` — generate with the command below
+   - `SECRET_KEY` — any random string
+4. Railway picks up `Procfile` automatically and runs gunicorn
+
+```bash
+# Generate ENCRYPTION_KEY
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+---
+
+## Run Locally
+
 ```bash
 git clone https://github.com/odia11/Orc-agent-Solana-chain-.git
 cd Orc-agent-Solana-chain-
 pip install -r requirements.txt
-python app.py
+cp .env.example .env   # fill in your values
+python dashboard.py
 ```
-Then open `http://localhost:5000` in your browser.
+
+Open `http://localhost:5000`, connect your wallet, configure settings, and start trading.
 
 ---
 
-## 🔧 Setup
+## Project Structure
 
-You'll need:
-
-| Field | Where to get it |
-|---|---|
-| **Anthropic API Key** | [console.anthropic.com](https://console.anthropic.com) → API Keys |
-| **Wallet Address** | Your Solana wallet public key (e.g. from Phantom) |
-| **Private Key** | Phantom → Settings → Export Private Key |
-
-> ⚠️ Your private key is stored **only on your local PC** in a `.env` file. It is never sent anywhere except to sign transactions on the Solana blockchain.
-
----
-
-## 🤖 Features
-
-### Trade Mode
-- Scans **7 Solana meme coins** every 5 minutes
-- Uses **Claude AI (Haiku)** to score each token on momentum, volume, buy/sell ratio, and liquidity
-- Auto-buys when score exceeds threshold
-- Auto-exits at:
-  - ✅ **15% Take Profit**
-  - 🛑 **5% Stop Loss**
-  - 📉 **3% Trailing Stop**
-
-### Snipe Mode
-- Watches **DexScreener** every 15 seconds for brand new token launches
-- Queues tokens for a configurable delay (default 10 min)
-- Runs safety checks before buying:
-  - ❌ Skips tokens with freeze authority set (rug risk)
-  - ❌ Skips tokens with liquidity too low or too high
-  - ✅ Buys tokens that pass all checks
-- Auto-sells sniped tokens at same TP/SL/trailing levels
-
-### Dashboard
-- 🐋 Live ORC logo and dancing animation on every trade
-- Connect **Phantom wallet** for live balance updates
-- Real-time log of all bot activity
-- Token signal scores updated every minute
-- Sniper queue with countdown timers
-
----
-
-## ⚙️ Configuration
-
-All settings configurable from the dashboard or via `.env`:
-
-```env
-ANTHROPIC_API_KEY=sk-ant-...
-WALLET_ADDRESS=57ENjXjh...
-WALLET_PRIVATE_KEY=your_base58_key
-
-# Trading
-STOP_LOSS=0.05          # 5% stop loss
-TAKE_PROFIT=0.15        # 15% take profit
-TRAILING_STOP=0.03      # 3% trailing stop
-MAX_TRADE_PCT=0.20      # max 20% of balance per trade
-MAX_OPEN_POSITIONS=3    # max simultaneous positions
-MIN_USDC_RESERVE=3.0    # always keep $3 in reserve
-INTERVAL=300            # scan every 300 seconds
-
-# Sniper
-SNIPER_AMOUNT=1.0       # USDC per snipe
-SNIPER_MIN_LIQ=1000     # min liquidity to snipe ($)
-SNIPER_MAX_LIQ=50000    # max liquidity to snipe ($)
-SNIPER_DELAY=600        # seconds to wait before buying
+```
+dashboard.py          — Flask server: API routes, background loops, SQLite, Fernet encryption
+dashboard.html        — Single-page frontend: wallet auth, live market, settings modal
+orcagent_solana.py    — Jupiter swap execution (called as subprocess with env-var private key)
+requirements.txt      — Python dependencies
+Procfile              — Railway / gunicorn entry point
+railway.json          — Railway config
+.env.example          — Environment variable template
+assets/               — SVG logo assets
 ```
 
 ---
 
-## 📦 Requirements (Source)
+## Environment Variables
 
-```
-anthropic
-solders
-requests
-python-dotenv
-flask
-```
-
-Install with:
-```bash
-pip install anthropic solders requests python-dotenv flask
-```
+| Variable | Required | Description |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | Yes | Claude API key for AI trade decisions |
+| `ENCRYPTION_KEY` | Yes | Fernet key for encrypting private keys at rest |
+| `SECRET_KEY` | Yes | Flask session secret |
+| `WALLET_ADDRESS` | No | Default wallet for balance display |
+| `PORT` | No | Server port (Railway sets this automatically) |
 
 ---
 
-## ⚠️ Disclaimer
+## Security Notes
 
-This bot trades real money on the Solana blockchain. Meme coin trading is extremely high risk. You can lose your entire balance. Use only money you can afford to lose. This is not financial advice.
-
-- Start with small amounts ($1–5 per trade)
-- Monitor the bot regularly
-- Keep most of your funds off the trading wallet
-
----
-
-## 🔗 Links
-
-- [Solscan](https://solscan.io) — verify your transactions
-- [Jupiter](https://jup.ag) — swap tokens manually
-- [DexScreener](https://dexscreener.com) — token charts
-- [Phantom](https://phantom.app) — Solana wallet
+- Private keys are **never stored raw** — Fernet-encrypted before writing to SQLite
+- Keys are **decrypted in memory only** when a swap is being executed
+- Keys are **wiped from memory** immediately after the trade thread exits
+- Keys are **never returned** in any API response
+- Use a dedicated trading wallet with only the funds you're willing to risk
 
 ---
 
-Made with 🐋 by [@degentrader1990](https://github.com/odia11)
+## Disclaimer
+
+This bot trades real money on Solana. Meme coin trading is extremely high risk. You can lose your entire balance. Use only funds you can afford to lose. This is not financial advice.
+
+---
+
+Made with by [@odia11](https://github.com/odia11)
