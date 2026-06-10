@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools
 from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.fernet import Fernet
@@ -7,6 +7,10 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY', 'orcagent-dev-secret-change-in-prod')
+app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(hours=24)
+app.config['SESSION_COOKIE_HTTPONLY']    = True
+app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
+app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -27,18 +31,68 @@ if _enc_key_str:
     except Exception:
         _k = Fernet.generate_key()
         _fernet = Fernet(_k)
-        print('WARNING: Invalid ENCRYPTION_KEY format. Ephemeral key used: ' + _k.decode(), flush=True)
+        print('WARNING: Invalid ENCRYPTION_KEY format — ephemeral key in use. Private keys will NOT survive restart.', flush=True)
 else:
     _k = Fernet.generate_key()
     _fernet = Fernet(_k)
-    print('WARNING: ENCRYPTION_KEY not set. Private keys will NOT survive restart.', flush=True)
-    print('Set ENCRYPTION_KEY=' + _k.decode() + ' in your environment.', flush=True)
+    print('WARNING: ENCRYPTION_KEY not set — private keys will NOT survive restart. '
+          'Generate one: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" '
+          'and set it as ENCRYPTION_KEY env var.', flush=True)
 
 def encrypt_key(raw: str) -> str:
     return _fernet.encrypt(raw.encode()).decode()
 
 def decrypt_key(enc: str) -> str:
     return _fernet.decrypt(enc.encode()).decode()
+
+# ── INPUT VALIDATION ──
+_SOLANA_ADDR_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
+_SOLANA_KEY_RE  = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{44,88}$')
+
+def is_valid_solana_address(addr: str) -> bool:
+    return bool(_SOLANA_ADDR_RE.match(addr or ''))
+
+def is_valid_solana_private_key(key: str) -> bool:
+    key = (key or '').strip()
+    if _SOLANA_KEY_RE.match(key):
+        return True
+    if key.startswith('[') and key.endswith(']'):
+        try:
+            arr = json.loads(key)
+            return (isinstance(arr, list) and len(arr) in (32, 64)
+                    and all(isinstance(b, int) and 0 <= b <= 255 for b in arr))
+        except Exception:
+            pass
+    return False
+
+# ── RATE LIMITING ──
+_rl_lock: threading.Lock = threading.Lock()
+_rl_hits: dict           = {}
+
+def _rate_ok(key: str, limit: int, window: int) -> bool:
+    now = time.time()
+    with _rl_lock:
+        hits = [t for t in _rl_hits.get(key, []) if now - t < window]
+        if len(hits) >= limit:
+            _rl_hits[key] = hits
+            return False
+        hits.append(now)
+        _rl_hits[key] = hits
+        return True
+
+def rate_limit(limit: int, window: int = 60):
+    def decorator(f):
+        @functools.wraps(f)
+        def wrapped(*args, **kwargs):
+            key = f.__name__ + ':' + (request.remote_addr or '0.0.0.0')
+            if not _rate_ok(key, limit, window):
+                return jsonify({'ok': False, 'msg': 'Too many requests — slow down'}), 429
+            return f(*args, **kwargs)
+        return wrapped
+    return decorator
+
+# ── TRADER LOCK (prevents double-start race condition) ──
+_trader_lock = threading.Lock()
 
 # ── SQLITE DATABASE ──
 def init_db():
@@ -533,8 +587,8 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     user_id          = row[0]
-    max_usdc         = float(row[2] or config.get('max_usdc', 12.5))
-    daily_loss_limit = abs(float(row[3] or config.get('daily_loss_limit', 50.0)))
+    max_usdc         = float(row[2] if row[2] is not None else 12.5)
+    daily_loss_limit = abs(float(row[3] if row[3] is not None else 50.0))
 
     try:
         private_key = decrypt_key(row[1])
@@ -609,15 +663,27 @@ def user_trader_loop(stop_event, config, wallet: str):
 #  FLASK ROUTES
 # ══════════════════════════════════════════════════════
 
+@app.after_request
+def _security_headers(resp):
+    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
+    resp.headers.setdefault('X-Frame-Options',        'DENY')
+    resp.headers.setdefault('X-XSS-Protection',       '1; mode=block')
+    resp.headers.setdefault('Referrer-Policy',        'strict-origin-when-cross-origin')
+    return resp
+
 @app.route('/')
 def index():
     return send_from_directory(BASE, 'dashboard.html')
 
 # ── WALLET ──
 @app.route('/api/wallet/set', methods=['POST'])
+@rate_limit(10, 60)
 def set_wallet():
     address = (request.json or {}).get('address', '').strip()
     if address:
+        if not is_valid_solana_address(address):
+            return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
+        session.permanent = True
         session['wallet'] = address
         state['wallet']   = address
         try:
@@ -646,14 +712,23 @@ def get_settings():
     return jsonify({'ok': True, 'has_key': False, 'max_trade_size': 12.5, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
+@rate_limit(10, 60)
 def save_settings():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
-    data             = request.json or {}
-    private_key_raw  = data.get('private_key', '').strip()
-    max_trade_size   = float(data.get('max_trade_size', 12.5))
-    daily_loss_limit = float(data.get('daily_loss_limit', 50.0))
+    data            = request.json or {}
+    private_key_raw = data.get('private_key', '').strip()
+    try:
+        max_trade_size = float(data.get('max_trade_size', 12.5))
+    except (ValueError, TypeError):
+        max_trade_size = 12.5
+    try:
+        daily_loss_limit = float(data.get('daily_loss_limit', 50.0))
+    except (ValueError, TypeError):
+        daily_loss_limit = 50.0
+    max_trade_size   = max(0.5,  min(max_trade_size,   10000.0))
+    daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
 
     conn = sqlite3.connect(DB_FILE)
     c    = conn.cursor()
@@ -661,11 +736,14 @@ def save_settings():
     row  = c.fetchone()
 
     if private_key_raw:
+        if not is_valid_solana_private_key(private_key_raw):
+            conn.close()
+            return jsonify({'ok': False, 'msg': 'Invalid private key format — paste the base58 or JSON array key from your wallet'})
         try:
             encrypted = encrypt_key(private_key_raw)
-        except Exception as e:
+        except Exception:
             conn.close()
-            return jsonify({'ok': False, 'msg': 'Encryption failed: ' + str(e)})
+            return jsonify({'ok': False, 'msg': 'Failed to save private key'})
     else:
         encrypted = row[1] if row else ''
 
@@ -706,18 +784,20 @@ def api_state():
 
 # ── TRADER START/STOP ──
 @app.route('/api/trader/start', methods=['POST'])
+@rate_limit(5, 60)
 def start_trader():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
-    us = get_user_state(wallet)
-    if us['trader_running']:
-        return jsonify({'ok': False, 'msg': 'Already running'})
-    config = request.json or {}
-    us['trader_stop']   = threading.Event()
-    us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)
-    us['trader_thread'].start()
-    us['trader_running'] = True
+    with _trader_lock:
+        us = get_user_state(wallet)
+        if us['trader_running']:
+            return jsonify({'ok': False, 'msg': 'Already running'})
+        config = request.json or {}
+        us['trader_stop']   = threading.Event()
+        us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)
+        us['trader_thread'].start()
+        us['trader_running'] = True
     return jsonify({'ok': True})
 
 @app.route('/api/trader/stop', methods=['POST'])
@@ -743,7 +823,10 @@ def api_totd():
     return jsonify({'token': state.get('token_of_the_day'), 'updated_at': updated, 'next_update_in': round(next_in)})
 
 @app.route('/api/chart/<mint>')
+@rate_limit(30, 60)
 def api_chart(mint):
+    if not _SOLANA_ADDR_RE.match(mint or ''):
+        return jsonify({'candles': [], 'error': 'invalid mint'})
     try:
         r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
         pairs = r.json().get('pairs', []) if r.status_code == 200 else []
@@ -821,8 +904,8 @@ def api_chart(mint):
                 ]
 
         return jsonify({'candles': candles, 'pair_address': pair_address})
-    except Exception as e:
-        return jsonify({'candles': [], 'error': str(e)})
+    except Exception:
+        return jsonify({'candles': [], 'error': 'Chart data unavailable'})
 
 @app.route('/api/trades')
 def api_trades():
