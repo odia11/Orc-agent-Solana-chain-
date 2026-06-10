@@ -961,7 +961,8 @@ function renderCandleChart(canvas,candles){
 
   const sy=v=>PAD.top+cH-((v-lo)/range)*cH;
   const sx=i=>PAD.left+(i+0.5)*step;
-  const bw=Math.max(1.5,step-1.5);
+  // Cap body width — prevents enormous bars when only 2–4 candles are present
+  const bw=Math.max(1.5,Math.min(14,step-1.5));
 
   // Grid lines
   ctx.strokeStyle='rgba(42,64,96,.35)';
@@ -977,7 +978,8 @@ function renderCandleChart(canvas,candles){
   const up=lastC>=firstC;
   const lineCol=up?'#00edaa':'#ff4d6a';
 
-  if(hasFull){
+  // Use candlesticks only when we have enough bars for them to look right
+  if(hasFull&&n>=5){
     // Candlestick chart
     candles.forEach((c,i)=>{
       const x=sx(i);
@@ -1024,15 +1026,16 @@ function renderCandleChart(canvas,candles){
     ctx.fillText(fmtPrice(price),W-PAD.right+4,sy(price)+3);
   });
 
-  // Time labels
+  // Time labels — skip middle when it coincides with first or last (e.g. n=2)
   ctx.textAlign='center';
   ctx.fillStyle='rgba(74,112,149,.8)';
   ctx.font='7px Share Tech Mono,monospace';
   if(candles[0]?.t){
     const fmt=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
+    const midIdx=Math.floor(n/2);
     ctx.fillText(fmt(candles[0].t),sx(0),H-4);
-    ctx.fillText(fmt(candles[Math.floor(n/2)].t),sx(Math.floor(n/2)),H-4);
-    ctx.fillText(fmt(candles[n-1].t),sx(n-1),H-4);
+    if(midIdx>0&&midIdx<n-1) ctx.fillText(fmt(candles[midIdx].t),sx(midIdx),H-4);
+    if(n>1) ctx.fillText(fmt(candles[n-1].t),sx(n-1),H-4);
   }
 }
 

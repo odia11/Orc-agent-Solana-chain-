@@ -733,6 +733,9 @@ def api_chart(mint):
             'Referer': 'https://dexscreener.com/',
         })
 
+        def _norm_ts(t):
+            return int(t) // 1000 if t > 1e10 else int(t)
+
         candles = []
         if rc.status_code == 200:
             data = rc.json()
@@ -744,7 +747,8 @@ def api_chart(mint):
                 lows   = data.get('l', [])
                 closes = data.get('c', [])
                 vols   = data.get('v', [])
-                for i, t_ts in enumerate(ts_arr):
+                for i, raw_ts in enumerate(ts_arr):
+                    t_ts = _norm_ts(raw_ts)
                     if t_ts >= from_ts:
                         candles.append({
                             't': t_ts,
@@ -757,7 +761,7 @@ def api_chart(mint):
             elif isinstance(data, list):
                 for c in data:
                     if not isinstance(c, dict): continue
-                    t_ts = c.get('time', c.get('t', 0))
+                    t_ts = _norm_ts(c.get('time', c.get('t', 0)))
                     if t_ts >= from_ts:
                         candles.append({
                             't': t_ts,
@@ -769,6 +773,19 @@ def api_chart(mint):
                         })
             candles.sort(key=lambda x: x['t'])
             candles = candles[-30:]
+
+        # Fallback: synthesize 2 data points from current price + m5 change when
+        # the chart API returns nothing (rate-limited, new token, API down, etc.)
+        if not candles:
+            current_price = float(pair.get('priceUsd', 0) or 0)
+            change5m = float((pair.get('priceChange') or {}).get('m5', 0) or 0)
+            if current_price > 0:
+                factor = max(1 + change5m / 100, 0.0001)
+                p_ago  = current_price / factor
+                candles = [
+                    {'t': now - 300, 'o': 0, 'h': 0, 'l': 0, 'c': p_ago,          'v': 0},
+                    {'t': now,       'o': 0, 'h': 0, 'l': 0, 'c': current_price,   'v': 0},
+                ]
 
         return jsonify({'candles': candles, 'pair_address': pair_address})
     except Exception as e:
