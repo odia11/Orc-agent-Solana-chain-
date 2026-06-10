@@ -458,7 +458,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
-      <button class="hdr-btn" onclick="openSettings()">⚙ Settings</button>
+      <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
     </div>
@@ -714,7 +714,8 @@ async function connectWalletOnboard(type){
     phantomKey=pubkey.toString();
     walletType=name;
     sessionStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
-    fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).catch(()=>{});
+    fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
+      .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } }).catch(()=>{});
     document.getElementById('wallet-type-label').textContent=name+' wallet connected';
     document.getElementById('wallet-addr').textContent=phantomKey;
     document.getElementById('wallet-connected').style.display='flex';
@@ -760,6 +761,21 @@ async function launchApp(){
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
     fetchBalance();
+    // Pre-load saved settings so key status is visible immediately without opening the modal
+    fetch('/api/settings').then(r=>r.json()).then(r=>{
+      if(r?.ok){
+        settingsHasKey=r.has_key||false;
+        updateKeyIndicator();
+        // Pre-populate fields so they are ready when the user opens the modal
+        document.getElementById('s-maxusdc').value=r.max_trade_size||1;
+        document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
+        if(settingsHasKey){
+          const hint=document.getElementById('s-key-hint');
+          hint.style.color='var(--green)';
+          hint.textContent='✓ key saved (encrypted)';
+        }
+      }
+    }).catch(()=>{});
   } else {
     // View-only: hide trade button, show notice
     const tb=document.getElementById('trade-btn');
@@ -1301,7 +1317,9 @@ async function toggleTrader(){
       document.getElementById('phantom-ob-btn').style.display='none';
       document.getElementById('solflare-ob-btn').style.display='none';
       document.getElementById('wallet-back-btn').style.display='block';
-      fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).catch(()=>{});
+      // Re-register session with server and capture has_key so we know immediately if key is saved
+      fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
+        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } }).catch(()=>{});
       launchApp();
       return;
     }
@@ -1315,6 +1333,10 @@ localStorage.clear();
 
 // ── SETTINGS MODAL ──
 let settingsHasKey=false;
+function updateKeyIndicator(){
+  const btn=document.getElementById('settings-btn');
+  if(btn) btn.textContent=settingsHasKey?'⚙ Settings ✓':'⚙ Settings';
+}
 async function openSettings(){
   const modal=document.getElementById('settings-modal');
   modal.classList.add('open');
@@ -1334,6 +1356,7 @@ async function openSettings(){
       const hint=document.getElementById('s-key-hint');
       hint.style.color='var(--green)';
       hint.textContent=settingsHasKey?'✓ key saved (encrypted)':'';
+      updateKeyIndicator();
     }
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
@@ -1383,7 +1406,7 @@ async function saveSettings(){
       document.getElementById('s-privkey').value='';
       const hint=document.getElementById('s-key-hint');
       hint.style.color='var(--green)'; hint.textContent='✓ key saved (encrypted)';
-      settingsHasKey=true;
+      settingsHasKey=true; updateKeyIndicator();
     } else {
       msgEl.textContent='✓ Trade settings updated.';
     }

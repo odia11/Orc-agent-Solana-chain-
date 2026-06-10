@@ -29,20 +29,36 @@ USDC_MINT      = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC     = 'https://api.mainnet-beta.solana.com'
 
 # ── FERNET ENCRYPTION ──
+# Priority: ENCRYPTION_KEY env var → key persisted in DB → generate and persist in DB.
+# Storing the key in the DB means private keys survive server restarts even without an env var.
 _enc_key_str = os.environ.get('ENCRYPTION_KEY', '')
+_fernet: 'Fernet | None' = None
+
 if _enc_key_str:
     try:
         _fernet = Fernet(_enc_key_str.encode())
     except Exception:
-        _k = Fernet.generate_key()
-        _fernet = Fernet(_k)
-        print('WARNING: Invalid ENCRYPTION_KEY format — ephemeral key in use. Private keys will NOT survive restart.', flush=True)
-else:
-    _k = Fernet.generate_key()
-    _fernet = Fernet(_k)
-    print('WARNING: ENCRYPTION_KEY not set — private keys will NOT survive restart. '
-          'Generate one: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())" '
-          'and set it as ENCRYPTION_KEY env var.', flush=True)
+        print('WARNING: Invalid ENCRYPTION_KEY env var — falling back to DB-persisted key.', flush=True)
+
+if _fernet is None:
+    _cfg_db  = sqlite3.connect(DB_FILE)
+    _cfg_cur = _cfg_db.cursor()
+    _cfg_cur.execute('CREATE TABLE IF NOT EXISTS server_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+    _cfg_cur.execute('SELECT value FROM server_config WHERE key="encryption_key"')
+    _cfg_row = _cfg_cur.fetchone()
+    if _cfg_row:
+        try:
+            _fernet = Fernet(_cfg_row[0].encode())
+        except Exception:
+            _cfg_row = None  # corrupt stored key — regenerate below
+    if not _cfg_row:
+        _gen_key = Fernet.generate_key()
+        _fernet  = Fernet(_gen_key)
+        _cfg_cur.execute('INSERT OR REPLACE INTO server_config (key, value) VALUES ("encryption_key", ?)',
+                         (_gen_key.decode(),))
+        print('OrcAgent: new encryption key generated and persisted to DB.', flush=True)
+    _cfg_db.commit()
+    _cfg_db.close()
 
 def encrypt_key(raw: str) -> str:
     return _fernet.encrypt(raw.encode()).decode()
@@ -111,6 +127,7 @@ def init_db():
         if 'x_username' in cols:
             c.execute('DROP TABLE users')
             conn.commit()
+    c.execute('CREATE TABLE IF NOT EXISTS server_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id                    INTEGER PRIMARY KEY AUTOINCREMENT,
         wallet_address        TEXT UNIQUE NOT NULL,
@@ -538,8 +555,8 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     try:
         private_key = decrypt_key(row[1])
-    except Exception as e:
-        add_log('[' + short + '] Key decryption failed: ' + str(e))
+    except Exception:
+        add_log('[' + short + '] ✗ Cannot decrypt private key — please re-save it in Settings')
         us['trader_running'] = False
         return
 
@@ -638,6 +655,17 @@ def set_wallet():
         except: pass
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_log('Wallet connected: ' + address[:6] + '...' + address[-4:])
+        has_key = False
+        try:
+            conn2 = sqlite3.connect(DB_FILE)
+            c2    = conn2.cursor()
+            c2.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (address,))
+            kr = c2.fetchone()
+            conn2.close()
+            has_key = bool(kr and kr[0])
+        except Exception:
+            pass
+        return jsonify({'ok': True, 'wallet': address, 'has_key': has_key})
     else:
         session.pop('wallet', None)
         state['wallet'] = WALLET_ADDRESS
