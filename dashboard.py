@@ -129,12 +129,13 @@ def get_user_state(wallet: str) -> dict:
     return user_states[wallet]
 
 # ── TOKEN DISCOVERY ──
-DISCOVERY_LIMIT = 20
-TOTD_INTERVAL   = 900  # 15 minutes
+TOTD_INTERVAL = 900  # 15 minutes
 
 def discover_tokens():
-    mints = []
     seen  = {USDC_MINT}
+    mints = []
+
+    # 1. Top boosted Solana tokens
     try:
         r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', timeout=10)
         if r.status_code == 200:
@@ -144,6 +145,24 @@ def discover_tokens():
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
     except: pass
+
+    # 2. Trending Solana tokens — mirrors DexScreener trending page (6h score)
+    try:
+        r = requests.get(
+            'https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6',
+            timeout=10
+        )
+        if r.status_code == 200:
+            data  = r.json()
+            pairs = data.get('pairs', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            for p in pairs:
+                if p.get('chainId') == 'solana':
+                    m = (p.get('baseToken') or {}).get('address', '')
+                    if m and m not in seen:
+                        seen.add(m); mints.append(m)
+    except: pass
+
+    # 3. Latest Solana token profiles
     try:
         r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
         if r.status_code == 200:
@@ -154,7 +173,8 @@ def discover_tokens():
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
     except: pass
-    return mints[:DISCOVERY_LIMIT]
+
+    return mints[:80]  # cap discovery to avoid excessive per-token API calls
 
 def add_log(msg):
     t = time.strftime('%H:%M:%S')
@@ -198,25 +218,32 @@ def get_token_data(mint):
         p    = pairs[0]
         base = p.get('baseToken', {})
         txns = p.get('txns', {})
-        # prefer m5 txns for recency, fall back to h1
-        m5_buys   = int(txns.get('m5', {}).get('buys',  0) or 0)
-        m5_sells  = int(txns.get('m5', {}).get('sells', 0) or 0)
-        h1_buys   = int(txns.get('h1', {}).get('buys',  0) or 0)
-        h1_sells  = int(txns.get('h1', {}).get('sells', 0) or 0)
+        m5_buys   = int(txns.get('m5',  {}).get('buys',  0) or 0)
+        m5_sells  = int(txns.get('m5',  {}).get('sells', 0) or 0)
+        h1_buys   = int(txns.get('h1',  {}).get('buys',  0) or 0)
+        h1_sells  = int(txns.get('h1',  {}).get('sells', 0) or 0)
+        h24_buys  = int(txns.get('h24', {}).get('buys',  0) or 0)
+        h24_sells = int(txns.get('h24', {}).get('sells', 0) or 0)
         return {
-            'symbol':    base.get('symbol', '') or '',
-            'name':      base.get('name', '') or '',
-            'price':     float(p.get('priceUsd', 0) or 0),
-            'change5m':  float(p.get('priceChange', {}).get('m5', 0) or 0),
-            'change1h':  float(p.get('priceChange', {}).get('h1', 0) or 0),
-            'change24h': float(p.get('priceChange', {}).get('h24', 0) or 0),
-            'liquidity': float(p.get('liquidity', {}).get('usd', 0) or 0),
-            'volume5m':  float(p.get('volume', {}).get('m5', 0) or 0),
-            'volume1h':  float(p.get('volume', {}).get('h1', 0) or 0),
-            'volume24h': float(p.get('volume', {}).get('h24', 0) or 0),
-            'fdv':       float(p.get('fdv', 0) or p.get('marketCap', 0) or 0),
-            'txns_buys':  m5_buys  or h1_buys,
-            'txns_sells': m5_sells or h1_sells,
+            'symbol':        base.get('symbol', '') or '',
+            'name':          base.get('name', '') or '',
+            'price':         float(p.get('priceUsd', 0) or 0),
+            'change5m':      float(p.get('priceChange', {}).get('m5',  0) or 0),
+            'change1h':      float(p.get('priceChange', {}).get('h1',  0) or 0),
+            'change6h':      float(p.get('priceChange', {}).get('h6',  0) or 0),
+            'change24h':     float(p.get('priceChange', {}).get('h24', 0) or 0),
+            'liquidity':     float(p.get('liquidity', {}).get('usd', 0) or 0),
+            'volume5m':      float(p.get('volume', {}).get('m5',  0) or 0),
+            'volume1h':      float(p.get('volume', {}).get('h1',  0) or 0),
+            'volume6h':      float(p.get('volume', {}).get('h6',  0) or 0),
+            'volume24h':     float(p.get('volume', {}).get('h24', 0) or 0),
+            'fdv':           float(p.get('fdv', 0) or p.get('marketCap', 0) or 0),
+            'txns_buys':     m5_buys  or h1_buys,
+            'txns_sells':    m5_sells or h1_sells,
+            'txns24h_buys':  h24_buys,
+            'txns24h_sells': h24_sells,
+            'txns24h':       h24_buys + h24_sells,
+            'makers24h':     int(p.get('makers', 0) or 0),
         }
     except: return None
 
@@ -297,32 +324,45 @@ def token_loop():
             all_tokens = []
             for mint in mints:
                 data = get_token_data(mint)
-                if not data or data['price'] <= 0 or data['liquidity'] < 10000:
+                if not data or data['price'] <= 0:
                     continue
-                sc     = score_token(data)
-                entry  = {
-                    'mint':      mint,
-                    'symbol':    data['symbol'] or mint[:8],
-                    'name':      data['name'] or data['symbol'] or mint[:8],
-                    'price':     data['price'],
-                    'change5m':  data['change5m'],
-                    'change1h':  data['change1h'],
-                    'change24h': data['change24h'],
-                    'volume5m':  data['volume5m'],
-                    'volume1h':  data['volume1h'],
-                    'volume24h': data['volume24h'],
-                    'liquidity': data['liquidity'],
-                    'fdv':       data['fdv'],
-                    'score':     sc,
+                # Trending filter — mirrors DexScreener pumpswap trending
+                if data['change1h'] < 50:
+                    continue
+                if data['liquidity'] < 10000:
+                    continue
+                if data['volume24h'] < 50000:
+                    continue
+                # txns24h==0 means data unavailable (new token); allow it through
+                if data['txns24h'] > 0 and data['txns24h'] < 500:
+                    continue
+                sc    = score_token(data)
+                entry = {
+                    'mint':          mint,
+                    'symbol':        data['symbol'] or mint[:8],
+                    'name':          data['name'] or data['symbol'] or mint[:8],
+                    'price':         data['price'],
+                    'change5m':      data['change5m'],
+                    'change1h':      data['change1h'],
+                    'change6h':      data['change6h'],
+                    'change24h':     data['change24h'],
+                    'volume5m':      data['volume5m'],
+                    'volume1h':      data['volume1h'],
+                    'volume24h':     data['volume24h'],
+                    'liquidity':     data['liquidity'],
+                    'fdv':           data['fdv'],
+                    'score':         sc,
+                    'txns24h':       data['txns24h'],
+                    'txns24h_buys':  data['txns24h_buys'],
+                    'txns24h_sells': data['txns24h_sells'],
+                    'makers24h':     data['makers24h'],
                 }
                 all_tokens.append(entry)
-            # Sort by m5 % descending — biggest pumpers first
-            display = sorted(all_tokens, key=lambda t: t['change5m'], reverse=True)
+            # Sort by 1h % descending — biggest 1h gainers first
+            display = sorted(all_tokens, key=lambda t: t['change1h'], reverse=True)
             if display:
                 state['tokens'] = display
-                pumping = sum(1 for t in display if t['change5m'] >= 20 or t['change1h'] >= 30)
-                add_log('Market refresh: ' + str(len(display)) + ' tokens' +
-                        (' (' + str(pumping) + ' pumping)' if pumping else ' (none pumping)'))
+                add_log('Market refresh: ' + str(len(display)) + ' trending tokens (h1≥50%)')
         except: pass
         time.sleep(90)
 
