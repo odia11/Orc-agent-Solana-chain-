@@ -250,6 +250,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .totd-stat-lbl{font-size:7px;color:rgba(255,193,58,.6);text-transform:uppercase;letter-spacing:.1em}
 .totd-stat-val{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#ffe080}
 
+/* ── TOTD LIVE CHART ── */
+.totd-chart-wrap{position:relative;width:100%;height:120px;border-radius:8px;overflow:hidden;background:#060c18;border:1px solid rgba(255,193,58,.15);margin:4px 0 0}
+.totd-chart-wrap canvas{display:block;width:100%!important;height:120px}
+.totd-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
+.totd-chart-msg.hidden{display:none}
+
 /* ── BOTTOM PANELS ── */
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.25rem}
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
@@ -513,27 +519,33 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- TOKEN OF THE DAY -->
+  <!-- LIVE CHART CARD -->
   <div class="totd-wrap" id="totd-wrap" style="display:none">
     <div class="totd-card" id="totd-card">
-      <div class="totd-label">Hottest Token Right Now <span class="totd-countdown" id="totd-countdown"></span></div>
-      <div class="totd-body">
+      <div class="totd-label"><span id="totd-lbl-text">Hottest Token Right Now</span><span class="totd-countdown" id="totd-countdown"></span></div>
+      <div class="totd-body" style="margin-bottom:8px">
         <div class="totd-left">
           <div class="totd-sym" id="totd-sym">—</div>
           <div class="totd-name" id="totd-name">—</div>
-          <div class="totd-price-row">
-            <span class="totd-price" id="totd-price">$0</span>
-            <span class="totd-chg up" id="totd-chg">+0.00%</span>
-          </div>
-          <div class="totd-stats">
-            <div class="totd-stat"><span class="totd-stat-lbl">Volume 5M</span><span class="totd-stat-val" id="totd-vol">—</span></div>
-            <div class="totd-stat"><span class="totd-stat-lbl">Liquidity</span><span class="totd-stat-val" id="totd-liq">—</span></div>
-            <div class="totd-stat"><span class="totd-stat-lbl">Market Cap</span><span class="totd-stat-val" id="totd-mcap">—</span></div>
-          </div>
         </div>
         <div class="totd-right">
           <span class="totd-sig sig-hold" id="totd-sig">HOLD</span>
         </div>
+      </div>
+      <!-- LIVE PRICE CHART -->
+      <div class="totd-chart-wrap" id="totd-chart-wrap">
+        <canvas id="price-chart" height="120" style="display:block;width:100%"></canvas>
+        <div class="totd-chart-msg" id="totd-chart-msg">Loading chart...</div>
+      </div>
+      <div class="totd-price-row" style="margin-top:10px">
+        <span class="totd-price" id="totd-price">$0</span>
+        <span class="totd-chg up" id="totd-chg">+0.00%</span>
+        <span style="font-size:8px;color:rgba(255,193,58,.5);margin-left:4px;letter-spacing:.06em">5M</span>
+      </div>
+      <div class="totd-stats">
+        <div class="totd-stat"><span class="totd-stat-lbl">Volume 5M</span><span class="totd-stat-val" id="totd-vol">—</span></div>
+        <div class="totd-stat"><span class="totd-stat-lbl">Liquidity</span><span class="totd-stat-val" id="totd-liq">—</span></div>
+        <div class="totd-stat"><span class="totd-stat-lbl">Market Cap</span><span class="totd-stat-val" id="totd-mcap">—</span></div>
       </div>
     </div>
   </div>
@@ -856,9 +868,11 @@ function renderMarket(tokens){
   ticker.innerHTML=tickHtml+tickHtml;
 }
 
-// ── TOKEN OF THE DAY ──
+// ── TOKEN OF THE DAY + LIVE CHART ──
 let _totdNextAt=0;
 let _marketTokens=[];
+let _chartMint=null;
+let _chartCandles=null;
 
 async function fetchTotd(){
   if(!appVisible()) return;
@@ -866,11 +880,13 @@ async function fetchTotd(){
   if(r?.token){
     renderTotd(r.token);
     _totdNextAt=Date.now()+(r.next_update_in||900)*1000;
+    _chartMint=r.token.mint;
   } else if(_marketTokens.length){
-    // Backend hasn't set TOTD yet — pick highest-scored token from cached market data
-    const best=_marketTokens.reduce((a,b)=>(b.score??0)>(a.score??0)?b:a, _marketTokens[0]);
+    const best=_marketTokens.reduce((a,b)=>(b.score??0)>(a.score??0)?b:a,_marketTokens[0]);
     renderTotd(best);
+    _chartMint=best.mint;
   }
+  if(_chartMint) loadChart(_chartMint);
 }
 
 function renderTotd(t){
@@ -886,12 +902,143 @@ function renderTotd(t){
   const chgEl=document.getElementById('totd-chg');
   chgEl.textContent=(chg>=0?'▲ +':'▼ −')+Math.abs(chg).toFixed(2)+'%';
   chgEl.className='totd-chg '+(chg>=0?'up':'dn');
-  const hot=t.score>=7, cold=t.score<=2;
+  const hot=t.score>=7,cold=t.score<=2;
   const sigEl=document.getElementById('totd-sig');
   sigEl.textContent=hot?'BUY':cold?'SELL':'HOLD';
   sigEl.className='totd-sig '+(hot?'sig-buy':cold?'sig-sell':'sig-hold');
+  document.getElementById('totd-lbl-text').textContent='★  '+(t.symbol||'Token')+' — Live 30-min Chart';
   document.getElementById('totd-card').onclick=()=>window.open('https://dexscreener.com/solana/'+t.mint);
 }
+
+async function loadChart(mint){
+  if(!mint||!appVisible()) return;
+  const canvas=document.getElementById('price-chart');
+  const msgEl=document.getElementById('totd-chart-msg');
+  if(!canvas) return;
+  if(msgEl){msgEl.textContent='Loading chart...';msgEl.classList.remove('hidden');}
+  const r=await fetch('/api/chart/'+mint).then(r=>r.json()).catch(()=>null);
+  if(!r){if(msgEl) msgEl.textContent='Chart unavailable';return;}
+  _chartCandles=r.candles||[];
+  renderCandleChart(canvas,_chartCandles);
+}
+
+function renderCandleChart(canvas,candles){
+  const wrap=canvas.parentElement;
+  const dpr=window.devicePixelRatio||1;
+  const W=wrap.clientWidth||600;
+  const H=120;
+  canvas.width=Math.round(W*dpr);
+  canvas.height=Math.round(H*dpr);
+  canvas.style.width=W+'px';
+  canvas.style.height=H+'px';
+  const ctx=canvas.getContext('2d');
+  ctx.scale(dpr,dpr);
+
+  ctx.fillStyle='#060c18';
+  ctx.fillRect(0,0,W,H);
+
+  const msgEl=document.getElementById('totd-chart-msg');
+  if(!candles||candles.length<2){
+    if(msgEl){msgEl.textContent=candles&&candles.length===1?'Too few data points':'Chart data unavailable';msgEl.classList.remove('hidden');}
+    return;
+  }
+  if(msgEl) msgEl.classList.add('hidden');
+
+  const PAD={top:10,bottom:18,left:2,right:56};
+  const cW=W-PAD.left-PAD.right;
+  const cH=H-PAD.top-PAD.bottom;
+  const n=candles.length;
+  const step=cW/n;
+
+  const highs=candles.map(c=>c.h>0?c.h:c.c);
+  const lows=candles.map(c=>c.l>0?c.l:c.c);
+  const rawLo=Math.min(...lows);
+  const rawHi=Math.max(...highs);
+  const pw=(rawHi-rawLo)*0.12||rawLo*0.04||1e-9;
+  const lo=rawLo-pw;
+  const hi=rawHi+pw;
+  const range=hi-lo;
+
+  const sy=v=>PAD.top+cH-((v-lo)/range)*cH;
+  const sx=i=>PAD.left+(i+0.5)*step;
+  const bw=Math.max(1.5,step-1.5);
+
+  // Grid lines
+  ctx.strokeStyle='rgba(42,64,96,.35)';
+  ctx.lineWidth=1;
+  [0,.25,.5,.75,1].forEach(f=>{
+    const y=PAD.top+cH*f;
+    ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
+  });
+
+  const hasFull=candles.some(c=>c.o>0&&c.h>0&&c.l>0);
+  const firstC=candles[0].c;
+  const lastC=candles[n-1].c;
+  const up=lastC>=firstC;
+  const lineCol=up?'#00edaa':'#ff4d6a';
+
+  if(hasFull){
+    // Candlestick chart
+    candles.forEach((c,i)=>{
+      const x=sx(i);
+      const bull=c.c>=c.o;
+      const col=bull?'#00edaa':'#ff4d6a';
+      const oy=sy(c.o),cy2=sy(c.c),hy=sy(c.h),ly2=sy(c.l);
+      ctx.strokeStyle=col;ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(x,hy);ctx.lineTo(x,ly2);ctx.stroke();
+      const bodyY=Math.min(oy,cy2);
+      const bodyH=Math.max(1,Math.abs(cy2-oy));
+      ctx.fillStyle=bull?'rgba(0,237,170,.85)':'rgba(255,77,106,.85)';
+      ctx.fillRect(x-bw/2,bodyY,bw,bodyH);
+    });
+  } else {
+    // Line chart with gradient fill
+    const pts=candles.map((c,i)=>[sx(i),sy(c.c)]);
+    ctx.beginPath();
+    pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+    ctx.lineTo(pts[n-1][0],PAD.top+cH);
+    ctx.lineTo(pts[0][0],PAD.top+cH);
+    ctx.closePath();
+    const grad=ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
+    grad.addColorStop(0,up?'rgba(0,237,170,.22)':'rgba(255,77,106,.22)');
+    grad.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.fillStyle=grad;ctx.fill();
+    ctx.beginPath();
+    ctx.strokeStyle=lineCol;ctx.lineWidth=2;
+    ctx.lineJoin='round';ctx.lineCap='round';
+    pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+    ctx.stroke();
+    // Live dot
+    const [lx,ly2]=pts[n-1];
+    ctx.beginPath();ctx.arc(lx,ly2,3.5,0,Math.PI*2);
+    ctx.fillStyle='#060c18';ctx.fill();
+    ctx.beginPath();ctx.arc(lx,ly2,3.5,0,Math.PI*2);
+    ctx.strokeStyle=lineCol;ctx.lineWidth=2;ctx.stroke();
+  }
+
+  // Y-axis price labels
+  ctx.fillStyle='rgba(255,193,58,.5)';
+  ctx.font='8px Share Tech Mono,monospace';
+  ctx.textAlign='left';
+  [lo+range*.12,lo+range*.52,lo+range*.88].forEach(price=>{
+    ctx.fillText(fmtPrice(price),W-PAD.right+4,sy(price)+3);
+  });
+
+  // Time labels
+  ctx.textAlign='center';
+  ctx.fillStyle='rgba(74,112,149,.8)';
+  ctx.font='7px Share Tech Mono,monospace';
+  if(candles[0]?.t){
+    const fmt=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
+    ctx.fillText(fmt(candles[0].t),sx(0),H-4);
+    ctx.fillText(fmt(candles[Math.floor(n/2)].t),sx(Math.floor(n/2)),H-4);
+    ctx.fillText(fmt(candles[n-1].t),sx(n-1),H-4);
+  }
+}
+
+window.addEventListener('resize',()=>{
+  if(_chartCandles){const c=document.getElementById('price-chart');if(c) renderCandleChart(c,_chartCandles);}
+});
 
 function _tickTotdCountdown(){
   const el=document.getElementById('totd-countdown');

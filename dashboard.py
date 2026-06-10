@@ -709,6 +709,71 @@ def api_totd():
     next_in = max(0.0, TOTD_INTERVAL - (time.time() - updated)) if updated else 0.0
     return jsonify({'token': state.get('token_of_the_day'), 'updated_at': updated, 'next_update_in': round(next_in)})
 
+@app.route('/api/chart/<mint>')
+def api_chart(mint):
+    try:
+        r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        pairs = r.json().get('pairs', []) if r.status_code == 200 else []
+        if not pairs:
+            return jsonify({'candles': [], 'error': 'no pairs'})
+        pair         = pairs[0]
+        pair_address = pair.get('pairAddress', '')
+        chain_id     = pair.get('chainId', 'solana')
+        if not pair_address:
+            return jsonify({'candles': [], 'error': 'no pair address'})
+
+        now     = int(time.time())
+        from_ts = now - 1800  # 30 minutes
+        chart_url = (
+            f'https://io.dexscreener.com/dex/chart/amm/v3/{chain_id}/{pair_address}'
+            f'?res=1&cb=0&from={from_ts}&to={now}'
+        )
+        rc = requests.get(chart_url, timeout=10, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+            'Referer': 'https://dexscreener.com/',
+        })
+
+        candles = []
+        if rc.status_code == 200:
+            data = rc.json()
+            # TradingView UDF format: {t:[...], o:[...], h:[...], l:[...], c:[...], v:[...]}
+            if isinstance(data, dict) and isinstance(data.get('t'), list):
+                ts_arr = data['t']
+                opens  = data.get('o', [])
+                highs  = data.get('h', [])
+                lows   = data.get('l', [])
+                closes = data.get('c', [])
+                vols   = data.get('v', [])
+                for i, t_ts in enumerate(ts_arr):
+                    if t_ts >= from_ts:
+                        candles.append({
+                            't': t_ts,
+                            'o': float(opens[i])  if i < len(opens)  else 0,
+                            'h': float(highs[i])  if i < len(highs)  else 0,
+                            'l': float(lows[i])   if i < len(lows)   else 0,
+                            'c': float(closes[i]) if i < len(closes) else 0,
+                            'v': float(vols[i])   if i < len(vols)   else 0,
+                        })
+            elif isinstance(data, list):
+                for c in data:
+                    if not isinstance(c, dict): continue
+                    t_ts = c.get('time', c.get('t', 0))
+                    if t_ts >= from_ts:
+                        candles.append({
+                            't': t_ts,
+                            'o': float(c.get('open',   c.get('o', 0)) or 0),
+                            'h': float(c.get('high',   c.get('h', 0)) or 0),
+                            'l': float(c.get('low',    c.get('l', 0)) or 0),
+                            'c': float(c.get('close',  c.get('c', 0)) or 0),
+                            'v': float(c.get('volume', c.get('v', 0)) or 0),
+                        })
+            candles.sort(key=lambda x: x['t'])
+            candles = candles[-30:]
+
+        return jsonify({'candles': candles, 'pair_address': pair_address})
+    except Exception as e:
+        return jsonify({'candles': [], 'error': str(e)})
+
 @app.route('/api/trades')
 def api_trades():
     wallet = _current_wallet()
