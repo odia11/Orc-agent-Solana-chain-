@@ -301,6 +301,16 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .s-save:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;filter:none}
 .s-key-hint{font-size:8px;font-family:'Share Tech Mono',monospace;margin-left:8px}
 
+/* ── INACTIVITY WARNING ── */
+.inact-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(6px)}
+.inact-card{background:var(--bg2);border:1px solid rgba(255,193,58,.4);border-radius:16px;padding:32px 28px;text-align:center;max-width:340px;width:90%;box-shadow:0 0 80px rgba(255,193,58,.12)}
+.inact-icon{font-size:40px;margin-bottom:14px}
+.inact-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--yellow);margin-bottom:10px;letter-spacing:.1em}
+.inact-msg{font-size:11px;color:var(--dim);margin-bottom:8px;line-height:1.7}
+.inact-timer{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--red);margin:12px 0 20px;letter-spacing:.05em}
+.inact-btn{background:var(--green);color:#000;border:none;border-radius:8px;padding:11px 28px;font-family:'Orbitron',monospace;font-size:11px;font-weight:900;cursor:pointer;letter-spacing:.06em;transition:filter .15s;width:100%}
+.inact-btn:hover{filter:brightness(1.12)}
+
 /* ── MOBILE ── */
 @media(max-width:720px){
   .stats{grid-template-columns:repeat(2,1fr)}
@@ -409,6 +419,17 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div style="height:14px"></div>
     <div class="s-msg" id="s-msg"></div>
     <button class="s-save" id="s-save-btn" onclick="saveSettings()" disabled>SAVE SETTINGS</button>
+  </div>
+</div>
+
+<!-- INACTIVITY WARNING POPUP -->
+<div class="inact-overlay" id="inact-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="inact-title">
+  <div class="inact-card">
+    <div class="inact-icon">⏳</div>
+    <div class="inact-title" id="inact-title">SESSION EXPIRING</div>
+    <div class="inact-msg">You will be disconnected due to inactivity in</div>
+    <div class="inact-timer" id="inact-countdown">2:00</div>
+    <button class="inact-btn" onclick="stayConnected()">STAY CONNECTED</button>
   </div>
 </div>
 
@@ -593,8 +614,60 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0;
 
+// ── INACTIVITY TIMEOUT ──
+const INACT_WARN_MS   = 18 * 60 * 1000; // warn at 18 min
+const INACT_LIMIT_MS  = 20 * 60 * 1000; // logout at 20 min
+let _lastActivity     = Date.now();
+let _warnShown        = false;
+let _warnTick         = null;
+
+function _resetActivity(){
+  _lastActivity = Date.now();
+  if(_warnShown) _hideInactWarning();
+}
+
+function _hideInactWarning(){
+  _warnShown = false;
+  document.getElementById('inact-overlay').style.display = 'none';
+  if(_warnTick){ clearInterval(_warnTick); _warnTick = null; }
+}
+
+function stayConnected(){ _resetActivity(); }
+
+function _showInactWarning(){
+  if(_warnShown || !phantomKey) return;
+  _warnShown = true;
+  document.getElementById('inact-overlay').style.display = 'flex';
+  if(_warnTick) clearInterval(_warnTick);
+  _warnTick = setInterval(()=>{
+    const rem = Math.max(0, INACT_LIMIT_MS - (Date.now() - _lastActivity));
+    const m = Math.floor(rem / 60000);
+    const s = Math.floor((rem % 60000) / 1000);
+    const el = document.getElementById('inact-countdown');
+    if(el) el.textContent = m + ':' + String(s).padStart(2,'0');
+    if(rem <= 0){ clearInterval(_warnTick); _warnTick = null; }
+  }, 500);
+}
+
+function _checkInactivity(){
+  if(!phantomKey) return;
+  const idle = Date.now() - _lastActivity;
+  if(idle >= INACT_LIMIT_MS){
+    _hideInactWarning();
+    doLogout();
+  } else if(idle >= INACT_WARN_MS && !_warnShown){
+    _showInactWarning();
+  }
+}
+
+// User activity resets the timer
+['mousemove','mousedown','keydown','scroll','touchstart','click'].forEach(evt=>{
+  document.addEventListener(evt, _resetActivity, {passive:true});
+});
+
 // ── LOGOUT ──
 function doLogout(){
+  _hideInactWarning();
   phantomKey=null; walletType=null;
   sessionStorage.removeItem('orcagent_wallet');
   updateAuthBtns();
@@ -693,6 +766,7 @@ async function launchApp(){
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   }
   updateAuthBtns();
+  _lastActivity = Date.now(); // start inactivity clock from moment of connect
   await fetchState();
   fetchTrades();
   fetchTotd();
@@ -1325,6 +1399,16 @@ setInterval(fetchTrades,10000);
 setInterval(fetchTotd,60000);
 setInterval(_tickTotdCountdown,1000);
 setInterval(fetchBalance,30000);
+setInterval(_checkInactivity,10000);
+
+// Disconnect server session when tab is closed
+window.addEventListener('beforeunload',()=>{
+  if(phantomKey){
+    sessionStorage.removeItem('orcagent_wallet');
+    navigator.sendBeacon('/api/wallet/set',
+      new Blob([JSON.stringify({address:''})],{type:'application/json'}));
+  }
+});
 </script>
 </body>
 </html>
