@@ -398,7 +398,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="s-grid">
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Max Trade Size (USDC)</label>
-        <input id="s-maxusdc" class="s-input" type="number" value="12.5" min="1" max="1000" step="0.5">
+        <input id="s-maxusdc" class="s-input" type="number" value="1" min="1" max="1000" step="0.5">
       </div>
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Daily Loss Limit (USDC)</label>
@@ -1200,7 +1200,7 @@ function updateBtns(){
 }
 
 async function toggleTrader(){
-  await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:12.5})});
+  await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
   fetchState();
 }
 
@@ -1254,7 +1254,7 @@ async function openSettings(){
     saveBtn.disabled=false; saveBtn.style.opacity='1';
     const r=await fetch('/api/settings').then(r=>r.json()).catch(()=>null);
     if(r?.ok){
-      document.getElementById('s-maxusdc').value=r.max_trade_size||12.5;
+      document.getElementById('s-maxusdc').value=r.max_trade_size||1;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
       settingsHasKey=r.has_key||false;
       const hint=document.getElementById('s-key-hint');
@@ -1283,7 +1283,7 @@ function togglePrivVis(){
 async function saveSettings(){
   if(!phantomKey){alert('Connect a wallet first.');return;}
   const pk       =document.getElementById('s-privkey').value.trim();
-  const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||12.5;
+  const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||1;
   const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||50;
   const msgEl    =document.getElementById('s-msg');
   const saveBtn  =document.getElementById('s-save-btn');

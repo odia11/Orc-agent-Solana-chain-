@@ -111,7 +111,7 @@ def init_db():
         wallet_address        TEXT UNIQUE NOT NULL,
         encrypted_private_key TEXT DEFAULT '',
         trading_active        INTEGER DEFAULT 0,
-        max_trade_size        REAL DEFAULT 12.5,
+        max_trade_size        REAL DEFAULT 1.0,
         daily_loss_limit      REAL DEFAULT 50.0,
         created_at            TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
@@ -575,8 +575,9 @@ def trader_loop(stop_event, config):
                         continue
 
                 # ── Entry: score ≥ 7, still pumping ──
-                if sc >= 7 and m5 >= 10 and usdc > 3 and open_pos < 3 and pos['amount'] == 0:
-                    spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('max_usdc', 12.5)), 2)
+                if sc >= 7 and m5 >= 10 and usdc > 1 and open_pos < 3 and pos['amount'] == 0:
+                    spend = round(min(usdc * config.get('trade_pct', 0.20), config.get('max_usdc', 1.0)), 2)
+                    if spend < 1.0: continue
                     add_log('BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
                     subprocess.Popen(
                         [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), 'buy', mint, str(spend)],
@@ -615,7 +616,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     user_id          = row[0]
-    max_usdc         = float(row[2] if row[2] is not None else 12.5)
+    max_usdc         = float(row[2] if row[2] is not None else 1.0)
     daily_loss_limit = abs(float(row[3] if row[3] is not None else 50.0))
 
     try:
@@ -669,8 +670,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                             continue
 
                     # ── Entry: score ≥ 7, still pumping (m5 ≥ 10) ──
-                    if sc >= 7 and m5 >= 10 and us_usdc > 3 and open_pos < 3 and pos['amount'] == 0:
+                    if sc >= 7 and m5 >= 10 and us_usdc > 1 and open_pos < 3 and pos['amount'] == 0:
                         spend = round(min(us_usdc * config.get('trade_pct', 0.20), max_usdc), 2)
+                        if spend < 1.0: continue
                         add_log('[' + short + '] BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
                         _execute_user_swap(wallet, private_key, 'buy', mint, str(spend))
                         pos['amount']     = spend / t['price']
@@ -737,8 +739,8 @@ def get_settings():
     row  = c.fetchone()
     conn.close()
     if row:
-        return jsonify({'ok': True, 'has_key': bool(row[0]), 'max_trade_size': row[1] or 12.5, 'daily_loss_limit': row[2] or 50.0})
-    return jsonify({'ok': True, 'has_key': False, 'max_trade_size': 12.5, 'daily_loss_limit': 50.0})
+        return jsonify({'ok': True, 'has_key': bool(row[0]), 'max_trade_size': row[1] or 1.0, 'daily_loss_limit': row[2] or 50.0})
+    return jsonify({'ok': True, 'has_key': False, 'max_trade_size': 1.0, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -749,14 +751,14 @@ def save_settings():
     data            = request.json or {}
     private_key_raw = data.get('private_key', '').strip()
     try:
-        max_trade_size = float(data.get('max_trade_size', 12.5))
+        max_trade_size = float(data.get('max_trade_size', 1.0))
     except (ValueError, TypeError):
-        max_trade_size = 12.5
+        max_trade_size = 1.0
     try:
         daily_loss_limit = float(data.get('daily_loss_limit', 50.0))
     except (ValueError, TypeError):
         daily_loss_limit = 50.0
-    max_trade_size   = max(0.5,  min(max_trade_size,   10000.0))
+    max_trade_size   = max(1.0,  min(max_trade_size,   10000.0))
     daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
 
     conn = sqlite3.connect(DB_FILE)
