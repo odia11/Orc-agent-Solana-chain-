@@ -1204,11 +1204,13 @@ async function toggleTrader(){
 localStorage.clear();
 
 // ── SETTINGS MODAL ──
+let settingsHasKey=false;
 async function openSettings(){
   const modal=document.getElementById('settings-modal');
   modal.classList.add('open');
   const msgEl=document.getElementById('s-msg');
   msgEl.className='s-msg'; msgEl.textContent='';
+  document.getElementById('s-privkey').value='';
   const saveBtn=document.getElementById('s-save-btn');
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
@@ -1218,14 +1220,16 @@ async function openSettings(){
     if(r?.ok){
       document.getElementById('s-maxusdc').value=r.max_trade_size||12.5;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
+      settingsHasKey=r.has_key||false;
       const hint=document.getElementById('s-key-hint');
       hint.style.color='var(--green)';
-      hint.textContent=r.has_key?'✓ key saved (encrypted)':'';
+      hint.textContent=settingsHasKey?'✓ key saved (encrypted)':'';
     }
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
     saveBtn.disabled=true; saveBtn.style.opacity='.45';
     document.getElementById('s-key-hint').textContent='';
+    settingsHasKey=false;
   }
 }
 
@@ -1248,6 +1252,12 @@ async function saveSettings(){
   const msgEl    =document.getElementById('s-msg');
   const saveBtn  =document.getElementById('s-save-btn');
 
+  if(!pk&&!settingsHasKey){
+    msgEl.className='s-msg err';
+    msgEl.textContent='✗ Please enter your trading wallet private key';
+    return;
+  }
+
   saveBtn.textContent='SAVING...'; saveBtn.disabled=true;
   const r=await fetch('/api/settings',{
     method:'POST',
@@ -1258,10 +1268,15 @@ async function saveSettings(){
 
   if(r?.ok){
     msgEl.className='s-msg ok';
-    msgEl.textContent='✓ Settings saved. Private key encrypted with Fernet and stored securely.';
-    document.getElementById('s-privkey').value='';
-    const hint=document.getElementById('s-key-hint');
-    hint.style.color='var(--green)'; hint.textContent='✓ key saved (encrypted)';
+    if(pk){
+      msgEl.textContent='✓ Settings saved. Private key encrypted with Fernet and stored securely.';
+      document.getElementById('s-privkey').value='';
+      const hint=document.getElementById('s-key-hint');
+      hint.style.color='var(--green)'; hint.textContent='✓ key saved (encrypted)';
+      settingsHasKey=true;
+    } else {
+      msgEl.textContent='✓ Trade settings updated.';
+    }
   } else {
     msgEl.className='s-msg err';
     msgEl.textContent='✗ '+(r?.msg||'Save failed. Check server logs.');
