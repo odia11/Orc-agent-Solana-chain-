@@ -180,8 +180,34 @@ def get_user_state(wallet: str) -> dict:
             'trader_running': False,
             'trader_stop': None,
             'trader_thread': None,
+            'sol': 0.0,
+            'usdc': 0.0,
+            'balance_fetched_at': 0.0,
         }
     return user_states[wallet]
+
+def fetch_user_balances(wallet: str):
+    """Fetch SOL and USDC balances from Solana RPC and cache in per-user state."""
+    us = get_user_state(wallet)
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+        }, timeout=8)
+        us['sol'] = round(r.json()['result']['value'] / 1e9, 4)
+    except Exception:
+        pass
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getTokenAccountsByOwner',
+            'params': [wallet, {'mint': USDC_MINT}, {'encoding': 'jsonParsed'}]
+        }, timeout=8)
+        accounts = r.json().get('result', {}).get('value', [])
+        us['usdc'] = round(float(
+            accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0
+        ), 2) if accounts else 0.0
+    except Exception:
+        pass
+    us['balance_fetched_at'] = time.time()
 
 # ── TOKEN DISCOVERY ──
 TOTD_INTERVAL = 900  # 15 minutes
@@ -689,6 +715,7 @@ def set_wallet():
         try:
             get_or_create_user(address)
         except: pass
+        threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_log('Wallet connected: ' + address[:6] + '...' + address[-4:])
     else:
         session.pop('wallet', None)
@@ -767,7 +794,8 @@ def api_state():
         open_pos = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
         return jsonify({
             'trader_running': us.get('trader_running', False),
-            'usdc': state['usdc'], 'sol': state['sol'],
+            'usdc': us.get('usdc', 0.0),
+            'sol':  us.get('sol',  0.0),
             'positions': open_pos,
             'log_lines': state['log_lines'][:40],
             'tokens':    state['tokens'],
@@ -810,6 +838,17 @@ def stop_trader():
         us['trader_stop'].set()
     us['trader_running'] = False
     return jsonify({'ok': True})
+
+# ── BALANCE ──
+@app.route('/api/balance')
+@rate_limit(10, 60)
+def api_balance():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'sol': 0.0, 'usdc': 0.0})
+    fetch_user_balances(wallet)
+    us = get_user_state(wallet)
+    return jsonify({'ok': True, 'sol': us.get('sol', 0.0), 'usdc': us.get('usdc', 0.0)})
 
 # ── MARKET / TOTD / TRADES ──
 @app.route('/api/market')

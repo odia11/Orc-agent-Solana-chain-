@@ -673,7 +673,7 @@ function launchApp(){
     document.getElementById('wallet-short').textContent=short;
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
-    refreshPhantomBalances();
+    fetchBalance();
   } else {
     // View-only: hide trade button, show notice
     const tb=document.getElementById('trade-btn');
@@ -685,18 +685,14 @@ function launchApp(){
   fetchTotd();
 }
 
-// ── PHANTOM BALANCES ──
-async function refreshPhantomBalances(){
-  if(!phantomKey) return;
-  try{
-    const RPC='https://api.mainnet-beta.solana.com',USDC='EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
-    const sr=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getBalance',params:[phantomKey]})}).then(r=>r.json());
-    document.getElementById('s-sol').textContent=(sr.result.value/1e9).toFixed(4);
-    const ur=await fetch(RPC,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'getTokenAccountsByOwner',params:[phantomKey,{mint:USDC},{encoding:'jsonParsed'}]})}).then(r=>r.json());
-    const accs=ur.result?.value||[];
-    const usdc=accs.length?parseFloat(accs[0].account.data.parsed.info.tokenAmount.uiAmount||0):0;
-    document.getElementById('s-usdc').textContent='$'+usdc.toFixed(2);
-  }catch(e){}
+// ── BALANCE REFRESH ──
+async function fetchBalance(){
+  if(!phantomKey||!appVisible()) return;
+  const r=await fetch('/api/balance').then(r=>r.json()).catch(()=>null);
+  if(r?.ok){
+    document.getElementById('s-sol').textContent=(+r.sol||0).toFixed(4);
+    document.getElementById('s-usdc').textContent='$'+(+r.usdc||0).toFixed(2);
+  }
 }
 
 function updateAuthBtns(){
@@ -731,6 +727,10 @@ async function fetchState(){
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
   document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
+  if(phantomKey){
+    if(r.sol!=null) document.getElementById('s-sol').textContent=(+r.sol).toFixed(4);
+    if(r.usdc!=null) document.getElementById('s-usdc').textContent='$'+(+r.usdc).toFixed(2);
+  }
   traderOn=r.trader_running;
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
@@ -1288,7 +1288,7 @@ setInterval(fetchMarketOnly,5000);
 setInterval(fetchTrades,10000);
 setInterval(fetchTotd,60000);
 setInterval(_tickTotdCountdown,1000);
-setInterval(()=>{if(phantomKey)refreshPhantomBalances();},15000);
+setInterval(fetchBalance,30000);
 </script>
 </body>
 </html>
