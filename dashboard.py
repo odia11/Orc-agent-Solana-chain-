@@ -603,6 +603,7 @@ def get_token_data(mint):
             'txns24h_sells': h24_sells,
             'txns24h':       h24_buys + h24_sells,
             'makers24h':     int(p.get('makers', 0) or 0),
+            'pairAddress':   p.get('pairAddress', '') or '',
         }
     except: return None
 
@@ -707,6 +708,7 @@ def token_loop():
                     'txns24h_buys':  data['txns24h_buys'],
                     'txns24h_sells': data['txns24h_sells'],
                     'makers24h':     data['makers24h'],
+                    'pairAddress':   data.get('pairAddress', '') or '',
                 }
                 all_tokens.append(entry)
             # Sort by 1h % descending — biggest 1h gainers first
@@ -1331,12 +1333,17 @@ def api_log():
 @app.route('/api/audit')
 @rate_limit(12, 60)
 def api_audit():
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
     return jsonify(_audit_state)
 
 @app.route('/api/audit/run', methods=['POST'])
 @rate_limit(3, 60)
 def api_audit_run():
-    """Trigger an immediate audit run (rate-limited to 3/min to prevent abuse)."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
     try:
         result = _run_audit()
         _audit_state.update(result)

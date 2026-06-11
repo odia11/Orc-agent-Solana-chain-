@@ -19,8 +19,9 @@ JUPITER_SWAP      = 'https://api.jup.ag/swap/v1/swap'
 USDC_MINT         = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
 def discover_tokens(limit=30):
-    mints = []
-    seen  = {USDC_MINT}
+    mints    = []
+    trending = set()
+    seen     = {USDC_MINT}
     try:
         r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', timeout=10)
         if r.status_code == 200:
@@ -29,6 +30,21 @@ def discover_tokens(limit=30):
                     m = item.get('tokenAddress', '')
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
+    except: pass
+    try:
+        r = requests.get(
+            'https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6',
+            timeout=10)
+        if r.status_code == 200:
+            data  = r.json()
+            pairs = data.get('pairs', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            for p in pairs:
+                if p.get('chainId') == 'solana':
+                    m = (p.get('baseToken') or {}).get('address', '')
+                    if m:
+                        trending.add(m)
+                        if m not in seen:
+                            seen.add(m); mints.append(m)
     except: pass
     try:
         r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
@@ -40,7 +56,7 @@ def discover_tokens(limit=30):
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
     except: pass
-    return [{'mint': m, 'label': m[:8]} for m in mints[:limit]]
+    return [{'mint': m, 'label': m[:8]} for m in mints[:limit]], trending
 
 def get_token_data(mint):
     try:
@@ -56,8 +72,9 @@ def get_token_data(mint):
         h1s  = int(txns.get('h1', {}).get('sells', 0) or 0)
         return {
             'price':      float(p.get('priceUsd', 0) or 0),
-            'change5m':   float(p.get('priceChange', {}).get('m5', 0) or 0),
-            'change1h':   float(p.get('priceChange', {}).get('h1', 0) or 0),
+            'change5m':   float(p.get('priceChange', {}).get('m5',  0) or 0),
+            'change15m':  float(p.get('priceChange', {}).get('m15', 0) or 0),
+            'change1h':   float(p.get('priceChange', {}).get('h1',  0) or 0),
             'liquidity':  float(p.get('liquidity', {}).get('usd', 0) or 0),
             'volume5m':   float(p.get('volume', {}).get('m5', 0) or 0),
             'volume1h':   float(p.get('volume', {}).get('h1', 0) or 0),
@@ -161,7 +178,7 @@ def run():
     positions = {}
     while True:
         try:
-            tokens = discover_tokens()
+            tokens, trending_mints = discover_tokens()
             sol    = get_balance()
             usdc   = get_usdc_balance()
             print('SOL:' + str(round(sol, 4)) + ' USDC:' + str(round(usdc, 2)))
@@ -169,15 +186,18 @@ def run():
             # Score and filter for momentum
             candidates = []
             for t in tokens:
-                data = get_token_data(t['mint'])
-                if not data or data['price'] <= 0 or data['liquidity'] < 10000: continue
-                if data['change5m'] >= 20 or data['change1h'] >= 30:
-                    if data['volume5m'] >= 5000:
-                        sc = score_token(data)
-                        candidates.append((sc, t, data))
+                mint = t['mint']
+                data = get_token_data(mint)
+                if not data or data['price'] <= 0 or data['liquidity'] < 15000: continue
+                m5  = data['change5m']
+                m15 = data.get('change15m', 0)
+                is_tr = mint in trending_mints
+                if (m5 >= 5 or m15 >= 10 or is_tr) and data['volume5m'] >= 5000:
+                    sc = score_token(data)
+                    candidates.append((sc, t, data, is_tr))
             candidates.sort(key=lambda x: x[0], reverse=True)
 
-            for sc, token, data in candidates:
+            for sc, token, data, is_tr in candidates:
                 try:
                     mint  = token['mint']
                     label = token['label']
@@ -204,8 +224,8 @@ def run():
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         continue
 
-                    # Entry: score ≥ 4, still pumping
-                    if sc >= 4 and m5 >= 10 and usdc > 5:
+                    # Entry: score ≥ 4, momentum (m5≥5 / m15≥10 / trending)
+                    if sc >= 4 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
                         spend = min(usdc * 0.20, MAX_USDC / 4)
                         tx    = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print('BUY ' + label + ' $' + str(round(spend, 2)) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '% TX:' + str(tx))

@@ -244,12 +244,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .slide-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
 .slide-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
 .slide-chg.up{color:var(--green)}.slide-chg.dn{color:var(--red)}
-.slide-tf{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
-.slide-tf-btn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
-.slide-tf-btn.active{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.5);color:#ffc13a}
-.slide-tf-btn:hover:not(.active){border-color:var(--border2);color:var(--dim)}
-.slide-chart-wrap{position:relative;width:100%;height:180px;border-radius:8px;overflow:hidden;background:#0a0e1a;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
-.slide-chart-wrap canvas{display:block;width:100%!important;height:180px}
+.slide-chart-wrap{position:relative;width:100%;height:380px;border-radius:8px;overflow:hidden;background:#0a0e1a;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
+.slide-chart-wrap iframe{display:block;width:100%;height:100%;border:none}
 .slide-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
 .slide-stats{display:flex;gap:18px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,193,58,.12)}
 .slide-stat{display:flex;flex-direction:column;gap:3px}
@@ -334,6 +330,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .mode{flex-direction:column;align-items:flex-start}
   .mode-right{width:100%}
   .mode-btn{width:100%;text-align:center}
+  .slide-chart-wrap{height:280px}
 }
 
 ::-webkit-scrollbar{width:4px}
@@ -374,10 +371,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .audit-run-btn:disabled{opacity:.45;cursor:not-allowed}
 .audit-next{font-size:9px;color:var(--muted)}
 
-/* ── CHART TOOLTIP ── */
-.chart-tooltip{position:absolute;top:5px;left:50%;transform:translateX(-50%);background:rgba(8,12,22,.93);border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:#8aaccc;white-space:nowrap;pointer-events:none;z-index:10;letter-spacing:.04em;display:none}
-.chart-tooltip .tt-up{color:#00ff88}
-.chart-tooltip .tt-dn{color:#ff3366}
 </style>
 </head>
 <body>
@@ -556,7 +549,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
-      <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit">
+      <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
         <span class="health-dot" id="health-dot"></span>HEALTH
       </button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
@@ -1122,10 +1115,6 @@ let _carTokens  = [];
 let _carIdx     = 0;
 let _carTimer   = null;
 let _carNextAt  = 0;
-let _carTf      = '5m';
-const _chartCache    = new Map(); // canvasId → last rendered data-hash; skip redraw if unchanged
-const _chartData     = new Map(); // canvasId → geometry needed by hover handler
-const _chartListened = new Set(); // canvases that already have mousemove attached
 
 async function fetchCarousel(){
   if(!appVisible()) return;
@@ -1141,8 +1130,10 @@ function _buildCarousel(tokens){
   const track=document.getElementById('carousel-track');
   const dots=document.getElementById('carousel-dots');
   if(!track||!dots) return;
-  const TFS=['1m','5m','15m','1h','4h','D'];
-  track.innerHTML=tokens.map((t,i)=>`
+  track.innerHTML=tokens.map((t,i)=>{
+    const addr=safeMint(t.pairAddress)||safeMint(t.mint)||'';
+    const src=addr?`https://dexscreener.com/solana/${addr}?embed=1&theme=dark&trades=0&info=0`:'';
+    return `
     <div class="carousel-slide" id="cslide-${i}">
       <div class="slide-header">
         <div class="slide-id">
@@ -1155,13 +1146,9 @@ function _buildCarousel(tokens){
         <span class="slide-price">${fmtPrice(t.price)}</span>
         <span class="slide-chg ${(t.change5m||0)>=0?'up':'dn'}">${_fmtChg(t.change5m||0)}</span>
       </div>
-      <div class="slide-tf">
-        ${TFS.map(tf=>`<button class="slide-tf-btn${tf==='5m'?' active':''}" onclick="setCarTf(${i},'${tf}')">${tf}</button>`).join('')}
-      </div>
       <div class="slide-chart-wrap">
-        <canvas id="cchart-${i}" height="180"></canvas>
         <div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
-        <div class="chart-tooltip" id="ctt-${i}"></div>
+        ${src?`<iframe src="${src}" style="width:100%;height:100%;border:none;display:block" onload="document.getElementById('cchartmsg-${i}').style.display='none'" referrerpolicy="no-referrer-when-downgrade"></iframe>`:''}
       </div>
       <div class="slide-stats">
         <div class="slide-stat"><span class="slide-stat-lbl">Vol 5M</span><span class="slide-stat-val">${fmtNum(t.volume5m||0)}</span></div>
@@ -1169,7 +1156,8 @@ function _buildCarousel(tokens){
         <div class="slide-stat"><span class="slide-stat-lbl">Market Cap</span><span class="slide-stat-val">${fmtNum(t.fdv||0)}</span></div>
         <div class="slide-stat"><span class="slide-stat-lbl">Score</span><span class="slide-stat-val">${t.score||0}</span></div>
       </div>
-    </div>`).join('');
+    </div>`;
+  }).join('');
   dots.innerHTML=tokens.map((_,i)=>`<div class="c-dot${i===_carIdx?' active':''}" onclick="goToSlide(${i})"></div>`).join('');
   document.getElementById('carousel-wrap').style.display='block';
 }
@@ -1187,277 +1175,12 @@ function goToSlide(idx,instant){
   _carNextAt=Date.now()+CAROUSEL_MS;
   clearTimeout(_carTimer);
   _carTimer=setTimeout(()=>carouselNav(1),CAROUSEL_MS);
-  _loadSlideChart(idx,_carTf);
 }
 
 function carouselNav(dir){ goToSlide(_carIdx+dir); }
 
-async function setCarTf(slideIdx,tf){
-  _carTf=tf;
-  const slide=document.getElementById('cslide-'+slideIdx);
-  if(slide) slide.querySelectorAll('.slide-tf-btn').forEach(b=>b.classList.toggle('active',b.textContent===tf));
-  const t=_carTokens[slideIdx];
-  if(t){
-    const chg=_chgForTf(t,tf);
-    const el=document.getElementById('cslide-'+slideIdx)?.querySelector('.slide-chg');
-    if(el){el.textContent=_fmtChg(chg);el.className='slide-chg '+(chg>=0?'up':'dn');}
-  }
-  await _loadSlideChart(slideIdx,tf);
-}
-
-function _chgForTf(t,tf){
-  if(tf==='1h') return t.change1h||0;
-  if(tf==='4h') return t.change6h||0;
-  if(tf==='D')  return t.change24h||0;
-  return t.change5m||0;
-}
 function _fmtChg(v){ return (v>=0?'▲ +':'▼ −')+Math.abs(v).toFixed(2)+'%'; }
 
-// Rounded rectangle helper — uses native roundRect where available, falls back to arcTo
-function _fillRoundRect(ctx,x,y,w,h,r){
-  r=Math.min(r,w/2,h/2);
-  if(ctx.roundRect){ctx.beginPath();ctx.roundRect(x,y,w,h,r);ctx.fill();return;}
-  ctx.beginPath();
-  ctx.moveTo(x+r,y);
-  ctx.arcTo(x+w,y,  x+w,y+h,r);
-  ctx.arcTo(x+w,y+h,x,  y+h,r);
-  ctx.arcTo(x,  y+h,x,  y,  r);
-  ctx.arcTo(x,  y,  x+w,y,  r);
-  ctx.closePath();
-  ctx.fill();
-}
-
-// ── CHART HOVER TOOLTIP ──
-function _attachChartListeners(canvas){
-  if(_chartListened.has(canvas.id)) return;
-  _chartListened.add(canvas.id);
-  canvas.addEventListener('mousemove',_onChartMouseMove);
-  canvas.addEventListener('mouseleave',_onChartMouseLeave);
-}
-
-function _onChartMouseMove(e){
-  const canvas=e.currentTarget;
-  const d=_chartData.get(canvas.id);
-  if(!d) return;
-  const rect=canvas.getBoundingClientRect();
-  const mx=e.clientX-rect.left;
-  const idx=Math.floor((mx-d.PAD.left)/d.step);
-  if(idx<0||idx>=d.n){_hideChartTip(canvas.id);return;}
-  const c=d.nc[idx];
-  const bull=c.c>=c.o;
-  const cls=bull?'tt-up':'tt-dn';
-  const fmtV=v=>{if(!v||v===0)return'—';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(1)+'K';return'$'+Math.round(v);};
-  const s=canvas.id.replace('cchart-','');
-  const tip=document.getElementById('ctt-'+s);
-  if(!tip) return;
-  tip.innerHTML=`<span class="${cls}">O:${fmtPrice(c.o)}&nbsp;&nbsp;H:${fmtPrice(c.h)}&nbsp;&nbsp;L:${fmtPrice(c.l)}&nbsp;&nbsp;C:${fmtPrice(c.c)}</span>&nbsp;&nbsp;V:${fmtV(c.v)}`;
-  // Clamp horizontally so tip never overflows the chart edge
-  const pct=Math.min(Math.max(mx/rect.width*100,12),88);
-  tip.style.left=pct+'%';
-  tip.style.display='block';
-}
-
-function _onChartMouseLeave(e){
-  _hideChartTip(e.currentTarget.id);
-}
-
-function _hideChartTip(canvasId){
-  const s=canvasId.replace('cchart-','');
-  const tip=document.getElementById('ctt-'+s);
-  if(tip) tip.style.display='none';
-}
-
-async function _loadSlideChart(idx,tf){
-  if(!_carTokens[idx]) return;
-  const mint=_carTokens[idx].mint;
-  const canvas=document.getElementById('cchart-'+idx);
-  const msg=document.getElementById('cchartmsg-'+idx);
-  if(!canvas) return;
-  // Fade out before the network fetch so the stale chart dims while new data loads
-  canvas.style.transition='opacity 0.12s ease';
-  canvas.style.opacity='0.2';
-  if(msg){msg.textContent='Loading...';msg.style.display='flex';}
-  const r=await fetch('/api/chart/'+mint+'?tf='+tf).then(r=>r.json()).catch(()=>null);
-  if(!r?.candles?.length){
-    if(msg){msg.textContent='Chart unavailable';msg.style.display='flex';}
-    canvas.style.opacity='1';
-    return;
-  }
-  if(msg) msg.style.display='none';
-  _renderSlideChart(canvas,r.candles);
-  // Fade back in after the new frame is drawn
-  canvas.style.opacity='1';
-}
-
-function _renderSlideChart(canvas,candles){
-  const wrap=canvas.parentElement;
-  const dpr=window.devicePixelRatio||1;
-  const W=wrap.clientWidth||560;
-  const H=180;
-
-  // Skip repaint if data and dimensions are identical to the last render
-  if(candles&&candles.length){
-    const n=candles.length;
-    const hash=`${W}|${n}|${candles[0].t}|${candles[0].c}|${candles[n-1].c}`;
-    if(_chartCache.get(canvas.id)===hash) return;
-    _chartCache.set(canvas.id,hash);
-  }
-
-  canvas.width=Math.round(W*dpr);
-  canvas.height=Math.round(H*dpr);
-  canvas.style.width=W+'px';
-  canvas.style.height=H+'px';
-  const ctx=canvas.getContext('2d');
-  ctx.scale(dpr,dpr);
-
-  ctx.fillStyle='#0a0e1a';
-  ctx.fillRect(0,0,W,H);
-
-  if(!candles||!candles.length){
-    ctx.fillStyle='rgba(160,180,200,.4)';
-    ctx.font='10px Share Tech Mono,monospace';
-    ctx.textAlign='center';
-    ctx.fillText('No data',W/2,H/2);
-    return;
-  }
-
-  // Cap to 50 most recent candles so bodies stay wide enough to see
-  const MAX_C=50, MIN_C=20;
-  let raw=candles.slice(-MAX_C).map(c=>({
-    t:c.t,
-    o:c.o||c.c,
-    h:c.h||Math.max(c.o||c.c,c.c),
-    l:c.l||Math.min(c.o||c.c,c.c),
-    c:c.c,
-    v:c.v||0,
-  }));
-
-  // Pad left with flat candles so there are always at least MIN_C visible
-  if(raw.length<MIN_C&&raw.length>0){
-    const f=raw[0].c;
-    const dt=raw.length>1?(raw[1].t-raw[0].t):60;
-    const pad=MIN_C-raw.length;
-    raw=[...Array.from({length:pad},(_,i)=>({t:raw[0].t-(pad-i)*dt,o:f,h:f,l:f,c:f,v:0})),...raw];
-  }
-
-  const nc=raw, n=nc.length;
-
-  const PAD={top:12,bottom:18,left:2,right:72};
-  const cW=W-PAD.left-PAD.right;
-  const USABLE=H-PAD.top-PAD.bottom;
-  const PRICE_H=Math.floor(USABLE*0.76);
-  const VOL_GAP=4;
-  const VOL_H=USABLE-PRICE_H-VOL_GAP;
-
-  const priceTop=PAD.top;
-  const priceBottom=PAD.top+PRICE_H;
-  const volBottom=H-PAD.bottom;
-
-  // Tight Y range: ±5% around wick extremes
-  const rawHi=Math.max(...nc.map(c=>c.h));
-  const rawLo=Math.min(...nc.map(c=>c.l));
-  const pw=Math.max((rawHi-rawLo)*0.05,rawLo*0.001,1e-12);
-  const hi=rawHi+pw,lo=rawLo-pw,range=hi-lo;
-
-  const syP=v=>priceTop+PRICE_H-((v-lo)/range)*PRICE_H;
-  const step=cW/n;
-  const bodyW=Math.max(6,Math.min(step*0.7,20));
-  const sx=i=>PAD.left+(i+0.5)*step;
-
-  const isUp=nc[n-1].c>=nc[0].c;
-  const C_UP='#00ff88', C_DN='#ff3366';
-  const gCol=isUp?C_UP:C_DN;
-
-  // Grid lines
-  ctx.strokeStyle='rgba(255,255,255,0.08)';
-  ctx.lineWidth=1;
-  const gridN=4;
-  for(let g=0;g<=gridN;g++){
-    const y=priceTop+(PRICE_H/gridN)*g;
-    ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
-  }
-  const vStep=Math.max(1,Math.floor(n/6));
-  for(let i=0;i<n;i+=vStep){
-    ctx.beginPath();ctx.moveTo(sx(i),priceTop);ctx.lineTo(sx(i),volBottom);ctx.stroke();
-  }
-
-  // Volume bars — minimum 3px height so they're always visible
-  const maxVol=Math.max(...nc.map(c=>c.v),1);
-  nc.forEach((c,i)=>{
-    const bull=c.c>=c.o;
-    const vh=Math.max(3,(c.v/maxVol)*VOL_H);
-    ctx.fillStyle=bull?'rgba(0,255,136,0.38)':'rgba(255,51,102,0.38)';
-    ctx.fillRect(sx(i)-bodyW/2,volBottom-vh,bodyW,vh);
-  });
-
-  // Candlestick bodies and wicks
-  nc.forEach((c,i)=>{
-    const bull=c.c>=c.o;
-    const col=bull?C_UP:C_DN;
-    const x=sx(i);
-    const bTop=Math.min(syP(c.o),syP(c.c));
-    const bBot=Math.max(syP(c.o),syP(c.c));
-    const bH=Math.max(1.5,bBot-bTop);
-    // Wick — always at least 1px
-    ctx.strokeStyle=col;
-    ctx.lineWidth=Math.max(1,step*0.1);
-    ctx.beginPath();ctx.moveTo(x,syP(c.h));ctx.lineTo(x,syP(c.l));ctx.stroke();
-    // Body — 4px rounded corners, capped so they never exceed half the dimension
-    ctx.fillStyle=col;
-    _fillRoundRect(ctx,x-bodyW/2,bTop,bodyW,bH,Math.min(4,bodyW/2,bH/2));
-  });
-
-  // Current price dashed line — bright, high opacity
-  const curP=nc[n-1].c;
-  const curY=syP(curP);
-  ctx.save();
-  ctx.setLineDash([5,3]);
-  ctx.strokeStyle=gCol;
-  ctx.lineWidth=1.5;
-  ctx.globalAlpha=0.9;
-  ctx.beginPath();ctx.moveTo(PAD.left,curY);ctx.lineTo(W-PAD.right,curY);ctx.stroke();
-  ctx.restore();
-  // Price label box
-  const lbl=fmtPrice(curP);
-  const boxH=15,boxW=PAD.right-3;
-  ctx.fillStyle=gCol;
-  ctx.fillRect(W-PAD.right+2,curY-boxH/2,boxW,boxH);
-  ctx.fillStyle='#0a0e1a';
-  ctx.font='bold 8px Share Tech Mono,monospace';
-  ctx.textAlign='left';
-  ctx.fillText(lbl,W-PAD.right+5,curY+3);
-
-  // Y-axis price labels (skip within 11px of current price box)
-  ctx.fillStyle='rgba(180,200,220,0.55)';
-  ctx.font='8px Share Tech Mono,monospace';
-  ctx.textAlign='left';
-  for(let g=0;g<=gridN;g++){
-    const p=hi-(range/gridN)*g;
-    const y=syP(p);
-    if(Math.abs(y-curY)<11) continue;
-    ctx.fillText(fmtPrice(p),W-PAD.right+5,y+3);
-  }
-
-  // X-axis time labels
-  if(nc[0]?.t){
-    const fmtT=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
-    ctx.fillStyle='rgba(120,145,175,0.6)';
-    ctx.font='7px Share Tech Mono,monospace';
-    ctx.textAlign='center';
-    const mid=Math.floor(n/2);
-    ctx.fillText(fmtT(nc[0].t),sx(0),H-3);
-    if(mid>0&&mid<n-1) ctx.fillText(fmtT(nc[mid].t),sx(mid),H-3);
-    if(n>1) ctx.fillText(fmtT(nc[n-1].t),sx(n-1),H-3);
-  }
-
-  // Store geometry for hover tooltip and attach listeners once per canvas
-  _chartData.set(canvas.id,{nc,n,step,PAD});
-  _attachChartListeners(canvas);
-}
-
-window.addEventListener('resize',()=>{
-  if(_carTokens.length){_chartCache.clear();_loadSlideChart(_carIdx,_carTf);}
-});
 
 function _tickCarousel(){
   const el=document.getElementById('carousel-countdown');
@@ -1481,13 +1204,18 @@ let _adminTimer=null;
 
 function checkOwnerPanel(wallet){
   const panel=document.getElementById('admin-panel');
-  if(!panel) return;
-  if(wallet&&wallet.toLowerCase()===_OWNER_WALLET.toLowerCase()){
-    panel.style.display='block';
+  const healthBtn=document.getElementById('health-btn');
+  const ownerMatch=!!(wallet&&wallet.toLowerCase()===_OWNER_WALLET.toLowerCase());
+  if(ownerMatch){
+    if(panel) panel.style.display='block';
+    if(healthBtn) healthBtn.style.display='';
     fetchAdminData();
+    fetchAudit();
     if(!_adminTimer) _adminTimer=setInterval(fetchAdminData,30000);
   } else {
-    panel.style.display='none';
+    if(panel) panel.style.display='none';
+    if(healthBtn) healthBtn.style.display='none';
+    closeHealthPanel();
     if(_adminTimer){clearInterval(_adminTimer);_adminTimer=null;}
   }
 }
@@ -1831,14 +1559,15 @@ setInterval(fetchCarousel,60000);
 setInterval(_tickCarousel,1000);
 setInterval(fetchBalance,30000);
 setInterval(_checkInactivity,10000);
-setInterval(fetchAudit,300000);  // refresh audit every 5 minutes
 
-// ── HEALTH / AUDIT ──
+// ── HEALTH / AUDIT (owner-only) ──
 let _auditLastTs=0;
+function isOwner(){ return !!(phantomKey&&phantomKey.toLowerCase()===_OWNER_WALLET.toLowerCase()); }
 
 async function fetchAudit(){
+  if(!isOwner()) return;
   const r=await fetch('/api/audit').then(r=>r.json()).catch(()=>null);
-  if(r) renderAudit(r);
+  if(r&&!r.error) renderAudit(r);
 }
 
 function renderAudit(r){
@@ -1885,6 +1614,7 @@ function _renderAuditPanel(r){
 }
 
 function toggleHealthPanel(){
+  if(!isOwner()) return;
   const o=document.getElementById('audit-overlay');
   if(!o) return;
   if(o.classList.contains('open')){ closeHealthPanel(); return; }
@@ -1900,15 +1630,13 @@ function closeHealthPanel(){
 }
 
 async function triggerAudit(){
+  if(!isOwner()) return;
   const btn=document.getElementById('audit-run-btn');
   if(btn){ btn.disabled=true; btn.textContent='Running…'; }
   const r=await fetch('/api/audit/run',{method:'POST'}).then(r=>r.json()).catch(()=>null);
   if(btn){ btn.disabled=false; btn.textContent='↻ Run Now'; }
-  if(r) renderAudit(r);
+  if(r&&!r.error) renderAudit(r);
 }
-
-// Load audit immediately on page boot so the dot is coloured as soon as possible
-fetchAudit();
 
 // Disconnect server session when tab is closed
 window.addEventListener('beforeunload',()=>{
