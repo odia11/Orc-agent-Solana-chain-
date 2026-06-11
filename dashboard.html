@@ -729,7 +729,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 </div><!-- /wrap -->
 
 <script>
-let traderOn=false, phantomKey=null, walletType=null, currentStep=0;
+let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false;
 
 // ── INACTIVITY TIMEOUT ──
 const INACT_WARN_MS   = 18 * 60 * 1000; // warn at 18 min
@@ -785,7 +785,7 @@ function _checkInactivity(){
 // ── LOGOUT ──
 function doLogout(){
   _hideInactWarning();
-  phantomKey=null; walletType=null;
+  phantomKey=null; walletType=null; _isAdmin=false;
   sessionStorage.removeItem('orcagent_wallet');
   updateAuthBtns();
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
@@ -832,7 +832,7 @@ async function connectWalletOnboard(type){
     walletType=name;
     sessionStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
     fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-      .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } }).catch(()=>{});
+      .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } _isAdmin=r.is_admin||false; }).catch(()=>{});
     document.getElementById('wallet-type-label').textContent=name+' wallet connected';
     document.getElementById('wallet-addr').textContent=phantomKey;
     document.getElementById('wallet-connected').style.display='flex';
@@ -902,7 +902,7 @@ async function launchApp(){
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   }
   updateAuthBtns();
-  checkOwnerPanel(phantomKey);
+  checkOwnerPanel();
   _lastActivity = Date.now(); // start inactivity clock from moment of connect
   await fetchState();
   fetchTrades();
@@ -950,6 +950,10 @@ async function fetchState(){
   if(!appVisible()) return;
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
+  if(typeof r.is_admin==='boolean' && r.is_admin!==_isAdmin){
+    _isAdmin=r.is_admin;
+    checkOwnerPanel();
+  }
   document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
   if(phantomKey){
     if(r.sol!=null) document.getElementById('s-sol').textContent=(+r.sol).toFixed(4);
@@ -1199,14 +1203,12 @@ async function fetchTrades(){
 }
 
 // ── OWNER ADMIN PANEL ──
-const _OWNER_WALLET='57enjXJH7Ro1aVTT97NuSvf3noYEsBwp4GUjet22vGW6';
 let _adminTimer=null;
 
-function checkOwnerPanel(wallet){
+function checkOwnerPanel(){
   const panel=document.getElementById('admin-panel');
   const healthBtn=document.getElementById('health-btn');
-  const ownerMatch=!!(wallet&&wallet.toLowerCase()===_OWNER_WALLET.toLowerCase());
-  if(ownerMatch){
+  if(_isAdmin){
     if(panel) panel.style.display='block';
     if(healthBtn) healthBtn.style.display='';
     fetchAdminData();
@@ -1429,9 +1431,9 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
       document.getElementById('phantom-ob-btn').style.display='none';
       document.getElementById('solflare-ob-btn').style.display='none';
       document.getElementById('wallet-back-btn').style.display='block';
-      // Re-register session with server and capture has_key so we know immediately if key is saved
+      // Re-register session with server and capture has_key / is_admin
       fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } }).catch(()=>{});
+        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
       launchApp();
       return;
     }
@@ -1459,7 +1461,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
       document.getElementById('solflare-ob-btn').style.display = 'none';
       document.getElementById('wallet-back-btn').style.display = 'block';
       fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})})
-        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } }).catch(()=>{});
+        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
       launchApp();
       return;
     }
@@ -1562,7 +1564,7 @@ setInterval(_checkInactivity,10000);
 
 // ── HEALTH / AUDIT (owner-only) ──
 let _auditLastTs=0;
-function isOwner(){ return !!(phantomKey&&phantomKey.toLowerCase()===_OWNER_WALLET.toLowerCase()); }
+function isOwner(){ return _isAdmin; }
 
 async function fetchAudit(){
   if(!isOwner()) return;

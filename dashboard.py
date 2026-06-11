@@ -27,7 +27,7 @@ DB_FILE    = os.path.join(BASE, 'orcagent.db')
 WALLET_ADDRESS = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT      = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC     = 'https://api.mainnet-beta.solana.com'
-OWNER_WALLET   = os.environ.get('OWNER_WALLET', '57enjXJH7Ro1aVTT97NuSvf3noYEsBwp4GUjet22vGW6')
+OWNER_WALLET   = os.environ.get('OWNER_WALLET', '')
 BIRDEYE_KEY    = os.environ.get('BIRDEYE_API_KEY', '')
 FEE_RATE       = 0.05  # 5% performance fee on profitable trades only
 
@@ -960,7 +960,8 @@ def set_wallet():
             has_key = bool(kr and kr[0])
         except Exception:
             pass
-        return jsonify({'ok': True, 'wallet': address, 'has_key': has_key})
+        return jsonify({'ok': True, 'wallet': address, 'has_key': has_key,
+                        'is_admin': bool(OWNER_WALLET and address == OWNER_WALLET)})
     else:
         prev = _current_wallet()
         session.pop('wallet', None)
@@ -1064,6 +1065,7 @@ def api_state():
             'log_lines':        us.get('log_lines', [])[:40],
             'tokens':           state['tokens'],
             'wallet':           wallet,
+            'is_admin':         bool(OWNER_WALLET and wallet == OWNER_WALLET),
         })
     return jsonify({
         'trader_running': state['trader_running'],
@@ -1072,6 +1074,7 @@ def api_state():
         'log_lines': state['log_lines'][:20],
         'tokens':    state['tokens'],
         'wallet':    state.get('wallet', ''),
+        'is_admin':  False,
     })
 
 # ── TRADER START/STOP ──
@@ -1378,7 +1381,6 @@ def api_admin():
             'fee_txs':      fee_txs,
             'total_users':  total_users,
             'total_trades': total_trades,
-            'owner':        OWNER_WALLET,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
