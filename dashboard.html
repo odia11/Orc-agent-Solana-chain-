@@ -254,6 +254,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(16,24,40,.88);border:1px solid rgba(255,193,58,.22);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;font-size:16px;color:#ffc13a;transition:all .15s;backdrop-filter:blur(4px);user-select:none}
 .carousel-arrow:hover{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.55)}
 .carousel-arrow.prev{left:-13px}.carousel-arrow.next{right:-13px}
+.slide-chart-fallback{display:flex;align-items:center;justify-content:center;height:100%;background:rgba(255,193,58,.03)}
+.slide-dex-link{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:#ffc13a;text-decoration:none;border:1px solid rgba(255,193,58,.4);border-radius:8px;padding:12px 24px;letter-spacing:.06em;transition:all .15s}
+.slide-dex-link:hover{background:rgba(255,193,58,.1);border-color:#ffc13a}
 .carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:10px;align-items:center}
 .c-dot{width:6px;height:6px;border-radius:50%;background:var(--border2);cursor:pointer;transition:all .25s}
 .c-dot.active{background:#ffc13a;width:18px;border-radius:3px}
@@ -1123,8 +1126,11 @@ let _carNextAt  = 0;
 async function fetchCarousel(){
   if(!appVisible()) return;
   const r=await fetch('/api/carousel').then(r=>r.json()).catch(()=>null);
-  if(r?.tokens?.length){
-    _carTokens=r.tokens;
+  if(!r?.tokens?.length) return;
+  const newMints=r.tokens.map(t=>t.mint).join(',');
+  const oldMints=_carTokens.map(t=>t.mint).join(',');
+  _carTokens=r.tokens;
+  if(newMints!==oldMints){
     _buildCarousel(_carTokens);
     goToSlide(_carIdx<_carTokens.length?_carIdx:0,true);
   }
@@ -1135,8 +1141,19 @@ function _buildCarousel(tokens){
   const dots=document.getElementById('carousel-dots');
   if(!track||!dots) return;
   track.innerHTML=tokens.map((t,i)=>{
-    const addr=safeMint(t.pairAddress)||safeMint(t.mint)||'';
-    const src=addr?`https://dexscreener.com/solana/${addr}?embed=1&theme=dark&trades=0&info=0`:'';
+    const pairAddr=safeMint(t.pairAddress)||'';
+    const mintAddr=safeMint(t.mint)||'';
+    const src=pairAddr?`https://dexscreener.com/solana/${pairAddr}?embed=1&theme=dark&trades=0&info=0`:'';
+    const chartContent=src
+      ? `<div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
+         <iframe id="cifr-${i}" loading="eager" src="${src}"
+           style="width:100%;height:100%;border:none;display:block;visibility:hidden"
+           onload="document.getElementById('cchartmsg-${i}').style.display='none'"
+           referrerpolicy="no-referrer-when-downgrade"></iframe>`
+      : `<div class="slide-chart-fallback">
+           <a class="slide-dex-link" href="https://dexscreener.com/solana/${mintAddr}"
+              target="_blank" rel="noopener">View on DexScreener ↗</a>
+         </div>`;
     return `
     <div class="carousel-slide" id="cslide-${i}">
       <div class="slide-header">
@@ -1150,10 +1167,7 @@ function _buildCarousel(tokens){
         <span class="slide-price">${fmtPrice(t.price)}</span>
         <span class="slide-chg ${(t.change5m||0)>=0?'up':'dn'}">${_fmtChg(t.change5m||0)}</span>
       </div>
-      <div class="slide-chart-wrap">
-        <div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
-        ${src?`<iframe src="${src}" style="width:100%;height:100%;border:none;display:block" onload="document.getElementById('cchartmsg-${i}').style.display='none'" referrerpolicy="no-referrer-when-downgrade"></iframe>`:''}
-      </div>
+      <div class="slide-chart-wrap">${chartContent}</div>
       <div class="slide-stats">
         <div class="slide-stat"><span class="slide-stat-lbl">Vol 5M</span><span class="slide-stat-val">${fmtNum(t.volume5m||0)}</span></div>
         <div class="slide-stat"><span class="slide-stat-lbl">Liquidity</span><span class="slide-stat-val">${fmtNum(t.liquidity||0)}</span></div>
@@ -1174,6 +1188,11 @@ function goToSlide(idx,instant){
   if(track){
     if(instant){track.style.transition='none';requestAnimationFrame(()=>{track.style.transition='';});}
     track.style.transform=`translateX(-${idx*100}%)`;
+  }
+  // Reveal the active iframe; keep all others visibility:hidden so they stay loaded in DOM
+  for(let i=0;i<_carTokens.length;i++){
+    const ifr=document.getElementById('cifr-'+i);
+    if(ifr) ifr.style.visibility=i===idx?'visible':'hidden';
   }
   document.querySelectorAll('.c-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
   _carNextAt=Date.now()+CAROUSEL_MS;
