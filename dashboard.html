@@ -237,8 +237,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .slide-tf-btn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
 .slide-tf-btn.active{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.5);color:#ffc13a}
 .slide-tf-btn:hover:not(.active){border-color:var(--border2);color:var(--dim)}
-.slide-chart-wrap{position:relative;width:100%;height:150px;border-radius:8px;overflow:hidden;background:#060c18;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
-.slide-chart-wrap canvas{display:block;width:100%!important;height:150px}
+.slide-chart-wrap{position:relative;width:100%;height:180px;border-radius:8px;overflow:hidden;background:#0d1117;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
+.slide-chart-wrap canvas{display:block;width:100%!important;height:180px}
 .slide-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
 .slide-stats{display:flex;gap:18px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,193,58,.12)}
 .slide-stat{display:flex;flex-direction:column;gap:3px}
@@ -1040,7 +1040,7 @@ function _buildCarousel(tokens){
         ${TFS.map(tf=>`<button class="slide-tf-btn${tf==='5m'?' active':''}" onclick="setCarTf(${i},'${tf}')">${tf}</button>`).join('')}
       </div>
       <div class="slide-chart-wrap">
-        <canvas id="cchart-${i}" height="150"></canvas>
+        <canvas id="cchart-${i}" height="180"></canvas>
         <div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
       </div>
       <div class="slide-stats">
@@ -1113,62 +1113,143 @@ function _renderSlideChart(canvas,candles){
   const wrap=canvas.parentElement;
   const dpr=window.devicePixelRatio||1;
   const W=wrap.clientWidth||560;
-  const H=150;
+  const H=180;
   canvas.width=Math.round(W*dpr);
   canvas.height=Math.round(H*dpr);
   canvas.style.width=W+'px';
   canvas.style.height=H+'px';
   const ctx=canvas.getContext('2d');
   ctx.scale(dpr,dpr);
-  ctx.fillStyle='#060c18';
+
+  // Background
+  ctx.fillStyle='#0d1117';
   ctx.fillRect(0,0,W,H);
+
   if(!candles||candles.length<2){
-    ctx.fillStyle='rgba(255,193,58,.4)';ctx.font='10px Share Tech Mono,monospace';
-    ctx.textAlign='center';ctx.fillText('Not enough data',W/2,H/2);
+    ctx.fillStyle='rgba(160,180,200,.35)';
+    ctx.font='10px Share Tech Mono,monospace';
+    ctx.textAlign='center';
+    ctx.fillText('Not enough data',W/2,H/2);
     return;
   }
-  const PAD={top:12,bottom:22,left:4,right:58};
+
+  // Normalise candles — synthetic fallback may have o/h/l==0
+  const nc=candles.map(c=>({
+    t:c.t,
+    o:c.o||c.c,
+    h:c.h||Math.max(c.o||c.c,c.c),
+    l:c.l||Math.min(c.o||c.c,c.c),
+    c:c.c,
+    v:c.v||0,
+  }));
+  const n=nc.length;
+
+  const PAD={top:14,bottom:20,left:2,right:66};
   const cW=W-PAD.left-PAD.right;
-  const cH=H-PAD.top-PAD.bottom;
-  const n=candles.length;
-  const closes=candles.map(c=>c.c);
-  const rawLo=Math.min(...closes),rawHi=Math.max(...closes);
-  const pw=(rawHi-rawLo)*0.12||rawLo*0.04||1e-9;
-  const lo=rawLo-pw,hi=rawHi+pw,range=hi-lo;
-  const sy=v=>PAD.top+cH-((v-lo)/range)*cH;
-  const sx=i=>PAD.left+(n===1?cW/2:(i/(n-1))*cW);
-  const isUp=closes[n-1]>=closes[0];
-  const col=isUp?'#00edaa':'#ff4d6a';
-  // Grid
-  ctx.strokeStyle='rgba(42,64,96,.3)';ctx.lineWidth=1;
-  [0,.25,.5,.75,1].forEach(f=>{const y=PAD.top+cH*f;ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();});
-  // Gradient fill
-  const pts=candles.map((c,i)=>[sx(i),sy(c.c)]);
-  ctx.beginPath();
-  pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
-  ctx.lineTo(pts[n-1][0],PAD.top+cH);ctx.lineTo(pts[0][0],PAD.top+cH);ctx.closePath();
-  const grad=ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
-  grad.addColorStop(0,isUp?'rgba(0,237,170,.18)':'rgba(255,77,106,.18)');
-  grad.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.fillStyle=grad;ctx.fill();
-  // Line
-  ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=2;ctx.lineJoin='round';ctx.lineCap='round';
-  pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();
-  // Live dot
-  const [lx,ly]=pts[n-1];
-  ctx.beginPath();ctx.arc(lx,ly,3.5,0,Math.PI*2);ctx.fillStyle='#060c18';ctx.fill();
-  ctx.beginPath();ctx.arc(lx,ly,3.5,0,Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();
-  // Y labels
-  ctx.fillStyle='rgba(255,193,58,.5)';ctx.font='8px Share Tech Mono,monospace';ctx.textAlign='left';
-  [lo+range*.12,lo+range*.52,lo+range*.88].forEach(p=>ctx.fillText(fmtPrice(p),W-PAD.right+4,sy(p)+3));
-  // X labels
-  if(candles[0]?.t){
-    const fmt=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
-    ctx.textAlign='center';ctx.fillStyle='rgba(74,112,149,.75)';ctx.font='7px Share Tech Mono,monospace';
+  const USABLE=H-PAD.top-PAD.bottom; // 146
+  const PRICE_H=Math.floor(USABLE*0.75); // ~109
+  const VOL_GAP=5;
+  const VOL_H=USABLE-PRICE_H-VOL_GAP; // ~32
+
+  const priceTop=PAD.top;
+  const priceBottom=PAD.top+PRICE_H;
+  const volTop=priceBottom+VOL_GAP;
+  const volBottom=H-PAD.bottom;
+
+  // Price range (include all wicks)
+  const rawHi=Math.max(...nc.map(c=>c.h));
+  const rawLo=Math.min(...nc.map(c=>c.l));
+  const pw=(rawHi-rawLo)*0.08||rawLo*0.02||1e-12;
+  const hi=rawHi+pw,lo=rawLo-pw,range=hi-lo;
+
+  const syP=v=>priceTop+PRICE_H-((v-lo)/range)*PRICE_H;
+  const step=cW/n;
+  const bodyW=Math.max(1,Math.min(step*0.65,14));
+  const sx=i=>PAD.left+(i+0.5)*step;
+
+  // Grid lines
+  ctx.strokeStyle='#1a1f2e';
+  ctx.lineWidth=1;
+  const gridN=4;
+  for(let g=0;g<=gridN;g++){
+    const y=priceTop+(PRICE_H/gridN)*g;
+    ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
+  }
+  const vGridStep=Math.max(1,Math.floor(n/5));
+  for(let i=0;i<n;i+=vGridStep){
+    const x=sx(i);
+    ctx.beginPath();ctx.moveTo(x,priceTop);ctx.lineTo(x,volBottom);ctx.stroke();
+  }
+
+  // Volume bars
+  const maxVol=Math.max(...nc.map(c=>c.v),1);
+  nc.forEach((c,i)=>{
+    const bull=c.c>=c.o;
+    const vh=Math.max(1,(c.v/maxVol)*VOL_H);
+    ctx.fillStyle=bull?'rgba(38,166,154,.45)':'rgba(239,83,80,.45)';
+    ctx.fillRect(sx(i)-bodyW/2,volBottom-vh,bodyW,vh);
+  });
+
+  // Candlesticks
+  nc.forEach((c,i)=>{
+    const bull=c.c>=c.o;
+    const col=bull?'#26a69a':'#ef5350';
+    const x=sx(i);
+    const bTop=Math.min(syP(c.o),syP(c.c));
+    const bBot=Math.max(syP(c.o),syP(c.c));
+    const bH=Math.max(1,bBot-bTop);
+    // Wick
+    ctx.strokeStyle=col;
+    ctx.lineWidth=Math.max(0.5,Math.min(1,step*0.12));
+    ctx.beginPath();ctx.moveTo(x,syP(c.h));ctx.lineTo(x,syP(c.l));ctx.stroke();
+    // Body
+    ctx.fillStyle=col;
+    ctx.fillRect(x-bodyW/2,bTop,bodyW,bH);
+  });
+
+  // Current price dashed line
+  const curP=nc[n-1].c;
+  const curY=syP(curP);
+  const isUp=curP>=nc[0].c;
+  const pCol=isUp?'#26a69a':'#ef5350';
+  ctx.save();
+  ctx.setLineDash([4,3]);
+  ctx.strokeStyle=pCol;
+  ctx.lineWidth=1;
+  ctx.globalAlpha=0.7;
+  ctx.beginPath();ctx.moveTo(PAD.left,curY);ctx.lineTo(W-PAD.right,curY);ctx.stroke();
+  ctx.restore();
+  // Price label box
+  const lbl=fmtPrice(curP);
+  const boxH=14,boxW=PAD.right-2;
+  ctx.fillStyle=pCol;
+  ctx.fillRect(W-PAD.right+2,curY-boxH/2,boxW,boxH);
+  ctx.fillStyle='#0d1117';
+  ctx.font='bold 7.5px Share Tech Mono,monospace';
+  ctx.textAlign='left';
+  ctx.fillText(lbl,W-PAD.right+4,curY+3);
+
+  // Y-axis price labels (skip if within 10px of current price line)
+  ctx.fillStyle='rgba(140,160,180,.6)';
+  ctx.font='8px Share Tech Mono,monospace';
+  ctx.textAlign='left';
+  for(let g=0;g<=gridN;g++){
+    const p=hi-(range/gridN)*g;
+    const y=syP(p);
+    if(Math.abs(y-curY)<10) continue;
+    ctx.fillText(fmtPrice(p),W-PAD.right+4,y+3);
+  }
+
+  // X-axis time labels
+  if(nc[0]?.t){
+    const fmtT=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
+    ctx.fillStyle='rgba(100,130,160,.65)';
+    ctx.font='7px Share Tech Mono,monospace';
+    ctx.textAlign='center';
     const mid=Math.floor(n/2);
-    ctx.fillText(fmt(candles[0].t),sx(0),H-4);
-    if(mid>0&&mid<n-1) ctx.fillText(fmt(candles[mid].t),sx(mid),H-4);
-    if(n>1) ctx.fillText(fmt(candles[n-1].t),sx(n-1),H-4);
+    ctx.fillText(fmtT(nc[0].t),sx(0),H-4);
+    if(mid>0&&mid<n-1) ctx.fillText(fmtT(nc[mid].t),sx(mid),H-4);
+    if(n>1) ctx.fillText(fmtT(nc[n-1].t),sx(n-1),H-4);
   }
 }
 
