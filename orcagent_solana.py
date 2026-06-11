@@ -1,40 +1,203 @@
-import anthropic, sys, time, json, os, requests, base64
+import sys, time, json, os, requests, base64, traceback
 from dotenv import load_dotenv
 from solders.keypair import Keypair
 from solders.transaction import VersionedTransaction
 from solders.message import to_bytes_versioned
 load_dotenv()
 
-ANTHROPIC_API_KEY = os.getenv('ANTHROPIC_API_KEY')
-WALLET_ADDRESS    = os.getenv('WALLET_ADDRESS')
-PRIVATE_KEY       = os.getenv('WALLET_PRIVATE_KEY')
-MAX_USDC          = float(os.getenv('MAX_USDC', 50))
-STOP_LOSS         = float(os.getenv('STOP_LOSS', 0.05))    # 5%
-TAKE_PROFIT       = float(os.getenv('TAKE_PROFIT', 0.15))  # 15%
-TRAILING_STOP     = float(os.getenv('TRAILING_STOP', 0.03))
-INTERVAL          = int(os.getenv('INTERVAL', 60))
-SOLANA_RPC        = 'https://api.mainnet-beta.solana.com'
-JUPITER_QUOTE     = 'https://api.jup.ag/swap/v1/quote'
-JUPITER_SWAP      = 'https://api.jup.ag/swap/v1/swap'
-USDC_MINT         = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
+PRIVATE_KEY    = os.getenv('WALLET_PRIVATE_KEY', '')
+MAX_USDC       = float(os.getenv('MAX_USDC', 50))
+STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.05))
+TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.15))
+TRAILING_STOP  = float(os.getenv('TRAILING_STOP', 0.03))
+INTERVAL       = int(os.getenv('INTERVAL', 60))
+
+SOLANA_RPC    = 'https://api.mainnet-beta.solana.com'
+JUPITER_QUOTE = 'https://quote-api.jup.ag/v6/quote'
+JUPITER_SWAP  = 'https://quote-api.jup.ag/v6/swap'
+USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+
+
+# ── SWAP EXECUTION ──────────────────────────────────────────────────────────
+
+def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
+                 wallet_address: str = '', private_key: str = '') -> str:
+    """Execute a Jupiter v6 swap. Returns the transaction signature string.
+    Logs every step so failures are immediately visible in Railway logs."""
+    wallet_address = wallet_address or WALLET_ADDRESS
+    private_key    = private_key    or PRIVATE_KEY
+    if not wallet_address or not private_key:
+        raise ValueError('WALLET_ADDRESS and WALLET_PRIVATE_KEY must be set')
+
+    label = output_mint[:8] if input_mint == USDC_MINT else input_mint[:8]
+
+    # ── Step 1: Jupiter quote ────────────────────────────────────────────────
+    print(f'Step 1: Getting quote from Jupiter for {label} amount {amount_lamports}', flush=True)
+    try:
+        r = requests.get(
+            JUPITER_QUOTE,
+            params={
+                'inputMint':   input_mint,
+                'outputMint':  output_mint,
+                'amount':      int(amount_lamports),
+                'slippageBps': 300,
+            },
+            timeout=15,
+        )
+        quote = r.json()
+    except Exception:
+        print('SWAP FAIL Step 1 (quote GET):\n' + traceback.format_exc(), flush=True)
+        raise
+
+    # ── Step 2: Validate quote ───────────────────────────────────────────────
+    out_amount = quote.get('outAmount', '?')
+    impact     = quote.get('priceImpactPct', '?')
+    print(f'Step 2: Quote received — outAmount={out_amount}  priceImpact={impact}%', flush=True)
+    if 'error' in quote:
+        raise Exception(f'Jupiter quote error: {quote["error"]}')
+    if 'outAmount' not in quote:
+        raise Exception(f'Unexpected quote response: {str(quote)[:300]}')
+
+    # ── Step 3: Get swap transaction ─────────────────────────────────────────
+    print('Step 3: Getting swap transaction from Jupiter', flush=True)
+    try:
+        r2 = requests.post(
+            JUPITER_SWAP,
+            json={
+                'quoteResponse':             quote,
+                'userPublicKey':             wallet_address,
+                'wrapAndUnwrapSol':          True,
+                'dynamicComputeUnitLimit':   True,
+                'prioritizationFeeLamports': 1000,
+            },
+            headers={'Content-Type': 'application/json'},
+            timeout=20,
+        )
+        swap_resp = r2.json()
+    except Exception:
+        print('SWAP FAIL Step 3 (swap POST):\n' + traceback.format_exc(), flush=True)
+        raise
+
+    swap_tx_b64 = swap_resp.get('swapTransaction')
+    print(f'Step 4: Swap transaction received — signing... (present={bool(swap_tx_b64)})', flush=True)
+    if 'error' in swap_resp:
+        raise Exception(f'Jupiter swap error: {swap_resp["error"]}')
+    if not swap_tx_b64:
+        raise Exception(f'No swapTransaction in response: {str(swap_resp)[:300]}')
+
+    # ── Step 4: Decode + sign ────────────────────────────────────────────────
+    try:
+        tx_bytes  = base64.b64decode(swap_tx_b64)
+        keypair   = Keypair.from_base58_string(private_key)
+        vtx       = VersionedTransaction.from_bytes(tx_bytes)
+        # VersionedTransaction(message, [keypair]) is the correct sign pattern;
+        # mutating vtx.signatures[0] is silently ignored (immutable Rust binding).
+        signed_tx = VersionedTransaction(vtx.message, [keypair])
+        encoded   = base64.b64encode(bytes(signed_tx)).decode()
+    except Exception:
+        print('SWAP FAIL Step 4 (sign):\n' + traceback.format_exc(), flush=True)
+        raise
+
+    # ── Step 5: Send to RPC ──────────────────────────────────────────────────
+    print(f'Step 5: Sending transaction to Solana RPC', flush=True)
+    try:
+        rpc_resp = requests.post(
+            SOLANA_RPC,
+            json={
+                'jsonrpc': '2.0',
+                'id': 1,
+                'method': 'sendTransaction',
+                'params': [
+                    encoded,
+                    {
+                        'encoding':       'base64',
+                        'skipPreflight':  False,
+                        'maxRetries':     3,
+                    },
+                ],
+            },
+            timeout=30,
+        ).json()
+    except Exception:
+        print('SWAP FAIL Step 5 (sendTransaction):\n' + traceback.format_exc(), flush=True)
+        raise
+
+    # ── Step 6: Result ───────────────────────────────────────────────────────
+    print(f'Step 6: Transaction result: {rpc_resp}', flush=True)
+    if 'error' in rpc_resp:
+        raise Exception(f'RPC sendTransaction error: {rpc_resp["error"]}')
+    sig = rpc_resp.get('result')
+    if sig:
+        print(f'Trade submitted: https://solscan.io/tx/{sig}', flush=True)
+        return sig
+    raise Exception(f'No signature in RPC response: {rpc_resp}')
+
+
+# ── SINGLE SWAP ENTRY POINT (called from dashboard subprocess) ───────────────
+
+def execute_single_swap(action: str, mint: str, amount_str: str):
+    """Called as: python orcagent_solana.py buy|sell MINT AMOUNT"""
+    amount = float(amount_str)
+    try:
+        if action == 'buy':
+            lamports = int(amount * 1_000_000)  # USDC has 6 decimals
+            sig = execute_swap(USDC_MINT, mint, lamports)
+            print(f'BUY {mint[:16]} ${round(amount,2)} TX:{sig}', flush=True)
+        elif action == 'sell':
+            lamports = int(amount * 1_000_000)  # assume 6 decimals for token
+            sig = execute_swap(mint, USDC_MINT, lamports)
+            print(f'SELL {mint[:16]} amt:{round(amount,4)} TX:{sig}', flush=True)
+        else:
+            print(f'Unknown action: {action}', flush=True)
+            sys.exit(1)
+    except Exception:
+        print(f'execute_single_swap FAILED [{action} {mint[:16]}]:\n' + traceback.format_exc(), flush=True)
+        sys.exit(1)
+
+
+# ── BALANCE HELPERS ──────────────────────────────────────────────────────────
+
+def get_balance() -> float:
+    r = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1,
+        'method': 'getBalance',
+        'params': [WALLET_ADDRESS],
+    }, timeout=10)
+    return r.json()['result']['value'] / 1e9
+
+def get_usdc_balance() -> float:
+    r = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1,
+        'method': 'getTokenAccountsByOwner',
+        'params': [WALLET_ADDRESS, {'mint': USDC_MINT}, {'encoding': 'jsonParsed'}],
+    }, timeout=10)
+    accounts = r.json().get('result', {}).get('value', [])
+    if accounts:
+        return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
+    return 0.0
+
+
+# ── TOKEN DISCOVERY ──────────────────────────────────────────────────────────
 
 def discover_tokens(limit=30):
-    mints    = []
+    mints   = []
     trending = set()
-    seen     = {USDC_MINT}
+    seen    = {USDC_MINT}
+    _h = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
     try:
-        r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', timeout=10)
+        r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', headers=_h, timeout=10)
         if r.status_code == 200:
             for item in r.json():
                 if item.get('chainId') == 'solana':
                     m = item.get('tokenAddress', '')
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
-    except: pass
+    except Exception: pass
     try:
         r = requests.get(
             'https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6',
-            timeout=10)
+            headers=_h, timeout=10)
         if r.status_code == 200:
             data  = r.json()
             pairs = data.get('pairs', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
@@ -45,9 +208,9 @@ def discover_tokens(limit=30):
                         trending.add(m)
                         if m not in seen:
                             seen.add(m); mints.append(m)
-    except: pass
+    except Exception: pass
     try:
-        r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
+        r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', headers=_h, timeout=10)
         if r.status_code == 200:
             items = r.json() if isinstance(r.json(), list) else []
             for item in items:
@@ -55,12 +218,16 @@ def discover_tokens(limit=30):
                     m = item.get('tokenAddress', '')
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
-    except: pass
+    except Exception: pass
     return [{'mint': m, 'label': m[:8]} for m in mints[:limit]], trending
 
-def get_token_data(mint):
+
+def get_token_data(mint: str):
     try:
-        r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=10)
+        r = requests.get(
+            'https://api.dexscreener.com/latest/dex/tokens/' + mint,
+            headers={'User-Agent': 'Mozilla/5.0 OrcAgent/1.0'},
+            timeout=10)
         r.raise_for_status()
         pairs = r.json().get('pairs', [])
         if not pairs: return None
@@ -81,9 +248,11 @@ def get_token_data(mint):
             'txns_buys':  m5b or h1b,
             'txns_sells': m5s or h1s,
         }
-    except: return None
+    except Exception:
+        return None
 
-def score_token(data):
+
+def score_token(data: dict) -> float:
     """Score 0–10. Momentum-focused: ≥4 = BUY signal."""
     if data.get('price', 0) <= 0: return 0
     score = 0.0
@@ -121,69 +290,22 @@ def score_token(data):
 
     return min(10.0, max(0.0, round(score, 1)))
 
-def get_balance():
-    r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[WALLET_ADDRESS]}, timeout=10)
-    return r.json()['result']['value'] / 1e9
 
-def get_usdc_balance():
-    r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[WALLET_ADDRESS,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=10)
-    accounts = r.json().get('result',{}).get('value',[])
-    if accounts:
-        return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
-    return 0.0
-
-def execute_swap(input_mint, output_mint, amount_lamports):
-    """Execute a Jupiter swap. amount_lamports is in base units (e.g. micro-USDC for USDC)."""
-    keypair    = Keypair.from_base58_string(PRIVATE_KEY)
-    quote      = requests.get(JUPITER_QUOTE, params={'inputMint': input_mint, 'outputMint': output_mint,
-                               'amount': int(amount_lamports), 'slippageBps': 300, 'maxAccounts': 20}, timeout=10).json()
-    if 'error' in quote: raise Exception('Quote: ' + str(quote['error']))
-    swap_resp  = requests.post(JUPITER_SWAP, json={'quoteResponse': quote, 'userPublicKey': WALLET_ADDRESS,
-                                'wrapAndUnwrapSol': True}, timeout=10).json()
-    if 'error' in swap_resp: raise Exception('Swap: ' + str(swap_resp['error']))
-    tx_key     = 'swapTransaction' if 'swapTransaction' in swap_resp else 'transaction'
-    if tx_key not in swap_resp: raise Exception('No tx in response')
-    raw_tx     = base64.b64decode(swap_resp[tx_key])
-    tx         = VersionedTransaction.from_bytes(raw_tx)
-    msg_bytes  = to_bytes_versioned(tx.message)
-    sig        = keypair.sign_message(msg_bytes)
-    tx.signatures[0] = sig
-    encoded    = base64.b64encode(bytes(tx)).decode()
-    result     = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'sendTransaction',
-                                'params':[encoded,{'encoding':'base64','skipPreflight': False}]}, timeout=30).json()
-    if 'error' in result: raise Exception('RPC: ' + str(result['error']))
-    return result.get('result', str(result))
-
-def execute_single_swap(action, mint, amount_str):
-    """Called when invoked as: python orcagent_solana.py buy|sell MINT AMOUNT"""
-    amount = float(amount_str)
-    if action == 'buy':
-        # amount is USDC dollars; convert to micro-USDC (6 decimals)
-        tx = execute_swap(USDC_MINT, mint, int(amount * 1e6))
-        print('BUY ' + mint[:16] + ' $' + str(round(amount, 2)) + ' TX:' + str(tx))
-    elif action == 'sell':
-        # amount is token units; convert to micro-token (assume 6 decimals)
-        tx = execute_swap(mint, USDC_MINT, int(amount * 1e6))
-        print('SELL ' + mint[:16] + ' amt:' + str(round(amount, 4)) + ' TX:' + str(tx))
-    else:
-        print('Unknown action: ' + action)
-        sys.exit(1)
+# ── STANDALONE TRADING LOOP ──────────────────────────────────────────────────
 
 def run():
-    """Standalone trading loop (not used by dashboard.py but available for direct CLI use)."""
-    print('OrcAgent Solana — momentum scalper v5')
-    print('Wallet: ' + str(WALLET_ADDRESS))
-    print('TP:' + str(TAKE_PROFIT * 100) + '% | SL:' + str(STOP_LOSS * 100) + '% | Interval:' + str(INTERVAL) + 's')
-    client    = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    """Standalone trading loop (not used by dashboard.py but available for CLI use)."""
+    print('OrcAgent Solana — momentum scalper v6', flush=True)
+    print(f'Wallet: {WALLET_ADDRESS}', flush=True)
+    print(f'TP:{TAKE_PROFIT*100}% | SL:{STOP_LOSS*100}% | Interval:{INTERVAL}s', flush=True)
     positions = {}
     while True:
         try:
             tokens, trending_mints = discover_tokens()
-            sol    = get_balance()
-            usdc   = get_usdc_balance()
-            print('SOL:' + str(round(sol, 4)) + ' USDC:' + str(round(usdc, 2)))
+            sol  = get_balance()
+            usdc = get_usdc_balance()
+            print(f'SOL:{round(sol,4)} USDC:{round(usdc,2)}', flush=True)
 
-            # Score and filter for momentum
             candidates = []
             for t in tokens:
                 mint = t['mint']
@@ -206,42 +328,40 @@ def run():
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0}
                     pos = positions[mint]
 
-                    # Exit checks
                     if pos['amount'] > 0 and pos['buy_price'] > 0:
                         if data['price'] > pos['peak_price']: pos['peak_price'] = data['price']
                         chg = (data['price'] - pos['buy_price']) / pos['buy_price']
                         if chg >= TAKE_PROFIT:
-                            tx = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
-                            print('TAKE PROFIT ' + label + ' +' + str(round(chg * 100, 1)) + '% TX:' + str(tx))
+                            sig = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         elif chg <= -STOP_LOSS:
-                            tx = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
-                            print('STOP LOSS ' + label + ' ' + str(round(chg * 100, 1)) + '% TX:' + str(tx))
+                            sig = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            print(f'STOP LOSS {label} {round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         elif m5 < 5:
-                            tx = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
-                            print('MOMENTUM DIED ' + label + ' m5=' + str(round(m5, 1)) + '% TX:' + str(tx))
+                            sig = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            print(f'MOMENTUM DIED {label} m5={round(m5,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         continue
 
-                    # Entry: score ≥ 4, momentum (m5≥5 / m15≥10 / trending)
                     if sc >= 4 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
                         spend = min(usdc * 0.20, MAX_USDC / 4)
-                        tx    = execute_swap(USDC_MINT, mint, int(spend * 1e6))
-                        print('BUY ' + label + ' $' + str(round(spend, 2)) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '% TX:' + str(tx))
+                        sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
+                        print(f'BUY {label} ${round(spend,2)} score:{sc} m5:+{round(m5,1)}% TX:{sig}', flush=True)
                         pos['amount']     = spend / data['price']
                         pos['buy_price']  = data['price']
                         pos['peak_price'] = data['price']
                         usdc -= spend
                 except Exception as e:
-                    print(token['label'] + ' error: ' + str(e))
-        except Exception as e:
-            print('Error: ' + str(e))
+                    print(f'{token["label"]} error: {traceback.format_exc()}', flush=True)
+        except Exception:
+            print('run() loop error:\n' + traceback.format_exc(), flush=True)
         time.sleep(INTERVAL)
+
 
 if __name__ == '__main__':
     if len(sys.argv) >= 4:
-        # Single swap mode: python orcagent_solana.py buy|sell MINT AMOUNT
         execute_single_swap(sys.argv[1], sys.argv[2], sys.argv[3])
     else:
         run()
