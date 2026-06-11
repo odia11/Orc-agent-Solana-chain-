@@ -464,6 +464,7 @@ def get_user_state(wallet: str) -> dict:
             'sol': 0.0,
             'usdc': 0.0,
             'balance_fetched_at': 0.0,
+            'has_trading_key': False,
             'log_lines': list(state['log_lines']),  # seed with recent system events
         }
     return user_states[wallet]
@@ -950,17 +951,19 @@ def set_wallet():
         except: pass
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])
-        has_key = False
+        has_trading_key = False
         try:
             conn2 = sqlite3.connect(DB_FILE)
             c2    = conn2.cursor()
             c2.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (address,))
             kr = c2.fetchone()
             conn2.close()
-            has_key = bool(kr and kr[0])
+            has_trading_key = bool(kr and kr[0])
         except Exception:
             pass
-        return jsonify({'ok': True, 'wallet': address, 'has_key': has_key,
+        us = get_user_state(address)
+        us['has_trading_key'] = has_trading_key
+        return jsonify({'ok': True, 'wallet': address, 'has_trading_key': has_trading_key,
                         'is_admin': bool(OWNER_WALLET and address == OWNER_WALLET)})
     else:
         prev = _current_wallet()
@@ -981,8 +984,8 @@ def get_settings():
     row  = c.fetchone()
     conn.close()
     if row:
-        return jsonify({'ok': True, 'has_key': bool(row[0]), 'max_trade_size': row[1] or 1.0, 'daily_loss_limit': row[2] or 50.0})
-    return jsonify({'ok': True, 'has_key': False, 'max_trade_size': 1.0, 'daily_loss_limit': 50.0})
+        return jsonify({'ok': True, 'has_trading_key': bool(row[0]), 'max_trade_size': row[1] or 1.0, 'daily_loss_limit': row[2] or 50.0})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 1.0, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -1030,7 +1033,25 @@ def save_settings():
         conn.commit()
     finally:
         conn.close()
+    if private_key_raw:
+        get_user_state(wallet)['has_trading_key'] = True
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
+    return jsonify({'ok': True})
+
+@app.route('/api/settings/key', methods=['DELETE'])
+@rate_limit(5, 60)
+def delete_trading_key():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET encrypted_private_key="" WHERE wallet_address=?', (wallet,))
+        conn.commit()
+    finally:
+        conn.close()
+    get_user_state(wallet)['has_trading_key'] = False
+    add_user_log(wallet, 'Trading key removed for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True})
 
 # ── STATE ──
@@ -1066,15 +1087,17 @@ def api_state():
             'tokens':           state['tokens'],
             'wallet':           wallet,
             'is_admin':         bool(OWNER_WALLET and wallet == OWNER_WALLET),
+            'has_trading_key':  us.get('has_trading_key', False),
         })
     return jsonify({
-        'trader_running': state['trader_running'],
-        'usdc': state['usdc'], 'sol': state['sol'],
-        'positions': int(state.get('positions', 0)),
-        'log_lines': state['log_lines'][:20],
-        'tokens':    state['tokens'],
-        'wallet':    state.get('wallet', ''),
-        'is_admin':  False,
+        'trader_running':  state['trader_running'],
+        'usdc':            state['usdc'], 'sol': state['sol'],
+        'positions':       int(state.get('positions', 0)),
+        'log_lines':       state['log_lines'][:20],
+        'tokens':          state['tokens'],
+        'wallet':          state.get('wallet', ''),
+        'is_admin':        False,
+        'has_trading_key': False,
     })
 
 # ── TRADER START/STOP ──

@@ -303,6 +303,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .s-save:hover{filter:brightness(1.1)}
 .s-save:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;filter:none}
 .s-key-hint{font-size:8px;font-family:'Share Tech Mono',monospace;margin-left:8px}
+.s-key-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.22);border-radius:7px;padding:9px 12px;margin-bottom:8px}
+.s-remove-key-btn{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;color:var(--red);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
+.s-remove-key-btn:hover{background:rgba(255,77,106,.2)}
 
 /* ── INACTIVITY WARNING ── */
 .inact-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(6px)}
@@ -472,8 +475,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
     <div class="s-field">
       <label class="s-label">Private Key <span class="s-key-hint" id="s-key-hint"></span></label>
+      <div id="s-key-saved" class="s-key-saved-row" style="display:none">
+        <span style="font-size:11px;color:var(--green)">✅ Private key saved — ready to trade</span>
+        <button onclick="removeKey()" class="s-remove-key-btn">Remove key</button>
+      </div>
       <div class="s-key-wrap">
-        <input id="s-privkey" class="s-input" type="password" placeholder="Leave blank to keep existing encrypted key" autocomplete="new-password">
+        <input id="s-privkey" class="s-input" type="password" placeholder="Enter private key to enable trading" autocomplete="new-password">
         <button class="s-vis-btn" id="s-vis-btn" onclick="togglePrivVis()">👁</button>
       </div>
     </div>
@@ -835,7 +842,7 @@ async function connectWalletOnboard(type){
     walletType=name;
     sessionStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
     fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-      .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } _isAdmin=r.is_admin||false; }).catch(()=>{});
+      .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; }).catch(()=>{});
     document.getElementById('wallet-type-label').textContent=name+' wallet connected';
     document.getElementById('wallet-addr').textContent=phantomKey;
     document.getElementById('wallet-connected').style.display='flex';
@@ -887,16 +894,10 @@ async function launchApp(){
     // Pre-load saved settings so key status is visible immediately without opening the modal
     fetch('/api/settings').then(r=>r.json()).then(r=>{
       if(r?.ok){
-        settingsHasKey=r.has_key||false;
-        updateKeyIndicator();
-        // Pre-populate fields so they are ready when the user opens the modal
+        settingsHasKey=r.has_trading_key||false;
         document.getElementById('s-maxusdc').value=r.max_trade_size||1;
         document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
-        if(settingsHasKey){
-          const hint=document.getElementById('s-key-hint');
-          hint.style.color='var(--green)';
-          hint.textContent='✓ key saved (encrypted)';
-        }
+        _updateKeyStatus();
       }
     }).catch(()=>{});
   } else {
@@ -956,6 +957,10 @@ async function fetchState(){
   if(typeof r.is_admin==='boolean' && r.is_admin!==_isAdmin){
     _isAdmin=r.is_admin;
     checkOwnerPanel();
+  }
+  if(typeof r.has_trading_key==='boolean' && r.has_trading_key!==settingsHasKey){
+    settingsHasKey=r.has_trading_key;
+    _updateKeyStatus();
   }
   document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
   if(phantomKey){
@@ -1402,6 +1407,7 @@ function updateBtns(){
 }
 
 async function toggleTrader(){
+  if(!traderOn && !settingsHasKey){ openSettings(); return; }
   const tb=document.getElementById('trade-btn');
   tb.disabled=true; tb.style.opacity='.6';
   // Watchdog: re-enable after 5 s regardless, so a hung request never leaves the button stuck
@@ -1450,9 +1456,9 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
       document.getElementById('phantom-ob-btn').style.display='none';
       document.getElementById('solflare-ob-btn').style.display='none';
       document.getElementById('wallet-back-btn').style.display='block';
-      // Re-register session with server and capture has_key / is_admin
+      // Re-register session with server and capture has_trading_key / is_admin
       fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
+        .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
       launchApp();
       return;
     }
@@ -1480,7 +1486,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
       document.getElementById('solflare-ob-btn').style.display = 'none';
       document.getElementById('wallet-back-btn').style.display = 'block';
       fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})})
-        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
+        .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
       launchApp();
       return;
     }
@@ -1493,6 +1499,25 @@ let settingsHasKey=false;
 function updateKeyIndicator(){
   const btn=document.getElementById('settings-btn');
   if(btn) btn.textContent=settingsHasKey?'⚙ Settings ✓':'⚙ Settings';
+}
+function _updateKeyStatus(){
+  updateKeyIndicator();
+  const saved=document.getElementById('s-key-saved');
+  const inp=document.getElementById('s-privkey');
+  const hint=document.getElementById('s-key-hint');
+  if(saved) saved.style.display=settingsHasKey?'flex':'none';
+  if(inp) inp.placeholder=settingsHasKey?'Enter new key to replace existing':'Paste private key (base58)';
+  if(hint) hint.textContent='';
+}
+async function removeKey(){
+  if(!confirm('Remove your saved trading key?')) return;
+  const r=await fetch('/api/settings/key',{method:'DELETE'}).then(r=>r.json()).catch(()=>null);
+  if(r?.ok){
+    settingsHasKey=false;
+    _updateKeyStatus();
+    const msgEl=document.getElementById('s-msg');
+    if(msgEl){ msgEl.className='s-msg ok'; msgEl.textContent='✓ Trading key removed.'; }
+  }
 }
 async function openSettings(){
   const modal=document.getElementById('settings-modal');
@@ -1509,17 +1534,14 @@ async function openSettings(){
     if(r?.ok){
       document.getElementById('s-maxusdc').value=r.max_trade_size||1;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
-      settingsHasKey=r.has_key||false;
-      const hint=document.getElementById('s-key-hint');
-      hint.style.color='var(--green)';
-      hint.textContent=settingsHasKey?'✓ key saved (encrypted)':'';
-      updateKeyIndicator();
+      settingsHasKey=r.has_trading_key||false;
+      _updateKeyStatus();
     }
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
     saveBtn.disabled=true; saveBtn.style.opacity='.45';
-    document.getElementById('s-key-hint').textContent='';
     settingsHasKey=false;
+    _updateKeyStatus();
   }
 }
 
@@ -1561,9 +1583,7 @@ async function saveSettings(){
     if(pk){
       msgEl.textContent='✓ Settings saved. Private key encrypted with Fernet and stored securely.';
       document.getElementById('s-privkey').value='';
-      const hint=document.getElementById('s-key-hint');
-      hint.style.color='var(--green)'; hint.textContent='✓ key saved (encrypted)';
-      settingsHasKey=true; updateKeyIndicator();
+      settingsHasKey=true; _updateKeyStatus();
     } else {
       msgEl.textContent='✓ Trade settings updated.';
     }
