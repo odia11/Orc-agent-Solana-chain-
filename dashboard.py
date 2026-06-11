@@ -1033,10 +1033,10 @@ def save_settings():
         conn.commit()
     finally:
         conn.close()
-    if private_key_raw:
-        get_user_state(wallet)['has_trading_key'] = True
+    final_has_key = bool(encrypted)
+    get_user_state(wallet)['has_trading_key'] = final_has_key
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
-    return jsonify({'ok': True})
+    return jsonify({'ok': True, 'has_trading_key': final_has_key})
 
 @app.route('/api/settings/key', methods=['DELETE'])
 @rate_limit(5, 60)
@@ -1107,6 +1107,16 @@ def start_trader():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        kr = c.fetchone()
+        conn.close()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'DB error: ' + str(e)[:60]}), 500
+    if not kr or not kr[0]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
     with _trader_lock:
         us = get_user_state(wallet)
         if us['trader_running']:

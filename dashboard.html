@@ -309,7 +309,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .s-save:hover{filter:brightness(1.1)}
 .s-save:disabled{background:var(--border2);color:var(--muted);cursor:not-allowed;filter:none}
 .s-key-hint{font-size:8px;font-family:'Share Tech Mono',monospace;margin-left:8px}
-.s-key-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.22);border-radius:7px;padding:9px 12px;margin-bottom:8px}
+.s-key-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,237,170,.09);border:1px solid rgba(0,237,170,.35);border-radius:8px;padding:11px 14px;margin-bottom:16px}
 .s-remove-key-btn{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;color:var(--red);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
 .s-remove-key-btn:hover{background:rgba(255,77,106,.2)}
 .s-card{max-height:90vh;overflow-y:auto}
@@ -486,6 +486,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="s-title">⚙ TRADING SETTINGS</div>
     <div class="s-sub" id="s-user-label">Connect a wallet to save per-wallet settings</div>
 
+    <div id="s-key-saved" class="s-key-saved-row" style="display:none">
+      <span style="font-size:12px;color:var(--green)">✅ Private key saved — ready to trade</span>
+      <button onclick="removeKey()" class="s-remove-key-btn">Remove key</button>
+    </div>
+
     <div class="how-to-box">
       <button class="how-to-toggle" onclick="toggleHowTo(this)" aria-expanded="false">
         ℹ How to Start Trading <span class="how-to-arrow">▼</span>
@@ -524,10 +529,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
     <div class="s-field">
       <label class="s-label">Private Key <span class="s-key-hint" id="s-key-hint"></span></label>
-      <div id="s-key-saved" class="s-key-saved-row" style="display:none">
-        <span style="font-size:11px;color:var(--green)">✅ Private key saved — ready to trade</span>
-        <button onclick="removeKey()" class="s-remove-key-btn">Remove key</button>
-      </div>
       <div class="s-key-wrap">
         <input id="s-privkey" class="s-input" type="password" placeholder="Enter private key to enable trading" autocomplete="new-password">
         <button class="s-vis-btn" id="s-vis-btn" onclick="togglePrivVis()">👁</button>
@@ -1517,7 +1518,9 @@ async function toggleTrader(){
   // Watchdog: re-enable after 5 s regardless, so a hung request never leaves the button stuck
   const watchdog=setTimeout(()=>{ tb.disabled=false; tb.style.opacity=''; },5000);
   try{
-    await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
+    const res=await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
+    const rj=await res.json().catch(()=>null);
+    if(rj&&!rj.ok&&rj.msg){ showTradeWarn('⚠️ '+rj.msg); }
     await fetchState();
   }catch(e){ console.error('toggleTrader',e); }
   finally{ clearTimeout(watchdog); tb.disabled=false; tb.style.opacity=''; }
@@ -1720,10 +1723,11 @@ async function saveSettings(){
 
   if(r?.ok){
     msgEl.className='s-msg ok';
+    settingsHasKey=r.has_trading_key||settingsHasKey;
+    _updateKeyStatus();
     if(pk){
-      msgEl.textContent='✓ Settings saved. Private key encrypted with Fernet and stored securely.';
+      msgEl.textContent='✓ Settings saved. Private key encrypted and stored securely.';
       document.getElementById('s-privkey').value='';
-      settingsHasKey=true; _updateKeyStatus();
     } else {
       msgEl.textContent='✓ Trade settings updated.';
     }
