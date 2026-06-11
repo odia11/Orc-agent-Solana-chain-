@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math
 from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.fernet import Fernet
@@ -28,6 +28,7 @@ WALLET_ADDRESS = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT      = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC     = 'https://api.mainnet-beta.solana.com'
 OWNER_WALLET   = os.environ.get('OWNER_WALLET', '57enjXJH7Ro1aVTT97NuSvf3noYEsBwp4GUjet22vGW6')
+BIRDEYE_KEY    = os.environ.get('BIRDEYE_API_KEY', '')
 FEE_RATE       = 0.05  # 5% performance fee on profitable trades only
 
 # ── FERNET ENCRYPTION ──
@@ -975,22 +976,59 @@ def api_totd():
 def api_carousel():
     return jsonify({'tokens': state['tokens'][:10]})
 
+def _synthetic_candles(pair: dict, now: int, tcfg: dict) -> list:
+    """Generate N synthetic OHLCV candles from DexScreener price-change percentages.
+    Used when both Birdeye and DexScreener chart APIs are unavailable.
+    Uses sine-based deterministic noise — no random module needed."""
+    cur = float(pair.get('priceUsd', 0) or 0)
+    if cur <= 0:
+        return []
+    ch     = pair.get('priceChange', {}) or {}
+    ch5m   = float(ch.get('m5',  0) or 0) / 100
+    ch1h   = float(ch.get('h1',  0) or 0) / 100
+    ch6h   = float(ch.get('h6',  0) or 0) / 100
+    ch24h  = float(ch.get('h24', 0) or 0) / 100
+    vol5m  = float((pair.get('volume', {}) or {}).get('m5', 0) or 0)
+    n      = tcfg['n']
+    win    = tcfg['window']
+    step_s = win // n
+    if   win <= 600:   total_chg = ch5m
+    elif win <= 7200:  total_chg = ch1h
+    elif win <= 86400: total_chg = ch6h
+    else:              total_chg = ch24h
+    p_start = cur / max(1.0 + total_chg, 0.001)
+    candles = []
+    for i in range(n):
+        frac  = i / max(n - 1, 1)
+        base  = p_start + (cur - p_start) * frac
+        noise = base * 0.003
+        o = base + math.sin(i * 2.3)         * noise
+        c = base + math.sin(i * 2.3 + 1.1)  * noise
+        h = max(o, c) + abs(math.sin(i * 2.3 + 2.2)) * noise * 1.6
+        l = min(o, c) - abs(math.sin(i * 2.3 + 3.3)) * noise * 1.6
+        v = vol5m * max(0.0, math.sin(i * 1.7 + 0.5) * 0.3 + 0.5)
+        candles.append({'t': now - win + i * step_s,
+                        'o': o, 'h': h, 'l': l, 'c': c, 'v': round(v, 2)})
+    return candles
+
+
 @app.route('/api/chart/<mint>')
 @rate_limit(60, 60)
 def api_chart(mint):
     if not _SOLANA_ADDR_RE.match(mint or ''):
         return jsonify({'candles': [], 'error': 'invalid mint'})
-    tf    = request.args.get('tf', '5m')
-    _TF   = {
-        '1m':  {'res': '1',    'window': 1800,    'n': 60},
-        '5m':  {'res': '5',    'window': 9000,    'n': 60},
-        '15m': {'res': '15',   'window': 21600,   'n': 60},
-        '1h':  {'res': '60',   'window': 86400,   'n': 48},
-        '4h':  {'res': '240',  'window': 345600,  'n': 42},
-        'D':   {'res': '1440', 'window': 2592000, 'n': 30},
+    tf   = request.args.get('tf', '5m')
+    _TF  = {
+        '1m':  {'res': '1',    'window': 1800,    'n': 60, 'brd': '1m'},
+        '5m':  {'res': '5',    'window': 9000,    'n': 60, 'brd': '5m'},
+        '15m': {'res': '15',   'window': 21600,   'n': 60, 'brd': '15m'},
+        '1h':  {'res': '60',   'window': 86400,   'n': 48, 'brd': '1H'},
+        '4h':  {'res': '240',  'window': 345600,  'n': 42, 'brd': '4H'},
+        'D':   {'res': '1440', 'window': 2592000, 'n': 30, 'brd': '1D'},
     }
-    tcfg  = _TF.get(tf, _TF['5m'])
+    tcfg = _TF.get(tf, _TF['5m'])
     try:
+        # ── Step 1: resolve pair address from DexScreener public API ──
         r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
         pairs = r.json().get('pairs', []) if r.status_code == 200 else []
         if not pairs:
@@ -1003,71 +1041,110 @@ def api_chart(mint):
 
         now     = int(time.time())
         from_ts = now - tcfg['window']
-        chart_url = (
-            f'https://io.dexscreener.com/dex/chart/amm/v3/{chain_id}/{pair_address}'
-            f'?res={tcfg["res"]}&cb=0&from={from_ts}&to={now}'
-        )
-        rc = requests.get(chart_url, timeout=10, headers={
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
-            'Referer': 'https://dexscreener.com/',
-        })
-
-        def _norm_ts(t):
-            return int(t) // 1000 if t > 1e10 else int(t)
-
         candles = []
-        if rc.status_code == 200:
-            data = rc.json()
-            # TradingView UDF format: {t:[...], o:[...], h:[...], l:[...], c:[...], v:[...]}
-            if isinstance(data, dict) and isinstance(data.get('t'), list):
-                ts_arr = data['t']
-                opens  = data.get('o', [])
-                highs  = data.get('h', [])
-                lows   = data.get('l', [])
-                closes = data.get('c', [])
-                vols   = data.get('v', [])
-                for i, raw_ts in enumerate(ts_arr):
-                    t_ts = _norm_ts(raw_ts)
-                    if t_ts >= from_ts:
+
+        # ── Step 2: Birdeye OHLCV (primary) ──
+        # DexScreener's internal chart API (io.dexscreener.com) is protected by
+        # Cloudflare and returns 404/bot-challenge HTML for server-side requests.
+        # Birdeye is the reliable server-to-server OHLCV source.
+        if BIRDEYE_KEY:
+            try:
+                brd_url = (
+                    f'https://public-api.birdeye.so/defi/ohlcv'
+                    f'?address={mint}&type={tcfg["brd"]}'
+                    f'&time_from={from_ts}&time_to={now}'
+                )
+                rb = requests.get(brd_url, timeout=10, headers={
+                    'X-API-KEY': BIRDEYE_KEY,
+                    'x-chain':   'solana',
+                    'Accept':    'application/json',
+                })
+                if rb.status_code == 200:
+                    for item in (rb.json().get('data') or {}).get('items', []):
+                        c_val = float(item.get('c', 0) or 0)
+                        if c_val <= 0:
+                            continue
                         candles.append({
-                            't': t_ts,
-                            'o': float(opens[i])  if i < len(opens)  else 0,
-                            'h': float(highs[i])  if i < len(highs)  else 0,
-                            'l': float(lows[i])   if i < len(lows)   else 0,
-                            'c': float(closes[i]) if i < len(closes) else 0,
-                            'v': float(vols[i])   if i < len(vols)   else 0,
+                            't': int(item.get('unixTime', 0)),
+                            'o': float(item.get('o', c_val) or c_val),
+                            'h': float(item.get('h', c_val) or c_val),
+                            'l': float(item.get('l', c_val) or c_val),
+                            'c': c_val,
+                            'v': float(item.get('v', 0) or 0),
                         })
-            elif isinstance(data, list):
-                for c in data:
-                    if not isinstance(c, dict): continue
-                    t_ts = _norm_ts(c.get('time', c.get('t', 0)))
-                    if t_ts >= from_ts:
-                        candles.append({
-                            't': t_ts,
-                            'o': float(c.get('open',   c.get('o', 0)) or 0),
-                            'h': float(c.get('high',   c.get('h', 0)) or 0),
-                            'l': float(c.get('low',    c.get('l', 0)) or 0),
-                            'c': float(c.get('close',  c.get('c', 0)) or 0),
-                            'v': float(c.get('volume', c.get('v', 0)) or 0),
-                        })
+                else:
+                    print(f'[chart] Birdeye {rb.status_code} for {mint[:8]}', flush=True)
+            except Exception as e:
+                print(f'[chart] Birdeye error: {e}', flush=True)
+
+        # ── Step 3: DexScreener internal chart API (secondary) ──
+        if not candles:
+            try:
+                chart_url = (
+                    f'https://io.dexscreener.com/dex/chart/amm/v3/{chain_id}/{pair_address}'
+                    f'?res={tcfg["res"]}&cb=0&from={from_ts}&to={now}'
+                )
+                rc = requests.get(chart_url, timeout=10, headers={
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                    'Accept':    'application/json',
+                    'Referer':   'https://dexscreener.com/',
+                    'Origin':    'https://dexscreener.com',
+                })
+                if rc.status_code == 200:
+                    data = rc.json()
+                    def _norm(t): return int(t) // 1000 if t > 1e10 else int(t)
+                    if isinstance(data, dict) and isinstance(data.get('t'), list):
+                        ts_arr = data['t']
+                        o_arr  = data.get('o', [])
+                        h_arr  = data.get('h', [])
+                        l_arr  = data.get('l', [])
+                        c_arr  = data.get('c', [])
+                        v_arr  = data.get('v', [])
+                        for i, raw_ts in enumerate(ts_arr):
+                            t_ts = _norm(raw_ts)
+                            if t_ts < from_ts: continue
+                            c_val = float(c_arr[i]) if i < len(c_arr) else 0
+                            if c_val <= 0: continue
+                            candles.append({
+                                't': t_ts,
+                                'o': float(o_arr[i]) if i < len(o_arr) else c_val,
+                                'h': float(h_arr[i]) if i < len(h_arr) else c_val,
+                                'l': float(l_arr[i]) if i < len(l_arr) else c_val,
+                                'c': c_val,
+                                'v': float(v_arr[i]) if i < len(v_arr) else 0,
+                            })
+                    elif isinstance(data, list):
+                        for c in data:
+                            if not isinstance(c, dict): continue
+                            raw_ts = c.get('time', c.get('t', 0))
+                            t_ts   = _norm(raw_ts)
+                            c_val  = float(c.get('close', c.get('c', 0)) or 0)
+                            if t_ts < from_ts or c_val <= 0: continue
+                            candles.append({
+                                't': t_ts,
+                                'o': float(c.get('open',   c.get('o', c_val)) or c_val),
+                                'h': float(c.get('high',   c.get('h', c_val)) or c_val),
+                                'l': float(c.get('low',    c.get('l', c_val)) or c_val),
+                                'c': c_val,
+                                'v': float(c.get('volume', c.get('v', 0))    or 0),
+                            })
+                else:
+                    print(f'[chart] DexScreener {rc.status_code} for {pair_address[:8]}', flush=True)
+            except Exception as e:
+                print(f'[chart] DexScreener error: {e}', flush=True)
+
+        if candles:
             candles.sort(key=lambda x: x['t'])
             candles = candles[-tcfg['n']:]
 
-        # Fallback: synthesize 2 data points from current price + m5 change when
-        # the chart API returns nothing (rate-limited, new token, API down, etc.)
+        # ── Step 4: synthetic OHLCV fallback ──
         if not candles:
-            current_price = float(pair.get('priceUsd', 0) or 0)
-            change5m = float((pair.get('priceChange') or {}).get('m5', 0) or 0)
-            if current_price > 0:
-                factor = max(1 + change5m / 100, 0.0001)
-                p_ago  = current_price / factor
-                candles = [
-                    {'t': now - 300, 'o': 0, 'h': 0, 'l': 0, 'c': p_ago,          'v': 0},
-                    {'t': now,       'o': 0, 'h': 0, 'l': 0, 'c': current_price,   'v': 0},
-                ]
+            print(f'[chart] using synthetic fallback for {mint[:8]}', flush=True)
+            candles = _synthetic_candles(pair, now, tcfg)
 
         return jsonify({'candles': candles, 'pair_address': pair_address})
-    except Exception:
+    except Exception as e:
+        print(f'[chart] unhandled error: {e}', flush=True)
         return jsonify({'candles': [], 'error': 'Chart data unavailable'})
 
 @app.route('/api/trades')

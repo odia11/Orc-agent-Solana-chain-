@@ -1172,6 +1172,7 @@ async function _loadSlideChart(idx,tf){
   canvas.style.opacity='0.2';
   if(msg){msg.textContent='Loading...';msg.style.display='flex';}
   const r=await fetch('/api/chart/'+mint+'?tf='+tf).then(r=>r.json()).catch(()=>null);
+  console.log('[carousel chart]',mint.slice(0,8),'tf='+tf,'candles='+( r?.candles?.length??'null'),r?.candles?.[0]??r?.error);
   if(!r?.candles?.length){
     if(msg){msg.textContent='Chart unavailable';msg.style.display='flex';}
     canvas.style.opacity='1';
