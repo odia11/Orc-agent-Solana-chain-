@@ -243,20 +243,31 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .carousel-slide{min-width:100%;padding:20px 22px 16px;box-sizing:border-box}
 .slide-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
 .slide-id{min-width:0;flex:1}
-.slide-sym{font-family:'Orbitron',monospace;font-size:22px;font-weight:700;color:#ffe080;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slide-sym{font-family:'Orbitron',monospace;font-size:22px;font-weight:700;color:#f0b90b;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slide-name{font-size:10px;color:rgba(255,193,58,.6);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .slide-buy-btn{flex-shrink:0;background:rgba(0,237,170,.13);color:var(--green);border:1px solid rgba(0,237,170,.35);border-radius:6px;padding:6px 14px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.08em;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;transition:all .15s}
 .slide-buy-btn:hover{background:rgba(0,237,170,.25);border-color:var(--green)}
-.slide-price-row{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.slide-price-row{display:flex;align-items:baseline;gap:10px;margin-bottom:8px;flex-wrap:wrap}
 .slide-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
 .slide-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
 .slide-chg.up{color:var(--green)}.slide-chg.dn{color:var(--red)}
 .slide-chart-wrap{position:relative;width:100%;height:240px;border-radius:8px;overflow:hidden;background:#0d1117;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
 .chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
-.slide-stats{display:flex;gap:18px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,193,58,.12)}
-.slide-stat{display:flex;flex-direction:column;gap:3px}
-.slide-stat-lbl{font-size:7px;color:rgba(255,193,58,.55);text-transform:uppercase;letter-spacing:.1em}
-.slide-stat-val{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#ffe080}
+.slide-pumping{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:#0d1117;background:#00edaa;border-radius:4px;padding:2px 7px;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
+.slide-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px}
+.slide-grid-cell{background:rgba(255,193,58,.03);border:1px solid rgba(255,193,58,.1);border-radius:6px;padding:7px 9px}
+.slide-grid-lbl{font-size:8px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;font-family:'Share Tech Mono',monospace}
+.slide-grid-val{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#d1d4dc}
+.slide-grid-val.up{color:#00edaa}.slide-grid-val.dn{color:#ff4d6a}
+.slide-signal-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid rgba(255,255,255,.07);border-bottom:1px solid rgba(255,255,255,.07);margin:6px 0}
+.slide-signal-badge{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;padding:3px 11px;border-radius:4px;letter-spacing:.06em}
+.slide-signal-badge.buy{color:#00edaa;background:rgba(0,237,170,.15);border:1px solid rgba(0,237,170,.35)}
+.slide-signal-badge.hold{color:#ffc13a;background:rgba(255,193,58,.15);border:1px solid rgba(255,193,58,.35)}
+.slide-signal-badge.sell{color:#ff4d6a;background:rgba(255,77,106,.15);border:1px solid rgba(255,77,106,.35)}
+.slide-score-badge{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;padding:3px 10px;border-radius:12px;letter-spacing:.04em}
+.slide-action-row{display:flex;gap:7px;margin-top:8px}
+.slide-action-btn{flex:1;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.05em;color:rgba(255,193,58,.65);background:rgba(255,193,58,.04);border:1px solid rgba(255,193,58,.2);border-radius:5px;padding:7px;text-align:center;text-decoration:none;cursor:pointer;transition:all .15s;white-space:nowrap}
+.slide-action-btn:hover{color:#ffc13a;border-color:rgba(255,193,58,.5);background:rgba(255,193,58,.1)}
 .carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(16,24,40,.88);border:1px solid rgba(255,193,58,.22);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;font-size:16px;color:#ffc13a;transition:all .15s;backdrop-filter:blur(4px);user-select:none}
 .carousel-arrow:hover{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.55)}
 .carousel-arrow.prev{left:-13px}.carousel-arrow.next{right:-13px}
@@ -1122,6 +1133,10 @@ function fmtNum(n){
   if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K';
   return '$'+Math.round(n);
 }
+function fmtInt(n){
+  if(!n||n===0) return '—';
+  return Math.round(n).toLocaleString();
+}
 
 // ── MARKET RENDER ──
 function renderMarket(tokens){
@@ -1241,29 +1256,87 @@ function _buildCarousel(tokens){
   const dots=document.getElementById('carousel-dots');
   if(!track||!dots) return;
   track.innerHTML=tokens.map((t,i)=>{
-    const chartContent=`<div id="lw-chart-${i}" style="width:100%;height:100%"></div>
-      <div class="chart-loading" id="chartload-${i}">Loading chart...</div>`;
-    return `
-    <div class="carousel-slide" id="cslide-${i}">
-      <div class="slide-header">
-        <div class="slide-id">
-          <div class="slide-sym">${esc(t.symbol||'???')}</div>
-          <div class="slide-name">${esc(t.name||t.symbol||'Unknown')}</div>
-        </div>
-        <a class="slide-buy-btn" href="https://jup.ag/swap/SOL-${esc(t.mint)}" target="_blank" rel="noopener">⚡ BUY</a>
+    const mintAddr = safeMint(t.mint)||'';
+    const c5m      = t.change5m  || 0;
+    const c1h      = t.change1h  || 0;
+    const c24h     = t.change24h || 0;
+    const sc       = t.score     || 0;
+    const buys24   = t.txns24h_buys  || 0;
+    const sells24  = t.txns24h_sells || 0;
+    const pumping  = c1h >= 20 || sc >= 8;
+    const sigClass = sc>=7?'buy':sc>=4?'hold':'sell';
+    const sigLabel = sc>=7?'BUY':sc>=4?'HOLD':'SELL';
+    const scoreClr = sc>=7?'#00edaa':sc>=4?'#ffc13a':'#ff4d6a';
+    const scoreBg  = sc>=7?'rgba(0,237,170,.15)':sc>=4?'rgba(255,193,58,.15)':'rgba(255,77,106,.15)';
+    const chartContent=`<div id="lw-chart-${i}" style="width:100%;height:100%"></div><div class="chart-loading" id="chartload-${i}">Loading chart...</div>`;
+    return `<div class="carousel-slide" id="cslide-${i}">
+  <div class="slide-header">
+    <div class="slide-id">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:2px">
+        <span class="slide-sym">${esc(t.symbol||'???')}</span>
+        ${pumping?'<span class="slide-pumping">🔥 PUMPING</span>':''}
       </div>
-      <div class="slide-price-row">
-        <span class="slide-price">${fmtPrice(t.price)}</span>
-        <span class="slide-chg ${(t.change5m||0)>=0?'up':'dn'}">${_fmtChg(t.change5m||0)}</span>
-      </div>
-      <div class="slide-chart-wrap">${chartContent}</div>
-      <div class="slide-stats">
-        <div class="slide-stat"><span class="slide-stat-lbl">Vol 5M</span><span class="slide-stat-val">${fmtNum(t.volume5m||0)}</span></div>
-        <div class="slide-stat"><span class="slide-stat-lbl">Liquidity</span><span class="slide-stat-val">${fmtNum(t.liquidity||0)}</span></div>
-        <div class="slide-stat"><span class="slide-stat-lbl">Market Cap</span><span class="slide-stat-val">${fmtNum(t.fdv||0)}</span></div>
-        <div class="slide-stat"><span class="slide-stat-lbl">Score</span><span class="slide-stat-val">${t.score||0}</span></div>
-      </div>
-    </div>`;
+      <div class="slide-name">${esc(t.name||t.symbol||'Unknown')}</div>
+    </div>
+    <a class="slide-buy-btn" href="https://jup.ag/swap/SOL-${mintAddr}" target="_blank" rel="noopener">⚡ BUY</a>
+  </div>
+  <div class="slide-price-row">
+    <span class="slide-price">${fmtPrice(t.price)}</span>
+  </div>
+  <div class="slide-grid">
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">5M</div>
+      <div class="slide-grid-val ${c5m>=0?'up':'dn'}">${_fmtChg(c5m)}</div>
+    </div>
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">1H</div>
+      <div class="slide-grid-val ${c1h>=0?'up':'dn'}">${_fmtChg(c1h)}</div>
+    </div>
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">24H</div>
+      <div class="slide-grid-val ${c24h>=0?'up':'dn'}">${_fmtChg(c24h)}</div>
+    </div>
+  </div>
+  <div class="slide-chart-wrap">${chartContent}</div>
+  <div class="slide-grid">
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">Volume 24H</div>
+      <div class="slide-grid-val">${fmtNum(t.volume24h||0)}</div>
+    </div>
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">Liquidity</div>
+      <div class="slide-grid-val">${fmtNum(t.liquidity||0)}</div>
+    </div>
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">Market Cap</div>
+      <div class="slide-grid-val">${fmtNum(t.fdv||0)}</div>
+    </div>
+  </div>
+  <div class="slide-grid">
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">Txns 24H</div>
+      <div class="slide-grid-val">${fmtInt(buys24+sells24)}</div>
+    </div>
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">Buys</div>
+      <div class="slide-grid-val up">${fmtInt(buys24)}</div>
+    </div>
+    <div class="slide-grid-cell">
+      <div class="slide-grid-lbl">Sells</div>
+      <div class="slide-grid-val dn">${fmtInt(sells24)}</div>
+    </div>
+  </div>
+  <div class="slide-signal-row">
+    <span style="font-size:9px;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase;font-family:'Share Tech Mono',monospace">AI Signal</span>
+    <span class="slide-signal-badge ${sigClass}">${sigLabel}</span>
+    <span style="flex:1"></span>
+    <span class="slide-score-badge" style="color:${scoreClr};background:${scoreBg};border:1px solid ${scoreClr}40">${sc}/10</span>
+  </div>
+  <div class="slide-action-row">
+    <a class="slide-action-btn" href="https://dexscreener.com/solana/${mintAddr}" target="_blank" rel="noopener">View on DexScreener ↗</a>
+    <button class="slide-action-btn" onclick="navigator.clipboard.writeText('${mintAddr}');this.textContent='✓ Copied!';setTimeout(()=>this.textContent='Copy Address',2000)">Copy Address</button>
+  </div>
+</div>`;
   }).join('');
   dots.innerHTML=tokens.map((_,i)=>`<div class="c-dot${i===_carIdx?' active':''}" onclick="goToSlide(${i})"></div>`).join('');
   document.getElementById('carousel-wrap').style.display='block';
