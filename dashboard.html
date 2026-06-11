@@ -801,6 +801,17 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         </tbody>
       </table>
     </div>
+    <div style="margin-top:16px">
+      <div class="admin-section-hdr">🔐 Security Log <span style="font-weight:400;font-size:11px;color:var(--muted)">(last 20 events)</span></div>
+      <div class="trade-table-wrap" style="margin-top:8px">
+        <table class="trade-table">
+          <thead><tr><th>Timestamp</th><th>Event</th><th>Wallet</th><th>IP</th><th>Details</th></tr></thead>
+          <tbody id="admin-sec-tbody">
+            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No security events yet</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <!-- ACTIVITY LOG -->
@@ -1360,6 +1371,23 @@ async function fetchAdminData(){
       <td>${solscan}</td>
     </tr>`;
   }).join('');
+  const secTbody=document.getElementById('admin-sec-tbody');
+  const secLog=r.security_log||[];
+  if(!secLog.length){
+    secTbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No security events yet</td></tr>';
+  } else {
+    const evtColor={key_saved:'var(--green)',key_deleted:'var(--warn)',key_access:'var(--blue)',key_leak_blocked:'#ff4d6a',key_rotation:'var(--orange)',default:'var(--muted)'};
+    secTbody.innerHTML=secLog.map(e=>{
+      const col=evtColor[e.event]||evtColor.default;
+      return `<tr>
+        <td style="font-size:11px">${esc(e.ts||'')}</td>
+        <td><span style="color:${col};font-weight:600">${esc(e.event||'')}</span></td>
+        <td class="td-sym">${esc(e.wallet||'')}</td>
+        <td style="font-size:11px">${esc(e.ip||'')}</td>
+        <td style="font-size:11px">${esc(e.details||'')}</td>
+      </tr>`;
+    }).join('');
+  }
 }
 
 function renderPerfPanel(r){

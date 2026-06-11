@@ -1,4 +1,5 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac
+from contextlib import contextmanager
 from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.fernet import Fernet
@@ -32,42 +33,38 @@ BIRDEYE_KEY    = os.environ.get('BIRDEYE_API_KEY', '')
 FEE_RATE       = 0.05  # 5% performance fee on profitable trades only
 
 # ── FERNET ENCRYPTION ──
-# Priority: ENCRYPTION_KEY env var → key persisted in DB → generate and persist in DB.
-# Storing the key in the DB means private keys survive server restarts even without an env var.
-_enc_key_str = os.environ.get('ENCRYPTION_KEY', '')
-_fernet: 'Fernet | None' = None
+# ENCRYPTION_KEY must be set as an environment variable. No fallback — app refuses to start
+# without it to ensure all stored private keys are always properly encrypted.
+_enc_key_str = os.environ.get('ENCRYPTION_KEY', '').strip()
+if not _enc_key_str:
+    print('CRITICAL: ENCRYPTION_KEY env var is not set. Refusing to start.', flush=True)
+    print('         Generate one: python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"', flush=True)
+    sys.exit(1)
 
-if _enc_key_str:
-    try:
-        _fernet = Fernet(_enc_key_str.encode())
-    except Exception:
-        print('WARNING: Invalid ENCRYPTION_KEY env var — falling back to DB-persisted key.', flush=True)
+try:
+    _fernet = Fernet(_enc_key_str.encode())
+except Exception:
+    print('CRITICAL: ENCRYPTION_KEY is not a valid Fernet key. Refusing to start.', flush=True)
+    sys.exit(1)
 
-if _fernet is None:
-    _cfg_db  = sqlite3.connect(DB_FILE)
-    _cfg_cur = _cfg_db.cursor()
-    _cfg_cur.execute('CREATE TABLE IF NOT EXISTS server_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
-    _cfg_cur.execute('SELECT value FROM server_config WHERE key="encryption_key"')
-    _cfg_row = _cfg_cur.fetchone()
-    if _cfg_row:
-        try:
-            _fernet = Fernet(_cfg_row[0].encode())
-        except Exception:
-            _cfg_row = None  # corrupt stored key — regenerate below
-    if not _cfg_row:
-        _gen_key = Fernet.generate_key()
-        _fernet  = Fernet(_gen_key)
-        _cfg_cur.execute('INSERT OR REPLACE INTO server_config (key, value) VALUES ("encryption_key", ?)',
-                         (_gen_key.decode(),))
-        print('OrcAgent: new encryption key generated and persisted to DB.', flush=True)
-    _cfg_db.commit()
-    _cfg_db.close()
+def _wallet_fernet(wallet: str) -> Fernet:
+    """Derive a wallet-specific Fernet key via HMAC-SHA256(ENCRYPTION_KEY, wallet_address)."""
+    derived = hmac.digest(_enc_key_str.encode(), wallet.encode(), 'sha256')
+    return Fernet(base64.urlsafe_b64encode(derived))
 
-def encrypt_key(raw: str) -> str:
-    return _fernet.encrypt(raw.encode()).decode()
+def encrypt_private_key(raw: str, wallet: str) -> str:
+    """Double-encrypt: Layer 1 = ENCRYPTION_KEY Fernet, Layer 2 = wallet-derived Fernet.
+    Result is prefixed with 'v2:' to distinguish from legacy single-layer ciphertext."""
+    l1 = _fernet.encrypt(raw.encode())
+    l2 = _wallet_fernet(wallet).encrypt(l1)
+    return 'v2:' + l2.decode()
 
-def decrypt_key(enc: str) -> str:
-    return _fernet.decrypt(enc.encode()).decode()
+def decrypt_private_key(enc: str, wallet: str) -> str:
+    """Decrypt v2 (double-encrypted) or legacy v1 (single Fernet layer) private key."""
+    if enc.startswith('v2:'):
+        l1 = _wallet_fernet(wallet).decrypt(enc[3:].encode())
+        return _fernet.decrypt(l1).decode()
+    return _fernet.decrypt(enc.encode()).decode()  # legacy v1 — migrated on next save
 
 # ── PERFORMANCE FEE COLLECTION ──
 def send_usdc_fee(from_privkey: str, to_wallet_str: str, amount_usdc: float) -> str:
@@ -414,8 +411,77 @@ def init_db():
     c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_wallet    ON fees(user_wallet)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_timestamp ON fees(timestamp)')
+    c.execute('''CREATE TABLE IF NOT EXISTS security_log (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        wallet     TEXT NOT NULL,
+        ip_addr    TEXT DEFAULT '',
+        details    TEXT DEFAULT '',
+        timestamp  TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_seclog_ts ON security_log(timestamp)')
+    # Migrate: add key_hash column to users if not already present
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN key_hash TEXT DEFAULT ""')
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
+
+# ── SECURITY HELPERS ──
+# Matches base58 strings 87-88 chars long — Solana private key length.
+# Also matches TX signatures; actively block only on key-sensitive API paths.
+_KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
+_SENSITIVE_PATHS = {'/api/settings', '/api/state', '/api/trader/start', '/api/trader/stop'}
+
+def _log_security_event(event_type: str, wallet: str, details: str = '') -> None:
+    short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    try:
+        ip = request.remote_addr or 'system'
+    except RuntimeError:
+        ip = 'system'  # no request context (background thread)
+    print(f'SEC [{event_type}] {short} {details}', flush=True)
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute(
+            'INSERT INTO security_log (event_type, wallet, ip_addr, details) VALUES (?,?,?,?)',
+            (event_type, short, ip, details))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+_ip_ban:  dict = {}  # ip → ban_expires_at (epoch seconds)
+_ip_warn: dict = {}  # ip → list of recent failure timestamps
+
+def _is_banned(ip: str) -> bool:
+    expires = _ip_ban.get(ip, 0)
+    if time.time() < expires:
+        return True
+    _ip_ban.pop(ip, None)
+    return False
+
+def _record_ip_failure(ip: str, duration: int = 3600, threshold: int = 3, window: int = 600) -> None:
+    """Ban IP for duration seconds after threshold failures within window seconds."""
+    now  = time.time()
+    hits = [t for t in _ip_warn.get(ip, []) if now - t < window]
+    hits.append(now)
+    _ip_warn[ip] = hits
+    if len(hits) >= threshold:
+        _ip_ban[ip] = now + duration
+        print(f'SECURITY: IP {ip} banned {duration}s after {len(hits)} failures', flush=True)
+
+@contextmanager
+def _use_key(enc_blob: str, wallet: str):
+    """Decrypt private key for one operation, then immediately clear the reference.
+    Minimises the window the raw key is in memory — decrypt at signing, nowhere else."""
+    _k = None
+    try:
+        _k = decrypt_private_key(enc_blob, wallet)
+        _log_security_event('key_access', wallet, 'trade execution')
+        yield _k
+    finally:
+        _k = None  # Python strings are immutable, so we clear the reference immediately
 
 def get_or_create_user(wallet: str) -> int:
     conn = sqlite3.connect(DB_FILE)
@@ -772,7 +838,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     if pnl > 0.0 and wallet and private_key and OWNER_WALLET and wallet != OWNER_WALLET:
         fee_amount = round(pnl * FEE_RATE, 6)
         if fee_amount >= 0.0001:  # skip dust fees below 0.0001 USDC
-            _pk   = private_key   # captured by value — survives outer key wipe
+            _pk   = private_key   # captured in thread args; cleared via pk=None in _do_fee finally
             _sym  = symbol
             _gros = pnl
             _fee  = fee_amount
@@ -828,15 +894,17 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
 
 # ── SWAP EXECUTION ──
 def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
-    """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output."""
+    """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output.
+    Key is passed via env var to the subprocess and the env dict is discarded after launch."""
     try:
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
         env['WALLET_PRIVATE_KEY'] = private_key
         result = subprocess.run(
             [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), action, mint, amount_str],
-            env=env, capture_output=True, text=True, timeout=60
+            env=env, capture_output=True, text=True, timeout=30
         )
+        env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
         if result.stdout:
             add_user_log(wallet, 'Swap: ' + result.stdout.strip()[-80:])
         if result.stderr:
@@ -872,8 +940,12 @@ def user_trader_loop(stop_event, config, wallet: str):
     max_usdc         = float(row[2] if row[2] is not None else 1.0)
     daily_loss_limit = abs(float(row[3] if row[3] is not None else 50.0))
 
+    # Keep only the encrypted blob — never store decrypted key across loop iterations.
+    # Each trade decrypts at the moment of signing and clears immediately after.
     try:
-        private_key = decrypt_key(row[1])
+        _enc_blob = row[1]
+        _test_key = decrypt_private_key(_enc_blob, wallet)
+        _test_key = None  # clear immediately — just verifying decryption works
     except Exception:
         add_user_log(wallet, '[' + short + '] ✗ Cannot decrypt private key — please re-save it in Settings')
         us['trader_running'] = False
@@ -916,10 +988,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                     elif m5  <  5:     exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
-                        sell_ok = _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
+                        with _use_key(_enc_blob, wallet) as _pk:
+                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
                         if sell_ok:
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               wallet=wallet, private_key=private_key)
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                                   wallet=wallet, private_key=_pk)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
@@ -945,7 +1019,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
-                            _execute_user_swap(wallet, private_key, 'buy', bmint, str(spend))
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
                             pos['amount']     = spend / best['price']
                             pos['buy_price']  = best['price']
                             pos['peak_price'] = best['price']
@@ -954,8 +1029,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 60))
     finally:
-        private_key = None  # wipe from memory
-        add_user_log(wallet, '[' + short + '] Trader stopped, key wiped from memory')
+        add_user_log(wallet, '[' + short + '] Trader stopped')
         us['trader_running'] = False
 
 
@@ -965,10 +1039,38 @@ def user_trader_loop(stop_event, config, wallet: str):
 
 @app.after_request
 def _security_headers(resp):
-    resp.headers.setdefault('X-Content-Type-Options', 'nosniff')
-    resp.headers.setdefault('X-Frame-Options',        'DENY')
-    resp.headers.setdefault('X-XSS-Protection',       '1; mode=block')
-    resp.headers.setdefault('Referrer-Policy',        'strict-origin-when-cross-origin')
+    resp.headers.setdefault('X-Content-Type-Options',  'nosniff')
+    resp.headers.setdefault('X-Frame-Options',          'DENY')
+    resp.headers.setdefault('X-XSS-Protection',         '1; mode=block')
+    resp.headers.setdefault('Referrer-Policy',          'strict-origin-when-cross-origin')
+    resp.headers.setdefault('Permissions-Policy',       'camera=(), microphone=(), geolocation=()')
+    resp.headers.setdefault('Content-Security-Policy',
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; "
+        "frame-src https://dexscreener.com; "
+        "object-src 'none'")
+    if os.getenv('RAILWAY_ENVIRONMENT'):
+        resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
+    # Scan JSON responses for possible private key leak (87-88 char base58 = private key length).
+    # Actively block only on endpoints that must never return key material.
+    # Other endpoints (e.g. /api/admin with fee TX hashes) only log a warning.
+    if (resp.content_type or '').startswith('application/json'):
+        try:
+            body = resp.get_data(as_text=True)
+            if _KEY_LEAK_RE.search(body):
+                path = getattr(request, 'path', '')
+                if path in _SENSITIVE_PATHS:
+                    print(f'SECURITY ALERT: possible key leak in {path} — response blocked', flush=True)
+                    try:
+                        _log_security_event('key_leak_blocked', _current_wallet() or 'unknown', path)
+                    except Exception:
+                        pass
+                    r = jsonify({'error': 'Response blocked by security policy'})
+                    r.status_code = 500
+                    return r
+                else:
+                    print(f'SEC WARN: 87+ char base58 in {path} (expected for TX hashes)', flush=True)
+        except Exception:
+            pass
     return resp
 
 @app.route('/')
@@ -1032,9 +1134,13 @@ def get_settings():
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
 def save_settings():
+    ip     = request.remote_addr or '0.0.0.0'
     wallet = _current_wallet()
     if not wallet:
+        _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    if _is_banned(ip):
+        return jsonify({'ok': False, 'msg': 'Access temporarily blocked'}), 429
     data            = request.json or {}
     private_key_raw = data.get('private_key', '').strip()
     try:
@@ -1048,14 +1154,22 @@ def save_settings():
     max_trade_size   = max(1.0,  min(max_trade_size,   10000.0))
     daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
 
-    # Validate key before touching the DB
+    # Validate, double-encrypt, and verify round-trip before touching the DB
+    new_hash  = None
     if private_key_raw:
         if not is_valid_solana_private_key(private_key_raw):
+            _record_ip_failure(ip)
             return jsonify({'ok': False, 'msg': 'Invalid private key format — paste the base58 or JSON array key from your wallet'})
         try:
-            encrypted = encrypt_key(private_key_raw)
+            encrypted = encrypt_private_key(private_key_raw, wallet)
+            _verify   = decrypt_private_key(encrypted, wallet)
+            if _verify != private_key_raw:
+                raise ValueError('Round-trip verify failed')
+            _verify   = None
+            new_hash  = hashlib.sha256(private_key_raw.encode()).hexdigest()
         except Exception:
             return jsonify({'ok': False, 'msg': 'Failed to save private key'})
+        _log_security_event('key_saved', wallet)
     else:
         encrypted = None  # resolved below after DB read
 
@@ -1067,11 +1181,15 @@ def save_settings():
         if encrypted is None:
             encrypted = row[1] if row else ''
         if row:
-            c.execute('UPDATE users SET encrypted_private_key=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                      (encrypted, max_trade_size, daily_loss_limit, wallet))
+            if new_hash is not None:
+                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
+                          (encrypted, new_hash, max_trade_size, daily_loss_limit, wallet))
+            else:
+                c.execute('UPDATE users SET encrypted_private_key=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
+                          (encrypted, max_trade_size, daily_loss_limit, wallet))
         else:
-            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, max_trade_size, daily_loss_limit) VALUES (?,?,?,?)',
-                      (wallet, encrypted, max_trade_size, daily_loss_limit))
+            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, daily_loss_limit) VALUES (?,?,?,?,?)',
+                      (wallet, encrypted, new_hash or '', max_trade_size, daily_loss_limit))
         conn.commit()
     finally:
         conn.close()
@@ -1088,11 +1206,12 @@ def delete_trading_key():
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
-        conn.execute('UPDATE users SET encrypted_private_key="" WHERE wallet_address=?', (wallet,))
+        conn.execute('UPDATE users SET encrypted_private_key="", key_hash="" WHERE wallet_address=?', (wallet,))
         conn.commit()
     finally:
         conn.close()
     get_user_state(wallet)['has_trading_key'] = False
+    _log_security_event('key_deleted', wallet)
     add_user_log(wallet, 'Trading key removed for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True})
 
@@ -1167,9 +1286,13 @@ def api_state():
 @app.route('/api/trader/start', methods=['POST'])
 @rate_limit(5, 60)
 def start_trader():
+    ip     = request.remote_addr or '0.0.0.0'
     wallet = _current_wallet()
     if not wallet:
+        _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    if _is_banned(ip):
+        return jsonify({'ok': False, 'msg': 'Access temporarily blocked'}), 429
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
@@ -1474,6 +1597,8 @@ def api_admin():
         total_trades = int(c.fetchone()[0] or 0)
         c.execute('SELECT COUNT(*) FROM trades WHERE timestamp LIKE ?', (today + '%',))
         trades_today = int(c.fetchone()[0] or 0)
+        c.execute('SELECT event_type, wallet, ip_addr, details, timestamp FROM security_log ORDER BY timestamp DESC LIMIT 20')
+        sec_log = [{'event': r[0], 'wallet': r[1], 'ip': r[2], 'details': r[3], 'ts': r[4]} for r in c.fetchall()]
         conn.close()
         users_trading = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
         return jsonify({
@@ -1486,9 +1611,61 @@ def api_admin():
             'total_trades':    total_trades,
             'trades_today':    trades_today,
             'owner_configured': bool(OWNER_WALLET),
+            'security_log':    sec_log,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/rotate_keys', methods=['POST'])
+@rate_limit(1, 300)
+def admin_rotate_keys():
+    """Re-encrypt all stored private keys with a new ENCRYPTION_KEY.
+    After rotating, update the ENCRYPTION_KEY env var and redeploy."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    new_enc_key = (request.json or {}).get('new_encryption_key', '').strip()
+    if not new_enc_key:
+        return jsonify({'ok': False, 'msg': 'new_encryption_key required in request body'}), 400
+    try:
+        new_fernet = Fernet(new_enc_key.encode())
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Invalid Fernet key format — generate with Fernet.generate_key()'}), 400
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute("SELECT wallet_address, encrypted_private_key FROM users WHERE encrypted_private_key != '' AND encrypted_private_key IS NOT NULL")
+        rows = c.fetchall()
+        migrated = failed = 0
+        for waddr, enc_blob in rows:
+            raw = None
+            try:
+                raw      = decrypt_private_key(enc_blob, waddr)
+                l1       = new_fernet.encrypt(raw.encode())
+                derived  = hmac.digest(new_enc_key.encode(), waddr.encode(), 'sha256')
+                new_wf   = Fernet(base64.urlsafe_b64encode(derived))
+                l2       = new_wf.encrypt(l1)
+                new_enc  = 'v2:' + l2.decode()
+                new_hash = hashlib.sha256(raw.encode()).hexdigest()
+                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=? WHERE wallet_address=?',
+                          (new_enc, new_hash, waddr))
+                migrated += 1
+            except Exception:
+                failed += 1
+            finally:
+                raw = None  # clear immediately
+        conn.commit()
+    finally:
+        conn.close()
+
+    _log_security_event('key_rotation', wallet, f'{migrated} migrated, {failed} failed')
+    return jsonify({
+        'ok':       True,
+        'migrated': migrated,
+        'failed':   failed,
+        'note':     'Now update ENCRYPTION_KEY in your environment to the new key and redeploy',
+    })
 
 # ── STARTUP ──
 if not OWNER_WALLET:
