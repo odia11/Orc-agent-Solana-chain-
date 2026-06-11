@@ -760,6 +760,9 @@ async function launchApp(){
     document.getElementById('wallet-short').textContent=short;
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
+    // Always ensure trade button is enabled when a wallet is connected
+    const tbMain=document.getElementById('trade-btn');
+    tbMain.disabled=false; tbMain.style.opacity=''; tbMain.title='';
     fetchBalance();
     // Pre-load saved settings so key status is visible immediately without opening the modal
     fetch('/api/settings').then(r=>r.json()).then(r=>{
@@ -1278,6 +1281,8 @@ function updateBtns(){
   const tb=document.getElementById('trade-btn');
   const tbadge=document.getElementById('trade-badge');
   const tc=document.getElementById('trade-card');
+  // Fallback: never leave button disabled when wallet is connected
+  if(phantomKey && tb.disabled){ tb.disabled=false; tb.style.opacity=''; }
   if(traderOn){
     tb.textContent='■ STOP TRADING';
     tbadge.textContent='RUNNING';tbadge.className='badge badge-trade';
@@ -1290,8 +1295,15 @@ function updateBtns(){
 }
 
 async function toggleTrader(){
-  await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
-  fetchState();
+  const tb=document.getElementById('trade-btn');
+  tb.disabled=true; tb.style.opacity='.6';
+  // Watchdog: re-enable after 5 s regardless, so a hung request never leaves the button stuck
+  const watchdog=setTimeout(()=>{ tb.disabled=false; tb.style.opacity=''; },5000);
+  try{
+    await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
+    await fetchState();
+  }catch(e){ console.error('toggleTrader',e); }
+  finally{ clearTimeout(watchdog); tb.disabled=false; tb.style.opacity=''; }
 }
 
 // ── STARTUP: restore session ──
@@ -1325,6 +1337,32 @@ async function toggleTrader(){
     }
     // Extension not connected or key mismatch — clear stale session
     sessionStorage.removeItem('orcagent_wallet');
+  }
+
+  // Fallback: session storage was cleared (e.g. inactivity logout) but the extension
+  // is still connected — auto-reconnect so the user doesn't have to go through onboarding again.
+  if(!phantomKey){
+    const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected   && window.solana?.publicKey;
+    const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
+    const _p = phantomReady ? window.solana : solflareReady ? window.solflare : null;
+    const _n = phantomReady ? 'Phantom'     : solflareReady ? 'Solflare'      : null;
+    if(_p && _n){
+      const _pk = _p.publicKey.toString();
+      phantomKey = _pk; walletType = _n;
+      sessionStorage.setItem('orcagent_wallet', JSON.stringify({key:_pk, type:_n}));
+      document.getElementById('wallet-type-label').textContent = _n + ' wallet connected';
+      document.getElementById('wallet-addr').textContent       = _pk;
+      document.getElementById('wallet-connected').style.display = 'flex';
+      const _cb = document.getElementById('wallet-continue-btn');
+      _cb.disabled = false; _cb.style.cssText = 'background:var(--green);color:#000;cursor:pointer;opacity:1';
+      document.getElementById('phantom-ob-btn').style.display  = 'none';
+      document.getElementById('solflare-ob-btn').style.display = 'none';
+      document.getElementById('wallet-back-btn').style.display = 'block';
+      fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})})
+        .then(r=>r.json()).then(r=>{ if(r.has_key){ settingsHasKey=true; updateKeyIndicator(); } }).catch(()=>{});
+      launchApp();
+      return;
+    }
   }
   // No verified wallet — stay on onboard screen
 })();
