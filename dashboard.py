@@ -205,6 +205,7 @@ def get_user_state(wallet: str) -> dict:
             'sol': 0.0,
             'usdc': 0.0,
             'balance_fetched_at': 0.0,
+            'log_lines': list(state['log_lines']),  # seed with recent system events
         }
     return user_states[wallet]
 
@@ -279,11 +280,26 @@ def discover_tokens():
 
     return mints[:80]  # cap discovery to avoid excessive per-token API calls
 
-def add_log(msg):
-    t = time.strftime('%H:%M:%S')
-    state['log_lines'].insert(0, {'t': t, 'msg': msg})
-    if len(state['log_lines']) > 100:
+def add_log(msg: str):
+    """System-wide event (market refresh, TOTD, startup).
+    Written to the small system buffer AND broadcast to every active user's log."""
+    t     = time.strftime('%H:%M:%S')
+    entry = {'t': t, 'msg': msg}
+    state['log_lines'].insert(0, entry)
+    if len(state['log_lines']) > 20:   # small buffer — only used to seed new sessions
         state['log_lines'].pop()
+    for _us in user_states.values():   # broadcast to all currently active per-user logs
+        _us['log_lines'].insert(0, entry)
+        if len(_us['log_lines']) > 100:
+            _us['log_lines'].pop()
+
+def add_user_log(wallet: str, msg: str):
+    """User-specific event — stored only in this wallet's log, never visible to others."""
+    t  = time.strftime('%H:%M:%S')
+    us = get_user_state(wallet)
+    us['log_lines'].insert(0, {'t': t, 'msg': msg})
+    if len(us['log_lines']) > 100:
+        us['log_lines'].pop()
 
 def get_sol_balance():
     addr = state.get('wallet') or WALLET_ADDRESS
@@ -525,9 +541,9 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
             env=env, capture_output=True, text=True, timeout=60
         )
         if result.stdout:
-            add_log('Swap: ' + result.stdout.strip()[-80:])
+            add_user_log(wallet, 'Swap: ' + result.stdout.strip()[-80:])
     except Exception as e:
-        add_log('Swap error: ' + str(e)[:80])
+        add_user_log(wallet, 'Swap error: ' + str(e)[:80])
 
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
@@ -540,12 +556,12 @@ def user_trader_loop(stop_event, config, wallet: str):
         row  = c.fetchone()
         conn.close()
     except Exception as e:
-        add_log('[' + short + '] DB error: ' + str(e))
+        add_user_log(wallet, '[' + short + '] DB error: ' + str(e))
         us['trader_running'] = False
         return
 
     if not row or not row[1]:
-        add_log('[' + short + '] No private key — configure in Settings first')
+        add_user_log(wallet, '[' + short + '] No private key — configure in Settings first')
         us['trader_running'] = False
         return
 
@@ -556,11 +572,11 @@ def user_trader_loop(stop_event, config, wallet: str):
     try:
         private_key = decrypt_key(row[1])
     except Exception:
-        add_log('[' + short + '] ✗ Cannot decrypt private key — please re-save it in Settings')
+        add_user_log(wallet, '[' + short + '] ✗ Cannot decrypt private key — please re-save it in Settings')
         us['trader_running'] = False
         return
 
-    add_log('[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥4')
+    add_user_log(wallet, '[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥4')
     positions = us['positions']
 
     try:
@@ -569,13 +585,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                 check_daily_reset_user(us)
                 daily_loss = us['daily_stats'].get('total_pnl', 0)
                 if daily_loss < -daily_loss_limit:
-                    add_log('[' + short + '] Daily loss limit hit ($' + str(round(daily_loss, 2)) + ') — pausing')
+                    add_user_log(wallet, '[' + short + '] Daily loss limit hit ($' + str(round(daily_loss, 2)) + ') — pausing')
                     stop_event.wait(300)
                     continue
                 live     = state['tokens']
                 open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
                 us_usdc  = _get_user_usdc(wallet)
-                add_log('[' + short + '] USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                add_user_log(wallet, '[' + short + '] USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
                 for t in live:
                     if stop_event.is_set(): break
                     mint  = t['mint']
@@ -596,7 +612,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         elif chg <= -0.05: exit_reason = 'STOP LOSS '    + str(round(chg * 100, 1)) + '%'
                         elif m5 < 5:       exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
                         if exit_reason:
-                            add_log('[' + short + '] ' + exit_reason + ' ' + label)
+                            add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                             _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'])
                             positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
@@ -607,7 +623,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if sc >= 4 and m5 >= 10 and us_usdc > 1 and open_pos < 3 and pos['amount'] == 0:
                         spend = round(min(us_usdc * config.get('trade_pct', 0.20), max_usdc), 2)
                         if spend < 1.0: continue
-                        add_log('[' + short + '] BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
+                        add_user_log(wallet, '[' + short + '] BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
                         _execute_user_swap(wallet, private_key, 'buy', mint, str(spend))
                         pos['amount']     = spend / t['price']
                         pos['buy_price']  = t['price']
@@ -615,11 +631,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                         pos['spend']      = spend
                         us_usdc -= spend; open_pos += 1
             except Exception as e:
-                add_log('[' + short + '] Trader error: ' + str(e))
+                add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 60))
     finally:
         private_key = None  # wipe from memory
-        add_log('[' + short + '] Trader stopped, key wiped from memory')
+        add_user_log(wallet, '[' + short + '] Trader stopped, key wiped from memory')
         us['trader_running'] = False
 
 
@@ -654,7 +670,7 @@ def set_wallet():
             get_or_create_user(address)
         except: pass
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
-        add_log('Wallet connected: ' + address[:6] + '...' + address[-4:])
+        add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])
         has_key = False
         try:
             conn2 = sqlite3.connect(DB_FILE)
@@ -667,9 +683,11 @@ def set_wallet():
             pass
         return jsonify({'ok': True, 'wallet': address, 'has_key': has_key})
     else:
+        prev = _current_wallet()
         session.pop('wallet', None)
         state['wallet'] = WALLET_ADDRESS
-        add_log('Wallet disconnected')
+        if prev:
+            add_user_log(prev, 'Wallet disconnected')
     return jsonify({'ok': True, 'wallet': session.get('wallet', state['wallet'])})
 
 # ── SETTINGS ──
@@ -731,7 +749,7 @@ def save_settings():
                   (wallet, encrypted, max_trade_size, daily_loss_limit))
     conn.commit()
     conn.close()
-    add_log('Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
+    add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True})
 
 # ── STATE ──
@@ -763,7 +781,7 @@ def api_state():
             'sol':              us.get('sol',  0.0),
             'positions':        open_pos,
             'positions_detail': positions_detail,
-            'log_lines':        state['log_lines'][:40],
+            'log_lines':        us.get('log_lines', [])[:40],
             'tokens':           state['tokens'],
             'wallet':           wallet,
         })
@@ -771,7 +789,7 @@ def api_state():
         'trader_running': state['trader_running'],
         'usdc': state['usdc'], 'sol': state['sol'],
         'positions': int(state.get('positions', 0)),
-        'log_lines': state['log_lines'][:40],
+        'log_lines': state['log_lines'][:20],
         'tokens':    state['tokens'],
         'wallet':    state.get('wallet', ''),
     })
