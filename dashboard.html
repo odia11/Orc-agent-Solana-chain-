@@ -200,7 +200,18 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .perf-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
 .perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
 .perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center}
+.fee-summary{display:flex;gap:18px;flex-wrap:wrap;padding:8px 12px;background:rgba(255,193,58,.05);border:1px solid rgba(255,193,58,.15);border-radius:8px;margin-bottom:12px;font-size:9px;color:var(--muted)}
+.fee-summary span{white-space:nowrap}.fee-summary b{font-family:'Orbitron',monospace;font-size:10px}
 .pos-panel{background:var(--bg2);border:1px solid rgba(0,237,170,.2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+/* Admin panel */
+.admin-panel{background:var(--bg2);border:1px solid rgba(255,77,106,.25);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.15);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
+.admin-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px}
+.admin-stat{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.admin-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.admin-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:#ff9a6c}
+/* Settings fee notice */
+.s-fee-notice{display:flex;gap:10px;align-items:flex-start;background:rgba(0,200,120,.06);border:1px solid rgba(0,200,120,.2);border-radius:8px;padding:10px 14px;font-size:10px;line-height:1.5;color:var(--dim);margin-bottom:14px}
 .pos-panel .panel-hdr{border-bottom:1px solid rgba(0,237,170,.12);padding-bottom:8px;margin-bottom:10px}
 .trade-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
 .trade-table{width:100%;border-collapse:collapse;font-size:10px;min-width:420px}
@@ -419,6 +430,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <span>Use a dedicated trading wallet only. Never use your main wallet. Private keys are encrypted with Fernet symmetric encryption before storage — they are never exposed in API responses.</span>
     </div>
 
+    <div class="s-fee-notice">
+      <span style="font-size:15px;flex-shrink:0">💰</span>
+      <span><strong>5% performance fee on profitable trades only.</strong> No fee on losing trades. The fee is automatically deducted from profit and sent to the OrcAgent treasury wallet after each winning trade closes.</span>
+    </div>
+
     <div class="s-field">
       <label class="s-label">Private Key <span class="s-key-hint" id="s-key-hint"></span></label>
       <div class="s-key-wrap">
@@ -538,7 +554,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="panel-hdr">Today's Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span></div>
     <div class="perf-stats">
       <div class="perf-stat">
-        <div class="perf-stat-lbl">Total P&amp;L</div>
+        <div class="perf-stat-lbl">Gross P&amp;L</div>
         <div class="perf-stat-val" id="p-pnl">$0.00</div>
       </div>
       <div class="perf-stat">
@@ -562,14 +578,19 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="perf-stat-val td-neg" id="p-worst">—</div>
       </div>
     </div>
+    <div class="fee-summary" id="fee-summary" style="display:none">
+      <span>Gross profit: <b id="fs-gross" class="td-pos">$0.00</b></span>
+      <span>Fees paid (5%): <b id="fs-fees" class="td-neg">-$0.00</b></span>
+      <span>Net profit: <b id="fs-net">$0.00</b></span>
+    </div>
     <div class="perf-chart-wrap">
       <svg id="pnl-chart" width="100%" height="110" viewBox="0 0 600 110" preserveAspectRatio="none" style="display:block"></svg>
     </div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>P&amp;L</th></tr></thead>
+        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>Gross P&amp;L</th><th>Fee</th><th>Net P&amp;L</th></tr></thead>
         <tbody id="trade-tbody">
-          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
+          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
         </tbody>
       </table>
     </div>
@@ -599,6 +620,37 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="ticker-wrap"><div class="ticker-track" id="ticker-track"></div></div>
     <div class="market-grid" id="market-grid">
       <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
+    </div>
+  </div>
+
+  <!-- OWNER ADMIN PANEL (hidden until owner wallet connects) -->
+  <div class="admin-panel" id="admin-panel" style="display:none">
+    <div class="panel-hdr">⚙ Owner Dashboard</div>
+    <div class="admin-stats">
+      <div class="admin-stat">
+        <div class="admin-stat-lbl">Fees Today</div>
+        <div class="admin-stat-val" id="a-fees-today">$0.00</div>
+      </div>
+      <div class="admin-stat">
+        <div class="admin-stat-lbl">Fees All Time</div>
+        <div class="admin-stat-val" id="a-fees-total">$0.00</div>
+      </div>
+      <div class="admin-stat">
+        <div class="admin-stat-lbl">Total Users</div>
+        <div class="admin-stat-val" id="a-users">0</div>
+      </div>
+      <div class="admin-stat">
+        <div class="admin-stat-lbl">Total Trades</div>
+        <div class="admin-stat-val" id="a-trades">0</div>
+      </div>
+    </div>
+    <div class="trade-table-wrap">
+      <table class="trade-table">
+        <thead><tr><th>Timestamp</th><th>User</th><th>Token</th><th>Gross Profit</th><th>Fee (5%)</th><th>TX</th></tr></thead>
+        <tbody id="admin-fee-tbody">
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No fees collected yet</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 
@@ -794,6 +846,7 @@ async function launchApp(){
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   }
   updateAuthBtns();
+  checkOwnerPanel(phantomKey);
   _lastActivity = Date.now(); // start inactivity clock from moment of connect
   await fetchState();
   fetchTrades();
@@ -1273,12 +1326,59 @@ async function fetchTrades(){
   renderPerfPanel(r);
 }
 
+// ── OWNER ADMIN PANEL ──
+const _OWNER_WALLET='57enjXJH7Ro1aVTT97NuSvf3noYEsBwp4GUjet22vGW6';
+let _adminTimer=null;
+
+function checkOwnerPanel(wallet){
+  const panel=document.getElementById('admin-panel');
+  if(!panel) return;
+  if(wallet&&wallet.toLowerCase()===_OWNER_WALLET.toLowerCase()){
+    panel.style.display='block';
+    fetchAdminData();
+    if(!_adminTimer) _adminTimer=setInterval(fetchAdminData,30000);
+  } else {
+    panel.style.display='none';
+    if(_adminTimer){clearInterval(_adminTimer);_adminTimer=null;}
+  }
+}
+
+async function fetchAdminData(){
+  const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error) return;
+  document.getElementById('a-fees-today').textContent='$'+(r.fees_today||0).toFixed(4);
+  document.getElementById('a-fees-total').textContent='$'+(r.fees_total||0).toFixed(4);
+  document.getElementById('a-users').textContent=r.total_users||0;
+  document.getElementById('a-trades').textContent=r.total_trades||0;
+  const tbody=document.getElementById('admin-fee-tbody');
+  const txs=r.fee_txs||[];
+  if(!txs.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No fees collected yet</td></tr>';
+    return;
+  }
+  tbody.innerHTML=txs.map(f=>{
+    const w=f.wallet||'';
+    const tx=f.tx||'';
+    const solscan=tx?`<a href="https://solscan.io/tx/${esc(tx)}" target="_blank" style="color:var(--blue)">${esc(tx.slice(0,12))}...</a>`:'-';
+    return `<tr>
+      <td>${esc(f.ts||'')}</td>
+      <td class="td-sym">${esc(w.slice(0,4)+'...'+w.slice(-4))}</td>
+      <td>${esc(f.token||'')}</td>
+      <td class="td-pos">+$${(f.gross||0).toFixed(4)}</td>
+      <td class="td-neg">-$${(f.fee||0).toFixed(4)}</td>
+      <td>${solscan}</td>
+    </tr>`;
+  }).join('');
+}
+
 function renderPerfPanel(r){
   const d=r.daily||{};
   const pnl=d.total_pnl??0;
   const pct=d.total_pnl_pct??0;
   const trades=d.trades??0;
   const wins=d.wins??0;
+  const fees=d.total_fees??0;
+  const net=d.net_pnl??pnl;
 
   const pnlEl=document.getElementById('p-pnl');
   pnlEl.textContent=(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2);
@@ -1294,24 +1394,42 @@ function renderPerfPanel(r){
   document.getElementById('p-worst').textContent=d.worst!=null?d.worst.toFixed(1)+'%':'—';
   document.getElementById('perf-date').textContent=d.date||'';
 
+  // Fee summary row — only visible when fees have been collected today
+  const feeRow=document.getElementById('fee-summary');
+  if(fees>0){
+    feeRow.style.display='flex';
+    document.getElementById('fs-gross').textContent=(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(4);
+    document.getElementById('fs-fees').textContent='-$'+fees.toFixed(4);
+    const netEl=document.getElementById('fs-net');
+    netEl.textContent=(net>=0?'+$':'-$')+Math.abs(net).toFixed(4);
+    netEl.className=net>=0?'td-pos':'td-neg';
+  } else {
+    feeRow.style.display='none';
+  }
+
   renderPnlChart(d.curve||[]);
 
   const tbody=document.getElementById('trade-tbody');
   const hist=(r.history||[]).slice().reverse();
   if(!hist.length){
-    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
+    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
     return;
   }
   tbody.innerHTML=hist.map(t=>{
     const p=t.pnl??0, pp=t.pnl_pct??0;
+    const fee=t.fee??0;
+    const netP=t.net_pnl??p;
     const cls=p>=0?'td-pos':'td-neg';
     const sign=p>=0?'+':'';
+    const netSign=netP>=0?'+':'';
     return `<tr>
       <td>${esc(t.time||'—')}</td>
       <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
       <td>${fmtPrice(t.exit||0)}</td>
       <td class="${cls}">${sign}$${Math.abs(p).toFixed(2)} <span style="opacity:.6;font-size:9px">(${sign}${pp.toFixed(1)}%)</span></td>
+      <td style="color:${fee>0?'var(--neg)':'var(--muted)'}">${fee>0?'-$'+fee.toFixed(4):'-'}</td>
+      <td class="${netP>=0?'td-pos':'td-neg'}">${netSign}$${Math.abs(netP).toFixed(2)}</td>
     </tr>`;
   }).join('');
 }

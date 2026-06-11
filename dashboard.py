@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64
 from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.fernet import Fernet
@@ -27,6 +27,8 @@ DB_FILE    = os.path.join(BASE, 'orcagent.db')
 WALLET_ADDRESS = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT      = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC     = 'https://api.mainnet-beta.solana.com'
+OWNER_WALLET   = os.environ.get('OWNER_WALLET', '57enjXJH7Ro1aVTT97NuSvf3noYEsBwp4GUjet22vGW6')
+FEE_RATE       = 0.05  # 5% performance fee on profitable trades only
 
 # ── FERNET ENCRYPTION ──
 # Priority: ENCRYPTION_KEY env var → key persisted in DB → generate and persist in DB.
@@ -65,6 +67,80 @@ def encrypt_key(raw: str) -> str:
 
 def decrypt_key(enc: str) -> str:
     return _fernet.decrypt(enc.encode()).decode()
+
+# ── PERFORMANCE FEE COLLECTION ──
+def send_usdc_fee(from_privkey: str, to_wallet_str: str, amount_usdc: float) -> str:
+    """SPL USDC transfer: send amount_usdc from from_privkey's wallet to to_wallet_str.
+    Uses a direct Token-program Transfer instruction (discriminant 3).
+    Creates the recipient's ATA if it doesn't exist yet."""
+    from solders.keypair import Keypair as _KP
+    from solders.pubkey import Pubkey
+    from solders.instruction import Instruction, AccountMeta
+    from solders.transaction import Transaction
+    from solders.hash import Hash as SolHash
+
+    TOKEN_PROG   = Pubkey.from_string('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+    ASSOC_PROG   = Pubkey.from_string('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bRC')
+    SYS_PROG     = Pubkey.from_string('11111111111111111111111111111111')
+    SYSVAR_RENT  = Pubkey.from_string('SysvarRent111111111111111111111111111111111')
+    USDC_PK      = Pubkey.from_string(USDC_MINT)
+
+    keypair  = _KP.from_base58_string(from_privkey)
+    sender   = keypair.pubkey()
+    receiver = Pubkey.from_string(to_wallet_str)
+
+    src_ata = Pubkey.find_program_address([bytes(sender),   bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
+    dst_ata = Pubkey.find_program_address([bytes(receiver), bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
+
+    amount_micro = int(amount_usdc * 1_000_000)
+
+    # Check if recipient's USDC account exists; create it if not
+    acc_resp = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
+        'params': [str(dst_ata), {'encoding': 'base64'}],
+    }, timeout=10).json()
+    dst_exists = acc_resp.get('result', {}).get('value') is not None
+
+    ixs = []
+    if not dst_exists:
+        ixs.append(Instruction(
+            program_id=ASSOC_PROG,
+            accounts=[
+                AccountMeta(sender,      is_signer=True,  is_writable=True),
+                AccountMeta(dst_ata,     is_signer=False, is_writable=True),
+                AccountMeta(receiver,    is_signer=False, is_writable=False),
+                AccountMeta(USDC_PK,     is_signer=False, is_writable=False),
+                AccountMeta(SYS_PROG,    is_signer=False, is_writable=False),
+                AccountMeta(TOKEN_PROG,  is_signer=False, is_writable=False),
+                AccountMeta(SYSVAR_RENT, is_signer=False, is_writable=False),
+            ],
+            data=bytes([]),
+        ))
+
+    ixs.append(Instruction(
+        program_id=TOKEN_PROG,
+        accounts=[
+            AccountMeta(src_ata, is_signer=False, is_writable=True),
+            AccountMeta(dst_ata, is_signer=False, is_writable=True),
+            AccountMeta(sender,  is_signer=True,  is_writable=False),
+        ],
+        data=bytes([3]) + struct.pack('<Q', amount_micro),  # SPL Transfer instruction
+    ))
+
+    bh = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+    }, timeout=10).json()['result']['value']['blockhash']
+
+    tx = Transaction.new_signed_with_payer(ixs, sender, [keypair], SolHash.from_string(bh))
+
+    encoded = base64.b64encode(bytes(tx)).decode()
+    res = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+        'params': [encoded, {'encoding': 'base64', 'skipPreflight': False}],
+    }, timeout=30).json()
+    if 'error' in res:
+        raise Exception('Fee TX: ' + str(res['error']))
+    return res.get('result', str(res))
 
 # ── INPUT VALIDATION ──
 _SOLANA_ADDR_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
@@ -145,9 +221,24 @@ def init_db():
         exit_price   REAL,
         amount       REAL,
         pnl          REAL,
+        fee_amount   REAL DEFAULT 0,
         timestamp    TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS fees (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_wallet  TEXT NOT NULL,
+        token        TEXT,
+        gross_profit REAL,
+        fee_amount   REAL,
+        fee_tx       TEXT DEFAULT '',
+        timestamp    TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    # Migrate: add fee_amount column to trades if it doesn't exist yet
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN fee_amount REAL DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -174,6 +265,7 @@ def _fresh_daily():
     return {
         'date': datetime.datetime.utcnow().strftime('%Y-%m-%d'),
         'total_pnl': 0.0, 'total_pnl_pct': 0.0,
+        'total_fees': 0.0, 'net_pnl': 0.0,
         'trades': 0, 'wins': 0, 'best': None, 'worst': None, 'curve': [],
     }
 
@@ -498,33 +590,66 @@ def check_daily_reset_user(us: dict):
     if us.get('daily_stats', {}).get('date') != today:
         us['daily_stats'] = _fresh_daily()
 
-def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float, amount: float, spend: float):
+def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
+                       amount: float, spend: float, wallet: str = '', private_key: str = ''):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
     pnl     = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
     pnl_pct = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
-    trade   = {
+
+    # 5% performance fee on profitable trades only
+    fee_amount = 0.0
+    if pnl > 0.0 and wallet and private_key and OWNER_WALLET and wallet != OWNER_WALLET:
+        fee_amount = round(pnl * FEE_RATE, 6)
+        if fee_amount >= 0.0001:  # skip dust fees below 0.0001 USDC
+            _pk   = private_key   # captured by value — survives outer key wipe
+            _sym  = symbol
+            _gros = pnl
+            _fee  = fee_amount
+            _wlt  = wallet
+            def _do_fee(pk, sym, gross, fee, wlt):
+                try:
+                    tx_sig = send_usdc_fee(pk, OWNER_WALLET, fee)
+                    conn = sqlite3.connect(DB_FILE)
+                    conn.execute(
+                        'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx) VALUES (?,?,?,?,?)',
+                        (wlt, sym, gross, fee, tx_sig))
+                    conn.commit()
+                    conn.close()
+                    add_user_log(wlt, f'✓ Perf fee ${fee:.4f} USDC (5% of +${gross:.4f}) TX:{tx_sig[:12]}...')
+                except Exception as e:
+                    add_user_log(wlt, f'Fee transfer failed: {str(e)[:80]}')
+                finally:
+                    pk = None
+            threading.Thread(target=_do_fee, args=(_pk, _sym, _gros, _fee, _wlt), daemon=True).start()
+
+    trade = {
         'symbol': symbol, 'entry': entry, 'exit': exit_price,
         'amount': amount, 'spend': spend, 'pnl': pnl, 'pnl_pct': pnl_pct,
+        'fee': fee_amount,
+        'net_pnl': round(pnl - fee_amount, 4),
         'time': now.strftime('%H:%M'), 'date': today, 'ts': now.timestamp(),
     }
     us['trades_history'].append(trade)
     if len(us['trades_history']) > 500:
         us['trades_history'] = us['trades_history'][-500:]
     ds = us['daily_stats']
-    ds['total_pnl'] = round(ds.get('total_pnl', 0) + pnl, 4)
-    ds['trades']    = ds.get('trades', 0) + 1
+    ds['total_pnl']  = round(ds.get('total_pnl', 0) + pnl, 4)
+    ds['total_fees'] = round(ds.get('total_fees', 0) + fee_amount, 6)
+    ds['net_pnl']    = round(ds['total_pnl'] - ds['total_fees'], 4)
+    ds['trades']     = ds.get('trades', 0) + 1
     if pnl > 0: ds['wins'] = ds.get('wins', 0) + 1
     today_spend = sum(t['spend'] for t in us['trades_history'] if t.get('date') == today)
     ds['total_pnl_pct'] = round(ds['total_pnl'] / today_spend * 100, 2) if today_spend else 0.0
     if ds.get('best')  is None or pnl_pct > ds['best']:  ds['best']  = pnl_pct
     if ds.get('worst') is None or pnl_pct < ds['worst']: ds['worst'] = pnl_pct
-    ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['total_pnl']})
+    ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['net_pnl']})
     try:
         conn = sqlite3.connect(DB_FILE)
-        conn.execute('INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl) VALUES (?,?,?,?,?,?)',
-                     (user_id, symbol, entry, exit_price, amount, pnl))
+        conn.execute(
+            'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount) VALUES (?,?,?,?,?,?,?)',
+            (user_id, symbol, entry, exit_price, amount, pnl, fee_amount))
         conn.commit()
         conn.close()
     except: pass
@@ -614,7 +739,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if exit_reason:
                             add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                             _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'])
+                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                               wallet=wallet, private_key=private_key)
                             positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                             open_pos -= 1
                             continue
@@ -966,6 +1092,38 @@ def api_log():
         return jsonify({'lines': [l.strip() for l in reversed(lines)]})
     except:
         return jsonify({'lines': []})
+
+@app.route('/api/admin')
+def api_admin():
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE timestamp LIKE ?', (today + '%',))
+        fees_today = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees')
+        fees_total = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp FROM fees ORDER BY timestamp DESC LIMIT 200')
+        fee_txs = [{'wallet': r[0], 'token': r[1], 'gross': r[2], 'fee': r[3], 'tx': r[4], 'ts': r[5]}
+                   for r in c.fetchall()]
+        c.execute('SELECT COUNT(*) FROM users')
+        total_users  = int(c.fetchone()[0] or 0)
+        c.execute('SELECT COUNT(*) FROM trades')
+        total_trades = int(c.fetchone()[0] or 0)
+        conn.close()
+        return jsonify({
+            'fees_today':   fees_today,
+            'fees_total':   fees_total,
+            'fee_txs':      fee_txs,
+            'total_users':  total_users,
+            'total_trades': total_trades,
+            'owner':        OWNER_WALLET,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 # ── STARTUP ──
 init_db()
