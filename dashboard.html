@@ -373,6 +373,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .audit-run-btn:hover{background:rgba(106,163,255,.22);border-color:var(--blue)}
 .audit-run-btn:disabled{opacity:.45;cursor:not-allowed}
 .audit-next{font-size:9px;color:var(--muted)}
+
+/* ── CHART TOOLTIP ── */
+.chart-tooltip{position:absolute;top:5px;left:50%;transform:translateX(-50%);background:rgba(8,12,22,.93);border:1px solid rgba(255,255,255,.13);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:#8aaccc;white-space:nowrap;pointer-events:none;z-index:10;letter-spacing:.04em;display:none}
+.chart-tooltip .tt-up{color:#00ff88}
+.chart-tooltip .tt-dn{color:#ff3366}
 </style>
 </head>
 <body>
@@ -1118,7 +1123,9 @@ let _carIdx     = 0;
 let _carTimer   = null;
 let _carNextAt  = 0;
 let _carTf      = '5m';
-const _chartCache = new Map(); // canvasId → last rendered data-hash; skip redraw if unchanged
+const _chartCache    = new Map(); // canvasId → last rendered data-hash; skip redraw if unchanged
+const _chartData     = new Map(); // canvasId → geometry needed by hover handler
+const _chartListened = new Set(); // canvases that already have mousemove attached
 
 async function fetchCarousel(){
   if(!appVisible()) return;
@@ -1154,6 +1161,7 @@ function _buildCarousel(tokens){
       <div class="slide-chart-wrap">
         <canvas id="cchart-${i}" height="180"></canvas>
         <div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
+        <div class="chart-tooltip" id="ctt-${i}"></div>
       </div>
       <div class="slide-stats">
         <div class="slide-stat"><span class="slide-stat-lbl">Vol 5M</span><span class="slide-stat-val">${fmtNum(t.volume5m||0)}</span></div>
@@ -1217,6 +1225,46 @@ function _fillRoundRect(ctx,x,y,w,h,r){
   ctx.arcTo(x,  y,  x+w,y,  r);
   ctx.closePath();
   ctx.fill();
+}
+
+// ── CHART HOVER TOOLTIP ──
+function _attachChartListeners(canvas){
+  if(_chartListened.has(canvas.id)) return;
+  _chartListened.add(canvas.id);
+  canvas.addEventListener('mousemove',_onChartMouseMove);
+  canvas.addEventListener('mouseleave',_onChartMouseLeave);
+}
+
+function _onChartMouseMove(e){
+  const canvas=e.currentTarget;
+  const d=_chartData.get(canvas.id);
+  if(!d) return;
+  const rect=canvas.getBoundingClientRect();
+  const mx=e.clientX-rect.left;
+  const idx=Math.floor((mx-d.PAD.left)/d.step);
+  if(idx<0||idx>=d.n){_hideChartTip(canvas.id);return;}
+  const c=d.nc[idx];
+  const bull=c.c>=c.o;
+  const cls=bull?'tt-up':'tt-dn';
+  const fmtV=v=>{if(!v||v===0)return'—';if(v>=1e6)return'$'+(v/1e6).toFixed(2)+'M';if(v>=1e3)return'$'+(v/1e3).toFixed(1)+'K';return'$'+Math.round(v);};
+  const s=canvas.id.replace('cchart-','');
+  const tip=document.getElementById('ctt-'+s);
+  if(!tip) return;
+  tip.innerHTML=`<span class="${cls}">O:${fmtPrice(c.o)}&nbsp;&nbsp;H:${fmtPrice(c.h)}&nbsp;&nbsp;L:${fmtPrice(c.l)}&nbsp;&nbsp;C:${fmtPrice(c.c)}</span>&nbsp;&nbsp;V:${fmtV(c.v)}`;
+  // Clamp horizontally so tip never overflows the chart edge
+  const pct=Math.min(Math.max(mx/rect.width*100,12),88);
+  tip.style.left=pct+'%';
+  tip.style.display='block';
+}
+
+function _onChartMouseLeave(e){
+  _hideChartTip(e.currentTarget.id);
+}
+
+function _hideChartTip(canvasId){
+  const s=canvasId.replace('cchart-','');
+  const tip=document.getElementById('ctt-'+s);
+  if(tip) tip.style.display='none';
 }
 
 async function _loadSlideChart(idx,tf){
@@ -1333,18 +1381,6 @@ function _renderSlideChart(canvas,candles){
     ctx.beginPath();ctx.moveTo(sx(i),priceTop);ctx.lineTo(sx(i),volBottom);ctx.stroke();
   }
 
-  // Gradient fill under the close-price path (drawn before candles)
-  const grad=ctx.createLinearGradient(0,priceTop,0,priceBottom);
-  grad.addColorStop(0,isUp?'rgba(0,255,136,0.12)':'rgba(255,51,102,0.12)');
-  grad.addColorStop(1,'rgba(0,0,0,0)');
-  ctx.beginPath();
-  nc.forEach((c,i)=>{const x=sx(i),y=syP(c.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
-  ctx.lineTo(sx(n-1),priceBottom);
-  ctx.lineTo(sx(0),priceBottom);
-  ctx.closePath();
-  ctx.fillStyle=grad;
-  ctx.fill();
-
   // Volume bars — minimum 3px height so they're always visible
   const maxVol=Math.max(...nc.map(c=>c.v),1);
   nc.forEach((c,i)=>{
@@ -1413,6 +1449,10 @@ function _renderSlideChart(canvas,candles){
     if(mid>0&&mid<n-1) ctx.fillText(fmtT(nc[mid].t),sx(mid),H-3);
     if(n>1) ctx.fillText(fmtT(nc[n-1].t),sx(n-1),H-3);
   }
+
+  // Store geometry for hover tooltip and attach listeners once per canvas
+  _chartData.set(canvas.id,{nc,n,step,PAD});
+  _attachChartListeners(canvas);
 }
 
 window.addEventListener('resize',()=>{
