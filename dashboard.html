@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>OrcAgent — Solana Trading Terminal</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -250,9 +251,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .slide-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
 .slide-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
 .slide-chg.up{color:var(--green)}.slide-chg.dn{color:var(--red)}
-.slide-chart-wrap{position:relative;width:100%;height:380px;border-radius:8px;overflow:hidden;background:#0a0e1a;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
-.slide-chart-wrap iframe{display:block;width:100%;height:100%;border:none}
-.slide-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
+.slide-chart-wrap{position:relative;width:100%;height:240px;border-radius:8px;overflow:hidden;background:#0d1117;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
+.chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
 .slide-stats{display:flex;gap:18px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,193,58,.12)}
 .slide-stat{display:flex;flex-direction:column;gap:3px}
 .slide-stat-lbl{font-size:7px;color:rgba(255,193,58,.55);text-transform:uppercase;letter-spacing:.1em}
@@ -260,9 +260,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(16,24,40,.88);border:1px solid rgba(255,193,58,.22);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;font-size:16px;color:#ffc13a;transition:all .15s;backdrop-filter:blur(4px);user-select:none}
 .carousel-arrow:hover{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.55)}
 .carousel-arrow.prev{left:-13px}.carousel-arrow.next{right:-13px}
-.slide-chart-fallback{display:flex;align-items:center;justify-content:center;height:100%;background:rgba(255,193,58,.03)}
-.slide-dex-link{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:#ffc13a;text-decoration:none;border:1px solid rgba(255,193,58,.4);border-radius:8px;padding:12px 24px;letter-spacing:.06em;transition:all .15s}
-.slide-dex-link:hover{background:rgba(255,193,58,.1);border-color:#ffc13a}
 .carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:10px;align-items:center}
 .c-dot{width:6px;height:6px;border-radius:50%;background:var(--border2);cursor:pointer;transition:all .25s}
 .c-dot.active{background:#ffc13a;width:18px;border-radius:3px}
@@ -359,7 +356,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .mode{flex-direction:column;align-items:flex-start}
   .mode-right{width:100%}
   .mode-btn{width:100%;text-align:center}
-  .slide-chart-wrap{height:280px}
+  .slide-chart-wrap{height:200px}
 }
 
 ::-webkit-scrollbar{width:4px}
@@ -1236,23 +1233,16 @@ async function fetchCarousel(){
 }
 
 function _buildCarousel(tokens){
+  // Clean up any existing chart instances before rebuilding to avoid memory leaks
+  document.querySelectorAll('[id^="lw-chart-"]').forEach(el=>{
+    if(el._chart){el._chart.remove();el._chart=null;}
+  });
   const track=document.getElementById('carousel-track');
   const dots=document.getElementById('carousel-dots');
   if(!track||!dots) return;
   track.innerHTML=tokens.map((t,i)=>{
-    const pairAddr=safeMint(t.pairAddress)||'';
-    const mintAddr=safeMint(t.mint)||'';
-    const src=pairAddr?`https://dexscreener.com/solana/${pairAddr}?embed=1&theme=dark&trades=0&info=0`:'';
-    const chartContent=src
-      ? `<div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
-         <iframe id="cifr-${i}" loading="eager" src="${src}"
-           style="width:100%;height:100%;border:none;display:block;visibility:hidden"
-           onload="document.getElementById('cchartmsg-${i}').style.display='none'"
-           referrerpolicy="no-referrer-when-downgrade"></iframe>`
-      : `<div class="slide-chart-fallback">
-           <a class="slide-dex-link" href="https://dexscreener.com/solana/${mintAddr}"
-              target="_blank" rel="noopener">View on DexScreener ↗</a>
-         </div>`;
+    const chartContent=`<div id="lw-chart-${i}" style="width:100%;height:100%"></div>
+      <div class="chart-loading" id="chartload-${i}">Loading chart...</div>`;
     return `
     <div class="carousel-slide" id="cslide-${i}">
       <div class="slide-header">
@@ -1288,10 +1278,10 @@ function goToSlide(idx,instant){
     if(instant){track.style.transition='none';requestAnimationFrame(()=>{track.style.transition='';});}
     track.style.transform=`translateX(-${idx*100}%)`;
   }
-  // Reveal the active iframe; keep all others visibility:hidden so they stay loaded in DOM
-  for(let i=0;i<_carTokens.length;i++){
-    const ifr=document.getElementById('cifr-'+i);
-    if(ifr) ifr.style.visibility=i===idx?'visible':'hidden';
+  // Initialize the LightweightCharts chart for the newly visible slide
+  if(_carTokens[idx]){
+    // Small delay so the CSS transform has settled and clientWidth is accurate
+    setTimeout(()=>initSlideChart(idx,_carTokens[idx].mint),50);
   }
   document.querySelectorAll('.c-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
   _carNextAt=Date.now()+CAROUSEL_MS;
@@ -1300,6 +1290,60 @@ function goToSlide(idx,instant){
 }
 
 function carouselNav(dir){ goToSlide(_carIdx+dir); }
+
+async function initSlideChart(index, mint){
+  const container=document.getElementById('lw-chart-'+index);
+  if(!container||container._chart) return;  // missing or already initialized
+  if(container.clientWidth===0) return;      // not yet laid out — will retry on next goToSlide
+
+  const loadEl=document.getElementById('chartload-'+index);
+  try{
+    const chart=LightweightCharts.createChart(container,{
+      width: container.clientWidth,
+      height: container.clientHeight||240,
+      layout:{
+        background:{type:'solid',color:'#0d1117'},
+        textColor:'#d1d4dc',
+      },
+      grid:{
+        vertLines:{color:'#1e2130'},
+        horzLines:{color:'#1e2130'},
+      },
+      crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+      rightPriceScale:{borderColor:'#2a2e39'},
+      timeScale:{borderColor:'#2a2e39',timeVisible:true,secondsVisible:false},
+      handleScroll:false,
+      handleScale:false,
+    });
+    container._chart=chart;
+
+    const series=chart.addCandlestickSeries({
+      upColor:'#00edaa',
+      downColor:'#ff4d6a',
+      borderVisible:false,
+      wickUpColor:'#00edaa',
+      wickDownColor:'#ff4d6a',
+    });
+
+    const r=await fetch('/api/chart/'+encodeURIComponent(mint)).then(r=>r.json()).catch(()=>null);
+    if(r?.candles?.length){
+      series.setData(r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c})));
+      chart.timeScale().fitContent();
+      if(loadEl) loadEl.style.display='none';
+    } else {
+      if(loadEl) loadEl.textContent='No chart data';
+    }
+
+    // Refit on container resize (e.g. window resize)
+    const ro=new ResizeObserver(()=>{
+      if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth});
+    });
+    ro.observe(container);
+  } catch(e){
+    if(loadEl) loadEl.textContent='Chart unavailable';
+    console.error('LW chart error:',e);
+  }
+}
 
 function _fmtChg(v){ return (v>=0?'▲ +':'▼ −')+Math.abs(v).toFixed(2)+'%'; }
 
