@@ -277,19 +277,24 @@ def _run_audit() -> dict:
                         'msg': f'Unreachable — {str(e)[:60]}'})
 
     # 4. DexScreener API (token discovery source)
-    try:
-        r = requests.get(
-            'https://api.dexscreener.com/latest/dex/tokens/' + USDC_MINT,
-            timeout=6)
-        if r.status_code == 200:
-            checks.append({'name': 'DexScreener', 'status': 'pass',
-                            'msg': f'HTTP {r.status_code} — token data available'})
-        else:
-            checks.append({'name': 'DexScreener', 'status': 'warn',
-                            'msg': f'HTTP {r.status_code} — degraded'})
-    except Exception as e:
-        checks.append({'name': 'DexScreener', 'status': 'fail',
-                        'msg': f'Unreachable — {str(e)[:60]}'})
+    if time.time() < _dex_429_until:
+        remaining = int(_dex_429_until - time.time())
+        checks.append({'name': 'DexScreener', 'status': 'warn',
+                        'msg': f'Rate-limited (429) — backoff {remaining}s remaining'})
+    else:
+        try:
+            r = requests.get(
+                'https://api.dexscreener.com/latest/dex/tokens/' + USDC_MINT,
+                headers=_DEX_HEADERS, timeout=6)
+            if r.status_code == 200:
+                checks.append({'name': 'DexScreener', 'status': 'pass',
+                                'msg': f'HTTP {r.status_code} — token data available'})
+            else:
+                checks.append({'name': 'DexScreener', 'status': 'warn',
+                                'msg': f'HTTP {r.status_code} — degraded'})
+        except Exception as e:
+            checks.append({'name': 'DexScreener', 'status': 'fail',
+                            'msg': f'Unreachable — {str(e)[:60]}'})
 
     # 5. Birdeye API key (chart data source)
     if BIRDEYE_KEY:
@@ -449,6 +454,26 @@ state = {
     'totd_updated_at': 0.0,
 }
 
+# ── DEXSCREENER HTTP HELPERS ──
+_DEX_HEADERS   = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
+_dex_429_until = 0.0  # epoch seconds — 0 means not in backoff
+
+def _dex_get(url: str, timeout: int = 10):
+    """GET a DexScreener URL with shared headers and 429 backoff.
+    Returns the Response, or None if in backoff / request failed."""
+    global _dex_429_until
+    if time.time() < _dex_429_until:
+        return None
+    try:
+        r = requests.get(url, headers=_DEX_HEADERS, timeout=timeout)
+        if r.status_code == 429:
+            _dex_429_until = time.time() + 60
+            add_log('DexScreener rate-limited (429) — backing off 60 s, serving cached data')
+            return None
+        return r
+    except Exception:
+        return None
+
 # ── PER-USER STATE ──
 user_states: dict = {}
 
@@ -500,23 +525,21 @@ def discover_tokens():
     mints = []
 
     # 1. Top boosted Solana tokens
-    try:
-        r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', timeout=10)
-        if r.status_code == 200:
+    r = _dex_get('https://api.dexscreener.com/token-boosts/top/v1')
+    if r and r.status_code == 200:
+        try:
             for item in r.json():
                 if item.get('chainId') == 'solana':
                     m = item.get('tokenAddress', '')
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
-    except: pass
+        except Exception: pass
+    time.sleep(0.5)  # stagger — avoid hammering all endpoints at once
 
     # 2. Trending Solana tokens — mirrors DexScreener trending page (6h score)
-    try:
-        r = requests.get(
-            'https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6',
-            timeout=10
-        )
-        if r.status_code == 200:
+    r = _dex_get('https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6')
+    if r and r.status_code == 200:
+        try:
             data  = r.json()
             pairs = data.get('pairs', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
             for p in pairs:
@@ -524,19 +547,20 @@ def discover_tokens():
                     m = (p.get('baseToken') or {}).get('address', '')
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
-    except: pass
+        except Exception: pass
+    time.sleep(0.5)  # stagger
 
     # 3. Latest Solana token profiles
-    try:
-        r = requests.get('https://api.dexscreener.com/token-profiles/latest/v1', timeout=10)
-        if r.status_code == 200:
+    r = _dex_get('https://api.dexscreener.com/token-profiles/latest/v1')
+    if r and r.status_code == 200:
+        try:
             items = r.json() if isinstance(r.json(), list) else []
             for item in items:
                 if item.get('chainId') == 'solana':
                     m = item.get('tokenAddress', '')
                     if m and m not in seen:
                         seen.add(m); mints.append(m)
-    except: pass
+        except Exception: pass
 
     return mints[:80]  # cap discovery to avoid excessive per-token API calls
 
@@ -572,7 +596,9 @@ def _get_user_usdc(wallet: str) -> float:
 
 def get_token_data(mint):
     try:
-        r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        if not r:
+            return None
         pairs = r.json().get('pairs', [])
         if not pairs: return None
         p    = pairs[0]
@@ -675,7 +701,9 @@ def token_loop():
         try:
             mints      = discover_tokens()
             all_tokens = []
-            for mint in mints:
+            for i, mint in enumerate(mints):
+                if i > 0:
+                    time.sleep(0.3)  # stagger per-token calls — ~24 s for 80 tokens
                 data = get_token_data(mint)
                 if not data or data['price'] <= 0:
                     continue
@@ -720,7 +748,7 @@ def token_loop():
             else:
                 add_log('Market refresh: no qualifying tokens yet (h1≥50% filter active)')
         except: pass
-        time.sleep(90)
+        time.sleep(120)
 
 # ── TRADE RECORDING ──
 def check_daily_reset():
@@ -1224,8 +1252,8 @@ def api_chart(mint):
     tcfg = _TF.get(tf, _TF['5m'])
     try:
         # ── Step 1: resolve pair address from DexScreener public API ──
-        r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
-        pairs = r.json().get('pairs', []) if r.status_code == 200 else []
+        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        pairs = r.json().get('pairs', []) if (r and r.status_code == 200) else []
         if not pairs:
             return jsonify({'candles': [], 'error': 'no pairs'})
         pair         = pairs[0]
