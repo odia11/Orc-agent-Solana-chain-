@@ -311,6 +311,16 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .inact-btn{background:var(--green);color:#000;border:none;border-radius:8px;padding:11px 28px;font-family:'Orbitron',monospace;font-size:11px;font-weight:900;cursor:pointer;letter-spacing:.06em;transition:filter .15s;width:100%}
 .inact-btn:hover{filter:brightness(1.12)}
 
+/* ── MOBILE DEEP LINK BUTTONS ── */
+/* Dashed border = "opens external app", solid = "connects in-browser" */
+.btn-deeplink-phantom{background:linear-gradient(135deg,#ab9ff2 0%,#7b6cc4 100%);color:#fff;border:2px dashed rgba(255,255,255,.35)!important}
+.btn-deeplink-phantom:hover{filter:brightness(1.08)}
+.btn-deeplink-solflare{background:linear-gradient(135deg,#fc7227 0%,#c85510 100%);color:#fff;border:2px dashed rgba(255,255,255,.35)!important}
+.btn-deeplink-solflare:hover{filter:brightness(1.08)}
+.deeplink-sub{display:block;font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:400;opacity:.75;margin-top:5px;letter-spacing:.02em}
+.mobile-hint{background:rgba(106,163,255,.07);border:1px solid rgba(106,163,255,.22);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--blue);margin-bottom:14px;line-height:1.7;text-align:left}
+.mobile-or{font-size:10px;color:var(--muted);text-align:center;margin:2px 0 10px;letter-spacing:.1em}
+
 /* ── MOBILE ── */
 @media(max-width:720px){
   .stats{grid-template-columns:repeat(2,1fr)}
@@ -375,8 +385,27 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         </div>
       </div>
       <div id="wallet-install-msg" style="display:none;font-size:11px;color:var(--red);background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;text-align:left;line-height:1.6"></div>
-      <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
-      <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
+
+      <!-- ── MOBILE: no wallet extension detected ── -->
+      <div id="mobile-deeplink-section" style="display:none">
+        <div class="mobile-hint">📱 On mobile? Open this app inside your wallet's built-in browser for full trading access.</div>
+        <button class="ob-btn btn-deeplink-phantom" onclick="window.open('https://phantom.app/ul/browse/https%3A%2F%2Forc-agent-solana-chain-production.up.railway.app','_blank')">
+          🔮 Open in Phantom
+          <span class="deeplink-sub">↗ Opens Phantom app → browse to OrcAgent → connect</span>
+        </button>
+        <button class="ob-btn btn-deeplink-solflare" onclick="window.open('https://solflare.com/ul/v1/browse/https%3A%2F%2Forc-agent-solana-chain-production.up.railway.app','_blank')">
+          🔥 Open in Solflare
+          <span class="deeplink-sub">↗ Opens Solflare app → browse to OrcAgent → connect</span>
+        </button>
+        <div class="mobile-or">— or —</div>
+      </div>
+
+      <!-- ── DESKTOP / DAPP BROWSER: direct extension connect ── -->
+      <div id="dapp-connect-section">
+        <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
+        <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
+      </div>
+
       <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="phantomKey&&launchApp()">Launch OrcAgent ▶</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
       <button class="ob-btn btn-skip" onclick="skipToApp()">Skip — browse without connecting →</button>
@@ -1305,6 +1334,20 @@ async function toggleTrader(){
   }catch(e){ console.error('toggleTrader',e); }
   finally{ clearTimeout(watchdog); tb.disabled=false; tb.style.opacity=''; }
 }
+
+// ── MOBILE DETECTION & ONBOARD SETUP ──
+function _isMobile(){ return /Android|iPhone|iPad|iPod|IEMobile|Opera Mini/i.test(navigator.userAgent); }
+function _inDappBrowser(){ return !!(window.solana||window.solflare); }
+(function _setupOnboard(){
+  // On a mobile regular browser (no injected wallet), swap connect buttons for deep links.
+  // Inside Phantom/Solflare's built-in browser, or on desktop, keep the existing flow.
+  if(_isMobile()&&!_inDappBrowser()){
+    document.getElementById('mobile-deeplink-section').style.display='block';
+    document.getElementById('dapp-connect-section').style.display='none';
+    // Launch button is irrelevant until the user is inside a dapp browser
+    document.getElementById('wallet-continue-btn').style.display='none';
+  }
+})();
 
 // ── STARTUP: restore session ──
 (async function initApp(){
