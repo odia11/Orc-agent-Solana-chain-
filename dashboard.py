@@ -562,7 +562,7 @@ def discover_tokens():
                         seen.add(m); mints.append(m)
         except Exception: pass
 
-    return mints[:80]  # cap discovery to avoid excessive per-token API calls
+    return mints[:100]  # cap discovery to 100 tokens per cycle
 
 def add_log(msg: str):
     """System-wide event (market refresh, TOTD, startup).
@@ -615,6 +615,7 @@ def get_token_data(mint):
             'name':          base.get('name', '') or '',
             'price':         float(p.get('priceUsd', 0) or 0),
             'change5m':      float(p.get('priceChange', {}).get('m5',  0) or 0),
+            'change15m':     float(p.get('priceChange', {}).get('m15', 0) or 0),
             'change1h':      float(p.get('priceChange', {}).get('h1',  0) or 0),
             'change6h':      float(p.get('priceChange', {}).get('h6',  0) or 0),
             'change24h':     float(p.get('priceChange', {}).get('h24', 0) or 0),
@@ -635,45 +636,44 @@ def get_token_data(mint):
     except: return None
 
 def score_token(data):
-    """Score 0–10. Momentum-focused: ≥4 = strong BUY signal."""
+    """Score 0–10 across six dimensions. ≥4 = BUY signal."""
     if data.get('price', 0) <= 0: return 0
     score = 0.0
-    m5    = data.get('change5m', 0)
-    h1    = data.get('change1h', 0)
-    vol5m = data.get('volume5m', 0)
+    m5    = data.get('change5m',  0)
+    m15   = data.get('change15m', 0)
+    h1    = data.get('change1h',  0)
+    vol5m = data.get('volume5m',  0)
     liq   = data.get('liquidity', 0)
-    buys  = data.get('txns_buys', 0)
-    sells = max(data.get('txns_sells', 1), 1)
+    buys  = data.get('txns_buys',  0)
+    sells = data.get('txns_sells', 0)
 
-    # M5 momentum (0–4 pts) — primary pump signal
+    # m5 price change (0–4 pts)
     if   m5 >= 50: score += 4.0
     elif m5 >= 30: score += 3.0
-    elif m5 >= 20: score += 2.5
-    elif m5 >= 10: score += 1.5
-    elif m5 >=  5: score += 0.5
+    elif m5 >= 20: score += 2.0
+    elif m5 >= 10: score += 1.0
 
-    # H1 trend confirmation (0–2 pts)
-    if   h1 >= 60: score += 2.0
-    elif h1 >= 30: score += 1.5
-    elif h1 >= 15: score += 1.0
-    elif h1 >=  5: score += 0.5
+    # m15 price change (0–2 pts)
+    if   m15 >= 20: score += 2.0
+    elif m15 >= 10: score += 1.0
 
-    # 5-min volume — real buying activity (0–2 pts)
+    # h1 trend confirmation (0–2 pts)
+    if   h1 >= 50: score += 2.0
+    elif h1 >= 20: score += 1.0
+
+    # 5m volume — real buying activity (0–2 pts)
     if   vol5m >= 50000: score += 2.0
-    elif vol5m >= 20000: score += 1.5
-    elif vol5m >=  5000: score += 1.0
-    elif vol5m >=  1000: score += 0.5
+    elif vol5m >= 10000: score += 1.0
 
-    # Buy pressure (0–2 pts)
-    ratio = buys / sells
-    if   ratio >= 4.0: score += 2.0
-    elif ratio >= 2.5: score += 1.5
-    elif ratio >= 1.5: score += 1.0
-    elif ratio >= 1.0: score += 0.5
+    # liquidity depth (0–2 pts)
+    if   liq >= 100000: score += 2.0
+    elif liq >=  50000: score += 1.0
 
-    # Liquidity safety gate
-    if   liq < 5000:   score = max(0, score - 4.0)  # likely rug
-    elif liq < 10000:  score = max(0, score - 2.0)
+    # buy pressure — more buys than sells (0–1 pt)
+    if buys > sells: score += 1.0
+
+    # penalty: low liquidity = rug risk
+    if liq < 15000: score -= 3.0
 
     return min(10.0, max(0.0, round(score, 1)))
 
@@ -700,22 +700,19 @@ def token_loop():
     while True:
         try:
             mints      = discover_tokens()
+            total_disc = len(mints)
+            add_log('Scanning ' + str(total_disc) + ' tokens...')
             all_tokens = []
             for i, mint in enumerate(mints):
                 if i > 0:
-                    time.sleep(0.3)  # stagger per-token calls — ~24 s for 80 tokens
+                    time.sleep(0.3)  # stagger per-token calls
                 data = get_token_data(mint)
                 if not data or data['price'] <= 0:
                     continue
-                # Trending filter — mirrors DexScreener pumpswap trending
-                if data['change1h'] < 50:
+                # Minimum quality filters — score handles the rest
+                if data['liquidity'] < 15000:
                     continue
-                if data['liquidity'] < 10000:
-                    continue
-                if data['volume24h'] < 50000:
-                    continue
-                # txns24h==0 means data unavailable (new token); allow it through
-                if data['txns24h'] > 0 and data['txns24h'] < 500:
+                if data['volume5m'] < 1000:
                     continue
                 sc    = score_token(data)
                 entry = {
@@ -724,6 +721,7 @@ def token_loop():
                     'name':          data['name'] or data['symbol'] or mint[:8],
                     'price':         data['price'],
                     'change5m':      data['change5m'],
+                    'change15m':     data.get('change15m', 0),
                     'change1h':      data['change1h'],
                     'change6h':      data['change6h'],
                     'change24h':     data['change24h'],
@@ -740,13 +738,13 @@ def token_loop():
                     'pairAddress':   data.get('pairAddress', '') or '',
                 }
                 all_tokens.append(entry)
-            # Sort by 1h % descending — biggest 1h gainers first
-            display = sorted(all_tokens, key=lambda t: t['change1h'], reverse=True)
+            # Sort by score descending — best opportunity first
+            display    = sorted(all_tokens, key=lambda t: t['score'], reverse=True)
+            qualifying = [t for t in display if t['score'] >= 4]
             state['tokens'] = display
-            if display:
-                add_log('Market refresh: ' + str(len(display)) + ' trending tokens (h1≥50%)')
-            else:
-                add_log('Market refresh: no qualifying tokens yet (h1≥50% filter active)')
+            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥4) — '
+                    + ('best: ' + display[0]['symbol'] + ' ' + str(display[0]['score']) + '/10'
+                       if display else 'no tokens'))
         except: pass
         time.sleep(120)
 
@@ -893,52 +891,65 @@ def user_trader_loop(stop_event, config, wallet: str):
                     add_user_log(wallet, '[' + short + '] Daily loss limit hit ($' + str(round(daily_loss, 2)) + ') — pausing')
                     stop_event.wait(300)
                     continue
-                live     = state['tokens']
+                live     = state['tokens']  # already sorted by score desc
                 open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
                 us_usdc  = _get_user_usdc(wallet)
-                add_user_log(wallet, '[' + short + '] USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                total_live = len(live)
+                add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
+                             ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+
+                # ── Pass 1: exit checks for all open positions ──
                 for t in live:
                     if stop_event.is_set(): break
                     mint  = t['mint']
-                    if mint not in positions:
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
-                    pos   = positions[mint]
-                    sc    = t['score']
+                    pos   = positions.get(mint, {})
+                    if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
+                        continue
                     m5    = t.get('change5m', 0)
                     label = t['symbol'] or mint[:8]
+                    price = t['price']
+                    if price > pos.get('peak_price', price): pos['peak_price'] = price
+                    chg   = (price - pos['buy_price']) / pos['buy_price']
+                    exit_reason = None
+                    if   chg >= 0.15:  exit_reason = 'TAKE PROFIT +' + str(round(chg * 100, 1)) + '%'
+                    elif chg <= -0.05: exit_reason = 'STOP LOSS '    + str(round(chg * 100, 1)) + '%'
+                    elif m5  <  5:     exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
+                    if exit_reason:
+                        add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
+                        sell_ok = _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
+                        if sell_ok:
+                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                               wallet=wallet, private_key=private_key)
+                        else:
+                            add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
+                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
+                        open_pos -= 1
 
-                    # ── Exit checks for open positions ──
-                    if pos['amount'] > 0 and pos['buy_price'] > 0:
-                        price = t['price']
-                        if price > pos.get('peak_price', price): pos['peak_price'] = price
-                        chg = (price - pos['buy_price']) / pos['buy_price']
-                        exit_reason = None
-                        if   chg >= 0.15:  exit_reason = 'TAKE PROFIT +' + str(round(chg * 100, 1)) + '%'
-                        elif chg <= -0.05: exit_reason = 'STOP LOSS '    + str(round(chg * 100, 1)) + '%'
-                        elif m5 < 5:       exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
-                        if exit_reason:
-                            add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
-                            sell_ok = _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
-                            if sell_ok:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                                   wallet=wallet, private_key=private_key)
-                            else:
-                                add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared to avoid retry loop')
-                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
-                            open_pos -= 1
-                            continue
-
-                    # ── Entry: score ≥ 4, still pumping (m5 ≥ 10) ──
-                    if sc >= 4 and m5 >= 10 and us_usdc > 1 and open_pos < 3 and pos['amount'] == 0:
+                # ── Pass 2: pick the single best entry ──
+                if not stop_event.is_set() and open_pos < 3 and us_usdc > 1:
+                    not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
+                    qualifying = [t for t in not_held if t['score'] >= 4]
+                    add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
+                                 str(total_live) + ' qualify (score≥4)')
+                    if qualifying:
+                        best  = qualifying[0]  # list is sorted by score desc
+                        bmint = best['mint']
+                        label = best['symbol'] or bmint[:8]
+                        sc    = best['score']
+                        m5    = best.get('change5m', 0)
+                        m5s   = ('+' if m5 >= 0 else '') + str(round(m5, 1)) + '%'
+                        add_user_log(wallet, '[' + short + '] Best: ' + label +
+                                     ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
                         spend = round(min(us_usdc * config.get('trade_pct', 0.20), max_usdc), 2)
-                        if spend < 1.0: continue
-                        add_user_log(wallet, '[' + short + '] BUY ' + label + ' $' + str(spend) + ' score:' + str(sc) + ' m5:+' + str(round(m5, 1)) + '%')
-                        _execute_user_swap(wallet, private_key, 'buy', mint, str(spend))
-                        pos['amount']     = spend / t['price']
-                        pos['buy_price']  = t['price']
-                        pos['peak_price'] = t['price']
-                        pos['spend']      = spend
-                        us_usdc -= spend; open_pos += 1
+                        if spend >= 1.0:
+                            if bmint not in positions:
+                                positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
+                            pos = positions[bmint]
+                            _execute_user_swap(wallet, private_key, 'buy', bmint, str(spend))
+                            pos['amount']     = spend / best['price']
+                            pos['buy_price']  = best['price']
+                            pos['peak_price'] = best['price']
+                            pos['spend']      = spend
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 60))
