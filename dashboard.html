@@ -248,7 +248,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .slide-tf-btn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
 .slide-tf-btn.active{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.5);color:#ffc13a}
 .slide-tf-btn:hover:not(.active){border-color:var(--border2);color:var(--dim)}
-.slide-chart-wrap{position:relative;width:100%;height:180px;border-radius:8px;overflow:hidden;background:#0d1117;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
+.slide-chart-wrap{position:relative;width:100%;height:180px;border-radius:8px;overflow:hidden;background:#0a0e1a;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
 .slide-chart-wrap canvas{display:block;width:100%!important;height:180px}
 .slide-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
 .slide-stats{display:flex;gap:18px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,193,58,.12)}
@@ -1174,20 +1174,20 @@ function _renderSlideChart(canvas,candles){
   const ctx=canvas.getContext('2d');
   ctx.scale(dpr,dpr);
 
-  // Background
-  ctx.fillStyle='#0d1117';
+  ctx.fillStyle='#0a0e1a';
   ctx.fillRect(0,0,W,H);
 
-  if(!candles||candles.length<2){
-    ctx.fillStyle='rgba(160,180,200,.35)';
+  if(!candles||!candles.length){
+    ctx.fillStyle='rgba(160,180,200,.4)';
     ctx.font='10px Share Tech Mono,monospace';
     ctx.textAlign='center';
-    ctx.fillText('Not enough data',W/2,H/2);
+    ctx.fillText('No data',W/2,H/2);
     return;
   }
 
-  // Normalise candles — synthetic fallback may have o/h/l==0
-  const nc=candles.map(c=>({
+  // Cap to 50 most recent candles so bodies stay wide enough to see
+  const MAX_C=50, MIN_C=20;
+  let raw=candles.slice(-MAX_C).map(c=>({
     t:c.t,
     o:c.o||c.c,
     h:c.h||Math.max(c.o||c.c,c.c),
@@ -1195,114 +1195,135 @@ function _renderSlideChart(canvas,candles){
     c:c.c,
     v:c.v||0,
   }));
-  const n=nc.length;
 
-  const PAD={top:14,bottom:20,left:2,right:66};
+  // Pad left with flat candles so there are always at least MIN_C visible
+  if(raw.length<MIN_C&&raw.length>0){
+    const f=raw[0].c;
+    const dt=raw.length>1?(raw[1].t-raw[0].t):60;
+    const pad=MIN_C-raw.length;
+    raw=[...Array.from({length:pad},(_,i)=>({t:raw[0].t-(pad-i)*dt,o:f,h:f,l:f,c:f,v:0})),...raw];
+  }
+
+  const nc=raw, n=nc.length;
+
+  const PAD={top:12,bottom:18,left:2,right:72};
   const cW=W-PAD.left-PAD.right;
-  const USABLE=H-PAD.top-PAD.bottom; // 146
-  const PRICE_H=Math.floor(USABLE*0.75); // ~109
-  const VOL_GAP=5;
-  const VOL_H=USABLE-PRICE_H-VOL_GAP; // ~32
+  const USABLE=H-PAD.top-PAD.bottom;
+  const PRICE_H=Math.floor(USABLE*0.76);
+  const VOL_GAP=4;
+  const VOL_H=USABLE-PRICE_H-VOL_GAP;
 
   const priceTop=PAD.top;
   const priceBottom=PAD.top+PRICE_H;
-  const volTop=priceBottom+VOL_GAP;
   const volBottom=H-PAD.bottom;
 
-  // Price range (include all wicks)
+  // Tight Y range: ±5% around wick extremes
   const rawHi=Math.max(...nc.map(c=>c.h));
   const rawLo=Math.min(...nc.map(c=>c.l));
-  const pw=(rawHi-rawLo)*0.08||rawLo*0.02||1e-12;
+  const pw=Math.max((rawHi-rawLo)*0.05,rawLo*0.001,1e-12);
   const hi=rawHi+pw,lo=rawLo-pw,range=hi-lo;
 
   const syP=v=>priceTop+PRICE_H-((v-lo)/range)*PRICE_H;
   const step=cW/n;
-  const bodyW=Math.max(1,Math.min(step*0.65,14));
+  const bodyW=Math.max(6,Math.min(step*0.7,20));
   const sx=i=>PAD.left+(i+0.5)*step;
 
+  const isUp=nc[n-1].c>=nc[0].c;
+  const C_UP='#00ff88', C_DN='#ff3366';
+  const gCol=isUp?C_UP:C_DN;
+
   // Grid lines
-  ctx.strokeStyle='#1a1f2e';
+  ctx.strokeStyle='rgba(255,255,255,0.05)';
   ctx.lineWidth=1;
   const gridN=4;
   for(let g=0;g<=gridN;g++){
     const y=priceTop+(PRICE_H/gridN)*g;
     ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
   }
-  const vGridStep=Math.max(1,Math.floor(n/5));
-  for(let i=0;i<n;i+=vGridStep){
-    const x=sx(i);
-    ctx.beginPath();ctx.moveTo(x,priceTop);ctx.lineTo(x,volBottom);ctx.stroke();
+  const vStep=Math.max(1,Math.floor(n/6));
+  for(let i=0;i<n;i+=vStep){
+    ctx.beginPath();ctx.moveTo(sx(i),priceTop);ctx.lineTo(sx(i),volBottom);ctx.stroke();
   }
 
-  // Volume bars
+  // Gradient fill under the close-price path (drawn before candles)
+  const grad=ctx.createLinearGradient(0,priceTop,0,priceBottom);
+  grad.addColorStop(0,isUp?'rgba(0,255,136,0.12)':'rgba(255,51,102,0.12)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();
+  nc.forEach((c,i)=>{const x=sx(i),y=syP(c.c);i?ctx.lineTo(x,y):ctx.moveTo(x,y);});
+  ctx.lineTo(sx(n-1),priceBottom);
+  ctx.lineTo(sx(0),priceBottom);
+  ctx.closePath();
+  ctx.fillStyle=grad;
+  ctx.fill();
+
+  // Volume bars — minimum 3px height so they're always visible
   const maxVol=Math.max(...nc.map(c=>c.v),1);
   nc.forEach((c,i)=>{
     const bull=c.c>=c.o;
-    const vh=Math.max(1,(c.v/maxVol)*VOL_H);
-    ctx.fillStyle=bull?'rgba(38,166,154,.45)':'rgba(239,83,80,.45)';
+    const vh=Math.max(3,(c.v/maxVol)*VOL_H);
+    ctx.fillStyle=bull?'rgba(0,255,136,0.38)':'rgba(255,51,102,0.38)';
     ctx.fillRect(sx(i)-bodyW/2,volBottom-vh,bodyW,vh);
   });
 
-  // Candlesticks
+  // Candlestick bodies and wicks
   nc.forEach((c,i)=>{
     const bull=c.c>=c.o;
-    const col=bull?'#26a69a':'#ef5350';
+    const col=bull?C_UP:C_DN;
     const x=sx(i);
     const bTop=Math.min(syP(c.o),syP(c.c));
     const bBot=Math.max(syP(c.o),syP(c.c));
-    const bH=Math.max(1,bBot-bTop);
-    // Wick
+    const bH=Math.max(1.5,bBot-bTop);
+    // Wick — always at least 1px
     ctx.strokeStyle=col;
-    ctx.lineWidth=Math.max(0.5,Math.min(1,step*0.12));
+    ctx.lineWidth=Math.max(1,step*0.1);
     ctx.beginPath();ctx.moveTo(x,syP(c.h));ctx.lineTo(x,syP(c.l));ctx.stroke();
     // Body
     ctx.fillStyle=col;
     ctx.fillRect(x-bodyW/2,bTop,bodyW,bH);
   });
 
-  // Current price dashed line
+  // Current price dashed line — bright, high opacity
   const curP=nc[n-1].c;
   const curY=syP(curP);
-  const isUp=curP>=nc[0].c;
-  const pCol=isUp?'#26a69a':'#ef5350';
   ctx.save();
-  ctx.setLineDash([4,3]);
-  ctx.strokeStyle=pCol;
-  ctx.lineWidth=1;
-  ctx.globalAlpha=0.7;
+  ctx.setLineDash([5,3]);
+  ctx.strokeStyle=gCol;
+  ctx.lineWidth=1.5;
+  ctx.globalAlpha=0.9;
   ctx.beginPath();ctx.moveTo(PAD.left,curY);ctx.lineTo(W-PAD.right,curY);ctx.stroke();
   ctx.restore();
   // Price label box
   const lbl=fmtPrice(curP);
-  const boxH=14,boxW=PAD.right-2;
-  ctx.fillStyle=pCol;
+  const boxH=15,boxW=PAD.right-3;
+  ctx.fillStyle=gCol;
   ctx.fillRect(W-PAD.right+2,curY-boxH/2,boxW,boxH);
-  ctx.fillStyle='#0d1117';
-  ctx.font='bold 7.5px Share Tech Mono,monospace';
+  ctx.fillStyle='#0a0e1a';
+  ctx.font='bold 8px Share Tech Mono,monospace';
   ctx.textAlign='left';
-  ctx.fillText(lbl,W-PAD.right+4,curY+3);
+  ctx.fillText(lbl,W-PAD.right+5,curY+3);
 
-  // Y-axis price labels (skip if within 10px of current price line)
-  ctx.fillStyle='rgba(140,160,180,.6)';
+  // Y-axis price labels (skip within 11px of current price box)
+  ctx.fillStyle='rgba(180,200,220,0.55)';
   ctx.font='8px Share Tech Mono,monospace';
   ctx.textAlign='left';
   for(let g=0;g<=gridN;g++){
     const p=hi-(range/gridN)*g;
     const y=syP(p);
-    if(Math.abs(y-curY)<10) continue;
-    ctx.fillText(fmtPrice(p),W-PAD.right+4,y+3);
+    if(Math.abs(y-curY)<11) continue;
+    ctx.fillText(fmtPrice(p),W-PAD.right+5,y+3);
   }
 
   // X-axis time labels
   if(nc[0]?.t){
     const fmtT=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
-    ctx.fillStyle='rgba(100,130,160,.65)';
+    ctx.fillStyle='rgba(120,145,175,0.6)';
     ctx.font='7px Share Tech Mono,monospace';
     ctx.textAlign='center';
     const mid=Math.floor(n/2);
-    ctx.fillText(fmtT(nc[0].t),sx(0),H-4);
-    if(mid>0&&mid<n-1) ctx.fillText(fmtT(nc[mid].t),sx(mid),H-4);
-    if(n>1) ctx.fillText(fmtT(nc[n-1].t),sx(n-1),H-4);
+    ctx.fillText(fmtT(nc[0].t),sx(0),H-3);
+    if(mid>0&&mid<n-1) ctx.fillText(fmtT(nc[mid].t),sx(mid),H-3);
+    if(n>1) ctx.fillText(fmtT(nc[n-1].t),sx(n-1),H-3);
   }
 }
 
