@@ -845,11 +845,25 @@ def api_totd():
     next_in = max(0.0, TOTD_INTERVAL - (time.time() - updated)) if updated else 0.0
     return jsonify({'token': state.get('token_of_the_day'), 'updated_at': updated, 'next_update_in': round(next_in)})
 
+@app.route('/api/carousel')
+def api_carousel():
+    return jsonify({'tokens': state['tokens'][:10]})
+
 @app.route('/api/chart/<mint>')
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_chart(mint):
     if not _SOLANA_ADDR_RE.match(mint or ''):
         return jsonify({'candles': [], 'error': 'invalid mint'})
+    tf    = request.args.get('tf', '5m')
+    _TF   = {
+        '1m':  {'res': '1',    'window': 1800,    'n': 60},
+        '5m':  {'res': '5',    'window': 9000,    'n': 60},
+        '15m': {'res': '15',   'window': 21600,   'n': 60},
+        '1h':  {'res': '60',   'window': 86400,   'n': 48},
+        '4h':  {'res': '240',  'window': 345600,  'n': 42},
+        'D':   {'res': '1440', 'window': 2592000, 'n': 30},
+    }
+    tcfg  = _TF.get(tf, _TF['5m'])
     try:
         r = requests.get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
         pairs = r.json().get('pairs', []) if r.status_code == 200 else []
@@ -862,10 +876,10 @@ def api_chart(mint):
             return jsonify({'candles': [], 'error': 'no pair address'})
 
         now     = int(time.time())
-        from_ts = now - 1800  # 30 minutes
+        from_ts = now - tcfg['window']
         chart_url = (
             f'https://io.dexscreener.com/dex/chart/amm/v3/{chain_id}/{pair_address}'
-            f'?res=1&cb=0&from={from_ts}&to={now}'
+            f'?res={tcfg["res"]}&cb=0&from={from_ts}&to={now}'
         )
         rc = requests.get(chart_url, timeout=10, headers={
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
@@ -911,7 +925,7 @@ def api_chart(mint):
                             'v': float(c.get('volume', c.get('v', 0)) or 0),
                         })
             candles.sort(key=lambda x: x['t'])
-            candles = candles[-30:]
+            candles = candles[-tcfg['n']:]
 
         # Fallback: synthesize 2 data points from current price + m5 change when
         # the chart API returns nothing (rate-limited, new token, API down, etc.)

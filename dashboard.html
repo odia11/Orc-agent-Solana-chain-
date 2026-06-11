@@ -212,51 +212,44 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .td-pos{color:var(--green)!important;font-weight:700}
 .td-neg{color:var(--red)!important;font-weight:700}
 
-/* ── TOKEN OF THE DAY ── */
-.totd-wrap{margin-bottom:1.25rem}
-.totd-card{
-  background:linear-gradient(135deg,#161208 0%,#1e1a0c 40%,#141a0e 100%);
-  border:1px solid rgba(255,193,58,.4);
-  border-radius:12px;
-  padding:20px 22px;
-  cursor:pointer;
-  position:relative;
-  overflow:hidden;
-  transition:transform .15s ease,box-shadow .15s ease,border-color .15s ease;
-  box-shadow:0 0 32px rgba(255,193,58,.09);
-}
-.totd-card::before{
-  content:'';position:absolute;top:0;left:0;right:0;height:3px;
-  background:linear-gradient(90deg,#ffc13a,#ffe080,#ffc13a,transparent);
-}
-.totd-card:hover{transform:translateY(-2px);border-color:rgba(255,193,58,.7);box-shadow:0 0 48px rgba(255,193,58,.18)}
-.totd-label{font-size:9px;color:#ffc13a;text-transform:uppercase;letter-spacing:.18em;font-family:'Share Tech Mono',monospace;margin-bottom:12px;display:flex;align-items:center;gap:7px;justify-content:space-between}
-.totd-countdown{font-size:8px;color:rgba(255,193,58,.5);letter-spacing:.06em;font-weight:400;text-transform:none;margin-left:auto;white-space:nowrap}
-.totd-label::before{content:'★';font-size:11px}
-.totd-body{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
-.totd-left{min-width:0;flex:1}
-.totd-sym{font-family:'Orbitron',monospace;font-size:22px;font-weight:700;color:#ffe080;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:3px}
-.totd-name{font-size:10px;color:rgba(255,193,58,.65);margin-bottom:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.totd-price-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap}
-.totd-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
-.totd-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
-.totd-chg.up{color:var(--green)}
-.totd-chg.dn{color:var(--red)}
-.totd-right{display:flex;flex-direction:column;gap:8px;align-items:flex-end}
-.totd-sig{font-size:9px;font-weight:700;padding:5px 14px;border-radius:4px;letter-spacing:.14em;font-family:'Orbitron',monospace;margin-bottom:4px}
-.totd-sig.sig-buy{background:rgba(0,237,170,.15);color:var(--green);border:1px solid rgba(0,237,170,.4)}
-.totd-sig.sig-sell{background:rgba(255,77,106,.13);color:var(--red);border:1px solid rgba(255,77,106,.4)}
-.totd-sig.sig-hold{background:rgba(106,143,175,.12);color:var(--dim);border:1px solid var(--border2)}
-.totd-stats{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;padding-top:12px;border-top:1px solid rgba(255,193,58,.2)}
-.totd-stat{display:flex;flex-direction:column;gap:3px}
-.totd-stat-lbl{font-size:7px;color:rgba(255,193,58,.6);text-transform:uppercase;letter-spacing:.1em}
-.totd-stat-val{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#ffe080}
-
-/* ── TOTD LIVE CHART ── */
-.totd-chart-wrap{position:relative;width:100%;height:120px;border-radius:8px;overflow:hidden;background:#060c18;border:1px solid rgba(255,193,58,.15);margin:4px 0 0}
-.totd-chart-wrap canvas{display:block;width:100%!important;height:120px}
-.totd-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
-.totd-chart-msg.hidden{display:none}
+/* ── TRENDING CAROUSEL ── */
+.carousel-wrap{margin-bottom:1.25rem}
+.carousel-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.carousel-title{font-size:9px;color:#ffc13a;text-transform:uppercase;letter-spacing:.18em;font-family:'Share Tech Mono',monospace;display:flex;align-items:center;gap:6px}
+.carousel-title::before{content:'★';font-size:11px}
+.carousel-countdown{font-size:8px;color:rgba(255,193,58,.5);letter-spacing:.06em;white-space:nowrap}
+.carousel-outer{position:relative}
+.carousel-viewport{overflow:hidden;border-radius:12px;border:1px solid rgba(255,193,58,.4);background:linear-gradient(135deg,#161208 0%,#1e1a0c 40%,#141a0e 100%);box-shadow:0 0 32px rgba(255,193,58,.09);position:relative}
+.carousel-viewport::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#ffc13a,#ffe080,#ffc13a,transparent);z-index:1;pointer-events:none}
+.carousel-track{display:flex;transition:transform .45s cubic-bezier(.4,0,.2,1);will-change:transform}
+.carousel-slide{min-width:100%;padding:20px 22px 16px;box-sizing:border-box}
+.slide-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:8px}
+.slide-id{min-width:0;flex:1}
+.slide-sym{font-family:'Orbitron',monospace;font-size:22px;font-weight:700;color:#ffe080;letter-spacing:.06em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slide-name{font-size:10px;color:rgba(255,193,58,.6);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.slide-buy-btn{flex-shrink:0;background:rgba(0,237,170,.13);color:var(--green);border:1px solid rgba(0,237,170,.35);border-radius:6px;padding:6px 14px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;cursor:pointer;letter-spacing:.08em;white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;transition:all .15s}
+.slide-buy-btn:hover{background:rgba(0,237,170,.25);border-color:var(--green)}
+.slide-price-row{display:flex;align-items:baseline;gap:10px;margin-bottom:10px;flex-wrap:wrap}
+.slide-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
+.slide-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
+.slide-chg.up{color:var(--green)}.slide-chg.dn{color:var(--red)}
+.slide-tf{display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap}
+.slide-tf-btn{background:transparent;border:1px solid var(--border);border-radius:4px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;cursor:pointer;transition:all .15s;letter-spacing:.04em}
+.slide-tf-btn.active{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.5);color:#ffc13a}
+.slide-tf-btn:hover:not(.active){border-color:var(--border2);color:var(--dim)}
+.slide-chart-wrap{position:relative;width:100%;height:150px;border-radius:8px;overflow:hidden;background:#060c18;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
+.slide-chart-wrap canvas{display:block;width:100%!important;height:150px}
+.slide-chart-msg{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:10px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
+.slide-stats{display:flex;gap:18px;flex-wrap:wrap;padding-top:10px;border-top:1px solid rgba(255,193,58,.12)}
+.slide-stat{display:flex;flex-direction:column;gap:3px}
+.slide-stat-lbl{font-size:7px;color:rgba(255,193,58,.55);text-transform:uppercase;letter-spacing:.1em}
+.slide-stat-val{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:#ffe080}
+.carousel-arrow{position:absolute;top:50%;transform:translateY(-50%);background:rgba(16,24,40,.88);border:1px solid rgba(255,193,58,.22);border-radius:50%;width:30px;height:30px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:5;font-size:16px;color:#ffc13a;transition:all .15s;backdrop-filter:blur(4px);user-select:none}
+.carousel-arrow:hover{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.55)}
+.carousel-arrow.prev{left:-13px}.carousel-arrow.next{right:-13px}
+.carousel-dots{display:flex;justify-content:center;gap:6px;margin-top:10px;align-items:center}
+.c-dot{width:6px;height:6px;border-radius:50%;background:var(--border2);cursor:pointer;transition:all .25s}
+.c-dot.active{background:#ffc13a;width:18px;border-radius:3px}
 
 /* ── BOTTOM PANELS ── */
 .panels{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.25rem}
@@ -582,35 +575,22 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- LIVE CHART CARD -->
-  <div class="totd-wrap" id="totd-wrap" style="display:none">
-    <div class="totd-card" id="totd-card">
-      <div class="totd-label"><span id="totd-lbl-text">Hottest Token Right Now</span><span class="totd-countdown" id="totd-countdown"></span></div>
-      <div class="totd-body" style="margin-bottom:8px">
-        <div class="totd-left">
-          <div class="totd-sym" id="totd-sym">—</div>
-          <div class="totd-name" id="totd-name">—</div>
-        </div>
-        <div class="totd-right">
-          <span class="totd-sig sig-hold" id="totd-sig">HOLD</span>
-        </div>
-      </div>
-      <!-- LIVE PRICE CHART -->
-      <div class="totd-chart-wrap" id="totd-chart-wrap">
-        <canvas id="price-chart" height="120" style="display:block;width:100%"></canvas>
-        <div class="totd-chart-msg" id="totd-chart-msg">Loading chart...</div>
-      </div>
-      <div class="totd-price-row" style="margin-top:10px">
-        <span class="totd-price" id="totd-price">$0</span>
-        <span class="totd-chg up" id="totd-chg">+0.00%</span>
-        <span style="font-size:8px;color:rgba(255,193,58,.5);margin-left:4px;letter-spacing:.06em">5M</span>
-      </div>
-      <div class="totd-stats">
-        <div class="totd-stat"><span class="totd-stat-lbl">Volume 5M</span><span class="totd-stat-val" id="totd-vol">—</span></div>
-        <div class="totd-stat"><span class="totd-stat-lbl">Liquidity</span><span class="totd-stat-val" id="totd-liq">—</span></div>
-        <div class="totd-stat"><span class="totd-stat-lbl">Market Cap</span><span class="totd-stat-val" id="totd-mcap">—</span></div>
-      </div>
+  <!-- TRENDING CAROUSEL -->
+  <div class="carousel-wrap" id="carousel-wrap" style="display:none">
+    <div class="carousel-header">
+      <div class="carousel-title">Trending Solana Tokens</div>
+      <div class="carousel-countdown" id="carousel-countdown"></div>
     </div>
+    <div class="carousel-outer">
+      <button class="carousel-arrow prev" onclick="carouselNav(-1)">‹</button>
+      <div class="carousel-viewport">
+        <div class="carousel-track" id="carousel-track">
+          <!-- slides injected by JS -->
+        </div>
+      </div>
+      <button class="carousel-arrow next" onclick="carouselNav(1)">›</button>
+    </div>
+    <div class="carousel-dots" id="carousel-dots"></div>
   </div>
 
   <!-- LIVE MARKET -->
@@ -817,7 +797,7 @@ async function launchApp(){
   _lastActivity = Date.now(); // start inactivity clock from moment of connect
   await fetchState();
   fetchTrades();
-  fetchTotd();
+  fetchCarousel();
 }
 
 // ── BALANCE REFRESH ──
@@ -870,7 +850,7 @@ async function fetchState(){
   updateBtns();
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
   renderMarket(r.tokens||[]);
-  if((r.tokens||[]).length&&!_totdNextAt) fetchTotd();
+  if((r.tokens||[]).length&&!_carTokens.length) fetchCarousel();
   renderPositions(r.positions_detail||[]);
 }
 
@@ -879,7 +859,7 @@ async function fetchMarketOnly(){
   const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
   if(r?.tokens&&r.tokens.length){
     renderMarket(r.tokens);
-    if(!_totdNextAt) fetchTotd();
+    if(!_carTokens.length) fetchCarousel();
   }
 }
 
@@ -1018,188 +998,189 @@ function renderMarket(tokens){
 }
 
 // ── TOKEN OF THE DAY + LIVE CHART ──
-let _totdNextAt=0;
-let _marketTokens=[];
-let _chartMint=null;
-let _chartCandles=null;
+let _marketTokens=[];  // used by renderMarket for grid fallback
 
-async function fetchTotd(){
+// ── TRENDING CAROUSEL ──
+const CAROUSEL_MS = 60000;
+let _carTokens  = [];
+let _carIdx     = 0;
+let _carTimer   = null;
+let _carNextAt  = 0;
+let _carTf      = '5m';
+
+async function fetchCarousel(){
   if(!appVisible()) return;
-  const r=await fetch('/api/totd').then(r=>r.json()).catch(()=>null);
-  if(r?.token){
-    renderTotd(r.token);
-    _totdNextAt=Date.now()+(r.next_update_in||900)*1000;
-    _chartMint=r.token.mint;
-  } else if(_marketTokens.length){
-    const best=_marketTokens.reduce((a,b)=>(b.score??0)>(a.score??0)?b:a,_marketTokens[0]);
-    renderTotd(best);
-    _chartMint=best.mint;
-    _totdNextAt=Date.now()+900000;
+  const r=await fetch('/api/carousel').then(r=>r.json()).catch(()=>null);
+  if(r?.tokens?.length){
+    _carTokens=r.tokens;
+    _buildCarousel(_carTokens);
+    goToSlide(_carIdx<_carTokens.length?_carIdx:0,true);
   }
-  if(_chartMint) loadChart(_chartMint);
 }
 
-function renderTotd(t){
-  if(!t) return;
-  document.getElementById('totd-wrap').style.display='block';
-  document.getElementById('totd-sym').textContent=t.symbol||'???';
-  document.getElementById('totd-name').textContent=t.name||t.symbol||'Unknown';
-  document.getElementById('totd-price').textContent=fmtPrice(t.price);
-  document.getElementById('totd-vol').textContent=fmtNum(t.volume5m||t.volume1h||0);
-  document.getElementById('totd-liq').textContent=fmtNum(t.liquidity||0);
-  document.getElementById('totd-mcap').textContent=fmtNum(t.fdv||0);
-  const chg=t.change5m??t.change1h??0;
-  const chgEl=document.getElementById('totd-chg');
-  chgEl.textContent=(chg>=0?'▲ +':'▼ −')+Math.abs(chg).toFixed(2)+'%';
-  chgEl.className='totd-chg '+(chg>=0?'up':'dn');
-  const hot=t.score>=7,cold=t.score<=2;
-  const sigEl=document.getElementById('totd-sig');
-  sigEl.textContent=hot?'BUY':cold?'SELL':'HOLD';
-  sigEl.className='totd-sig '+(hot?'sig-buy':cold?'sig-sell':'sig-hold');
-  document.getElementById('totd-lbl-text').textContent='★  '+(t.symbol||'Token')+' — Live 30-min Chart';
-  document.getElementById('totd-card').onclick=()=>window.open('https://dexscreener.com/solana/'+t.mint);
+function _buildCarousel(tokens){
+  const track=document.getElementById('carousel-track');
+  const dots=document.getElementById('carousel-dots');
+  if(!track||!dots) return;
+  const TFS=['1m','5m','15m','1h','4h','D'];
+  track.innerHTML=tokens.map((t,i)=>`
+    <div class="carousel-slide" id="cslide-${i}">
+      <div class="slide-header">
+        <div class="slide-id">
+          <div class="slide-sym">${esc(t.symbol||'???')}</div>
+          <div class="slide-name">${esc(t.name||t.symbol||'Unknown')}</div>
+        </div>
+        <a class="slide-buy-btn" href="https://jup.ag/swap/SOL-${esc(t.mint)}" target="_blank" rel="noopener">⚡ BUY</a>
+      </div>
+      <div class="slide-price-row">
+        <span class="slide-price">${fmtPrice(t.price)}</span>
+        <span class="slide-chg ${(t.change5m||0)>=0?'up':'dn'}">${_fmtChg(t.change5m||0)}</span>
+      </div>
+      <div class="slide-tf">
+        ${TFS.map(tf=>`<button class="slide-tf-btn${tf==='5m'?' active':''}" onclick="setCarTf(${i},'${tf}')">${tf}</button>`).join('')}
+      </div>
+      <div class="slide-chart-wrap">
+        <canvas id="cchart-${i}" height="150"></canvas>
+        <div class="slide-chart-msg" id="cchartmsg-${i}">Loading chart...</div>
+      </div>
+      <div class="slide-stats">
+        <div class="slide-stat"><span class="slide-stat-lbl">Vol 5M</span><span class="slide-stat-val">${fmtNum(t.volume5m||0)}</span></div>
+        <div class="slide-stat"><span class="slide-stat-lbl">Liquidity</span><span class="slide-stat-val">${fmtNum(t.liquidity||0)}</span></div>
+        <div class="slide-stat"><span class="slide-stat-lbl">Market Cap</span><span class="slide-stat-val">${fmtNum(t.fdv||0)}</span></div>
+        <div class="slide-stat"><span class="slide-stat-lbl">Score</span><span class="slide-stat-val">${t.score||0}</span></div>
+      </div>
+    </div>`).join('');
+  dots.innerHTML=tokens.map((_,i)=>`<div class="c-dot${i===_carIdx?' active':''}" onclick="goToSlide(${i})"></div>`).join('');
+  document.getElementById('carousel-wrap').style.display='block';
 }
 
-async function loadChart(mint){
-  if(!mint||!appVisible()) return;
-  const canvas=document.getElementById('price-chart');
-  const msgEl=document.getElementById('totd-chart-msg');
+function goToSlide(idx,instant){
+  if(!_carTokens.length) return;
+  idx=((idx%_carTokens.length)+_carTokens.length)%_carTokens.length;
+  _carIdx=idx;
+  const track=document.getElementById('carousel-track');
+  if(track){
+    if(instant){track.style.transition='none';requestAnimationFrame(()=>{track.style.transition='';});}
+    track.style.transform=`translateX(-${idx*100}%)`;
+  }
+  document.querySelectorAll('.c-dot').forEach((d,i)=>d.classList.toggle('active',i===idx));
+  _carNextAt=Date.now()+CAROUSEL_MS;
+  clearTimeout(_carTimer);
+  _carTimer=setTimeout(()=>carouselNav(1),CAROUSEL_MS);
+  _loadSlideChart(idx,_carTf);
+}
+
+function carouselNav(dir){ goToSlide(_carIdx+dir); }
+
+async function setCarTf(slideIdx,tf){
+  _carTf=tf;
+  const slide=document.getElementById('cslide-'+slideIdx);
+  if(slide) slide.querySelectorAll('.slide-tf-btn').forEach(b=>b.classList.toggle('active',b.textContent===tf));
+  const t=_carTokens[slideIdx];
+  if(t){
+    const chg=_chgForTf(t,tf);
+    const el=document.getElementById('cslide-'+slideIdx)?.querySelector('.slide-chg');
+    if(el){el.textContent=_fmtChg(chg);el.className='slide-chg '+(chg>=0?'up':'dn');}
+  }
+  await _loadSlideChart(slideIdx,tf);
+}
+
+function _chgForTf(t,tf){
+  if(tf==='1h') return t.change1h||0;
+  if(tf==='4h') return t.change6h||0;
+  if(tf==='D')  return t.change24h||0;
+  return t.change5m||0;
+}
+function _fmtChg(v){ return (v>=0?'▲ +':'▼ −')+Math.abs(v).toFixed(2)+'%'; }
+
+async function _loadSlideChart(idx,tf){
+  if(!_carTokens[idx]) return;
+  const mint=_carTokens[idx].mint;
+  const canvas=document.getElementById('cchart-'+idx);
+  const msg=document.getElementById('cchartmsg-'+idx);
   if(!canvas) return;
-  if(msgEl){msgEl.textContent='Loading chart...';msgEl.classList.remove('hidden');}
-  const r=await fetch('/api/chart/'+mint).then(r=>r.json()).catch(()=>null);
-  if(!r){if(msgEl) msgEl.textContent='Chart unavailable';return;}
-  _chartCandles=r.candles||[];
-  renderCandleChart(canvas,_chartCandles);
+  if(msg){msg.textContent='Loading...';msg.style.display='flex';}
+  const r=await fetch('/api/chart/'+mint+'?tf='+tf).then(r=>r.json()).catch(()=>null);
+  if(!r?.candles?.length){
+    if(msg){msg.textContent='Chart unavailable';msg.style.display='flex';}
+    return;
+  }
+  if(msg) msg.style.display='none';
+  _renderSlideChart(canvas,r.candles);
 }
 
-function renderCandleChart(canvas,candles){
+function _renderSlideChart(canvas,candles){
   const wrap=canvas.parentElement;
   const dpr=window.devicePixelRatio||1;
-  const W=wrap.clientWidth||600;
-  const H=120;
+  const W=wrap.clientWidth||560;
+  const H=150;
   canvas.width=Math.round(W*dpr);
   canvas.height=Math.round(H*dpr);
   canvas.style.width=W+'px';
   canvas.style.height=H+'px';
   const ctx=canvas.getContext('2d');
   ctx.scale(dpr,dpr);
-
   ctx.fillStyle='#060c18';
   ctx.fillRect(0,0,W,H);
-
-  const msgEl=document.getElementById('totd-chart-msg');
   if(!candles||candles.length<2){
-    if(msgEl){msgEl.textContent=candles&&candles.length===1?'Too few data points':'Chart data unavailable';msgEl.classList.remove('hidden');}
+    ctx.fillStyle='rgba(255,193,58,.4)';ctx.font='10px Share Tech Mono,monospace';
+    ctx.textAlign='center';ctx.fillText('Not enough data',W/2,H/2);
     return;
   }
-  if(msgEl) msgEl.classList.add('hidden');
-
-  const PAD={top:10,bottom:18,left:2,right:56};
+  const PAD={top:12,bottom:22,left:4,right:58};
   const cW=W-PAD.left-PAD.right;
   const cH=H-PAD.top-PAD.bottom;
   const n=candles.length;
-  const step=cW/n;
-
-  const highs=candles.map(c=>c.h>0?c.h:c.c);
-  const lows=candles.map(c=>c.l>0?c.l:c.c);
-  const rawLo=Math.min(...lows);
-  const rawHi=Math.max(...highs);
+  const closes=candles.map(c=>c.c);
+  const rawLo=Math.min(...closes),rawHi=Math.max(...closes);
   const pw=(rawHi-rawLo)*0.12||rawLo*0.04||1e-9;
-  const lo=rawLo-pw;
-  const hi=rawHi+pw;
-  const range=hi-lo;
-
+  const lo=rawLo-pw,hi=rawHi+pw,range=hi-lo;
   const sy=v=>PAD.top+cH-((v-lo)/range)*cH;
-  const sx=i=>PAD.left+(i+0.5)*step;
-  // Cap body width — prevents enormous bars when only 2–4 candles are present
-  const bw=Math.max(1.5,Math.min(14,step-1.5));
-
-  // Grid lines
-  ctx.strokeStyle='rgba(42,64,96,.35)';
-  ctx.lineWidth=1;
-  [0,.25,.5,.75,1].forEach(f=>{
-    const y=PAD.top+cH*f;
-    ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();
-  });
-
-  const hasFull=candles.some(c=>c.o>0&&c.h>0&&c.l>0);
-  const firstC=candles[0].c;
-  const lastC=candles[n-1].c;
-  const up=lastC>=firstC;
-  const lineCol=up?'#00edaa':'#ff4d6a';
-
-  // Use candlesticks only when we have enough bars for them to look right
-  if(hasFull&&n>=5){
-    // Candlestick chart
-    candles.forEach((c,i)=>{
-      const x=sx(i);
-      const bull=c.c>=c.o;
-      const col=bull?'#00edaa':'#ff4d6a';
-      const oy=sy(c.o),cy2=sy(c.c),hy=sy(c.h),ly2=sy(c.l);
-      ctx.strokeStyle=col;ctx.lineWidth=1;
-      ctx.beginPath();ctx.moveTo(x,hy);ctx.lineTo(x,ly2);ctx.stroke();
-      const bodyY=Math.min(oy,cy2);
-      const bodyH=Math.max(1,Math.abs(cy2-oy));
-      ctx.fillStyle=bull?'rgba(0,237,170,.85)':'rgba(255,77,106,.85)';
-      ctx.fillRect(x-bw/2,bodyY,bw,bodyH);
-    });
-  } else {
-    // Line chart with gradient fill
-    const pts=candles.map((c,i)=>[sx(i),sy(c.c)]);
-    ctx.beginPath();
-    pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
-    ctx.lineTo(pts[n-1][0],PAD.top+cH);
-    ctx.lineTo(pts[0][0],PAD.top+cH);
-    ctx.closePath();
-    const grad=ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
-    grad.addColorStop(0,up?'rgba(0,237,170,.22)':'rgba(255,77,106,.22)');
-    grad.addColorStop(1,'rgba(0,0,0,0)');
-    ctx.fillStyle=grad;ctx.fill();
-    ctx.beginPath();
-    ctx.strokeStyle=lineCol;ctx.lineWidth=2;
-    ctx.lineJoin='round';ctx.lineCap='round';
-    pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
-    ctx.stroke();
-    // Live dot
-    const [lx,ly2]=pts[n-1];
-    ctx.beginPath();ctx.arc(lx,ly2,3.5,0,Math.PI*2);
-    ctx.fillStyle='#060c18';ctx.fill();
-    ctx.beginPath();ctx.arc(lx,ly2,3.5,0,Math.PI*2);
-    ctx.strokeStyle=lineCol;ctx.lineWidth=2;ctx.stroke();
-  }
-
-  // Y-axis price labels
-  ctx.fillStyle='rgba(255,193,58,.5)';
-  ctx.font='8px Share Tech Mono,monospace';
-  ctx.textAlign='left';
-  [lo+range*.12,lo+range*.52,lo+range*.88].forEach(price=>{
-    ctx.fillText(fmtPrice(price),W-PAD.right+4,sy(price)+3);
-  });
-
-  // Time labels — skip middle when it coincides with first or last (e.g. n=2)
-  ctx.textAlign='center';
-  ctx.fillStyle='rgba(74,112,149,.8)';
-  ctx.font='7px Share Tech Mono,monospace';
+  const sx=i=>PAD.left+(n===1?cW/2:(i/(n-1))*cW);
+  const isUp=closes[n-1]>=closes[0];
+  const col=isUp?'#00edaa':'#ff4d6a';
+  // Grid
+  ctx.strokeStyle='rgba(42,64,96,.3)';ctx.lineWidth=1;
+  [0,.25,.5,.75,1].forEach(f=>{const y=PAD.top+cH*f;ctx.beginPath();ctx.moveTo(PAD.left,y);ctx.lineTo(W-PAD.right,y);ctx.stroke();});
+  // Gradient fill
+  const pts=candles.map((c,i)=>[sx(i),sy(c.c)]);
+  ctx.beginPath();
+  pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));
+  ctx.lineTo(pts[n-1][0],PAD.top+cH);ctx.lineTo(pts[0][0],PAD.top+cH);ctx.closePath();
+  const grad=ctx.createLinearGradient(0,PAD.top,0,PAD.top+cH);
+  grad.addColorStop(0,isUp?'rgba(0,237,170,.18)':'rgba(255,77,106,.18)');
+  grad.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle=grad;ctx.fill();
+  // Line
+  ctx.beginPath();ctx.strokeStyle=col;ctx.lineWidth=2;ctx.lineJoin='round';ctx.lineCap='round';
+  pts.forEach(([x,y],i)=>i?ctx.lineTo(x,y):ctx.moveTo(x,y));ctx.stroke();
+  // Live dot
+  const [lx,ly]=pts[n-1];
+  ctx.beginPath();ctx.arc(lx,ly,3.5,0,Math.PI*2);ctx.fillStyle='#060c18';ctx.fill();
+  ctx.beginPath();ctx.arc(lx,ly,3.5,0,Math.PI*2);ctx.strokeStyle=col;ctx.lineWidth=2;ctx.stroke();
+  // Y labels
+  ctx.fillStyle='rgba(255,193,58,.5)';ctx.font='8px Share Tech Mono,monospace';ctx.textAlign='left';
+  [lo+range*.12,lo+range*.52,lo+range*.88].forEach(p=>ctx.fillText(fmtPrice(p),W-PAD.right+4,sy(p)+3));
+  // X labels
   if(candles[0]?.t){
     const fmt=ts=>{const d=new Date(ts*1000);return d.getUTCHours().toString().padStart(2,'0')+':'+d.getUTCMinutes().toString().padStart(2,'0');};
-    const midIdx=Math.floor(n/2);
+    ctx.textAlign='center';ctx.fillStyle='rgba(74,112,149,.75)';ctx.font='7px Share Tech Mono,monospace';
+    const mid=Math.floor(n/2);
     ctx.fillText(fmt(candles[0].t),sx(0),H-4);
-    if(midIdx>0&&midIdx<n-1) ctx.fillText(fmt(candles[midIdx].t),sx(midIdx),H-4);
+    if(mid>0&&mid<n-1) ctx.fillText(fmt(candles[mid].t),sx(mid),H-4);
     if(n>1) ctx.fillText(fmt(candles[n-1].t),sx(n-1),H-4);
   }
 }
 
 window.addEventListener('resize',()=>{
-  if(_chartCandles){const c=document.getElementById('price-chart');if(c) renderCandleChart(c,_chartCandles);}
+  if(_carTokens.length) _loadSlideChart(_carIdx,_carTf);
 });
 
-function _tickTotdCountdown(){
-  const el=document.getElementById('totd-countdown');
-  if(!el||!_totdNextAt) return;
-  const rem=Math.max(0,_totdNextAt-Date.now());
-  if(rem===0&&appVisible()){fetchTotd();return;}
-  const m=Math.floor(rem/60000);
-  const s=Math.floor((rem%60000)/1000);
+function _tickCarousel(){
+  const el=document.getElementById('carousel-countdown');
+  if(!el||!_carNextAt) return;
+  const rem=Math.max(0,_carNextAt-Date.now());
+  const m=Math.floor(rem/60000),s=Math.floor((rem%60000)/1000);
   el.textContent='rotates in '+m+':'+String(s).padStart(2,'0');
 }
 
@@ -1500,8 +1481,8 @@ async function saveSettings(){
 setInterval(fetchState,5000);
 setInterval(fetchMarketOnly,5000);
 setInterval(fetchTrades,10000);
-setInterval(fetchTotd,60000);
-setInterval(_tickTotdCountdown,1000);
+setInterval(fetchCarousel,60000);
+setInterval(_tickCarousel,1000);
 setInterval(fetchBalance,30000);
 setInterval(_checkInactivity,10000);
 
