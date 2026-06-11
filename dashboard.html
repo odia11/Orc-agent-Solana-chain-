@@ -204,11 +204,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .fee-summary span{white-space:nowrap}.fee-summary b{font-family:'Orbitron',monospace;font-size:10px}
 .pos-panel{background:var(--bg2);border:1px solid rgba(0,237,170,.2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 /* Admin panel */
-.admin-panel{background:var(--bg2);border:1px solid rgba(255,77,106,.25);border-radius:10px;padding:16px;margin-bottom:1.25rem}
-.admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.15);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
+.admin-panel{background:var(--bg2);border:2px solid rgba(255,77,106,.5);border-radius:10px;padding:16px;margin-bottom:1.25rem;box-shadow:0 0 0 1px rgba(255,77,106,.1),0 4px 28px rgba(255,77,106,.1)}
+.admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.25);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
+.admin-panel .panel-hdr::before{background:#ff4d6a}
+.admin-owner-warn{background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.4);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--red);margin-bottom:14px;line-height:1.65;display:none}
+.admin-owner-warn.show{display:block}
 .admin-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
-.admin-section{background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:12px 14px}
-.admin-section-hdr{font-size:9px;color:#ff9a6c;text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,77,106,.15)}
+.admin-section{background:var(--bg3);border:1px solid rgba(255,77,106,.2);border-radius:9px;padding:12px 14px}
+.admin-section-hdr{font-size:9px;color:#ff9a6c;text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,77,106,.2)}
 .admin-row{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:6px}
 .admin-row:last-child{margin-bottom:0}
 .admin-stat-lbl{font-size:10px;color:var(--dim)}
@@ -749,6 +752,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <!-- OWNER ADMIN PANEL (hidden until owner wallet connects) -->
   <div class="admin-panel" id="admin-panel" style="display:none">
     <div class="panel-hdr">⚙ Owner Dashboard</div>
+    <div class="admin-owner-warn" id="admin-owner-warn">
+      ⚠️ <strong>OWNER_WALLET is not set</strong> — is_admin will never be true for any user.<br>
+      Set <code>OWNER_WALLET</code> in your Railway environment variables and redeploy.
+    </div>
     <div class="admin-stats">
       <div class="admin-section">
         <div class="admin-section-hdr">👤 User Stats</div>
@@ -1324,6 +1331,8 @@ function checkOwnerPanel(){
 async function fetchAdminData(){
   const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
   if(!r||r.error) return;
+  const owWarn=document.getElementById('admin-owner-warn');
+  if(owWarn) owWarn.classList.toggle('show', !r.owner_configured);
   document.getElementById('a-users').textContent=r.total_users||0;
   document.getElementById('a-users-key').textContent=r.users_with_key||0;
   document.getElementById('a-users-trading').textContent=r.users_trading||0;

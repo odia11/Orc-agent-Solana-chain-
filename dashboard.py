@@ -1404,19 +1404,24 @@ def api_admin():
         conn.close()
         users_trading = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
         return jsonify({
-            'fees_today':    fees_today,
-            'fees_total':    fees_total,
-            'fee_txs':       fee_txs,
-            'total_users':   total_users,
-            'users_with_key': users_with_key,
-            'users_trading': users_trading,
-            'total_trades':  total_trades,
-            'trades_today':  trades_today,
+            'fees_today':      fees_today,
+            'fees_total':      fees_total,
+            'fee_txs':         fee_txs,
+            'total_users':     total_users,
+            'users_with_key':  users_with_key,
+            'users_trading':   users_trading,
+            'total_trades':    total_trades,
+            'trades_today':    trades_today,
+            'owner_configured': bool(OWNER_WALLET),
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 # ── STARTUP ──
+if not OWNER_WALLET:
+    print('WARNING: OWNER_WALLET is not set in environment variables.')
+    print('         is_admin will never be true for any user.')
+    print('         Set OWNER_WALLET in Railway Variables and redeploy.')
 init_db()
 threading.Thread(target=token_loop,    daemon=True).start()
 threading.Thread(target=totd_loop,     daemon=True).start()
