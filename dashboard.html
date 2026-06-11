@@ -306,6 +306,23 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .s-key-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.22);border-radius:7px;padding:9px 12px;margin-bottom:8px}
 .s-remove-key-btn{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;color:var(--red);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
 .s-remove-key-btn:hover{background:rgba(255,77,106,.2)}
+.s-card{max-height:90vh;overflow-y:auto}
+.how-to-box{background:var(--bg3);border:1px solid var(--border);border-radius:9px;margin-bottom:18px;overflow:hidden}
+.how-to-toggle{width:100%;background:none;border:none;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:10px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;letter-spacing:.05em;transition:color .15s}
+.how-to-toggle:hover{color:var(--text)}
+.how-to-arrow{transition:transform .2s;font-size:9px;flex-shrink:0}
+.how-to-body{padding:0 14px 14px;font-size:10px;line-height:1.65;display:none}
+.how-to-body.open{display:block}
+.how-to-section{color:var(--green);font-size:9px;letter-spacing:.1em;text-transform:uppercase;margin:12px 0 5px;font-weight:700}
+.how-to-section:first-child{margin-top:4px}
+.how-to-item{color:var(--dim);padding-left:12px;position:relative;margin-bottom:3px}
+.how-to-item::before{content:'–';position:absolute;left:0;color:var(--muted)}
+.welcome-banner{background:rgba(106,163,255,.07);border:1px solid rgba(106,163,255,.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px;font-size:11px;color:var(--blue);line-height:1.65}
+.welcome-banner.hide{display:none}
+.wb-dismiss{background:none;border:1px solid rgba(106,163,255,.35);border-radius:5px;color:var(--blue);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;white-space:nowrap;margin-top:7px;display:inline-block;transition:background .15s}
+.wb-dismiss:hover{background:rgba(106,163,255,.12)}
+.trade-warn{background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.3);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-top:10px;display:none;line-height:1.55}
+.trade-warn.show{display:block}
 
 /* ── INACTIVITY WARNING ── */
 .inact-overlay{position:fixed;inset:0;background:rgba(0,0,0,.7);display:flex;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(6px)}
@@ -463,6 +480,32 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="s-title">⚙ TRADING SETTINGS</div>
     <div class="s-sub" id="s-user-label">Connect a wallet to save per-wallet settings</div>
 
+    <div class="how-to-box">
+      <button class="how-to-toggle" onclick="toggleHowTo(this)" aria-expanded="false">
+        ℹ How to Start Trading <span class="how-to-arrow">▼</span>
+      </button>
+      <div class="how-to-body">
+        <div class="how-to-section">💰 Minimum Requirements</div>
+        <div class="how-to-item">At least $10 USDC in your trading wallet</div>
+        <div class="how-to-item">At least 0.01 SOL for transaction fees (~$1.50)</div>
+        <div class="how-to-item">Your trading wallet private key saved below</div>
+        <div class="how-to-section">⚡ How the Bot Trades</div>
+        <div class="how-to-item">Scans Solana tokens every 90 seconds</div>
+        <div class="how-to-item">Buys when: 5%+ in 5min OR 10%+ in 15min OR trending on DexScreener</div>
+        <div class="how-to-item">Minimum liquidity: $15,000 | Minimum 5m volume: $5,000</div>
+        <div class="how-to-item">Maximum 3 open positions at once</div>
+        <div class="how-to-item">Auto sells at +15% profit or −5% stop loss</div>
+        <div class="how-to-section">💸 Fees</div>
+        <div class="how-to-item">5% performance fee on profitable trades only</div>
+        <div class="how-to-item">Zero fee on losing trades</div>
+        <div class="how-to-item">~$0.000005 SOL per transaction (Solana network fee)</div>
+        <div class="how-to-section">🔒 Security</div>
+        <div class="how-to-item">Use a dedicated trading wallet only — never your main wallet</div>
+        <div class="how-to-item">Only deposit what you can afford to lose</div>
+        <div class="how-to-item">Your private key is encrypted with Fernet before storage</div>
+      </div>
+    </div>
+
     <div class="s-warn">
       <span style="font-size:15px;flex-shrink:0">⚠</span>
       <span>Use a dedicated trading wallet only. Never use your main wallet. Private keys are encrypted with Fernet symmetric encryption before storage — they are never exposed in API responses.</span>
@@ -568,6 +611,16 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- WELCOME BANNER -->
+  <div id="welcome-banner" class="welcome-banner hide">
+    <span style="font-size:18px;flex-shrink:0">👋</span>
+    <div>
+      <strong>Welcome to OrcAgent!</strong> To start trading:<br>
+      1) Open <strong>Settings</strong> &nbsp;·&nbsp; 2) Add your trading wallet private key &nbsp;·&nbsp; 3) Make sure you have USDC + SOL for fees &nbsp;·&nbsp; 4) Click <strong>Start Trading</strong>
+      <br><button class="wb-dismiss" onclick="dismissWelcome()">Got it</button>
+    </div>
+  </div>
+
   <!-- STATS -->
   <div class="stats">
     <div class="stat">
@@ -613,6 +666,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ START TRADING</button>
       </div>
     </div>
+    <div class="trade-warn" id="trade-warn"></div>
   </div>
 
   <!-- TODAY'S PERFORMANCE -->
@@ -1407,7 +1461,24 @@ function updateBtns(){
 }
 
 async function toggleTrader(){
-  if(!traderOn && !settingsHasKey){ openSettings(); return; }
+  if(!traderOn && !settingsHasKey){
+    showTradeWarn('⚠️ Add your trading wallet private key in Settings first');
+    openSettings();
+    return;
+  }
+  if(!traderOn){
+    const sol=parseFloat(document.getElementById('s-sol').textContent)||0;
+    const usdc=parseFloat((document.getElementById('s-usdc').textContent||'').replace(/[^0-9.]/g,''))||0;
+    if(sol < 0.005){
+      showTradeWarn('⚠️ Low SOL balance — you need at least 0.01 SOL to pay transaction fees');
+      return;
+    }
+    if(usdc < 1){
+      showTradeWarn('⚠️ Low USDC balance — deposit at least $10 USDC to start trading');
+      return;
+    }
+  }
+  hideTradeWarn();
   const tb=document.getElementById('trade-btn');
   tb.disabled=true; tb.style.opacity='.6';
   // Watchdog: re-enable after 5 s regardless, so a hung request never leaves the button stuck
@@ -1496,6 +1567,41 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── SETTINGS MODAL ──
 let settingsHasKey=false;
+
+function toggleHowTo(btn){
+  const body=btn.nextElementSibling;
+  const open=body.classList.toggle('open');
+  btn.setAttribute('aria-expanded',open);
+  btn.querySelector('.how-to-arrow').style.transform=open?'rotate(180deg)':'rotate(0deg)';
+}
+
+function _checkWelcomeBanner(){
+  const banner=document.getElementById('welcome-banner');
+  if(!banner) return;
+  const dismissed=localStorage.getItem('orca_welcome_dismissed');
+  if(!dismissed && phantomKey && !settingsHasKey){
+    banner.classList.remove('hide');
+  } else {
+    banner.classList.add('hide');
+  }
+}
+function dismissWelcome(){
+  localStorage.setItem('orca_welcome_dismissed','1');
+  document.getElementById('welcome-banner').classList.add('hide');
+}
+
+function showTradeWarn(msg){
+  const el=document.getElementById('trade-warn');
+  if(!el) return;
+  el.textContent=msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'),8000);
+}
+function hideTradeWarn(){
+  const el=document.getElementById('trade-warn');
+  if(el) el.classList.remove('show');
+}
+
 function updateKeyIndicator(){
   const btn=document.getElementById('settings-btn');
   if(btn) btn.textContent=settingsHasKey?'⚙ Settings ✓':'⚙ Settings';
@@ -1508,6 +1614,7 @@ function _updateKeyStatus(){
   if(saved) saved.style.display=settingsHasKey?'flex':'none';
   if(inp) inp.placeholder=settingsHasKey?'Enter new key to replace existing':'Paste private key (base58)';
   if(hint) hint.textContent='';
+  _checkWelcomeBanner();
 }
 async function removeKey(){
   if(!confirm('Remove your saved trading key?')) return;
