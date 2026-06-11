@@ -1395,15 +1395,23 @@ def api_admin():
                    for r in c.fetchall()]
         c.execute('SELECT COUNT(*) FROM users')
         total_users  = int(c.fetchone()[0] or 0)
+        c.execute("SELECT COUNT(*) FROM users WHERE encrypted_private_key != '' AND encrypted_private_key IS NOT NULL")
+        users_with_key = int(c.fetchone()[0] or 0)
         c.execute('SELECT COUNT(*) FROM trades')
         total_trades = int(c.fetchone()[0] or 0)
+        c.execute('SELECT COUNT(*) FROM trades WHERE timestamp LIKE ?', (today + '%',))
+        trades_today = int(c.fetchone()[0] or 0)
         conn.close()
+        users_trading = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
         return jsonify({
-            'fees_today':   fees_today,
-            'fees_total':   fees_total,
-            'fee_txs':      fee_txs,
-            'total_users':  total_users,
-            'total_trades': total_trades,
+            'fees_today':    fees_today,
+            'fees_total':    fees_total,
+            'fee_txs':       fee_txs,
+            'total_users':   total_users,
+            'users_with_key': users_with_key,
+            'users_trading': users_trading,
+            'total_trades':  total_trades,
+            'trades_today':  trades_today,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

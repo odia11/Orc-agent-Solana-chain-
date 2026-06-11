@@ -206,10 +206,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* Admin panel */
 .admin-panel{background:var(--bg2);border:1px solid rgba(255,77,106,.25);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 .admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.15);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
-.admin-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:8px;margin-bottom:14px}
-.admin-stat{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
-.admin-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
-.admin-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:#ff9a6c}
+.admin-stats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.admin-section{background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:12px 14px}
+.admin-section-hdr{font-size:9px;color:#ff9a6c;text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,77,106,.15)}
+.admin-row{display:flex;justify-content:space-between;align-items:baseline;gap:6px;margin-bottom:6px}
+.admin-row:last-child{margin-bottom:0}
+.admin-stat-lbl{font-size:10px;color:var(--dim)}
+.admin-stat-val{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:#ff9a6c;white-space:nowrap}
 /* Settings fee notice */
 .s-fee-notice{display:flex;gap:10px;align-items:flex-start;background:rgba(0,200,120,.06);border:1px solid rgba(0,200,120,.2);border-radius:8px;padding:10px 14px;font-size:10px;line-height:1.5;color:var(--dim);margin-bottom:14px}
 .pos-panel .panel-hdr{border-bottom:1px solid rgba(0,237,170,.12);padding-bottom:8px;margin-bottom:10px}
@@ -747,21 +750,39 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div class="admin-panel" id="admin-panel" style="display:none">
     <div class="panel-hdr">⚙ Owner Dashboard</div>
     <div class="admin-stats">
-      <div class="admin-stat">
-        <div class="admin-stat-lbl">Fees Today</div>
-        <div class="admin-stat-val" id="a-fees-today">$0.00</div>
+      <div class="admin-section">
+        <div class="admin-section-hdr">👤 User Stats</div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">Total registered</span>
+          <span class="admin-stat-val" id="a-users">0</span>
+        </div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">With trading key</span>
+          <span class="admin-stat-val" id="a-users-key">0</span>
+        </div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">Currently trading</span>
+          <span class="admin-stat-val" id="a-users-trading">0</span>
+        </div>
       </div>
-      <div class="admin-stat">
-        <div class="admin-stat-lbl">Fees All Time</div>
-        <div class="admin-stat-val" id="a-fees-total">$0.00</div>
-      </div>
-      <div class="admin-stat">
-        <div class="admin-stat-lbl">Total Users</div>
-        <div class="admin-stat-val" id="a-users">0</div>
-      </div>
-      <div class="admin-stat">
-        <div class="admin-stat-lbl">Total Trades</div>
-        <div class="admin-stat-val" id="a-trades">0</div>
+      <div class="admin-section">
+        <div class="admin-section-hdr">📊 Trading Stats</div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">Trades today</span>
+          <span class="admin-stat-val" id="a-trades-today">0</span>
+        </div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">Trades all time</span>
+          <span class="admin-stat-val" id="a-trades">0</span>
+        </div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">Fees today</span>
+          <span class="admin-stat-val" id="a-fees-today">$0.00</span>
+        </div>
+        <div class="admin-row">
+          <span class="admin-stat-lbl">Fees all time</span>
+          <span class="admin-stat-val" id="a-fees-total">$0.00</span>
+        </div>
       </div>
     </div>
     <div class="trade-table-wrap">
@@ -1291,7 +1312,7 @@ function checkOwnerPanel(){
     if(healthBtn) healthBtn.style.display='';
     fetchAdminData();
     fetchAudit();
-    if(!_adminTimer) _adminTimer=setInterval(fetchAdminData,30000);
+    if(!_adminTimer) _adminTimer=setInterval(fetchAdminData,60000);
   } else {
     if(panel) panel.style.display='none';
     if(healthBtn) healthBtn.style.display='none';
@@ -1303,10 +1324,13 @@ function checkOwnerPanel(){
 async function fetchAdminData(){
   const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
   if(!r||r.error) return;
+  document.getElementById('a-users').textContent=r.total_users||0;
+  document.getElementById('a-users-key').textContent=r.users_with_key||0;
+  document.getElementById('a-users-trading').textContent=r.users_trading||0;
+  document.getElementById('a-trades-today').textContent=r.trades_today||0;
+  document.getElementById('a-trades').textContent=r.total_trades||0;
   document.getElementById('a-fees-today').textContent='$'+(r.fees_today||0).toFixed(4);
   document.getElementById('a-fees-total').textContent='$'+(r.fees_total||0).toFixed(4);
-  document.getElementById('a-users').textContent=r.total_users||0;
-  document.getElementById('a-trades').textContent=r.total_trades||0;
   const tbody=document.getElementById('admin-fee-tbody');
   const txs=r.fee_txs||[];
   if(!txs.length){
