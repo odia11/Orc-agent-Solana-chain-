@@ -1011,8 +1011,11 @@ def get_settings():
     c.execute('SELECT encrypted_private_key, max_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
     row  = c.fetchone()
     conn.close()
+    has_key = bool(row and row[0])
+    # Sync in-memory cache so /api/state benefits from this read
+    get_user_state(wallet)['has_trading_key'] = has_key
     if row:
-        return jsonify({'ok': True, 'has_trading_key': bool(row[0]), 'max_trade_size': row[1] or 1.0, 'daily_loss_limit': row[2] or 50.0})
+        return jsonify({'ok': True, 'has_trading_key': has_key, 'max_trade_size': row[1] or 1.0, 'daily_loss_limit': row[2] or 50.0})
     return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 1.0, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
@@ -1083,11 +1086,32 @@ def delete_trading_key():
     return jsonify({'ok': True})
 
 # ── STATE ──
+def _db_has_key(wallet: str) -> bool:
+    """Check SQLite directly for a non-empty encrypted_private_key for this wallet."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute(
+            "SELECT COUNT(*) FROM users WHERE wallet_address=? "
+            "AND encrypted_private_key IS NOT NULL AND encrypted_private_key != ''",
+            (wallet,))
+        result = bool(c.fetchone()[0])
+        conn.close()
+        return result
+    except Exception:
+        return False
+
 @app.route('/api/state')
 def api_state():
     wallet = _current_wallet()
     if wallet:
         us       = get_user_state(wallet)
+        # In-memory may be stale after server restart — DB-confirm when False
+        htk = us.get('has_trading_key', False)
+        if not htk:
+            htk = _db_has_key(wallet)
+            if htk:
+                us['has_trading_key'] = True  # warm the cache
         open_pos = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
         live_map = {t['mint']: t for t in state.get('tokens', [])}
         positions_detail = []
@@ -1115,7 +1139,7 @@ def api_state():
             'tokens':           state['tokens'],
             'wallet':           wallet,
             'is_admin':         bool(OWNER_WALLET and wallet == OWNER_WALLET),
-            'has_trading_key':  us.get('has_trading_key', False),
+            'has_trading_key':  htk,
         })
     return jsonify({
         'trader_running':  state['trader_running'],
