@@ -193,23 +193,34 @@ def rate_limit(limit: int, window: int = 60):
 _USER_STATES_MAX = 200   # evict LRU entries beyond this cap
 
 def _cleanup_loop():
-    """Periodically evict stale rate-limit buckets and idle user states."""
+    """Periodically evict stale rate-limit buckets, idle user states, and dead position slots."""
     while True:
         time.sleep(300)
         now = time.time()
+        # Evict expired rate-limit buckets
         with _rl_lock:
             stale = [k for k, hits in _rl_hits.items() if not any(now - t < 120 for t in hits)]
             for k in stale:
                 del _rl_hits[k]
+        # Prune zero-amount position slots that accumulate in active traders
+        for us in list(user_states.values()):
+            pos = us.get('positions')
+            if pos and len(pos) > 200:
+                dead = [m for m, p in list(pos.items()) if not p.get('amount')]
+                for m in dead[:len(pos) - 100]:
+                    pos.pop(m, None)
+        # Evict idle user states beyond cap
         if len(user_states) > _USER_STATES_MAX:
-            # Keep the most recently accessed wallets
             by_age = sorted(
                 user_states.items(),
                 key=lambda kv: kv[1].get('balance_fetched_at', 0),
             )
             for wallet, _ in by_age[:len(user_states) - _USER_STATES_MAX]:
-                if not user_states[wallet].get('trader_running'):
-                    del user_states[wallet]
+                try:
+                    if not user_states[wallet].get('trader_running'):
+                        del user_states[wallet]
+                except KeyError:
+                    pass  # already removed by another thread
 
 # ── TRADER LOCK (prevents double-start race condition) ──
 _trader_lock = threading.Lock()
@@ -284,9 +295,6 @@ def _current_wallet() -> str:
     return session.get('wallet', '')
 
 # ── GLOBAL STATE ──
-trader_thread = None
-trader_stop   = threading.Event()
-
 def _fresh_daily():
     return {
         'date': datetime.datetime.utcnow().strftime('%Y-%m-%d'),
@@ -646,16 +654,19 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['net_pnl']})
     try:
         conn = sqlite3.connect(DB_FILE)
-        conn.execute(
-            'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount) VALUES (?,?,?,?,?,?,?)',
-            (user_id, symbol, entry, exit_price, amount, pnl, fee_amount))
-        conn.commit()
-        conn.close()
-    except: pass
+        try:
+            conn.execute(
+                'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount) VALUES (?,?,?,?,?,?,?)',
+                (user_id, symbol, entry, exit_price, amount, pnl, fee_amount))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception:
+        pass
 
 # ── SWAP EXECUTION ──
-def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str):
-    """Execute a Jupiter swap with the private key passed via env (never via CLI args)."""
+def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
+    """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output."""
     try:
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
@@ -666,8 +677,12 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         )
         if result.stdout:
             add_user_log(wallet, 'Swap: ' + result.stdout.strip()[-80:])
+        if result.stderr:
+            add_user_log(wallet, 'Swap err: ' + result.stderr.strip()[-80:])
+        return result.returncode == 0 and bool(result.stdout.strip())
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
+        return False
 
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
@@ -675,10 +690,12 @@ def user_trader_loop(stop_event, config, wallet: str):
     short = wallet[:6] + '...' + wallet[-4:]
     try:
         conn = sqlite3.connect(DB_FILE)
-        c    = conn.cursor()
-        c.execute('SELECT id, encrypted_private_key, max_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
-        row  = c.fetchone()
-        conn.close()
+        try:
+            c   = conn.cursor()
+            c.execute('SELECT id, encrypted_private_key, max_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
+            row = c.fetchone()
+        finally:
+            conn.close()
     except Exception as e:
         add_user_log(wallet, '[' + short + '] DB error: ' + str(e))
         us['trader_running'] = False
@@ -737,9 +754,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                         elif m5 < 5:       exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
                         if exit_reason:
                             add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
-                            _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               wallet=wallet, private_key=private_key)
+                            sell_ok = _execute_user_swap(wallet, private_key, 'sell', mint, str(pos['amount']))
+                            if sell_ok:
+                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                                   wallet=wallet, private_key=private_key)
+                            else:
+                                add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared to avoid retry loop')
                             positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                             open_pos -= 1
                             continue
@@ -847,31 +867,33 @@ def save_settings():
     max_trade_size   = max(1.0,  min(max_trade_size,   10000.0))
     daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
 
-    conn = sqlite3.connect(DB_FILE)
-    c    = conn.cursor()
-    c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
-    row  = c.fetchone()
-
+    # Validate key before touching the DB
     if private_key_raw:
         if not is_valid_solana_private_key(private_key_raw):
-            conn.close()
             return jsonify({'ok': False, 'msg': 'Invalid private key format — paste the base58 or JSON array key from your wallet'})
         try:
             encrypted = encrypt_key(private_key_raw)
         except Exception:
-            conn.close()
             return jsonify({'ok': False, 'msg': 'Failed to save private key'})
     else:
-        encrypted = row[1] if row else ''
+        encrypted = None  # resolved below after DB read
 
-    if row:
-        c.execute('UPDATE users SET encrypted_private_key=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                  (encrypted, max_trade_size, daily_loss_limit, wallet))
-    else:
-        c.execute('INSERT INTO users (wallet_address, encrypted_private_key, max_trade_size, daily_loss_limit) VALUES (?,?,?,?)',
-                  (wallet, encrypted, max_trade_size, daily_loss_limit))
-    conn.commit()
-    conn.close()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c   = conn.cursor()
+        c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+        if encrypted is None:
+            encrypted = row[1] if row else ''
+        if row:
+            c.execute('UPDATE users SET encrypted_private_key=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
+                      (encrypted, max_trade_size, daily_loss_limit, wallet))
+        else:
+            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, max_trade_size, daily_loss_limit) VALUES (?,?,?,?)',
+                      (wallet, encrypted, max_trade_size, daily_loss_limit))
+        conn.commit()
+    finally:
+        conn.close()
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True})
 
@@ -953,8 +975,11 @@ def api_balance():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'sol': 0.0, 'usdc': 0.0})
-    fetch_user_balances(wallet)
-    us = get_user_state(wallet)
+    us  = get_user_state(wallet)
+    age = time.time() - us.get('balance_fetched_at', 0)
+    if age > 25:
+        # Return cached value immediately; refresh in background so this never blocks
+        threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
     return jsonify({'ok': True, 'sol': us.get('sol', 0.0), 'usdc': us.get('usdc', 0.0)})
 
 # ── MARKET / TOTD / TRADES ──
