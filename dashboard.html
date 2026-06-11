@@ -339,6 +339,40 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:var(--bg2)}
 ::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* ── HEALTH / AUDIT ── */
+.health-btn{display:flex;align-items:center;gap:5px;padding:6px 10px}
+.health-dot{width:8px;height:8px;border-radius:50%;background:#4a6a8a;flex-shrink:0;transition:background .4s}
+.health-dot.pass{background:#00ff88;box-shadow:0 0 6px rgba(0,255,136,.5)}
+.health-dot.warn{background:#ffc13a;box-shadow:0 0 6px rgba(255,193,58,.5)}
+.health-dot.fail{background:#ff4d6a;box-shadow:0 0 6px rgba(255,77,106,.5);animation:healthPulse 1.2s ease-in-out infinite}
+@keyframes healthPulse{0%,100%{opacity:1}50%{opacity:.4}}
+.audit-overlay{position:fixed;inset:0;z-index:300;background:rgba(8,14,24,.88);backdrop-filter:blur(8px);display:none;align-items:center;justify-content:center;padding:1rem}
+.audit-overlay.open{display:flex}
+.audit-card{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:24px;width:100%;max-width:520px;box-shadow:0 0 60px rgba(0,0,0,.6);position:relative;max-height:90vh;overflow-y:auto}
+.audit-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;gap:8px}
+.audit-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:8px}
+.audit-status-badge{font-size:8px;padding:3px 9px;border-radius:20px;font-weight:700;letter-spacing:.1em;font-family:'Orbitron',monospace}
+.audit-status-badge.pass{background:rgba(0,255,136,.14);color:#00ff88;border:1px solid rgba(0,255,136,.35)}
+.audit-status-badge.warn{background:rgba(255,193,58,.14);color:#ffc13a;border:1px solid rgba(255,193,58,.35)}
+.audit-status-badge.fail{background:rgba(255,77,106,.14);color:#ff4d6a;border:1px solid rgba(255,77,106,.35)}
+.audit-status-badge.unknown{background:rgba(106,143,175,.12);color:var(--dim);border:1px solid var(--border2)}
+.audit-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px;flex-shrink:0}
+.audit-close:hover{color:var(--text)}
+.audit-ran-at{font-size:9px;color:var(--muted);margin-bottom:14px;letter-spacing:.06em}
+.audit-checks{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+.audit-row{display:flex;align-items:flex-start;gap:10px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px}
+.audit-row.pass{border-left:3px solid rgba(0,255,136,.5)}
+.audit-row.warn{border-left:3px solid rgba(255,193,58,.5)}
+.audit-row.fail{border-left:3px solid rgba(255,77,106,.5)}
+.audit-icon{font-size:12px;flex-shrink:0;margin-top:1px}
+.audit-name{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;color:var(--dim);margin-bottom:2px;letter-spacing:.04em}
+.audit-msg{font-size:9px;color:var(--muted);line-height:1.5}
+.audit-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.audit-run-btn{background:rgba(106,163,255,.12);border:1px solid rgba(106,163,255,.3);border-radius:6px;color:var(--blue);font-family:'Orbitron',monospace;font-size:9px;font-weight:700;padding:7px 14px;cursor:pointer;letter-spacing:.07em;transition:all .15s}
+.audit-run-btn:hover{background:rgba(106,163,255,.22);border-color:var(--blue)}
+.audit-run-btn:disabled{opacity:.45;cursor:not-allowed}
+.audit-next{font-size:9px;color:var(--muted)}
 </style>
 </head>
 <body>
@@ -471,6 +505,27 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div>
 </div>
 
+<!-- HEALTH AUDIT OVERLAY -->
+<div class="audit-overlay" id="audit-overlay" onclick="if(event.target===this)closeHealthPanel()">
+  <div class="audit-card">
+    <div class="audit-hdr">
+      <div class="audit-title">
+        SYSTEM AUDIT
+        <span class="audit-status-badge unknown" id="audit-badge">—</span>
+      </div>
+      <button class="audit-close" onclick="closeHealthPanel()">✕</button>
+    </div>
+    <div class="audit-ran-at" id="audit-ran-at">Last run: —</div>
+    <div class="audit-checks" id="audit-checks">
+      <div style="color:var(--muted);font-size:10px;text-align:center;padding:20px">Loading audit results…</div>
+    </div>
+    <div class="audit-footer">
+      <button class="audit-run-btn" id="audit-run-btn" onclick="triggerAudit()">↻ Run Now</button>
+      <span class="audit-next" id="audit-next"></span>
+    </div>
+  </div>
+</div>
+
 <!-- MAIN APP -->
 <div class="wrap" id="app" style="display:none">
 
@@ -496,6 +551,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none"><div class="dot-green"></div><span id="wallet-short"></span></div>
+      <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit">
+        <span class="health-dot" id="health-dot"></span>HEALTH
+      </button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
@@ -1733,6 +1791,84 @@ setInterval(fetchCarousel,60000);
 setInterval(_tickCarousel,1000);
 setInterval(fetchBalance,30000);
 setInterval(_checkInactivity,10000);
+setInterval(fetchAudit,300000);  // refresh audit every 5 minutes
+
+// ── HEALTH / AUDIT ──
+let _auditLastTs=0;
+
+async function fetchAudit(){
+  const r=await fetch('/api/audit').then(r=>r.json()).catch(()=>null);
+  if(r) renderAudit(r);
+}
+
+function renderAudit(r){
+  _auditLastTs=r.ran_at_ts||0;
+  // Update header dot
+  const dot=document.getElementById('health-dot');
+  if(dot){ dot.className='health-dot '+(r.status||'unknown'); }
+  // If panel is open, refresh its contents
+  const overlay=document.getElementById('audit-overlay');
+  if(overlay?.classList.contains('open')) _renderAuditPanel(r);
+}
+
+function _renderAuditPanel(r){
+  // Badge
+  const badge=document.getElementById('audit-badge');
+  const statusLabel={'pass':'ALL PASS','warn':'WARNING','fail':'ISSUES FOUND','unknown':'PENDING'}[r.status]||r.status;
+  if(badge){ badge.textContent=statusLabel; badge.className='audit-status-badge '+(r.status||'unknown'); }
+  // Ran-at
+  const ra=document.getElementById('audit-ran-at');
+  if(ra) ra.textContent=r.ran_at?'Last run: '+r.ran_at:'Not yet run — first check runs 15 s after startup';
+  // Checks
+  const ICON={'pass':'✓','warn':'⚠','fail':'✕'};
+  const checks=document.getElementById('audit-checks');
+  if(checks){
+    if(!r.checks||!r.checks.length){
+      checks.innerHTML='<div style="color:var(--muted);font-size:10px;text-align:center;padding:20px">Awaiting first audit run…</div>';
+    } else {
+      checks.innerHTML=r.checks.map(c=>`
+        <div class="audit-row ${esc(c.status)}">
+          <span class="audit-icon">${ICON[c.status]||'?'}</span>
+          <div>
+            <div class="audit-name">${esc(c.name)}</div>
+            <div class="audit-msg">${esc(c.msg)}</div>
+          </div>
+        </div>`).join('');
+    }
+  }
+  // Next run countdown
+  const next=document.getElementById('audit-next');
+  if(next&&_auditLastTs){
+    const secsLeft=Math.max(0,300-Math.round((Date.now()/1000)-_auditLastTs));
+    next.textContent=secsLeft>0?'Next auto-run in '+secsLeft+'s':'Refreshing…';
+  }
+}
+
+function toggleHealthPanel(){
+  const o=document.getElementById('audit-overlay');
+  if(!o) return;
+  if(o.classList.contains('open')){ closeHealthPanel(); return; }
+  o.classList.add('open');
+  // Show last cached data immediately, then fetch fresh
+  const cached={status:document.getElementById('health-dot')?.classList[1]||'unknown',checks:[],ran_at:null,ran_at_ts:_auditLastTs};
+  _renderAuditPanel(cached);
+  fetchAudit();
+}
+
+function closeHealthPanel(){
+  document.getElementById('audit-overlay')?.classList.remove('open');
+}
+
+async function triggerAudit(){
+  const btn=document.getElementById('audit-run-btn');
+  if(btn){ btn.disabled=true; btn.textContent='Running…'; }
+  const r=await fetch('/api/audit/run',{method:'POST'}).then(r=>r.json()).catch(()=>null);
+  if(btn){ btn.disabled=false; btn.textContent='↻ Run Now'; }
+  if(r) renderAudit(r);
+}
+
+// Load audit immediately on page boot so the dot is coloured as soon as possible
+fetchAudit();
 
 // Disconnect server session when tab is closed
 window.addEventListener('beforeunload',()=>{

@@ -222,6 +222,139 @@ def _cleanup_loop():
                 except KeyError:
                     pass  # already removed by another thread
 
+# ── SYSTEM AUDIT ──
+_audit_state: dict = {
+    'status': 'unknown',   # 'pass' | 'warn' | 'fail' | 'unknown'
+    'checks': [],
+    'ran_at': None,
+    'ran_at_ts': 0.0,
+}
+
+def _run_audit() -> dict:
+    checks = []
+
+    # 1. Database connectivity
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            c = conn.cursor()
+            c.execute('SELECT COUNT(*) FROM users')
+            n_users = c.fetchone()[0]
+            c.execute('SELECT COUNT(*) FROM trades')
+            n_trades = c.fetchone()[0]
+        finally:
+            conn.close()
+        checks.append({'name': 'Database', 'status': 'pass',
+                        'msg': f'{n_users} user(s), {n_trades} trade(s) on record'})
+    except Exception as e:
+        checks.append({'name': 'Database', 'status': 'fail', 'msg': str(e)[:80]})
+
+    # 2. Token feed freshness
+    n_tokens = len(state.get('tokens', []))
+    if n_tokens == 0:
+        checks.append({'name': 'Token Feed', 'status': 'warn',
+                        'msg': 'No tokens loaded — DexScreener scan pending or h1≥50% filter active'})
+    elif n_tokens < 3:
+        checks.append({'name': 'Token Feed', 'status': 'warn',
+                        'msg': f'Only {n_tokens} token(s) visible — market filter is very strict right now'})
+    else:
+        checks.append({'name': 'Token Feed', 'status': 'pass',
+                        'msg': f'{n_tokens} trending token(s) loaded'})
+
+    # 3. Solana RPC
+    try:
+        r = requests.post(SOLANA_RPC,
+                          json={'jsonrpc': '2.0', 'id': 1, 'method': 'getHealth'},
+                          timeout=5)
+        health = r.json().get('result', '')
+        if health == 'ok':
+            checks.append({'name': 'Solana RPC', 'status': 'pass', 'msg': 'Mainnet RPC healthy'})
+        else:
+            checks.append({'name': 'Solana RPC', 'status': 'warn',
+                            'msg': f'RPC returned: {str(health)[:40]}'})
+    except Exception as e:
+        checks.append({'name': 'Solana RPC', 'status': 'fail',
+                        'msg': f'Unreachable — {str(e)[:60]}'})
+
+    # 4. DexScreener API (token discovery source)
+    try:
+        r = requests.get(
+            'https://api.dexscreener.com/latest/dex/tokens/' + USDC_MINT,
+            timeout=6)
+        if r.status_code == 200:
+            checks.append({'name': 'DexScreener', 'status': 'pass',
+                            'msg': f'HTTP {r.status_code} — token data available'})
+        else:
+            checks.append({'name': 'DexScreener', 'status': 'warn',
+                            'msg': f'HTTP {r.status_code} — degraded'})
+    except Exception as e:
+        checks.append({'name': 'DexScreener', 'status': 'fail',
+                        'msg': f'Unreachable — {str(e)[:60]}'})
+
+    # 5. Birdeye API key (chart data source)
+    if BIRDEYE_KEY:
+        checks.append({'name': 'Birdeye Charts', 'status': 'pass',
+                        'msg': 'API key set — live OHLCV charts enabled'})
+    else:
+        checks.append({'name': 'Birdeye Charts', 'status': 'warn',
+                        'msg': 'No BIRDEYE_API_KEY — charts use synthetic fallback'})
+
+    # 6. Encryption key (private key storage)
+    if _fernet is not None:
+        checks.append({'name': 'Encryption Key', 'status': 'pass',
+                        'msg': 'Fernet key initialised — private keys stored securely'})
+    else:
+        checks.append({'name': 'Encryption Key', 'status': 'fail',
+                        'msg': 'Fernet not initialised — cannot save private keys'})
+
+    # 7. Memory
+    n_states = len(user_states)
+    n_rl     = len(_rl_hits)
+    if n_states > 190:
+        checks.append({'name': 'Memory', 'status': 'fail',
+                        'msg': f'{n_states} user states (cleanup loop may be stuck)'})
+    elif n_states > 150:
+        checks.append({'name': 'Memory', 'status': 'warn',
+                        'msg': f'{n_states} user states in memory — approaching cap'})
+    else:
+        checks.append({'name': 'Memory', 'status': 'pass',
+                        'msg': f'{n_states} user state(s), {n_rl} rate-limit bucket(s)'})
+
+    # 8. Active traders
+    active = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
+    checks.append({'name': 'Active Traders', 'status': 'pass',
+                    'msg': f'{active} trader(s) currently running'})
+
+    # Overall
+    if any(c['status'] == 'fail' for c in checks):
+        overall = 'fail'
+    elif any(c['status'] == 'warn' for c in checks):
+        overall = 'warn'
+    else:
+        overall = 'pass'
+
+    return {
+        'status':    overall,
+        'checks':    checks,
+        'ran_at':    datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+        'ran_at_ts': time.time(),
+    }
+
+def _audit_loop():
+    time.sleep(15)   # let token/TOTD loops start first
+    while True:
+        try:
+            result = _run_audit()
+            _audit_state.update(result)
+        except Exception as e:
+            _audit_state.update({
+                'status':    'fail',
+                'checks':    [{'name': 'Audit runner', 'status': 'fail', 'msg': str(e)[:120]}],
+                'ran_at':    datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+                'ran_at_ts': time.time(),
+            })
+        time.sleep(300)   # re-run every 5 minutes
+
 # ── TRADER LOCK (prevents double-start race condition) ──
 _trader_lock = threading.Lock()
 
@@ -1195,6 +1328,22 @@ def api_log():
     except:
         return jsonify({'lines': []})
 
+@app.route('/api/audit')
+@rate_limit(12, 60)
+def api_audit():
+    return jsonify(_audit_state)
+
+@app.route('/api/audit/run', methods=['POST'])
+@rate_limit(3, 60)
+def api_audit_run():
+    """Trigger an immediate audit run (rate-limited to 3/min to prevent abuse)."""
+    try:
+        result = _run_audit()
+        _audit_state.update(result)
+        return jsonify(_audit_state)
+    except Exception as e:
+        return jsonify({'status': 'fail', 'checks': [], 'ran_at': None, 'error': str(e)}), 500
+
 @app.route('/api/admin')
 def api_admin():
     wallet = _current_wallet()
@@ -1232,6 +1381,7 @@ init_db()
 threading.Thread(target=token_loop,    daemon=True).start()
 threading.Thread(target=totd_loop,     daemon=True).start()
 threading.Thread(target=_cleanup_loop, daemon=True).start()
+threading.Thread(target=_audit_loop,   daemon=True).start()
 add_log('OrcAgent started')
 
 if __name__ == '__main__':
