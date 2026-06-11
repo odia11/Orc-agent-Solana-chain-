@@ -6,7 +6,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY', 'orcagent-dev-secret-change-in-prod')
+app.secret_key = os.getenv('SECRET_KEY') or os.urandom(32)
 app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=30)
 app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
@@ -189,6 +189,28 @@ def rate_limit(limit: int, window: int = 60):
         return wrapped
     return decorator
 
+# ── MEMORY CLEANUP ──
+_USER_STATES_MAX = 200   # evict LRU entries beyond this cap
+
+def _cleanup_loop():
+    """Periodically evict stale rate-limit buckets and idle user states."""
+    while True:
+        time.sleep(300)
+        now = time.time()
+        with _rl_lock:
+            stale = [k for k, hits in _rl_hits.items() if not any(now - t < 120 for t in hits)]
+            for k in stale:
+                del _rl_hits[k]
+        if len(user_states) > _USER_STATES_MAX:
+            # Keep the most recently accessed wallets
+            by_age = sorted(
+                user_states.items(),
+                key=lambda kv: kv[1].get('balance_fetched_at', 0),
+            )
+            for wallet, _ in by_age[:len(user_states) - _USER_STATES_MAX]:
+                if not user_states[wallet].get('trader_running'):
+                    del user_states[wallet]
+
 # ── TRADER LOCK (prevents double-start race condition) ──
 _trader_lock = threading.Lock()
 
@@ -240,6 +262,9 @@ def init_db():
         c.execute('ALTER TABLE trades ADD COLUMN fee_amount REAL DEFAULT 0')
     except sqlite3.OperationalError:
         pass
+    c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_fees_wallet    ON fees(user_wallet)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_fees_timestamp ON fees(timestamp)')
     conn.commit()
     conn.close()
 
@@ -394,25 +419,6 @@ def add_user_log(wallet: str, msg: str):
     if len(us['log_lines']) > 100:
         us['log_lines'].pop()
 
-def get_sol_balance():
-    addr = state.get('wallet') or WALLET_ADDRESS
-    if not addr: return state['sol']
-    try:
-        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[addr]}, timeout=8)
-        return r.json()['result']['value'] / 1e9
-    except: return state['sol']
-
-def get_usdc_balance():
-    addr = state.get('wallet') or WALLET_ADDRESS
-    if not addr: return state['usdc']
-    try:
-        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[addr,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=8)
-        accounts = r.json().get('result',{}).get('value',[])
-        if accounts:
-            return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
-        return 0.0
-    except: return state['usdc']
-
 def _get_user_usdc(wallet: str) -> float:
     try:
         r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[wallet,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=8)
@@ -520,14 +526,6 @@ def totd_loop():
                         ' m5:' + ('+' if m5 >= 0 else '') + str(round(m5, 1)) + '%)')
         except: pass
         time.sleep(TOTD_INTERVAL)
-
-def balance_loop():
-    while True:
-        try:
-            state['sol']  = round(get_sol_balance(), 4)
-            state['usdc'] = round(get_usdc_balance(), 2)
-        except: pass
-        time.sleep(30)
 
 def token_loop():
     while True:
@@ -792,7 +790,6 @@ def set_wallet():
             return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
         session.permanent = True
         session['wallet'] = address
-        state['wallet']   = address
         try:
             get_or_create_user(address)
         except: pass
@@ -812,10 +809,9 @@ def set_wallet():
     else:
         prev = _current_wallet()
         session.pop('wallet', None)
-        state['wallet'] = WALLET_ADDRESS
         if prev:
             add_user_log(prev, 'Wallet disconnected')
-    return jsonify({'ok': True, 'wallet': session.get('wallet', state['wallet'])})
+    return jsonify({'ok': True, 'wallet': session.get('wallet', '')})
 
 # ── SETTINGS ──
 @app.route('/api/settings', methods=['GET'])
@@ -963,16 +959,19 @@ def api_balance():
 
 # ── MARKET / TOTD / TRADES ──
 @app.route('/api/market')
+@rate_limit(30, 60)
 def api_market():
     return jsonify({'tokens': state['tokens']})
 
 @app.route('/api/totd')
+@rate_limit(30, 60)
 def api_totd():
     updated = state.get('totd_updated_at', 0)
     next_in = max(0.0, TOTD_INTERVAL - (time.time() - updated)) if updated else 0.0
     return jsonify({'token': state.get('token_of_the_day'), 'updated_at': updated, 'next_update_in': round(next_in)})
 
 @app.route('/api/carousel')
+@rate_limit(30, 60)
 def api_carousel():
     return jsonify({'tokens': state['tokens'][:10]})
 
@@ -1148,6 +1147,7 @@ def api_chart(mint):
         return jsonify({'candles': [], 'error': 'Chart data unavailable'})
 
 @app.route('/api/trades')
+@rate_limit(30, 60)
 def api_trades():
     wallet = _current_wallet()
     if wallet:
@@ -1204,9 +1204,9 @@ def api_admin():
 
 # ── STARTUP ──
 init_db()
-threading.Thread(target=balance_loop, daemon=True).start()
-threading.Thread(target=token_loop,   daemon=True).start()
-threading.Thread(target=totd_loop,    daemon=True).start()
+threading.Thread(target=token_loop,    daemon=True).start()
+threading.Thread(target=totd_loop,     daemon=True).start()
+threading.Thread(target=_cleanup_loop, daemon=True).start()
 add_log('OrcAgent started')
 
 if __name__ == '__main__':

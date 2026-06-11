@@ -1172,7 +1172,6 @@ async function _loadSlideChart(idx,tf){
   canvas.style.opacity='0.2';
   if(msg){msg.textContent='Loading...';msg.style.display='flex';}
   const r=await fetch('/api/chart/'+mint+'?tf='+tf).then(r=>r.json()).catch(()=>null);
-  console.log('[carousel chart]',mint.slice(0,8),'tf='+tf,'candles='+( r?.candles?.length??'null'),r?.candles?.[0]??r?.error);
   if(!r?.candles?.length){
     if(msg){msg.textContent='Chart unavailable';msg.style.display='flex';}
     canvas.style.opacity='1';
@@ -1642,8 +1641,6 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
   // No verified wallet — stay on onboard screen
 })();
 
-localStorage.clear();
-
 // ── SETTINGS MODAL ──
 let settingsHasKey=false;
 function updateKeyIndicator(){
@@ -1730,7 +1727,7 @@ async function saveSettings(){
 }
 
 setInterval(fetchState,5000);
-setInterval(fetchMarketOnly,5000);
+setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,10000);
 setInterval(fetchCarousel,60000);
 setInterval(_tickCarousel,1000);
