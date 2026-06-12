@@ -355,7 +355,7 @@ def get_token_data(mint: str):
 
 
 def score_token(data: dict) -> float:
-    """Score 0–10. Momentum-focused: ≥6 = BUY signal."""
+    """Score 0–10. Momentum-focused: ≥5.5 = BUY signal."""
     if data.get('price', 0) <= 0: return 0
     score = 0.0
     m5    = data.get('change5m', 0)
@@ -450,7 +450,7 @@ def run():
                         continue
 
                     open_count = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
-                    if sc >= 6 and open_count < 3 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
+                    if sc >= 5.5 and open_count < 3 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
                         spend = min(usdc * 0.20, MAX_USDC / 4)
                         sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print(f'BUY {label} ${round(spend,2)} score:{sc} m5:+{round(m5,1)}% TX:{sig}', flush=True)

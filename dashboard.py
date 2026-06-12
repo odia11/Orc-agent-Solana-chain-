@@ -755,12 +755,14 @@ def get_token_data(mint):
     except: return None
 
 _ai_cache: dict = {}
-_AI_CACHE_TTL   = 300  # seconds — cache per-token AI analysis for 5 min
+_AI_CACHE_TTL    = 300   # seconds — cache per-token AI analysis for 5 min
+_ai_key_invalid  = False  # set True on first 401 so we stop hammering a bad key
 
 def get_ai_signal(token_data: dict, mint: str) -> tuple:
     """Returns (bonus_pts 0–2.0, one-line reasoning). Requires ANTHROPIC_API_KEY.
     Result is cached per mint for _AI_CACHE_TTL seconds to avoid excess API calls."""
-    if not ANTHROPIC_API_KEY:
+    global _ai_key_invalid
+    if not ANTHROPIC_API_KEY or _ai_key_invalid:
         return 0.0, ''
     now    = time.time()
     cached = _ai_cache.get(mint)
@@ -782,19 +784,27 @@ def get_ai_signal(token_data: dict, mint: str) -> tuple:
             'Reply with valid JSON only, no other text: '
             '{"score":5,"reasoning":"one sentence max 12 words","signal":"BUY"}'
         )
-        msg    = client.messages.create(
+        msg  = client.messages.create(
             model='claude-haiku-4-5-20251001',
             max_tokens=80,
             messages=[{'role': 'user', 'content': prompt}],
         )
-        parsed  = json.loads(msg.content[0].text.strip())
-        ai_raw  = float(parsed.get('score', 5))
-        reason  = str(parsed.get('reasoning', ''))[:100]
-        bonus   = round(max(0.0, min(2.0, (ai_raw - 5) / 5 * 2)), 1)
+        text = msg.content[0].text.strip() if msg.content else ''
+        if not text:
+            _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
+            return 0.0, ''
+        parsed = json.loads(text)
+        ai_raw = float(parsed.get('score', 5))
+        reason = str(parsed.get('reasoning', ''))[:100]
+        bonus  = round(max(0.0, min(2.0, (ai_raw - 5) / 5 * 2)), 1)
         _ai_cache[mint] = {'score': bonus, 'reasoning': reason, 'ts': now}
         return bonus, reason
     except Exception as e:
-        add_log(f'AI signal error {mint[:8]}: {str(e)[:60]}')
+        e_str = str(e)
+        if '401' in e_str or 'authentication' in e_str.lower():
+            _ai_key_invalid = True
+            add_log('AI signal: invalid API key — AI bonus disabled')
+        # 429 rate limit, JSON parse errors, network issues: silent, just skip bonus
         _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
         return 0.0, ''
 
@@ -1011,9 +1021,9 @@ def token_loop():
                         bd['confidence'] = round(sc / 10 * 100)
                 # Re-sort after AI adjustments
                 display.sort(key=lambda t: t['score'], reverse=True)
-            qualifying = [t for t in display if t['score'] >= 6]
+            qualifying = [t for t in display if t['score'] >= 5.5]
             state['tokens'] = display
-            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥6) — '
+            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥5.5) — '
                     + ('best: ' + display[0]['symbol'] + ' ' + str(display[0]['score']) + '/10'
                        if display else 'no tokens'))
         except: pass
@@ -1156,7 +1166,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_user_log(wallet, '[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥6')
+    add_user_log(wallet, '[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥5.5')
     positions = us['positions']
 
     try:
@@ -1252,9 +1262,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                 # ── Pass 2: pick the single best entry ──
                 if not stop_event.is_set() and open_pos < 3 and us_usdc > 1:
                     not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
-                    qualifying = [t for t in not_held if t['score'] >= 6]
+                    qualifying = [t for t in not_held if t['score'] >= 5.5]
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (score≥6)')
+                                 str(total_live) + ' qualify (score≥5.5)')
                     if qualifying:
                         best  = qualifying[0]  # list is sorted by score desc
                         bmint = best['mint']
