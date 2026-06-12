@@ -1954,7 +1954,16 @@ function hideTradeWarn(){
 
 function updateKeyIndicator(){
   const btn=document.getElementById('settings-btn');
-  if(btn) btn.textContent=settingsHasKey?'⚙ Settings ✓':'⚙ Settings';
+  if(!btn) return;
+  if(settingsHasKey){
+    btn.textContent='⚙ Settings ✓';
+    btn.style.color='var(--green)';
+    btn.style.borderColor='var(--green)';
+  } else {
+    btn.textContent='⚙ Settings ⚠';
+    btn.style.color='#ff9500';
+    btn.style.borderColor='#ff9500';
+  }
 }
 function _updateKeyStatus(){
   updateKeyIndicator();
