@@ -42,6 +42,7 @@ USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 BIRDEYE_KEY      = os.environ.get('BIRDEYE_API_KEY', '')
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
@@ -747,50 +748,168 @@ def get_token_data(mint):
             'txns24h':       h24_buys + h24_sells,
             'makers24h':     int(p.get('makers', 0) or 0),
             'pairAddress':   p.get('pairAddress', '') or '',
+            'pairCreatedAt': int(p.get('pairCreatedAt', 0) or 0),
         }
     except: return None
 
-def score_token(data):
-    """Score 0–10 across six dimensions. ≥4 = BUY signal."""
-    if data.get('price', 0) <= 0: return 0
-    score = 0.0
-    m5    = data.get('change5m',  0)
-    m15   = data.get('change15m', 0)
-    h1    = data.get('change1h',  0)
-    vol5m = data.get('volume5m',  0)
-    liq   = data.get('liquidity', 0)
-    buys  = data.get('txns_buys',  0)
-    sells = data.get('txns_sells', 0)
+_ai_cache: dict = {}
+_AI_CACHE_TTL   = 300  # seconds — cache per-token AI analysis for 5 min
 
-    # m5 price change (0–4 pts)
-    if   m5 >= 50: score += 4.0
-    elif m5 >= 30: score += 3.0
-    elif m5 >= 20: score += 2.0
-    elif m5 >= 10: score += 1.0
+def get_ai_signal(token_data: dict, mint: str) -> tuple:
+    """Returns (bonus_pts 0–2.0, one-line reasoning). Requires ANTHROPIC_API_KEY.
+    Result is cached per mint for _AI_CACHE_TTL seconds to avoid excess API calls."""
+    if not ANTHROPIC_API_KEY:
+        return 0.0, ''
+    now    = time.time()
+    cached = _ai_cache.get(mint)
+    if cached and now - cached['ts'] < _AI_CACHE_TTL:
+        return cached['score'], cached['reasoning']
+    try:
+        import anthropic as _ant
+        client = _ant.Anthropic(api_key=ANTHROPIC_API_KEY)
+        prompt = (
+            'Analyze this Solana meme coin for a 5-30 min momentum trade.\n'
+            f'5m change:    {token_data.get("change5m", 0):.1f}%\n'
+            f'1h change:    {token_data.get("change1h", 0):.1f}%\n'
+            f'6h change:    {token_data.get("change6h", 0):.1f}%\n'
+            f'Volume 5m:   ${token_data.get("volume5m", 0):,.0f}\n'
+            f'Volume 1h:   ${token_data.get("volume1h", 0):,.0f}\n'
+            f'Liquidity:   ${token_data.get("liquidity", 0):,.0f}\n'
+            f'Buy pressure: {token_data.get("_buy_pct", 50):.0f}%\n'
+            f'Base score:   {token_data.get("_base_score", 0)}/10\n'
+            'Reply with valid JSON only, no other text: '
+            '{"score":5,"reasoning":"one sentence max 12 words","signal":"BUY"}'
+        )
+        msg    = client.messages.create(
+            model='claude-haiku-4-5-20251001',
+            max_tokens=80,
+            messages=[{'role': 'user', 'content': prompt}],
+        )
+        parsed  = json.loads(msg.content[0].text.strip())
+        ai_raw  = float(parsed.get('score', 5))
+        reason  = str(parsed.get('reasoning', ''))[:100]
+        bonus   = round(max(0.0, min(2.0, (ai_raw - 5) / 5 * 2)), 1)
+        _ai_cache[mint] = {'score': bonus, 'reasoning': reason, 'ts': now}
+        return bonus, reason
+    except Exception as e:
+        add_log(f'AI signal error {mint[:8]}: {str(e)[:60]}')
+        _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
+        return 0.0, ''
 
-    # m15 price change (0–2 pts)
-    if   m15 >= 20: score += 2.0
-    elif m15 >= 10: score += 1.0
+def score_token(data: dict) -> tuple:
+    """Multi-factor signal scoring. Returns (score 0–10, breakdown dict).
+    Factors: momentum(0-3) + volume(0-2) + trend(0-2) + liq(0-1) + activity(0-1) - penalties."""
+    if data.get('price', 0) <= 0:
+        return 0.0, {
+            'label': 'AVOID', 'confidence': 0, 'momentum': 0, 'volume': 0,
+            'trend': 0, 'liquidity': 0, 'trader_activity': 0, 'penalties': 0,
+            'ai_bonus': 0, 'ai_reasoning': '', 'vol_accel': False,
+            'buy_pressure': 50, 'risk_flags': [], 'why_buy': [],
+        }
 
-    # h1 trend confirmation (0–2 pts)
-    if   h1 >= 50: score += 2.0
-    elif h1 >= 20: score += 1.0
+    m5     = data.get('change5m',  0)
+    h1     = data.get('change1h',  0)
+    h6     = data.get('change6h',  0)
+    v5m    = data.get('volume5m',  0)
+    v1h    = data.get('volume1h',  0)
+    liq    = data.get('liquidity', 0)
+    fdv    = data.get('fdv',       0)
+    buys   = data.get('txns_buys',  0) or 0
+    sells  = data.get('txns_sells', 0) or 0
+    txns24 = data.get('txns24h',    0) or 0
+    makers = data.get('makers24h',  0) or 0
 
-    # 5m volume — real buying activity (0–2 pts)
-    if   vol5m >= 50000: score += 2.0
-    elif vol5m >= 10000: score += 1.0
+    total_5m  = buys + sells
+    buy_ratio = buys / total_5m if total_5m > 0 else 0.5
+    buy_pct   = round(buy_ratio * 100)
 
-    # liquidity depth (0–2 pts)
-    if   liq >= 100000: score += 2.0
-    elif liq >=  50000: score += 1.0
+    # age from pairCreatedAt (ms epoch)
+    created_ms = data.get('pairCreatedAt', 0) or 0
+    age_hours  = (time.time() - created_ms / 1000) / 3600 if created_ms > 0 else 999
 
-    # buy pressure — more buys than sells (0–1 pt)
-    if buys > sells: score += 1.0
+    # ── MOMENTUM (0–3 pts) ──────────────────────────────────────────────
+    if   m5 >= 20: mom_pts = 3.0
+    elif m5 >= 10: mom_pts = 2.0
+    elif m5 >=  5: mom_pts = 1.0
+    else:          mom_pts = 0.0
 
-    # penalty: low liquidity = rug risk
-    if liq < 15000: score -= 3.0
+    # ── VOLUME (0–2 pts) ────────────────────────────────────────────────
+    # volume acceleration: current 5m pace > average 5m pace from last hour
+    vol_accel = bool(v5m > 0 and v1h > 0 and v5m > v1h / 12)
+    vol_pts   = (1.0 if vol_accel else 0.0) + (1.0 if buy_ratio > 0.6 else 0.0)
 
-    return min(10.0, max(0.0, round(score, 1)))
+    # ── TREND ALIGNMENT (0–2 pts) ────────────────────────────────────────
+    trend_pts = (0.5 if h1 > 0 else 0.0) + (0.5 if h6 > 0 else 0.0)
+    if m5 > 0 and h1 > 0 and h6 > 0:
+        trend_pts += 1.0  # golden cross: all three timeframes aligned
+    if h6 < -10 and m5 > 10:
+        trend_pts = max(0.0, trend_pts - 0.5)  # dead-cat-bounce risk
+
+    # ── LIQUIDITY HEALTH (0–1 pt) ────────────────────────────────────────
+    liq_pts = 1.0 if liq >= 100_000 else (0.5 if liq >= 50_000 else 0.0)
+
+    # ── TRADER ACTIVITY (0–1 pt) ─────────────────────────────────────────
+    activity   = makers if makers > 0 else txns24
+    trader_pts = 1.0 if activity >= 500 else (0.5 if activity >= 200 else 0.0)
+
+    base = mom_pts + vol_pts + trend_pts + liq_pts + trader_pts
+
+    # ── RISK PENALTIES ────────────────────────────────────────────────────
+    penalties  = 0.0
+    risk_flags = []
+    if buy_ratio < 0.4:
+        penalties += 1.0;  risk_flags.append('SELL PRESSURE')
+    if liq < 5_000:
+        penalties += 4.0;  risk_flags.append('VERY LOW LIQ')
+    elif liq < 15_000:
+        penalties += 2.0;  risk_flags.append('LOW LIQ')
+    if 0 < activity < 100:
+        penalties += 1.0;  risk_flags.append('FEW TRADERS')
+    if fdv > 0 and liq > 0 and fdv / liq > 100:
+        penalties += 1.0;  risk_flags.append('HIGH MCAP/LIQ')
+    if 0 < age_hours < 1:
+        penalties += 1.0;  risk_flags.append('VERY NEW <1H')
+
+    raw = max(0.0, base - penalties)
+
+    # ── WHY BUY reasons ───────────────────────────────────────────────────
+    why = []
+    if mom_pts >= 2:         why.append(f'+{m5:.0f}% in 5m — strong momentum')
+    elif mom_pts == 1:       why.append(f'+{m5:.0f}% in 5m — building momentum')
+    if vol_accel:            why.append('Volume accelerating above average pace')
+    if buy_ratio > 0.6:      why.append(f'{buy_pct}% buy pressure — strong demand')
+    if trend_pts >= 2:       why.append('All timeframes aligned (5m + 1h + 6h)')
+    elif trend_pts >= 1:     why.append('Multi-timeframe trend positive')
+    if liq >= 100_000:       why.append(f'Deep liquidity ${liq/1000:.0f}K')
+
+    # Store helper fields for AI call
+    data['_buy_pct']    = buy_pct
+    data['_base_score'] = round(raw, 1)
+
+    score = round(min(10.0, raw), 1)
+
+    if   score >= 8: lbl = 'STRONG BUY'
+    elif score >= 6: lbl = 'BUY'
+    elif score >= 4: lbl = 'WATCH'
+    else:            lbl = 'AVOID'
+
+    bd = {
+        'label':          lbl,
+        'confidence':     round(score / 10 * 100),
+        'momentum':       mom_pts,
+        'volume':         vol_pts,
+        'vol_accel':      vol_accel,
+        'buy_pressure':   buy_pct,
+        'trend':          trend_pts,
+        'liquidity':      liq_pts,
+        'trader_activity': trader_pts,
+        'penalties':      penalties,
+        'risk_flags':     risk_flags,
+        'ai_bonus':       0.0,
+        'ai_reasoning':   '',
+        'why_buy':        why[:3],
+    }
+    return score, bd
 
 # ── BACKGROUND LOOPS ──
 def totd_loop():
@@ -829,7 +948,7 @@ def token_loop():
                     continue
                 if data['volume5m'] < 1000:
                     continue
-                sc    = score_token(data)
+                sc, bd = score_token(data)
                 entry = {
                     'mint':          mint,
                     'symbol':        data['symbol'] or mint[:8],
@@ -846,6 +965,8 @@ def token_loop():
                     'liquidity':     data['liquidity'],
                     'fdv':           data['fdv'],
                     'score':         sc,
+                    'breakdown':     bd,
+                    'pairCreatedAt': data.get('pairCreatedAt', 0),
                     'txns24h':       data['txns24h'],
                     'txns24h_buys':  data['txns24h_buys'],
                     'txns24h_sells': data['txns24h_sells'],
@@ -855,6 +976,24 @@ def token_loop():
                 all_tokens.append(entry)
             # Sort by score descending — best opportunity first
             display    = sorted(all_tokens, key=lambda t: t['score'], reverse=True)
+            # AI signal boost for top 5 scoring tokens (adds 0–2 bonus pts)
+            if ANTHROPIC_API_KEY:
+                for entry in display[:5]:
+                    ai_bonus, ai_reason = get_ai_signal(entry, entry['mint'])
+                    if ai_bonus > 0 or ai_reason:
+                        entry['score'] = round(min(10.0, entry['score'] + ai_bonus), 1)
+                        bd = entry.get('breakdown', {})
+                        bd['ai_bonus']     = ai_bonus
+                        bd['ai_reasoning'] = ai_reason
+                        if ai_reason:
+                            why = bd.get('why_buy', [])
+                            why.append(f'AI: {ai_reason}')
+                            bd['why_buy'] = why[:3]
+                        sc = entry['score']
+                        bd['label']      = 'STRONG BUY' if sc >= 8 else ('BUY' if sc >= 6 else ('WATCH' if sc >= 4 else 'AVOID'))
+                        bd['confidence'] = round(sc / 10 * 100)
+                # Re-sort after AI adjustments
+                display.sort(key=lambda t: t['score'], reverse=True)
             qualifying = [t for t in display if t['score'] >= 4]
             state['tokens'] = display
             add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥4) — '
@@ -1029,12 +1168,54 @@ def user_trader_loop(stop_event, config, wallet: str):
                     m5    = t.get('change5m', 0)
                     label = t['symbol'] or mint[:8]
                     price = t['price']
+                    bd    = t.get('breakdown', {})
+                    buy_pres = bd.get('buy_pressure', 50)
+
                     if price > pos.get('peak_price', price): pos['peak_price'] = price
-                    chg   = (price - pos['buy_price']) / pos['buy_price']
+                    chg          = (price - pos['buy_price']) / pos['buy_price']
+                    peak         = pos.get('peak_price', price)
+                    trail_drop   = (peak - price) / peak if peak > 0 else 0
+
+                    # Dynamic stop level: rises as position profits
+                    if   chg >= 0.20: stop_level = 0.10   # lock in +10% after +20%
+                    elif chg >= 0.10: stop_level = 0.00   # move to breakeven after +10%
+                    else:             stop_level = -0.05  # normal 5% stop loss
+
+                    if chg >= 0.10: pos['was_up_10'] = True
+
+                    # ── Partial profit take at +20% (once per position) ──
+                    if chg >= 0.20 and not pos.get('partial_taken') and pos.get('amount', 0) > 0:
+                        half = round(pos['amount'] * 0.5, 6)
+                        add_user_log(wallet, '[' + short + '] PARTIAL EXIT +' + str(round(chg*100,1)) + '% — selling 50% of ' + label)
+                        with _use_key(_enc_blob, wallet) as _pk:
+                            part_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(half))
+                        if part_ok:
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _record_user_trade(user_id, us, label, pos['buy_price'], price,
+                                                   half, pos['spend'] * 0.5, wallet=wallet, private_key=_pk)
+                            pos['amount'] *= 0.5
+                            pos['spend']  *= 0.5
+                            pos['buy_price']     = price   # reset entry for trailing
+                            pos['partial_taken'] = True
+                        continue
+
                     exit_reason = None
-                    if   chg >= 0.15:  exit_reason = 'TAKE PROFIT +' + str(round(chg * 100, 1)) + '%'
-                    elif chg <= -0.05: exit_reason = 'STOP LOSS '    + str(round(chg * 100, 1)) + '%'
-                    elif m5  <  5:     exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5, 1)) + '%)'
+                    if chg <= stop_level:
+                        if stop_level == 0.10:
+                            exit_reason = 'PROFIT LOCK +' + str(round(chg*100,1)) + '%'
+                        elif stop_level == 0.00:
+                            exit_reason = 'BREAKEVEN STOP ' + str(round(chg*100,1)) + '%'
+                        else:
+                            exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
+                    elif chg >= 0.15:
+                        exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
+                    elif chg > 0 and trail_drop >= 0.07:
+                        exit_reason = 'TRAILING STOP (peak was +' + str(round((peak/pos['buy_price']-1)*100,1)) + '%)'
+                    elif buy_pres < 40 and chg < 0.05:
+                        exit_reason = 'BUY PRESSURE DIED (' + str(buy_pres) + '%)'
+                    elif m5 < 5 and chg < 0:
+                        exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5,1)) + '%)'
+
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
@@ -1068,12 +1249,45 @@ def user_trader_loop(stop_event, config, wallet: str):
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
-                            with _use_key(_enc_blob, wallet) as _pk:
-                                _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
-                            pos['amount']     = spend / best['price']
-                            pos['buy_price']  = best['price']
-                            pos['peak_price'] = best['price']
-                            pos['spend']      = spend
+
+                            # Entry timing: if token is very extended (m5 > 30%), wait for 2-5% pullback
+                            if m5 > 30 and not pos.get('entry_waiting'):
+                                pos['entry_waiting']   = True
+                                pos['entry_ref_price'] = best['price']
+                                pos['entry_wait_count']= 0
+                                add_user_log(wallet, '[' + short + '] WAITING FOR ENTRY — ' + label +
+                                             ' extended (+' + str(round(m5,1)) + '%), watching for pullback')
+                            elif pos.get('entry_waiting'):
+                                ref = pos.get('entry_ref_price', best['price'])
+                                dip = (best['price'] - ref) / ref if ref > 0 else 0
+                                pos['entry_wait_count'] = pos.get('entry_wait_count', 0) + 1
+                                if -0.06 <= dip <= -0.02:
+                                    # Good pullback — buy now
+                                    add_user_log(wallet, '[' + short + '] PULLBACK ENTRY — ' + label +
+                                                 ' dipped ' + str(round(dip*100,1)) + '%')
+                                    pos.pop('entry_waiting', None)
+                                    pos.pop('entry_ref_price', None)
+                                    pos.pop('entry_wait_count', None)
+                                    with _use_key(_enc_blob, wallet) as _pk:
+                                        _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
+                                    pos['amount']     = spend / best['price']
+                                    pos['buy_price']  = best['price']
+                                    pos['peak_price'] = best['price']
+                                    pos['spend']      = spend
+                                elif pos.get('entry_wait_count', 0) >= 5 or dip > 0.05:
+                                    # Timed out or ran away — cancel wait
+                                    add_user_log(wallet, '[' + short + '] ENTRY WAIT CANCELLED — ' + label)
+                                    pos.pop('entry_waiting', None)
+                                    pos.pop('entry_ref_price', None)
+                                    pos.pop('entry_wait_count', None)
+                                # else still waiting
+                            else:
+                                with _use_key(_enc_blob, wallet) as _pk:
+                                    _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
+                                pos['amount']     = spend / best['price']
+                                pos['buy_price']  = best['price']
+                                pos['peak_price'] = best['price']
+                                pos['spend']      = spend
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 60))

@@ -408,6 +408,18 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .audit-run-btn:disabled{opacity:.45;cursor:not-allowed}
 .audit-next{font-size:9px;color:var(--muted)}
 
+.slide-confidence-bar{flex:1;height:4px;background:rgba(255,255,255,.08);border-radius:2px;overflow:hidden;min-width:40px;max-width:90px;margin:0 4px}
+.slide-confidence-fill{height:100%;border-radius:2px}
+.slide-factors{display:flex;gap:4px;flex-wrap:wrap;margin:5px 0 3px}
+.factor-on{font-size:8px;font-family:'Share Tech Mono',monospace;color:#0d1117;background:#00edaa;border-radius:3px;padding:2px 5px;font-weight:700;letter-spacing:.05em}
+.factor-off{font-size:8px;font-family:'Share Tech Mono',monospace;color:rgba(255,255,255,.25);background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.08);border-radius:3px;padding:2px 5px}
+.slide-why-buy{margin:4px 0;font-size:9px;color:rgba(255,255,255,.45);line-height:1.75}
+.slide-why-buy b{display:block;font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,237,170,.6);letter-spacing:.08em;margin-bottom:2px;font-weight:400}
+.slide-risk-flags{display:flex;gap:4px;flex-wrap:wrap;margin:4px 0}
+.risk-flag{font-size:8px;font-family:'Share Tech Mono',monospace;color:#ff4d6a;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.25);border-radius:3px;padding:2px 5px}
+.slide-ai-line{margin:4px 0;font-size:9px;color:rgba(0,237,170,.65);font-style:italic;line-height:1.4}
+.slide-ai-line b{font-style:normal;font-family:'Share Tech Mono',monospace;font-size:7px;color:rgba(0,237,170,.4);letter-spacing:.1em;vertical-align:middle;margin-right:3px}
+
 </style>
 </head>
 <body>
@@ -1276,6 +1288,29 @@ function _buildCarousel(tokens){
     const sigLabel = sc>=7?'BUY':sc>=4?'HOLD':'SELL';
     const scoreClr = sc>=7?'#00edaa':sc>=4?'#ffc13a':'#ff4d6a';
     const scoreBg  = sc>=7?'rgba(0,237,170,.15)':sc>=4?'rgba(255,193,58,.15)':'rgba(255,77,106,.15)';
+    const bd         = t.breakdown || {};
+    const confidence = bd.confidence || Math.round(sc/10*100);
+    const lblClass   = sc>=8?'buy':sc>=6?'buy':sc>=4?'hold':'sell';
+    const lblText    = bd.label || (sc>=8?'STRONG BUY':sc>=6?'BUY':sc>=4?'WATCH':'AVOID');
+    const factors    = [
+      {key:'MOM',  on: (bd.momentum||0)>=2},
+      {key:'VOL↑', on: bd.vol_accel===true},
+      {key:`${bd.buy_pressure||'?'}%BUY`, on: (bd.buy_pressure||0)>60},
+      {key:'TREND',on: (bd.trend||0)>=1},
+      {key:'LIQ',  on: (bd.liquidity||0)>=1},
+    ];
+    const factorsHtml = factors.map(f=>`<span class="${f.on?'factor-on':'factor-off'}">${f.key}</span>`).join('');
+    const riskFlags   = bd.risk_flags || [];
+    const riskHtml    = riskFlags.length
+      ? `<div class="slide-risk-flags">${riskFlags.map(r=>`<span class="risk-flag">⚠ ${r}</span>`).join('')}</div>`
+      : '';
+    const whyList     = bd.why_buy || [];
+    const whyHtml     = whyList.length
+      ? `<div class="slide-why-buy"><b>WHY ${lblText}</b>${whyList.map(w=>`• ${esc(w)}`).join('<br>')}</div>`
+      : '';
+    const aiHtml      = bd.ai_reasoning
+      ? `<div class="slide-ai-line"><b>AI ✦</b>${esc(bd.ai_reasoning)}</div>`
+      : '';
     const chartContent=`<div id="lw-chart-${i}" style="width:100%;height:100%"></div><div class="chart-loading" id="chartload-${i}">Loading chart...</div>`;
     return `<div class="carousel-slide" id="cslide-${i}">
   <div class="slide-header">
@@ -1335,11 +1370,15 @@ function _buildCarousel(tokens){
     </div>
   </div>
   <div class="slide-signal-row">
-    <span style="font-size:9px;color:rgba(255,255,255,.35);letter-spacing:.1em;text-transform:uppercase;font-family:'Share Tech Mono',monospace">AI Signal</span>
-    <span class="slide-signal-badge ${sigClass}">${sigLabel}</span>
-    <span style="flex:1"></span>
+    <span class="slide-signal-badge ${lblClass}">${lblText}</span>
+    <div class="slide-confidence-bar"><div class="slide-confidence-fill" style="width:${confidence}%;background:${scoreClr}"></div></div>
+    <span style="font-size:9px;color:${scoreClr};font-family:'Share Tech Mono',monospace;min-width:28px">${confidence}%</span>
     <span class="slide-score-badge" style="color:${scoreClr};background:${scoreBg};border:1px solid ${scoreClr}40">${sc}/10</span>
   </div>
+  <div class="slide-factors">${factorsHtml}</div>
+  ${whyHtml}
+  ${riskHtml}
+  ${aiHtml}
   <div class="slide-action-row">
     <a class="slide-action-btn" href="https://dexscreener.com/solana/${mintAddr}" target="_blank" rel="noopener">View on DexScreener ↗</a>
     <button class="slide-action-btn" onclick="navigator.clipboard.writeText('${mintAddr}');this.textContent='✓ Copied!';setTimeout(()=>this.textContent='Copy Address',2000)">Copy Address</button>
