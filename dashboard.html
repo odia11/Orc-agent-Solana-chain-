@@ -553,6 +553,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <input id="s-privkey" class="s-input" type="password" placeholder="Enter private key to enable trading" autocomplete="new-password">
         <button class="s-vis-btn" id="s-vis-btn" onclick="togglePrivVis()">👁</button>
       </div>
+      <div style="margin-top:7px;padding:8px 10px;background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.25);border-radius:6px;font-size:10px;color:#c8a800;line-height:1.5">
+        ⚠️ <strong>Use a dedicated trading wallet only — never your main wallet.</strong>
+        Your key is double-encrypted before storage and never leaves the server.
+        It is never returned in any API response or log.
+      </div>
     </div>
 
     <div class="s-grid">
