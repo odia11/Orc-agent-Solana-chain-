@@ -41,7 +41,6 @@ WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
-BIRDEYE_KEY      = os.environ.get('BIRDEYE_API_KEY', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
@@ -339,14 +338,6 @@ def _run_audit() -> dict:
     except Exception as e:
         checks.append({'name': 'Jupiter API', 'status': 'fail',
                         'msg': f'Unreachable {_route_label} — {str(e)[:80]}'})
-
-    # 6. Birdeye API key (chart data source)
-    if BIRDEYE_KEY:
-        checks.append({'name': 'Birdeye Charts', 'status': 'pass',
-                        'msg': 'API key set — live OHLCV charts enabled'})
-    else:
-        checks.append({'name': 'Birdeye Charts', 'status': 'warn',
-                        'msg': 'No BIRDEYE_API_KEY — charts use synthetic fallback'})
 
     # 6. Encryption key (private key storage)
     if _fernet is not None:
@@ -1643,7 +1634,7 @@ def api_carousel():
 
 def _synthetic_candles(pair: dict, now: int, tcfg: dict) -> list:
     """Generate N synthetic OHLCV candles from DexScreener price-change percentages.
-    Used when both Birdeye and DexScreener chart APIs are unavailable.
+    Used when the DexScreener chart API is unavailable.
     Uses sine-based deterministic noise — no random module needed."""
     cur = float(pair.get('priceUsd', 0) or 0)
     if cur <= 0:
@@ -1684,12 +1675,12 @@ def api_chart(mint):
         return jsonify({'candles': [], 'error': 'invalid mint'})
     tf   = request.args.get('tf', '5m')
     _TF  = {
-        '1m':  {'res': '1',    'window': 1800,    'n': 60, 'brd': '1m'},
-        '5m':  {'res': '5',    'window': 9000,    'n': 60, 'brd': '5m'},
-        '15m': {'res': '15',   'window': 21600,   'n': 60, 'brd': '15m'},
-        '1h':  {'res': '60',   'window': 86400,   'n': 48, 'brd': '1H'},
-        '4h':  {'res': '240',  'window': 345600,  'n': 42, 'brd': '4H'},
-        'D':   {'res': '1440', 'window': 2592000, 'n': 30, 'brd': '1D'},
+        '1m':  {'res': '1',    'window': 1800,    'n': 60},
+        '5m':  {'res': '5',    'window': 9000,    'n': 60},
+        '15m': {'res': '15',   'window': 21600,   'n': 60},
+        '1h':  {'res': '60',   'window': 86400,   'n': 48},
+        '4h':  {'res': '240',  'window': 345600,  'n': 42},
+        'D':   {'res': '1440', 'window': 2592000, 'n': 30},
     }
     tcfg = _TF.get(tf, _TF['5m'])
     try:
@@ -1708,41 +1699,7 @@ def api_chart(mint):
         from_ts = now - tcfg['window']
         candles = []
 
-        # ── Step 2: Birdeye OHLCV (primary) ──
-        # DexScreener's internal chart API (io.dexscreener.com) is protected by
-        # Cloudflare and returns 404/bot-challenge HTML for server-side requests.
-        # Birdeye is the reliable server-to-server OHLCV source.
-        if BIRDEYE_KEY:
-            try:
-                brd_url = (
-                    f'https://public-api.birdeye.so/defi/ohlcv'
-                    f'?address={mint}&type={tcfg["brd"]}'
-                    f'&time_from={from_ts}&time_to={now}'
-                )
-                rb = requests.get(brd_url, timeout=10, headers={
-                    'X-API-KEY': BIRDEYE_KEY,
-                    'x-chain':   'solana',
-                    'Accept':    'application/json',
-                })
-                if rb.status_code == 200:
-                    for item in (rb.json().get('data') or {}).get('items', []):
-                        c_val = float(item.get('c', 0) or 0)
-                        if c_val <= 0:
-                            continue
-                        candles.append({
-                            't': int(item.get('unixTime', 0)),
-                            'o': float(item.get('o', c_val) or c_val),
-                            'h': float(item.get('h', c_val) or c_val),
-                            'l': float(item.get('l', c_val) or c_val),
-                            'c': c_val,
-                            'v': float(item.get('v', 0) or 0),
-                        })
-                else:
-                    print(f'[chart] Birdeye {rb.status_code} for {mint[:8]}', flush=True)
-            except Exception as e:
-                print(f'[chart] Birdeye error: {e}', flush=True)
-
-        # ── Step 3: DexScreener internal chart API (secondary) ──
+        # ── Step 2: DexScreener internal chart API ──
         if not candles:
             try:
                 chart_url = (
