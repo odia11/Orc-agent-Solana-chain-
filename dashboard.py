@@ -305,7 +305,37 @@ def _run_audit() -> dict:
             checks.append({'name': 'DexScreener', 'status': 'fail',
                             'msg': f'Unreachable — {str(e)[:60]}'})
 
-    # 5. Birdeye API key (chart data source)
+    # 5. Jupiter API (swap quote endpoint — critical for trade execution)
+    _sol_mint = 'So11111111111111111111111111111111111111112'
+    try:
+        jr = requests.get(
+            'https://quote-api.jup.ag/v6/quote',
+            params={
+                'inputMint':   USDC_MINT,
+                'outputMint':  _sol_mint,
+                'amount':      '1000000',
+                'slippageBps': '300',
+            },
+            headers={
+                'Accept':     'application/json',
+                'User-Agent': 'Mozilla/5.0 OrcAgent/1.0',
+            },
+            timeout=8,
+        )
+        if jr.status_code == 200:
+            checks.append({'name': 'Jupiter API', 'status': 'pass',
+                            'msg': f'quote-api.jup.ag reachable — quote returned (HTTP 200)'})
+        elif jr.status_code == 429:
+            checks.append({'name': 'Jupiter API', 'status': 'warn',
+                            'msg': 'Rate-limited by Jupiter (429) — trades may be delayed'})
+        else:
+            checks.append({'name': 'Jupiter API', 'status': 'warn',
+                            'msg': f'quote-api.jup.ag HTTP {jr.status_code} — {jr.text[:80]}'})
+    except Exception as e:
+        checks.append({'name': 'Jupiter API', 'status': 'fail',
+                        'msg': f'Unreachable — {str(e)[:80]}'})
+
+    # 6. Birdeye API key (chart data source)
     if BIRDEYE_KEY:
         checks.append({'name': 'Birdeye Charts', 'status': 'pass',
                         'msg': 'API key set — live OHLCV charts enabled'})

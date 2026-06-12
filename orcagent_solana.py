@@ -22,6 +22,13 @@ JUPITER_QUOTE = 'https://quote-api.jup.ag/v6/quote'
 JUPITER_SWAP  = 'https://quote-api.jup.ag/v6/swap'
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
+# Required by Jupiter — some endpoints 400/reject requests missing these
+_JUP_HEADERS = {
+    'Accept':       'application/json',
+    'Content-Type': 'application/json',
+    'User-Agent':   'Mozilla/5.0 OrcAgent/1.0',
+}
+
 
 def _rpc_post(payload: dict, timeout: int = 30) -> dict:
     """Try each RPC endpoint in order; return first success or raise."""
@@ -68,21 +75,41 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
 
     # ── Step 1: Jupiter quote ────────────────────────────────────────────────
     print(f'[TRADE] Step 1/6 — Requesting {direction} quote for {label} ({amount_lamports} lamports)', flush=True)
-    try:
-        r = requests.get(
-            JUPITER_QUOTE,
-            params={
-                'inputMint':   input_mint,
-                'outputMint':  output_mint,
-                'amount':      int(amount_lamports),
-                'slippageBps': 300,
-            },
-            timeout=15,
-        )
-        quote = r.json()
-    except Exception:
-        print('[TRADE] FAIL Step 1 (quote GET):\n' + traceback.format_exc(), flush=True)
-        raise
+    for _attempt in range(3):
+        try:
+            r = requests.get(
+                JUPITER_QUOTE,
+                params={
+                    'inputMint':   input_mint,
+                    'outputMint':  output_mint,
+                    'amount':      int(amount_lamports),
+                    'slippageBps': 300,
+                },
+                headers=_JUP_HEADERS,
+                timeout=15,
+            )
+            print(f'[TRADE] Step 1 — HTTP {r.status_code} from Jupiter quote endpoint', flush=True)
+            if r.status_code == 429:
+                wait = 2 ** _attempt
+                print(f'[TRADE] Jupiter rate-limited (429) — retrying in {wait}s (attempt {_attempt+1}/3)', flush=True)
+                time.sleep(wait)
+                continue
+            if r.status_code == 503:
+                wait = 2 ** _attempt
+                print(f'[TRADE] Jupiter unavailable (503) — retrying in {wait}s (attempt {_attempt+1}/3)', flush=True)
+                time.sleep(wait)
+                continue
+            if r.status_code != 200:
+                raise Exception(f'Jupiter quote HTTP {r.status_code}: {r.text[:300]}')
+            quote = r.json()
+            break
+        except Exception:
+            if _attempt == 2:
+                print('[TRADE] FAIL Step 1 (quote GET):\n' + traceback.format_exc(), flush=True)
+                raise
+            time.sleep(2 ** _attempt)
+    else:
+        raise Exception('Jupiter quote failed after 3 attempts')
 
     # ── Step 2: Validate quote ───────────────────────────────────────────────
     out_amount = quote.get('outAmount', '?')
@@ -96,23 +123,42 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
 
     # ── Step 3: Get swap transaction ─────────────────────────────────────────
     print('[TRADE] Step 3/6 — Getting swap transaction from Jupiter', flush=True)
-    try:
-        r2 = requests.post(
-            JUPITER_SWAP,
-            json={
-                'quoteResponse':             quote,
-                'userPublicKey':             wallet_address,
-                'wrapAndUnwrapSol':          True,
-                'dynamicComputeUnitLimit':   True,
-                'prioritizationFeeLamports': 1000,
-            },
-            headers={'Content-Type': 'application/json'},
-            timeout=20,
-        )
-        swap_resp = r2.json()
-    except Exception:
-        print('[TRADE] FAIL Step 3 (swap POST):\n' + traceback.format_exc(), flush=True)
-        raise
+    for _attempt in range(3):
+        try:
+            r2 = requests.post(
+                JUPITER_SWAP,
+                json={
+                    'quoteResponse':             quote,
+                    'userPublicKey':             wallet_address,
+                    'wrapAndUnwrapSol':          True,
+                    'dynamicComputeUnitLimit':   True,
+                    'prioritizationFeeLamports': 1000,
+                },
+                headers=_JUP_HEADERS,
+                timeout=20,
+            )
+            print(f'[TRADE] Step 3 — HTTP {r2.status_code} from Jupiter swap endpoint', flush=True)
+            if r2.status_code == 429:
+                wait = 2 ** _attempt
+                print(f'[TRADE] Jupiter rate-limited (429) — retrying in {wait}s (attempt {_attempt+1}/3)', flush=True)
+                time.sleep(wait)
+                continue
+            if r2.status_code == 503:
+                wait = 2 ** _attempt
+                print(f'[TRADE] Jupiter unavailable (503) — retrying in {wait}s (attempt {_attempt+1}/3)', flush=True)
+                time.sleep(wait)
+                continue
+            if r2.status_code not in (200, 201):
+                raise Exception(f'Jupiter swap HTTP {r2.status_code}: {r2.text[:300]}')
+            swap_resp = r2.json()
+            break
+        except Exception:
+            if _attempt == 2:
+                print('[TRADE] FAIL Step 3 (swap POST):\n' + traceback.format_exc(), flush=True)
+                raise
+            time.sleep(2 ** _attempt)
+    else:
+        raise Exception('Jupiter swap failed after 3 attempts')
 
     swap_tx_b64 = swap_resp.get('swapTransaction')
     print(f'[TRADE] Step 4/6 — Signing transaction (tx present={bool(swap_tx_b64)})', flush=True)
