@@ -449,7 +449,8 @@ def run():
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         continue
 
-                    if sc >= 4 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
+                    open_count = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
+                    if sc >= 6 and open_count < 3 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
                         spend = min(usdc * 0.20, MAX_USDC / 4)
                         sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print(f'BUY {label} ${round(spend,2)} score:{sc} m5:+{round(m5,1)}% TX:{sig}', flush=True)

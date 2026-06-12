@@ -213,6 +213,16 @@ def _cleanup_loop():
             stale = [k for k, hits in _rl_hits.items() if not any(now - t < 120 for t in hits)]
             for k in stale:
                 del _rl_hits[k]
+        # Evict expired IP bans and stale warn records
+        for ip in list(_ip_ban.keys()):
+            if now >= _ip_ban[ip]:
+                _ip_ban.pop(ip, None)
+                _ip_warn.pop(ip, None)
+        # Evict stale AI cache entries (keep only entries younger than 2× TTL)
+        ai_cutoff = now - _AI_CACHE_TTL * 2
+        for mint in list(_ai_cache.keys()):
+            if _ai_cache[mint].get('ts', 0) < ai_cutoff:
+                del _ai_cache[mint]
         # Prune zero-amount position slots that accumulate in active traders
         for us in list(user_states.values()):
             pos = us.get('positions')
@@ -1388,6 +1398,7 @@ def set_wallet():
 
 # ── SETTINGS ──
 @app.route('/api/settings', methods=['GET'])
+@rate_limit(30, 60)
 def get_settings():
     wallet = _current_wallet()
     if not wallet:
@@ -1428,6 +1439,7 @@ def save_settings():
     daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
 
     # Validate, double-encrypt, and verify round-trip before touching the DB
+    encrypted = ''   # initialised here so it is always defined in the INSERT branch below
     new_hash  = None
     if private_key_raw:
         if not is_valid_solana_private_key(private_key_raw):
@@ -1590,6 +1602,7 @@ def start_trader():
     return jsonify({'ok': True})
 
 @app.route('/api/trader/stop', methods=['POST'])
+@rate_limit(10, 60)
 def stop_trader():
     wallet = _current_wallet()
     if not wallet:
@@ -1713,6 +1726,8 @@ def api_trades():
 @app.route('/api/log')
 @rate_limit(30, 60)
 def api_log():
+    if not _current_wallet():
+        return jsonify({'lines': []})
     try:
         with open(LOG_FILE, encoding='utf-8') as f:
             lines = f.readlines()[-50:]
