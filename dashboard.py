@@ -1593,7 +1593,7 @@ def start_trader():
     with _trader_lock:
         us = get_user_state(wallet)
         if us['trader_running']:
-            return jsonify({'ok': False, 'msg': 'Already running'})
+            return jsonify({'ok': True})  # idempotent — already in desired state
         config = request.json or {}
         us['trader_stop']   = threading.Event()
         us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)

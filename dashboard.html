@@ -1827,15 +1827,21 @@ async function toggleTrader(){
     }
   }
   hideTradeWarn();
+  const starting=!traderOn;
   const tb=document.getElementById('trade-btn');
   tb.disabled=true; tb.style.opacity='.6';
   // Watchdog: re-enable after 5 s regardless, so a hung request never leaves the button stuck
   const watchdog=setTimeout(()=>{ tb.disabled=false; tb.style.opacity=''; },5000);
   try{
-    const res=await fetch(traderOn?'/api/trader/stop':'/api/trader/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
+    const res=await fetch(starting?'/api/trader/start':'/api/trader/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
     const rj=await res.json().catch(()=>null);
-    if(rj&&!rj.ok&&rj.msg){ showTradeWarn('⚠️ '+rj.msg); }
-    await fetchState();
+    if(rj&&rj.ok){
+      traderOn=starting;   // optimistic update — don't wait for fetchState()
+      updateBtns();
+    } else if(rj&&!rj.ok&&rj.msg){
+      showTradeWarn('⚠️ '+rj.msg);
+    }
+    await fetchState();    // authoritative sync
   }catch(e){ console.error('toggleTrader',e); }
   finally{ clearTimeout(watchdog); tb.disabled=false; tb.style.opacity=''; }
 }
