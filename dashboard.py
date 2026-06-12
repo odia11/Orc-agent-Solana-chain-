@@ -1632,42 +1632,6 @@ def api_totd():
 def api_carousel():
     return jsonify({'tokens': state['tokens'][:10]})
 
-def _synthetic_candles(pair: dict, now: int, tcfg: dict) -> list:
-    """Generate N synthetic OHLCV candles from DexScreener price-change percentages.
-    Used when the DexScreener chart API is unavailable.
-    Uses sine-based deterministic noise — no random module needed."""
-    cur = float(pair.get('priceUsd', 0) or 0)
-    if cur <= 0:
-        return []
-    ch     = pair.get('priceChange', {}) or {}
-    ch5m   = float(ch.get('m5',  0) or 0) / 100
-    ch1h   = float(ch.get('h1',  0) or 0) / 100
-    ch6h   = float(ch.get('h6',  0) or 0) / 100
-    ch24h  = float(ch.get('h24', 0) or 0) / 100
-    vol5m  = float((pair.get('volume', {}) or {}).get('m5', 0) or 0)
-    n      = tcfg['n']
-    win    = tcfg['window']
-    step_s = win // n
-    if   win <= 600:   total_chg = ch5m
-    elif win <= 7200:  total_chg = ch1h
-    elif win <= 86400: total_chg = ch6h
-    else:              total_chg = ch24h
-    p_start = cur / max(1.0 + total_chg, 0.001)
-    candles = []
-    for i in range(n):
-        frac  = i / max(n - 1, 1)
-        base  = p_start + (cur - p_start) * frac
-        noise = base * 0.003
-        o = base + math.sin(i * 2.3)         * noise
-        c = base + math.sin(i * 2.3 + 1.1)  * noise
-        h = max(o, c) + abs(math.sin(i * 2.3 + 2.2)) * noise * 1.6
-        l = min(o, c) - abs(math.sin(i * 2.3 + 3.3)) * noise * 1.6
-        v = vol5m * max(0.0, math.sin(i * 1.7 + 0.5) * 0.3 + 0.5)
-        candles.append({'t': now - win + i * step_s,
-                        'o': o, 'h': h, 'l': l, 'c': c, 'v': round(v, 2)})
-    return candles
-
-
 @app.route('/api/chart/<mint>')
 @rate_limit(60, 60)
 def api_chart(mint):
@@ -1675,96 +1639,58 @@ def api_chart(mint):
         return jsonify({'candles': [], 'error': 'invalid mint'})
     tf   = request.args.get('tf', '5m')
     _TF  = {
-        '1m':  {'res': '1',    'window': 1800,    'n': 60},
-        '5m':  {'res': '5',    'window': 9000,    'n': 60},
-        '15m': {'res': '15',   'window': 21600,   'n': 60},
-        '1h':  {'res': '60',   'window': 86400,   'n': 48},
-        '4h':  {'res': '240',  'window': 345600,  'n': 42},
-        'D':   {'res': '1440', 'window': 2592000, 'n': 30},
+        '1m':  {'gt_tf': 'minute', 'gt_agg': 1,  'limit': 60},
+        '5m':  {'gt_tf': 'minute', 'gt_agg': 5,  'limit': 60},
+        '15m': {'gt_tf': 'minute', 'gt_agg': 15, 'limit': 60},
+        '1h':  {'gt_tf': 'hour',   'gt_agg': 1,  'limit': 48},
+        '4h':  {'gt_tf': 'hour',   'gt_agg': 4,  'limit': 42},
+        'D':   {'gt_tf': 'day',    'gt_agg': 1,  'limit': 30},
     }
     tcfg = _TF.get(tf, _TF['5m'])
     try:
-        # ── Step 1: resolve pair address from DexScreener public API ──
+        # ── Step 1: resolve pool address from DexScreener ──
         r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
         pairs = r.json().get('pairs', []) if (r and r.status_code == 200) else []
         if not pairs:
             return jsonify({'candles': [], 'error': 'no pairs'})
-        pair         = pairs[0]
-        pair_address = pair.get('pairAddress', '')
-        chain_id     = pair.get('chainId', 'solana')
+        pair_address = pairs[0].get('pairAddress', '')
         if not pair_address:
             return jsonify({'candles': [], 'error': 'no pair address'})
 
-        now     = int(time.time())
-        from_ts = now - tcfg['window']
+        # ── Step 2: GeckoTerminal OHLCV ──
         candles = []
-
-        # ── Step 2: DexScreener internal chart API ──
-        if not candles:
-            try:
-                chart_url = (
-                    f'https://io.dexscreener.com/dex/chart/amm/v3/{chain_id}/{pair_address}'
-                    f'?res={tcfg["res"]}&cb=0&from={from_ts}&to={now}'
-                )
-                rc = requests.get(chart_url, timeout=10, headers={
-                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-                    'Accept':    'application/json',
-                    'Referer':   'https://dexscreener.com/',
-                    'Origin':    'https://dexscreener.com',
-                })
-                if rc.status_code == 200:
-                    data = rc.json()
-                    def _norm(t): return int(t) // 1000 if t > 1e10 else int(t)
-                    if isinstance(data, dict) and isinstance(data.get('t'), list):
-                        ts_arr = data['t']
-                        o_arr  = data.get('o', [])
-                        h_arr  = data.get('h', [])
-                        l_arr  = data.get('l', [])
-                        c_arr  = data.get('c', [])
-                        v_arr  = data.get('v', [])
-                        for i, raw_ts in enumerate(ts_arr):
-                            t_ts = _norm(raw_ts)
-                            if t_ts < from_ts: continue
-                            c_val = float(c_arr[i]) if i < len(c_arr) else 0
-                            if c_val <= 0: continue
-                            candles.append({
-                                't': t_ts,
-                                'o': float(o_arr[i]) if i < len(o_arr) else c_val,
-                                'h': float(h_arr[i]) if i < len(h_arr) else c_val,
-                                'l': float(l_arr[i]) if i < len(l_arr) else c_val,
-                                'c': c_val,
-                                'v': float(v_arr[i]) if i < len(v_arr) else 0,
-                            })
-                    elif isinstance(data, list):
-                        for c in data:
-                            if not isinstance(c, dict): continue
-                            raw_ts = c.get('time', c.get('t', 0))
-                            t_ts   = _norm(raw_ts)
-                            c_val  = float(c.get('close', c.get('c', 0)) or 0)
-                            if t_ts < from_ts or c_val <= 0: continue
-                            candles.append({
-                                't': t_ts,
-                                'o': float(c.get('open',   c.get('o', c_val)) or c_val),
-                                'h': float(c.get('high',   c.get('h', c_val)) or c_val),
-                                'l': float(c.get('low',    c.get('l', c_val)) or c_val),
-                                'c': c_val,
-                                'v': float(c.get('volume', c.get('v', 0))    or 0),
-                            })
-                else:
-                    print(f'[chart] DexScreener {rc.status_code} for {pair_address[:8]}', flush=True)
-            except Exception as e:
-                print(f'[chart] DexScreener error: {e}', flush=True)
+        try:
+            gt_url = (
+                f'https://api.geckoterminal.com/api/v2/networks/solana'
+                f'/pools/{pair_address}/ohlcv/{tcfg["gt_tf"]}'
+                f'?aggregate={tcfg["gt_agg"]}&limit={tcfg["limit"]}'
+                f'&currency=usd&token=base'
+            )
+            rg = requests.get(gt_url, timeout=10, headers={'Accept': 'application/json;version=20230302'})
+            if rg.status_code == 200:
+                items = (rg.json().get('data') or {}).get('attributes', {}).get('ohlcv_list', [])
+                for row in items:
+                    # row = [timestamp_ms, open, high, low, close, volume]
+                    if len(row) < 6: continue
+                    c_val = float(row[4] or 0)
+                    if c_val <= 0: continue
+                    candles.append({
+                        't': int(row[0]) // 1000 if int(row[0]) > 1e10 else int(row[0]),
+                        'o': float(row[1] or c_val),
+                        'h': float(row[2] or c_val),
+                        'l': float(row[3] or c_val),
+                        'c': c_val,
+                        'v': float(row[5] or 0),
+                    })
+                candles.sort(key=lambda x: x['t'])
+            else:
+                print(f'[chart] GeckoTerminal {rg.status_code} for {pair_address[:8]}', flush=True)
+        except Exception as e:
+            print(f'[chart] GeckoTerminal error: {e}', flush=True)
 
         if candles:
-            candles.sort(key=lambda x: x['t'])
-            candles = candles[-tcfg['n']:]
-
-        # ── Step 4: synthetic OHLCV fallback ──
-        if not candles:
-            print(f'[chart] using synthetic fallback for {mint[:8]}', flush=True)
-            candles = _synthetic_candles(pair, now, tcfg)
-
-        return jsonify({'candles': candles, 'pair_address': pair_address})
+            return jsonify({'candles': candles, 'pair_address': pair_address})
+        return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address})
     except Exception as e:
         print(f'[chart] unhandled error: {e}', flush=True)
         return jsonify({'candles': [], 'error': 'Chart data unavailable'})

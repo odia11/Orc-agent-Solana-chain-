@@ -249,8 +249,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .slide-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:700;color:var(--text);letter-spacing:.01em}
 .slide-chg{font-size:14px;font-weight:700;letter-spacing:.03em}
 .slide-chg.up{color:var(--green)}.slide-chg.dn{color:var(--red)}
-.slide-chart-wrap{position:relative;width:100%;height:240px;border-radius:8px;overflow:hidden;background:#0d1117;border:1px solid rgba(255,193,58,.12);margin-bottom:12px}
-.chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,193,58,.4);letter-spacing:.08em;pointer-events:none;font-family:'Share Tech Mono',monospace}
+.slide-chart-wrap{width:100%;height:252px;border-radius:8px;overflow:hidden;background:#0d1117;border:1px solid rgba(255,193,58,.12);margin-bottom:12px;display:flex;flex-direction:column}
+.chart-tf-bar{display:flex;gap:3px;padding:4px 6px;background:#0d1117;border-bottom:1px solid #1e2130;flex-shrink:0}
+.chart-tf-btn{font-family:'Share Tech Mono',monospace;font-size:9px;padding:2px 7px;background:transparent;border:1px solid rgba(255,193,58,.2);border-radius:3px;color:rgba(255,193,58,.45);cursor:pointer;transition:all .15s;letter-spacing:.04em}
+.chart-tf-btn:hover{border-color:rgba(255,193,58,.5);color:#ffc13a}
+.chart-tf-btn.active{background:rgba(255,193,58,.12);border-color:rgba(255,193,58,.55);color:#ffc13a}
+.chart-inner{position:relative;flex:1;min-height:0}
+.chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,193,58,.4);letter-spacing:.08em;font-family:'Share Tech Mono',monospace;background:#0d1117;z-index:2}
 .slide-pumping{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:#0d1117;background:#00edaa;border-radius:4px;padding:2px 7px;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
 .slide-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px}
 .slide-grid-cell{background:rgba(255,193,58,.03);border:1px solid rgba(255,193,58,.1);border-radius:6px;padding:7px 9px}
@@ -1360,7 +1365,9 @@ function _buildCarousel(tokens){
     const aiHtml      = bd.ai_reasoning
       ? `<div class="slide-ai-line"><b>AI ✦</b>${esc(bd.ai_reasoning)}</div>`
       : '';
-    const chartContent=`<div id="lw-chart-${i}" style="width:100%;height:100%"></div><div class="chart-loading" id="chartload-${i}">Loading chart...</div>`;
+    const tfs=['1m','5m','15m','1h','4h','D'];
+    const tfBtns=tfs.map(tf=>`<button class="chart-tf-btn${tf==='5m'?' active':''}" onclick="changeSlideTf(${i},'${tf}',this)">${tf}</button>`).join('');
+    const chartContent=`<div class="chart-tf-bar" id="chart-tf-${i}">${tfBtns}</div><div class="chart-inner"><div id="lw-chart-${i}" style="width:100%;height:100%"></div><div class="chart-loading" id="chartload-${i}">Loading chart…</div></div>`;
     return `<div class="carousel-slide" id="cslide-${i}">
   <div class="slide-header">
     <div class="slide-id">
@@ -1462,22 +1469,19 @@ function carouselNav(dir){ goToSlide(_carIdx+dir); }
 
 async function initSlideChart(index, mint){
   const container=document.getElementById('lw-chart-'+index);
-  if(!container||container._chart) return;  // missing or already initialized
-  if(container.clientWidth===0) return;      // not yet laid out — will retry on next goToSlide
+  if(!container) return;
+  if(container.clientWidth===0) return;
+  if(container._chart) return; // already built — TF changes go via changeSlideTf()
 
   const loadEl=document.getElementById('chartload-'+index);
   try{
+    const inner=container.closest('.chart-inner')||container.parentElement;
+    const h=inner?.clientHeight||216;
     const chart=LightweightCharts.createChart(container,{
-      width: container.clientWidth,
-      height: container.clientHeight||240,
-      layout:{
-        background:{type:'solid',color:'#0d1117'},
-        textColor:'#d1d4dc',
-      },
-      grid:{
-        vertLines:{color:'#1e2130'},
-        horzLines:{color:'#1e2130'},
-      },
+      width:container.clientWidth,
+      height:h,
+      layout:{background:{type:'solid',color:'#0d1117'},textColor:'#d1d4dc'},
+      grid:{vertLines:{color:'#1e2130'},horzLines:{color:'#1e2130'}},
       crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
       rightPriceScale:{borderColor:'#2a2e39'},
       timeScale:{borderColor:'#2a2e39',timeVisible:true,secondsVisible:false},
@@ -1487,31 +1491,66 @@ async function initSlideChart(index, mint){
     container._chart=chart;
 
     const series=chart.addCandlestickSeries({
-      upColor:'#00edaa',
-      downColor:'#ff4d6a',
+      upColor:'#26a69a',downColor:'#ef5350',
       borderVisible:false,
-      wickUpColor:'#00edaa',
-      wickDownColor:'#ff4d6a',
+      wickUpColor:'#26a69a',wickDownColor:'#ef5350',
     });
+    container._series=series;
 
-    const r=await fetch('/api/chart/'+encodeURIComponent(mint)).then(r=>r.json()).catch(()=>null);
-    if(r?.candles?.length){
-      series.setData(r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c})));
-      chart.timeScale().fitContent();
-      if(loadEl) loadEl.style.display='none';
-    } else {
-      if(loadEl) loadEl.textContent='No chart data';
-    }
+    const volSeries=chart.addHistogramSeries({
+      priceFormat:{type:'volume'},
+      priceScaleId:'vol',
+    });
+    chart.priceScale('vol').applyOptions({scaleMargins:{top:0.8,bottom:0}});
+    container._volSeries=volSeries;
 
-    // Refit on container resize (e.g. window resize)
     const ro=new ResizeObserver(()=>{
-      if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth});
+      if(container.clientWidth>0){
+        const ih=container.closest('.chart-inner')?.clientHeight||216;
+        chart.applyOptions({width:container.clientWidth,height:ih});
+      }
     });
     ro.observe(container);
-  } catch(e){
-    if(loadEl) loadEl.textContent='Chart unavailable';
+
+    await _loadChartData(index,mint,'5m',container,loadEl);
+  }catch(e){
+    _showChartUnavail(index,mint,loadEl);
     console.error('LW chart error:',e);
   }
+}
+
+async function changeSlideTf(index,tf,btn){
+  document.querySelectorAll(`#chart-tf-${index} .chart-tf-btn`).forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const container=document.getElementById('lw-chart-'+index);
+  if(!container?._series) return;
+  const mint=_carTokens[index]?.mint;
+  if(!mint) return;
+  const loadEl=document.getElementById('chartload-'+index);
+  if(loadEl){loadEl.textContent='Loading chart…';loadEl.style.display='flex';}
+  await _loadChartData(index,mint,tf,container,loadEl);
+}
+
+async function _loadChartData(index,mint,tf,container,loadEl){
+  const r=await fetch('/api/chart/'+encodeURIComponent(mint)+'?tf='+tf).then(r=>r.json()).catch(()=>null);
+  if(r?.candles?.length){
+    container._series.setData(r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c})));
+    container._volSeries.setData(r.candles.map(c=>({
+      time:c.t,value:c.v,
+      color:c.c>=c.o?'rgba(38,166,154,0.45)':'rgba(239,83,80,0.45)',
+    })));
+    container._chart.timeScale().fitContent();
+    if(loadEl) loadEl.style.display='none';
+  }else{
+    _showChartUnavail(index,mint,loadEl);
+  }
+}
+
+function _showChartUnavail(index,mint,loadEl){
+  if(!loadEl) return;
+  const addr=safeMint(mint)||mint;
+  loadEl.innerHTML=`<div style="text-align:center;pointer-events:auto"><div style="margin-bottom:8px;color:rgba(255,193,58,.5);font-size:11px">Chart unavailable</div><a href="https://dexscreener.com/solana/${addr}" target="_blank" rel="noopener" class="slide-action-btn" style="display:inline-block;pointer-events:auto">View on DexScreener ↗</a></div>`;
+  loadEl.style.display='flex';
 }
 
 function _fmtChg(v){ return (v>=0?'▲ +':'▼ −')+Math.abs(v).toFixed(2)+'%'; }
