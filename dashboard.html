@@ -491,7 +491,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
       </div>
 
-      <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="phantomKey&&launchApp()">Launch OrcAgent ▶</button>
+      <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="_launchWithTimeout()">Launch OrcAgent ▶</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
       <button class="ob-btn btn-skip" onclick="skipToApp()">Skip — browse without connecting →</button>
     </div>
@@ -1000,6 +1000,27 @@ function skipToApp(){
 }
 
 async function launchApp(){
+  // ── 1. Verify / silently restore server-side session ────────────
+  if(phantomKey){
+    try{
+      const sr = await fetch('/api/state').then(r=>r.json()).catch(()=>null);
+      if(!sr || !sr.wallet){
+        // Session expired — re-register before showing the dashboard
+        const wr = await fetch('/api/wallet/set',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({address:phantomKey})
+        }).then(r=>r.json()).catch(()=>null);
+        if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); }
+      } else {
+        // Pick up any server-side flag changes (key uploaded from another tab, etc.)
+        if(typeof sr.is_admin==='boolean') _isAdmin=sr.is_admin;
+        if(typeof sr.has_trading_key==='boolean'){ settingsHasKey=sr.has_trading_key; _updateKeyStatus(); }
+      }
+    }catch(e){}
+  }
+
+  // ── 2. Show dashboard ──────────────────────────────────────────
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
   document.getElementById('s-pos').textContent='0/3';
@@ -1009,11 +1030,9 @@ async function launchApp(){
     document.getElementById('wallet-short').textContent=short;
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
-    // Always ensure trade button is enabled when a wallet is connected
     const tbMain=document.getElementById('trade-btn');
     tbMain.disabled=false; tbMain.style.opacity=''; tbMain.title='';
     fetchBalance();
-    // Pre-load saved settings so key status is visible immediately without opening the modal
     fetch('/api/settings').then(r=>r.json()).then(r=>{
       if(r?.ok){
         settingsHasKey=r.has_trading_key||false;
@@ -1023,17 +1042,53 @@ async function launchApp(){
       }
     }).catch(()=>{});
   } else {
-    // View-only: hide trade button, show notice
     const tb=document.getElementById('trade-btn');
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   }
   updateAuthBtns();
   checkOwnerPanel();
-  _lastActivity = Date.now(); // start inactivity clock from moment of connect
+  _lastActivity = Date.now();
   await fetchState();
   fetchTrades();
   fetchCarousel();
 }
+
+// ── LAUNCH WITH 5s TIMEOUT (prevents button getting stuck) ─────────────────
+async function _launchWithTimeout(){
+  if(!phantomKey) return;
+  const btn=document.getElementById('wallet-continue-btn');
+  if(btn._launching) return;
+  btn._launching=true;
+  const origText=btn.textContent;
+  const origCss=btn.style.cssText;
+  btn.textContent='Launching…';
+  btn.style.opacity='.7';
+  try{
+    await Promise.race([launchApp(), new Promise(r=>setTimeout(r,5000))]);
+  }catch(e){}
+  btn._launching=false;
+  // If app is now showing, button is gone — nothing to restore
+  const ob=document.getElementById('onboard');
+  if(ob && ob.classList.contains('hide')) return;
+  // Timeout or failure before app showed — re-enable so user can retry
+  btn.textContent=origText; btn.style.cssText=origCss; btn.disabled=false;
+}
+
+// ── AUTO-RECONNECT ON TAB FOCUS ────────────────────────────────────────────
+document.addEventListener('visibilitychange', async function(){
+  if(document.visibilityState!=='visible'||!phantomKey) return;
+  try{
+    const sr=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
+    if(sr && !sr.wallet){
+      const wr=await fetch('/api/wallet/set',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({address:phantomKey})
+      }).then(r=>r.json()).catch(()=>null);
+      if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); }
+    }
+  }catch(e){}
+});
 
 // ── BALANCE REFRESH ──
 async function fetchBalance(){
