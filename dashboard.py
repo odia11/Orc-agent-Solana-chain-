@@ -37,12 +37,14 @@ BASE       = os.path.dirname(os.path.abspath(__file__))
 LOG_FILE   = os.path.join(BASE, 'trades.log')
 DB_FILE    = os.path.join(BASE, 'orcagent.db')
 
-WALLET_ADDRESS = os.environ.get('WALLET_ADDRESS', '')
-USDC_MINT      = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
-SOLANA_RPC     = 'https://api.mainnet-beta.solana.com'
-OWNER_WALLET   = os.environ.get('OWNER_WALLET', '')
-BIRDEYE_KEY    = os.environ.get('BIRDEYE_API_KEY', '')
-FEE_RATE       = 0.05  # 5% performance fee on profitable trades only
+WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
+USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
+OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
+BIRDEYE_KEY      = os.environ.get('BIRDEYE_API_KEY', '')
+JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
+PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
+FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
 
 # ── FERNET ENCRYPTION ──
 # ENCRYPTION_KEY must be set as an environment variable. No fallback — app refuses to start
@@ -306,34 +308,36 @@ def _run_audit() -> dict:
                             'msg': f'Unreachable — {str(e)[:60]}'})
 
     # 5. Jupiter API (swap quote endpoint — critical for trade execution)
-    _sol_mint = 'So11111111111111111111111111111111111111112'
+    _sol_mint    = 'So11111111111111111111111111111111111111112'
+    _jup_url     = (JUPITER_PROXY + '/v6/quote') if JUPITER_PROXY else 'https://quote-api.jup.ag/v6/quote'
+    _jup_headers = {'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 OrcAgent/1.0'}
+    if PROXY_SECRET:
+        _jup_headers['X-Proxy-Secret'] = PROXY_SECRET
+    _route_label = f'via proxy ({JUPITER_PROXY})' if JUPITER_PROXY else 'direct (quote-api.jup.ag)'
     try:
         jr = requests.get(
-            'https://quote-api.jup.ag/v6/quote',
+            _jup_url,
             params={
                 'inputMint':   USDC_MINT,
                 'outputMint':  _sol_mint,
                 'amount':      '1000000',
                 'slippageBps': '300',
             },
-            headers={
-                'Accept':     'application/json',
-                'User-Agent': 'Mozilla/5.0 OrcAgent/1.0',
-            },
+            headers=_jup_headers,
             timeout=8,
         )
         if jr.status_code == 200:
             checks.append({'name': 'Jupiter API', 'status': 'pass',
-                            'msg': f'quote-api.jup.ag reachable — quote returned (HTTP 200)'})
+                            'msg': f'Reachable {_route_label} — HTTP 200, quote OK'})
         elif jr.status_code == 429:
             checks.append({'name': 'Jupiter API', 'status': 'warn',
-                            'msg': 'Rate-limited by Jupiter (429) — trades may be delayed'})
+                            'msg': f'Rate-limited (429) {_route_label}'})
         else:
             checks.append({'name': 'Jupiter API', 'status': 'warn',
-                            'msg': f'quote-api.jup.ag HTTP {jr.status_code} — {jr.text[:80]}'})
+                            'msg': f'HTTP {jr.status_code} {_route_label} — {jr.text[:80]}'})
     except Exception as e:
         checks.append({'name': 'Jupiter API', 'status': 'fail',
-                        'msg': f'Unreachable — {str(e)[:80]}'})
+                        'msg': f'Unreachable {_route_label} — {str(e)[:80]}'})
 
     # 6. Birdeye API key (chart data source)
     if BIRDEYE_KEY:

@@ -18,16 +18,28 @@ SOLANA_RPCS   = [
     'https://api.mainnet-beta.solana.com',
     'https://rpc.ankr.com/solana',
 ]
-JUPITER_QUOTE = 'https://quote-api.jup.ag/v6/quote'
-JUPITER_SWAP  = 'https://quote-api.jup.ag/v6/swap'
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
-# Required by Jupiter — some endpoints 400/reject requests missing these
+# Optional proxy — set JUPITER_PROXY_URL in Railway Variables to route swap
+# calls through the Cloudflare Workers proxy in proxy/worker.js instead of
+# hitting quote-api.jup.ag directly (useful when Railway IPs are rate-limited).
+_PROXY_BASE   = os.getenv('JUPITER_PROXY_URL', '').rstrip('/')
+_PROXY_SECRET = os.getenv('JUPITER_PROXY_SECRET', '')
+_JUP_BASE     = _PROXY_BASE if _PROXY_BASE else 'https://quote-api.jup.ag'
+JUPITER_QUOTE = _JUP_BASE + '/v6/quote'
+JUPITER_SWAP  = _JUP_BASE + '/v6/swap'
+
+if _PROXY_BASE:
+    print(f'[TRADE] Using Jupiter proxy: {_PROXY_BASE}', flush=True)
+
+# Required by Jupiter (and the proxy) — some endpoints reject requests without these
 _JUP_HEADERS = {
     'Accept':       'application/json',
     'Content-Type': 'application/json',
     'User-Agent':   'Mozilla/5.0 OrcAgent/1.0',
 }
+if _PROXY_SECRET:
+    _JUP_HEADERS['X-Proxy-Secret'] = _PROXY_SECRET
 
 
 def _rpc_post(payload: dict, timeout: int = 30) -> dict:
