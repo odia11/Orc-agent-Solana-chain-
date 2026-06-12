@@ -18,6 +18,18 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 def _refresh_session():
     if session.get('wallet'):
         session.modified = True  # extend cookie lifetime on every API call
+
+@app.before_request
+def _csrf_check():
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and request.path.startswith('/api/'):
+        origin = request.headers.get('Origin', '')
+        if origin:
+            host = request.headers.get('Host', '') or ''
+            host_bare = host.split(':')[0]
+            origin_bare = origin.split('//')[-1].split(':')[0]
+            if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
+                return jsonify({'error': 'CSRF check failed'}), 403
+
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
@@ -523,17 +535,20 @@ state = {
 # ── DEXSCREENER HTTP HELPERS ──
 _DEX_HEADERS   = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
 _dex_429_until = 0.0  # epoch seconds — 0 means not in backoff
+_dex_lock      = threading.Lock()
 
 def _dex_get(url: str, timeout: int = 10):
     """GET a DexScreener URL with shared headers and 429 backoff.
     Returns the Response, or None if in backoff / request failed."""
     global _dex_429_until
-    if time.time() < _dex_429_until:
-        return None
+    with _dex_lock:
+        if time.time() < _dex_429_until:
+            return None
     try:
         r = requests.get(url, headers=_DEX_HEADERS, timeout=timeout)
         if r.status_code == 429:
-            _dex_429_until = time.time() + 60
+            with _dex_lock:
+                _dex_429_until = time.time() + 60
             add_log('DexScreener rate-limited (429) — backing off 60 s, serving cached data')
             return None
         return r
@@ -1232,6 +1247,7 @@ def _db_has_key(wallet: str) -> bool:
         return False
 
 @app.route('/api/state')
+@rate_limit(60, 60)
 def api_state():
     wallet = _current_wallet()
     if wallet:
@@ -1544,6 +1560,7 @@ def api_trades():
     return jsonify({'daily': state['daily_stats'], 'history': today_trades[-10:]})
 
 @app.route('/api/log')
+@rate_limit(30, 60)
 def api_log():
     try:
         with open(LOG_FILE, encoding='utf-8') as f:

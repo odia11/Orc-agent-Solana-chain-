@@ -14,9 +14,42 @@ TRAILING_STOP  = float(os.getenv('TRAILING_STOP', 0.03))
 INTERVAL       = int(os.getenv('INTERVAL', 60))
 
 SOLANA_RPC    = 'https://api.mainnet-beta.solana.com'
+SOLANA_RPCS   = [
+    'https://api.mainnet-beta.solana.com',
+    'https://rpc.ankr.com/solana',
+]
 JUPITER_QUOTE = 'https://quote-api.jup.ag/v6/quote'
 JUPITER_SWAP  = 'https://quote-api.jup.ag/v6/swap'
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+
+
+def _rpc_post(payload: dict, timeout: int = 30) -> dict:
+    """Try each RPC endpoint in order; return first success or raise."""
+    last_err: object = None
+    for rpc in SOLANA_RPCS:
+        try:
+            result = requests.post(rpc, json=payload, timeout=timeout).json()
+            # Retry on node-overload codes; return on any other response
+            if 'error' not in result or result['error'].get('code') not in (-32005, -32009):
+                return result
+            last_err = result
+        except Exception as e:
+            last_err = e
+    raise Exception(f'All RPC endpoints failed. Last: {last_err}')
+
+
+def get_token_decimals(mint: str) -> int:
+    """Fetch actual on-chain decimals via getTokenSupply; default 6 on error."""
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'getTokenSupply',
+            'params': [mint],
+        }, timeout=8).json()
+        return int(r['result']['value']['decimals'])
+    except Exception:
+        print(f'get_token_decimals failed for {mint[:8]}, defaulting to 6', flush=True)
+        return 6
 
 
 # ── SWAP EXECUTION ──────────────────────────────────────────────────────────
@@ -99,26 +132,22 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
         print('SWAP FAIL Step 4 (sign):\n' + traceback.format_exc(), flush=True)
         raise
 
-    # ── Step 5: Send to RPC ──────────────────────────────────────────────────
+    # ── Step 5: Send to RPC (with multi-RPC failover) ───────────────────────
     print(f'Step 5: Sending transaction to Solana RPC', flush=True)
     try:
-        rpc_resp = requests.post(
-            SOLANA_RPC,
-            json={
-                'jsonrpc': '2.0',
-                'id': 1,
-                'method': 'sendTransaction',
-                'params': [
-                    encoded,
-                    {
-                        'encoding':       'base64',
-                        'skipPreflight':  False,
-                        'maxRetries':     3,
-                    },
-                ],
-            },
-            timeout=30,
-        ).json()
+        rpc_resp = _rpc_post({
+            'jsonrpc': '2.0',
+            'id': 1,
+            'method': 'sendTransaction',
+            'params': [
+                encoded,
+                {
+                    'encoding':      'base64',
+                    'skipPreflight': False,
+                    'maxRetries':    3,
+                },
+            ],
+        }, timeout=30)
     except Exception:
         print('SWAP FAIL Step 5 (sendTransaction):\n' + traceback.format_exc(), flush=True)
         raise
@@ -145,7 +174,8 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
             sig = execute_swap(USDC_MINT, mint, lamports)
             print(f'BUY {mint[:16]} ${round(amount,2)} TX:{sig}', flush=True)
         elif action == 'sell':
-            lamports = int(amount * 1_000_000)  # assume 6 decimals for token
+            decimals = get_token_decimals(mint)
+            lamports = int(amount * (10 ** decimals))
             sig = execute_swap(mint, USDC_MINT, lamports)
             print(f'SELL {mint[:16]} amt:{round(amount,4)} TX:{sig}', flush=True)
         else:
@@ -331,16 +361,18 @@ def run():
                     if pos['amount'] > 0 and pos['buy_price'] > 0:
                         if data['price'] > pos['peak_price']: pos['peak_price'] = data['price']
                         chg = (data['price'] - pos['buy_price']) / pos['buy_price']
+                        _dec = pos.get('decimals', 6)
+                        _raw = int(pos['amount'] * (10 ** _dec))
                         if chg >= TAKE_PROFIT:
-                            sig = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            sig = execute_swap(mint, USDC_MINT, _raw)
                             print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         elif chg <= -STOP_LOSS:
-                            sig = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            sig = execute_swap(mint, USDC_MINT, _raw)
                             print(f'STOP LOSS {label} {round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         elif m5 < 5:
-                            sig = execute_swap(mint, USDC_MINT, int(pos['amount'] * 1e6))
+                            sig = execute_swap(mint, USDC_MINT, _raw)
                             print(f'MOMENTUM DIED {label} m5={round(m5,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
                         continue
@@ -349,7 +381,9 @@ def run():
                         spend = min(usdc * 0.20, MAX_USDC / 4)
                         sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print(f'BUY {label} ${round(spend,2)} score:{sc} m5:+{round(m5,1)}% TX:{sig}', flush=True)
+                        _dec              = get_token_decimals(mint)
                         pos['amount']     = spend / data['price']
+                        pos['decimals']   = _dec
                         pos['buy_price']  = data['price']
                         pos['peak_price'] = data['price']
                         usdc -= spend
