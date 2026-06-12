@@ -1433,30 +1433,31 @@ def save_settings():
         except Exception:
             return jsonify({'ok': False, 'msg': 'Failed to save private key'})
         _log_security_event('key_saved', wallet)
-    else:
-        encrypted = None  # resolved below after DB read
 
     conn = sqlite3.connect(DB_FILE)
     try:
         c   = conn.cursor()
         c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
         row = c.fetchone()
-        if encrypted is None:
-            encrypted = row[1] if row else ''
         if row:
-            if new_hash is not None:
+            if private_key_raw:
+                # New key provided — update key columns + settings
                 c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
                           (encrypted, new_hash, max_trade_size, daily_loss_limit, wallet))
+                final_enc = encrypted
             else:
-                c.execute('UPDATE users SET encrypted_private_key=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                          (encrypted, max_trade_size, daily_loss_limit, wallet))
+                # No new key — only update settings, leave encrypted_private_key untouched
+                c.execute('UPDATE users SET max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
+                          (max_trade_size, daily_loss_limit, wallet))
+                final_enc = row[1]
         else:
             c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, daily_loss_limit) VALUES (?,?,?,?,?)',
-                      (wallet, encrypted, new_hash or '', max_trade_size, daily_loss_limit))
+                      (wallet, encrypted or '', new_hash or '', max_trade_size, daily_loss_limit))
+            final_enc = encrypted or ''
         conn.commit()
     finally:
         conn.close()
-    final_has_key = bool(encrypted)
+    final_has_key = bool(final_enc)
     get_user_state(wallet)['has_trading_key'] = final_has_key
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True, 'has_trading_key': final_has_key})
