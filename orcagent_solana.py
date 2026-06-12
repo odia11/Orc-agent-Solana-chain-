@@ -63,10 +63,11 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     if not wallet_address or not private_key:
         raise ValueError('WALLET_ADDRESS and WALLET_PRIVATE_KEY must be set')
 
-    label = output_mint[:8] if input_mint == USDC_MINT else input_mint[:8]
+    label     = output_mint[:8] if input_mint == USDC_MINT else input_mint[:8]
+    direction = 'BUY' if input_mint == USDC_MINT else 'SELL'
 
     # ── Step 1: Jupiter quote ────────────────────────────────────────────────
-    print(f'Step 1: Getting quote from Jupiter for {label} amount {amount_lamports}', flush=True)
+    print(f'[TRADE] Step 1/6 — Requesting {direction} quote for {label} ({amount_lamports} lamports)', flush=True)
     try:
         r = requests.get(
             JUPITER_QUOTE,
@@ -80,20 +81,21 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
         )
         quote = r.json()
     except Exception:
-        print('SWAP FAIL Step 1 (quote GET):\n' + traceback.format_exc(), flush=True)
+        print('[TRADE] FAIL Step 1 (quote GET):\n' + traceback.format_exc(), flush=True)
         raise
 
     # ── Step 2: Validate quote ───────────────────────────────────────────────
     out_amount = quote.get('outAmount', '?')
     impact     = quote.get('priceImpactPct', '?')
-    print(f'Step 2: Quote received — outAmount={out_amount}  priceImpact={impact}%', flush=True)
+    print(f'[TRADE] Step 2/6 — Quote OK: outAmount={out_amount}  priceImpact={impact}%', flush=True)
     if 'error' in quote:
+        print(f'[TRADE] Jupiter quote error: {quote["error"]}', flush=True)
         raise Exception(f'Jupiter quote error: {quote["error"]}')
     if 'outAmount' not in quote:
         raise Exception(f'Unexpected quote response: {str(quote)[:300]}')
 
     # ── Step 3: Get swap transaction ─────────────────────────────────────────
-    print('Step 3: Getting swap transaction from Jupiter', flush=True)
+    print('[TRADE] Step 3/6 — Getting swap transaction from Jupiter', flush=True)
     try:
         r2 = requests.post(
             JUPITER_SWAP,
@@ -109,12 +111,13 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
         )
         swap_resp = r2.json()
     except Exception:
-        print('SWAP FAIL Step 3 (swap POST):\n' + traceback.format_exc(), flush=True)
+        print('[TRADE] FAIL Step 3 (swap POST):\n' + traceback.format_exc(), flush=True)
         raise
 
     swap_tx_b64 = swap_resp.get('swapTransaction')
-    print(f'Step 4: Swap transaction received — signing... (present={bool(swap_tx_b64)})', flush=True)
+    print(f'[TRADE] Step 4/6 — Signing transaction (tx present={bool(swap_tx_b64)})', flush=True)
     if 'error' in swap_resp:
+        print(f'[TRADE] Jupiter swap error: {swap_resp["error"]}', flush=True)
         raise Exception(f'Jupiter swap error: {swap_resp["error"]}')
     if not swap_tx_b64:
         raise Exception(f'No swapTransaction in response: {str(swap_resp)[:300]}')
@@ -129,11 +132,11 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
         signed_tx = VersionedTransaction(vtx.message, [keypair])
         encoded   = base64.b64encode(bytes(signed_tx)).decode()
     except Exception:
-        print('SWAP FAIL Step 4 (sign):\n' + traceback.format_exc(), flush=True)
+        print('[TRADE] FAIL Step 4 (sign):\n' + traceback.format_exc(), flush=True)
         raise
 
     # ── Step 5: Send to RPC (with multi-RPC failover) ───────────────────────
-    print(f'Step 5: Sending transaction to Solana RPC', flush=True)
+    print('[TRADE] Step 5/6 — Sending transaction to Solana RPC', flush=True)
     try:
         rpc_resp = _rpc_post({
             'jsonrpc': '2.0',
@@ -149,16 +152,17 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
             ],
         }, timeout=30)
     except Exception:
-        print('SWAP FAIL Step 5 (sendTransaction):\n' + traceback.format_exc(), flush=True)
+        print('[TRADE] FAIL Step 5 (sendTransaction):\n' + traceback.format_exc(), flush=True)
         raise
 
     # ── Step 6: Result ───────────────────────────────────────────────────────
-    print(f'Step 6: Transaction result: {rpc_resp}', flush=True)
+    print(f'[TRADE] Step 6/6 — RPC response: {rpc_resp}', flush=True)
     if 'error' in rpc_resp:
+        print(f'[TRADE] RPC ERROR: {rpc_resp["error"]}', flush=True)
         raise Exception(f'RPC sendTransaction error: {rpc_resp["error"]}')
     sig = rpc_resp.get('result')
     if sig:
-        print(f'Trade submitted: https://solscan.io/tx/{sig}', flush=True)
+        print(f'[TRADE] SUCCESS: https://solscan.io/tx/{sig}', flush=True)
         return sig
     raise Exception(f'No signature in RPC response: {rpc_resp}')
 

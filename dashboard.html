@@ -810,6 +810,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </table>
     </div>
     <div style="margin-top:16px">
+      <div class="admin-section-hdr">🧪 Test Trade <span style="font-weight:400;font-size:11px;color:var(--muted)">($1 USDC buy — verifies full on-chain path)</span></div>
+      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+        <input id="test-trade-mint" type="text" placeholder="Token mint address (e.g. EKpQGS…)" style="flex:1;min-width:280px;background:var(--bg3);border:1px solid rgba(255,77,106,.3);border-radius:7px;padding:7px 10px;color:#e8eaf0;font-size:12px;font-family:monospace">
+        <button class="bot-btn" style="background:rgba(255,193,58,.15);border-color:rgba(255,193,58,.4);color:#f0b90b;font-size:11px" onclick="runTestTrade()">⚡ Test Trade ($1)</button>
+      </div>
+      <div id="test-trade-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid rgba(0,237,170,.2);border-radius:8px;padding:12px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all;line-height:1.6;color:#a0aec0;max-height:280px;overflow-y:auto"></div>
+    </div>
+    <div style="margin-top:16px">
       <div class="admin-section-hdr">🔐 Security Log <span style="font-weight:400;font-size:11px;color:var(--muted)">(last 20 events)</span></div>
       <div class="trade-table-wrap" style="margin-top:8px">
         <table class="trade-table">
@@ -1454,6 +1462,40 @@ function checkOwnerPanel(){
     if(healthBtn) healthBtn.style.display='none';
     closeHealthPanel();
     if(_adminTimer){clearInterval(_adminTimer);_adminTimer=null;}
+  }
+}
+
+async function runTestTrade(){
+  const mint=(document.getElementById('test-trade-mint').value||'').trim();
+  const out=document.getElementById('test-trade-result');
+  if(!mint){out.style.display='block';out.textContent='⚠ Enter a token mint address first.';return;}
+  out.style.display='block';
+  out.textContent='⏳ Submitting $1 test buy… (may take up to 60s)';
+  const btn=document.querySelector('[onclick="runTestTrade()"]');
+  if(btn){btn.disabled=true;btn.textContent='Running…';}
+  try{
+    const r=await fetch('/api/admin/test_trade',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token_address:mint}),
+    }).then(r=>r.json()).catch(e=>({error:String(e)}));
+    if(r.error){out.textContent='ERROR: '+r.error;return;}
+    let txt='';
+    if(r.ok){txt+='✅ SUCCESS\n';}else{txt+='❌ FAILED (returncode='+r.returncode+')\n';}
+    if(r.solscan_url){txt+='🔗 '+r.solscan_url+'\n';}
+    txt+='⏱ '+r.elapsed_s+'s\n\n';
+    if(r.stdout){txt+='── STDOUT ──\n'+r.stdout+'\n';}
+    if(r.stderr){txt+='\n── STDERR ──\n'+r.stderr+'\n';}
+    out.textContent=txt;
+    if(r.solscan_url){
+      const a=document.createElement('a');
+      a.href=r.solscan_url;a.target='_blank';
+      a.style='display:block;color:#00edaa;margin-top:6px;font-size:11px;word-break:break-all';
+      a.textContent='Open on Solscan ↗';
+      out.appendChild(a);
+    }
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='⚡ Test Trade ($1)';}
   }
 }
 

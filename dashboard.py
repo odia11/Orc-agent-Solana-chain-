@@ -921,9 +921,9 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         )
         env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
         if result.stdout:
-            add_user_log(wallet, 'Swap: ' + result.stdout.strip()[-80:])
+            add_user_log(wallet, 'Swap: ' + result.stdout.strip()[-400:])
         if result.stderr:
-            add_user_log(wallet, 'Swap err: ' + result.stderr.strip()[-80:])
+            add_user_log(wallet, 'Swap err: ' + result.stderr.strip()[-400:])
         return result.returncode == 0 and bool(result.stdout.strip())
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
@@ -1682,6 +1682,73 @@ def admin_rotate_keys():
         'migrated': migrated,
         'failed':   failed,
         'note':     'Now update ENCRYPTION_KEY in your environment to the new key and redeploy',
+    })
+
+@app.route('/api/admin/test_trade', methods=['POST'])
+@rate_limit(3, 300)
+def admin_test_trade():
+    """Execute a $1 USDC test buy using the owner's saved trading key.
+    Returns the full subprocess stdout/stderr so you can verify the on-chain path
+    without waiting for the bot to find a signal naturally."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    token_address = ((request.json or {}).get('token_address', '') or '').strip()
+    if not token_address or not _SOLANA_ADDR_RE.match(token_address):
+        return jsonify({'error': 'token_address must be a valid Solana mint address'}), 400
+
+    # Fetch owner's encrypted key from DB
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+
+    if not row or not (row[0] or '').strip():
+        return jsonify({'error': 'No trading key saved for owner wallet — add it in Settings first'}), 400
+
+    enc_blob = row[0]
+    start_ts = time.time()
+
+    try:
+        with _use_key(enc_blob, wallet) as pk:
+            env = os.environ.copy()
+            env['WALLET_ADDRESS']     = wallet
+            env['WALLET_PRIVATE_KEY'] = pk
+            proc = subprocess.run(
+                [sys.executable, os.path.join(BASE, 'orcagent_solana.py'),
+                 'buy', token_address, '1.0'],
+                env=env, capture_output=True, text=True, timeout=60,
+            )
+            env['WALLET_PRIVATE_KEY'] = ''
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+    elapsed = round(time.time() - start_ts, 2)
+    stdout  = proc.stdout.strip()
+    stderr  = proc.stderr.strip()
+
+    # Extract Solscan URL from output if present
+    solscan_url = ''
+    for line in stdout.splitlines():
+        if 'solscan.io/tx/' in line:
+            idx = line.find('https://')
+            if idx >= 0:
+                solscan_url = line[idx:].strip()
+                break
+
+    _log_security_event('key_access', wallet, f'test_trade {token_address[:8]}')
+
+    return jsonify({
+        'ok':         proc.returncode == 0 and bool(solscan_url),
+        'returncode': proc.returncode,
+        'stdout':     stdout,
+        'stderr':     stderr,
+        'solscan_url': solscan_url,
+        'elapsed_s':  elapsed,
     })
 
 # ── STARTUP ──
