@@ -569,8 +569,9 @@ state = {
 
 # ── DEXSCREENER HTTP HELPERS ──
 _DEX_HEADERS   = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
-_dex_429_until = 0.0  # epoch seconds — 0 means not in backoff
-_dex_lock      = threading.Lock()
+_dex_429_until  = 0.0  # epoch seconds — 0 means not in backoff
+_dex_lock       = threading.Lock()
+_last_good_mints: list = []  # last non-empty result from discover_tokens()
 
 def _dex_get(url: str, timeout: int = 10):
     """GET a DexScreener URL with shared headers and 429 backoff.
@@ -931,11 +932,26 @@ def totd_loop():
         time.sleep(TOTD_INTERVAL)
 
 def token_loop():
+    global _last_good_mints
     while True:
         try:
-            mints      = discover_tokens()
+            mints = discover_tokens()
+            if mints:
+                _last_good_mints = list(mints)
+                add_log('Scanning ' + str(len(mints)) + ' tokens...')
+            elif _last_good_mints:
+                with _dex_lock:
+                    in_backoff = time.time() < _dex_429_until
+                if in_backoff:
+                    add_log('DexScreener rate limited — using last ' + str(len(_last_good_mints)) + ' known tokens')
+                else:
+                    add_log('Scanning ' + str(len(_last_good_mints)) + ' tokens (cached)...')
+                mints = _last_good_mints
+            else:
+                # No data at all yet — skip cycle silently
+                time.sleep(120)
+                continue
             total_disc = len(mints)
-            add_log('Scanning ' + str(total_disc) + ' tokens...')
             all_tokens = []
             for i, mint in enumerate(mints):
                 if i > 0:
@@ -1155,8 +1171,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                 open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
                 us_usdc  = _get_user_usdc(wallet)
                 total_live = len(live)
-                add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                             ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                if total_live == 0:
+                    add_user_log(wallet, '[' + short + '] Waiting for token data... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                else:
+                    add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
+                                 ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
 
                 # ── Pass 1: exit checks for all open positions ──
                 for t in live:
