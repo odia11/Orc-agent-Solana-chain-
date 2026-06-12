@@ -21,16 +21,18 @@ SOLANA_RPCS   = [
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 
 # Optional proxy — set JUPITER_PROXY_URL in Railway Variables to route swap
-# calls through the Cloudflare Workers proxy in proxy/worker.js instead of
-# hitting quote-api.jup.ag directly (useful when Railway IPs are rate-limited).
+# calls through the Cloudflare Workers proxy in proxy/worker.js.
+# Proxy routes: /quote → api.jup.ag/swap/v1/quote, /swap → api.jup.ag/swap/v1/swap
 _PROXY_BASE   = os.getenv('JUPITER_PROXY_URL', '').rstrip('/')
 _PROXY_SECRET = os.getenv('JUPITER_PROXY_SECRET', '')
-_JUP_BASE     = _PROXY_BASE if _PROXY_BASE else 'https://quote-api.jup.ag'
-JUPITER_QUOTE = _JUP_BASE + '/v6/quote'
-JUPITER_SWAP  = _JUP_BASE + '/v6/swap'
 
 if _PROXY_BASE:
+    JUPITER_QUOTE = _PROXY_BASE + '/quote'
+    JUPITER_SWAP  = _PROXY_BASE + '/swap'
     print(f'[TRADE] Using Jupiter proxy: {_PROXY_BASE}', flush=True)
+else:
+    JUPITER_QUOTE = 'https://api.jup.ag/swap/v1/quote'
+    JUPITER_SWAP  = 'https://api.jup.ag/swap/v1/swap'
 
 # Required by Jupiter (and the proxy) — some endpoints reject requests without these
 _JUP_HEADERS = {
@@ -84,6 +86,15 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
 
     label     = output_mint[:8] if input_mint == USDC_MINT else input_mint[:8]
     direction = 'BUY' if input_mint == USDC_MINT else 'SELL'
+
+    # Keypair created here so pubkey is derived from the actual signing key
+    # and can be passed to the swap body before signing in Step 4.
+    try:
+        keypair = Keypair.from_base58_string(private_key)
+        pubkey  = str(keypair.pubkey())
+    except Exception:
+        print('[TRADE] FAIL — invalid private key:\n' + traceback.format_exc(), flush=True)
+        raise
 
     # ── Step 1: Jupiter quote ────────────────────────────────────────────────
     print(f'[TRADE] Step 1/6 — Requesting {direction} quote for {label} ({amount_lamports} lamports)', flush=True)
@@ -141,10 +152,10 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
                 JUPITER_SWAP,
                 json={
                     'quoteResponse':             quote,
-                    'userPublicKey':             wallet_address,
+                    'userPublicKey':             pubkey,
                     'wrapAndUnwrapSol':          True,
                     'dynamicComputeUnitLimit':   True,
-                    'prioritizationFeeLamports': 1000,
+                    'prioritizationFeeLamports': 'auto',
                 },
                 headers=_JUP_HEADERS,
                 timeout=20,
@@ -183,7 +194,6 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     # ── Step 4: Decode + sign ────────────────────────────────────────────────
     try:
         tx_bytes  = base64.b64decode(swap_tx_b64)
-        keypair   = Keypair.from_base58_string(private_key)
         vtx       = VersionedTransaction.from_bytes(tx_bytes)
         # VersionedTransaction(message, [keypair]) is the correct sign pattern;
         # mutating vtx.signatures[0] is silently ignored (immutable Rust binding).

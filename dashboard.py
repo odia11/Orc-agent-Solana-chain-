@@ -309,7 +309,7 @@ def _run_audit() -> dict:
 
     # 5. Jupiter API (swap quote endpoint — critical for trade execution)
     _sol_mint    = 'So11111111111111111111111111111111111111112'
-    _jup_url     = (JUPITER_PROXY + '/v6/quote') if JUPITER_PROXY else 'https://quote-api.jup.ag/v6/quote'
+    _jup_url     = (JUPITER_PROXY + '/quote') if JUPITER_PROXY else 'https://api.jup.ag/swap/v1/quote'
     _jup_headers = {'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 OrcAgent/1.0'}
     if PROXY_SECRET:
         _jup_headers['X-Proxy-Secret'] = PROXY_SECRET
