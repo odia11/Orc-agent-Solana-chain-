@@ -355,7 +355,7 @@ def get_token_data(mint: str):
 
 
 def score_token(data: dict) -> float:
-    """Score 0–10. Momentum-focused: ≥4 = BUY signal."""
+    """Score 0–10. Momentum-focused: ≥6 = BUY signal."""
     if data.get('price', 0) <= 0: return 0
     score = 0.0
     m5    = data.get('change5m', 0)

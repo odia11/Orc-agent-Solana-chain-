@@ -1010,9 +1010,9 @@ def token_loop():
                         bd['confidence'] = round(sc / 10 * 100)
                 # Re-sort after AI adjustments
                 display.sort(key=lambda t: t['score'], reverse=True)
-            qualifying = [t for t in display if t['score'] >= 4]
+            qualifying = [t for t in display if t['score'] >= 6]
             state['tokens'] = display
-            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥4) — '
+            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥6) — '
                     + ('best: ' + display[0]['symbol'] + ' ' + str(display[0]['score']) + '/10'
                        if display else 'no tokens'))
         except: pass
@@ -1155,7 +1155,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_user_log(wallet, '[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥4')
+    add_user_log(wallet, '[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥6')
     positions = us['positions']
 
     try:
@@ -1251,9 +1251,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                 # ── Pass 2: pick the single best entry ──
                 if not stop_event.is_set() and open_pos < 3 and us_usdc > 1:
                     not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
-                    qualifying = [t for t in not_held if t['score'] >= 4]
+                    qualifying = [t for t in not_held if t['score'] >= 6]
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (score≥4)')
+                                 str(total_live) + ' qualify (score≥6)')
                     if qualifying:
                         best  = qualifying[0]  # list is sorted by score desc
                         bmint = best['mint']
