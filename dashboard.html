@@ -873,6 +873,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="adash-health-grid" id="ad-health-grid">
           <div style="text-align:center;color:var(--muted);grid-column:1/-1;padding:16px">Loading…</div>
         </div>
+        <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+          <button id="test-ai-btn" onclick="testAIKey()" style="background:rgba(255,193,58,.12);border:1px solid rgba(255,193,58,.4);border-radius:7px;padding:6px 16px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer">⚡ Test AI Key</button>
+          <span id="test-ai-result" style="font-size:11px;color:var(--muted)"></span>
+        </div>
       </div>
       <!-- Security pane -->
       <div id="adpane-security" style="display:none">
@@ -1739,7 +1743,7 @@ async function fetchAdminHealth(){
     ['Total Users', r.total_users, ''],
     ['DB Size', r.db_size_kb+' KB', ''],
     ['AI Cache', r.ai_cache_size+' entries', ''],
-    ['AI Key', r.ai_key_invalid?'✗ Invalid':(r.anthropic_key?'✓ Set':'✗ Not set'), r.ai_key_invalid?'bad':(r.anthropic_key?'ok':'warn')],
+    ['AI Key', r.ai_disabled?'⏸ Disabled (1h backoff)':(r.anthropic_key?'✓ Set':'✗ Not set'), r.ai_disabled?'warn':(r.anthropic_key?'ok':'warn')],
     ['DexScreener', r.dex_rate_limited?'⚠ Rate Limited':'✓ OK', r.dex_rate_limited?'warn':'ok'],
     ['Jupiter Proxy', r.jupiter_proxy?'✓ Configured':'— Direct', r.jupiter_proxy?'ok':''],
     ['Owner Wallet', r.owner_configured?'✓ Set':'✗ Not set', r.owner_configured?'ok':'bad'],
@@ -1750,6 +1754,23 @@ async function fetchAdminHealth(){
       <span class="adash-health-key">${esc(String(k))}</span>
       <span class="adash-health-val ${c==='ok'?'adash-ok':c==='warn'?'adash-warn':c==='bad'?'adash-bad':''}">${esc(String(v))}</span>
     </div>`).join('');
+}
+
+async function testAIKey(){
+  const btn=document.getElementById('test-ai-btn');
+  const out=document.getElementById('test-ai-result');
+  if(btn){btn.disabled=true;btn.textContent='Testing…';}
+  out.textContent='';
+  try{
+    const r=await fetch('/api/admin/test',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
+    if(!r){out.style.color='var(--red)';out.textContent='Request failed';return;}
+    const ai=r.ai||{};
+    out.style.color=ai.ok?'var(--green)':'var(--red)';
+    out.textContent=ai.msg||'No response';
+    if(ai.ok) _adminTabLoaded['health']=false; // refresh health grid to clear backoff status
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='⚡ Test AI Key';}
+  }
 }
 
 async function fetchAdminSecurity(){

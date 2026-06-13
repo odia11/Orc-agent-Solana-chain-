@@ -755,56 +755,56 @@ def get_token_data(mint):
     except: return None
 
 _ai_cache: dict = {}
-_AI_CACHE_TTL    = 300   # seconds — cache per-token AI analysis for 5 min
-_ai_key_invalid  = False  # set True on first 401 so we stop hammering a bad key
+_AI_CACHE_TTL      = 300   # seconds — cache per-token AI signal for 5 min
+_ai_disabled_until = 0.0   # epoch — set to now+3600 on 401, resets automatically
+
+_ANTHROPIC_URL     = 'https://api.anthropic.com/v1/messages'
+_ANTHROPIC_HEADERS = {'anthropic-version': '2023-06-01', 'content-type': 'application/json'}
 
 def get_ai_signal(token_data: dict, mint: str) -> tuple:
-    """Returns (bonus_pts 0–2.0, one-line reasoning). Requires ANTHROPIC_API_KEY.
-    Result is cached per mint for _AI_CACHE_TTL seconds to avoid excess API calls."""
-    global _ai_key_invalid
-    if not ANTHROPIC_API_KEY or _ai_key_invalid:
+    """Returns (bonus_pts 0–2.0, text). Direct REST call — no SDK dependency.
+    Caches per mint for _AI_CACHE_TTL seconds to avoid hammering the API."""
+    global _ai_disabled_until
+    if not ANTHROPIC_API_KEY:
         return 0.0, ''
-    now    = time.time()
+    now = time.time()
+    if now < _ai_disabled_until:
+        return 0.0, ''
     cached = _ai_cache.get(mint)
     if cached and now - cached['ts'] < _AI_CACHE_TTL:
         return cached['score'], cached['reasoning']
     try:
-        import anthropic as _ant
-        client = _ant.Anthropic(api_key=ANTHROPIC_API_KEY)
         prompt = (
-            'Analyze this Solana meme coin for a 5-30 min momentum trade.\n'
-            f'5m change:    {token_data.get("change5m", 0):.1f}%\n'
-            f'1h change:    {token_data.get("change1h", 0):.1f}%\n'
-            f'6h change:    {token_data.get("change6h", 0):.1f}%\n'
-            f'Volume 5m:   ${token_data.get("volume5m", 0):,.0f}\n'
-            f'Volume 1h:   ${token_data.get("volume1h", 0):,.0f}\n'
-            f'Liquidity:   ${token_data.get("liquidity", 0):,.0f}\n'
-            f'Buy pressure: {token_data.get("_buy_pct", 50):.0f}%\n'
-            f'Base score:   {token_data.get("_base_score", 0)}/10\n'
-            'Reply with valid JSON only, no other text: '
-            '{"score":5,"reasoning":"one sentence max 12 words","signal":"BUY"}'
+            f'price: ${token_data.get("price", 0)}, '
+            f'm5: {token_data.get("change5m", 0):.1f}%, '
+            f'1h: {token_data.get("change1h", 0):.1f}%, '
+            f'liq: ${token_data.get("liquidity", 0):,.0f}, '
+            f'Buys: {token_data.get("txns24h_buys", 0)}, '
+            f'Sells: {token_data.get("txns24h_sells", 0)}. '
+            'Reply with just a number 1-10.'
         )
-        msg  = client.messages.create(
-            model='claude-haiku-4-5-20251001',
-            max_tokens=80,
-            messages=[{'role': 'user', 'content': prompt}],
+        resp = requests.post(
+            _ANTHROPIC_URL,
+            headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+            json={'model': 'claude-haiku-4-5-20251001', 'max_tokens': 10,
+                  'messages': [{'role': 'user', 'content': prompt}]},
+            timeout=10,
         )
-        text = msg.content[0].text.strip() if msg.content else ''
-        if not text:
+        if resp.status_code == 401:
+            _ai_disabled_until = now + 3600  # 1-hour backoff, not permanent
+            add_log('AI signals disabled - check ANTHROPIC_API_KEY')
             _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
             return 0.0, ''
-        parsed = json.loads(text)
-        ai_raw = float(parsed.get('score', 5))
-        reason = str(parsed.get('reasoning', ''))[:100]
+        if resp.status_code == 429:
+            _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
+            return 0.0, ''
+        resp.raise_for_status()
+        text   = ((resp.json().get('content') or [{}])[0].get('text') or '').strip()
+        ai_raw = max(1.0, min(10.0, float(text.split()[0])))
         bonus  = round(max(0.0, min(2.0, (ai_raw - 5) / 5 * 2)), 1)
-        _ai_cache[mint] = {'score': bonus, 'reasoning': reason, 'ts': now}
-        return bonus, reason
-    except Exception as e:
-        e_str = str(e)
-        if '401' in e_str or 'authentication' in e_str.lower():
-            _ai_key_invalid = True
-            add_log('AI signal: invalid API key — AI bonus disabled')
-        # 429 rate limit, JSON parse errors, network issues: silent, just skip bonus
+        _ai_cache[mint] = {'score': bonus, 'reasoning': text[:40], 'ts': now}
+        return bonus, text[:40]
+    except Exception:
         _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
         return 0.0, ''
 
@@ -1933,7 +1933,7 @@ def admin_health():
             'total_users':      total_users,
             'db_size_kb':       db_size_kb,
             'ai_cache_size':    len(_ai_cache),
-            'ai_key_invalid':   _ai_key_invalid,
+            'ai_disabled':      time.time() < _ai_disabled_until,
             'dex_rate_limited': dex_limited,
             'sec_events_1h':    sec_events_1h,
             'owner_configured': bool(OWNER_WALLET),
@@ -1942,6 +1942,40 @@ def admin_health():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/test', methods=['POST'])
+@rate_limit(5, 60)
+def admin_test():
+    """Test live connectivity for Claude API and other integrations."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    results = {}
+    # ── Claude API ──
+    if ANTHROPIC_API_KEY:
+        try:
+            resp = requests.post(
+                _ANTHROPIC_URL,
+                headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+                json={'model': 'claude-haiku-4-5-20251001', 'max_tokens': 5,
+                      'messages': [{'role': 'user', 'content': 'Reply with just: ok'}]},
+                timeout=10,
+            )
+            if resp.status_code == 200:
+                results['ai'] = {'ok': True,  'msg': 'Claude API key is valid ✓'}
+                global _ai_disabled_until
+                _ai_disabled_until = 0.0  # clear any backoff
+            elif resp.status_code == 401:
+                results['ai'] = {'ok': False, 'msg': 'Invalid API key (401)'}
+            elif resp.status_code == 429:
+                results['ai'] = {'ok': False, 'msg': 'Rate limited — key is valid but quota hit (429)'}
+            else:
+                results['ai'] = {'ok': False, 'msg': f'Unexpected HTTP {resp.status_code}'}
+        except Exception as e:
+            results['ai'] = {'ok': False, 'msg': str(e)[:100]}
+    else:
+        results['ai'] = {'ok': False, 'msg': 'ANTHROPIC_API_KEY not set in environment'}
+    return jsonify(results)
 
 @app.route('/api/admin/rotate_keys', methods=['POST'])
 @rate_limit(1, 300)
