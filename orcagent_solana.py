@@ -9,9 +9,8 @@ WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 PRIVATE_KEY    = os.getenv('WALLET_PRIVATE_KEY', '')
 MAX_USDC       = float(os.getenv('MAX_USDC', 50))
 MIN_USDC       = float(os.getenv('MIN_USDC', 1))
-STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.03))
-TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.25))
-TRAILING_STOP  = float(os.getenv('TRAILING_STOP', 0.03))
+STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.05))
+TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.20))
 INTERVAL       = int(os.getenv('INTERVAL', 30))
 
 SOLANA_RPC    = 'https://api.mainnet-beta.solana.com'
@@ -429,26 +428,21 @@ def run():
                     label = token['label']
                     m5    = data['change5m']
                     if mint not in positions:
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0}
+                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0}
                     pos = positions[mint]
 
                     if pos['amount'] > 0 and pos['buy_price'] > 0:
-                        if data['price'] > pos['peak_price']: pos['peak_price'] = data['price']
                         chg = (data['price'] - pos['buy_price']) / pos['buy_price']
                         _dec = pos.get('decimals', 6)
                         _raw = int(pos['amount'] * (10 ** _dec))
                         if chg >= TAKE_PROFIT:
                             sig = execute_swap(mint, USDC_MINT, _raw)
                             print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
-                            pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
+                            pos['amount'] = pos['buy_price'] = 0.0
                         elif chg <= -STOP_LOSS:
                             sig = execute_swap(mint, USDC_MINT, _raw)
                             print(f'STOP LOSS {label} {round(chg*100,1)}% TX:{sig}', flush=True)
-                            pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
-                        elif m5 < 5:
-                            sig = execute_swap(mint, USDC_MINT, _raw)
-                            print(f'MOMENTUM DIED {label} m5={round(m5,1)}% TX:{sig}', flush=True)
-                            pos['amount'] = pos['buy_price'] = pos['peak_price'] = 0.0
+                            pos['amount'] = pos['buy_price'] = 0.0
                         continue
 
                     open_count = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
@@ -460,10 +454,9 @@ def run():
                         sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print(f'BUY {label} ${round(spend,2)} score:{sc} pct:{int(trade_pct*100)}% m5:+{round(m5,1)}% TX:{sig}', flush=True)
                         _dec              = get_token_decimals(mint)
-                        pos['amount']     = spend / data['price']
-                        pos['decimals']   = _dec
-                        pos['buy_price']  = data['price']
-                        pos['peak_price'] = data['price']
+                        pos['amount']    = spend / data['price']
+                        pos['decimals']  = _dec
+                        pos['buy_price'] = data['price']
                         usdc -= spend
                 except Exception as e:
                     print(f'{token["label"]} error: {traceback.format_exc()}', flush=True)

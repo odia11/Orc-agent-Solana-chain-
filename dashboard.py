@@ -1220,56 +1220,15 @@ def user_trader_loop(stop_event, config, wallet: str):
                     pos   = positions.get(mint, {})
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
-                    m5    = t.get('change5m', 0)
                     label = t['symbol'] or mint[:8]
                     price = t['price']
-                    bd    = t.get('breakdown', {})
-                    buy_pres = bd.get('buy_pressure', 50)
-
-                    if price > pos.get('peak_price', price): pos['peak_price'] = price
-                    chg          = (price - pos['buy_price']) / pos['buy_price']
-                    peak         = pos.get('peak_price', price)
-                    trail_drop   = (peak - price) / peak if peak > 0 else 0
-
-                    # Dynamic stop level: rises as position profits
-                    if   chg >= 0.20: stop_level = 0.10   # lock in +10% after +20%
-                    elif chg >= 0.10: stop_level = 0.00   # move to breakeven after +10%
-                    else:             stop_level = -0.03  # normal 3% stop loss
-
-                    if chg >= 0.10: pos['was_up_10'] = True
-
-                    # ── Partial profit take at +20% (once per position) ──
-                    if chg >= 0.20 and not pos.get('partial_taken') and pos.get('amount', 0) > 0:
-                        half = round(pos['amount'] * 0.5, 6)
-                        add_user_log(wallet, '[' + short + '] PARTIAL EXIT +' + str(round(chg*100,1)) + '% — selling 50% of ' + label)
-                        with _use_key(_enc_blob, wallet) as _pk:
-                            part_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(half))
-                        if part_ok:
-                            with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], price,
-                                                   half, pos['spend'] * 0.5, wallet=wallet, private_key=_pk)
-                            pos['amount'] *= 0.5
-                            pos['spend']  *= 0.5
-                            pos['buy_price']     = price   # reset entry for trailing
-                            pos['partial_taken'] = True
-                        continue
+                    chg   = (price - pos['buy_price']) / pos['buy_price']
 
                     exit_reason = None
-                    if chg <= stop_level:
-                        if stop_level == 0.10:
-                            exit_reason = 'PROFIT LOCK +' + str(round(chg*100,1)) + '%'
-                        elif stop_level == 0.00:
-                            exit_reason = 'BREAKEVEN STOP ' + str(round(chg*100,1)) + '%'
-                        else:
-                            exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
-                    elif chg >= 0.25:
+                    if chg >= 0.20:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
-                    elif chg > 0 and trail_drop >= 0.07:
-                        exit_reason = 'TRAILING STOP (peak was +' + str(round((peak/pos['buy_price']-1)*100,1)) + '%)'
-                    elif buy_pres < 40 and chg < 0.05:
-                        exit_reason = 'BUY PRESSURE DIED (' + str(buy_pres) + '%)'
-                    elif m5 < 5 and chg < 0:
-                        exit_reason = 'MOMENTUM DIED (m5=' + str(round(m5,1)) + '%)'
+                    elif chg <= -0.05:
+                        exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
 
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
@@ -1281,7 +1240,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
+                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
 
                 # ── Pass 2: pick the single best entry ──
@@ -1303,7 +1262,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         spend = round(us_usdc * trade_pct, 2)
                         if spend >= 0.01:
                             if bmint not in positions:
-                                positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
+                                positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
 
                             # Entry timing: if token is very extended (m5 > 30%), wait for 2-5% pullback
@@ -1328,7 +1287,6 @@ def user_trader_loop(stop_event, config, wallet: str):
                                         _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
                                     pos['amount']     = spend / best['price']
                                     pos['buy_price']  = best['price']
-                                    pos['peak_price'] = best['price']
                                     pos['spend']      = spend
                                 elif pos.get('entry_wait_count', 0) >= 5 or dip > 0.05:
                                     # Timed out or ran away — cancel wait
@@ -1342,7 +1300,6 @@ def user_trader_loop(stop_event, config, wallet: str):
                                     _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
                                 pos['amount']     = spend / best['price']
                                 pos['buy_price']  = best['price']
-                                pos['peak_price'] = best['price']
                                 pos['spend']      = spend
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
