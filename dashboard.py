@@ -210,7 +210,12 @@ def rate_limit(limit: int, window: int = 60, ban: bool = False):
             key = f.__name__ + ':' + ip
             if not _rate_ok(key, limit, window):
                 if ban:
-                    _record_ip_failure(ip)  # 3 overages → 1-hour IP ban
+                    # Only ban for extreme volume — 100+ req/min on this endpoint
+                    _now = time.time()
+                    with _rl_lock:
+                        _recent = len([t for t in _rl_hits.get(key, []) if _now - t < 60])
+                    if _recent >= 100:
+                        _record_ip_failure(ip)
                 return jsonify({'ok': False, 'msg': 'Too many requests — slow down'}), 429
             return f(*args, **kwargs)
         return wrapped
@@ -501,7 +506,7 @@ def init_db():
 # Matches base58 strings 87-88 chars long — Solana private key length.
 # Also matches TX signatures; actively block only on key-sensitive API paths.
 _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
-_SENSITIVE_PATHS = {'/api/settings', '/api/state', '/api/trader/start', '/api/trader/stop'}
+_SENSITIVE_PATHS = {'/api/settings'}  # only endpoints that could ever return key material
 
 def _log_security_event(event_type: str, wallet: str, details: str = '') -> None:
     short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
@@ -1559,7 +1564,7 @@ def _db_has_key(wallet: str) -> bool:
         return False
 
 @app.route('/api/state')
-@rate_limit(10, 60, ban=True)
+@rate_limit(60, 60, ban=True)
 def api_state():
     wallet = _current_wallet()
     if wallet:
