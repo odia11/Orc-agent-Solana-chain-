@@ -217,6 +217,33 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .admin-row:last-child{margin-bottom:0}
 .admin-stat-lbl{font-size:10px;color:var(--dim)}
 .admin-stat-val{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:#ff9a6c;white-space:nowrap}
+/* ── ADMIN DASHBOARD VIEW ── */
+.adash-wrap{border:2px solid rgba(255,193,58,.5);border-radius:12px;padding:20px;background:var(--bg2);box-shadow:0 0 0 1px rgba(255,193,58,.1),0 4px 32px rgba(255,193,58,.08);margin-bottom:1.5rem}
+.adash-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(255,193,58,.25)}
+.adash-title{font-family:'Orbitron',monospace;font-size:14px;font-weight:900;color:#f0b90b;letter-spacing:.05em}
+.adash-back-btn{background:transparent;border:1px solid rgba(255,193,58,.35);border-radius:6px;padding:5px 14px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .15s}
+.adash-back-btn:hover{background:rgba(255,193,58,.1)}
+.adash-overview{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:16px}
+@media(max-width:640px){.adash-overview{grid-template-columns:repeat(2,1fr)}}
+.adash-stat-card{background:var(--bg3);border:1px solid rgba(255,193,58,.2);border-radius:9px;padding:12px 14px}
+.adash-stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.adash-stat-val{font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:#f0b90b}
+.adash-tabs{display:flex;gap:6px;margin-bottom:14px;flex-wrap:wrap}
+.adash-tab{background:transparent;border:1px solid rgba(255,193,58,.25);border-radius:6px;padding:5px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
+.adash-tab:hover,.adash-tab.active{border-color:#f0b90b;color:#f0b90b;background:rgba(255,193,58,.08)}
+.adash-section-hdr{font-size:9px;color:#f0b90b;text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid rgba(255,193,58,.2)}
+.adash-table-wrap{overflow-x:auto;border:1px solid rgba(255,193,58,.15);border-radius:8px}
+.adash-table{width:100%;border-collapse:collapse;font-size:11px;min-width:400px}
+.adash-table th{padding:8px 12px;text-align:left;color:#f0b90b;font-size:9px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid rgba(255,193,58,.2);background:rgba(255,193,58,.04);white-space:nowrap}
+.adash-table td{padding:7px 12px;border-bottom:1px solid rgba(255,193,58,.07);color:var(--dim)}
+.adash-table tr:last-child td{border-bottom:none}
+.adash-table tr:hover td{background:rgba(255,193,58,.03)}
+.adash-health-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+@media(max-width:500px){.adash-health-grid{grid-template-columns:1fr}}
+.adash-health-item{background:var(--bg3);border:1px solid rgba(255,193,58,.15);border-radius:8px;padding:9px 14px;display:flex;justify-content:space-between;align-items:center}
+.adash-health-key{font-size:10px;color:var(--muted)}
+.adash-health-val{font-family:'Share Tech Mono',monospace;font-size:11px;color:#f0b90b}
+.adash-ok{color:var(--green)!important}.adash-warn{color:var(--yellow)!important}.adash-bad{color:var(--red)!important}
 .pos-panel .panel-hdr{border-bottom:1px solid rgba(0,237,170,.12);padding-bottom:8px;margin-bottom:10px}
 .trade-table-wrap{overflow-x:auto;border:1px solid var(--border);border-radius:8px}
 .trade-table{width:100%;border-collapse:collapse;font-size:10px;min-width:420px}
@@ -631,11 +658,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
         <span class="health-dot" id="health-dot"></span>HEALTH
       </button>
+      <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:rgba(255,193,58,.4);color:#f0b90b" title="Owner admin dashboard">👑 Admin</button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
     </div>
   </div>
+
+  <!-- ── MAIN DASHBOARD ── -->
+  <div id="dash-main">
 
   <!-- WELCOME BANNER -->
   <div id="welcome-banner" class="welcome-banner hide">
@@ -769,78 +800,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- OWNER ADMIN PANEL (hidden until owner wallet connects) -->
-  <div class="admin-panel" id="admin-panel" style="display:none">
-    <div class="panel-hdr">⚙ Owner Dashboard</div>
-    <div class="admin-owner-warn" id="admin-owner-warn">
-      ⚠️ <strong>OWNER_WALLET is not set</strong> — is_admin will never be true for any user.<br>
-      Set <code>OWNER_WALLET</code> in your Railway environment variables and redeploy.
-    </div>
-    <div class="admin-stats">
-      <div class="admin-section">
-        <div class="admin-section-hdr">👤 User Stats</div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">Total registered</span>
-          <span class="admin-stat-val" id="a-users">0</span>
-        </div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">With trading key</span>
-          <span class="admin-stat-val" id="a-users-key">0</span>
-        </div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">Currently trading</span>
-          <span class="admin-stat-val" id="a-users-trading">0</span>
-        </div>
-      </div>
-      <div class="admin-section">
-        <div class="admin-section-hdr">📊 Trading Stats</div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">Trades today</span>
-          <span class="admin-stat-val" id="a-trades-today">0</span>
-        </div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">Trades all time</span>
-          <span class="admin-stat-val" id="a-trades">0</span>
-        </div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">Fees today</span>
-          <span class="admin-stat-val" id="a-fees-today">$0.00</span>
-        </div>
-        <div class="admin-row">
-          <span class="admin-stat-lbl">Fees all time</span>
-          <span class="admin-stat-val" id="a-fees-total">$0.00</span>
-        </div>
-      </div>
-    </div>
-    <div class="trade-table-wrap">
-      <table class="trade-table">
-        <thead><tr><th>Timestamp</th><th>User</th><th>Token</th><th>Gross Profit</th><th>Fee (5%)</th><th>TX</th></tr></thead>
-        <tbody id="admin-fee-tbody">
-          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No fees collected yet</td></tr>
-        </tbody>
-      </table>
-    </div>
-    <div style="margin-top:16px">
-      <div class="admin-section-hdr">🧪 Test Trade <span style="font-weight:400;font-size:11px;color:var(--muted)">($1 USDC buy — verifies full on-chain path)</span></div>
-      <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-        <input id="test-trade-mint" type="text" placeholder="Token mint address (e.g. EKpQGS…)" style="flex:1;min-width:280px;background:var(--bg3);border:1px solid rgba(255,77,106,.3);border-radius:7px;padding:7px 10px;color:#e8eaf0;font-size:12px;font-family:monospace">
-        <button class="bot-btn" style="background:rgba(255,193,58,.15);border-color:rgba(255,193,58,.4);color:#f0b90b;font-size:11px" onclick="runTestTrade()">⚡ Test Trade ($1)</button>
-      </div>
-      <div id="test-trade-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid rgba(0,237,170,.2);border-radius:8px;padding:12px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all;line-height:1.6;color:#a0aec0;max-height:280px;overflow-y:auto"></div>
-    </div>
-    <div style="margin-top:16px">
-      <div class="admin-section-hdr">🔐 Security Log <span style="font-weight:400;font-size:11px;color:var(--muted)">(last 20 events)</span></div>
-      <div class="trade-table-wrap" style="margin-top:8px">
-        <table class="trade-table">
-          <thead><tr><th>Timestamp</th><th>Event</th><th>Wallet</th><th>IP</th><th>Details</th></tr></thead>
-          <tbody id="admin-sec-tbody">
-            <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No security events yet</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <!-- ACTIVITY LOG -->
   <div class="panels" style="grid-template-columns:1fr">
     <div class="panel">
@@ -856,6 +815,85 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <button class="bot-btn" onclick="window.open('https://jup.ag','_blank')">Jupiter ↗</button>
     <button class="bot-btn" onclick="window.open('https://dexscreener.com','_blank')">DexScreener ↗</button>
   </div>
+
+  </div><!-- /dash-main -->
+
+  <!-- ── ADMIN DASHBOARD VIEW (toggled by 👑 Admin button) ── -->
+  <div id="dash-admin" style="display:none">
+    <div class="adash-wrap">
+      <div class="adash-hdr">
+        <span class="adash-title">👑 Admin Dashboard</span>
+        <button class="adash-back-btn" onclick="toggleAdminView()">← Dashboard</button>
+      </div>
+      <!-- Overview stat cards -->
+      <div class="adash-overview">
+        <div class="adash-stat-card"><div class="adash-stat-lbl">Total Users</div><div class="adash-stat-val" id="ad-users">—</div></div>
+        <div class="adash-stat-card"><div class="adash-stat-lbl">Active Traders</div><div class="adash-stat-val" id="ad-trading">—</div></div>
+        <div class="adash-stat-card"><div class="adash-stat-lbl">Trades Today</div><div class="adash-stat-val" id="ad-trades-today">—</div></div>
+        <div class="adash-stat-card"><div class="adash-stat-lbl">Fees Today</div><div class="adash-stat-val" id="ad-fees-today">—</div></div>
+      </div>
+      <!-- Tabs -->
+      <div class="adash-tabs">
+        <button class="adash-tab active" id="adtab-users"    onclick="showAdminTab('users')">👤 Users</button>
+        <button class="adash-tab"        id="adtab-fees"     onclick="showAdminTab('fees')">💰 Fees</button>
+        <button class="adash-tab"        id="adtab-tokens"   onclick="showAdminTab('tokens')">📊 Tokens</button>
+        <button class="adash-tab"        id="adtab-health"   onclick="showAdminTab('health')">⚙ Health</button>
+        <button class="adash-tab"        id="adtab-security" onclick="showAdminTab('security')">🔐 Security</button>
+        <button class="adash-tab"        id="adtab-test"     onclick="showAdminTab('test')">🧪 Test Trade</button>
+      </div>
+      <!-- Users pane -->
+      <div id="adpane-users">
+        <div class="adash-table-wrap">
+          <table class="adash-table">
+            <thead><tr><th>Wallet</th><th>Has Key</th><th>Trading</th><th>Positions</th><th>Max Trade</th><th>Joined</th></tr></thead>
+            <tbody id="ad-users-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Fees pane -->
+      <div id="adpane-fees" style="display:none">
+        <div class="adash-table-wrap">
+          <table class="adash-table">
+            <thead><tr><th>Timestamp</th><th>User</th><th>Token</th><th>Gross Profit</th><th>Fee (5%)</th><th>TX</th></tr></thead>
+            <tbody id="ad-fees-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Tokens pane -->
+      <div id="adpane-tokens" style="display:none">
+        <div class="adash-table-wrap">
+          <table class="adash-table">
+            <thead><tr><th>Token</th><th>Trades</th><th>Win Rate</th><th>Total P&amp;L</th><th>Avg P&amp;L</th><th>Best Trade</th></tr></thead>
+            <tbody id="ad-tokens-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Health pane -->
+      <div id="adpane-health" style="display:none">
+        <div class="adash-health-grid" id="ad-health-grid">
+          <div style="text-align:center;color:var(--muted);grid-column:1/-1;padding:16px">Loading…</div>
+        </div>
+      </div>
+      <!-- Security pane -->
+      <div id="adpane-security" style="display:none">
+        <div class="adash-table-wrap">
+          <table class="adash-table">
+            <thead><tr><th>Timestamp</th><th>Event</th><th>Wallet</th><th>IP</th><th>Details</th></tr></thead>
+            <tbody id="ad-sec-tbody"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+      <!-- Test Trade pane -->
+      <div id="adpane-test" style="display:none">
+        <div class="adash-section-hdr">$1 USDC test buy — verifies full on-chain swap path</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <input id="test-trade-mint" type="text" placeholder="Token mint address" style="flex:1;min-width:240px;background:var(--bg3);border:1px solid rgba(255,193,58,.3);border-radius:7px;padding:7px 10px;color:#e8eaf0;font-size:12px;font-family:monospace">
+          <button id="test-trade-btn" style="background:rgba(255,193,58,.15);border:1px solid rgba(255,193,58,.4);border-radius:7px;padding:7px 16px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer" onclick="runTestTrade()">⚡ Test Trade ($1)</button>
+        </div>
+        <div id="test-trade-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid rgba(0,237,170,.2);border-radius:8px;padding:12px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all;line-height:1.6;color:#a0aec0;max-height:280px;overflow-y:auto"></div>
+      </div>
+    </div>
+  </div><!-- /dash-admin -->
 
 </div><!-- /wrap -->
 
@@ -1573,23 +1611,165 @@ async function fetchTrades(){
 }
 
 // ── OWNER ADMIN PANEL ──
-let _adminTimer=null;
+let _adminTimer=null, _adminView=false, _adminTabLoaded={};
 
 function checkOwnerPanel(){
-  const panel=document.getElementById('admin-panel');
+  const adminBtn=document.getElementById('admin-btn');
   const healthBtn=document.getElementById('health-btn');
   if(_isAdmin){
-    if(panel) panel.style.display='block';
+    if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
-    fetchAdminData();
     fetchAudit();
-    if(!_adminTimer) _adminTimer=setInterval(fetchAdminData,60000);
+    if(!_adminTimer) _adminTimer=setInterval(()=>{ if(_adminView) fetchAdminOverview(); },60000);
   } else {
-    if(panel) panel.style.display='none';
+    if(adminBtn) adminBtn.style.display='none';
     if(healthBtn) healthBtn.style.display='none';
+    if(_adminView) toggleAdminView();
     closeHealthPanel();
     if(_adminTimer){clearInterval(_adminTimer);_adminTimer=null;}
   }
+}
+
+function toggleAdminView(){
+  _adminView=!_adminView;
+  document.getElementById('dash-main').style.display=_adminView?'none':'';
+  document.getElementById('dash-admin').style.display=_adminView?'':'none';
+  const btn=document.getElementById('admin-btn');
+  if(btn){
+    btn.textContent=_adminView?'← Dashboard':'👑 Admin';
+    btn.style.background=_adminView?'rgba(255,193,58,.15)':'';
+  }
+  if(_adminView){
+    _adminTabLoaded={};
+    fetchAdminOverview();
+    showAdminTab('users');
+  }
+}
+
+function showAdminTab(tab){
+  const tabs=['users','fees','tokens','health','security','test'];
+  tabs.forEach(t=>{
+    const btn=document.getElementById('adtab-'+t);
+    const pane=document.getElementById('adpane-'+t);
+    if(btn) btn.classList.toggle('active',t===tab);
+    if(pane) pane.style.display=t===tab?'':'none';
+  });
+  if(!_adminTabLoaded[tab]){
+    _adminTabLoaded[tab]=true;
+    if(tab==='users')    fetchAdminUsers();
+    else if(tab==='fees')     fetchAdminFees();
+    else if(tab==='tokens')   fetchAdminTokens();
+    else if(tab==='health')   fetchAdminHealth();
+    else if(tab==='security') fetchAdminSecurity();
+  }
+}
+
+async function fetchAdminOverview(){
+  const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error) return;
+  document.getElementById('ad-users').textContent=r.total_users??0;
+  document.getElementById('ad-trading').textContent=r.users_trading??0;
+  document.getElementById('ad-trades-today').textContent=r.trades_today??0;
+  document.getElementById('ad-fees-today').textContent='$'+(r.fees_today||0).toFixed(4);
+}
+
+async function fetchAdminUsers(){
+  const tbody=document.getElementById('ad-users-tbody');
+  const r=await fetch('/api/admin/users').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px">Failed to load</td></tr>';return;}
+  const users=r.users||[];
+  if(!users.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No users yet</td></tr>';return;}
+  tbody.innerHTML=users.map(u=>`<tr>
+    <td style="font-family:monospace">${esc(u.wallet)}</td>
+    <td><span style="color:${u.has_key?'var(--green)':'var(--muted)'}">${u.has_key?'✓ Yes':'✗ No'}</span></td>
+    <td><span style="color:${u.trading?'var(--green)':'var(--muted)'}">${u.trading?'● Active':'○ Idle'}</span></td>
+    <td style="text-align:center">${u.positions}</td>
+    <td>$${(u.max_trade||0).toFixed(2)}</td>
+    <td style="color:var(--muted);font-size:10px">${esc(u.created)}</td>
+  </tr>`).join('');
+}
+
+async function fetchAdminFees(){
+  const tbody=document.getElementById('ad-fees-tbody');
+  const r=await fetch('/api/admin/fees').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px">Failed to load</td></tr>';return;}
+  const txs=r.transactions||[];
+  if(!txs.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No fees collected yet</td></tr>';return;}
+  tbody.innerHTML=txs.map(f=>{
+    const tx=f.tx||'';
+    const sol=tx?`<a href="https://solscan.io/tx/${esc(tx)}" target="_blank" style="color:var(--blue)">${esc(tx.slice(0,10))}…</a>`:'-';
+    return `<tr>
+      <td style="font-size:10px">${esc(f.ts||'')}</td>
+      <td style="font-family:monospace">${esc(f.wallet||'')}</td>
+      <td>${esc(f.token||'')}</td>
+      <td class="td-pos">+$${(f.gross||0).toFixed(4)}</td>
+      <td class="td-neg">-$${(f.fee||0).toFixed(4)}</td>
+      <td>${sol}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function fetchAdminTokens(){
+  const tbody=document.getElementById('ad-tokens-tbody');
+  const r=await fetch('/api/admin/tokens').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px">Failed to load</td></tr>';return;}
+  const tokens=r.tokens||[];
+  if(!tokens.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No trades yet</td></tr>';return;}
+  tbody.innerHTML=tokens.map(t=>{
+    const tp=t.total_pnl||0,ap=t.avg_pnl||0;
+    return `<tr>
+      <td style="font-weight:600">${esc(t.token||'')}</td>
+      <td style="text-align:center">${t.trades}</td>
+      <td style="text-align:center">${t.win_rate}%</td>
+      <td class="${tp>=0?'td-pos':'td-neg'}">${tp>=0?'+':'-'}$${Math.abs(tp).toFixed(4)}</td>
+      <td class="${ap>=0?'td-pos':'td-neg'}">${ap>=0?'+':'-'}$${Math.abs(ap).toFixed(4)}</td>
+      <td class="td-pos">+$${(t.best_pnl||0).toFixed(4)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function fetchAdminHealth(){
+  const grid=document.getElementById('ad-health-grid');
+  const r=await fetch('/api/admin/health').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error){grid.innerHTML='<div style="text-align:center;color:var(--red);grid-column:1/-1;padding:16px">Failed to load</div>';return;}
+  const items=[
+    ['Tokens Tracked', r.tokens_tracked, ''],
+    ['Active Traders', r.active_traders, ''],
+    ['Total Sessions', r.total_sessions, ''],
+    ['Total Users', r.total_users, ''],
+    ['DB Size', r.db_size_kb+' KB', ''],
+    ['AI Cache', r.ai_cache_size+' entries', ''],
+    ['AI Key', r.ai_key_invalid?'✗ Invalid':(r.anthropic_key?'✓ Set':'✗ Not set'), r.ai_key_invalid?'bad':(r.anthropic_key?'ok':'warn')],
+    ['DexScreener', r.dex_rate_limited?'⚠ Rate Limited':'✓ OK', r.dex_rate_limited?'warn':'ok'],
+    ['Jupiter Proxy', r.jupiter_proxy?'✓ Configured':'— Direct', r.jupiter_proxy?'ok':''],
+    ['Owner Wallet', r.owner_configured?'✓ Set':'✗ Not set', r.owner_configured?'ok':'bad'],
+    ['Sec Events (1h)', r.sec_events_1h, r.sec_events_1h>5?'warn':''],
+  ];
+  grid.innerHTML=items.map(([k,v,c])=>`
+    <div class="adash-health-item">
+      <span class="adash-health-key">${esc(String(k))}</span>
+      <span class="adash-health-val ${c==='ok'?'adash-ok':c==='warn'?'adash-warn':c==='bad'?'adash-bad':''}">${esc(String(v))}</span>
+    </div>`).join('');
+}
+
+async function fetchAdminSecurity(){
+  const tbody=document.getElementById('ad-sec-tbody');
+  const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
+  if(!r||r.error){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--red);padding:12px">Failed to load</td></tr>';return;}
+  const log=r.security_log||[];
+  if(!log.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No security events yet</td></tr>';return;}
+  const ec={key_saved:'var(--green)',key_deleted:'var(--yellow)',key_access:'var(--blue)',key_leak_blocked:'#ff4d6a',key_rotation:'#ff9500'};
+  tbody.innerHTML=log.map(e=>{
+    const w=e.wallet||'';
+    const ws=w.length>=8?w.slice(0,4)+'...'+w.slice(-4):w;
+    return `<tr>
+      <td style="font-size:10px">${esc(e.ts||'')}</td>
+      <td><span style="color:${ec[e.event]||'var(--muted)'};font-weight:600">${esc(e.event||'')}</span></td>
+      <td style="font-family:monospace">${esc(ws)}</td>
+      <td style="font-size:10px">${esc(e.ip||'')}</td>
+      <td style="font-size:10px">${esc(e.details||'')}</td>
+    </tr>`;
+  }).join('');
 }
 
 async function runTestTrade(){
@@ -1598,7 +1778,7 @@ async function runTestTrade(){
   if(!mint){out.style.display='block';out.textContent='⚠ Enter a token mint address first.';return;}
   out.style.display='block';
   out.textContent='⏳ Submitting $1 test buy… (may take up to 60s)';
-  const btn=document.querySelector('[onclick="runTestTrade()"]');
+  const btn=document.getElementById('test-trade-btn');
   if(btn){btn.disabled=true;btn.textContent='Running…';}
   try{
     const r=await fetch('/api/admin/test_trade',{
@@ -1626,55 +1806,6 @@ async function runTestTrade(){
   }
 }
 
-async function fetchAdminData(){
-  const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
-  if(!r||r.error) return;
-  const owWarn=document.getElementById('admin-owner-warn');
-  if(owWarn) owWarn.classList.toggle('show', !r.owner_configured);
-  document.getElementById('a-users').textContent=r.total_users||0;
-  document.getElementById('a-users-key').textContent=r.users_with_key||0;
-  document.getElementById('a-users-trading').textContent=r.users_trading||0;
-  document.getElementById('a-trades-today').textContent=r.trades_today||0;
-  document.getElementById('a-trades').textContent=r.total_trades||0;
-  document.getElementById('a-fees-today').textContent='$'+(r.fees_today||0).toFixed(4);
-  document.getElementById('a-fees-total').textContent='$'+(r.fees_total||0).toFixed(4);
-  const tbody=document.getElementById('admin-fee-tbody');
-  const txs=r.fee_txs||[];
-  if(!txs.length){
-    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No fees collected yet</td></tr>';
-    return;
-  }
-  tbody.innerHTML=txs.map(f=>{
-    const w=f.wallet||'';
-    const tx=f.tx||'';
-    const solscan=tx?`<a href="https://solscan.io/tx/${esc(tx)}" target="_blank" style="color:var(--blue)">${esc(tx.slice(0,12))}...</a>`:'-';
-    return `<tr>
-      <td>${esc(f.ts||'')}</td>
-      <td class="td-sym">${esc(w.slice(0,4)+'...'+w.slice(-4))}</td>
-      <td>${esc(f.token||'')}</td>
-      <td class="td-pos">+$${(f.gross||0).toFixed(4)}</td>
-      <td class="td-neg">-$${(f.fee||0).toFixed(4)}</td>
-      <td>${solscan}</td>
-    </tr>`;
-  }).join('');
-  const secTbody=document.getElementById('admin-sec-tbody');
-  const secLog=r.security_log||[];
-  if(!secLog.length){
-    secTbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No security events yet</td></tr>';
-  } else {
-    const evtColor={key_saved:'var(--green)',key_deleted:'var(--warn)',key_access:'var(--blue)',key_leak_blocked:'#ff4d6a',key_rotation:'var(--orange)',default:'var(--muted)'};
-    secTbody.innerHTML=secLog.map(e=>{
-      const col=evtColor[e.event]||evtColor.default;
-      return `<tr>
-        <td style="font-size:11px">${esc(e.ts||'')}</td>
-        <td><span style="color:${col};font-weight:600">${esc(e.event||'')}</span></td>
-        <td class="td-sym">${esc(e.wallet||'')}</td>
-        <td style="font-size:11px">${esc(e.ip||'')}</td>
-        <td style="font-size:11px">${esc(e.details||'')}</td>
-      </tr>`;
-    }).join('');
-  }
-}
 
 function renderPerfPanel(r){
   const d=r.daily||{};

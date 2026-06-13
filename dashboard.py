@@ -1809,6 +1809,140 @@ def api_admin():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/users')
+@rate_limit(20, 60)
+def admin_users():
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('''SELECT wallet_address, encrypted_private_key, created_at,
+                            max_trade_size, daily_loss_limit
+                     FROM users ORDER BY created_at DESC''')
+        rows = c.fetchall()
+        conn.close()
+        users = []
+        for r in rows:
+            w   = r[0] or ''
+            us  = user_states.get(w, {})
+            pos = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+            users.append({
+                'wallet':     w[:4] + '...' + w[-4:] if len(w) >= 8 else w,
+                'has_key':    bool(r[1]),
+                'trading':    us.get('trader_running', False),
+                'positions':  pos,
+                'max_trade':  r[3],
+                'loss_limit': r[4],
+                'created':    (r[2] or '')[:10],
+            })
+        return jsonify({'users': users, 'total': len(users)})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/fees')
+@rate_limit(20, 60)
+def admin_fees():
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE timestamp LIKE ?', (today + '%',))
+        fees_today = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees')
+        fees_total = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('''SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp
+                     FROM fees ORDER BY timestamp DESC LIMIT 200''')
+        txs = []
+        for r in c.fetchall():
+            w = r[0] or ''
+            txs.append({
+                'wallet': w[:4] + '...' + w[-4:] if len(w) >= 8 else w,
+                'token':  r[1], 'gross': round(r[2] or 0, 4),
+                'fee':    round(r[3] or 0, 4), 'tx': r[4], 'ts': r[5],
+            })
+        conn.close()
+        return jsonify({'fees_today': fees_today, 'fees_total': fees_total, 'transactions': txs})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/tokens')
+@rate_limit(20, 60)
+def admin_tokens():
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('''SELECT token,
+                            COUNT(*) trades,
+                            COALESCE(SUM(pnl),0) total_pnl,
+                            COALESCE(AVG(pnl),0) avg_pnl,
+                            COALESCE(MAX(pnl),0) best_pnl,
+                            SUM(CASE WHEN pnl > 0 THEN 1 ELSE 0 END) wins
+                     FROM trades WHERE token IS NOT NULL AND token != ''
+                     GROUP BY token ORDER BY trades DESC LIMIT 30''')
+        tokens = []
+        for r in c.fetchall():
+            trades = int(r[1])
+            wins   = int(r[5])
+            tokens.append({
+                'token':     r[0],
+                'trades':    trades,
+                'total_pnl': round(r[2], 4),
+                'avg_pnl':   round(r[3], 4),
+                'best_pnl':  round(r[4], 4),
+                'win_rate':  round(wins / trades * 100, 0) if trades > 0 else 0,
+            })
+        conn.close()
+        return jsonify({'tokens': tokens})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/health')
+@rate_limit(20, 60)
+def admin_health():
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    try:
+        db_size_kb = 0
+        try:
+            db_size_kb = round(os.path.getsize(DB_FILE) / 1024, 1)
+        except Exception:
+            pass
+        active_traders = sum(1 for us in user_states.values() if us.get('trader_running'))
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM users')
+        total_users = int(c.fetchone()[0] or 0)
+        c.execute('SELECT COUNT(*) FROM security_log WHERE timestamp >= datetime("now", "-1 hour")')
+        sec_events_1h = int(c.fetchone()[0] or 0)
+        conn.close()
+        with _dex_lock:
+            dex_limited = time.time() < _dex_429_until
+        return jsonify({
+            'tokens_tracked':   len(state.get('tokens', [])),
+            'active_traders':   active_traders,
+            'total_sessions':   len(user_states),
+            'total_users':      total_users,
+            'db_size_kb':       db_size_kb,
+            'ai_cache_size':    len(_ai_cache),
+            'ai_key_invalid':   _ai_key_invalid,
+            'dex_rate_limited': dex_limited,
+            'sec_events_1h':    sec_events_1h,
+            'owner_configured': bool(OWNER_WALLET),
+            'jupiter_proxy':    bool(JUPITER_PROXY),
+            'anthropic_key':    bool(ANTHROPIC_API_KEY),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/api/admin/rotate_keys', methods=['POST'])
 @rate_limit(1, 300)
 def admin_rotate_keys():
