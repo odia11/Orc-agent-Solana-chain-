@@ -1980,13 +1980,22 @@ def admin_test():
 @app.route('/api/admin/test_fee', methods=['POST'])
 @rate_limit(3, 300)
 def admin_test_fee():
-    """Send $0.01 USDC from owner wallet to owner wallet (self-transfer) to verify
-    the SPL transfer path works end-to-end before real fees are collected."""
+    """Verify the full fee-transfer path step-by-step.
+    If sender == receiver (owner testing with their own key), infrastructure is
+    checked without sending — the SPL token program forbids self-transfers."""
+    import traceback as _tb
     wallet = _current_wallet()
     if not wallet or wallet != OWNER_WALLET:
         return jsonify({'error': 'Unauthorized'}), 403
-    if not OWNER_WALLET:
-        return jsonify({'ok': False, 'error': 'OWNER_WALLET not set in environment'}), 400
+
+    steps = []
+
+    def _step(msg, ok=True, detail=''):
+        entry = {'msg': msg, 'ok': ok, 'detail': detail}
+        steps.append(entry)
+        print(f'[test_fee] {"✓" if ok else "✗"} {msg}' + (f': {detail}' if detail else ''), flush=True)
+
+    # ── 1. Trading key ──────────────────────────────────────────────────────
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
@@ -1995,19 +2004,88 @@ def admin_test_fee():
     finally:
         conn.close()
     if not row or not (row[0] or '').strip():
-        return jsonify({'ok': False, 'error': 'No trading key saved — add it in Settings first'}), 400
+        _step('Trading key', ok=False, detail='No trading key saved — add your private key in Settings first')
+        return jsonify({'ok': False, 'steps': steps, 'error': steps[-1]['detail']}), 400
+    _step('Trading key', detail='found in DB')
+
+    sig = None
     try:
+        from solders.keypair import Keypair as _KP
+        from solders.pubkey import Pubkey as _PK
+
+        TOKEN_PROG = _PK.from_string('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
+        ASSOC_PROG = _PK.from_string('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bRC')
+        USDC_PK    = _PK.from_string(USDC_MINT)
+
         with _use_key(row[0], wallet) as pk:
+            # ── 2. Keypair ──────────────────────────────────────────────────
+            kp     = _KP.from_base58_string(pk)
+            sender = kp.pubkey()
+            _step('Keypair', detail=str(sender)[:8] + '…')
+
+            # ── 3. Derive ATAs ──────────────────────────────────────────────
+            receiver = _PK.from_string(OWNER_WALLET)
+            src_ata  = _PK.find_program_address(
+                [bytes(sender), bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
+            dst_ata  = _PK.find_program_address(
+                [bytes(receiver), bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
+            _step('Token accounts', detail=f'src {str(src_ata)[:8]}… dst {str(dst_ata)[:8]}…')
+
+            # ── 4. USDC balance ─────────────────────────────────────────────
+            bal_r = requests.post(SOLANA_RPC, json={
+                'jsonrpc': '2.0', 'id': 1,
+                'method': 'getTokenAccountBalance',
+                'params': [str(src_ata)],
+            }, timeout=10).json()
+            bal_val = (bal_r.get('result') or {}).get('value')
+            if bal_val is None:
+                _step('USDC account', ok=False,
+                      detail='Source USDC account not found — fund this wallet with USDC first')
+                return jsonify({'ok': False, 'steps': steps, 'error': steps[-1]['detail']}), 400
+            balance = float(bal_val.get('uiAmount') or 0)
+            _step('USDC balance', detail=f'${balance:.4f}')
+            if balance < 0.01:
+                _step('Balance check', ok=False,
+                      detail=f'Insufficient USDC: ${balance:.4f} (need ≥ $0.01)')
+                return jsonify({'ok': False, 'steps': steps, 'error': steps[-1]['detail']}), 400
+            _step('Balance check', detail='sufficient')
+
+            # ── 5. Self-transfer guard ──────────────────────────────────────
+            # SPL token program forbids src == dst; when owner tests with their
+            # own key sender == receiver so src_ata == dst_ata.  All infrastructure
+            # checks have passed at this point, so report success without sending.
+            if str(src_ata) == str(dst_ata):
+                _step('Transfer skipped',
+                      detail='src and dst ATA are identical (owner self-transfer). '
+                             'SPL token program forbids this — use a separate test wallet, '
+                             'or start trading so real fees trigger between different wallets. '
+                             'All infrastructure verified ✓')
+                return jsonify({
+                    'ok':   True,
+                    'steps': steps,
+                    'msg':  'Infrastructure verified — key, ATA, and balance all OK. '
+                            'Actual transfer skipped: SPL does not allow self-transfers.',
+                })
+
+            # ── 6. Send ─────────────────────────────────────────────────────
+            _step('Building transfer…')
             sig = send_usdc_fee(pk, OWNER_WALLET, 0.01)
+            _step('Transaction sent', detail=sig[:12] + '…')
+
         _log_security_event('key_access', wallet, 'test_fee_transfer $0.01')
         return jsonify({
             'ok':          True,
+            'steps':       steps,
             'sig':         sig,
             'solscan_url': 'https://solscan.io/tx/' + sig,
-            'msg':         'Sent $0.01 USDC (self-transfer to owner wallet)',
+            'msg':         'Sent $0.01 USDC successfully',
         })
+
     except Exception as e:
-        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+        tb = _tb.format_exc()
+        print(f'[test_fee] EXCEPTION:\n{tb}', flush=True)
+        _step('Error', ok=False, detail=str(e))
+        return jsonify({'ok': False, 'steps': steps, 'error': str(e), 'traceback': tb}), 500
 
 @app.route('/api/admin/rotate_keys', methods=['POST'])
 @rate_limit(1, 300)

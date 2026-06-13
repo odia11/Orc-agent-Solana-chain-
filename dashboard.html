@@ -862,8 +862,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
           <div class="adash-section-hdr">Fee Transfer Test</div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
             <button id="test-fee-btn" onclick="testFeeTransfer()" style="background:rgba(255,193,58,.12);border:1px solid rgba(255,193,58,.4);border-radius:7px;padding:6px 16px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer">🧪 Test Fee Transfer ($0.01)</button>
-            <span id="test-fee-result" style="font-size:11px;color:var(--muted)"></span>
           </div>
+          <div id="test-fee-result" style="font-size:11px;margin-top:8px;line-height:1.7"></div>
         </div>
       </div>
       <!-- Tokens pane -->
@@ -1783,19 +1783,32 @@ async function testAIKey(){
 async function testFeeTransfer(){
   const btn=document.getElementById('test-fee-btn');
   const out=document.getElementById('test-fee-result');
-  if(btn){btn.disabled=true;btn.textContent='Sending…';}
-  out.textContent='';out.style.color='var(--muted)';
+  if(btn){btn.disabled=true;btn.textContent='Running…';}
+  out.innerHTML='<span style="color:var(--muted)">Checking…</span>';
   try{
-    const r=await fetch('/api/admin/test_fee',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
-    if(!r){out.style.color='var(--red)';out.textContent='Request failed';return;}
-    if(r.ok){
-      out.style.color='var(--green)';
-      out.innerHTML='✓ '+esc(r.msg||'OK')+
-        (r.solscan_url?` &nbsp;<a href="${esc(r.solscan_url)}" target="_blank" style="color:var(--blue)">View on Solscan ↗</a>`:'');
-    } else {
-      out.style.color='var(--red)';
-      out.textContent='✗ '+(r.error||'Failed');
+    const r=await fetch('/api/admin/test_fee',{method:'POST',headers:{'Content-Type':'application/json'}}).then(x=>x.json()).catch(()=>null);
+    if(!r){out.innerHTML='<span style="color:var(--red)">✗ Request failed — check network</span>';return;}
+    let html='';
+    // render step-by-step checklist
+    if(Array.isArray(r.steps)&&r.steps.length){
+      html+=r.steps.map(s=>{
+        const icon=s.ok?'<span style="color:var(--green)">✓</span>':'<span style="color:var(--red)">✗</span>';
+        const detail=s.detail?` <span style="color:var(--muted)">${esc(s.detail)}</span>`:'';
+        return `${icon} ${esc(s.msg)}${detail}`;
+      }).join('<br>');
+      html+='<br>';
     }
+    if(r.ok){
+      html+=`<span style="color:var(--green)">${esc(r.msg||'OK')}</span>`;
+      if(r.solscan_url) html+=` &nbsp;<a href="${esc(r.solscan_url)}" target="_blank" style="color:var(--blue)">View on Solscan ↗</a>`;
+    } else {
+      html+=`<span style="color:var(--red)">✗ ${esc(r.error||'Failed')}</span>`;
+      if(r.traceback){
+        html+=`<details style="margin-top:6px"><summary style="cursor:pointer;color:var(--muted);font-size:10px">Traceback</summary>`+
+          `<pre style="font-size:9px;color:var(--muted);white-space:pre-wrap;margin:4px 0 0">${esc(r.traceback)}</pre></details>`;
+      }
+    }
+    out.innerHTML=html;
   }finally{
     if(btn){btn.disabled=false;btn.textContent='🧪 Test Fee Transfer ($0.01)';}
   }

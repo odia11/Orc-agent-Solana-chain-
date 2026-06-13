@@ -19,7 +19,7 @@ Multi-user: each wallet address gets independent positions, P&L, settings, and b
 - Live token discovery: DexScreener top-boosted, trending (6h score), and latest token profiles
 - Trending filter: only tokens with h1 ≥ 50%, liquidity ≥ $10k, 24h volume ≥ $50k shown in market grid
 - Multi-factor signal scoring 0–10: momentum, volume, trend, liquidity, activity, + optional Claude Haiku AI boost
-- **Auto-buy at score ≥ 6** — max 3 concurrent positions
+- **Auto-buy at score ≥ 5.5** — max 3 concurrent positions
 - **Auto-sell:** take profit at +15%, stop loss at −5%, trailing stop, partial exit at +20%
 - OHLCV candlestick charts via TradingView Lightweight Charts — TF buttons 1m/5m/15m/1h/4h/D, GeckoTerminal data source
 - Per-user daily P&L tracking with trade history table
