@@ -194,11 +194,16 @@ def _rate_ok(key: str, limit: int, window: int) -> bool:
 
 def rate_limit(limit: int, window: int = 60, ban: bool = False):
     """Sliding-window rate limiter.  When ban=True, repeated overages trigger the
-    IP-ban system (_record_ip_failure) in addition to returning 429."""
+    IP-ban system (_record_ip_failure) in addition to returning 429.
+    The owner wallet is always bypassed — session.get('wallet') is checked
+    so this works for every endpoint without any per-route special-casing."""
     def decorator(f):
         @functools.wraps(f)
         def wrapped(*args, **kwargs):
             ip  = request.remote_addr or '0.0.0.0'
+            # Owner wallet is never rate-limited or banned
+            if OWNER_WALLET and session.get('wallet') == OWNER_WALLET:
+                return f(*args, **kwargs)
             # Respect existing bans before even counting the request
             if ban and _is_banned(ip):
                 return jsonify({'ok': False, 'msg': 'Too many requests — slow down'}), 429
@@ -1968,6 +1973,67 @@ def admin_health():
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/bans')
+@rate_limit(20, 60)
+def admin_bans():
+    """Return currently active IP bans and total rate-limit bucket count."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    now  = time.time()
+    bans = []
+    for ip, expires in list(_ip_ban.items()):
+        if expires > now:
+            bans.append({
+                'ip':         ip,
+                'expires_at': int(expires),
+                'mins_left':  round((expires - now) / 60, 1),
+            })
+        else:
+            _ip_ban.pop(ip, None)
+            _ip_warn.pop(ip, None)
+    with _rl_lock:
+        rl_bucket_count = len(_rl_hits)
+    return jsonify({'bans': sorted(bans, key=lambda x: x['mins_left'], reverse=True),
+                    'rl_bucket_count': rl_bucket_count})
+
+
+@app.route('/api/admin/clear_ratelimit', methods=['POST'])
+@rate_limit(10, 60)
+def admin_clear_ratelimit():
+    """Clear IP ban and rate-limit hit counters.
+    POST body: {"ip": "1.2.3.4"} to target one IP, or {} to clear everything."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    data   = request.json or {}
+    target = (data.get('ip') or '').strip()
+    if target:
+        banned = target in _ip_ban
+        _ip_ban.pop(target, None)
+        _ip_warn.pop(target, None)
+        with _rl_lock:
+            keys = [k for k in list(_rl_hits) if k.endswith(':' + target)]
+            for k in keys:
+                del _rl_hits[k]
+        print(f'[admin] clear_ratelimit: {wallet[:8]}… cleared IP {target} '
+              f'(was_banned={banned}, rl_buckets={len(keys)})', flush=True)
+        return jsonify({'ok': True,
+                        'msg': f'Cleared {target} — ban removed: {banned}, '
+                               f'rate-limit buckets cleared: {len(keys)}'})
+    else:
+        n_bans = len(_ip_ban)
+        n_rl   = len(_rl_hits)
+        _ip_ban.clear()
+        _ip_warn.clear()
+        with _rl_lock:
+            _rl_hits.clear()
+        print(f'[admin] clear_ratelimit: {wallet[:8]}… cleared ALL '
+              f'({n_bans} bans, {n_rl} rl buckets)', flush=True)
+        return jsonify({'ok': True,
+                        'msg': f'Cleared all — {n_bans} ban(s) and {n_rl} rate-limit bucket(s) removed'})
+
 
 @app.route('/api/admin/test', methods=['POST'])
 @rate_limit(5, 60)

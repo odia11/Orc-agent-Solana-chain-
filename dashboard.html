@@ -890,6 +890,19 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
       <!-- Security pane -->
       <div id="adpane-security" style="display:none">
+        <!-- Banned IPs -->
+        <div style="margin-bottom:14px">
+          <div class="adash-section-hdr" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+            <span>Banned IPs &amp; Rate Limits</span>
+            <div style="display:flex;gap:8px">
+              <button onclick="fetchAdminBans()" style="background:rgba(255,193,58,.1);border:1px solid rgba(255,193,58,.3);border-radius:6px;padding:4px 12px;color:#f0b90b;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">↺ Refresh</button>
+              <button onclick="clearAllBans()" style="background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:6px;padding:4px 12px;color:#ff4d6a;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">✕ Clear All Bans</button>
+            </div>
+          </div>
+          <div id="ad-bans-list" style="font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--muted)">Loading…</div>
+        </div>
+        <!-- Security event log -->
+        <div class="adash-section-hdr" style="margin-bottom:8px">Security Event Log</div>
         <div class="adash-table-wrap">
           <table class="adash-table">
             <thead><tr><th>Timestamp</th><th>Event</th><th>Wallet</th><th>IP</th><th>Details</th></tr></thead>
@@ -1836,6 +1849,38 @@ async function fetchAdminSecurity(){
       <td style="font-size:10px">${esc(e.details||'')}</td>
     </tr>`;
   }).join('');
+  fetchAdminBans();
+}
+
+async function fetchAdminBans(){
+  const el=document.getElementById('ad-bans-list');
+  const r=await fetch('/api/admin/bans').then(x=>x.json()).catch(()=>null);
+  if(!r){el.style.color='var(--red)';el.textContent='Failed to load';return;}
+  el.style.color='var(--muted)';
+  if(!r.bans||!r.bans.length){
+    el.textContent=`No active bans  •  ${r.rl_bucket_count||0} rate-limit bucket(s) in memory`;
+    return;
+  }
+  el.innerHTML=r.bans.map(b=>`<div style="display:flex;align-items:center;gap:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
+    <span style="color:var(--red);min-width:130px">${esc(b.ip)}</span>
+    <span style="color:var(--muted)">expires in ${b.mins_left} min</span>
+    <button onclick="unbanIP('${esc(b.ip)}')" style="margin-left:auto;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;padding:2px 10px;color:#ff4d6a;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">Unban</button>
+  </div>`).join('')+
+  `<div style="margin-top:6px;color:var(--muted)">${r.bans.length} ban(s) active  •  ${r.rl_bucket_count||0} rate-limit bucket(s) in memory</div>`;
+}
+
+async function unbanIP(ip){
+  const r=await fetch('/api/admin/clear_ratelimit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})}).then(x=>x.json()).catch(()=>null);
+  if(r?.ok) fetchAdminBans();
+  else alert('Failed to unban: '+(r?.error||'unknown error'));
+}
+
+async function clearAllBans(){
+  if(!confirm('Clear all IP bans and rate-limit counters?')) return;
+  const r=await fetch('/api/admin/clear_ratelimit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}).then(x=>x.json()).catch(()=>null);
+  const el=document.getElementById('ad-bans-list');
+  if(r?.ok){el.style.color='var(--green)';el.textContent='✓ '+r.msg;setTimeout(fetchAdminBans,1500);}
+  else{el.style.color='var(--red)';el.textContent='✗ '+(r?.error||'Failed');}
 }
 
 async function runTestTrade(){
