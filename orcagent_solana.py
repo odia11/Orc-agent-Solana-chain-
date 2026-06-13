@@ -93,7 +93,8 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
         keypair = Keypair.from_base58_string(private_key)
         pubkey  = str(keypair.pubkey())
     except Exception:
-        print('[TRADE] FAIL — invalid private key:\n' + traceback.format_exc(), flush=True)
+        # Do NOT log traceback here — solders may embed the raw key in its error message.
+        print('[TRADE] FAIL — invalid private key (exception details withheld for security)', flush=True)
         raise
 
     # ── Step 1: Jupiter quote ────────────────────────────────────────────────

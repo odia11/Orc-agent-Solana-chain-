@@ -1,5 +1,6 @@
 # Environment
 .env
+.env.*
 
 # Python
 __pycache__/
@@ -8,6 +9,7 @@ __pycache__/
 
 # Database
 *.db
+*.sqlite
 *.sqlite3
 
 # Logs
@@ -32,3 +34,4 @@ fix_*.py
 # Build artifacts / misc
 files/
 proxy/.wrangler/
+node_modules/
