@@ -1017,7 +1017,7 @@ function _checkInactivity(){
 function doLogout(){
   _hideInactWarning();
   phantomKey=null; walletType=null; _isAdmin=false;
-  sessionStorage.removeItem('orcagent_wallet');
+  localStorage.removeItem('orcagent_wallet');
   updateAuthBtns();
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-pill').style.display='none';
@@ -1061,7 +1061,7 @@ async function connectWalletOnboard(type){
     }
     phantomKey=pubkey.toString();
     walletType=name;
-    sessionStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
+    localStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
     fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
       .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; }).catch(()=>{});
     document.getElementById('wallet-type-label').textContent=name+' wallet connected';
@@ -1081,7 +1081,7 @@ async function connectWalletOnboard(type){
 
 function resetWallet(){
   phantomKey=null; walletType=null;
-  sessionStorage.removeItem('orcagent_wallet');
+  localStorage.removeItem('orcagent_wallet');
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-install-msg').style.display='none';
   document.getElementById('wallet-connected').style.display='none';
@@ -2140,7 +2140,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 // ── STARTUP: restore session ──
 (async function initApp(){
   // Restore wallet only if the extension confirms it is still connected
-  const saved=JSON.parse(sessionStorage.getItem('orcagent_wallet')||'null');
+  const saved=JSON.parse(localStorage.getItem('orcagent_wallet')||'null');
   if(saved?.key){
     const isPhantom=saved.type==='Phantom';
     const provider=isPhantom?window.solana:window.solflare;
@@ -2167,7 +2167,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
       return;
     }
     // Extension not connected or key mismatch — clear stale session
-    sessionStorage.removeItem('orcagent_wallet');
+    localStorage.removeItem('orcagent_wallet');
   }
 
   // Fallback: session storage was cleared (e.g. inactivity logout) but the extension
@@ -2180,7 +2180,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
     if(_p && _n){
       const _pk = _p.publicKey.toString();
       phantomKey = _pk; walletType = _n;
-      sessionStorage.setItem('orcagent_wallet', JSON.stringify({key:_pk, type:_n}));
+      localStorage.setItem('orcagent_wallet', JSON.stringify({key:_pk, type:_n}));
       document.getElementById('wallet-type-label').textContent = _n + ' wallet connected';
       document.getElementById('wallet-addr').textContent       = _pk;
       document.getElementById('wallet-connected').style.display = 'flex';
@@ -2434,7 +2434,7 @@ async function triggerAudit(){
 // Disconnect server session when tab is closed
 window.addEventListener('beforeunload',()=>{
   if(phantomKey){
-    sessionStorage.removeItem('orcagent_wallet');
+    localStorage.removeItem('orcagent_wallet');
     navigator.sendBeacon('/api/wallet/set',
       new Blob([JSON.stringify({address:''})],{type:'application/json'}));
   }
