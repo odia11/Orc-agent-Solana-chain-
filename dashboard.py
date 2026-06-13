@@ -1125,13 +1125,13 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         conn = sqlite3.connect(DB_FILE)
         try:
             conn.execute(
-                'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount) VALUES (?,?,?,?,?,?,?)',
-                (user_id, symbol, entry, exit_price, amount, pnl, fee_amount))
+                'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp) VALUES (?,?,?,?,?,?,?,?)',
+                (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, now.strftime('%Y-%m-%dT%H:%M:%SZ')))
             conn.commit()
         finally:
             conn.close()
-    except Exception:
-        pass
+    except Exception as e:
+        print(f'[trade_record] DB write failed: {e}', flush=True)
 
 # ── SWAP EXECUTION ──
 def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
@@ -1191,7 +1191,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_user_log(wallet, '[' + short + '] Trader started — aggressive strategy | TP:25% SL:3% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
+    add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
     positions = us['positions']
 
     try:
@@ -1240,6 +1240,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
+                            # Record the trade without a fee so it appears in history even on swap failure
+                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'])
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
 
