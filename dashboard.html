@@ -2139,63 +2139,34 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── STARTUP: restore session ──
 (async function initApp(){
-  // Restore wallet only if the extension confirms it is still connected
+  // Trust localStorage directly — wallet extensions are not yet initialised
+  // when this script runs on a fresh page load, so checking provider.isConnected
+  // always returns false and was incorrectly deleting the saved session.
+  // launchApp() already handles re-registering the server session via
+  // /api/wallet/set if the Flask cookie has expired.
   const saved=JSON.parse(localStorage.getItem('orcagent_wallet')||'null');
   if(saved?.key){
-    const isPhantom=saved.type==='Phantom';
-    const provider=isPhantom?window.solana:window.solflare;
-    const extensionPresent=isPhantom?provider?.isPhantom:provider?.isSolflare;
-    const stillConnected=extensionPresent
-      && provider.isConnected
-      && provider.publicKey?.toString()===saved.key;
-
-    if(stillConnected){
-      phantomKey=saved.key;
-      walletType=saved.type||'Wallet';
-      document.getElementById('wallet-type-label').textContent=walletType+' wallet connected';
-      document.getElementById('wallet-addr').textContent=phantomKey;
-      document.getElementById('wallet-connected').style.display='flex';
-      const cb=document.getElementById('wallet-continue-btn');
-      cb.disabled=false; cb.style.cssText='background:var(--green);color:#000;cursor:pointer;opacity:1';
-      document.getElementById('phantom-ob-btn').style.display='none';
-      document.getElementById('solflare-ob-btn').style.display='none';
-      document.getElementById('wallet-back-btn').style.display='block';
-      // Re-register session with server and capture has_trading_key / is_admin
-      fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-        .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
-      launchApp();
-      return;
-    }
-    // Extension not connected or key mismatch — clear stale session
-    localStorage.removeItem('orcagent_wallet');
+    phantomKey=saved.key;
+    walletType=saved.type||'Wallet';
+    await launchApp();
+    return;
   }
 
-  // Fallback: session storage was cleared (e.g. inactivity logout) but the extension
-  // is still connected — auto-reconnect so the user doesn't have to go through onboarding again.
-  if(!phantomKey){
-    const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected   && window.solana?.publicKey;
-    const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
-    const _p = phantomReady ? window.solana : solflareReady ? window.solflare : null;
-    const _n = phantomReady ? 'Phantom'     : solflareReady ? 'Solflare'      : null;
-    if(_p && _n){
-      const _pk = _p.publicKey.toString();
-      phantomKey = _pk; walletType = _n;
-      localStorage.setItem('orcagent_wallet', JSON.stringify({key:_pk, type:_n}));
-      document.getElementById('wallet-type-label').textContent = _n + ' wallet connected';
-      document.getElementById('wallet-addr').textContent       = _pk;
-      document.getElementById('wallet-connected').style.display = 'flex';
-      const _cb = document.getElementById('wallet-continue-btn');
-      _cb.disabled = false; _cb.style.cssText = 'background:var(--green);color:#000;cursor:pointer;opacity:1';
-      document.getElementById('phantom-ob-btn').style.display  = 'none';
-      document.getElementById('solflare-ob-btn').style.display = 'none';
-      document.getElementById('wallet-back-btn').style.display = 'block';
-      fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})})
-        .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; checkOwnerPanel(); }).catch(()=>{});
-      launchApp();
-      return;
-    }
+  // No localStorage entry — check if a wallet extension is already connected
+  // (covers dapp browsers and extensions that auto-connect without a prior visit).
+  const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected && window.solana?.publicKey;
+  const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
+  const _p = phantomReady ? window.solana : solflareReady ? window.solflare : null;
+  const _n = phantomReady ? 'Phantom'    : solflareReady ? 'Solflare'      : null;
+  if(_p && _n){
+    const _pk=_p.publicKey.toString();
+    phantomKey=_pk; walletType=_n;
+    localStorage.setItem('orcagent_wallet',JSON.stringify({key:_pk,type:_n}));
+    await launchApp();
+    return;
   }
-  // No verified wallet — stay on onboard screen
+
+  // No wallet found — show onboarding screen
 })();
 
 // ── SETTINGS MODAL ──
