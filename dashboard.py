@@ -1163,7 +1163,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, max_trade_size, min_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -1178,9 +1178,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     user_id          = row[0]
-    max_usdc         = float(row[2] if row[2] is not None else 10.0)
-    min_usdc         = float(row[3] if row[3] is not None else 1.0)
-    daily_loss_limit = abs(float(row[4] if row[4] is not None else 50.0))
+    daily_loss_limit = abs(float(row[2] if row[2] is not None else 50.0))
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -1302,8 +1300,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
                         trade_pct = 0.60 if sc >= 7 else config.get('trade_pct', 0.40)
-                        spend = round(min(us_usdc * trade_pct, max_usdc), 2)
-                        if spend >= min_usdc:
+                        spend = round(us_usdc * trade_pct, 2)
+                        if spend >= 0.01:
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
