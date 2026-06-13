@@ -33,9 +33,12 @@ def _csrf_check():
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
-BASE       = os.path.dirname(os.path.abspath(__file__))
-LOG_FILE   = os.path.join(BASE, 'trades.log')
-DB_FILE    = os.path.join(BASE, 'orcagent.db')
+BASE         = os.path.dirname(os.path.abspath(__file__))
+# Use Railway persistent volume when available so the DB and logs survive redeploys.
+_DATA_DIR    = '/data' if os.path.exists('/data') else BASE
+LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
+DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
+print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
