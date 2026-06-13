@@ -1977,6 +1977,38 @@ def admin_test():
         results['ai'] = {'ok': False, 'msg': 'ANTHROPIC_API_KEY not set in environment'}
     return jsonify(results)
 
+@app.route('/api/admin/test_fee', methods=['POST'])
+@rate_limit(3, 300)
+def admin_test_fee():
+    """Send $0.01 USDC from owner wallet to owner wallet (self-transfer) to verify
+    the SPL transfer path works end-to-end before real fees are collected."""
+    wallet = _current_wallet()
+    if not wallet or wallet != OWNER_WALLET:
+        return jsonify({'error': 'Unauthorized'}), 403
+    if not OWNER_WALLET:
+        return jsonify({'ok': False, 'error': 'OWNER_WALLET not set in environment'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not (row[0] or '').strip():
+        return jsonify({'ok': False, 'error': 'No trading key saved — add it in Settings first'}), 400
+    try:
+        with _use_key(row[0], wallet) as pk:
+            sig = send_usdc_fee(pk, OWNER_WALLET, 0.01)
+        _log_security_event('key_access', wallet, 'test_fee_transfer $0.01')
+        return jsonify({
+            'ok':          True,
+            'sig':         sig,
+            'solscan_url': 'https://solscan.io/tx/' + sig,
+            'msg':         'Sent $0.01 USDC (self-transfer to owner wallet)',
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)[:300]}), 500
+
 @app.route('/api/admin/rotate_keys', methods=['POST'])
 @rate_limit(1, 300)
 def admin_rotate_keys():

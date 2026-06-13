@@ -858,6 +858,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
             <tbody id="ad-fees-tbody"><tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr></tbody>
           </table>
         </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,193,58,.15)">
+          <div class="adash-section-hdr">Fee Transfer Test</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
+            <button id="test-fee-btn" onclick="testFeeTransfer()" style="background:rgba(255,193,58,.12);border:1px solid rgba(255,193,58,.4);border-radius:7px;padding:6px 16px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer">🧪 Test Fee Transfer ($0.01)</button>
+            <span id="test-fee-result" style="font-size:11px;color:var(--muted)"></span>
+          </div>
+        </div>
       </div>
       <!-- Tokens pane -->
       <div id="adpane-tokens" style="display:none">
@@ -1770,6 +1777,27 @@ async function testAIKey(){
     if(ai.ok) _adminTabLoaded['health']=false; // refresh health grid to clear backoff status
   }finally{
     if(btn){btn.disabled=false;btn.textContent='⚡ Test AI Key';}
+  }
+}
+
+async function testFeeTransfer(){
+  const btn=document.getElementById('test-fee-btn');
+  const out=document.getElementById('test-fee-result');
+  if(btn){btn.disabled=true;btn.textContent='Sending…';}
+  out.textContent='';out.style.color='var(--muted)';
+  try{
+    const r=await fetch('/api/admin/test_fee',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
+    if(!r){out.style.color='var(--red)';out.textContent='Request failed';return;}
+    if(r.ok){
+      out.style.color='var(--green)';
+      out.innerHTML='✓ '+esc(r.msg||'OK')+
+        (r.solscan_url?` &nbsp;<a href="${esc(r.solscan_url)}" target="_blank" style="color:var(--blue)">View on Solscan ↗</a>`:'');
+    } else {
+      out.style.color='var(--red)';
+      out.textContent='✗ '+(r.error||'Failed');
+    }
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🧪 Test Fee Transfer ($0.01)';}
   }
 }
 
