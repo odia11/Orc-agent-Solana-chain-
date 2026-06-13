@@ -1042,9 +1042,9 @@ def token_loop():
                         bd['confidence'] = round(sc / 10 * 100)
                 # Re-sort after AI adjustments
                 display.sort(key=lambda t: t['score'], reverse=True)
-            qualifying = [t for t in display if t['score'] >= 5.5]
+            qualifying = [t for t in display if t['score'] >= 4.5]
             state['tokens'] = display
-            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥5.5) — '
+            add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥4.5) — '
                     + ('best: ' + display[0]['symbol'] + ' ' + str(display[0]['score']) + '/10'
                        if display else 'no tokens'))
         except: pass
@@ -1188,7 +1188,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_user_log(wallet, '[' + short + '] Trader started — momentum strategy | TP:15% SL:5% | score≥5.5')
+    add_user_log(wallet, '[' + short + '] Trader started — aggressive strategy | TP:25% SL:3% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
     positions = us['positions']
 
     try:
@@ -1205,10 +1205,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                 us_usdc  = _get_user_usdc(wallet)
                 total_live = len(live)
                 if total_live == 0:
-                    add_user_log(wallet, '[' + short + '] Waiting for token data... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                    add_user_log(wallet, '[' + short + '] Waiting for token data... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/5')
                 else:
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                                 ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                                 ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/5')
 
                 # ── Pass 1: exit checks for all open positions ──
                 for t in live:
@@ -1231,7 +1231,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     # Dynamic stop level: rises as position profits
                     if   chg >= 0.20: stop_level = 0.10   # lock in +10% after +20%
                     elif chg >= 0.10: stop_level = 0.00   # move to breakeven after +10%
-                    else:             stop_level = -0.05  # normal 5% stop loss
+                    else:             stop_level = -0.03  # normal 3% stop loss
 
                     if chg >= 0.10: pos['was_up_10'] = True
 
@@ -1259,7 +1259,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                             exit_reason = 'BREAKEVEN STOP ' + str(round(chg*100,1)) + '%'
                         else:
                             exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
-                    elif chg >= 0.15:
+                    elif chg >= 0.25:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
                     elif chg > 0 and trail_drop >= 0.07:
                         exit_reason = 'TRAILING STOP (peak was +' + str(round((peak/pos['buy_price']-1)*100,1)) + '%)'
@@ -1282,11 +1282,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                         open_pos -= 1
 
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 3 and us_usdc > 1:
+                if not stop_event.is_set() and open_pos < 5 and us_usdc > 1:
                     not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
-                    qualifying = [t for t in not_held if t['score'] >= 5.5]
+                    qualifying = [t for t in not_held if t['score'] >= 4.5]
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (score≥5.5)')
+                                 str(total_live) + ' qualify (score≥4.5)')
                     if qualifying:
                         best  = qualifying[0]  # list is sorted by score desc
                         bmint = best['mint']
@@ -1296,7 +1296,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         m5s   = ('+' if m5 >= 0 else '') + str(round(m5, 1)) + '%'
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
-                        spend = round(min(us_usdc * config.get('trade_pct', 0.20), max_usdc), 2)
+                        trade_pct = 0.60 if sc >= 7 else config.get('trade_pct', 0.40)
+                        spend = round(min(us_usdc * trade_pct, max_usdc), 2)
                         if spend >= min_usdc:
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
@@ -1342,7 +1343,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['spend']      = spend
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
-            stop_event.wait(config.get('interval', 60))
+            stop_event.wait(config.get('interval', 30))
     finally:
         add_user_log(wallet, '[' + short + '] Trader stopped')
         us['trader_running'] = False
