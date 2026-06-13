@@ -192,12 +192,20 @@ def _rate_ok(key: str, limit: int, window: int) -> bool:
         _rl_hits[key] = hits
         return True
 
-def rate_limit(limit: int, window: int = 60):
+def rate_limit(limit: int, window: int = 60, ban: bool = False):
+    """Sliding-window rate limiter.  When ban=True, repeated overages trigger the
+    IP-ban system (_record_ip_failure) in addition to returning 429."""
     def decorator(f):
         @functools.wraps(f)
         def wrapped(*args, **kwargs):
-            key = f.__name__ + ':' + (request.remote_addr or '0.0.0.0')
+            ip  = request.remote_addr or '0.0.0.0'
+            # Respect existing bans before even counting the request
+            if ban and _is_banned(ip):
+                return jsonify({'ok': False, 'msg': 'Too many requests — slow down'}), 429
+            key = f.__name__ + ':' + ip
             if not _rate_ok(key, limit, window):
+                if ban:
+                    _record_ip_failure(ip)  # 3 overages → 1-hour IP ban
                 return jsonify({'ok': False, 'msg': 'Too many requests — slow down'}), 429
             return f(*args, **kwargs)
         return wrapped
@@ -1545,7 +1553,7 @@ def _db_has_key(wallet: str) -> bool:
         return False
 
 @app.route('/api/state')
-@rate_limit(60, 60)
+@rate_limit(10, 60, ban=True)
 def api_state():
     wallet = _current_wallet()
     if wallet:
