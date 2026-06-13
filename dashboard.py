@@ -442,7 +442,7 @@ def init_db():
         wallet_address        TEXT UNIQUE NOT NULL,
         encrypted_private_key TEXT DEFAULT '',
         trading_active        INTEGER DEFAULT 0,
-        max_trade_size        REAL DEFAULT 1.0,
+        max_trade_size        REAL DEFAULT 10.0,
         min_trade_size        REAL DEFAULT 1.0,
         daily_loss_limit      REAL DEFAULT 50.0,
         created_at            TEXT DEFAULT CURRENT_TIMESTAMP
@@ -1173,7 +1173,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     user_id          = row[0]
-    max_usdc         = float(row[2] if row[2] is not None else 1.0)
+    max_usdc         = float(row[2] if row[2] is not None else 10.0)
     min_usdc         = float(row[3] if row[3] is not None else 1.0)
     daily_loss_limit = abs(float(row[4] if row[4] is not None else 50.0))
 
@@ -1446,10 +1446,10 @@ def get_settings():
     get_user_state(wallet)['has_trading_key'] = has_key
     if row:
         return jsonify({'ok': True, 'has_trading_key': has_key,
-                        'max_trade_size': row[1] or 1.0,
+                        'max_trade_size': row[1] or 10.0,
                         'min_trade_size': row[2] if row[2] is not None else 1.0,
                         'daily_loss_limit': row[3] or 50.0})
-    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 1.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 10.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -1464,9 +1464,9 @@ def save_settings():
     data            = request.json or {}
     private_key_raw = data.get('private_key', '').strip()
     try:
-        max_trade_size = float(data.get('max_trade_size', 1.0))
+        max_trade_size = float(data.get('max_trade_size', 10.0))
     except (ValueError, TypeError):
-        max_trade_size = 1.0
+        max_trade_size = 10.0
     try:
         min_trade_size = float(data.get('min_trade_size', 1.0))
     except (ValueError, TypeError):
