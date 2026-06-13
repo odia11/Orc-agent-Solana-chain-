@@ -430,6 +430,7 @@ def init_db():
         encrypted_private_key TEXT DEFAULT '',
         trading_active        INTEGER DEFAULT 0,
         max_trade_size        REAL DEFAULT 1.0,
+        min_trade_size        REAL DEFAULT 1.0,
         daily_loss_limit      REAL DEFAULT 50.0,
         created_at            TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
@@ -454,9 +455,13 @@ def init_db():
         fee_tx       TEXT DEFAULT '',
         timestamp    TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
-    # Migrate: add fee_amount column to trades if it doesn't exist yet
+    # Migrations: add columns introduced after initial deploy
     try:
         c.execute('ALTER TABLE trades ADD COLUMN fee_amount REAL DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 1.0')
     except sqlite3.OperationalError:
         pass
     c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
@@ -1140,7 +1145,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, max_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, max_trade_size, min_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -1156,7 +1161,8 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     user_id          = row[0]
     max_usdc         = float(row[2] if row[2] is not None else 1.0)
-    daily_loss_limit = abs(float(row[3] if row[3] is not None else 50.0))
+    min_usdc         = float(row[3] if row[3] is not None else 1.0)
+    daily_loss_limit = abs(float(row[4] if row[4] is not None else 50.0))
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -1278,7 +1284,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
                         spend = round(min(us_usdc * config.get('trade_pct', 0.20), max_usdc), 2)
-                        if spend >= 1.0:
+                        if spend >= min_usdc:
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'peak_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
@@ -1418,15 +1424,18 @@ def get_settings():
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
     conn = sqlite3.connect(DB_FILE)
     c    = conn.cursor()
-    c.execute('SELECT encrypted_private_key, max_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
+    c.execute('SELECT encrypted_private_key, max_trade_size, min_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
     row  = c.fetchone()
     conn.close()
     has_key = bool(row and row[0])
     # Sync in-memory cache so /api/state benefits from this read
     get_user_state(wallet)['has_trading_key'] = has_key
     if row:
-        return jsonify({'ok': True, 'has_trading_key': has_key, 'max_trade_size': row[1] or 1.0, 'daily_loss_limit': row[2] or 50.0})
-    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 1.0, 'daily_loss_limit': 50.0})
+        return jsonify({'ok': True, 'has_trading_key': has_key,
+                        'max_trade_size': row[1] or 1.0,
+                        'min_trade_size': row[2] if row[2] is not None else 1.0,
+                        'daily_loss_limit': row[3] or 50.0})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 1.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -1445,10 +1454,15 @@ def save_settings():
     except (ValueError, TypeError):
         max_trade_size = 1.0
     try:
+        min_trade_size = float(data.get('min_trade_size', 1.0))
+    except (ValueError, TypeError):
+        min_trade_size = 1.0
+    try:
         daily_loss_limit = float(data.get('daily_loss_limit', 50.0))
     except (ValueError, TypeError):
         daily_loss_limit = 50.0
-    max_trade_size   = max(1.0,  min(max_trade_size,   10000.0))
+    max_trade_size   = max(0.01, min(max_trade_size,   10000.0))
+    min_trade_size   = max(0.01, min(min_trade_size,   max_trade_size))
     daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
 
     # Validate, double-encrypt, and verify round-trip before touching the DB
@@ -1477,17 +1491,17 @@ def save_settings():
         if row:
             if private_key_raw:
                 # New key provided — update key columns + settings
-                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                          (encrypted, new_hash, max_trade_size, daily_loss_limit, wallet))
+                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, min_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
+                          (encrypted, new_hash, max_trade_size, min_trade_size, daily_loss_limit, wallet))
                 final_enc = encrypted
             else:
                 # No new key — only update settings, leave encrypted_private_key untouched
-                c.execute('UPDATE users SET max_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                          (max_trade_size, daily_loss_limit, wallet))
+                c.execute('UPDATE users SET max_trade_size=?, min_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
+                          (max_trade_size, min_trade_size, daily_loss_limit, wallet))
                 final_enc = row[1]
         else:
-            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, daily_loss_limit) VALUES (?,?,?,?,?)',
-                      (wallet, encrypted or '', new_hash or '', max_trade_size, daily_loss_limit))
+            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, min_trade_size, daily_loss_limit) VALUES (?,?,?,?,?,?)',
+                      (wallet, encrypted or '', new_hash or '', max_trade_size, min_trade_size, daily_loss_limit))
             final_enc = encrypted or ''
         conn.commit()
     finally:
@@ -1822,7 +1836,7 @@ def admin_users():
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
         c.execute('''SELECT wallet_address, encrypted_private_key, created_at,
-                            max_trade_size, daily_loss_limit
+                            max_trade_size, min_trade_size, daily_loss_limit
                      FROM users ORDER BY created_at DESC''')
         rows = c.fetchall()
         conn.close()
@@ -1837,7 +1851,8 @@ def admin_users():
                 'trading':    us.get('trader_running', False),
                 'positions':  pos,
                 'max_trade':  r[3],
-                'loss_limit': r[4],
+                'min_trade':  r[4],
+                'loss_limit': r[5],
                 'created':    (r[2] or '')[:10],
             })
         return jsonify({'users': users, 'total': len(users)})

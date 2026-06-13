@@ -580,10 +580,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
     </div>
 
-    <div class="s-grid">
+    <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="s-field" style="margin-bottom:0">
+        <label class="s-label">Min Trade Size (USDC)</label>
+        <input id="s-minusdc" class="s-input" type="number" value="1" min="0.01" max="1000" step="0.5">
+      </div>
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Max Trade Size (USDC)</label>
-        <input id="s-maxusdc" class="s-input" type="number" value="1" min="1" max="1000" step="0.5">
+        <input id="s-maxusdc" class="s-input" type="number" value="1" min="0.01" max="1000" step="0.5">
       </div>
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Daily Loss Limit (USDC)</label>
@@ -1083,6 +1087,7 @@ async function launchApp(){
     fetch('/api/settings').then(r=>r.json()).then(r=>{
       if(r?.ok){
         settingsHasKey=r.has_trading_key||false;
+        document.getElementById('s-minusdc').value=r.min_trade_size??1;
         document.getElementById('s-maxusdc').value=r.max_trade_size||1;
         document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
         _updateKeyStatus();
@@ -2196,6 +2201,7 @@ async function openSettings(){
     saveBtn.disabled=false; saveBtn.style.opacity='1';
     const r=await fetch('/api/settings').then(r=>r.json()).catch(()=>null);
     if(r?.ok){
+      document.getElementById('s-minusdc').value=r.min_trade_size??1;
       document.getElementById('s-maxusdc').value=r.max_trade_size||1;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
       settingsHasKey=r.has_trading_key||false;
@@ -2223,6 +2229,7 @@ function togglePrivVis(){
 async function saveSettings(){
   if(!phantomKey){alert('Connect a wallet first.');return;}
   const pk       =document.getElementById('s-privkey').value.trim();
+  const minUsdc  =parseFloat(document.getElementById('s-minusdc').value)||1;
   const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||1;
   const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||50;
   const msgEl    =document.getElementById('s-msg');
@@ -2238,7 +2245,7 @@ async function saveSettings(){
   const r=await fetch('/api/settings',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({private_key:pk,max_trade_size:maxUsdc,daily_loss_limit:lossLimit})
+    body:JSON.stringify({private_key:pk,min_trade_size:minUsdc,max_trade_size:maxUsdc,daily_loss_limit:lossLimit})
   }).then(r=>r.json()).catch(()=>null);
   saveBtn.textContent='SAVE SETTINGS'; saveBtn.disabled=false;
 

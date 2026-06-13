@@ -8,6 +8,7 @@ load_dotenv()
 WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 PRIVATE_KEY    = os.getenv('WALLET_PRIVATE_KEY', '')
 MAX_USDC       = float(os.getenv('MAX_USDC', 50))
+MIN_USDC       = float(os.getenv('MIN_USDC', 1))
 STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.05))
 TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.15))
 TRAILING_STOP  = float(os.getenv('TRAILING_STOP', 0.03))
@@ -453,6 +454,8 @@ def run():
                     open_count = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
                     if sc >= 5.5 and open_count < 3 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
                         spend = min(usdc * 0.20, MAX_USDC / 4)
+                        if spend < MIN_USDC:
+                            continue
                         sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
                         print(f'BUY {label} ${round(spend,2)} score:{sc} m5:+{round(m5,1)}% TX:{sig}', flush=True)
                         _dec              = get_token_decimals(mint)
