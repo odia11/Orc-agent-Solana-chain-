@@ -85,69 +85,35 @@ def decrypt_private_key(enc: str, wallet: str) -> str:
     return _fernet.decrypt(enc.encode()).decode()  # legacy v1 — migrated on next save
 
 # ── PERFORMANCE FEE COLLECTION ──
-def send_usdc_fee(from_privkey: str, to_wallet_str: str, amount_usdc: float) -> str:
-    """SPL USDC transfer: send amount_usdc from from_privkey's wallet to to_wallet_str.
-    Uses a direct Token-program Transfer instruction (discriminant 3).
-    Creates the recipient's ATA if it doesn't exist yet."""
+def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> str:
+    """Native SOL transfer via System Program — no ATA, no SPL, just lamports."""
     from solders.keypair import Keypair as _KP
     from solders.pubkey import Pubkey
     from solders.instruction import Instruction, AccountMeta
     from solders.transaction import Transaction
     from solders.hash import Hash as SolHash
 
-    TOKEN_PROG   = Pubkey.from_string('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-    ASSOC_PROG   = Pubkey.from_string('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bRC')
-    SYS_PROG     = Pubkey.from_string('11111111111111111111111111111111')
-    SYSVAR_RENT  = Pubkey.from_string('SysvarRent111111111111111111111111111111111')
-    USDC_PK      = Pubkey.from_string(USDC_MINT)
-
+    SYS_PROG = Pubkey.from_string('11111111111111111111111111111111')
     keypair  = _KP.from_base58_string(from_privkey)
     sender   = keypair.pubkey()
     receiver = Pubkey.from_string(to_wallet_str)
+    lamports = int(amount_sol * 1_000_000_000)
 
-    src_ata = Pubkey.find_program_address([bytes(sender),   bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
-    dst_ata = Pubkey.find_program_address([bytes(receiver), bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
-
-    amount_micro = int(amount_usdc * 1_000_000)
-
-    # Check if recipient's USDC account exists; create it if not
-    acc_resp = requests.post(SOLANA_RPC, json={
-        'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
-        'params': [str(dst_ata), {'encoding': 'base64'}],
-    }, timeout=10).json()
-    dst_exists = acc_resp.get('result', {}).get('value') is not None
-
-    ixs = []
-    if not dst_exists:
-        ixs.append(Instruction(
-            program_id=ASSOC_PROG,
-            accounts=[
-                AccountMeta(sender,      is_signer=True,  is_writable=True),
-                AccountMeta(dst_ata,     is_signer=False, is_writable=True),
-                AccountMeta(receiver,    is_signer=False, is_writable=False),
-                AccountMeta(USDC_PK,     is_signer=False, is_writable=False),
-                AccountMeta(SYS_PROG,    is_signer=False, is_writable=False),
-                AccountMeta(TOKEN_PROG,  is_signer=False, is_writable=False),
-                AccountMeta(SYSVAR_RENT, is_signer=False, is_writable=False),
-            ],
-            data=bytes([]),
-        ))
-
-    ixs.append(Instruction(
-        program_id=TOKEN_PROG,
+    # System Program Transfer: u32 discriminant=2 + u64 lamports (little-endian)
+    ix = Instruction(
+        program_id=SYS_PROG,
         accounts=[
-            AccountMeta(src_ata, is_signer=False, is_writable=True),
-            AccountMeta(dst_ata, is_signer=False, is_writable=True),
-            AccountMeta(sender,  is_signer=True,  is_writable=False),
+            AccountMeta(sender,   is_signer=True,  is_writable=True),
+            AccountMeta(receiver, is_signer=False, is_writable=True),
         ],
-        data=bytes([3]) + struct.pack('<Q', amount_micro),  # SPL Transfer instruction
-    ))
+        data=struct.pack('<IQ', 2, lamports),
+    )
 
     bh = requests.post(SOLANA_RPC, json={
         'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
     }, timeout=10).json()['result']['value']['blockhash']
 
-    tx = Transaction.new_signed_with_payer(ixs, sender, [keypair], SolHash.from_string(bh))
+    tx = Transaction.new_signed_with_payer([ix], sender, [keypair], SolHash.from_string(bh))
 
     encoded = base64.b64encode(bytes(tx)).decode()
     res = requests.post(SOLANA_RPC, json={
@@ -1107,31 +1073,48 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     pnl     = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
     pnl_pct = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
 
-    # 5% performance fee on profitable trades only
+    # 5% performance fee on profitable trades only (collected in SOL)
     fee_amount = 0.0
+    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     if pnl > 0.0 and wallet and private_key and OWNER_WALLET and wallet != OWNER_WALLET:
         fee_amount = round(pnl * FEE_RATE, 6)
-        if fee_amount >= 0.0001:  # skip dust fees below 0.0001 USDC
-            _pk   = private_key   # captured in thread args; cleared via pk=None in _do_fee finally
+        print(f'[fee] {short_w} {symbol} profit={pnl:.6f} SOL fee={fee_amount:.6f} SOL '
+              f'(pnl>0={pnl>0}, has_key={bool(private_key)}, owner_set={bool(OWNER_WALLET)})', flush=True)
+        if fee_amount >= 0.0001:  # skip dust fees below 0.0001 SOL
+            _pk   = private_key
             _sym  = symbol
             _gros = pnl
             _fee  = fee_amount
             _wlt  = wallet
             def _do_fee(pk, sym, gross, fee, wlt):
+                sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
+                print(f'[fee] attempting SOL transfer {fee:.6f} SOL → OWNER_WALLET for {sw} {sym}', flush=True)
                 try:
-                    tx_sig = send_usdc_fee(pk, OWNER_WALLET, fee)
+                    tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
                     conn = sqlite3.connect(DB_FILE)
                     conn.execute(
                         'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx) VALUES (?,?,?,?,?)',
                         (wlt, sym, gross, fee, tx_sig))
                     conn.commit()
                     conn.close()
-                    add_user_log(wlt, f'✓ Perf fee ${fee:.4f} USDC (5% of +${gross:.4f}) TX:{tx_sig[:12]}...')
+                    print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent TX:{tx_sig[:16]}', flush=True)
+                    add_user_log(wlt, f'✓ Perf fee {fee:.4f} SOL (5% of +{gross:.4f} SOL) TX:{tx_sig[:12]}...')
                 except Exception as e:
+                    err = _redact_keys(str(e)[:120])
+                    print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err}', flush=True)
                     add_user_log(wlt, f'Fee transfer failed: {_redact_keys(str(e)[:80])}')
                 finally:
                     pk = None
             threading.Thread(target=_do_fee, args=(_pk, _sym, _gros, _fee, _wlt), daemon=True).start()
+        else:
+            print(f'[fee] {short_w} {symbol} fee {fee_amount:.6f} SOL below dust threshold — skipped', flush=True)
+    else:
+        if pnl <= 0.0:
+            print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
+        elif not OWNER_WALLET:
+            print(f'[fee] {short_w} {symbol} no fee — OWNER_WALLET not set', flush=True)
+        elif wallet == OWNER_WALLET:
+            print(f'[fee] {short_w} {symbol} no fee — owner trading own wallet', flush=True)
 
     trade = {
         'symbol': symbol, 'entry': entry, 'exit': exit_price,
@@ -2220,72 +2203,52 @@ def admin_test_fee():
         from solders.keypair import Keypair as _KP
         from solders.pubkey import Pubkey as _PK
 
-        TOKEN_PROG = _PK.from_string('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA')
-        ASSOC_PROG = _PK.from_string('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJe1bRC')
-        USDC_PK    = _PK.from_string(USDC_MINT)
-
         with _use_key(row[0], wallet) as pk:
             # ── 2. Keypair ──────────────────────────────────────────────────
             kp     = _KP.from_base58_string(pk)
             sender = kp.pubkey()
             _step('Keypair', detail=str(sender)[:8] + '…')
 
-            # ── 3. Derive ATAs ──────────────────────────────────────────────
-            receiver = _PK.from_string(OWNER_WALLET)
-            src_ata  = _PK.find_program_address(
-                [bytes(sender), bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
-            dst_ata  = _PK.find_program_address(
-                [bytes(receiver), bytes(TOKEN_PROG), bytes(USDC_PK)], ASSOC_PROG)[0]
-            _step('Token accounts', detail=f'src {str(src_ata)[:8]}… dst {str(dst_ata)[:8]}…')
-
-            # ── 4. USDC balance ─────────────────────────────────────────────
-            bal_r = requests.post(SOLANA_RPC, json={
-                'jsonrpc': '2.0', 'id': 1,
-                'method': 'getTokenAccountBalance',
-                'params': [str(src_ata)],
+            # ── 3. SOL balance ──────────────────────────────────────────────
+            bal_r   = requests.post(SOLANA_RPC, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [str(sender)],
             }, timeout=10).json()
-            bal_val = (bal_r.get('result') or {}).get('value')
-            if bal_val is None:
-                _step('USDC account', ok=False,
-                      detail='Source USDC account not found — fund this wallet with USDC first')
-                return jsonify({'ok': False, 'steps': steps, 'error': steps[-1]['detail']}), 400
-            balance = float(bal_val.get('uiAmount') or 0)
-            _step('USDC balance', detail=f'${balance:.4f}')
-            if balance < 0.01:
+            lamports = (bal_r.get('result') or {}).get('value', 0)
+            balance  = lamports / 1e9
+            _step('SOL balance', detail=f'{balance:.6f} SOL')
+            if balance < 0.001:
                 _step('Balance check', ok=False,
-                      detail=f'Insufficient USDC: ${balance:.4f} (need ≥ $0.01)')
+                      detail=f'Insufficient SOL: {balance:.6f} (need ≥ 0.001 SOL for test transfer + fees)')
                 return jsonify({'ok': False, 'steps': steps, 'error': steps[-1]['detail']}), 400
             _step('Balance check', detail='sufficient')
 
-            # ── 5. Self-transfer guard ──────────────────────────────────────
-            # SPL token program forbids src == dst; when owner tests with their
-            # own key sender == receiver so src_ata == dst_ata.  All infrastructure
-            # checks have passed at this point, so report success without sending.
-            if str(src_ata) == str(dst_ata):
+            # ── 4. Self-transfer guard ──────────────────────────────────────
+            # Native SOL self-transfer is technically valid on-chain but wastes fees.
+            # When owner tests with their own key, sender == OWNER_WALLET — just
+            # confirm infrastructure is wired up without burning lamports.
+            if str(sender) == OWNER_WALLET:
                 _step('Transfer skipped',
-                      detail='src and dst ATA are identical (owner self-transfer). '
-                             'SPL token program forbids this — use a separate test wallet, '
-                             'or start trading so real fees trigger between different wallets. '
-                             'All infrastructure verified ✓')
+                      detail='sender == OWNER_WALLET (owner self-transfer). '
+                             'All infrastructure verified ✓ — no lamports wasted.')
                 return jsonify({
                     'ok':   True,
                     'steps': steps,
-                    'msg':  'Infrastructure verified — key, ATA, and balance all OK. '
-                            'Actual transfer skipped: SPL does not allow self-transfers.',
+                    'msg':  'Infrastructure verified — key, balance, and RPC all OK. '
+                            'Transfer skipped: sender is OWNER_WALLET.',
                 })
 
-            # ── 6. Send ─────────────────────────────────────────────────────
-            _step('Building transfer…')
-            sig = send_usdc_fee(pk, OWNER_WALLET, 0.01)
-            _step('Transaction sent', detail=sig[:12] + '…')
+            # ── 5. Send 0.0001 SOL ──────────────────────────────────────────
+            _step('Building SOL transfer…')
+            sig = send_sol_fee(pk, OWNER_WALLET, 0.0001)
+            _step('Transaction sent', detail=sig[:16] + '…')
 
-        _log_security_event('key_access', wallet, 'test_fee_transfer $0.01')
+        _log_security_event('key_access', wallet, 'test_fee_transfer 0.0001 SOL')
         return jsonify({
             'ok':          True,
             'steps':       steps,
             'sig':         sig,
             'solscan_url': 'https://solscan.io/tx/' + sig,
-            'msg':         'Sent $0.01 USDC successfully',
+            'msg':         'Sent 0.0001 SOL successfully',
         })
 
     except Exception as e:
