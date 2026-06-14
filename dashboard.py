@@ -2104,9 +2104,9 @@ def api_claim_sol():
     all_accs = session_accs + trading_accs
     print(f'[claim_sol] total accounts before dedup: {len(all_accs)}', flush=True)
 
-    # Filter: raw amount == "0" is the definitive empty check.
-    # uiAmount can be None/null for non-zero dust — only raw amount == 0 guarantees CloseAccount succeeds.
-    # Also record the on-chain owner so we know which keypair must sign.
+    # Filter: close empty accounts (raw==0) and dust accounts (raw < 1000).
+    # Dust accounts need a Burn instruction first; CloseAccount requires zero balance.
+    DUST_THRESHOLD = 1000  # raw tokens; sub-cent value for any normal token
     closeable  = []
     skipped    = []
     seen       = set()
@@ -2138,29 +2138,33 @@ def api_claim_sol():
             print(f'[claim_sol]         raw_amount={raw_amt}  uiAmount={ui_amt}  uiAmountString={ui_str}', flush=True)
             print(f'[claim_sol]         lamports={lamports}  ({sol_rent:.6f} SOL rent)', flush=True)
 
-            if raw_amt == '0':
-                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain})
-                print(f'[claim_sol]         → CLOSEABLE (raw_amount==0)', flush=True)
+            raw_int = int(raw_amt) if raw_amt.isdigit() else 1
+            if raw_int == 0:
+                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': 0, 'mint': mint_str})
+                print(f'[claim_sol]         → CLOSEABLE (empty)', flush=True)
+            elif raw_int < DUST_THRESHOLD:
+                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': raw_int, 'mint': mint_str})
+                print(f'[claim_sol]         → CLOSEABLE (dust: raw={raw_amt} < {DUST_THRESHOLD})', flush=True)
             else:
                 skipped.append({'pubkey': pub, 'amount': raw_amt, 'ui': str(ui_amt), 'mint': mint_str})
-                print(f'[claim_sol]         → SKIPPED (raw_amount={raw_amt} != 0, still holds tokens)', flush=True)
+                print(f'[claim_sol]         → SKIPPED (raw={raw_amt} ui={ui_amt})', flush=True)
         except Exception as ex:
             print(f'[claim_sol]   [{src}] {pub} → PARSE ERROR: {ex}  raw={acc}', flush=True)
 
     print(f'[claim_sol] ─── summary ───', flush=True)
-    print(f'[claim_sol] total unique accounts : {len(seen)}', flush=True)
-    print(f'[claim_sol] closeable (amount==0) : {len(closeable)}', flush=True)
-    print(f'[claim_sol] skipped (have tokens) : {len(skipped)}', flush=True)
+    print(f'[claim_sol] total unique accounts   : {len(seen)}', flush=True)
+    print(f'[claim_sol] closeable (empty + dust): {len(closeable)}', flush=True)
+    print(f'[claim_sol] skipped (have tokens)   : {len(skipped)}', flush=True)
     for s in skipped:
         print(f'[claim_sol]   skipped: pubkey={s["pubkey"]}  mint={s["mint"]}  '
               f'raw={s["amount"]}  ui={s["ui"]}', flush=True)
     for c in closeable:
         print(f'[claim_sol]   closeable: pubkey={c["pubkey"]}  lamports={c["lamports"]}  '
-              f'owner={c["owner"]}', flush=True)
+              f'owner={c["owner"]}  raw_amt={c["raw_amt"]}', flush=True)
 
     if not closeable:
-        msg = (f'No empty token accounts found — {len(all_accs)} total accounts checked '
-               f'({len(skipped)} still have token balance). '
+        msg = (f'No empty or dust token accounts found — {len(all_accs)} total accounts checked '
+               f'({len(skipped)} still have meaningful token balance). '
                f'Wallets checked: session={wallet[:8]}... trading={trading_pk[:8]}...')
         add_user_log(wallet, '[claim] ' + msg)
         return jsonify({'ok': True, 'msg': msg, 'reclaimed': 0.0, 'closed': 0,
@@ -2197,7 +2201,18 @@ def api_claim_sol():
             batch = our_accs[i:i+5]
             ixs = []
             for a in batch:
-                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}', flush=True)
+                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}', flush=True)
+                if a['raw_amt'] > 0:
+                    # Burn dust first — CloseAccount requires zero balance
+                    ixs.append(_IX(
+                        program_id=SPL_PROG,
+                        accounts=[
+                            _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account
+                            _AM(_PBK.from_string(a['mint']),   is_signer=False, is_writable=True),  # mint (supply decremented)
+                            _AM(signer,                         is_signer=True,  is_writable=False), # authority
+                        ],
+                        data=bytes([8]) + struct.pack('<Q', a['raw_amt']),  # Burn instruction
+                    ))
                 ixs.append(_IX(
                     program_id=SPL_PROG,
                     accounts=[
