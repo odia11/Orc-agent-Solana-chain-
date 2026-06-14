@@ -661,13 +661,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 </div>
 
 <!-- INACTIVITY WARNING POPUP -->
-<div class="inact-overlay" id="inact-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="inact-title">
-  <div class="inact-card">
-    <div class="inact-icon">⏳</div>
-    <div class="inact-title" id="inact-title">SESSION EXPIRING</div>
-    <div class="inact-msg">You will be disconnected due to inactivity in</div>
-    <div class="inact-timer" id="inact-countdown">2:00</div>
-    <button class="inact-btn" onclick="stayConnected()">STAY CONNECTED</button>
+<div class="inact-overlay" id="inact-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="inact-title" onclick="stayConnected()">
+  <div class="inact-card" onclick="event.stopPropagation()">
+    <div class="inact-icon">⚠️</div>
+    <div class="inact-title" id="inact-title">INACTIVITY WARNING</div>
+    <div class="inact-msg">You will be logged out in 2 minutes due to inactivity. Click anywhere to stay logged in.</div>
+    <div class="inact-timer" id="inact-countdown">120</div>
+    <button class="inact-btn" onclick="stayConnected()">STAY LOGGED IN</button>
   </div>
 </div>
 
@@ -1066,10 +1066,9 @@ function _showInactWarning(){
   if(_warnTick) clearInterval(_warnTick);
   _warnTick = setInterval(()=>{
     const rem = Math.max(0, INACT_LIMIT_MS - (Date.now() - _lastActivity));
-    const m = Math.floor(rem / 60000);
-    const s = Math.floor((rem % 60000) / 1000);
+    const secs = Math.ceil(rem / 1000);
     const el = document.getElementById('inact-countdown');
-    if(el) el.textContent = m + ':' + String(s).padStart(2,'0');
+    if(el) el.textContent = secs;
     if(rem <= 0){ clearInterval(_warnTick); _warnTick = null; }
   }, 500);
 }
