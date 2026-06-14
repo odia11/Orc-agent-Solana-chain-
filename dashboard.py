@@ -2230,6 +2230,92 @@ def admin_fees():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/api/admin/recover-fees', methods=['POST'])
+@rate_limit(5, 60)
+def admin_recover_fees():
+    """Scan trades table for profitable trades with uncollected fees and recover them."""
+    wallet = _current_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    if not OWNER_WALLET:
+        return jsonify({'error': 'OWNER_WALLET not configured'}), 500
+
+    results   = []
+    total_sent = 0.0
+
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+
+        # Per-wallet: total fees recorded in trades (calculated) vs total fees confirmed sent
+        c.execute('''
+            SELECT u.wallet_address,
+                   u.encrypted_private_key,
+                   COALESCE(SUM(t.fee_amount), 0) AS owed
+            FROM users u
+            JOIN trades t ON t.user_id = u.id
+            WHERE t.pnl > 0
+              AND t.fee_amount > 0
+              AND u.encrypted_private_key IS NOT NULL
+              AND u.encrypted_private_key != ""
+            GROUP BY u.wallet_address, u.encrypted_private_key
+        ''')
+        owed_rows = c.fetchall()
+
+        c.execute('''
+            SELECT user_wallet, COALESCE(SUM(fee_amount), 0)
+            FROM fees
+            GROUP BY user_wallet
+        ''')
+        collected_map = {row[0]: float(row[1]) for row in c.fetchall()}
+        conn.close()
+    except Exception as e:
+        return jsonify({'error': f'DB query failed: {e}'}), 500
+
+    for (user_wallet, enc_blob, owed_raw) in owed_rows:
+        if _is_owner(user_wallet):
+            continue
+        owed      = round(float(owed_raw), 6)
+        collected = round(collected_map.get(user_wallet, 0.0), 6)
+        outstanding = round(owed - collected, 6)
+        sw = (user_wallet[:6] + '...' + user_wallet[-4:]) if len(user_wallet) >= 10 else user_wallet
+
+        if outstanding < 0.0001:
+            results.append({'wallet': sw, 'owed': owed, 'collected': collected,
+                            'outstanding': outstanding, 'status': 'skipped_dust'})
+            continue
+
+        print(f'[fee-recovery] {sw} owed={owed:.6f} collected={collected:.6f} outstanding={outstanding:.6f} SOL', flush=True)
+        try:
+            with _use_key(enc_blob, user_wallet) as pk:
+                tx_sig = send_sol_fee(pk, OWNER_WALLET, outstanding)
+
+            conn2 = sqlite3.connect(DB_FILE)
+            conn2.execute(
+                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx) VALUES (?,?,?,?,?)',
+                (user_wallet, '[recovery]', outstanding / FEE_RATE, outstanding, tx_sig))
+            conn2.commit()
+            conn2.close()
+
+            total_sent += outstanding
+            print(f'[fee-recovery] ✓ {sw} recovered {outstanding:.6f} SOL TX:{tx_sig[:20]}', flush=True)
+            add_log(f'[fee-recovery] {sw} {outstanding:.6f} SOL TX:{tx_sig[:16]}...')
+            results.append({'wallet': sw, 'owed': owed, 'collected': collected,
+                            'outstanding': outstanding, 'tx': tx_sig, 'status': 'sent'})
+        except Exception as e:
+            err = _redact_keys(str(e)[:160])
+            print(f'[fee-recovery] ✗ {sw} FAILED: {err}', flush=True)
+            results.append({'wallet': sw, 'owed': owed, 'collected': collected,
+                            'outstanding': outstanding, 'error': err, 'status': 'failed'})
+
+    return jsonify({
+        'ok':         True,
+        'wallets_checked': len(owed_rows),
+        'total_sent_sol':  round(total_sent, 6),
+        'results':    results,
+    })
+
+
 @app.route('/api/admin/tokens')
 @rate_limit(20, 60)
 def admin_tokens():
