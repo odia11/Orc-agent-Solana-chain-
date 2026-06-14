@@ -267,10 +267,14 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
 # ── BALANCE HELPERS ──────────────────────────────────────────────────────────
 
 def get_balance() -> float:
+    try:
+        owner = str(Keypair.from_base58_string(PRIVATE_KEY).pubkey()) if PRIVATE_KEY else WALLET_ADDRESS
+    except Exception:
+        owner = WALLET_ADDRESS
     r = requests.post(SOLANA_RPC, json={
         'jsonrpc': '2.0', 'id': 1,
         'method': 'getBalance',
-        'params': [WALLET_ADDRESS],
+        'params': [owner],
     }, timeout=10)
     return r.json()['result']['value'] / 1e9
 
@@ -287,19 +291,32 @@ def get_usdc_balance() -> float:
 
 
 def get_token_balance(mint: str) -> float:
-    """Fetch actual on-chain token balance for the trading wallet."""
+    """Fetch actual on-chain token balance for the trading keypair.
+
+    Jupiter uses keypair.pubkey() as userPublicKey — the ATA is created there,
+    NOT on WALLET_ADDRESS (the Phantom session wallet). We must query the address
+    derived from the private key, or sells will always see balance=0 and fail.
+    """
+    try:
+        owner = str(Keypair.from_base58_string(PRIVATE_KEY).pubkey()) if PRIVATE_KEY else WALLET_ADDRESS
+    except Exception:
+        owner = WALLET_ADDRESS
+    print(f'[get_token_balance] owner={owner[:8]}... mint={mint[:8]}...', flush=True)
     try:
         r = requests.post(SOLANA_RPC, json={
             'jsonrpc': '2.0', 'id': 1,
             'method': 'getTokenAccountsByOwner',
-            'params': [WALLET_ADDRESS, {'mint': mint}, {'encoding': 'jsonParsed'}],
+            'params': [owner, {'mint': mint}, {'encoding': 'jsonParsed'}],
         }, timeout=10)
         accounts = r.json().get('result', {}).get('value', [])
         if accounts:
             ui = accounts[0]['account']['data']['parsed']['info']['tokenAmount'].get('uiAmount', 0)
-            return float(ui or 0)
+            bal = float(ui or 0)
+            print(f'[get_token_balance] balance={bal}', flush=True)
+            return bal
+        print(f'[get_token_balance] no ATA found for {mint[:8]}... on {owner[:8]}...', flush=True)
     except Exception as e:
-        print(f'[get_token_balance] {mint[:16]}: {e}', flush=True)
+        print(f'[get_token_balance] ERROR {mint[:16]}: {e}', flush=True)
     return 0.0
 
 

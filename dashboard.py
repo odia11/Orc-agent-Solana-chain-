@@ -1403,16 +1403,48 @@ def user_trader_loop(stop_event, config, wallet: str):
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
     try:
+        from solders.keypair import Keypair as _KP_init
         _enc_blob = row[1]
         _test_key = decrypt_private_key(_enc_blob, wallet)
-        _test_key = None  # clear immediately — just verifying decryption works
+        # Derive the trading wallet address from the keypair (this is where Jupiter
+        # creates ATAs and where SOL lands after sells — NOT the Phantom session wallet).
+        _trading_wallet = str(_KP_init.from_base58_string(_test_key).pubkey())
+        _test_key = None  # clear immediately
+        del _KP_init
     except Exception:
         add_user_log(wallet, '[' + short + '] ✗ Cannot decrypt private key — please re-save it in Settings')
         us['trader_running'] = False
         return
 
+    print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
     add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
     positions = us['positions']
+
+    # ── Immediate stop-loss pass on startup ──────────────────────────────────
+    # Catches any positions that breached -5% while the stop-loss bug was active.
+    for _mint, _pos in list(positions.items()):
+        if stop_event.is_set(): break
+        if _pos.get('amount', 0) <= 0 or _pos.get('buy_price', 0) <= 0:
+            continue
+        _td = get_token_data(_mint)
+        _price = float(_td['price']) if _td else 0.0
+        if _price <= 0:
+            continue
+        _chg = (_price - _pos['buy_price']) / _pos['buy_price']
+        _label = (_td.get('symbol', '') if _td else '') or _pos.get('symbol', _mint[:8])
+        if _chg <= -0.05:
+            add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bug was active)')
+            print(f'[trader] {short} STARTUP FORCE SELL {_label} {round(_chg*100,1)}%', flush=True)
+            with _use_key(_enc_blob, wallet) as _pk:
+                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
+            if _sell_ok:
+                with _use_key(_enc_blob, wallet) as _pk:
+                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
+                                       _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk)
+            else:
+                _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
+                                   _pos['amount'], _pos.get('spend', 0))
+            positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
 
     try:
         while not stop_event.is_set():
@@ -1425,7 +1457,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     continue
                 live     = state['tokens']  # already sorted by score desc
                 open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
-                us_sol  = _get_user_sol(wallet)
+                us_sol  = _get_user_sol(_trading_wallet)
                 total_live = len(live)
                 if total_live == 0:
                     add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
