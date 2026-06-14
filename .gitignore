@@ -27,6 +27,7 @@ dist/
 
 # Editor / tooling
 .claude/
+.railway
 
 # Temporary fix/patch scripts
 fix_*.py
