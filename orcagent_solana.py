@@ -247,10 +247,14 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
             sig = execute_swap(USDC_MINT, mint, lamports)
             print(f'BUY {mint[:16]} ${round(amount,2)} TX:{sig}', flush=True)
         elif action == 'sell':
-            decimals = get_token_decimals(mint)
-            lamports = int(amount * (10 ** decimals))
+            decimals       = get_token_decimals(mint)
+            actual_balance = get_token_balance(mint)
+            if actual_balance <= 0:
+                print(f'SELL {mint[:16]} — on-chain balance is 0, nothing to sell', flush=True)
+                sys.exit(0)
+            lamports = int(actual_balance * (10 ** decimals))
             sig = execute_swap(mint, USDC_MINT, lamports)
-            print(f'SELL {mint[:16]} amt:{round(amount,4)} TX:{sig}', flush=True)
+            print(f'SELL {mint[:16]} amt:{round(actual_balance,6)} (on-chain) TX:{sig}', flush=True)
         else:
             print(f'Unknown action: {action}', flush=True)
             sys.exit(1)
@@ -278,6 +282,23 @@ def get_usdc_balance() -> float:
     accounts = r.json().get('result', {}).get('value', [])
     if accounts:
         return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
+    return 0.0
+
+
+def get_token_balance(mint: str) -> float:
+    """Fetch actual on-chain token balance for the trading wallet."""
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'getTokenAccountsByOwner',
+            'params': [WALLET_ADDRESS, {'mint': mint}, {'encoding': 'jsonParsed'}],
+        }, timeout=10)
+        accounts = r.json().get('result', {}).get('value', [])
+        if accounts:
+            ui = accounts[0]['account']['data']['parsed']['info']['tokenAmount'].get('uiAmount', 0)
+            return float(ui or 0)
+    except Exception as e:
+        print(f'[get_token_balance] {mint[:16]}: {e}', flush=True)
     return 0.0
 
 

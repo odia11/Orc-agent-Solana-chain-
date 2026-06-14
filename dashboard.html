@@ -761,7 +761,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Token</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th></tr></thead>
+        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th></tr></thead>
         <tbody id="positions-tbody"></tbody>
       </table>
     </div>
@@ -1042,6 +1042,7 @@ function _showInactWarning(){
 
 function _checkInactivity(){
   if(!phantomKey) return;
+  if(traderOn){ _hideInactWarning(); return; } // never log out while bot is running
   const idle = Date.now() - _lastActivity;
   if(idle >= INACT_LIMIT_MS){
     _hideInactWarning();
@@ -1619,8 +1620,15 @@ function carouselNav(dir){ goToSlide(_carIdx+dir); }
 async function initSlideChart(index, mint){
   const container=document.getElementById('lw-chart-'+index);
   if(!container) return;
-  if(container.clientWidth===0) return;
   if(container._chart) return; // already built — TF changes go via changeSlideTf()
+  if(container.clientWidth===0){
+    // Container not yet visible — wait until it has width, then retry once
+    const ro=new ResizeObserver(()=>{
+      if(container.clientWidth>0){ro.disconnect();initSlideChart(index,mint);}
+    });
+    ro.observe(container);
+    return;
+  }
 
   const loadEl=document.getElementById('chartload-'+index);
   try{
@@ -1677,7 +1685,11 @@ async function changeSlideTf(index,tf,btn){
   if(!mint) return;
   const loadEl=document.getElementById('chartload-'+index);
   if(loadEl){loadEl.textContent='Loading chart…';loadEl.style.display='flex';}
-  await _loadChartData(index,mint,tf,container,loadEl);
+  try{
+    await _loadChartData(index,mint,tf,container,loadEl);
+  }catch(e){
+    _showChartUnavail(index,mint,loadEl);
+  }
 }
 
 async function _loadChartData(index,mint,tf,container,loadEl){
@@ -2106,8 +2118,12 @@ function renderPositions(detail){
   document.getElementById('positions-tbody').innerHTML=detail.map(p=>{
     const cls=p.pnl>=0?'td-pos':'td-neg';
     const sign=p.pnl>=0?'+':'';
+    const openedStr=p.opened_at
+      ? new Date(p.opened_at*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
+      : '—';
     return `<tr>
       <td class="td-sym">${esc(p.symbol||'???')}</td>
+      <td style="color:var(--muted);font-size:10px">${openedStr}</td>
       <td>${fmtPrice(p.entry||0)}</td>
       <td>${fmtPrice(p.current||0)}</td>
       <td>$${(p.spend||0).toFixed(2)}</td>

@@ -1290,6 +1290,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                     pos['amount']     = spend / best['price']
                                     pos['buy_price']  = best['price']
                                     pos['spend']      = spend
+                                    pos['opened_at']  = time.time()
                                     open_pos += 1
                                 elif pos.get('entry_wait_count', 0) >= 5 or dip > 0.05:
                                     # Timed out or ran away — cancel wait
@@ -1304,6 +1305,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['amount']     = spend / best['price']
                                 pos['buy_price']  = best['price']
                                 pos['spend']      = spend
+                                pos['opened_at']  = time.time()
                                 open_pos += 1
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
@@ -1550,6 +1552,7 @@ def api_state():
                     'entry': entry, 'current': cur_price,
                     'spend': round(pos.get('spend', 0), 2),
                     'pnl': pnl, 'pnl_pct': pnl_pct,
+                    'opened_at': pos.get('opened_at', 0),
                 })
         return jsonify({
             'trader_running':   us.get('trader_running', False),
