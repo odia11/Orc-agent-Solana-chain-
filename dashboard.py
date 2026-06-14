@@ -2621,62 +2621,6 @@ def admin_recover_fees():
     return jsonify(result), status
 
 
-@app.route('/api/admin/force-sell', methods=['POST'])
-@rate_limit(10, 60)
-def admin_force_sell():
-    """Immediately sell a token position across all users who hold it."""
-    admin_wallet = _current_wallet()
-    if not admin_wallet or not _is_owner(admin_wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
-    target_mint = ((request.json or {}).get('mint') or '').strip()
-    if not target_mint:
-        return jsonify({'error': 'mint required'}), 400
-
-    results = []
-    for wallet, us in list(user_states.items()):
-        pos = us.get('positions', {}).get(target_mint, {})
-        if pos.get('amount', 0) <= 0:
-            continue
-        sw = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-        conn = sqlite3.connect(DB_FILE)
-        try:
-            row = conn.execute(
-                'SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
-            ).fetchone()
-        finally:
-            conn.close()
-        if not row or not row[1]:
-            results.append({'wallet': sw, 'status': 'no_key'})
-            continue
-        user_id, enc_blob = row[0], row[1]
-        td    = get_token_data(target_mint)
-        price = float(td['price']) if td else 0.0
-        label = (td['symbol'] if td else '') or pos.get('symbol', target_mint[:8])
-        print(f'[force-sell] {sw} {label} amount={pos["amount"]} price=${price}', flush=True)
-        try:
-            with _use_key(enc_blob, wallet) as _pk:
-                sell_ok = _execute_user_swap(wallet, _pk, 'sell', target_mint, str(pos['amount']))
-            if sell_ok and price > 0:
-                with _use_key(enc_blob, wallet) as _pk:
-                    _record_user_trade(user_id, us, label, pos['buy_price'], price,
-                                       pos['amount'], pos['spend'], wallet=wallet, private_key=_pk)
-            else:
-                _record_user_trade(user_id, us, label, pos['buy_price'], price,
-                                   pos['amount'], pos['spend'])
-            us['positions'][target_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-            add_user_log(wallet, f'[ADMIN FORCE SELL] {label} sell_ok={sell_ok} price=${round(price,8)}')
-            print(f'[force-sell] ✓ {sw} {label} sell_ok={sell_ok}', flush=True)
-            results.append({'wallet': sw, 'label': label, 'sell_ok': sell_ok,
-                            'price': price, 'status': 'sold'})
-        except Exception as e:
-            err = _redact_keys(str(e)[:160])
-            print(f'[force-sell] ✗ {sw} {label} FAILED: {err}', flush=True)
-            results.append({'wallet': sw, 'label': label, 'error': err, 'status': 'failed'})
-
-    if not results:
-        return jsonify({'ok': False, 'msg': f'No open positions found for {target_mint[:12]}...'})
-    return jsonify({'ok': True, 'results': results})
-
 
 @app.route('/api/admin/tokens')
 @rate_limit(20, 60)
