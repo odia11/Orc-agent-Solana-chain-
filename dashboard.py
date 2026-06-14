@@ -2053,18 +2053,24 @@ def api_claim_sol():
     print(f'[claim_sol] RPC candidates  = {CLAIM_SOL_RPCS}', flush=True)
     print(f'[claim_sol] SPL_PROG        = {SPL_PROG_STR}', flush=True)
 
-    # Try each RPC in order until one returns a non-error response.
-    # api.mainnet-beta.solana.com rate-limits getTokenAccountsByOwner and silently returns [].
+    # Use Ankr as primary RPC — no API key, higher rate limits than mainnet-beta.
+    # mainnet-beta silently returns [] under rate limiting; Ankr does not.
+    ANKR_RPC = 'https://rpc.ankr.com/solana'
+
     def _rpc_token_accounts(owner: str, label: str) -> tuple:
-        """Returns (accounts_list, rpc_url_that_worked)."""
+        """Returns (accounts_list, rpc_url_that_worked). Tries Ankr first, falls back to others."""
         payload = {
             'jsonrpc': '2.0', 'id': 1,
             'method':  'getTokenAccountsByOwner',
             'params':  [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
         }
-        for rpc in CLAIM_SOL_RPCS:
-            rpc_short = rpc.split('?')[0]   # hide API key from logs
-            print(f'[claim_sol] → trying {rpc_short}  owner={owner}  label={label}', flush=True)
+        # Build ordered list: always Ankr first, then the configured fallbacks
+        rpcs_to_try = [ANKR_RPC] + [r for r in CLAIM_SOL_RPCS if r != ANKR_RPC]
+        for rpc in rpcs_to_try:
+            rpc_short = rpc.split('?')[0]
+            print(f'[claim_sol] → getTokenAccountsByOwner  rpc={rpc_short}  owner={owner}  label={label}', flush=True)
+            # 1-second pause before each RPC call to avoid rate-limit bursts
+            time.sleep(1)
             try:
                 r    = requests.post(rpc, json=payload, timeout=15)
                 resp = r.json()
@@ -2072,12 +2078,12 @@ def api_claim_sol():
                     print(f'[claim_sol]   {rpc_short} ERROR: {resp["error"]}', flush=True)
                     continue
                 accs = resp.get('result', {}).get('value', [])
-                print(f'[claim_sol]   {rpc_short} OK → {len(accs)} account(s)', flush=True)
+                print(f'[claim_sol]   {rpc_short} → {len(accs)} account(s) returned', flush=True)
                 return accs, rpc
             except Exception as ex:
                 print(f'[claim_sol]   {rpc_short} EXCEPTION: {ex}', flush=True)
         print(f'[claim_sol]   all RPCs exhausted for {label}', flush=True)
-        return [], CLAIM_SOL_RPCS[-1]
+        return [], rpcs_to_try[-1]
 
     try:
         session_accs, working_rpc = _rpc_token_accounts(wallet, 'session_wallet')
