@@ -78,13 +78,13 @@ PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
 
 # Ordered list of RPC endpoints for claim_sol read queries.
-# api.mainnet-beta.solana.com rate-limits getTokenAccountsByOwner and silently returns [].
-# Ankr is free with no key; Helius is prioritised when HELIUS_API_KEY is set.
+# Ankr now requires an API key (403 on free tier). Using Alchemy demo + Helius demo as primaries.
 def _build_claim_rpcs() -> list:
     rpcs = []
-    if HELIUS_API_KEY:
+    if HELIUS_API_KEY:                      # real key beats demo key
         rpcs.append(f'https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}')
-    rpcs.append('https://rpc.ankr.com/solana')
+    rpcs.append('https://solana-mainnet.g.alchemy.com/v2/demo')
+    rpcs.append('https://mainnet.helius-rpc.com/?api-key=demo')
     rpcs.append('https://api.mainnet-beta.solana.com')
     return rpcs
 CLAIM_SOL_RPCS = _build_claim_rpcs()
@@ -2053,37 +2053,35 @@ def api_claim_sol():
     print(f'[claim_sol] RPC candidates  = {CLAIM_SOL_RPCS}', flush=True)
     print(f'[claim_sol] SPL_PROG        = {SPL_PROG_STR}', flush=True)
 
-    # Use Ankr as primary RPC — no API key, higher rate limits than mainnet-beta.
-    # mainnet-beta silently returns [] under rate limiting; Ankr does not.
-    ANKR_RPC = 'https://rpc.ankr.com/solana'
-
     def _rpc_token_accounts(owner: str, label: str) -> tuple:
-        """Returns (accounts_list, rpc_url_that_worked). Tries Ankr first, falls back to others."""
+        """Returns (accounts_list, rpc_url_that_worked). Tries CLAIM_SOL_RPCS in order."""
         payload = {
             'jsonrpc': '2.0', 'id': 1,
             'method':  'getTokenAccountsByOwner',
             'params':  [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
         }
-        # Build ordered list: always Ankr first, then the configured fallbacks
-        rpcs_to_try = [ANKR_RPC] + [r for r in CLAIM_SOL_RPCS if r != ANKR_RPC]
-        for rpc in rpcs_to_try:
+        headers = {'Content-Type': 'application/json'}
+        for rpc in CLAIM_SOL_RPCS:
             rpc_short = rpc.split('?')[0]
             print(f'[claim_sol] → getTokenAccountsByOwner  rpc={rpc_short}  owner={owner}  label={label}', flush=True)
-            # 1-second pause before each RPC call to avoid rate-limit bursts
-            time.sleep(1)
+            time.sleep(1)   # avoid burst rate-limiting across successive calls
             try:
-                r    = requests.post(rpc, json=payload, timeout=15)
+                r = requests.post(rpc, json=payload, headers=headers, timeout=15)
+                print(f'[claim_sol]   {rpc_short} HTTP {r.status_code}', flush=True)
+                if r.status_code != 200:
+                    print(f'[claim_sol]   {rpc_short} non-200, body={r.text[:120]}', flush=True)
+                    continue
                 resp = r.json()
                 if 'error' in resp:
-                    print(f'[claim_sol]   {rpc_short} ERROR: {resp["error"]}', flush=True)
+                    print(f'[claim_sol]   {rpc_short} JSON-RPC error: {resp["error"]}', flush=True)
                     continue
                 accs = resp.get('result', {}).get('value', [])
-                print(f'[claim_sol]   {rpc_short} → {len(accs)} account(s) returned', flush=True)
+                print(f'[claim_sol]   {rpc_short} OK → {len(accs)} account(s)', flush=True)
                 return accs, rpc
             except Exception as ex:
                 print(f'[claim_sol]   {rpc_short} EXCEPTION: {ex}', flush=True)
         print(f'[claim_sol]   all RPCs exhausted for {label}', flush=True)
-        return [], rpcs_to_try[-1]
+        return [], CLAIM_SOL_RPCS[-1]
 
     try:
         session_accs, working_rpc = _rpc_token_accounts(wallet, 'session_wallet')
