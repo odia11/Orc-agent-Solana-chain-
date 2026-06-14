@@ -131,6 +131,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .swipe-hint{display:none;font-size:10px;color:var(--muted);text-align:right;margin:-4px 0 6px;letter-spacing:.05em}
 @media(max-width:600px){.swipe-hint{display:block}}
 .usdc-warn{display:none;margin:0 0 10px;padding:10px 14px;background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.25);border-radius:8px;font-size:11px;color:#f0b90b;line-height:1.5}
+.claim-sol-btn{display:block;margin:5px auto 0;padding:3px 10px;font-size:10px;background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.2);border-radius:4px;color:var(--green);cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:background .15s}
+.claim-sol-btn:hover{background:rgba(0,255,136,.18)}
+.claim-sol-btn:disabled{opacity:.45;cursor:default}
+.claim-msg{margin:0 0 8px;padding:8px 12px;border-radius:7px;font-size:11px;line-height:1.5}
+.claim-msg.ok{background:rgba(0,255,136,.07);border:1px solid rgba(0,255,136,.2);color:var(--green)}
+.claim-msg.err{background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.2);color:var(--red)}
 
 .mkt-card{
   background:var(--bg3);
@@ -740,6 +746,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-lbl">SOL Balance</div>
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub">available to trade</div>
+      <button id="claim-sol-btn" class="claim-sol-btn" onclick="claimSol()" title="Close empty token accounts and reclaim rent SOL">⚡ Claim SOL</button>
     </div>
     <div class="stat">
       <div class="stat-lbl">Open Positions</div>
@@ -747,6 +754,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-sub">max 3 concurrent</div>
     </div>
   </div>
+  <div id="claim-msg" class="claim-msg" style="display:none"></div>
 
   <!-- SOL WARNING -->
   <div class="usdc-warn" id="usdc-warn">⚠ Low SOL balance — send SOL to your trading wallet to start trading.</div>
@@ -2374,6 +2382,27 @@ setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,10000);
 setInterval(fetchCarousel,60000);
+
+// ── CLAIM SOL ──
+async function claimSol(){
+  if(!phantomKey) return;
+  const btn=document.getElementById('claim-sol-btn');
+  btn.disabled=true; btn.textContent='Checking...';
+  try{
+    const r=await fetch('/api/claim_sol',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
+    if(!r){ _showClaimMsg('Request failed',false); return; }
+    _showClaimMsg(r.msg||(r.ok?'Done':'Failed'),r.ok);
+    if(r.ok&&r.reclaimed>0) setTimeout(fetchBalance,2000);
+  }catch(e){ _showClaimMsg('Error: '+e.message,false); }
+  finally{ btn.disabled=false; btn.textContent='⚡ Claim SOL'; }
+}
+function _showClaimMsg(text,ok){
+  const m=document.getElementById('claim-msg');
+  m.textContent=text;
+  m.className='claim-msg '+(ok?'ok':'err');
+  m.style.display='block';
+  setTimeout(()=>m.style.display='none',8000);
+}
 
 // ── SWIPE GESTURES — market grid (mobile) ──
 (function(){

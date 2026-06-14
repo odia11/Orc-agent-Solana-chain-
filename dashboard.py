@@ -1623,6 +1623,99 @@ def api_balance():
         threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
     return jsonify({'ok': True, 'sol': us.get('sol', 0.0), 'usdc': us.get('usdc', 0.0)})
 
+# ── CLAIM SOL ──
+@app.route('/api/claim_sol', methods=['POST'])
+@rate_limit(3, 60)
+def api_claim_sol():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+
+    conn = sqlite3.connect(DB_FILE)
+    row  = conn.execute('SELECT enc_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No trading key — configure in Settings first'}), 400
+
+    enc_blob       = row[0]
+    TOKEN_PROG_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getTokenAccountsByOwner',
+            'params': [wallet, {'programId': TOKEN_PROG_STR}, {'encoding': 'jsonParsed'}],
+        }, timeout=10)
+        accounts_data = r.json().get('result', {}).get('value', [])
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'RPC error: ' + str(e)}), 500
+
+    closeable = []
+    for acc in accounts_data:
+        try:
+            amount = int(acc['account']['data']['parsed']['info']['tokenAmount']['amount'] or 0)
+            if amount == 0:
+                closeable.append((acc['pubkey'], int(acc['account']['lamports'])))
+        except Exception:
+            pass
+
+    if not closeable:
+        return jsonify({'ok': True, 'msg': 'No empty token accounts to close', 'reclaimed': 0.0, 'closed': 0})
+
+    total_lamports = sum(lam for _, lam in closeable)
+    closed = 0
+    errors = 0
+
+    with _use_key(enc_blob, wallet) as pk_str:
+        from solders.keypair import Keypair as _KP
+        from solders.pubkey import Pubkey as _PBK
+        from solders.instruction import Instruction as _IX, AccountMeta as _AM
+        from solders.transaction import Transaction as _TX
+        from solders.hash import Hash as _SH
+
+        TOKEN_PROG = _PBK.from_string(TOKEN_PROG_STR)
+        keypair    = _KP.from_base58_string(pk_str)
+        owner_pk   = keypair.pubkey()
+
+        for i in range(0, len(closeable), 20):
+            batch = closeable[i:i+20]
+            ixs = [_IX(
+                program_id=TOKEN_PROG,
+                accounts=[
+                    _AM(_PBK.from_string(acc_pk), is_signer=False, is_writable=True),
+                    _AM(owner_pk,                  is_signer=False, is_writable=True),
+                    _AM(owner_pk,                  is_signer=True,  is_writable=False),
+                ],
+                data=bytes([9]),  # CloseAccount
+            ) for acc_pk, _ in batch]
+            try:
+                bh  = requests.post(SOLANA_RPC, json={
+                    'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+                }, timeout=10).json()['result']['value']['blockhash']
+                tx  = _TX.new_signed_with_payer(ixs, owner_pk, [keypair], _SH.from_string(bh))
+                res = requests.post(SOLANA_RPC, json={
+                    'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+                    'params': [base64.b64encode(bytes(tx)).decode(), {'encoding': 'base64', 'skipPreflight': False}],
+                }, timeout=30).json()
+                if 'error' in res:
+                    errors += len(batch)
+                    print(f'[claim_sol] batch error: {res["error"]}', flush=True)
+                else:
+                    closed += len(batch)
+            except Exception as e:
+                errors += len(batch)
+                print(f'[claim_sol] error: {e}', flush=True)
+
+    if closed == 0:
+        return jsonify({'ok': False, 'msg': 'Failed to close accounts — check server logs', 'reclaimed': 0.0})
+
+    reclaimed = total_lamports / 1e9
+    msg = f'Closed {closed} account{"s" if closed != 1 else ""} — reclaimed ~{reclaimed:.5f} SOL'
+    if errors:
+        msg += f' ({errors} failed)'
+    add_user_log(wallet, '[claim] ' + msg)
+    threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
+    return jsonify({'ok': True, 'msg': msg, 'reclaimed': reclaimed, 'closed': closed})
+
 # ── MARKET / TOTD / TRADES ──
 @app.route('/api/market')
 @rate_limit(30, 60)
