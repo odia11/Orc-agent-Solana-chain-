@@ -70,6 +70,7 @@ WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT         = 'So11111111111111111111111111111111111111112'
 SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
+SOLANA_RPC_URL   = os.environ.get('SOLANA_RPC_URL', '')   # set in Railway — overrides all fallbacks
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -77,11 +78,13 @@ JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
 
-# Ordered list of RPC endpoints for claim_sol read queries.
-# Ankr now requires an API key (403 on free tier). Using Alchemy demo + Helius demo as primaries.
+# Ordered list of RPC endpoints for claim_sol queries.
+# SOLANA_RPC_URL (Railway env var) is always first when set — use it for a real Helius key.
 def _build_claim_rpcs() -> list:
     rpcs = []
-    if HELIUS_API_KEY:                      # real key beats demo key
+    if SOLANA_RPC_URL:
+        rpcs.append(SOLANA_RPC_URL)
+    if HELIUS_API_KEY:
         rpcs.append(f'https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}')
     rpcs.append('https://solana-mainnet.g.alchemy.com/v2/demo')
     rpcs.append('https://mainnet.helius-rpc.com/?api-key=demo')
