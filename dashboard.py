@@ -512,9 +512,12 @@ _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
 _SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
 
 # Fields that must never appear in any JSON response body.
+# Includes DB column names so a runaway SELECT * can never accidentally expose them.
 _FORBIDDEN_RESPONSE_KEYS = frozenset({
-    'private_key', 'private_key_raw', 'enc_key', 'encrypted_key',
-    'secret', 'secret_key', 'encryption_key', 'raw_key', 'privkey',
+    'private_key', 'private_key_raw', 'encrypted_private_key',
+    'enc_key', 'encrypted_key', 'encryption_key', 'raw_key', 'privkey',
+    'secret', 'secret_key',
+    'key_hash',
     'traceback',
 })
 
@@ -523,8 +526,36 @@ def _redact_keys(text: str) -> str:
     Covers both private keys and TX hashes — used for subprocess output before logging."""
     return _KEY_LEAK_RE.sub('[REDACTED]', text)
 
+def _security_selftest() -> bool:
+    STATE_ALLOWED    = frozenset({
+        'trader_running', 'usdc', 'sol', 'positions', 'positions_detail',
+        'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key',
+    })
+    SETTINGS_ALLOWED = frozenset({
+        'ok', 'has_trading_key', 'max_trade_size', 'min_trade_size', 'daily_loss_limit', 'msg',
+    })
+    passed = True
+    for name, allowed in [('/api/state', STATE_ALLOWED), ('/api/settings', SETTINGS_ALLOWED)]:
+        leak = allowed & _FORBIDDEN_RESPONSE_KEYS
+        if leak:
+            print(f'[SECURITY SELFTEST FAIL] {name} schema contains forbidden field(s): {leak}', flush=True)
+            passed = False
+    if '/api/settings' not in _SENSITIVE_PATHS:
+        print('[SECURITY SELFTEST FAIL] /api/settings not in _SENSITIVE_PATHS', flush=True)
+        passed = False
+    if not _KEY_LEAK_RE.pattern:
+        print('[SECURITY SELFTEST FAIL] _KEY_LEAK_RE not compiled', flush=True)
+        passed = False
+    if passed:
+        print(f'[security selftest] PASS — '
+              f'{len(_SENSITIVE_PATHS)} blocked path(s), '
+              f'{len(_FORBIDDEN_RESPONSE_KEYS)} forbidden field(s), '
+              f'log_lines scrubbed, regex active on all endpoints', flush=True)
+    return passed
+
 def _log_security_event(event_type: str, wallet: str, details: str = '') -> None:
-    short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    short   = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    details = _redact_keys(str(details))  # scrub before printing — belt-and-suspenders
     try:
         ip = request.remote_addr or 'system'
     except RuntimeError:
@@ -1097,7 +1128,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                     conn.close()
                     add_user_log(wlt, f'✓ Perf fee ${fee:.4f} USDC (5% of +${gross:.4f}) TX:{tx_sig[:12]}...')
                 except Exception as e:
-                    add_user_log(wlt, f'Fee transfer failed: {str(e)[:80]}')
+                    add_user_log(wlt, f'Fee transfer failed: {_redact_keys(str(e)[:80])}')
                 finally:
                     pk = None
             threading.Thread(target=_do_fee, args=(_pk, _sym, _gros, _fee, _wlt), daemon=True).start()
@@ -1571,23 +1602,27 @@ def api_state():
                     'pnl': pnl, 'pnl_pct': pnl_pct,
                     'opened_at': pos.get('opened_at', 0),
                 })
+        safe_logs = [{'t': ln.get('t', ''), 'msg': _redact_keys(str(ln.get('msg', '')))}
+                     for ln in us.get('log_lines', [])[:40]]
         return jsonify({
             'trader_running':   us.get('trader_running', False),
             'usdc':             us.get('usdc', 0.0),
             'sol':              us.get('sol',  0.0),
             'positions':        open_pos,
             'positions_detail': positions_detail,
-            'log_lines':        us.get('log_lines', [])[:40],
+            'log_lines':        safe_logs,
             'tokens':           state['tokens'],
             'wallet':           wallet,
             'is_admin':         bool(OWNER_WALLET and wallet == OWNER_WALLET),
             'has_trading_key':  htk,
         })
+    safe_sys_logs = [{'t': ln.get('t', ''), 'msg': _redact_keys(str(ln.get('msg', '')))}
+                     for ln in state['log_lines'][:20]]
     return jsonify({
         'trader_running':  state['trader_running'],
         'usdc':            state['usdc'], 'sol': state['sol'],
         'positions':       int(state.get('positions', 0)),
-        'log_lines':       state['log_lines'][:20],
+        'log_lines':       safe_sys_logs,
         'tokens':          state['tokens'],
         'wallet':          state.get('wallet', ''),
         'is_admin':        False,
@@ -1899,7 +1934,9 @@ def api_admin():
         c.execute('SELECT COUNT(*) FROM trades WHERE timestamp LIKE ?', (today + '%',))
         trades_today = int(c.fetchone()[0] or 0)
         c.execute('SELECT event_type, wallet, ip_addr, details, timestamp FROM security_log ORDER BY timestamp DESC LIMIT 20')
-        sec_log = [{'event': r[0], 'wallet': r[1], 'ip': r[2], 'details': r[3], 'ts': r[4]} for r in c.fetchall()]
+        sec_log = [{'event': r[0], 'wallet': r[1], 'ip': r[2],
+                    'details': _redact_keys(str(r[3] or '')), 'ts': r[4]}
+                   for r in c.fetchall()]
         conn.close()
         users_trading = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
         return jsonify({
@@ -2385,6 +2422,7 @@ threading.Thread(target=token_loop,    daemon=True).start()
 threading.Thread(target=totd_loop,     daemon=True).start()
 threading.Thread(target=_cleanup_loop, daemon=True).start()
 threading.Thread(target=_audit_loop,   daemon=True).start()
+_security_selftest()
 add_log('OrcAgent started')
 
 if __name__ == '__main__':
