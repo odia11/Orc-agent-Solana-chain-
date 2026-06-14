@@ -1963,133 +1963,165 @@ def api_claim_sol():
         return jsonify({'ok': False, 'msg': 'No trading key — configure in Settings first'}), 400
 
     enc_blob       = row[0]
-    TOKEN_PROG_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
-    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    SPL_PROG_STR   = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+    short_w        = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
 
-    from solders.keypair  import Keypair  as _KP
-    from solders.pubkey   import Pubkey   as _PBK
+    from solders.keypair     import Keypair     as _KP
+    from solders.pubkey      import Pubkey      as _PBK
     from solders.instruction import Instruction as _IX, AccountMeta as _AM
     from solders.transaction import Transaction as _TX
-    from solders.hash     import Hash     as _SH
+    from solders.hash        import Hash        as _SH
 
-    # Derive trading wallet pubkey so we can search both addresses
+    # Derive the trading keypair once — authority must match the account's owner field
     try:
         with _use_key(enc_blob, wallet) as _pk_tmp:
-            trading_pk = str(_KP.from_base58_string(_pk_tmp).pubkey())
+            _kp_probe  = _KP.from_base58_string(_pk_tmp)
+            trading_pk = str(_kp_probe.pubkey())
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key: ' + str(e)[:80]}), 500
 
-    print(f'[claim_sol] {short_w} session={wallet[:8]}... trading={trading_pk[:8]}...', flush=True)
+    print(f'[claim_sol] {short_w} session_wallet={wallet} trading_wallet={trading_pk}', flush=True)
 
-    # Query getTokenAccountsByOwner for BOTH the session wallet and the trading wallet.
-    # Token accounts might be on either one depending on which pubkey Jupiter used.
-    def _fetch_accounts(owner_addr):
-        resp = requests.post(SOLANA_RPC, json={
+    # Fetch token accounts for BOTH wallets — either may hold empty ATAs
+    def _rpc_token_accounts(owner: str):
+        r = requests.post(SOLANA_RPC, json={
             'jsonrpc': '2.0', 'id': 1,
             'method': 'getTokenAccountsByOwner',
-            'params': [owner_addr, {'programId': TOKEN_PROG_STR}, {'encoding': 'jsonParsed'}],
+            'params': [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
         }, timeout=15)
-        return resp.json().get('result', {}).get('value', [])
+        resp = r.json()
+        if 'error' in resp:
+            print(f'[claim_sol] RPC error for {owner[:8]}: {resp["error"]}', flush=True)
+            return []
+        return resp.get('result', {}).get('value', [])
 
     try:
-        session_accs = _fetch_accounts(wallet)
-        trading_accs = _fetch_accounts(trading_pk) if trading_pk != wallet else []
+        session_accs = _rpc_token_accounts(wallet)
+        trading_accs = _rpc_token_accounts(trading_pk) if trading_pk != wallet else []
     except Exception as e:
-        return jsonify({'ok': False, 'msg': 'RPC error: ' + str(e)}), 500
+        return jsonify({'ok': False, 'msg': 'RPC request failed: ' + str(e)}), 500
 
     all_accs = session_accs + trading_accs
-    print(f'[claim_sol] found {len(session_accs)} accounts on session wallet, '
-          f'{len(trading_accs)} on trading wallet ({len(all_accs)} total)', flush=True)
+    print(f'[claim_sol] session_wallet={len(session_accs)} accs  trading_wallet={len(trading_accs)} accs  total={len(all_accs)}', flush=True)
 
-    # Filter: uiAmount == 0 (empty after selling)
-    # uiAmount is the human-readable float; amount is the raw integer.
-    # Using uiAmount catches accounts where tiny dust rounds to 0 in display.
-    closeable = []
-    seen_pubkeys = set()
+    # Filter: raw amount == "0" is the definitive empty check.
+    # uiAmount can be None/null for non-zero dust — only raw amount == 0 guarantees CloseAccount succeeds.
+    # Also record the on-chain owner so we know which keypair must sign.
+    closeable  = []
+    skipped    = []
+    seen       = set()
     for acc in all_accs:
+        pub = acc.get('pubkey', '')
+        if pub in seen:
+            continue
+        seen.add(pub)
         try:
-            pubkey   = acc['pubkey']
-            if pubkey in seen_pubkeys:
-                continue
-            seen_pubkeys.add(pubkey)
             info     = acc['account']['data']['parsed']['info']
-            ui_amt   = float(info['tokenAmount'].get('uiAmount') or 0)
+            raw_amt  = str(info['tokenAmount'].get('amount', '1'))   # default '1' → not closeable
             lamports = int(acc['account']['lamports'])
             mint_str = info.get('mint', 'unknown')
-            print(f'[claim_sol]   {pubkey[:12]}... mint={mint_str[:12]}... uiAmount={ui_amt} lamports={lamports}', flush=True)
-            if ui_amt == 0:
-                closeable.append((pubkey, lamports))
+            owner_on_chain = info.get('owner', '')
+            print(f'[claim_sol]   {pub[:12]}... mint={mint_str[:12]}... raw_amount={raw_amt} '
+                  f'lamports={lamports} owner={owner_on_chain[:12]}...', flush=True)
+            if raw_amt == '0':
+                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain})
+            else:
+                skipped.append({'pubkey': pub[:12], 'amount': raw_amt, 'mint': mint_str[:12]})
         except Exception as ex:
-            print(f'[claim_sol]   parse error: {ex}', flush=True)
+            print(f'[claim_sol]   parse error for {pub[:12]}: {ex}', flush=True)
 
-    print(f'[claim_sol] {len(closeable)} empty accounts (uiAmount==0) ready to close', flush=True)
+    print(f'[claim_sol] {len(closeable)} closeable (amount==0)  {len(skipped)} skipped (non-zero)', flush=True)
+    if skipped:
+        print(f'[claim_sol] skipped (still have tokens): {skipped}', flush=True)
 
     if not closeable:
-        add_user_log(wallet, f'[claim] 0 empty accounts (checked {len(all_accs)} total)')
-        return jsonify({
-            'ok':        True,
-            'msg':       f'No empty token accounts found — checked {len(all_accs)} account(s), none have zero balance',
-            'reclaimed': 0.0,
-            'closed':    0,
-        })
+        msg = (f'No empty token accounts found — {len(all_accs)} total accounts checked '
+               f'({len(skipped)} still have token balance). '
+               f'Wallets checked: session={wallet[:8]}... trading={trading_pk[:8]}...')
+        add_user_log(wallet, '[claim] ' + msg)
+        return jsonify({'ok': True, 'msg': msg, 'reclaimed': 0.0, 'closed': 0,
+                        'debug': {'session_wallet': wallet, 'trading_wallet': trading_pk,
+                                  'total_accounts': len(all_accs), 'skipped': skipped}})
 
-    total_lamports = sum(lam for _, lam in closeable)
-    tx_sigs = []
-    errors  = 0
+    total_lamports = sum(a['lamports'] for a in closeable)
+    tx_sigs  = []
+    failed   = []
+    last_err = ''
 
     with _use_key(enc_blob, wallet) as pk_str:
-        TOKEN_PROG = _PBK.from_string(TOKEN_PROG_STR)
-        keypair    = _KP.from_base58_string(pk_str)
-        owner_pk   = keypair.pubkey()
-        dest_pk    = _PBK.from_string(wallet)  # rent goes back to the session (Phantom) wallet
+        kp       = _KP.from_base58_string(pk_str)
+        signer   = kp.pubkey()
+        SPL_PROG = _PBK.from_string(SPL_PROG_STR)
 
-        # Bundle in batches of 20 (transaction size limit)
-        for i in range(0, len(closeable), 20):
-            batch = closeable[i:i+20]
+        # Only close accounts where on-chain owner == our signing keypair.
+        # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
+        our_accs   = [a for a in closeable if a['owner'] == str(signer)]
+        other_accs = [a for a in closeable if a['owner'] != str(signer)]
+        if other_accs:
+            print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
+                  f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
+
+        print(f'[claim_sol] signing {len(our_accs)} accounts with trading keypair {str(signer)[:8]}...', flush=True)
+
+        for i in range(0, len(our_accs), 5):   # small batches — most reliable
+            batch = our_accs[i:i+5]
             ixs = []
-            for acc_pk, lam in batch:
-                print(f'[claim_sol] closing {acc_pk[:12]}... {lam} lamports', flush=True)
+            for a in batch:
+                print(f'[claim_sol] → closing {a["pubkey"][:12]}... {a["lamports"]} lamports', flush=True)
                 ixs.append(_IX(
-                    program_id=TOKEN_PROG,
+                    program_id=SPL_PROG,
                     accounts=[
-                        _AM(_PBK.from_string(acc_pk), is_signer=False, is_writable=True),  # account to close
-                        _AM(dest_pk,                   is_signer=False, is_writable=True),  # destination — rent back to user wallet
-                        _AM(owner_pk,                  is_signer=True,  is_writable=False), # owner/authority (trading key signs)
+                        _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account to close
+                        _AM(signer,                         is_signer=False, is_writable=True),  # destination (rent back)
+                        _AM(signer,                         is_signer=True,  is_writable=False), # authority (must match owner)
                     ],
-                    data=bytes([9]),  # CloseAccount discriminator
+                    data=bytes([9]),  # CloseAccount instruction index
                 ))
             try:
-                bh  = requests.post(SOLANA_RPC, json={
+                bh_resp = requests.post(SOLANA_RPC, json={
                     'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
-                }, timeout=10).json()['result']['value']['blockhash']
-                tx  = _TX.new_signed_with_payer(ixs, owner_pk, [keypair], _SH.from_string(bh))
+                }, timeout=10).json()
+                bh  = bh_resp['result']['value']['blockhash']
+                tx  = _TX.new_signed_with_payer(ixs, signer, [kp], _SH.from_string(bh))
                 res = requests.post(SOLANA_RPC, json={
                     'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
                     'params': [base64.b64encode(bytes(tx)).decode(),
                                {'encoding': 'base64', 'skipPreflight': False}],
                 }, timeout=30).json()
+                print(f'[claim_sol] sendTransaction response: {res}', flush=True)
                 if 'error' in res:
-                    errors += len(batch)
-                    print(f'[claim_sol] TX error: {res["error"]}', flush=True)
+                    last_err = str(res['error'])
+                    failed.extend(batch)
+                    print(f'[claim_sol] ✗ TX failed: {last_err}', flush=True)
                 else:
                     sig = str(res.get('result', ''))
                     tx_sigs.append(sig)
-                    print(f'[claim_sol] ✓ closed {len(batch)} accounts TX:{sig[:20]}', flush=True)
+                    print(f'[claim_sol] ✓ {len(batch)} closed TX:{sig[:20]}', flush=True)
             except Exception as e:
-                errors += len(batch)
-                print(f'[claim_sol] TX exception: {e}', flush=True)
+                last_err = str(e)
+                failed.extend(batch)
+                print(f'[claim_sol] ✗ TX exception: {e}', flush=True)
 
-    closed = len(closeable) - errors
-    if closed == 0:
-        return jsonify({'ok': False, 'msg': 'Found empty accounts but all close transactions failed — check Railway logs', 'reclaimed': 0.0})
+    closed = len(our_accs) - len(failed)
+    skipped_other = len(other_accs)
 
-    reclaimed = total_lamports / 1e9
-    msg = f'Closed {closed} account{"s" if closed != 1 else ""} — reclaimed ~{reclaimed:.5f} SOL'
-    if errors:
-        msg += f' ({errors} failed)'
+    if closed == 0 and our_accs:
+        return jsonify({
+            'ok':   False,
+            'msg':  f'Found {len(our_accs)} empty accounts but close TX failed: {last_err}',
+            'reclaimed': 0.0,
+            'debug': {'last_error': last_err, 'trading_wallet': trading_pk,
+                      'skipped_wrong_owner': skipped_other},
+        })
+
+    reclaimed = sum(a['lamports'] for a in our_accs if a not in failed) / 1e9
+    msg = f'Closed {closed} empty account{"s" if closed != 1 else ""} — reclaimed ~{reclaimed:.5f} SOL'
+    if skipped_other:
+        msg += f' ({skipped_other} account{"s" if skipped_other != 1 else ""} owned by different key — use sol-incinerator.com directly)'
     add_user_log(wallet, '[claim] ' + msg)
     threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
-    return jsonify({'ok': True, 'msg': msg, 'reclaimed': reclaimed, 'closed': closed, 'txs': tx_sigs})
+    return jsonify({'ok': True, 'msg': msg, 'reclaimed': round(reclaimed, 6),
+                    'closed': closed, 'txs': tx_sigs})
 
 # ── MARKET / TOTD / TRADES ──
 @app.route('/api/market')
