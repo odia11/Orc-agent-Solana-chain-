@@ -2431,6 +2431,32 @@ setInterval(fetchCarousel,60000);
     _snapTo(dx<0?_idx+1:_idx-1);
   },{passive:true});
 })();
+
+// ── SWIPE — token detail carousel ──
+(function(){
+  const vp=document.querySelector('.carousel-viewport');
+  if(!vp) return;
+  let _sx=0,_sy=0,_on=false;
+  vp.addEventListener('touchstart',function(e){
+    _sx=e.touches[0].clientX;
+    _sy=e.touches[0].clientY;
+    _on=true;
+  },{passive:true});
+  vp.addEventListener('touchmove',function(e){
+    if(!_on) return;
+    if(Math.abs(e.touches[0].clientX-_sx)>Math.abs(e.touches[0].clientY-_sy))
+      e.preventDefault();
+  },{passive:false});
+  vp.addEventListener('touchend',function(e){
+    if(!_on) return;
+    _on=false;
+    const dx=e.changedTouches[0].clientX-_sx;
+    const dy=e.changedTouches[0].clientY-_sy;
+    if(Math.abs(dx)<50||Math.abs(dy)>Math.abs(dx)) return;
+    if(dx<-50) document.querySelector('.carousel-arrow.next')?.click();
+    else        document.querySelector('.carousel-arrow.prev')?.click();
+  },{passive:true});
+})();
 setInterval(_tickCarousel,1000);
 setInterval(fetchBalance,30000);
 setInterval(_checkInactivity,10000);
