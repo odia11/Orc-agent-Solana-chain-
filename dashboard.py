@@ -1407,7 +1407,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 3 pos | scan 30s | momentum 7+ → 60%')
+    add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
     positions = us['positions']
 
     try:
@@ -1424,10 +1424,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                 us_sol  = _get_user_sol(wallet)
                 total_live = len(live)
                 if total_live == 0:
-                    add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/3')
+                    add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
                 else:
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                                 ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/3')
+                                 ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
 
                 # ── Pass 1: exit checks for all open positions ──
                 for t in live:
@@ -1462,7 +1462,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         open_pos -= 1
 
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 3 and us_sol > 0.01:
+                if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01:
                     not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = [t for t in not_held if t['score'] >= 4.5]
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
