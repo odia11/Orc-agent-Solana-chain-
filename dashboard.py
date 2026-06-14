@@ -507,7 +507,21 @@ def init_db():
 # Matches base58 strings 87-88 chars long — Solana private key length.
 # Also matches TX signatures; actively block only on key-sensitive API paths.
 _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
-_SENSITIVE_PATHS = {'/api/settings'}  # only endpoints that could ever return key material
+# Endpoints where any 87-88 char base58 string in the response triggers a hard block.
+# Admin endpoints that return TX hashes are excluded — TX sigs are the same length.
+_SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
+
+# Fields that must never appear in any JSON response body.
+_FORBIDDEN_RESPONSE_KEYS = frozenset({
+    'private_key', 'private_key_raw', 'enc_key', 'encrypted_key',
+    'secret', 'secret_key', 'encryption_key', 'raw_key', 'privkey',
+    'traceback',
+})
+
+def _redact_keys(text: str) -> str:
+    """Replace 87-88 char base58 strings in text with [REDACTED].
+    Covers both private keys and TX hashes — used for subprocess output before logging."""
+    return _KEY_LEAK_RE.sub('[REDACTED]', text)
 
 def _log_security_event(event_type: str, wallet: str, details: str = '') -> None:
     short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
@@ -1135,9 +1149,9 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         )
         env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
         if result.stdout:
-            add_user_log(wallet, 'Swap: ' + result.stdout.strip()[-400:])
+            add_user_log(wallet, 'Swap: ' + _redact_keys(result.stdout.strip()[-400:]))
         if result.stderr:
-            add_user_log(wallet, 'Swap err: ' + result.stderr.strip()[-400:])
+            add_user_log(wallet, 'Swap err: ' + _redact_keys(result.stderr.strip()[-400:]))
         return result.returncode == 0 and bool(result.stdout.strip())
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
@@ -1324,10 +1338,11 @@ def _security_headers(resp):
     # Actively block only on endpoints that must never return key material.
     # Other endpoints (e.g. /api/admin with fee TX hashes) only log a warning.
     if (resp.content_type or '').startswith('application/json'):
+        path = getattr(request, 'path', '')
         try:
             body = resp.get_data(as_text=True)
+            # ── 1. Block 87-88 char base58 on sensitive endpoints ──
             if _KEY_LEAK_RE.search(body):
-                path = getattr(request, 'path', '')
                 if path in _SENSITIVE_PATHS:
                     print(f'SECURITY ALERT: possible key leak in {path} — response blocked', flush=True)
                     try:
@@ -1339,6 +1354,20 @@ def _security_headers(resp):
                     return r
                 else:
                     print(f'SEC WARN: 87+ char base58 in {path} (expected for TX hashes)', flush=True)
+            # ── 2. Strip forbidden field names from JSON responses ──
+            try:
+                payload = json.loads(body)
+                if isinstance(payload, dict):
+                    dirty = _FORBIDDEN_RESPONSE_KEYS & payload.keys()
+                    if dirty:
+                        for k in dirty:
+                            del payload[k]
+                        print(f'SEC: stripped forbidden field(s) {dirty} from {path}', flush=True)
+                        r = jsonify(payload)
+                        r.status_code = resp.status_code
+                        return r
+            except (json.JSONDecodeError, Exception):
+                pass
         except Exception:
             pass
     return resp
@@ -1632,7 +1661,7 @@ def api_claim_sol():
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
 
     conn = sqlite3.connect(DB_FILE)
-    row  = conn.execute('SELECT enc_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    row  = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
     conn.close()
     if not row or not row[0]:
         return jsonify({'ok': False, 'msg': 'No trading key — configure in Settings first'}), 400
@@ -2224,9 +2253,9 @@ def admin_test_fee():
 
     except Exception as e:
         tb = _tb.format_exc()
-        print(f'[test_fee] EXCEPTION:\n{tb}', flush=True)
-        _step('Error', ok=False, detail=str(e))
-        return jsonify({'ok': False, 'steps': steps, 'error': str(e), 'traceback': tb}), 500
+        print(f'[test_fee] EXCEPTION:\n{tb}', flush=True)  # server log only — never sent to client
+        _step('Error', ok=False, detail=str(e)[:120])
+        return jsonify({'ok': False, 'steps': steps, 'error': str(e)[:120]}), 500
 
 @app.route('/api/admin/rotate_keys', methods=['POST'])
 @rate_limit(1, 300)
@@ -2326,7 +2355,7 @@ def admin_test_trade():
     stdout  = proc.stdout.strip()
     stderr  = proc.stderr.strip()
 
-    # Extract Solscan URL from output if present
+    # Extract Solscan URL from output before redacting (TX hash is in the URL path)
     solscan_url = ''
     for line in stdout.splitlines():
         if 'solscan.io/tx/' in line:
@@ -2338,12 +2367,12 @@ def admin_test_trade():
     _log_security_event('key_access', wallet, f'test_trade {token_address[:8]}')
 
     return jsonify({
-        'ok':         proc.returncode == 0 and bool(solscan_url),
-        'returncode': proc.returncode,
-        'stdout':     stdout,
-        'stderr':     stderr,
+        'ok':          proc.returncode == 0 and bool(solscan_url),
+        'returncode':  proc.returncode,
+        'stdout':      _redact_keys(stdout),
+        'stderr':      _redact_keys(stderr),
         'solscan_url': solscan_url,
-        'elapsed_s':  elapsed,
+        'elapsed_s':   elapsed,
     })
 
 # ── STARTUP ──
