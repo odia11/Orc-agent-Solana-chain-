@@ -40,6 +40,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .ob-progress{display:flex;gap:6px;justify-content:center;margin-bottom:1.5rem}
 .ob-dot{width:7px;height:7px;border-radius:50%;background:var(--border);transition:background .3s}
 .ob-dot.done{background:var(--green)}.ob-dot.active{background:var(--blue)}
+.sg-list{text-align:left;margin-bottom:1.1rem;display:flex;flex-direction:column;gap:10px}
+.sg-item{display:flex;align-items:flex-start;gap:10px;font-size:11px;line-height:1.55;color:var(--dim)}
+.sg-num{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:rgba(0,214,143,.1);border:1px solid rgba(0,214,143,.3);color:var(--green);font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace}
+.sg-label{font-weight:700;color:var(--text);display:block;margin-bottom:1px}
+.sg-warn{padding:9px 11px;background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.22);border-radius:7px;font-size:10px;color:#f0b90b;text-align:left;line-height:1.55;margin-bottom:1.1rem}
 
 /* ── ORC DANCE ── */
 #orc-overlay{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(13,24,40,.95);backdrop-filter:blur(10px)}
@@ -502,6 +507,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div class="ob-box">
     <div class="ob-title">ORCAGENT</div>
     <div class="ob-sub">Connect your Phantom or Solflare wallet to start trading Solana meme coins automatically.</div>
+    <div class="ob-progress"><div class="ob-dot active"></div><div class="ob-dot"></div></div>
     <div class="ob-step active" id="step-0">
       <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL &amp; USDC balances.</div>
@@ -534,9 +540,34 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
       </div>
 
-      <button class="ob-btn" id="wallet-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="_launchWithTimeout()">Launch OrcAgent ▶</button>
+      <button class="ob-btn" id="step1-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="gotoSetupGuide()">Continue →</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
       <button class="ob-btn btn-skip" onclick="skipToApp()">Skip — browse without connecting →</button>
+    </div>
+
+    <div class="ob-step" id="step-1">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.85rem">Step 2 — Setup Guide</div>
+      <div class="sg-list">
+        <div class="sg-item">
+          <div class="sg-num">1</div>
+          <div><span class="sg-label">Create a dedicated trading wallet</span>Never use your main wallet. Make a separate one in Phantom or Solflare just for the bot.</div>
+        </div>
+        <div class="sg-item">
+          <div class="sg-num">2</div>
+          <div><span class="sg-label">Fund it with USDC + SOL</span>Send at least $10 USDC and 0.01 SOL (for swap gas fees) to the trading wallet.</div>
+        </div>
+        <div class="sg-item">
+          <div class="sg-num">3</div>
+          <div><span class="sg-label">Add your trading key in Settings</span>Open ⚙ Settings and paste the private key of the trading wallet. It is double-encrypted before storage.</div>
+        </div>
+        <div class="sg-item">
+          <div class="sg-num">4</div>
+          <div><span class="sg-label">Start Trading</span>Hit the START TRADING button. The bot scans every 30s and exits at +20% profit or −5% stop loss.</div>
+        </div>
+      </div>
+      <div class="sg-warn">⚠ Only paste the private key of a dedicated trading wallet — never your main wallet's key.</div>
+      <button class="ob-btn" id="ob-launch-btn" style="background:var(--green);color:#000;font-weight:900" onclick="_launchWithTimeout()">Launch OrcAgent ▶</button>
+      <button class="ob-btn btn-skip" onclick="currentStep=0;showStep(0)">← Back</button>
     </div>
 
   </div>
@@ -1034,6 +1065,7 @@ function showStep(n){
   document.querySelectorAll('.ob-dot').forEach((d,i)=>{d.classList.toggle('done',i<n);d.classList.toggle('active',i===n);});
 }
 function nextStep(n){currentStep=n+1;showStep(currentStep);}
+function gotoSetupGuide(){currentStep=1;showStep(1);}
 
 async function connectWalletOnboard(type){
   const isPhantom=type==='phantom';
@@ -1069,7 +1101,7 @@ async function connectWalletOnboard(type){
     document.getElementById('wallet-connected').style.display='flex';
     document.getElementById('phantom-ob-btn').style.display='none';
     document.getElementById('solflare-ob-btn').style.display='none';
-    const cb=document.getElementById('wallet-continue-btn');
+    const cb=document.getElementById('step1-continue-btn');
     cb.disabled=false; cb.style.cssText='background:var(--green);color:#000;cursor:pointer;opacity:1';
     document.getElementById('wallet-back-btn').style.display='block';
   }catch(e){
@@ -1087,7 +1119,7 @@ function resetWallet(){
   document.getElementById('wallet-connected').style.display='none';
   document.getElementById('phantom-ob-btn').style.display='block';
   document.getElementById('solflare-ob-btn').style.display='block';
-  const cb=document.getElementById('wallet-continue-btn');
+  const cb=document.getElementById('step1-continue-btn');
   cb.disabled=true; cb.style.cssText='background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5';
   document.getElementById('wallet-back-btn').style.display='none';
 }
@@ -1156,7 +1188,7 @@ async function launchApp(){
 // ── LAUNCH WITH 5s TIMEOUT (prevents button getting stuck) ─────────────────
 async function _launchWithTimeout(){
   if(!phantomKey) return;
-  const btn=document.getElementById('wallet-continue-btn');
+  const btn=document.getElementById('ob-launch-btn');
   if(btn._launching) return;
   btn._launching=true;
   const origText=btn.textContent;
@@ -2133,7 +2165,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
     document.getElementById('mobile-deeplink-section').style.display='block';
     document.getElementById('dapp-connect-section').style.display='none';
     // Launch button is irrelevant until the user is inside a dapp browser
-    document.getElementById('wallet-continue-btn').style.display='none';
+    document.getElementById('step1-continue-btn').style.display='none';
   }
 })();
 
