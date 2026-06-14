@@ -1343,7 +1343,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                 try:
                     tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
                     print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
-                    add_user_log(wlt, f'✓ Perf fee {fee:.5f} SOL (5% of +{gross:.5f} SOL profit)  TX:{tx_sig[:12]}...')
+                    add_user_log(wlt, f'💸 5% performance fee: {fee:.5f} SOL deducted from your profit  TX:{tx_sig[:12]}...')
                 except Exception as e:
                     err_msg = _redact_keys(str(e))
                     print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err_msg}', flush=True)
@@ -1562,7 +1562,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                     elif chg <= -0.05:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
                     if exit_reason:
-                        add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
+                        fee_note = ' (5% fee will apply)' if chg >= 0.20 else ''
+                        add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label + fee_note)
                         with _use_key(_enc_blob, wallet) as _pk:
                             sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
                         if sell_ok:
