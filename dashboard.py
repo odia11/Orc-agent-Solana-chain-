@@ -1433,23 +1433,33 @@ def user_trader_loop(stop_event, config, wallet: str):
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
                                  ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
 
-                # ── Pass 1: exit checks for all open positions ──
-                for t in live:
+                # ── Pass 1: exit checks for ALL open positions ──
+                # Iterates positions dict (not live scan) so tokens that drop off the
+                # DexScreener trending list still get stop-loss/take-profit every cycle.
+                live_map = {t['mint']: t for t in live}
+                for mint, pos in list(positions.items()):
                     if stop_event.is_set(): break
-                    mint  = t['mint']
-                    pos   = positions.get(mint, {})
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
-                    label = t['symbol'] or mint[:8]
-                    price = t['price']
-                    chg   = (price - pos['buy_price']) / pos['buy_price']
-
+                    if mint in live_map:
+                        price = live_map[mint]['price']
+                        label = live_map[mint]['symbol'] or pos.get('symbol', mint[:8])
+                    else:
+                        # Token left the live scan — fetch price directly so SL still fires
+                        _td   = get_token_data(mint)
+                        price = float(_td['price']) if _td else 0.0
+                        label = (_td['symbol'] if _td else '') or pos.get('symbol', mint[:8])
+                        if price > 0:
+                            add_user_log(wallet, '[' + short + '] ' + label +
+                                         ' not in scan — fetched price $' + str(round(price, 8)))
+                    if price <= 0:
+                        continue
+                    chg = (price - pos['buy_price']) / pos['buy_price']
                     exit_reason = None
                     if chg >= 0.20:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
                     elif chg <= -0.05:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
-
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
@@ -1460,7 +1470,6 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
-                            # Record the trade without a fee so it appears in history even on swap failure
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'])
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
@@ -1510,6 +1519,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                     pos['amount']     = spend / best['price']
                                     pos['buy_price']  = best['price']
                                     pos['spend']      = spend
+                                    pos['symbol']     = label
                                     pos['opened_at']  = time.time()
                                     open_pos += 1
                                 elif pos.get('entry_wait_count', 0) >= 5 or dip > 0.05:
@@ -1525,6 +1535,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['amount']     = spend / best['price']
                                 pos['buy_price']  = best['price']
                                 pos['spend']      = spend
+                                pos['symbol']     = label
                                 pos['opened_at']  = time.time()
                                 open_pos += 1
             except Exception as e:
@@ -2318,6 +2329,63 @@ def admin_recover_fees():
         'total_sent_sol':  round(total_sent, 6),
         'results':    results,
     })
+
+
+@app.route('/api/admin/force-sell', methods=['POST'])
+@rate_limit(10, 60)
+def admin_force_sell():
+    """Immediately sell a token position across all users who hold it."""
+    admin_wallet = _current_wallet()
+    if not admin_wallet or not _is_owner(admin_wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    target_mint = ((request.json or {}).get('mint') or '').strip()
+    if not target_mint:
+        return jsonify({'error': 'mint required'}), 400
+
+    results = []
+    for wallet, us in list(user_states.items()):
+        pos = us.get('positions', {}).get(target_mint, {})
+        if pos.get('amount', 0) <= 0:
+            continue
+        sw = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row or not row[1]:
+            results.append({'wallet': sw, 'status': 'no_key'})
+            continue
+        user_id, enc_blob = row[0], row[1]
+        td    = get_token_data(target_mint)
+        price = float(td['price']) if td else 0.0
+        label = (td['symbol'] if td else '') or pos.get('symbol', target_mint[:8])
+        print(f'[force-sell] {sw} {label} amount={pos["amount"]} price=${price}', flush=True)
+        try:
+            with _use_key(enc_blob, wallet) as _pk:
+                sell_ok = _execute_user_swap(wallet, _pk, 'sell', target_mint, str(pos['amount']))
+            if sell_ok and price > 0:
+                with _use_key(enc_blob, wallet) as _pk:
+                    _record_user_trade(user_id, us, label, pos['buy_price'], price,
+                                       pos['amount'], pos['spend'], wallet=wallet, private_key=_pk)
+            else:
+                _record_user_trade(user_id, us, label, pos['buy_price'], price,
+                                   pos['amount'], pos['spend'])
+            us['positions'][target_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+            add_user_log(wallet, f'[ADMIN FORCE SELL] {label} sell_ok={sell_ok} price=${round(price,8)}')
+            print(f'[force-sell] ✓ {sw} {label} sell_ok={sell_ok}', flush=True)
+            results.append({'wallet': sw, 'label': label, 'sell_ok': sell_ok,
+                            'price': price, 'status': 'sold'})
+        except Exception as e:
+            err = _redact_keys(str(e)[:160])
+            print(f'[force-sell] ✗ {sw} {label} FAILED: {err}', flush=True)
+            results.append({'wallet': sw, 'label': label, 'error': err, 'status': 'failed'})
+
+    if not results:
+        return jsonify({'ok': False, 'msg': f'No open positions found for {target_mint[:12]}...'})
+    return jsonify({'ok': True, 'results': results})
 
 
 @app.route('/api/admin/tokens')

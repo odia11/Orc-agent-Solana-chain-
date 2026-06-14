@@ -928,7 +928,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <button class="adash-tab"        id="adtab-tokens"   onclick="showAdminTab('tokens')">📊 Tokens</button>
         <button class="adash-tab"        id="adtab-health"   onclick="showAdminTab('health')">⚙ Health</button>
         <button class="adash-tab"        id="adtab-security" onclick="showAdminTab('security')">🔐 Security</button>
-        <button class="adash-tab"        id="adtab-test"     onclick="showAdminTab('test')">🧪 Test Trade</button>
+        <button class="adash-tab"        id="adtab-test"      onclick="showAdminTab('test')">🧪 Test Trade</button>
+        <button class="adash-tab"        id="adtab-forcesell" onclick="showAdminTab('forcesell')" style="border-color:rgba(255,77,106,.4);color:var(--red)">🔴 Force Sell</button>
       </div>
       <!-- Users pane -->
       <div id="adpane-users">
@@ -995,6 +996,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
             <tbody id="ad-sec-tbody"><tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">Loading…</td></tr></tbody>
           </table>
         </div>
+      </div>
+      <!-- Force Sell pane -->
+      <div id="adpane-forcesell" style="display:none">
+        <div class="adash-section-hdr" style="color:var(--red)">⚠ FORCE SELL — immediately closes a position for all users holding this token</div>
+        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+          <input id="force-sell-mint" type="text" placeholder="Token mint address (e.g. SIEGE mint)" style="flex:1;min-width:280px;background:var(--bg3);border:1px solid rgba(255,77,106,.4);border-radius:7px;padding:7px 10px;color:#e8eaf0;font-size:12px;font-family:monospace">
+          <button id="force-sell-btn" style="background:rgba(255,77,106,.15);border:1px solid rgba(255,77,106,.5);border-radius:7px;padding:7px 18px;color:var(--red);font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;font-weight:700" onclick="runForceSell()">🔴 FORCE SELL NOW</button>
+        </div>
+        <div id="force-sell-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid rgba(255,77,106,.25);border-radius:8px;padding:12px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all;line-height:1.6;color:#a0aec0;max-height:280px;overflow-y:auto"></div>
       </div>
       <!-- Test Trade pane -->
       <div id="adpane-test" style="display:none">
@@ -2010,6 +2020,38 @@ async function clearAllBans(){
   const el=document.getElementById('ad-bans-list');
   if(r?.ok){el.style.color='var(--green)';el.textContent='✓ '+r.msg;setTimeout(fetchAdminBans,1500);}
   else{el.style.color='var(--red)';el.textContent='✗ '+(r?.error||'Failed');}
+}
+
+async function runForceSell(){
+  const mint=(document.getElementById('force-sell-mint').value||'').trim();
+  const out=document.getElementById('force-sell-result');
+  if(!mint){out.style.display='block';out.textContent='⚠ Enter the token mint address first.';return;}
+  if(!confirm('FORCE SELL: immediately close ALL positions in this token for ALL users. Continue?'))return;
+  out.style.display='block';
+  out.textContent='⏳ Executing force sell…';
+  const btn=document.getElementById('force-sell-btn');
+  if(btn){btn.disabled=true;btn.textContent='Selling…';}
+  try{
+    const r=await fetch('/api/admin/force-sell',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mint}),
+    }).then(r=>r.json()).catch(e=>({error:String(e)}));
+    if(r.error){out.textContent='ERROR: '+r.error;return;}
+    if(!r.ok){out.textContent='⚠ '+r.msg;return;}
+    let txt='Results:\n\n';
+    (r.results||[]).forEach(res=>{
+      const icon=res.status==='sold'?'✅':res.status==='skipped_dust'?'⏭':'❌';
+      txt+=icon+' '+res.wallet+' — '+res.status;
+      if(res.label) txt+=' ('+res.label+')';
+      if(res.price) txt+=' price=$'+res.price;
+      if(res.error) txt+=' ERR:'+res.error;
+      txt+='\n';
+    });
+    out.textContent=txt;
+  }finally{
+    if(btn){btn.disabled=false;btn.textContent='🔴 FORCE SELL NOW';}
+  }
 }
 
 async function runTestTrade(){
