@@ -440,9 +440,9 @@ def init_db():
         wallet_address        TEXT UNIQUE NOT NULL,
         encrypted_private_key TEXT DEFAULT '',
         trading_active        INTEGER DEFAULT 0,
-        max_trade_size        REAL DEFAULT 10.0,
-        min_trade_size        REAL DEFAULT 1.0,
-        daily_loss_limit      REAL DEFAULT 50.0,
+        max_trade_size        REAL DEFAULT 0.5,
+        min_trade_size        REAL DEFAULT 0.01,
+        daily_loss_limit      REAL DEFAULT 1.0,
         created_at            TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS trades (
@@ -472,7 +472,7 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
-        c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 1.0')
+        c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 0.01')
     except sqlite3.OperationalError:
         pass
     c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
@@ -1671,10 +1671,10 @@ def get_settings():
     get_user_state(wallet)['has_trading_key'] = has_key
     if row:
         return jsonify({'ok': True, 'has_trading_key': has_key,
-                        'max_trade_size': row[1] or 10.0,
-                        'min_trade_size': row[2] if row[2] is not None else 1.0,
-                        'daily_loss_limit': row[3] or 50.0})
-    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 10.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0})
+                        'max_trade_size': row[1] if row[1] is not None else 0.5,
+                        'min_trade_size': row[2] if row[2] is not None else 0.01,
+                        'daily_loss_limit': row[3] if row[3] is not None else 1.0})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 0.5, 'min_trade_size': 0.01, 'daily_loss_limit': 1.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -1689,20 +1689,20 @@ def save_settings():
     data            = request.json or {}
     private_key_raw = data.get('private_key', '').strip()
     try:
-        max_trade_size = float(data.get('max_trade_size', 10.0))
+        max_trade_size = float(data.get('max_trade_size', 0.5))
     except (ValueError, TypeError):
-        max_trade_size = 10.0
+        max_trade_size = 0.5
     try:
-        min_trade_size = float(data.get('min_trade_size', 1.0))
+        min_trade_size = float(data.get('min_trade_size', 0.01))
     except (ValueError, TypeError):
-        min_trade_size = 1.0
+        min_trade_size = 0.01
     try:
-        daily_loss_limit = float(data.get('daily_loss_limit', 50.0))
+        daily_loss_limit = float(data.get('daily_loss_limit', 1.0))
     except (ValueError, TypeError):
-        daily_loss_limit = 50.0
-    max_trade_size   = max(0.01, min(max_trade_size,   10000.0))
+        daily_loss_limit = 1.0
+    max_trade_size   = max(0.1,  min(max_trade_size,   10000.0))
     min_trade_size   = max(0.01, min(min_trade_size,   max_trade_size))
-    daily_loss_limit = max(1.0,  min(daily_loss_limit, 50000.0))
+    daily_loss_limit = max(0.1,  min(daily_loss_limit, 50000.0))
 
     # Validate, double-encrypt, and verify round-trip before touching the DB
     encrypted = ''   # initialised here so it is always defined in the INSERT branch below

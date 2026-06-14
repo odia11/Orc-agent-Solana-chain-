@@ -642,15 +642,18 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Min Trade Size (SOL)</label>
-        <input id="s-minusdc" class="s-input" type="number" value="0.01" min="0.001" max="100" step="0.01">
+        <input id="s-minusdc" class="s-input" type="number" value="0.01" min="0.01" max="100" step="0.01">
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">min 0.01 SOL</div>
       </div>
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Max Trade Size (SOL)</label>
-        <input id="s-maxusdc" class="s-input" type="number" value="0.5" min="0.001" max="100" step="0.01">
+        <input id="s-maxusdc" class="s-input" type="number" value="0.5" min="0.1" max="100" step="0.01">
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">min 0.1 SOL</div>
       </div>
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Daily Loss Limit (SOL)</label>
-        <input id="s-losslimit" class="s-input" type="number" value="50" min="1" max="10000" step="1">
+        <input id="s-losslimit" class="s-input" type="number" value="1" min="0.1" max="10000" step="0.1">
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">min 0.1 SOL</div>
       </div>
     </div>
 
@@ -1212,9 +1215,9 @@ async function launchApp(){
     fetch('/api/settings').then(r=>r.json()).then(r=>{
       if(r?.ok){
         settingsHasKey=r.has_trading_key||false;
-        document.getElementById('s-minusdc').value=r.min_trade_size??1;
-        document.getElementById('s-maxusdc').value=r.max_trade_size||10;
-        document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
+        document.getElementById('s-minusdc').value=r.min_trade_size??0.01;
+        document.getElementById('s-maxusdc').value=r.max_trade_size||0.5;
+        document.getElementById('s-losslimit').value=r.daily_loss_limit||1;
         _updateKeyStatus();
       }
     }).catch(()=>{});
@@ -2370,9 +2373,9 @@ function togglePrivVis(){
 async function saveSettings(){
   if(!phantomKey){alert('Connect a wallet first.');return;}
   const pk       =document.getElementById('s-privkey').value.trim();
-  const minUsdc  =parseFloat(document.getElementById('s-minusdc').value)||1;
-  const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||10;
-  const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||50;
+  const minUsdc  =parseFloat(document.getElementById('s-minusdc').value)||0.01;
+  const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||0.5;
+  const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||1;
   const msgEl    =document.getElementById('s-msg');
   const saveBtn  =document.getElementById('s-save-btn');
 
