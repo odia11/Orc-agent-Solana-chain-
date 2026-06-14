@@ -949,6 +949,16 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
           </table>
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,193,58,.15)">
+          <div class="adash-section-hdr">Recover Uncollected Fees</div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:8px">
+            Finds all trades where fee_paid=0 and pnl&gt;0, sums 5% per user, sends one SOL transfer to OWNER_WALLET, and marks trades paid.
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+            <button id="recover-fees-btn" onclick="runFeeRecovery()" style="background:rgba(255,193,58,.15);border:1px solid rgba(255,193,58,.5);border-radius:7px;padding:7px 18px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;font-weight:600">💰 RECOVER FEES NOW</button>
+          </div>
+          <div id="recover-fees-result" style="font-size:11px;margin-top:10px;line-height:1.8"></div>
+        </div>
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,193,58,.15)">
           <div class="adash-section-hdr">Fee Transfer Test</div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
             <button id="test-fee-btn" onclick="testFeeTransfer()" style="background:rgba(255,193,58,.12);border:1px solid rgba(255,193,58,.4);border-radius:7px;padding:6px 16px;color:#f0b90b;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer">🧪 Test Fee Transfer ($0.01)</button>
@@ -1934,6 +1944,37 @@ async function testAIKey(){
   }finally{
     if(btn){btn.disabled=false;btn.textContent='⚡ Test AI Key';}
   }
+}
+
+async function runFeeRecovery(){
+  const btn=document.getElementById('recover-fees-btn');
+  const out=document.getElementById('recover-fees-result');
+  btn.disabled=true; btn.textContent='⏳ Recovering…';
+  out.innerHTML='<span style="color:var(--muted)">Scanning trades and sending fees…</span>';
+  try{
+    const r=await fetch('/api/admin/recover-fees',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':getCSRF()}});
+    const d=await r.json();
+    if(d.error){out.innerHTML=`<span style="color:var(--red)">Error: ${d.error}</span>`;}
+    else if(!d.ok){out.innerHTML=`<span style="color:var(--red)">${d.error||'Recovery failed'}</span>`;}
+    else{
+      const lines=[];
+      lines.push(`<b style="color:#4ade80">Total recovered: ${(d.total_sol||0).toFixed(5)} SOL</b>`);
+      lines.push(`Wallets processed: ${d.wallets||0}`);
+      (d.results||[]).forEach(res=>{
+        const icon=res.status==='sent'?'✓':res.status==='skipped_dust'?'—':'✗';
+        const col=res.status==='sent'?'#4ade80':res.status==='skipped_dust'?'var(--muted)':'var(--red)';
+        const detail=res.status==='sent'
+          ?`${res.fee?.toFixed(5)} SOL  TX:${(res.tx||'').slice(0,14)}…  (${res.trades} trade(s))`
+          :res.status==='skipped_dust'?`${res.fee?.toFixed(6)} SOL — dust`
+          :`FAILED: ${res.error||'unknown'}`;
+        lines.push(`<span style="color:${col}">${icon} ${res.wallet}  ${detail}</span>`);
+      });
+      if(!d.results?.length) lines.push('<span style="color:var(--muted)">No unpaid fees found</span>');
+      out.innerHTML=lines.join('<br>');
+      if(typeof loadAdminFees==='function') loadAdminFees();
+    }
+  }catch(e){out.innerHTML=`<span style="color:var(--red)">Request failed: ${e.message}</span>`;}
+  finally{btn.disabled=false; btn.textContent='💰 RECOVER FEES NOW';}
 }
 
 async function testFeeTransfer(){

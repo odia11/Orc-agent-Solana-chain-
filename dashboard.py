@@ -2503,93 +2503,106 @@ def admin_fees():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/api/admin/recover-fees', methods=['POST'])
-@rate_limit(5, 60)
-def admin_recover_fees():
-    """Scan trades table for profitable trades with uncollected fees and recover them."""
-    wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
+    """Send all unpaid fees (fee_paid=0, pnl>0) from each user's trading wallet to OWNER_WALLET.
+    Returns a summary dict. Safe to call from a background thread or an API endpoint."""
     if not OWNER_WALLET:
-        return jsonify({'error': 'OWNER_WALLET not configured'}), 500
+        print('[fee-recovery] OWNER_WALLET not set — skipping', flush=True)
+        return {'ok': False, 'error': 'OWNER_WALLET not configured', 'total_sol': 0.0, 'results': []}
 
-    results   = []
-    total_sent = 0.0
-
+    print(f'[fee-recovery] ── START ({triggered_by}) ──', flush=True)
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-
-        # Per-wallet: total fees recorded in trades (calculated) vs total fees confirmed sent
+        # Group unpaid trades by user so we send one TX per user instead of one per trade
         c.execute('''
             SELECT u.wallet_address,
                    u.encrypted_private_key,
-                   COALESCE(SUM(t.fee_amount), 0) AS owed
-            FROM users u
-            JOIN trades t ON t.user_id = u.id
+                   GROUP_CONCAT(t.id)            AS trade_ids,
+                   COALESCE(SUM(t.pnl * ?), 0)   AS total_fee
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
             WHERE t.pnl > 0
-              AND t.fee_amount > 0
+              AND (t.fee_paid IS NULL OR t.fee_paid = 0)
               AND u.encrypted_private_key IS NOT NULL
               AND u.encrypted_private_key != ""
             GROUP BY u.wallet_address, u.encrypted_private_key
-        ''')
-        owed_rows = c.fetchall()
-
-        # Only count fees that were successfully sent (status='ok' or no status yet / no FAILED: prefix)
-        c.execute('''
-            SELECT user_wallet, COALESCE(SUM(fee_amount), 0)
-            FROM fees
-            WHERE (status IS NULL OR status = 'ok')
-              AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')
-            GROUP BY user_wallet
-        ''')
-        collected_map = {row[0]: float(row[1]) for row in c.fetchall()}
+        ''', (FEE_RATE,))
+        rows = c.fetchall()
         conn.close()
     except Exception as e:
-        return jsonify({'error': f'DB query failed: {e}'}), 500
+        print(f'[fee-recovery] DB query failed: {e}', flush=True)
+        return {'ok': False, 'error': str(e), 'total_sol': 0.0, 'results': []}
 
-    for (user_wallet, enc_blob, owed_raw) in owed_rows:
-        if _is_owner(user_wallet):
-            continue
-        owed      = round(float(owed_raw), 6)
-        collected = round(collected_map.get(user_wallet, 0.0), 6)
-        outstanding = round(owed - collected, 6)
+    if not rows:
+        print('[fee-recovery] no unpaid trades found', flush=True)
+        return {'ok': True, 'total_sol': 0.0, 'results': [], 'msg': 'No unpaid fees found'}
+
+    total_recovered = 0.0
+    results         = []
+
+    for (user_wallet, enc_blob, trade_ids_str, total_fee_raw) in rows:
+        total_fee = round(float(total_fee_raw or 0), 6)
+        trade_ids = [int(x) for x in (trade_ids_str or '').split(',') if x.strip().isdigit()]
         sw = (user_wallet[:6] + '...' + user_wallet[-4:]) if len(user_wallet) >= 10 else user_wallet
 
-        if outstanding < 0.0001:
-            results.append({'wallet': sw, 'owed': owed, 'collected': collected,
-                            'outstanding': outstanding, 'status': 'skipped_dust'})
+        print(f'[fee-recovery] {sw}  unpaid_trades={len(trade_ids)}  '
+              f'total_fee={total_fee:.6f} SOL', flush=True)
+
+        if total_fee < 0.0001:
+            print(f'[fee-recovery] {sw} below dust threshold — skipping', flush=True)
+            results.append({'wallet': sw, 'fee': total_fee, 'status': 'skipped_dust'})
             continue
 
-        print(f'[fee-recovery] {sw} owed={owed:.6f} collected={collected:.6f} outstanding={outstanding:.6f} SOL', flush=True)
         try:
             with _use_key(enc_blob, user_wallet) as pk:
-                tx_sig = send_sol_fee(pk, OWNER_WALLET, outstanding)
+                tx_sig = send_sol_fee(pk, OWNER_WALLET, total_fee)
 
+            # Mark every trade in this batch as paid and record in fees table
             conn2 = sqlite3.connect(DB_FILE)
+            placeholders = ','.join('?' * len(trade_ids))
             conn2.execute(
-                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx) VALUES (?,?,?,?,?)',
-                (user_wallet, '[recovery]', outstanding / FEE_RATE, outstanding, tx_sig))
+                f'UPDATE trades SET fee_paid=1 WHERE id IN ({placeholders})',
+                trade_ids)
+            conn2.execute(
+                '''INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status)
+                   VALUES (?,?,?,?,?,?)''',
+                (user_wallet, '[recovery]', total_fee / FEE_RATE, total_fee, tx_sig, 'ok'))
             conn2.commit()
             conn2.close()
 
-            total_sent += outstanding
-            print(f'[fee-recovery] ✓ {sw} recovered {outstanding:.6f} SOL TX:{tx_sig[:20]}', flush=True)
-            add_log(f'[fee-recovery] {sw} {outstanding:.6f} SOL TX:{tx_sig[:16]}...')
-            results.append({'wallet': sw, 'owed': owed, 'collected': collected,
-                            'outstanding': outstanding, 'tx': tx_sig, 'status': 'sent'})
-        except Exception as e:
-            err = _redact_keys(str(e)[:160])
-            print(f'[fee-recovery] ✗ {sw} FAILED: {err}', flush=True)
-            results.append({'wallet': sw, 'owed': owed, 'collected': collected,
-                            'outstanding': outstanding, 'error': err, 'status': 'failed'})
+            total_recovered += total_fee
+            print(f'[fee-recovery] ✓ {sw} sent {total_fee:.6f} SOL  TX:{tx_sig[:20]}...  '
+                  f'{len(trade_ids)} trade(s) marked fee_paid=1', flush=True)
+            add_log(f'[fee-recovery] {sw} recovered {total_fee:.5f} SOL  TX:{tx_sig[:14]}...')
+            results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
+                            'tx': tx_sig, 'status': 'sent'})
 
-    return jsonify({
+        except Exception as e:
+            err = _redact_keys(str(e)[:200])
+            print(f'[fee-recovery] ✗ {sw} FAILED: {err}', flush=True)
+            results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
+                            'error': err, 'status': 'failed'})
+
+    print(f'[fee-recovery] ── DONE  total_recovered={total_recovered:.6f} SOL ──', flush=True)
+    return {
         'ok':         True,
-        'wallets_checked': len(owed_rows),
-        'total_sent_sol':  round(total_sent, 6),
+        'total_sol':  round(total_recovered, 6),
+        'wallets':    len(rows),
         'results':    results,
-    })
+    }
+
+
+@app.route('/api/admin/recover-fees', methods=['POST'])
+@rate_limit(5, 60)
+def admin_recover_fees():
+    """Collect all unpaid fees (trades.fee_paid=0) and send them to OWNER_WALLET in one TX per user."""
+    wallet = _current_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    result = _recover_uncollected_fees(triggered_by='admin-button')
+    status = 200 if result.get('ok') else 500
+    return jsonify(result), status
 
 
 @app.route('/api/admin/force-sell', methods=['POST'])
@@ -3074,6 +3087,14 @@ threading.Thread(target=_audit_loop,           daemon=True).start()
 threading.Thread(target=_security_check_loop,  daemon=True).start()
 _security_selftest()
 add_log('OrcAgent started')
+
+def _startup_fee_recovery():
+    """One-time recovery run 30 s after boot — collects any fees missed before fee_paid tracking."""
+    time.sleep(30)
+    print('[fee-recovery] startup pass — checking for unpaid fees...', flush=True)
+    _recover_uncollected_fees(triggered_by='startup')
+
+threading.Thread(target=_startup_fee_recovery, daemon=True).start()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
