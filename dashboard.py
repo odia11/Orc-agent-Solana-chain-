@@ -42,6 +42,7 @@ print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", 
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+SOL_MINT         = 'So11111111111111111111111111111111111111112'
 SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -639,7 +640,7 @@ def get_user_state(wallet: str) -> dict:
     return user_states[wallet]
 
 def fetch_user_balances(wallet: str):
-    """Fetch SOL and USDC balances from Solana RPC and cache in per-user state."""
+    """Fetch SOL balance from Solana RPC and cache in per-user state."""
     us = get_user_state(wallet)
     try:
         r = requests.post(SOLANA_RPC, json={
@@ -648,24 +649,13 @@ def fetch_user_balances(wallet: str):
         us['sol'] = round(r.json()['result']['value'] / 1e9, 4)
     except Exception:
         pass
-    try:
-        r = requests.post(SOLANA_RPC, json={
-            'jsonrpc': '2.0', 'id': 1, 'method': 'getTokenAccountsByOwner',
-            'params': [wallet, {'mint': USDC_MINT}, {'encoding': 'jsonParsed'}]
-        }, timeout=8)
-        accounts = r.json().get('result', {}).get('value', [])
-        us['usdc'] = round(float(
-            accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0
-        ), 2) if accounts else 0.0
-    except Exception:
-        pass
     us['balance_fetched_at'] = time.time()
 
 # ── TOKEN DISCOVERY ──
 TOTD_INTERVAL = 900  # 15 minutes
 
 def discover_tokens():
-    seen  = {USDC_MINT}
+    seen  = {USDC_MINT, SOL_MINT}
     mints = []
 
     # 1. Top boosted Solana tokens
@@ -729,12 +719,10 @@ def add_user_log(wallet: str, msg: str):
     if len(us['log_lines']) > 100:
         us['log_lines'].pop()
 
-def _get_user_usdc(wallet: str) -> float:
+def _get_user_sol(wallet: str) -> float:
     try:
-        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getTokenAccountsByOwner','params':[wallet,{'mint':USDC_MINT},{'encoding':'jsonParsed'}]}, timeout=8)
-        accounts = r.json().get('result',{}).get('value',[])
-        if accounts:
-            return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
+        r = requests.post(SOLANA_RPC, json={'jsonrpc':'2.0','id':1,'method':'getBalance','params':[wallet]}, timeout=8)
+        return round(r.json()['result']['value'] / 1e9, 6)
     except: pass
     return 0.0
 
@@ -1205,13 +1193,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                     continue
                 live     = state['tokens']  # already sorted by score desc
                 open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
-                us_usdc  = _get_user_usdc(wallet)
+                us_sol  = _get_user_sol(wallet)
                 total_live = len(live)
                 if total_live == 0:
-                    add_user_log(wallet, '[' + short + '] Waiting for token data... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                    add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/3')
                 else:
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                                 ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
+                                 ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/3')
 
                 # ── Pass 1: exit checks for all open positions ──
                 for t in live:
@@ -1246,7 +1234,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         open_pos -= 1
 
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 3 and us_usdc > 1:
+                if not stop_event.is_set() and open_pos < 3 and us_sol > 0.01:
                     not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = [t for t in not_held if t['score'] >= 4.5]
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
@@ -1261,8 +1249,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
                         trade_pct = 0.60 if sc >= 7 else config.get('trade_pct', 0.40)
-                        spend = round(us_usdc * trade_pct, 2)
-                        if spend >= 0.01:
+                        spend = round(us_sol * trade_pct, 4)
+                        if spend >= 0.001:
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]

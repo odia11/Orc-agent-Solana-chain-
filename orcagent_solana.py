@@ -7,8 +7,8 @@ load_dotenv()
 
 WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 PRIVATE_KEY    = os.getenv('WALLET_PRIVATE_KEY', '')
-MAX_USDC       = float(os.getenv('MAX_USDC', 50))
-MIN_USDC       = float(os.getenv('MIN_USDC', 1))
+MAX_SOL        = float(os.getenv('MAX_SOL', 0.5))
+MIN_SOL        = float(os.getenv('MIN_SOL', 0.005))
 STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.05))
 TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.20))
 INTERVAL       = int(os.getenv('INTERVAL', 30))
@@ -19,6 +19,7 @@ SOLANA_RPCS   = [
     'https://rpc.ankr.com/solana',
 ]
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+SOL_MINT      = 'So11111111111111111111111111111111111111112'
 
 # Optional proxy — set JUPITER_PROXY_URL in Railway Variables to route swap
 # calls through the Cloudflare Workers proxy in proxy/worker.js.
@@ -243,9 +244,9 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
     amount = float(amount_str)
     try:
         if action == 'buy':
-            lamports = int(amount * 1_000_000)  # USDC has 6 decimals
-            sig = execute_swap(USDC_MINT, mint, lamports)
-            print(f'BUY {mint[:16]} ${round(amount,2)} TX:{sig}', flush=True)
+            lamports = int(amount * 1_000_000_000)  # SOL has 9 decimals
+            sig = execute_swap(SOL_MINT, mint, lamports)
+            print(f'BUY {mint[:16]} {round(amount,4)} SOL TX:{sig}', flush=True)
         elif action == 'sell':
             decimals       = get_token_decimals(mint)
             actual_balance = get_token_balance(mint)
@@ -253,7 +254,7 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
                 print(f'SELL {mint[:16]} — on-chain balance is 0, nothing to sell', flush=True)
                 sys.exit(0)
             lamports = int(actual_balance * (10 ** decimals))
-            sig = execute_swap(mint, USDC_MINT, lamports)
+            sig = execute_swap(mint, SOL_MINT, lamports)
             print(f'SELL {mint[:16]} amt:{round(actual_balance,6)} (on-chain) TX:{sig}', flush=True)
         else:
             print(f'Unknown action: {action}', flush=True)
@@ -307,7 +308,7 @@ def get_token_balance(mint: str) -> float:
 def discover_tokens(limit=30):
     mints   = []
     trending = set()
-    seen    = {USDC_MINT}
+    seen    = {USDC_MINT, SOL_MINT}
     _h = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
     try:
         r = requests.get('https://api.dexscreener.com/token-boosts/top/v1', headers=_h, timeout=10)
@@ -427,8 +428,7 @@ def run():
         try:
             tokens, trending_mints = discover_tokens()
             sol  = get_balance()
-            usdc = get_usdc_balance()
-            print(f'SOL:{round(sol,4)} USDC:{round(usdc,2)}', flush=True)
+            print(f'SOL:{round(sol,4)}', flush=True)
 
             candidates = []
             for t in tokens:
@@ -457,28 +457,28 @@ def run():
                         _dec = pos.get('decimals', 6)
                         _raw = int(pos['amount'] * (10 ** _dec))
                         if chg >= TAKE_PROFIT:
-                            sig = execute_swap(mint, USDC_MINT, _raw)
+                            sig = execute_swap(mint, SOL_MINT, _raw)
                             print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = 0.0
                         elif chg <= -STOP_LOSS:
-                            sig = execute_swap(mint, USDC_MINT, _raw)
+                            sig = execute_swap(mint, SOL_MINT, _raw)
                             print(f'STOP LOSS {label} {round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = 0.0
                         continue
 
                     open_count = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
-                    if sc >= 4.5 and open_count < 5 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and usdc > 5:
+                    if sc >= 4.5 and open_count < 3 and (m5 >= 5 or data.get('change15m', 0) >= 10 or is_tr) and sol > 0.05:
                         trade_pct = 0.60 if sc >= 7 else 0.40
-                        spend = min(usdc * trade_pct, MAX_USDC / 4)
-                        if spend < MIN_USDC:
+                        spend = min(sol * trade_pct, MAX_SOL)
+                        if spend < MIN_SOL:
                             continue
-                        sig   = execute_swap(USDC_MINT, mint, int(spend * 1e6))
-                        print(f'BUY {label} ${round(spend,2)} score:{sc} pct:{int(trade_pct*100)}% m5:+{round(m5,1)}% TX:{sig}', flush=True)
+                        sig   = execute_swap(SOL_MINT, mint, int(spend * 1e9))
+                        print(f'BUY {label} {round(spend,4)} SOL score:{sc} pct:{int(trade_pct*100)}% m5:+{round(m5,1)}% TX:{sig}', flush=True)
                         _dec              = get_token_decimals(mint)
-                        pos['amount']    = spend / data['price']
+                        pos['amount']    = spend
                         pos['decimals']  = _dec
                         pos['buy_price'] = data['price']
-                        usdc -= spend
+                        sol -= spend
                 except Exception as e:
                     print(f'{token["label"]} error: {traceback.format_exc()}', flush=True)
         except Exception:

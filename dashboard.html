@@ -518,7 +518,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="ob-progress"><div class="ob-dot active"></div><div class="ob-dot"></div></div>
     <div class="ob-step active" id="step-0">
       <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL &amp; USDC balances.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL balance and start trading.</div>
       <div id="wallet-connected" style="display:none" class="ob-connected">
         <div class="ob-check">✓</div>
         <div class="ob-conn-text">
@@ -562,7 +562,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         </div>
         <div class="sg-item">
           <div class="sg-num">2</div>
-          <div><span class="sg-label">Fund it with USDC + SOL</span>Send at least $10 USDC and 0.01 SOL (for swap gas fees) to the trading wallet.</div>
+          <div><span class="sg-label">Fund it with SOL</span>Send at least 0.1 SOL to the trading wallet. The bot trades directly with SOL.</div>
         </div>
         <div class="sg-item">
           <div class="sg-num">3</div>
@@ -599,8 +599,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </button>
       <div class="how-to-body">
         <div class="how-to-section">💰 Minimum Requirements</div>
-        <div class="how-to-item">At least $10 USDC in your trading wallet</div>
-        <div class="how-to-item">At least 0.01 SOL for transaction fees (~$1.50)</div>
+        <div class="how-to-item">At least 0.1 SOL in your trading wallet (used directly for buying tokens)</div>
+        <div class="how-to-item">A small extra SOL buffer (~0.01 SOL) is kept for transaction fees automatically</div>
         <div class="how-to-item">Your trading wallet private key saved below</div>
         <div class="how-to-section">⚡ How the Bot Trades</div>
         <div class="how-to-item">Scans Solana tokens every 90 seconds</div>
@@ -635,15 +635,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
     <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="s-field" style="margin-bottom:0">
-        <label class="s-label">Min Trade Size (USDC)</label>
-        <input id="s-minusdc" class="s-input" type="number" value="1" min="0.01" max="1000" step="0.5">
+        <label class="s-label">Min Trade Size (SOL)</label>
+        <input id="s-minusdc" class="s-input" type="number" value="0.01" min="0.001" max="100" step="0.01">
       </div>
       <div class="s-field" style="margin-bottom:0">
-        <label class="s-label">Max Trade Size (USDC)</label>
-        <input id="s-maxusdc" class="s-input" type="number" value="10" min="0.01" max="1000" step="0.5">
+        <label class="s-label">Max Trade Size (SOL)</label>
+        <input id="s-maxusdc" class="s-input" type="number" value="0.5" min="0.001" max="100" step="0.01">
       </div>
       <div class="s-field" style="margin-bottom:0">
-        <label class="s-label">Daily Loss Limit (USDC)</label>
+        <label class="s-label">Daily Loss Limit (SOL)</label>
         <input id="s-losslimit" class="s-input" type="number" value="50" min="1" max="10000" step="1">
       </div>
     </div>
@@ -729,7 +729,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <span style="font-size:18px;flex-shrink:0">👋</span>
     <div>
       <strong>Welcome to OrcAgent!</strong> To start trading:<br>
-      1) Open <strong>Settings</strong> &nbsp;·&nbsp; 2) Add your trading wallet private key &nbsp;·&nbsp; 3) Make sure you have USDC + SOL for fees &nbsp;·&nbsp; 4) Click <strong>Start Trading</strong>
+      1) Open <strong>Settings</strong> &nbsp;·&nbsp; 2) Add your trading wallet private key &nbsp;·&nbsp; 3) Make sure you have SOL in your trading wallet &nbsp;·&nbsp; 4) Click <strong>Start Trading</strong>
       <br><button class="wb-dismiss" onclick="dismissWelcome()">Got it</button>
     </div>
   </div>
@@ -737,14 +737,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <!-- STATS -->
   <div class="stats">
     <div class="stat">
-      <div class="stat-lbl">USDC Balance</div>
-      <div class="stat-val g" id="s-usdc"><span class="stat-placeholder">——</span></div>
-      <div class="stat-sub">available to trade</div>
-    </div>
-    <div class="stat">
       <div class="stat-lbl">SOL Balance</div>
-      <div class="stat-val b" id="s-sol"><span class="stat-placeholder">——</span></div>
-      <div class="stat-sub">for transaction fees</div>
+      <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
+      <div class="stat-sub">available to trade</div>
     </div>
     <div class="stat">
       <div class="stat-lbl">Open Positions</div>
@@ -753,15 +748,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- USDC WARNING -->
-  <div class="usdc-warn" id="usdc-warn">⚠ You need USDC to trade. Send USDC to your wallet first.</div>
+  <!-- SOL WARNING -->
+  <div class="usdc-warn" id="usdc-warn">⚠ Low SOL balance — send SOL to your trading wallet to start trading.</div>
 
   <!-- OPEN POSITIONS -->
   <div class="pos-panel" id="positions-panel" style="display:none">
     <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th></tr></thead>
+        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Cost (SOL)</th><th>P&amp;L</th></tr></thead>
         <tbody id="positions-tbody"></tbody>
       </table>
     </div>
@@ -1069,7 +1064,6 @@ function doLogout(){
   document.getElementById('wallet-pill').style.display='none';
   document.getElementById('app').style.display='none';
   document.getElementById('onboard').classList.remove('hide');
-  document.getElementById('s-usdc').innerHTML='<span class="stat-placeholder">——</span>';
   document.getElementById('s-sol').innerHTML='<span class="stat-placeholder">——</span>';
   currentStep=0; showStep(0);
 }
@@ -1243,7 +1237,6 @@ async function fetchBalance(){
   const r=await fetch('/api/balance').then(r=>r.json()).catch(()=>null);
   if(r?.ok){
     document.getElementById('s-sol').textContent=(+r.sol||0).toFixed(4);
-    document.getElementById('s-usdc').textContent='$'+(+r.usdc||0).toFixed(2);
   }
 }
 
@@ -1288,11 +1281,10 @@ async function fetchState(){
   }
   document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
   if(phantomKey){
-    if(r.sol!=null) document.getElementById('s-sol').textContent=(+r.sol).toFixed(4);
-    if(r.usdc!=null){
-      document.getElementById('s-usdc').textContent='$'+(+r.usdc).toFixed(2);
+    if(r.sol!=null){
+      document.getElementById('s-sol').textContent=(+r.sol).toFixed(4);
       const uw=document.getElementById('usdc-warn');
-      if(uw) uw.style.display=(+r.usdc<0.01)?'block':'none';
+      if(uw) uw.style.display=(+r.sol<0.02)?'block':'none';
     }
   }
   traderOn=r.trader_running;
@@ -2160,13 +2152,8 @@ async function toggleTrader(){
   }
   if(!traderOn){
     const sol=parseFloat(document.getElementById('s-sol').textContent)||0;
-    const usdc=parseFloat((document.getElementById('s-usdc').textContent||'').replace(/[^0-9.]/g,''))||0;
-    if(sol < 0.005){
-      showTradeWarn('⚠️ Low SOL balance — you need at least 0.01 SOL to pay transaction fees');
-      return;
-    }
-    if(usdc < 1){
-      showTradeWarn('⚠️ Low USDC balance — deposit at least $10 USDC to start trading');
+    if(sol < 0.02){
+      showTradeWarn('⚠️ Low SOL balance — you need at least 0.02 SOL to trade');
       return;
     }
   }
