@@ -1933,53 +1933,84 @@ def api_claim_sol():
     enc_blob       = row[0]
     TOKEN_PROG_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 
+    # Derive the TRADING wallet pubkey from the encrypted key.
+    # Token accounts are owned by the trading keypair (used to sign swaps),
+    # NOT by the Phantom session wallet — so we must query with the trading pubkey.
+    from solders.keypair import Keypair as _KP
+    from solders.pubkey import Pubkey as _PBK
+    from solders.instruction import Instruction as _IX, AccountMeta as _AM
+    from solders.transaction import Transaction as _TX
+    from solders.hash import Hash as _SH
+
+    try:
+        with _use_key(enc_blob, wallet) as _pk_tmp:
+            _kp_tmp    = _KP.from_base58_string(_pk_tmp)
+            trading_pk = str(_kp_tmp.pubkey())
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key: ' + str(e)[:80]}), 500
+
+    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    print(f'[claim_sol] {short_w} session_wallet={wallet[:8]}... trading_wallet={trading_pk[:8]}...', flush=True)
+
+    # Fetch ALL token accounts owned by the trading wallet
     try:
         r = requests.post(SOLANA_RPC, json={
             'jsonrpc': '2.0', 'id': 1, 'method': 'getTokenAccountsByOwner',
-            'params': [wallet, {'programId': TOKEN_PROG_STR}, {'encoding': 'jsonParsed'}],
-        }, timeout=10)
-        accounts_data = r.json().get('result', {}).get('value', [])
+            'params': [trading_pk, {'programId': TOKEN_PROG_STR}, {'encoding': 'jsonParsed'}],
+        }, timeout=15)
+        rpc_result    = r.json()
+        accounts_data = rpc_result.get('result', {}).get('value', [])
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'RPC error: ' + str(e)}), 500
+
+    print(f'[claim_sol] found {len(accounts_data)} total token accounts for trading wallet', flush=True)
 
     closeable = []
     for acc in accounts_data:
         try:
-            amount = int(acc['account']['data']['parsed']['info']['tokenAmount']['amount'] or 0)
+            info     = acc['account']['data']['parsed']['info']
+            mint     = info.get('mint', '')[:12]
+            amount   = int(info['tokenAmount']['amount'] or 0)
+            lamports = int(acc['account']['lamports'])
+            print(f'[claim_sol]   account={acc["pubkey"][:12]}... mint={mint}... amount={amount} lamports={lamports}', flush=True)
             if amount == 0:
-                closeable.append((acc['pubkey'], int(acc['account']['lamports'])))
-        except Exception:
-            pass
+                closeable.append((acc['pubkey'], lamports))
+        except Exception as ex:
+            print(f'[claim_sol]   parse error for account: {ex}', flush=True)
+
+    print(f'[claim_sol] {len(closeable)} empty accounts to close (amount==0)', flush=True)
 
     if not closeable:
-        return jsonify({'ok': True, 'msg': 'No empty token accounts to close', 'reclaimed': 0.0, 'closed': 0})
+        add_user_log(wallet, f'[claim] 0 empty token accounts found (checked {len(accounts_data)} total)')
+        return jsonify({
+            'ok': True,
+            'msg': f'No empty token accounts found ({len(accounts_data)} accounts checked — none have zero balance)',
+            'reclaimed': 0.0, 'closed': 0,
+        })
 
     total_lamports = sum(lam for _, lam in closeable)
     closed = 0
     errors = 0
 
     with _use_key(enc_blob, wallet) as pk_str:
-        from solders.keypair import Keypair as _KP
-        from solders.pubkey import Pubkey as _PBK
-        from solders.instruction import Instruction as _IX, AccountMeta as _AM
-        from solders.transaction import Transaction as _TX
-        from solders.hash import Hash as _SH
-
         TOKEN_PROG = _PBK.from_string(TOKEN_PROG_STR)
         keypair    = _KP.from_base58_string(pk_str)
         owner_pk   = keypair.pubkey()
 
         for i in range(0, len(closeable), 20):
             batch = closeable[i:i+20]
-            ixs = [_IX(
-                program_id=TOKEN_PROG,
-                accounts=[
-                    _AM(_PBK.from_string(acc_pk), is_signer=False, is_writable=True),
-                    _AM(owner_pk,                  is_signer=False, is_writable=True),
-                    _AM(owner_pk,                  is_signer=True,  is_writable=False),
-                ],
-                data=bytes([9]),  # CloseAccount
-            ) for acc_pk, _ in batch]
+            ixs = []
+            for acc_pk, lam in batch:
+                print(f'[claim_sol] closing {acc_pk[:12]}... ({lam} lamports)', flush=True)
+                ixs.append(_IX(
+                    program_id=TOKEN_PROG,
+                    accounts=[
+                        _AM(_PBK.from_string(acc_pk), is_signer=False, is_writable=True),  # account to close
+                        _AM(owner_pk,                  is_signer=False, is_writable=True),  # destination (rent back)
+                        _AM(owner_pk,                  is_signer=True,  is_writable=False), # authority
+                    ],
+                    data=bytes([9]),  # CloseAccount instruction discriminator
+                ))
             try:
                 bh  = requests.post(SOLANA_RPC, json={
                     'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
@@ -1994,12 +2025,13 @@ def api_claim_sol():
                     print(f'[claim_sol] batch error: {res["error"]}', flush=True)
                 else:
                     closed += len(batch)
+                    print(f'[claim_sol] batch closed {len(batch)} accounts TX:{str(res.get("result",""))[:20]}', flush=True)
             except Exception as e:
                 errors += len(batch)
                 print(f'[claim_sol] error: {e}', flush=True)
 
     if closed == 0:
-        return jsonify({'ok': False, 'msg': 'Failed to close accounts — check server logs', 'reclaimed': 0.0})
+        return jsonify({'ok': False, 'msg': 'Found empty accounts but closing failed — check server logs', 'reclaimed': 0.0})
 
     reclaimed = total_lamports / 1e9
     msg = f'Closed {closed} account{"s" if closed != 1 else ""} — reclaimed ~{reclaimed:.5f} SOL'
