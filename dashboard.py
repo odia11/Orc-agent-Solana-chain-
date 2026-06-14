@@ -2030,29 +2030,39 @@ def api_claim_sol():
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key: ' + str(e)[:80]}), 500
 
-    print(f'[claim_sol] {short_w} session_wallet={wallet} trading_wallet={trading_pk}', flush=True)
+    print(f'[claim_sol] ═══ START ═══', flush=True)
+    print(f'[claim_sol] session_wallet  = {wallet}', flush=True)
+    print(f'[claim_sol] trading_wallet  = {trading_pk}', flush=True)
+    print(f'[claim_sol] wallets_differ  = {wallet != trading_pk}', flush=True)
+    print(f'[claim_sol] RPC             = {SOLANA_RPC}', flush=True)
+    print(f'[claim_sol] SPL_PROG        = {SPL_PROG_STR}', flush=True)
 
     # Fetch token accounts for BOTH wallets — either may hold empty ATAs
-    def _rpc_token_accounts(owner: str):
-        r = requests.post(SOLANA_RPC, json={
+    def _rpc_token_accounts(owner: str, label: str):
+        print(f'[claim_sol] → getTokenAccountsByOwner  owner={owner}  label={label}', flush=True)
+        r    = requests.post(SOLANA_RPC, json={
             'jsonrpc': '2.0', 'id': 1,
-            'method': 'getTokenAccountsByOwner',
-            'params': [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
+            'method':  'getTokenAccountsByOwner',
+            'params':  [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
         }, timeout=15)
         resp = r.json()
         if 'error' in resp:
-            print(f'[claim_sol] RPC error for {owner[:8]}: {resp["error"]}', flush=True)
+            print(f'[claim_sol]   RPC ERROR for {label}: {resp["error"]}', flush=True)
             return []
-        return resp.get('result', {}).get('value', [])
+        accs = resp.get('result', {}).get('value', [])
+        print(f'[claim_sol]   {label} → {len(accs)} token account(s) returned', flush=True)
+        return accs
 
     try:
-        session_accs = _rpc_token_accounts(wallet)
-        trading_accs = _rpc_token_accounts(trading_pk) if trading_pk != wallet else []
+        session_accs = _rpc_token_accounts(wallet, 'session_wallet')
+        trading_accs = _rpc_token_accounts(trading_pk, 'trading_wallet') if trading_pk != wallet else []
+        if trading_pk == wallet:
+            print(f'[claim_sol]   trading_wallet == session_wallet, skipping duplicate query', flush=True)
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'RPC request failed: ' + str(e)}), 500
 
     all_accs = session_accs + trading_accs
-    print(f'[claim_sol] session_wallet={len(session_accs)} accs  trading_wallet={len(trading_accs)} accs  total={len(all_accs)}', flush=True)
+    print(f'[claim_sol] total accounts before dedup: {len(all_accs)}', flush=True)
 
     # Filter: raw amount == "0" is the definitive empty check.
     # uiAmount can be None/null for non-zero dust — only raw amount == 0 guarantees CloseAccount succeeds.
@@ -2060,29 +2070,53 @@ def api_claim_sol():
     closeable  = []
     skipped    = []
     seen       = set()
-    for acc in all_accs:
+    print(f'[claim_sol] ─── account details ───', flush=True)
+    for idx, acc in enumerate(all_accs):
         pub = acc.get('pubkey', '')
+        src = 'session' if idx < len(session_accs) else 'trading'
         if pub in seen:
+            print(f'[claim_sol]   [{src}] {pub} → DUPLICATE skipped', flush=True)
             continue
         seen.add(pub)
         try:
-            info     = acc['account']['data']['parsed']['info']
-            raw_amt  = str(info['tokenAmount'].get('amount', '1'))   # default '1' → not closeable
-            lamports = int(acc['account']['lamports'])
-            mint_str = info.get('mint', 'unknown')
+            info           = acc['account']['data']['parsed']['info']
+            tok            = info.get('tokenAmount', {})
+            raw_amt        = str(tok.get('amount',        '1'))
+            ui_amt         = tok.get('uiAmount',          None)   # float or null
+            ui_str         = tok.get('uiAmountString',    '?')
+            decimals       = tok.get('decimals',          '?')
+            lamports       = int(acc['account']['lamports'])
+            sol_rent       = lamports / 1e9
+            mint_str       = info.get('mint',  'unknown')
             owner_on_chain = info.get('owner', '')
-            print(f'[claim_sol]   {pub[:12]}... mint={mint_str[:12]}... raw_amount={raw_amt} '
-                  f'lamports={lamports} owner={owner_on_chain[:12]}...', flush=True)
+            state          = info.get('state', '?')
+
+            print(f'[claim_sol]   [{src}] pubkey={pub}', flush=True)
+            print(f'[claim_sol]         mint={mint_str}', flush=True)
+            print(f'[claim_sol]         owner_on_chain={owner_on_chain}', flush=True)
+            print(f'[claim_sol]         state={state}  decimals={decimals}', flush=True)
+            print(f'[claim_sol]         raw_amount={raw_amt}  uiAmount={ui_amt}  uiAmountString={ui_str}', flush=True)
+            print(f'[claim_sol]         lamports={lamports}  ({sol_rent:.6f} SOL rent)', flush=True)
+
             if raw_amt == '0':
                 closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain})
+                print(f'[claim_sol]         → CLOSEABLE (raw_amount==0)', flush=True)
             else:
-                skipped.append({'pubkey': pub[:12], 'amount': raw_amt, 'mint': mint_str[:12]})
+                skipped.append({'pubkey': pub, 'amount': raw_amt, 'ui': str(ui_amt), 'mint': mint_str})
+                print(f'[claim_sol]         → SKIPPED (raw_amount={raw_amt} != 0, still holds tokens)', flush=True)
         except Exception as ex:
-            print(f'[claim_sol]   parse error for {pub[:12]}: {ex}', flush=True)
+            print(f'[claim_sol]   [{src}] {pub} → PARSE ERROR: {ex}  raw={acc}', flush=True)
 
-    print(f'[claim_sol] {len(closeable)} closeable (amount==0)  {len(skipped)} skipped (non-zero)', flush=True)
-    if skipped:
-        print(f'[claim_sol] skipped (still have tokens): {skipped}', flush=True)
+    print(f'[claim_sol] ─── summary ───', flush=True)
+    print(f'[claim_sol] total unique accounts : {len(seen)}', flush=True)
+    print(f'[claim_sol] closeable (amount==0) : {len(closeable)}', flush=True)
+    print(f'[claim_sol] skipped (have tokens) : {len(skipped)}', flush=True)
+    for s in skipped:
+        print(f'[claim_sol]   skipped: pubkey={s["pubkey"]}  mint={s["mint"]}  '
+              f'raw={s["amount"]}  ui={s["ui"]}', flush=True)
+    for c in closeable:
+        print(f'[claim_sol]   closeable: pubkey={c["pubkey"]}  lamports={c["lamports"]}  '
+              f'owner={c["owner"]}', flush=True)
 
     if not closeable:
         msg = (f'No empty token accounts found — {len(all_accs)} total accounts checked '
@@ -2111,13 +2145,19 @@ def api_claim_sol():
             print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
                   f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
 
-        print(f'[claim_sol] signing {len(our_accs)} accounts with trading keypair {str(signer)[:8]}...', flush=True)
+        print(f'[claim_sol] ─── close phase ───', flush=True)
+        print(f'[claim_sol] signer (trading keypair) = {str(signer)}', flush=True)
+        print(f'[claim_sol] our_accs   (owner==signer)  : {len(our_accs)}', flush=True)
+        print(f'[claim_sol] other_accs (owner!=signer)  : {len(other_accs)}', flush=True)
+        for a in other_accs:
+            print(f'[claim_sol]   other: pubkey={a["pubkey"]}  owner={a["owner"]}', flush=True)
+        print(f'[claim_sol] destination (rent back) = {str(signer)}', flush=True)
 
         for i in range(0, len(our_accs), 5):   # small batches — most reliable
             batch = our_accs[i:i+5]
             ixs = []
             for a in batch:
-                print(f'[claim_sol] → closing {a["pubkey"][:12]}... {a["lamports"]} lamports', flush=True)
+                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}', flush=True)
                 ixs.append(_IX(
                     program_id=SPL_PROG,
                     accounts=[
@@ -2152,8 +2192,11 @@ def api_claim_sol():
                 failed.extend(batch)
                 print(f'[claim_sol] ✗ TX exception: {e}', flush=True)
 
-    closed = len(our_accs) - len(failed)
+    closed        = len(our_accs) - len(failed)
     skipped_other = len(other_accs)
+    print(f'[claim_sol] ─── result ───', flush=True)
+    print(f'[claim_sol] our_accs={len(our_accs)}  closed={closed}  failed={len(failed)}  '
+          f'skipped_other_owner={skipped_other}', flush=True)
 
     if closed == 0 and our_accs:
         return jsonify({
