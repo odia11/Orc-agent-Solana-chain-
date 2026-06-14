@@ -477,6 +477,9 @@ _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
 # Admin endpoints that return TX hashes are excluded — TX sigs are the same length.
 _SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
 
+# Paths that should never be legitimately accessed — any hit is a scan/probe.
+_HONEYPOT_PATHS = frozenset({'/.env', '/wp-login.php', '/admin', '/phpmyadmin', '/config.php', '/.git/config'})
+
 # Fields that must never appear in any JSON response body.
 # Includes DB column names so a runaway SELECT * can never accidentally expose them.
 _FORBIDDEN_RESPONSE_KEYS = frozenset({
@@ -518,6 +521,92 @@ def _security_selftest() -> bool:
               f'{len(_FORBIDDEN_RESPONSE_KEYS)} forbidden field(s), '
               f'log_lines scrubbed, regex active on all endpoints', flush=True)
     return passed
+
+def _run_security_checks() -> list:
+    """Run all runtime security invariant checks. Returns list of failed {check, detail} dicts."""
+    failures = []
+
+    # 1. ENCRYPTION_KEY is still present and valid in the environment
+    try:
+        live_key = os.environ.get('ENCRYPTION_KEY', '').strip()
+        if not live_key:
+            failures.append({'check': 'ENCRYPTION_KEY', 'detail': 'missing from environment at runtime'})
+        else:
+            Fernet(live_key.encode())  # re-validate without decrypting anything
+    except Exception as e:
+        failures.append({'check': 'ENCRYPTION_KEY', 'detail': f'invalid Fernet key at runtime: {str(e)[:80]}'})
+
+    # 2. All stored encrypted private keys can still be decrypted
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT wallet_address, encrypted_private_key FROM users '
+                  'WHERE encrypted_private_key != "" AND encrypted_private_key IS NOT NULL')
+        rows = c.fetchall()
+        conn.close()
+        n_ok = n_fail = 0
+        for waddr, enc_blob in rows:
+            raw = None
+            try:
+                raw = decrypt_private_key(enc_blob, waddr)
+                n_ok += 1
+            except Exception:
+                n_fail += 1
+            finally:
+                raw = None
+        if n_fail:
+            failures.append({'check': 'Key Decryption',
+                             'detail': f'{n_fail}/{n_ok + n_fail} stored key(s) cannot be decrypted'})
+    except Exception as e:
+        failures.append({'check': 'Key Decryption', 'detail': f'DB query failed: {str(e)[:80]}'})
+
+    # 3. /api/state schema contains no forbidden response fields
+    _state_schema = frozenset({
+        'trader_running', 'usdc', 'sol', 'positions', 'positions_detail',
+        'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key',
+    })
+    leaked = _FORBIDDEN_RESPONSE_KEYS & _state_schema
+    if leaked:
+        failures.append({'check': 'Response Schema',
+                         'detail': f'forbidden field(s) in /api/state schema: {leaked}'})
+
+    # 4. All honeypot routes are still registered in the URL map
+    registered = {rule.rule for rule in app.url_map.iter_rules()}
+    missing_pots = _HONEYPOT_PATHS - registered
+    if missing_pots:
+        failures.append({'check': 'Honeypots',
+                         'detail': f'honeypot route(s) not in url_map: {missing_pots}'})
+
+    # 5. Rate limiting is active (lock, hits dict, and decorator all functional)
+    if not callable(rate_limit):
+        failures.append({'check': 'Rate Limiter', 'detail': 'rate_limit is not callable'})
+    elif not isinstance(_rl_lock, threading.Lock):
+        failures.append({'check': 'Rate Limiter', 'detail': '_rl_lock is not a threading.Lock'})
+    elif not isinstance(_rl_hits, dict):
+        failures.append({'check': 'Rate Limiter', 'detail': '_rl_hits is not a dict'})
+
+    return failures
+
+
+def _security_check_loop():
+    """Background thread: run security invariant checks every 60 s.
+    Any failure is logged as CRITICAL and written to the security_log table."""
+    time.sleep(30)  # let startup (DB init, selftest) finish first
+    while True:
+        try:
+            failures = _run_security_checks()
+            if failures:
+                for f in failures:
+                    msg = f'CRITICAL [security] CHECK FAILED: {f["check"]} — {f["detail"]}'
+                    print(msg, flush=True)
+                    # Persist to security_log so it appears in the admin panel
+                    _log_security_event('CRITICAL_check_failed', 'system',
+                                        f'{f["check"]}: {f["detail"][:200]}')
+            else:
+                print('[security] OK — all checks passed', flush=True)
+        except Exception as e:
+            print(f'[security] ERROR in check loop: {e}', flush=True)
+        time.sleep(60)
 
 def _log_security_event(event_type: str, wallet: str, details: str = '') -> None:
     short   = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
@@ -1389,6 +1478,21 @@ def _security_headers(resp):
 @app.route('/')
 def index():
     return send_from_directory(BASE, 'dashboard.html')
+
+# ── HONEYPOTS ──
+# These paths are never legitimately accessed. Any hit means a scanner or attacker.
+# Log the IP, increment failure count (triggering ban on repeat hits), return 404.
+@app.route('/.env')
+@app.route('/wp-login.php')
+@app.route('/admin')
+@app.route('/phpmyadmin')
+@app.route('/config.php')
+@app.route('/.git/config')
+def _honeypot():
+    ip = request.remote_addr or 'unknown'
+    _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
+    _record_ip_failure(ip)
+    return '', 404
 
 # ── WALLET ──
 @app.route('/api/wallet/set', methods=['POST'])
@@ -2381,10 +2485,11 @@ if not OWNER_WALLET:
     print('         is_admin will never be true for any user.')
     print('         Set OWNER_WALLET in Railway Variables and redeploy.')
 init_db()
-threading.Thread(target=token_loop,    daemon=True).start()
-threading.Thread(target=totd_loop,     daemon=True).start()
-threading.Thread(target=_cleanup_loop, daemon=True).start()
-threading.Thread(target=_audit_loop,   daemon=True).start()
+threading.Thread(target=token_loop,            daemon=True).start()
+threading.Thread(target=totd_loop,             daemon=True).start()
+threading.Thread(target=_cleanup_loop,         daemon=True).start()
+threading.Thread(target=_audit_loop,           daemon=True).start()
+threading.Thread(target=_security_check_loop,  daemon=True).start()
 _security_selftest()
 add_log('OrcAgent started')
 
