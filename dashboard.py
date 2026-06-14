@@ -472,6 +472,14 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
+        c.execute('ALTER TABLE trades ADD COLUMN fee_paid INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE fees ADD COLUMN status TEXT DEFAULT "ok"')
+    except sqlite3.OperationalError:
+        pass
+    try:
         c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 0.01')
     except sqlite3.OperationalError:
         pass
@@ -1279,46 +1287,85 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
 
     # 5% performance fee on profitable trades only (collected in SOL)
     fee_amount = 0.0
-    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    if pnl > 0.0 and wallet and private_key and not _is_owner(wallet):
+    short_w    = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    _owner_set = bool(OWNER_WALLET)
+    _is_user_owner = _is_owner(wallet) if wallet else False
+    print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} SOL  '
+          f'pnl_positive={pnl>0}  has_key={bool(private_key and wallet)}  '
+          f'owner_wallet_set={_owner_set}  is_owner_account={_is_user_owner}', flush=True)
+
+    if pnl > 0.0 and wallet and private_key and _owner_set and not _is_user_owner:
         fee_amount = round(pnl * FEE_RATE, 6)
-        print(f'[fee] {short_w} {symbol} profit={pnl:.6f} SOL fee={fee_amount:.6f} SOL '
-              f'(pnl>0={pnl>0}, has_key={bool(private_key)}, owner_set={bool(OWNER_WALLET)})', flush=True)
-        if fee_amount >= 0.0001:  # skip dust fees below 0.0001 SOL
-            _pk   = private_key
+        print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
+              f'(5% of {pnl:.6f} SOL profit)  threshold_met={fee_amount >= 0.0001}', flush=True)
+
+        if fee_amount >= 0.0001:
+            _pk   = private_key     # Python string — immutable, ref lives in thread args tuple
             _sym  = symbol
             _gros = pnl
             _fee  = fee_amount
             _wlt  = wallet
-            def _do_fee(pk, sym, gross, fee, wlt):
+            _uid  = user_id
+            _ts   = now.strftime('%Y-%m-%dT%H:%M:%SZ')
+
+            def _do_fee(pk, sym, gross, fee, wlt, uid, trade_ts):
                 sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
-                print(f'[fee] attempting SOL transfer {fee:.6f} SOL → OWNER_WALLET for {sw} {sym}', flush=True)
+                # Wait for the sell TX to confirm on-chain before we try to spend from that balance
+                time.sleep(12)
+                print(f'[fee] → attempting {fee:.6f} SOL transfer from trading wallet to OWNER_WALLET '
+                      f'for {sw} {sym}  gross_profit={gross:.6f} SOL', flush=True)
+                if not OWNER_WALLET:
+                    print(f'[fee] ✗ OWNER_WALLET is not set — cannot collect fee', flush=True)
+                    return
+                tx_sig   = None
+                err_msg  = None
                 try:
                     tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
-                    conn = sqlite3.connect(DB_FILE)
-                    conn.execute(
-                        'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx) VALUES (?,?,?,?,?)',
-                        (wlt, sym, gross, fee, tx_sig))
-                    conn.commit()
-                    conn.close()
-                    print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent TX:{tx_sig[:16]}', flush=True)
-                    add_user_log(wlt, f'✓ Perf fee {fee:.4f} SOL (5% of +{gross:.4f} SOL) TX:{tx_sig[:12]}...')
+                    print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
+                    add_user_log(wlt, f'✓ Perf fee {fee:.5f} SOL (5% of +{gross:.5f} SOL profit)  TX:{tx_sig[:12]}...')
                 except Exception as e:
-                    err = _redact_keys(str(e)[:120])
-                    print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err}', flush=True)
-                    add_user_log(wlt, f'Fee transfer failed: {_redact_keys(str(e)[:80])}')
+                    err_msg = _redact_keys(str(e))
+                    print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err_msg}', flush=True)
+                    add_user_log(wlt, f'Fee {fee:.5f} SOL owed but transfer failed — will appear in admin recovery panel')
+
+                # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
+                try:
+                    status = 'ok' if tx_sig else 'failed'
+                    fee_tx = tx_sig if tx_sig else ('FAILED: ' + (err_msg or 'unknown')[:80])
+                    conn2  = sqlite3.connect(DB_FILE)
+                    conn2.execute(
+                        'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status) VALUES (?,?,?,?,?,?)',
+                        (wlt, sym, gross, fee, fee_tx, status))
+                    if tx_sig:
+                        # Mark trade as fee paid using timestamp to identify it
+                        conn2.execute(
+                            'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
+                            (uid, trade_ts))
+                    conn2.commit()
+                    conn2.close()
+                    print(f'[fee] recorded in fees table: status={status} fee_tx={fee_tx[:30]}', flush=True)
+                except Exception as db_e:
+                    print(f'[fee] ✗ could not write to fees table: {db_e}', flush=True)
                 finally:
                     pk = None
-            threading.Thread(target=_do_fee, args=(_pk, _sym, _gros, _fee, _wlt), daemon=True).start()
+
+            threading.Thread(
+                target=_do_fee,
+                args=(_pk, _sym, _gros, _fee, _wlt, _uid, _ts),
+                daemon=True,
+            ).start()
+            print(f'[fee] {short_w} {symbol} fee thread started (will execute in ~12s after sell confirms)', flush=True)
         else:
-            print(f'[fee] {short_w} {symbol} fee {fee_amount:.6f} SOL below dust threshold — skipped', flush=True)
+            print(f'[fee] {short_w} {symbol} fee {fee_amount:.6f} SOL below 0.0001 dust threshold — skipped', flush=True)
     else:
         if pnl <= 0.0:
-            print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
-        elif not OWNER_WALLET:
-            print(f'[fee] {short_w} {symbol} no fee — OWNER_WALLET not set', flush=True)
-        elif _is_owner(wallet):
-            print(f'[fee] {short_w} {symbol} no fee — owner trading own wallet', flush=True)
+            print(f'[fee] {short_w} {symbol} no fee — trade not profitable', flush=True)
+        elif not _owner_set:
+            print(f'[fee] {short_w} {symbol} no fee — OWNER_WALLET env var is not set', flush=True)
+        elif _is_user_owner:
+            print(f'[fee] {short_w} {symbol} no fee — owner wallet is exempt', flush=True)
+        elif not private_key:
+            print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
 
     trade = {
         'symbol': symbol, 'entry': entry, 'exit': exit_price,
@@ -1345,8 +1392,11 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         conn = sqlite3.connect(DB_FILE)
         try:
             conn.execute(
-                'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp) VALUES (?,?,?,?,?,?,?,?)',
-                (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, now.strftime('%Y-%m-%dT%H:%M:%SZ')))
+                '''INSERT INTO trades
+                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp)
+                   VALUES (?,?,?,?,?,?,?,?,?)''',
+                (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
+                 now.strftime('%Y-%m-%dT%H:%M:%SZ')))
             conn.commit()
         finally:
             conn.close()
@@ -2261,12 +2311,16 @@ def api_admin():
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE timestamp LIKE ?', (today + '%',))
+        ok_f = "(status IS NULL OR status='ok') AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')"
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE ({ok_f}) AND timestamp LIKE ?', (today + '%',))
         fees_today = round(float(c.fetchone()[0] or 0), 4)
-        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees')
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_f}')
         fees_total = round(float(c.fetchone()[0] or 0), 4)
-        c.execute('SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp FROM fees ORDER BY timestamp DESC LIMIT 200')
-        fee_txs = [{'wallet': r[0], 'token': r[1], 'gross': r[2], 'fee': r[3], 'tx': r[4], 'ts': r[5]}
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE status="failed" OR fee_tx LIKE "FAILED:%"')
+        fees_failed = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp, status FROM fees ORDER BY timestamp DESC LIMIT 200')
+        fee_txs = [{'wallet': r[0], 'token': r[1], 'gross': r[2], 'fee': r[3], 'tx': r[4], 'ts': r[5],
+                    'status': r[6] or ('failed' if str(r[4] or '').startswith('FAILED:') else 'ok')}
                    for r in c.fetchall()]
         c.execute('SELECT COUNT(*) FROM users')
         total_users  = int(c.fetchone()[0] or 0)
@@ -2283,16 +2337,17 @@ def api_admin():
         conn.close()
         users_trading = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
         return jsonify({
-            'fees_today':      fees_today,
-            'fees_total':      fees_total,
-            'fee_txs':         fee_txs,
-            'total_users':     total_users,
-            'users_with_key':  users_with_key,
-            'users_trading':   users_trading,
-            'total_trades':    total_trades,
-            'trades_today':    trades_today,
-            'owner_configured': bool(OWNER_WALLET),
-            'security_log':    sec_log,
+            'fees_today':        fees_today,
+            'fees_total':        fees_total,
+            'fees_failed_total': fees_failed,
+            'fee_txs':           fee_txs,
+            'total_users':       total_users,
+            'users_with_key':    users_with_key,
+            'users_trading':     users_trading,
+            'total_trades':      total_trades,
+            'trades_today':      trades_today,
+            'owner_configured':  bool(OWNER_WALLET),
+            'security_log':      sec_log,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -2340,22 +2395,27 @@ def admin_fees():
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE timestamp LIKE ?', (today + '%',))
+        ok_filter = "(status IS NULL OR status='ok') AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')"
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE ({ok_filter}) AND timestamp LIKE ?', (today + '%',))
         fees_today = round(float(c.fetchone()[0] or 0), 4)
-        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees')
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_filter}')
         fees_total = round(float(c.fetchone()[0] or 0), 4)
-        c.execute('''SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE status="failed" OR fee_tx LIKE "FAILED:%"')
+        fees_failed_total = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('''SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp, status
                      FROM fees ORDER BY timestamp DESC LIMIT 200''')
         txs = []
         for r in c.fetchall():
-            w = r[0] or ''
+            w      = r[0] or ''
+            status = r[6] or ('failed' if str(r[4] or '').startswith('FAILED:') else 'ok')
             txs.append({
                 'wallet': w[:4] + '...' + w[-4:] if len(w) >= 8 else w,
                 'token':  r[1], 'gross': round(r[2] or 0, 4),
-                'fee':    round(r[3] or 0, 4), 'tx': r[4], 'ts': r[5],
+                'fee':    round(r[3] or 0, 4), 'tx': r[4], 'ts': r[5], 'status': status,
             })
         conn.close()
-        return jsonify({'fees_today': fees_today, 'fees_total': fees_total, 'transactions': txs})
+        return jsonify({'fees_today': fees_today, 'fees_total': fees_total,
+                        'fees_failed_total': fees_failed_total, 'transactions': txs})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
@@ -2391,9 +2451,12 @@ def admin_recover_fees():
         ''')
         owed_rows = c.fetchall()
 
+        # Only count fees that were successfully sent (status='ok' or no status yet / no FAILED: prefix)
         c.execute('''
             SELECT user_wallet, COALESCE(SUM(fee_amount), 0)
             FROM fees
+            WHERE (status IS NULL OR status = 'ok')
+              AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')
             GROUP BY user_wallet
         ''')
         collected_map = {row[0]: float(row[1]) for row in c.fetchall()}
