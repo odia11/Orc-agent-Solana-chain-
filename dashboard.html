@@ -123,6 +123,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── TOKEN CARDS ── */
 .market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px}
+@media(max-width:600px){
+  .market-grid{display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:10px;padding-bottom:8px;scrollbar-width:none}
+  .market-grid::-webkit-scrollbar{display:none}
+  .mkt-card{flex:0 0 82%;scroll-snap-align:start}
+}
+.swipe-hint{display:none;font-size:10px;color:var(--muted);text-align:right;margin:-4px 0 6px;letter-spacing:.05em}
+@media(max-width:600px){.swipe-hint{display:block}}
+.usdc-warn{display:none;margin:0 0 10px;padding:10px 14px;background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.25);border-radius:8px;font-size:11px;color:#f0b90b;line-height:1.5}
 
 .mkt-card{
   background:var(--bg3);
@@ -745,6 +753,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- USDC WARNING -->
+  <div class="usdc-warn" id="usdc-warn">⚠ You need USDC to trade. Send USDC to your wallet first.</div>
+
   <!-- OPEN POSITIONS -->
   <div class="pos-panel" id="positions-panel" style="display:none">
     <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
@@ -864,6 +875,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div class="market-panel">
     <div class="panel-hdr">Live Solana Market &nbsp;<span id="token-count" style="color:var(--green);font-family:'Orbitron',monospace"></span></div>
     <div class="ticker-wrap"><div class="ticker-track" id="ticker-track"></div></div>
+    <div class="swipe-hint">← swipe →</div>
     <div class="market-grid" id="market-grid">
       <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
     </div>
@@ -1274,7 +1286,11 @@ async function fetchState(){
   document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
   if(phantomKey){
     if(r.sol!=null) document.getElementById('s-sol').textContent=(+r.sol).toFixed(4);
-    if(r.usdc!=null) document.getElementById('s-usdc').textContent='$'+(+r.usdc).toFixed(2);
+    if(r.usdc!=null){
+      document.getElementById('s-usdc').textContent='$'+(+r.usdc).toFixed(2);
+      const uw=document.getElementById('usdc-warn');
+      if(uw) uw.style.display=(+r.usdc<0.01)?'block':'none';
+    }
   }
   traderOn=r.trader_running;
   updateBtns();
@@ -2348,10 +2364,39 @@ async function saveSettings(){
   }
 }
 
-setInterval(fetchState,8000);
+setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,10000);
 setInterval(fetchCarousel,60000);
+
+// ── SWIPE GESTURES — market grid (mobile) ──
+(function(){
+  const el=document.getElementById('market-grid');
+  if(!el) return;
+  let x0=0,y0=0,t0=0,dragging=false;
+  el.addEventListener('touchstart',e=>{
+    const t=e.touches[0];
+    x0=t.clientX; y0=t.clientY; t0=Date.now(); dragging=true;
+  },{passive:true});
+  el.addEventListener('touchmove',e=>{
+    if(!dragging) return;
+    const dx=Math.abs(e.touches[0].clientX-x0);
+    const dy=Math.abs(e.touches[0].clientY-y0);
+    // Suppress vertical page scroll only when clearly a horizontal swipe
+    if(dx>dy&&dx>8) e.preventDefault();
+  },{passive:false});
+  el.addEventListener('touchend',e=>{
+    if(!dragging){return;}
+    dragging=false;
+    const dx=e.changedTouches[0].clientX-x0;
+    const dy=e.changedTouches[0].clientY-y0;
+    const dt=Date.now()-t0;
+    if(Math.abs(dx)<20||Math.abs(dy)>Math.abs(dx)||dt>400) return;
+    // Snap to next/prev card (card width ≈ 82% of container)
+    const cardW=el.clientWidth*0.82+10;
+    el.scrollBy({left:dx<0?cardW:-cardW,behavior:'smooth'});
+  },{passive:true});
+})();
 setInterval(_tickCarousel,1000);
 setInterval(fetchBalance,30000);
 setInterval(_checkInactivity,10000);
