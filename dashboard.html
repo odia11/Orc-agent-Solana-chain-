@@ -1952,7 +1952,7 @@ async function runFeeRecovery(){
   btn.disabled=true; btn.textContent='⏳ Recovering…';
   out.innerHTML='<span style="color:var(--muted)">Scanning trades and sending fees…</span>';
   try{
-    const r=await fetch('/api/admin/recover-fees',{method:'POST',headers:{'Content-Type':'application/json','X-CSRF-Token':getCSRF()}});
+    const r=await fetch('/api/admin/recover-fees',{method:'POST',headers:{'Content-Type':'application/json'}});
     const d=await r.json();
     if(d.error){out.innerHTML=`<span style="color:var(--red)">Error: ${d.error}</span>`;}
     else if(!d.ok){out.innerHTML=`<span style="color:var(--red)">${d.error||'Recovery failed'}</span>`;}
