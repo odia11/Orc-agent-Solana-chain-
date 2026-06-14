@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets
 from contextlib import contextmanager
 from flask import Flask, jsonify, request, send_from_directory, session
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -19,9 +19,27 @@ def _refresh_session():
     if session.get('wallet'):
         session.modified = True  # extend cookie lifetime on every API call
 
+# /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
+# cannot require a session-scoped CSRF token. Origin check still protects it.
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set'})
+
+def _get_csrf_token() -> str:
+    """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
+    if 'csrf_token' not in session:
+        session['csrf_token'] = secrets.token_hex(32)
+    return session['csrf_token']
+
+def _validate_csrf(token: str) -> bool:
+    """Constant-time CSRF token comparison — prevents timing oracle attacks."""
+    expected = session.get('csrf_token', '')
+    if not expected or not token:
+        return False
+    return hmac.compare_digest(token.encode(), expected.encode())
+
 @app.before_request
 def _csrf_check():
     if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and request.path.startswith('/api/'):
+        # ── 1. Origin / Host validation ──────────────────────────────────────
         origin = request.headers.get('Origin', '')
         if origin:
             host = request.headers.get('Host', '') or ''
@@ -29,6 +47,14 @@ def _csrf_check():
             origin_bare = origin.split('//')[-1].split(':')[0]
             if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
                 return jsonify({'error': 'CSRF check failed'}), 403
+        # ── 2. CSRF token for authenticated sessions ──────────────────────────
+        if session.get('wallet') and request.path not in _CSRF_EXEMPT_PATHS:
+            tok = (request.headers.get('X-CSRF-Token', '') or
+                   (request.get_json(silent=True) or {}).get('csrf_token', ''))
+            if not _validate_csrf(tok):
+                _log_security_event('csrf_fail', session.get('wallet', 'unknown'),
+                                    f'bad/missing token on {request.path}')
+                return jsonify({'error': 'CSRF validation failed'}), 403
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -169,7 +195,7 @@ def rate_limit(limit: int, window: int = 60, ban: bool = False):
         def wrapped(*args, **kwargs):
             ip  = request.remote_addr or '0.0.0.0'
             # Owner wallet is never rate-limited or banned
-            if OWNER_WALLET and session.get('wallet') == OWNER_WALLET:
+            if _is_owner(session.get('wallet', '')):
                 return f(*args, **kwargs)
             # Respect existing bans before even counting the request
             if ban and _is_banned(ip):
@@ -588,21 +614,57 @@ def _run_security_checks() -> list:
     return failures
 
 
+# Persistent state for the security check loop — read by /api/admin/security-status
+_sec_check_state: dict = {
+    'consecutive_failures': 0,
+    'last_checked':         None,
+    'last_failures':        [],
+    'trading_paused':       False,
+    'paused_at':            None,
+}
+
 def _security_check_loop():
     """Background thread: run security invariant checks every 60 s.
-    Any failure is logged as CRITICAL and written to the security_log table."""
+    Two consecutive failures pause ALL user traders and log CRITICAL."""
     time.sleep(30)  # let startup (DB init, selftest) finish first
     while True:
         try:
-            failures = _run_security_checks()
+            failures  = _run_security_checks()
+            now_str   = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+            _sec_check_state['last_checked'] = now_str
             if failures:
+                _sec_check_state['consecutive_failures'] += 1
+                _sec_check_state['last_failures']         = failures
+                n_consec = _sec_check_state['consecutive_failures']
                 for f in failures:
-                    msg = f'CRITICAL [security] CHECK FAILED: {f["check"]} — {f["detail"]}'
-                    print(msg, flush=True)
-                    # Persist to security_log so it appears in the admin panel
+                    print(f'CRITICAL [security] CHECK FAILED ({n_consec}x): '
+                          f'{f["check"]} — {f["detail"]}', flush=True)
                     _log_security_event('CRITICAL_check_failed', 'system',
-                                        f'{f["check"]}: {f["detail"][:200]}')
+                                        f'({n_consec}x) {f["check"]}: {f["detail"][:200]}')
+                # Pause all trading after 2 consecutive failures
+                if n_consec >= 2 and not _sec_check_state['trading_paused']:
+                    _sec_check_state['trading_paused'] = True
+                    _sec_check_state['paused_at']      = now_str
+                    n_stopped = 0
+                    for w, us in list(user_states.items()):
+                        if us.get('trader_running'):
+                            if us.get('trader_stop'):
+                                us['trader_stop'].set()
+                            us['trader_running'] = False
+                            try:
+                                add_user_log(w, '[SECURITY] Trading paused by security check failure. '
+                                             'Contact admin to resume.')
+                            except Exception:
+                                pass
+                            n_stopped += 1
+                    print(f'CRITICAL [security] ALL TRADING PAUSED — '
+                          f'{n_stopped} trader(s) stopped after {n_consec} consecutive failures',
+                          flush=True)
+                    _log_security_event('trading_paused_security', 'system',
+                                        f'{n_consec} consecutive failures — {n_stopped} trader(s) paused')
             else:
+                _sec_check_state['consecutive_failures'] = 0
+                _sec_check_state['last_failures']        = []
                 print('[security] OK — all checks passed', flush=True)
         except Exception as e:
             print(f'[security] ERROR in check loop: {e}', flush=True)
@@ -629,6 +691,40 @@ def _log_security_event(event_type: str, wallet: str, details: str = '') -> None
 _ip_ban:  dict = {}  # ip → ban_expires_at (epoch seconds)
 _ip_warn: dict = {}  # ip → list of recent failure timestamps
 
+# Multi-IP wallet monitoring: same wallet from 3+ distinct IPs within 1 h → alert + pause
+_wallet_ips:      dict           = {}   # wallet → [(ip, timestamp), ...]
+_wallet_ips_lock: threading.Lock = threading.Lock()
+
+def _check_wallet_multi_ip(wallet: str, ip: str) -> bool:
+    """Record auth IP for wallet. Returns True if 3+ distinct IPs seen in last hour.
+    On detection: logs CRITICAL, pauses the wallet's trader, records security event."""
+    now = time.time()
+    with _wallet_ips_lock:
+        entries = [(h, ts) for h, ts in _wallet_ips.get(wallet, []) if now - ts < 3600]
+        entries.append((ip, now))
+        _wallet_ips[wallet] = entries
+        distinct = {h for h, _ in entries}
+    if len(distinct) >= 3:
+        short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+        msg = (f'CRITICAL [security] Multi-IP alert: {short} authenticated from '
+               f'{len(distinct)} distinct IPs in 1h')
+        print(msg, flush=True)
+        _log_security_event('multi_ip_alert', wallet,
+                            f'{len(distinct)} IPs in 1h: {", ".join(sorted(distinct)[:8])}')
+        # Pause this user's active trader
+        us = user_states.get(wallet)
+        if us and us.get('trader_running'):
+            if us.get('trader_stop'):
+                us['trader_stop'].set()
+            us['trader_running'] = False
+            try:
+                add_user_log(wallet, '[SECURITY] Trading paused — multiple IPs detected. '
+                             'Contact admin if this was not you.')
+            except Exception:
+                pass
+        return True
+    return False
+
 def _is_banned(ip: str) -> bool:
     expires = _ip_ban.get(ip, 0)
     if time.time() < expires:
@@ -648,15 +744,23 @@ def _record_ip_failure(ip: str, duration: int = 3600, threshold: int = 3, window
 
 @contextmanager
 def _use_key(enc_blob: str, wallet: str):
-    """Decrypt private key for one operation, then immediately clear the reference.
-    Minimises the window the raw key is in memory — decrypt at signing, nowhere else."""
+    """Decrypt private key for one operation with best-effort memory protection.
+    Zeros a mutable bytearray copy of the key in finally, then drops the reference."""
     _k = None
     try:
         _k = decrypt_private_key(enc_blob, wallet)
         _log_security_event('key_access', wallet, 'trade execution')
         yield _k
     finally:
-        _k = None  # Python strings are immutable, so we clear the reference immediately
+        if _k is not None:
+            try:
+                # Python strings are immutable so we cannot zero in-place;
+                # zero a mutable copy so the content at least lives briefly.
+                _kb = bytearray(_k.encode('utf-8'))
+                _kb[:] = b'\x00' * len(_kb)
+            except Exception:
+                pass
+        _k = None
 
 def get_or_create_user(wallet: str) -> int:
     conn = sqlite3.connect(DB_FILE)
@@ -672,6 +776,13 @@ def _current_wallet() -> str:
     """Returns the wallet address for the current session only.
     Never falls back to shared state — that would leak one user's identity to another."""
     return session.get('wallet', '')
+
+def _is_owner(wallet: str) -> bool:
+    """Constant-time comparison: is wallet the OWNER_WALLET?
+    hmac.compare_digest prevents timing oracle attacks on admin auth checks."""
+    if not OWNER_WALLET or not wallet:
+        return False
+    return hmac.compare_digest(wallet.encode(), OWNER_WALLET.encode())
 
 # ── GLOBAL STATE ──
 def _fresh_daily():
@@ -1165,7 +1276,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     # 5% performance fee on profitable trades only (collected in SOL)
     fee_amount = 0.0
     short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    if pnl > 0.0 and wallet and private_key and OWNER_WALLET and wallet != OWNER_WALLET:
+    if pnl > 0.0 and wallet and private_key and not _is_owner(wallet):
         fee_amount = round(pnl * FEE_RATE, 6)
         print(f'[fee] {short_w} {symbol} profit={pnl:.6f} SOL fee={fee_amount:.6f} SOL '
               f'(pnl>0={pnl>0}, has_key={bool(private_key)}, owner_set={bool(OWNER_WALLET)})', flush=True)
@@ -1202,7 +1313,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
         elif not OWNER_WALLET:
             print(f'[fee] {short_w} {symbol} no fee — OWNER_WALLET not set', flush=True)
-        elif wallet == OWNER_WALLET:
+        elif _is_owner(wallet):
             print(f'[fee] {short_w} {symbol} no fee — owner trading own wallet', flush=True)
 
     trade = {
@@ -1494,21 +1605,34 @@ def _honeypot():
     _record_ip_failure(ip)
     return '', 404
 
+# ── CSRF TOKEN ──
+@app.route('/api/csrf-token')
+@rate_limit(60, 60)
+def get_csrf_token_endpoint():
+    """Return (or create) the per-session CSRF token.
+    Called by the frontend on page load so subsequent POSTs can include it."""
+    return jsonify({'token': _get_csrf_token()})
+
 # ── WALLET ──
 @app.route('/api/wallet/set', methods=['POST'])
 @rate_limit(10, 60)
 def set_wallet():
+    ip      = request.remote_addr or '0.0.0.0'
     address = (request.json or {}).get('address', '').strip()
     if address:
         if not is_valid_solana_address(address):
             return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
         session.permanent = True
         session['wallet'] = address
+        # Generate (or retrieve) CSRF token for this session now that the session exists
+        csrf_tok = _get_csrf_token()
         try:
             get_or_create_user(address)
         except: pass
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])
+        # Multi-IP detection: same wallet from 3+ IPs in 1 h → CRITICAL alert + pause trader
+        threading.Thread(target=_check_wallet_multi_ip, args=(address, ip), daemon=True).start()
         has_trading_key = False
         try:
             conn2 = sqlite3.connect(DB_FILE)
@@ -1522,7 +1646,7 @@ def set_wallet():
         us = get_user_state(address)
         us['has_trading_key'] = has_trading_key
         return jsonify({'ok': True, 'wallet': address, 'has_trading_key': has_trading_key,
-                        'is_admin': bool(OWNER_WALLET and address == OWNER_WALLET)})
+                        'is_admin': _is_owner(address), 'csrf_token': csrf_tok})
     else:
         prev = _current_wallet()
         session.pop('wallet', None)
@@ -1700,7 +1824,7 @@ def api_state():
             'log_lines':        safe_logs,
             'tokens':           state['tokens'],
             'wallet':           wallet,
-            'is_admin':         bool(OWNER_WALLET and wallet == OWNER_WALLET),
+            'is_admin':         _is_owner(wallet),
             'has_trading_key':  htk,
         })
     safe_sys_logs = [{'t': ln.get('t', ''), 'msg': _redact_keys(str(ln.get('msg', '')))}
@@ -1737,6 +1861,9 @@ def start_trader():
         return jsonify({'ok': False, 'msg': 'DB error: ' + str(e)[:60]}), 500
     if not kr or not kr[0]:
         return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False,
+                        'msg': 'Trading suspended — security check failure. Contact admin to resume.'}), 503
     with _trader_lock:
         us = get_user_state(wallet)
         if us['trader_running']:
@@ -1979,7 +2106,7 @@ def api_log():
 @rate_limit(12, 60)
 def api_audit():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     return jsonify(_audit_state)
 
@@ -1987,7 +2114,7 @@ def api_audit():
 @rate_limit(3, 60)
 def api_audit_run():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
         result = _run_audit()
@@ -1999,7 +2126,7 @@ def api_audit_run():
 @app.route('/api/admin')
 def api_admin():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
@@ -2045,7 +2172,7 @@ def api_admin():
 @rate_limit(20, 60)
 def admin_users():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -2078,7 +2205,7 @@ def admin_users():
 @rate_limit(20, 60)
 def admin_fees():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
@@ -2107,7 +2234,7 @@ def admin_fees():
 @rate_limit(20, 60)
 def admin_tokens():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -2141,7 +2268,7 @@ def admin_tokens():
 @rate_limit(20, 60)
 def admin_health():
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
         db_size_kb = 0
@@ -2181,7 +2308,7 @@ def admin_health():
 def admin_bans():
     """Return currently active IP bans and total rate-limit bucket count."""
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     now  = time.time()
     bans = []
@@ -2207,7 +2334,7 @@ def admin_clear_ratelimit():
     """Clear IP ban and rate-limit hit counters.
     POST body: {"ip": "1.2.3.4"} to target one IP, or {} to clear everything."""
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     data   = request.json or {}
     target = (data.get('ip') or '').strip()
@@ -2242,7 +2369,7 @@ def admin_clear_ratelimit():
 def admin_test():
     """Test live connectivity for Claude API and other integrations."""
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     results = {}
     # ── Claude API ──
@@ -2279,7 +2406,7 @@ def admin_test_fee():
     checked without sending — the SPL token program forbids self-transfers."""
     import traceback as _tb
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
 
     steps = []
@@ -2330,7 +2457,7 @@ def admin_test_fee():
             # Native SOL self-transfer is technically valid on-chain but wastes fees.
             # When owner tests with their own key, sender == OWNER_WALLET — just
             # confirm infrastructure is wired up without burning lamports.
-            if str(sender) == OWNER_WALLET:
+            if _is_owner(str(sender)):
                 _step('Transfer skipped',
                       detail='sender == OWNER_WALLET (owner self-transfer). '
                              'All infrastructure verified ✓ — no lamports wasted.')
@@ -2367,7 +2494,7 @@ def admin_rotate_keys():
     """Re-encrypt all stored private keys with a new ENCRYPTION_KEY.
     After rotating, update the ENCRYPTION_KEY env var and redeploy."""
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     new_enc_key = (request.json or {}).get('new_encryption_key', '').strip()
     if not new_enc_key:
@@ -2412,6 +2539,42 @@ def admin_rotate_keys():
         'note':     'Now update ENCRYPTION_KEY in your environment to the new key and redeploy',
     })
 
+@app.route('/api/admin/security-status')
+@rate_limit(20, 60)
+def admin_security_status():
+    """Real-time snapshot of all security checks, consecutive failure count, and trading pause state."""
+    wallet = _current_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    failures = _run_security_checks()
+    now = time.time()
+    # Summarise multi-IP wallets (2+ distinct IPs in last hour)
+    with _wallet_ips_lock:
+        multi_ip = {
+            w: len({h for h, _ in entries})
+            for w, entries in _wallet_ips.items()
+            if len({h for h, ts in entries if now - ts < 3600}) >= 2
+        }
+    all_checks = [{'name': c['check'], 'ok': False, 'detail': c['detail']} for c in failures]
+    passing = {c['check'] for c in failures}
+    _known = ['ENCRYPTION_KEY', 'Key Decryption', 'Response Schema', 'Honeypots', 'Rate Limiter']
+    for name in _known:
+        if name not in passing:
+            all_checks.append({'name': name, 'ok': True, 'detail': ''})
+    return jsonify({
+        'ok':                   len(failures) == 0,
+        'checks':               all_checks,
+        'consecutive_failures': _sec_check_state['consecutive_failures'],
+        'trading_paused':       _sec_check_state['trading_paused'],
+        'paused_at':            _sec_check_state.get('paused_at'),
+        'last_checked':         _sec_check_state.get('last_checked'),
+        'last_failures':        _sec_check_state.get('last_failures', []),
+        'ip_bans_active':       sum(1 for exp in _ip_ban.values() if now < exp),
+        'active_traders':       sum(1 for us in user_states.values() if us.get('trader_running')),
+        'multi_ip_wallets':     multi_ip,
+        'ran_at':               datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+    })
+
 @app.route('/api/admin/test_trade', methods=['POST'])
 @rate_limit(3, 300)
 def admin_test_trade():
@@ -2419,7 +2582,7 @@ def admin_test_trade():
     Returns the full subprocess stdout/stderr so you can verify the on-chain path
     without waiting for the bot to find a signal naturally."""
     wallet = _current_wallet()
-    if not wallet or wallet != OWNER_WALLET:
+    if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
 
     token_address = ((request.json or {}).get('token_address', '') or '').strip()

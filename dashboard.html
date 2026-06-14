@@ -1010,6 +1010,35 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false;
 
+// ── CSRF TOKEN ──
+let _csrfToken = '';
+
+// Override fetch globally: inject X-CSRF-Token into all mutating requests.
+// The override is installed synchronously so it covers every fetch call below.
+// _csrfToken is populated asynchronously by _initCsrf(); it's empty until then
+// but the server only requires it for authenticated sessions, so the race is safe.
+(function(){
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts) {
+    opts = Object.assign({}, opts || {});
+    const method = ((opts.method || 'GET') + '').toUpperCase();
+    if (['POST','PUT','PATCH','DELETE'].includes(method) && _csrfToken) {
+      opts.headers = Object.assign({}, opts.headers || {}, {'X-CSRF-Token': _csrfToken});
+    }
+    return _origFetch(url, opts);
+  };
+})();
+
+async function _initCsrf(){
+  try {
+    const r = await window.fetch('/api/csrf-token').then(r=>r.json()).catch(()=>null);
+    if(r && r.token) _csrfToken = r.token;
+  } catch(e) {}
+}
+
+// Fetch CSRF token immediately on page load (before any user interaction)
+_initCsrf();
+
 // ── INACTIVITY TIMEOUT ──
 const INACT_WARN_MS   = 18 * 60 * 1000; // warn at 18 min
 const INACT_LIMIT_MS  = 20 * 60 * 1000; // logout at 20 min
@@ -1112,7 +1141,7 @@ async function connectWalletOnboard(type){
     walletType=name;
     localStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
     fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-      .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; }).catch(()=>{});
+      .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; if(r.csrf_token) _csrfToken=r.csrf_token; }).catch(()=>{});
     document.getElementById('wallet-type-label').textContent=name+' wallet connected';
     document.getElementById('wallet-addr').textContent=phantomKey;
     document.getElementById('wallet-connected').style.display='flex';
@@ -1159,7 +1188,7 @@ async function launchApp(){
           headers:{'Content-Type':'application/json'},
           body:JSON.stringify({address:phantomKey})
         }).then(r=>r.json()).catch(()=>null);
-        if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); }
+        if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
       } else {
         // Pick up any server-side flag changes (key uploaded from another tab, etc.)
         if(typeof sr.is_admin==='boolean') _isAdmin=sr.is_admin;
@@ -1234,7 +1263,7 @@ document.addEventListener('visibilitychange', async function(){
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({address:phantomKey})
       }).then(r=>r.json()).catch(()=>null);
-      if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); }
+      if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
     }
   }catch(e){}
 });
