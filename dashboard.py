@@ -70,11 +70,24 @@ WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT         = 'So11111111111111111111111111111111111111112'
 SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
+HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
+
+# Ordered list of RPC endpoints for claim_sol read queries.
+# api.mainnet-beta.solana.com rate-limits getTokenAccountsByOwner and silently returns [].
+# Ankr is free with no key; Helius is prioritised when HELIUS_API_KEY is set.
+def _build_claim_rpcs() -> list:
+    rpcs = []
+    if HELIUS_API_KEY:
+        rpcs.append(f'https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}')
+    rpcs.append('https://rpc.ankr.com/solana')
+    rpcs.append('https://api.mainnet-beta.solana.com')
+    return rpcs
+CLAIM_SOL_RPCS = _build_claim_rpcs()
 
 # ── FERNET ENCRYPTION ──
 # ENCRYPTION_KEY must be set as an environment variable. No fallback — app refuses to start
@@ -2037,32 +2050,49 @@ def api_claim_sol():
     print(f'[claim_sol] session_wallet  = {wallet}', flush=True)
     print(f'[claim_sol] trading_wallet  = {trading_pk}', flush=True)
     print(f'[claim_sol] wallets_differ  = {wallet != trading_pk}', flush=True)
-    print(f'[claim_sol] RPC             = {SOLANA_RPC}', flush=True)
+    print(f'[claim_sol] RPC candidates  = {CLAIM_SOL_RPCS}', flush=True)
     print(f'[claim_sol] SPL_PROG        = {SPL_PROG_STR}', flush=True)
 
-    # Fetch token accounts for BOTH wallets — either may hold empty ATAs
-    def _rpc_token_accounts(owner: str, label: str):
-        print(f'[claim_sol] → getTokenAccountsByOwner  owner={owner}  label={label}', flush=True)
-        r    = requests.post(SOLANA_RPC, json={
+    # Try each RPC in order until one returns a non-error response.
+    # api.mainnet-beta.solana.com rate-limits getTokenAccountsByOwner and silently returns [].
+    def _rpc_token_accounts(owner: str, label: str) -> tuple:
+        """Returns (accounts_list, rpc_url_that_worked)."""
+        payload = {
             'jsonrpc': '2.0', 'id': 1,
             'method':  'getTokenAccountsByOwner',
             'params':  [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
-        }, timeout=15)
-        resp = r.json()
-        if 'error' in resp:
-            print(f'[claim_sol]   RPC ERROR for {label}: {resp["error"]}', flush=True)
-            return []
-        accs = resp.get('result', {}).get('value', [])
-        print(f'[claim_sol]   {label} → {len(accs)} token account(s) returned', flush=True)
-        return accs
+        }
+        for rpc in CLAIM_SOL_RPCS:
+            rpc_short = rpc.split('?')[0]   # hide API key from logs
+            print(f'[claim_sol] → trying {rpc_short}  owner={owner}  label={label}', flush=True)
+            try:
+                r    = requests.post(rpc, json=payload, timeout=15)
+                resp = r.json()
+                if 'error' in resp:
+                    print(f'[claim_sol]   {rpc_short} ERROR: {resp["error"]}', flush=True)
+                    continue
+                accs = resp.get('result', {}).get('value', [])
+                print(f'[claim_sol]   {rpc_short} OK → {len(accs)} account(s)', flush=True)
+                return accs, rpc
+            except Exception as ex:
+                print(f'[claim_sol]   {rpc_short} EXCEPTION: {ex}', flush=True)
+        print(f'[claim_sol]   all RPCs exhausted for {label}', flush=True)
+        return [], CLAIM_SOL_RPCS[-1]
 
     try:
-        session_accs = _rpc_token_accounts(wallet, 'session_wallet')
-        trading_accs = _rpc_token_accounts(trading_pk, 'trading_wallet') if trading_pk != wallet else []
-        if trading_pk == wallet:
+        session_accs, working_rpc = _rpc_token_accounts(wallet, 'session_wallet')
+        if trading_pk != wallet:
+            trading_accs, working_rpc2 = _rpc_token_accounts(trading_pk, 'trading_wallet')
+            # prefer whichever RPC gave us results
+            if trading_accs and not session_accs:
+                working_rpc = working_rpc2
+        else:
+            trading_accs = []
             print(f'[claim_sol]   trading_wallet == session_wallet, skipping duplicate query', flush=True)
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'RPC request failed: ' + str(e)}), 500
+
+    print(f'[claim_sol] working_rpc = {working_rpc.split("?")[0]}', flush=True)
 
     all_accs = session_accs + trading_accs
     print(f'[claim_sol] total accounts before dedup: {len(all_accs)}', flush=True)
@@ -2171,17 +2201,18 @@ def api_claim_sol():
                     data=bytes([9]),  # CloseAccount instruction index
                 ))
             try:
-                bh_resp = requests.post(SOLANA_RPC, json={
+                bh_resp = requests.post(working_rpc, json={
                     'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
                 }, timeout=10).json()
                 bh  = bh_resp['result']['value']['blockhash']
                 tx  = _TX.new_signed_with_payer(ixs, signer, [kp], _SH.from_string(bh))
-                res = requests.post(SOLANA_RPC, json={
+                res = requests.post(working_rpc, json={
                     'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
                     'params': [base64.b64encode(bytes(tx)).decode(),
                                {'encoding': 'base64', 'skipPreflight': False}],
                 }, timeout=30).json()
-                print(f'[claim_sol] sendTransaction response: {res}', flush=True)
+                rpc_short = working_rpc.split('?')[0]
+                print(f'[claim_sol] sendTransaction via {rpc_short} response: {res}', flush=True)
                 if 'error' in res:
                     last_err = str(res['error'])
                     failed.extend(batch)
