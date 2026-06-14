@@ -1191,7 +1191,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
+    add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 3 pos | scan 30s | momentum 7+ → 60%')
     positions = us['positions']
 
     try:
@@ -1208,10 +1208,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                 us_usdc  = _get_user_usdc(wallet)
                 total_live = len(live)
                 if total_live == 0:
-                    add_user_log(wallet, '[' + short + '] Waiting for token data... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/5')
+                    add_user_log(wallet, '[' + short + '] Waiting for token data... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
                 else:
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                                 ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/5')
+                                 ' tokens... USDC:' + str(round(us_usdc, 2)) + ' Pos:' + str(open_pos) + '/3')
 
                 # ── Pass 1: exit checks for all open positions ──
                 for t in live:
@@ -1246,7 +1246,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         open_pos -= 1
 
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 5 and us_usdc > 1:
+                if not stop_event.is_set() and open_pos < 3 and us_usdc > 1:
                     not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = [t for t in not_held if t['score'] >= 4.5]
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
@@ -1290,6 +1290,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                     pos['amount']     = spend / best['price']
                                     pos['buy_price']  = best['price']
                                     pos['spend']      = spend
+                                    open_pos += 1
                                 elif pos.get('entry_wait_count', 0) >= 5 or dip > 0.05:
                                     # Timed out or ran away — cancel wait
                                     add_user_log(wallet, '[' + short + '] ENTRY WAIT CANCELLED — ' + label)
@@ -1303,6 +1304,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['amount']     = spend / best['price']
                                 pos['buy_price']  = best['price']
                                 pos['spend']      = spend
+                                open_pos += 1
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 30))
