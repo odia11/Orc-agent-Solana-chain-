@@ -124,9 +124,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* ── TOKEN CARDS ── */
 .market-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px}
 @media(max-width:600px){
-  .market-grid{display:flex;flex-wrap:nowrap;overflow-x:auto;scroll-snap-type:x mandatory;-webkit-overflow-scrolling:touch;gap:10px;padding-bottom:8px;scrollbar-width:none}
-  .market-grid::-webkit-scrollbar{display:none}
-  .mkt-card{flex:0 0 82%;scroll-snap-align:start}
+  #market-grid-outer{overflow:hidden;touch-action:pan-y}
+  .market-grid{display:flex;flex-wrap:nowrap;gap:12px;transition:transform .3s cubic-bezier(.25,.46,.45,.94);will-change:transform}
+  .mkt-card{flex:0 0 88%;max-width:88%}
 }
 .swipe-hint{display:none;font-size:10px;color:var(--muted);text-align:right;margin:-4px 0 6px;letter-spacing:.05em}
 @media(max-width:600px){.swipe-hint{display:block}}
@@ -876,8 +876,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="panel-hdr">Live Solana Market &nbsp;<span id="token-count" style="color:var(--green);font-family:'Orbitron',monospace"></span></div>
     <div class="ticker-wrap"><div class="ticker-track" id="ticker-track"></div></div>
     <div class="swipe-hint">← swipe →</div>
-    <div class="market-grid" id="market-grid">
-      <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
+    <div id="market-grid-outer">
+      <div class="market-grid" id="market-grid">
+        <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
+      </div>
     </div>
   </div>
 
@@ -1438,6 +1440,7 @@ function renderMarket(tokens){
 
   grid.innerHTML=tokens.map(makeCard).join('')||
     '<div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">NO TRENDING TOKENS RIGHT NOW</div>';
+  if(typeof window._swipeReset==='function') window._swipeReset();
 
   // ticker bar
   const tickHtml=tokens.map(t=>{
@@ -2387,30 +2390,45 @@ setInterval(fetchCarousel,60000);
 
 // ── SWIPE GESTURES — market grid (mobile) ──
 (function(){
-  const el=document.getElementById('market-grid');
-  if(!el) return;
-  let x0=0,y0=0,t0=0,dragging=false;
-  el.addEventListener('touchstart',e=>{
-    const t=e.touches[0];
-    x0=t.clientX; y0=t.clientY; t0=Date.now(); dragging=true;
+  const outer=document.getElementById('market-grid-outer');
+  const grid=document.getElementById('market-grid');
+  if(!outer||!grid) return;
+
+  let _idx=0, _startX=0, _startY=0, _active=false;
+
+  function _cards(){ return Array.from(grid.querySelectorAll('.mkt-card')); }
+
+  function _snapTo(n){
+    const cards=_cards();
+    if(!cards.length) return;
+    _idx=Math.max(0,Math.min(n,cards.length-1));
+    const cardW=cards[0].offsetWidth+12; // card width + 12px gap
+    grid.style.transform='translateX(-'+(  _idx*cardW)+'px)';
+  }
+
+  // Called by renderMarket when new tokens load
+  window._swipeReset=function(){ _idx=0; grid.style.transform=''; };
+
+  outer.addEventListener('touchstart',function(e){
+    _startX=e.touches[0].clientX;
+    _startY=e.touches[0].clientY;
+    _active=true;
   },{passive:true});
-  el.addEventListener('touchmove',e=>{
-    if(!dragging) return;
-    const dx=Math.abs(e.touches[0].clientX-x0);
-    const dy=Math.abs(e.touches[0].clientY-y0);
-    // Suppress vertical page scroll only when clearly a horizontal swipe
-    if(dx>dy&&dx>8) e.preventDefault();
+
+  outer.addEventListener('touchmove',function(e){
+    if(!_active) return;
+    const dx=e.touches[0].clientX-_startX;
+    const dy=e.touches[0].clientY-_startY;
+    if(Math.abs(dx)>Math.abs(dy)) e.preventDefault();
   },{passive:false});
-  el.addEventListener('touchend',e=>{
-    if(!dragging){return;}
-    dragging=false;
-    const dx=e.changedTouches[0].clientX-x0;
-    const dy=e.changedTouches[0].clientY-y0;
-    const dt=Date.now()-t0;
-    if(Math.abs(dx)<20||Math.abs(dy)>Math.abs(dx)||dt>400) return;
-    // Snap to next/prev card (card width ≈ 82% of container)
-    const cardW=el.clientWidth*0.82+10;
-    el.scrollBy({left:dx<0?cardW:-cardW,behavior:'smooth'});
+
+  outer.addEventListener('touchend',function(e){
+    if(!_active) return;
+    _active=false;
+    const dx=e.changedTouches[0].clientX-_startX;
+    const dy=e.changedTouches[0].clientY-_startY;
+    if(Math.abs(dx)<50||Math.abs(dy)>Math.abs(dx)) return;
+    _snapTo(dx<0?_idx+1:_idx-1);
   },{passive:true});
 })();
 setInterval(_tickCarousel,1000);
