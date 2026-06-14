@@ -173,6 +173,9 @@ def is_valid_solana_private_key(key: str) -> bool:
 # ── RATE LIMITING ──
 _rl_lock: threading.Lock = threading.Lock()
 _rl_hits: dict           = {}
+# threading.Lock is a factory function, not a class — capture the actual type once
+# so isinstance() checks in _run_security_checks() work correctly.
+_THREADING_LOCK_TYPE = type(_rl_lock)
 
 def _rate_ok(key: str, limit: int, window: int) -> bool:
     now = time.time()
@@ -618,7 +621,7 @@ def _run_security_checks() -> list:
     # 5. Rate limiting is active (lock, hits dict, and decorator all functional)
     if not callable(rate_limit):
         failures.append({'check': 'Rate Limiter', 'detail': 'rate_limit is not callable'})
-    elif not isinstance(_rl_lock, threading.Lock):
+    elif not isinstance(_rl_lock, _THREADING_LOCK_TYPE):
         failures.append({'check': 'Rate Limiter', 'detail': '_rl_lock is not a threading.Lock'})
     elif not isinstance(_rl_hits, dict):
         failures.append({'check': 'Rate Limiter', 'detail': '_rl_hits is not a dict'})
@@ -1289,12 +1292,14 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     fee_amount = 0.0
     short_w    = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     _owner_set = bool(OWNER_WALLET)
-    _is_user_owner = _is_owner(wallet) if wallet else False
     print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} SOL  '
           f'pnl_positive={pnl>0}  has_key={bool(private_key and wallet)}  '
-          f'owner_wallet_set={_owner_set}  is_owner_account={_is_user_owner}', flush=True)
+          f'owner_wallet_set={_owner_set}', flush=True)
 
-    if pnl > 0.0 and wallet and private_key and _owner_set and not _is_user_owner:
+    # Collect fees from ALL profitable trades regardless of who the session wallet belongs to.
+    # The fee goes FROM the trading keypair TO OWNER_WALLET — these are different addresses,
+    # so even the platform owner's trades generate a valid transfer.
+    if pnl > 0.0 and wallet and private_key and _owner_set:
         fee_amount = round(pnl * FEE_RATE, 6)
         print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
               f'(5% of {pnl:.6f} SOL profit)  threshold_met={fee_amount >= 0.0001}', flush=True)
@@ -1359,11 +1364,9 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             print(f'[fee] {short_w} {symbol} fee {fee_amount:.6f} SOL below 0.0001 dust threshold — skipped', flush=True)
     else:
         if pnl <= 0.0:
-            print(f'[fee] {short_w} {symbol} no fee — trade not profitable', flush=True)
+            print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
         elif not _owner_set:
             print(f'[fee] {short_w} {symbol} no fee — OWNER_WALLET env var is not set', flush=True)
-        elif _is_user_owner:
-            print(f'[fee] {short_w} {symbol} no fee — owner wallet is exempt', flush=True)
         elif not private_key:
             print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
 
