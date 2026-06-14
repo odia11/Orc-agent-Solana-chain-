@@ -1318,9 +1318,9 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     if pnl > 0.0 and wallet and private_key and _owner_set:
         fee_amount = round(pnl * FEE_RATE, 6)
         print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
-              f'(5% of {pnl:.6f} SOL profit)  threshold_met={fee_amount >= 0.0001}', flush=True)
+              f'(5% of {pnl:.6f} SOL profit)', flush=True)
 
-        if fee_amount >= 0.0001:
+        if fee_amount > 0:
             _pk   = private_key     # Python string — immutable, ref lives in thread args tuple
             _sym  = symbol
             _gros = pnl
@@ -1377,7 +1377,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             ).start()
             print(f'[fee] {short_w} {symbol} fee thread started (will execute in ~12s after sell confirms)', flush=True)
         else:
-            print(f'[fee] {short_w} {symbol} fee {fee_amount:.6f} SOL below 0.0001 dust threshold — skipped', flush=True)
+            print(f'[fee] {short_w} {symbol} nothing to collect', flush=True)
     else:
         if pnl <= 0.0:
             print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
