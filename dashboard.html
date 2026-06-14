@@ -1040,8 +1040,8 @@ async function _initCsrf(){
 _initCsrf();
 
 // ── INACTIVITY TIMEOUT ──
-const INACT_WARN_MS   = 18 * 60 * 1000; // warn at 18 min
-const INACT_LIMIT_MS  = 20 * 60 * 1000; // logout at 20 min
+const INACT_WARN_MS   = 8 * 60 * 1000;  // warn at 8 min
+const INACT_LIMIT_MS  = 10 * 60 * 1000; // logout at 10 min
 let _lastActivity     = Date.now();
 let _warnShown        = false;
 let _warnTick         = null;
@@ -2584,14 +2584,9 @@ async function triggerAudit(){
   if(r&&!r.error) renderAudit(r);
 }
 
-// Disconnect server session when tab is closed
-window.addEventListener('beforeunload',()=>{
-  if(phantomKey){
-    localStorage.removeItem('orcagent_wallet');
-    navigator.sendBeacon('/api/wallet/set',
-      new Blob([JSON.stringify({address:''})],{type:'application/json'}));
-  }
-});
+// No beforeunload handler — localStorage is intentionally preserved across page
+// refreshes, tab switches, and browser restarts. The only way to clear the saved
+// session is an explicit "Disconnect" button click, which calls doLogout().
 </script>
 </body>
 </html>
