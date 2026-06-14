@@ -442,7 +442,7 @@ def init_db():
         trading_active        INTEGER DEFAULT 0,
         max_trade_size        REAL DEFAULT 0.5,
         min_trade_size        REAL DEFAULT 0.01,
-        daily_loss_limit      REAL DEFAULT 1.0,
+        daily_loss_limit      REAL DEFAULT 10.0,
         created_at            TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS trades (
@@ -475,6 +475,10 @@ def init_db():
         c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 0.01')
     except sqlite3.OperationalError:
         pass
+    # Fix stale users still on the old UI defaults (min=3, max=5, daily=50)
+    c.execute('''UPDATE users
+                 SET min_trade_size=0.01, max_trade_size=0.5, daily_loss_limit=10.0
+                 WHERE min_trade_size=3 AND max_trade_size=5 AND daily_loss_limit=50''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_wallet    ON fees(user_wallet)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_timestamp ON fees(timestamp)')
@@ -1394,7 +1398,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     user_id          = row[0]
-    daily_loss_limit = abs(float(row[2] if row[2] is not None else 50.0))
+    daily_loss_limit = abs(float(row[2] if row[2] is not None else 10.0))
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -1673,8 +1677,8 @@ def get_settings():
         return jsonify({'ok': True, 'has_trading_key': has_key,
                         'max_trade_size': row[1] if row[1] is not None else 0.5,
                         'min_trade_size': row[2] if row[2] is not None else 0.01,
-                        'daily_loss_limit': row[3] if row[3] is not None else 1.0})
-    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 0.5, 'min_trade_size': 0.01, 'daily_loss_limit': 1.0})
+                        'daily_loss_limit': row[3] if row[3] is not None else 10.0})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 0.5, 'min_trade_size': 0.01, 'daily_loss_limit': 10.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -1697,9 +1701,9 @@ def save_settings():
     except (ValueError, TypeError):
         min_trade_size = 0.01
     try:
-        daily_loss_limit = float(data.get('daily_loss_limit', 1.0))
+        daily_loss_limit = float(data.get('daily_loss_limit', 10.0))
     except (ValueError, TypeError):
-        daily_loss_limit = 1.0
+        daily_loss_limit = 10.0
     max_trade_size   = max(0.1,  min(max_trade_size,   10000.0))
     min_trade_size   = max(0.01, min(min_trade_size,   max_trade_size))
     daily_loss_limit = max(0.1,  min(daily_loss_limit, 50000.0))
