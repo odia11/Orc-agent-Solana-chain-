@@ -1297,7 +1297,7 @@ def check_daily_reset_user(us: dict):
         us['daily_stats'] = _fresh_daily()
 
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
-                       amount: float, spend: float, wallet: str = '', private_key: str = ''):
+                       amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = ''):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -1392,6 +1392,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         'fee': fee_amount,
         'net_pnl': round(pnl - fee_amount, 4),
         'time': now.strftime('%H:%M'), 'date': today, 'ts': now.timestamp(),
+        'mint': mint,
     }
     us['trades_history'].append(trade)
     if len(us['trades_history']) > 500:
@@ -1509,10 +1510,10 @@ def user_trader_loop(stop_event, config, wallet: str):
             if _sell_ok:
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                       _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk)
+                                       _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint)
             else:
                 _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                   _pos['amount'], _pos.get('spend', 0))
+                                   _pos['amount'], _pos.get('spend', 0), mint=_mint)
             positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
 
     try:
@@ -1569,10 +1570,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                                   wallet=wallet, private_key=_pk)
+                                                   wallet=wallet, private_key=_pk, mint=mint)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'])
+                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'], mint=mint)
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
 
@@ -2363,11 +2364,13 @@ def api_trades():
         check_daily_reset_user(us)
         today        = us['daily_stats']['date']
         today_trades = [t for t in us.get('trades_history', []) if t.get('date') == today]
-        return jsonify({'daily': us['daily_stats'], 'history': today_trades[-10:]})
+        recent       = us.get('trades_history', [])[-20:]
+        return jsonify({'daily': us['daily_stats'], 'history': today_trades[-10:], 'recent': recent})
     check_daily_reset()
     today        = state['daily_stats']['date']
     today_trades = [t for t in state['trades_history'] if t.get('date') == today]
-    return jsonify({'daily': state['daily_stats'], 'history': today_trades[-10:]})
+    recent       = state.get('trades_history', [])[-20:]
+    return jsonify({'daily': state['daily_stats'], 'history': today_trades[-10:], 'recent': recent})
 
 @app.route('/api/log')
 @rate_limit(30, 60)
