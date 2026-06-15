@@ -318,7 +318,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* ── POSITION CHART MODAL ── */
 #pos-chart-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.82);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 #pos-chart-modal.open{display:flex}
-.pos-chart-wrap{background:#0a0a0f;border:1px solid rgba(0,237,170,.22);border-radius:12px;width:min(920px,96vw);height:min(580px,90vh);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.pos-chart-wrap{background:#0d0d0d;border:1px solid rgba(0,237,170,.22);border-radius:12px;width:min(920px,96vw);height:min(580px,90vh);display:flex;flex-direction:column;position:relative;overflow:hidden}
 .pos-chart-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0}
 .pos-chart-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--green);letter-spacing:.1em}
 .pos-chart-close{background:none;border:1px solid rgba(255,255,255,.14);color:var(--muted);font-size:13px;width:26px;height:26px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1}
@@ -328,7 +328,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .pos-chart-tf-bar .chart-tf-btn:hover{border-color:rgba(0,237,170,.5);color:#00edaa}
 .pos-chart-tf-bar .chart-tf-btn.active{background:rgba(0,237,170,.1);border-color:rgba(0,237,170,.55);color:#00edaa}
 #pos-chart-container{flex:1;min-height:0;position:relative}
-.pos-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em;background:#0a0a0f;z-index:2}
+.pos-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em;background:#0d0d0d;z-index:2}
 .pos-chart-btn{background:transparent;border:1px solid rgba(0,237,170,.18);color:rgba(0,237,170,.55);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'Share Tech Mono',monospace;white-space:nowrap}
 .pos-chart-btn:hover{border-color:rgba(0,237,170,.5);color:#00edaa;background:rgba(0,237,170,.05)}
 @media(max-width:600px){.pos-chart-wrap{width:100vw;height:100dvh;border-radius:0;border:none}#pos-chart-modal.open{align-items:flex-start}}
@@ -2453,22 +2453,22 @@ function _initPosChart(currentPrice){
   _posChart=LightweightCharts.createChart(container,{
     width:container.clientWidth,
     height:container.clientHeight||400,
-    layout:{background:{type:'solid',color:'#0a0a0f'},textColor:'#9ca3af'},
-    grid:{vertLines:{color:'rgba(255,255,255,.04)'},horzLines:{color:'rgba(255,255,255,.04)'}},
+    layout:{background:{type:'solid',color:'#0d0d0d'},textColor:'#d1d4dc'},
+    grid:{vertLines:{color:'#1e222d'},horzLines:{color:'#1e222d'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
-    rightPriceScale:{borderColor:'rgba(255,255,255,.07)'},
-    timeScale:{borderColor:'rgba(255,255,255,.07)',timeVisible:true,secondsVisible:false},
+    rightPriceScale:{borderColor:'#2a2e39'},
+    timeScale:{borderColor:'#2a2e39',timeVisible:true,secondsVisible:false},
     handleScroll:true,handleScale:true,
   });
   _posSeries=_posChart.addCandlestickSeries({
-    upColor:'#00ff88',downColor:'#ff4444',
+    upColor:'#26a69a',downColor:'#ef5350',
     borderVisible:false,
-    wickUpColor:'#00ff88',wickDownColor:'#ff4444',
+    wickUpColor:'#26a69a',wickDownColor:'#ef5350',
   });
   _posVolSeries=_posChart.addHistogramSeries({
     priceFormat:{type:'volume'},priceScaleId:'pos-vol',
   });
-  _posChart.priceScale('pos-vol').applyOptions({scaleMargins:{top:0.82,bottom:0}});
+  _posChart.priceScale('pos-vol').applyOptions({scaleMargins:{top:0.70,bottom:0}});
   if(currentPrice>0) _posPriceLine=_posSeries.createPriceLine({price:currentPrice,color:'#ffc13a',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'now'});
   new ResizeObserver(()=>{
     if(container.clientWidth>0) _posChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
@@ -2481,7 +2481,7 @@ async function _loadPosChartData(){
   const r=await fetch('/api/chart/'+encodeURIComponent(_posCurrentMint)+'?tf='+_posCurrentTf).then(r=>r.json()).catch(()=>null);
   if(r?.candles?.length){
     _posSeries.setData(r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c})));
-    _posVolSeries.setData(r.candles.map(c=>({time:c.t,value:c.v,color:c.c>=c.o?'rgba(0,255,136,.35)':'rgba(255,68,68,.35)'})));
+    _posVolSeries.setData(r.candles.map(c=>({time:c.t,value:c.v,color:c.c>=c.o?'rgba(38,166,154,.45)':'rgba(239,83,80,.45)'})));
     _posChart.timeScale().fitContent();
     if(loadEl) loadEl.style.display='none';
   }else{
