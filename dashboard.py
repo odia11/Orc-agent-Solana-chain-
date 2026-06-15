@@ -2053,6 +2053,98 @@ def api_balance():
         threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
     return jsonify({'ok': True, 'sol': us.get('sol', 0.0), 'usdc': us.get('usdc', 0.0)})
 
+# ── TOKEN ACCOUNT HELPERS ──
+_SPL_PROG_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+_DUST_THRESHOLD = 1000  # raw tokens below which an account is considered dust
+
+def _get_spl_token_accounts(wallets: list) -> tuple:
+    """Fetch all SPL token accounts for one or more wallet addresses.
+    Deduplicates by pubkey. Returns (accounts_list, working_rpc_url)."""
+    headers = {'Content-Type': 'application/json'}
+    all_accs: list = []
+    working_rpc: str = CLAIM_SOL_RPCS[-1]
+    seen: set = set()
+    for owner in wallets:
+        payload = {
+            'jsonrpc': '2.0', 'id': 1,
+            'method':  'getTokenAccountsByOwner',
+            'params':  [owner, {'programId': _SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
+        }
+        for rpc in CLAIM_SOL_RPCS:
+            time.sleep(0.6)
+            try:
+                r = requests.post(rpc, json=payload, headers=headers, timeout=15)
+                if r.status_code != 200:
+                    continue
+                resp = r.json()
+                if 'error' in resp:
+                    continue
+                for acc in resp.get('result', {}).get('value', []):
+                    pub = acc.get('pubkey', '')
+                    if pub and pub not in seen:
+                        seen.add(pub)
+                        all_accs.append(acc)
+                working_rpc = rpc
+                break
+            except Exception:
+                continue
+    return all_accs, working_rpc
+
+
+@app.route('/api/get-tokens')
+@rate_limit(10, 60)
+def api_get_tokens():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+
+    conn = sqlite3.connect(DB_FILE)
+    row  = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    conn.close()
+
+    trading_pk = wallet
+    if row and row[0]:
+        try:
+            with _use_key(row[0], wallet) as pk_str:
+                from solders.keypair import Keypair as _KP2
+                trading_pk = str(_KP2.from_base58_string(pk_str).pubkey())
+        except Exception:
+            pass
+
+    wallets = list(dict.fromkeys([wallet, trading_pk]))
+    all_accs, _ = _get_spl_token_accounts(wallets)
+
+    tokens = []
+    for acc in all_accs:
+        try:
+            pub      = acc.get('pubkey', '')
+            info     = acc['account']['data']['parsed']['info']
+            tok_amt  = info.get('tokenAmount', {})
+            decimals = int(tok_amt.get('decimals', 0))
+            raw_str  = str(tok_amt.get('amount', '0'))
+            ui_str   = tok_amt.get('uiAmountString', '0')
+            lamports = int(acc.get('account', {}).get('lamports', 2039280))
+            mint_str = info.get('mint', '')
+            owner_oc = info.get('owner', '')
+            raw_int  = int(raw_str) if raw_str.isdigit() else 1
+            closeable = raw_int == 0 or raw_int < _DUST_THRESHOLD
+            tokens.append({
+                'pubkey':    pub,
+                'mint':      mint_str,
+                'balance':   ui_str,
+                'raw':       raw_int,
+                'decimals':  decimals,
+                'sol_rent':  round(lamports / 1e9, 6),
+                'closeable': closeable,
+                'can_close': closeable and (owner_oc == trading_pk),
+                'has_balance': raw_int > 0,
+            })
+        except Exception:
+            continue
+
+    return jsonify({'ok': True, 'tokens': tokens, 'trading_wallet': trading_pk})
+
+
 # ── CLAIM SOL ──
 @app.route('/api/claim_sol', methods=['POST'])
 @rate_limit(3, 60)
@@ -2197,6 +2289,13 @@ def api_claim_sol():
     for c in closeable:
         print(f'[claim_sol]   closeable: pubkey={c["pubkey"]}  lamports={c["lamports"]}  '
               f'owner={c["owner"]}  raw_amt={c["raw_amt"]}', flush=True)
+
+    # Honour user-selected subset when frontend sends a pubkeys list
+    _sel = (request.get_json(silent=True) or {}).get('pubkeys') or []
+    if _sel:
+        _sel_set = set(_sel)
+        closeable = [a for a in closeable if a['pubkey'] in _sel_set]
+        print(f'[claim_sol] filtered to {len(closeable)} user-selected account(s)', flush=True)
 
     if not closeable:
         msg = (f'No empty or dust token accounts found — {len(all_accs)} total accounts checked '

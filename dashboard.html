@@ -481,6 +481,33 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .slide-ai-line{margin:4px 0;font-size:9px;color:rgba(0,237,170,.65);font-style:italic;line-height:1.4}
 .slide-ai-line b{font-style:normal;font-family:'Share Tech Mono',monospace;font-size:7px;color:rgba(0,237,170,.4);letter-spacing:.1em;vertical-align:middle;margin-right:3px}
 
+/* ── INCINERATOR MODAL ── */
+.inc-card{max-width:540px!important}
+.inc-token-list{max-height:38vh;overflow-y:auto;border:1px solid var(--border2);border-radius:8px;margin-bottom:12px}
+.inc-token-row{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .1s}
+.inc-token-row:last-child{border-bottom:none}
+.inc-token-row:hover{background:rgba(255,255,255,.025)}
+.inc-checkbox{width:15px;height:15px;accent-color:var(--green);cursor:pointer;flex-shrink:0}
+.inc-token-info{flex:1;min-width:0;overflow:hidden}
+.inc-token-mint{display:block;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-decoration:none}
+.inc-token-mint:hover{color:var(--blue);text-decoration:underline}
+.inc-token-bal{display:block;font-size:9px;color:var(--muted);margin-top:2px}
+.inc-token-sol{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:var(--green);white-space:nowrap;flex-shrink:0}
+.inc-controls{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap}
+.inc-found{font-size:10px;color:var(--dim)}
+.inc-ctrl-btns{display:flex;gap:6px}
+.inc-ctrl-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.04em;transition:all .15s}
+.inc-ctrl-btn:hover{border-color:var(--green);color:var(--green)}
+.inc-summary-bar{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
+.inc-summary-text{font-size:10px;color:var(--dim)}
+.inc-sol-est{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--green)}
+.inc-burn-btn{width:100%;padding:12px;background:linear-gradient(90deg,#c53030,#9b2c2c);color:#fff;border:none;border-radius:8px;font-family:'Orbitron',monospace;font-size:11px;font-weight:900;cursor:pointer;letter-spacing:.08em;transition:filter .15s}
+.inc-burn-btn:hover:not(:disabled){filter:brightness(1.15)}
+.inc-burn-btn:disabled{opacity:.4;cursor:not-allowed}
+.inc-loading{text-align:center;padding:32px 0;color:var(--muted);font-size:11px;letter-spacing:.06em}
+.inc-empty{text-align:center;padding:28px 0;color:var(--muted);font-size:11px;line-height:1.75}
+.inc-empty b{color:var(--green)}
+
 /* ── LIVE ACTIVITY FEED ── */
 .live-feed-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 .lf-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
@@ -717,6 +744,36 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div>
 </div>
 
+<!-- INCINERATOR MODAL -->
+<div class="s-modal" id="incinerator-modal" onclick="if(event.target===this)closeIncinerator()">
+  <div class="s-card inc-card">
+    <button class="s-close" onclick="closeIncinerator()">✕</button>
+    <div class="s-title">🔥 Token Incinerator</div>
+    <div class="s-sub">Burn empty &amp; dust token accounts — recover SOL rent (~0.002 per account)</div>
+    <div id="inc-status" class="s-msg" style="display:none"></div>
+    <div id="inc-loading" class="inc-loading">⏳ Scanning wallet for burnable accounts…</div>
+    <div id="inc-body" style="display:none">
+      <div class="inc-controls">
+        <span class="inc-found"><span id="inc-found-count">0</span> burnable accounts found</span>
+        <div class="inc-ctrl-btns">
+          <button class="inc-ctrl-btn" onclick="_incSelectAll(true)">Select All</button>
+          <button class="inc-ctrl-btn" onclick="_incSelectAll(false)">None</button>
+        </div>
+      </div>
+      <div class="inc-token-list" id="inc-token-list"></div>
+      <div class="inc-summary-bar" id="inc-summary-bar">
+        <span class="inc-summary-text" id="inc-summary-text">0 selected</span>
+        <span class="inc-sol-est" id="inc-sol-est">~0.0000 SOL</span>
+      </div>
+      <button class="inc-burn-btn" id="inc-burn-btn" onclick="burnSelected()" disabled>🔥 Burn &amp; Claim SOL</button>
+    </div>
+    <div id="inc-empty" class="inc-empty" style="display:none">
+      <div style="font-size:22px;margin-bottom:8px">✅</div>
+      <b>Wallet is clean!</b><br>No empty or dust token accounts found.
+    </div>
+  </div>
+</div>
+
 <!-- INACTIVITY WARNING POPUP -->
 <div class="inact-overlay" id="inact-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="inact-title" onclick="stayConnected()">
   <div class="inact-card" onclick="event.stopPropagation()">
@@ -804,7 +861,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub">available to trade</div>
       <div class="stat-sub" id="s-sol-usdc" style="color:var(--muted);margin-top:2px"></div>
-      <button id="claim-sol-btn" class="claim-sol-btn" onclick="claimSol()" title="Close empty token accounts and reclaim rent SOL">⚡ Claim SOL</button>
+      <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">🔥 Burn &amp; Claim</button>
     </div>
     <div class="stat">
       <div class="stat-lbl">Open Positions</div>
@@ -2680,25 +2737,108 @@ setInterval(async()=>{
   }
 },30000);
 
-// ── CLAIM SOL ──
-async function claimSol(){
+// ── TOKEN INCINERATOR ──
+let _incTokens=[];
+
+async function openIncinerator(){
   if(!phantomKey) return;
-  const btn=document.getElementById('claim-sol-btn');
-  btn.disabled=true; btn.textContent='Checking...';
-  try{
-    const r=await fetch('/api/claim_sol',{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
-    if(!r){ _showClaimMsg('Request failed',false); return; }
-    _showClaimMsg(r.msg||(r.ok?'Done':'Failed'),r.ok);
-    if(r.ok&&r.reclaimed>0) setTimeout(fetchBalance,2000);
-  }catch(e){ _showClaimMsg('Error: '+e.message,false); }
-  finally{ btn.disabled=false; btn.textContent='⚡ Claim SOL'; }
+  const modal=document.getElementById('incinerator-modal');
+  modal.classList.add('open');
+  // reset state
+  document.getElementById('inc-loading').style.display='block';
+  document.getElementById('inc-body').style.display='none';
+  document.getElementById('inc-empty').style.display='none';
+  const st=document.getElementById('inc-status');
+  st.style.display='none'; st.className='s-msg';
+
+  const r=await fetch('/api/get-tokens').then(r=>r.json()).catch(()=>null);
+  document.getElementById('inc-loading').style.display='none';
+
+  if(!r||!r.ok){
+    st.textContent=r?.msg||'Failed to scan wallet. Try again.';
+    st.className='s-msg err'; st.style.display='block';
+    return;
+  }
+
+  _incTokens=(r.tokens||[]).filter(t=>t.can_close);
+
+  if(!_incTokens.length){
+    document.getElementById('inc-empty').style.display='block';
+    return;
+  }
+
+  document.getElementById('inc-found-count').textContent=_incTokens.length;
+  const list=document.getElementById('inc-token-list');
+  list.innerHTML=_incTokens.map((t,i)=>{
+    const shortMint=t.mint?(t.mint.slice(0,8)+'…'+t.mint.slice(-6)):'—';
+    const solscanUrl='https://solscan.io/token/'+t.mint;
+    const bal=t.raw===0?'<span style="color:var(--green)">Empty account</span>'
+      :`<span style="color:var(--yellow)">Dust: ${t.balance} tokens</span>`;
+    const solRent='~'+(t.sol_rent||0.002039).toFixed(4)+' SOL';
+    return `<label class="inc-token-row">
+      <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-sol="${t.sol_rent||0.002039}" checked onchange="_incUpdateSummary()">
+      <div class="inc-token-info">
+        <a class="inc-token-mint" href="${solscanUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t.mint}">${shortMint}</a>
+        <span class="inc-token-bal">${bal}</span>
+      </div>
+      <span class="inc-token-sol">${solRent}</span>
+    </label>`;
+  }).join('');
+
+  _incUpdateSummary();
+  document.getElementById('inc-body').style.display='block';
 }
-function _showClaimMsg(text,ok){
-  const m=document.getElementById('claim-msg');
-  m.textContent=text;
-  m.className='claim-msg '+(ok?'ok':'err');
-  m.style.display='block';
-  setTimeout(()=>m.style.display='none',8000);
+
+function _incUpdateSummary(){
+  const cbs=document.querySelectorAll('.inc-checkbox:checked');
+  const count=cbs.length;
+  let sol=0;
+  cbs.forEach(cb=>sol+=parseFloat(cb.dataset.sol||0));
+  document.getElementById('inc-summary-text').textContent=count+' account'+(count!==1?'s':'')+' selected';
+  document.getElementById('inc-sol-est').textContent='~'+sol.toFixed(4)+' SOL';
+  const burnBtn=document.getElementById('inc-burn-btn');
+  burnBtn.disabled=count===0;
+}
+
+function _incSelectAll(all){
+  document.querySelectorAll('.inc-checkbox').forEach(cb=>cb.checked=all);
+  _incUpdateSummary();
+}
+
+function closeIncinerator(){
+  document.getElementById('incinerator-modal').classList.remove('open');
+}
+
+async function burnSelected(){
+  const cbs=document.querySelectorAll('.inc-checkbox:checked');
+  if(!cbs.length) return;
+  const pubkeys=Array.from(cbs).map(cb=>_incTokens[parseInt(cb.dataset.idx)]?.pubkey).filter(Boolean);
+  const btn=document.getElementById('inc-burn-btn');
+  const st=document.getElementById('inc-status');
+  btn.disabled=true; btn.textContent='Burning…';
+  st.style.display='none';
+  try{
+    const r=await fetch('/api/claim_sol',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({pubkeys})
+    }).then(r=>r.json()).catch(()=>null);
+    st.style.display='block';
+    if(r?.ok){
+      st.textContent='✓ '+(r.msg||'Done! SOL recovered.');
+      st.className='s-msg ok';
+      setTimeout(fetchBalance,2000);
+      setTimeout(closeIncinerator,3500);
+    } else {
+      st.textContent='✗ '+(r?.msg||'Transaction failed. Try again.');
+      st.className='s-msg err';
+      btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';
+    }
+  }catch(e){
+    st.textContent='Error: '+e.message;
+    st.className='s-msg err'; st.style.display='block';
+    btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';
+  }
 }
 
 // ── SWIPE GESTURES — market grid (mobile) ──
