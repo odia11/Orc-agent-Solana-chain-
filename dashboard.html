@@ -568,6 +568,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .lf-badge{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 7px;border-radius:3px;letter-spacing:.1em;flex-shrink:0}
 .lf-badge-buy{background:rgba(0,237,170,.15);color:var(--green);border:1px solid rgba(0,237,170,.4)}
 .lf-badge-sell{background:rgba(255,77,106,.13);color:var(--red);border:1px solid rgba(255,77,106,.4)}
+.lf-badge-tp{background:rgba(0,237,170,.15);color:var(--green);border:1px solid rgba(0,237,170,.5)}
+.lf-badge-sl{background:rgba(255,68,68,.15);color:#ff4444;border:1px solid rgba(255,68,68,.5)}
+.lf-amt{font-size:9px;color:var(--muted);margin-top:2px;font-family:'Share Tech Mono',monospace}
 .lf-prices{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lf-prices span{color:var(--dim)}
 .lf-right{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0;min-width:88px;text-align:right}
@@ -924,7 +927,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th><th></th></tr></thead>
+        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Invested</th><th>P&amp;L</th><th></th></tr></thead>
         <tbody id="positions-tbody"></tbody>
       </table>
     </div>
@@ -955,6 +958,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <button class="pos-chart-close" onclick="closePosChart()">✕</button>
       </div>
       <div class="pos-chart-tf-bar" id="pos-chart-tf-bar">
+        <button class="chart-tf-btn" onclick="setPosChartTf('1m',this)">1m</button>
         <button class="chart-tf-btn active" onclick="setPosChartTf('5m',this)">5m</button>
         <button class="chart-tf-btn" onclick="setPosChartTf('15m',this)">15m</button>
         <button class="chart-tf-btn" onclick="setPosChartTf('1h',this)">1h</button>
@@ -2395,18 +2399,34 @@ function renderPositions(detail){
   panel.style.display='block';
   document.getElementById('pos-count').textContent=detail.length+'/3';
   document.getElementById('positions-tbody').innerHTML=detail.map(p=>{
-    const cls=p.pnl>=0?'td-pos':'td-neg';
-    const sign=p.pnl>=0?'+':'';
+    const isPos=p.pnl>=0;
+    const cls=isPos?'td-pos':'td-neg';
+    const sign=isPos?'+':'-';
     const openedStr=p.opened_at
       ? new Date(p.opened_at*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})
       : '—';
+    const solE=_solPrice>0?(p.entry||0)/_solPrice:0;
+    const solC=_solPrice>0?(p.current||0)/_solPrice:0;
+    const spendUsd=((p.spend||0)*_solPrice).toFixed(2);
     return `<tr>
       <td class="td-sym">${esc(p.symbol||'???')}</td>
       <td style="color:var(--muted);font-size:10px">${openedStr}</td>
-      <td>${fmtPrice(p.entry||0)}</td>
-      <td>${fmtPrice(p.current||0)}</td>
-      <td>${fmtSolToUsdc(p.spend||0)}</td>
-      <td class="${cls}">${sign}${fmtSolToUsdc(Math.abs(p.pnl||0))}<span style="opacity:.55;font-size:9px;margin-left:4px">(${sign}${(p.pnl_pct||0).toFixed(1)}%)</span></td>
+      <td>
+        <div>${fmtPrice(p.entry||0)}</div>
+        ${solE>0?`<div style="font-size:9px;color:var(--muted);margin-top:1px">◎${solE.toFixed(9)}</div>`:''}
+      </td>
+      <td>
+        <div>${fmtPrice(p.current||0)}</div>
+        ${solC>0?`<div style="font-size:9px;color:var(--muted);margin-top:1px">◎${solC.toFixed(9)}</div>`:''}
+      </td>
+      <td>
+        <div>◎${(p.spend||0).toFixed(4)}</div>
+        <div style="font-size:9px;color:var(--muted);margin-top:1px">$${spendUsd}</div>
+      </td>
+      <td class="${cls}">
+        <div>${sign}${fmtSolToUsdc(Math.abs(p.pnl||0))}</div>
+        <div style="font-size:9px;opacity:.6;margin-top:1px">${sign}${Math.abs(p.pnl_pct||0).toFixed(1)}%</div>
+      </td>
       <td><button class="pos-chart-btn" onclick="openPosChart('${esc(p.mint||'')}','${esc(p.symbol||'???')}',${p.current||0})">📈 Chart</button></td>
     </tr>`;
   }).join('');
@@ -2522,10 +2542,10 @@ function renderLiveFeed(){
   if(!list) return;
   const feed=[];
   for(const pos of _lfPositions){
-    feed.push({type:'buy',symbol:pos.symbol,entry:pos.entry,exit:pos.current,pnl:pos.pnl,pnl_pct:pos.pnl_pct,ts:pos.opened_at||0,mint:pos.mint||''});
+    feed.push({type:'buy',symbol:pos.symbol,entry:pos.entry,exit:pos.current,pnl:pos.pnl,pnl_pct:pos.pnl_pct,ts:pos.opened_at||0,mint:pos.mint||'',spend:pos.spend||0,exit_reason:''});
   }
   for(const t of _lfHistory){
-    feed.push({type:'sell',symbol:t.symbol,entry:t.entry,exit:t.exit,pnl:t.pnl,pnl_pct:t.pnl_pct,ts:t.ts||0,time:t.time,mint:t.mint||''});
+    feed.push({type:'sell',symbol:t.symbol,entry:t.entry,exit:t.exit,pnl:t.pnl,pnl_pct:t.pnl_pct,ts:t.ts||0,time:t.time,mint:t.mint||'',spend:t.spend||0,exit_reason:t.exit_reason||''});
   }
   feed.sort((a,b)=>b.ts-a.ts);
   const items=feed.slice(0,20);
@@ -2537,11 +2557,22 @@ function renderLiveFeed(){
     const logoHtml=_lfLogoHtml(item.symbol,mint);
     const pnlPos=(item.pnl||0)>=0;
     const pnlCls=pnlPos?'td-pos':'td-neg';
-    const sign=pnlPos?'+':'';
+    const sign=pnlPos?'+':'-';
     const itemCls='lf-item '+(isBuy?'lf-item-buy':(pnlPos?'lf-item-sell-pos':'lf-item-sell-neg'));
-    const badge=isBuy?'<span class="lf-badge lf-badge-buy">BUY</span>':'<span class="lf-badge lf-badge-sell">SELL</span>';
+    const reason=(item.exit_reason||'').toUpperCase();
+    const isTp=!isBuy&&reason.includes('TAKE PROFIT');
+    const isSl=!isBuy&&reason.includes('STOP LOSS');
+    const badge=isBuy
+      ?'<span class="lf-badge lf-badge-buy">BUY</span>'
+      :isTp?'<span class="lf-badge lf-badge-tp">TAKE PROFIT</span>'
+      :isSl?'<span class="lf-badge lf-badge-sl">STOP LOSS</span>'
+      :'<span class="lf-badge lf-badge-sell">SELL</span>';
     const priceLabel=isBuy?'Current':'Exit';
     const priceHtml=`Entry: <span>${fmtPrice(item.entry||0)}</span>&nbsp;→&nbsp;${priceLabel}: <span>${fmtPrice(item.exit||0)}</span>`;
+    const spendSol=item.spend||0;
+    const amtHtml=spendSol>0
+      ?`<div class="lf-amt">◎${spendSol.toFixed(4)} <span style="color:var(--dim)">/ $${(spendSol*_solPrice).toFixed(2)}</span></div>`
+      :'';
     const timeStr=item.time||(item.ts?new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'—');
     const txHtml=mint?`<a href="https://solscan.io/token/${mint}" target="_blank" rel="noopener" class="lf-tx">View ↗</a>`:'';
     return `<div class="${itemCls}">
@@ -2549,6 +2580,7 @@ function renderLiveFeed(){
       <div class="lf-main">
         <div class="lf-top-row">${badge}<span class="lf-sym">${esc(item.symbol||'???')}</span></div>
         <div class="lf-prices">${priceHtml}</div>
+        ${amtHtml}
       </div>
       <div class="lf-right">
         <span class="${pnlCls} lf-pnl-sol">${sign}${fmtSolToUsdc(Math.abs(item.pnl||0))}</span>
