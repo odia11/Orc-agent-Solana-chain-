@@ -220,8 +220,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .perf-stat-lbl{font-size:7px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
 .perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
 .perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center}
-.fee-summary{display:flex;gap:18px;flex-wrap:wrap;padding:8px 12px;background:rgba(255,193,58,.05);border:1px solid rgba(255,193,58,.15);border-radius:8px;margin-bottom:12px;font-size:9px;color:var(--muted)}
-.fee-summary span{white-space:nowrap}.fee-summary b{font-family:'Orbitron',monospace;font-size:10px}
 .pos-panel{background:var(--bg2);border:1px solid rgba(0,237,170,.2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 /* Admin panel */
 .admin-panel{background:var(--bg2);border:2px solid rgba(255,77,106,.5);border-radius:10px;padding:16px;margin-bottom:1.25rem;box-shadow:0 0 0 1px rgba(255,77,106,.1),0 4px 28px rgba(255,77,106,.1)}
@@ -662,10 +660,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="how-to-item">Minimum liquidity: $15,000 | Minimum 5m volume: $5,000</div>
         <div class="how-to-item">Maximum 5 open positions at once</div>
         <div class="how-to-item">Auto sells at +20% profit or −5% stop loss</div>
-        <div class="how-to-section">💸 Fees</div>
-        <div class="how-to-item">5% performance fee on profitable trades only</div>
-        <div class="how-to-item">Zero fee on losing trades</div>
-        <div class="how-to-item">~$0.000005 SOL per transaction (Solana network fee)</div>
 
       </div>
     </div>
@@ -888,11 +882,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="perf-stat-val td-neg" id="p-worst">—</div>
       </div>
     </div>
-    <div class="fee-summary" id="fee-summary" style="display:none">
-      <span>Gross profit: <b id="fs-gross" class="td-pos">$0.00</b></span>
-      <span>Fees paid (5%): <b id="fs-fees" class="td-neg">-$0.00</b></span>
-      <span>Net profit: <b id="fs-net">$0.00</b></span>
-    </div>
     <div class="perf-chart-wrap">
       <svg id="pnl-chart" width="100%" height="110" viewBox="0 0 600 110" preserveAspectRatio="none" style="display:block"></svg>
     </div>
@@ -913,15 +902,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="hiw-card hiw-card--execute">
           <div class="hiw-card-icon">⚡</div>
           <div class="hiw-card-name">EXECUTE</div>
-          <div class="hiw-card-body">Winning tokens are bought instantly via Jupiter DEX. Auto-exits at 20% take profit or 5% stop loss. 5% fee on profits only.</div>
+          <div class="hiw-card-body">Winning tokens are bought instantly via Jupiter DEX. Auto-exits at 20% take profit or 5% stop loss.</div>
         </div>
       </div>
     </div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>Gross P&amp;L</th><th>Fee</th><th>Net P&amp;L</th></tr></thead>
+        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>P&amp;L</th></tr></thead>
         <tbody id="trade-tbody">
-          <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
+          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
         </tbody>
       </table>
     </div>
@@ -2172,8 +2161,6 @@ function renderPerfPanel(r){
   const pct=d.total_pnl_pct??0;
   const trades=d.trades??0;
   const wins=d.wins??0;
-  const fees=d.total_fees??0;
-  const net=d.net_pnl??pnl;
 
   const pnlEl=document.getElementById('p-pnl');
   pnlEl.textContent=(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(2);
@@ -2189,42 +2176,24 @@ function renderPerfPanel(r){
   document.getElementById('p-worst').textContent=d.worst!=null?d.worst.toFixed(1)+'%':'—';
   document.getElementById('perf-date').textContent=d.date||'';
 
-  // Fee summary row — only visible when fees have been collected today
-  const feeRow=document.getElementById('fee-summary');
-  if(fees>0){
-    feeRow.style.display='flex';
-    document.getElementById('fs-gross').textContent=(pnl>=0?'+$':'-$')+Math.abs(pnl).toFixed(4);
-    document.getElementById('fs-fees').textContent='-$'+fees.toFixed(4);
-    const netEl=document.getElementById('fs-net');
-    netEl.textContent=(net>=0?'+$':'-$')+Math.abs(net).toFixed(4);
-    netEl.className=net>=0?'td-pos':'td-neg';
-  } else {
-    feeRow.style.display='none';
-  }
-
   renderPnlChart(d.curve||[]);
 
   const tbody=document.getElementById('trade-tbody');
   const hist=(r.history||[]).slice().reverse();
   if(!hist.length){
-    tbody.innerHTML='<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
+    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
     return;
   }
   tbody.innerHTML=hist.map(t=>{
     const p=t.pnl??0, pp=t.pnl_pct??0;
-    const fee=t.fee??0;
-    const netP=t.net_pnl??p;
     const cls=p>=0?'td-pos':'td-neg';
     const sign=p>=0?'+':'';
-    const netSign=netP>=0?'+':'';
     return `<tr>
       <td>${esc(t.time||'—')}</td>
       <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
       <td>${fmtPrice(t.exit||0)}</td>
       <td class="${cls}">${sign}$${Math.abs(p).toFixed(2)} <span style="opacity:.6;font-size:9px">(${sign}${pp.toFixed(1)}%)</span></td>
-      <td style="color:${fee>0?'var(--neg)':'var(--muted)'}">${fee>0?'-$'+fee.toFixed(4):'-'}</td>
-      <td class="${netP>=0?'td-pos':'td-neg'}">${netSign}$${Math.abs(netP).toFixed(2)}</td>
     </tr>`;
   }).join('');
 }

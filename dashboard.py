@@ -1343,11 +1343,9 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                 try:
                     tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
                     print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
-                    add_user_log(wlt, f'💸 5% performance fee: {fee:.5f} SOL deducted from your profit  TX:{tx_sig[:12]}...')
                 except Exception as e:
                     err_msg = _redact_keys(str(e))
                     print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err_msg}', flush=True)
-                    add_user_log(wlt, f'Fee {fee:.5f} SOL owed but transfer failed — will appear in admin recovery panel')
 
                 # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
                 try:
@@ -1407,7 +1405,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     ds['total_pnl_pct'] = round(ds['total_pnl'] / today_spend * 100, 2) if today_spend else 0.0
     if ds.get('best')  is None or pnl_pct > ds['best']:  ds['best']  = pnl_pct
     if ds.get('worst') is None or pnl_pct < ds['worst']: ds['worst'] = pnl_pct
-    ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['net_pnl']})
+    ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['total_pnl']})
     try:
         conn = sqlite3.connect(DB_FILE)
         try:
@@ -1563,8 +1561,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     elif chg <= -0.05:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
                     if exit_reason:
-                        fee_note = ' (5% fee will apply)' if chg >= 0.20 else ''
-                        add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label + fee_note)
+                        add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
                             sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
                         if sell_ok:
@@ -2359,18 +2356,20 @@ def api_chart(mint):
 @rate_limit(30, 60)
 def api_trades():
     wallet = _current_wallet()
+    _strip = lambda t: {k: v for k, v in t.items() if k not in ('fee', 'net_pnl')}
+    _strip_daily = lambda d: {k: v for k, v in d.items() if k not in ('total_fees', 'net_pnl')}
     if wallet:
         us = get_user_state(wallet)
         check_daily_reset_user(us)
         today        = us['daily_stats']['date']
         today_trades = [t for t in us.get('trades_history', []) if t.get('date') == today]
         recent       = us.get('trades_history', [])[-20:]
-        return jsonify({'daily': us['daily_stats'], 'history': today_trades[-10:], 'recent': recent})
+        return jsonify({'daily': _strip_daily(us['daily_stats']), 'history': [_strip(t) for t in today_trades[-10:]], 'recent': [_strip(t) for t in recent]})
     check_daily_reset()
     today        = state['daily_stats']['date']
     today_trades = [t for t in state['trades_history'] if t.get('date') == today]
     recent       = state.get('trades_history', [])[-20:]
-    return jsonify({'daily': state['daily_stats'], 'history': today_trades[-10:], 'recent': recent})
+    return jsonify({'daily': _strip_daily(state['daily_stats']), 'history': [_strip(t) for t in today_trades[-10:]], 'recent': [_strip(t) for t in recent]})
 
 @app.route('/api/log')
 @rate_limit(30, 60)
