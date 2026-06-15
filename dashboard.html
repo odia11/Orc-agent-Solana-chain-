@@ -993,7 +993,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- TODAY'S PERFORMANCE -->
   <div class="perf-panel">
-    <div class="panel-hdr">Today's Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span></div>
+    <div class="panel-hdr">Today's Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span><span id="perf-tz" style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;margin-left:6px;letter-spacing:.06em"></span></div>
     <div class="perf-stats">
       <div class="perf-stat">
         <div class="perf-stat-lbl">Gross P&amp;L</div>
@@ -2335,7 +2335,10 @@ function renderPerfPanel(r){
   document.getElementById('p-wr').textContent=trades>0?Math.round(wins/trades*100)+'%':'—';
   document.getElementById('p-best').textContent=d.best!=null?'+'+d.best.toFixed(1)+'%':'—';
   document.getElementById('p-worst').textContent=d.worst!=null?d.worst.toFixed(1)+'%':'—';
-  document.getElementById('perf-date').textContent=d.date||'';
+  const _now=new Date();
+  document.getElementById('perf-date').textContent=_now.toLocaleDateString(navigator.language,{weekday:'short',month:'short',day:'numeric'});
+  const _tzOff=-_now.getTimezoneOffset(),_tzH=Math.floor(Math.abs(_tzOff)/60),_tzM=Math.abs(_tzOff)%60;
+  document.getElementById('perf-tz').textContent='UTC'+(_tzOff>=0?'+':'-')+_tzH+(_tzM?':'+String(_tzM).padStart(2,'0'):'');
 
   renderPnlChart(d.curve||[]);
 
@@ -2350,7 +2353,7 @@ function renderPerfPanel(r){
     const cls=p>=0?'td-pos':'td-neg';
     const sign=p>=0?'+':'';
     return `<tr>
-      <td>${esc(t.time||'—')}</td>
+      <td>${t.ts?new Date(t.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(t.time||'—')}</td>
       <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
       <td>${fmtPrice(t.exit||0)}</td>
@@ -2573,7 +2576,7 @@ function renderLiveFeed(){
     const amtHtml=spendSol>0
       ?`<div class="lf-amt">◎${spendSol.toFixed(4)} <span style="color:var(--dim)">/ $${(spendSol*_solPrice).toFixed(2)}</span></div>`
       :'';
-    const timeStr=item.time||(item.ts?new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):'—');
+    const timeStr=item.ts?new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(item.time||'—');
     const txHtml=mint?`<a href="https://solscan.io/token/${mint}" target="_blank" rel="noopener" class="lf-tx">View ↗</a>`:'';
     return `<div class="${itemCls}">
       ${logoHtml}
