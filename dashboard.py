@@ -1500,7 +1500,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
-    add_user_log(wallet, '[' + short + '] Trader started — TP:20% SL:5% | score≥4.5 | max 5 pos | scan 30s | momentum 7+ → 60%')
+    add_user_log(wallet, '[' + short + '] Trader started — TP:12% SL:8% | momentum 5-20% in 5m + vol rising | max 5 pos | scan 30s')
     positions = us['positions']
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
@@ -1515,8 +1515,8 @@ def user_trader_loop(stop_event, config, wallet: str):
             continue
         _chg = (_price - _pos['buy_price']) / _pos['buy_price']
         _label = (_td.get('symbol', '') if _td else '') or _pos.get('symbol', _mint[:8])
-        if _chg <= -0.05:
-            add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bug was active)')
+        if _chg <= -0.08:
+            add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             print(f'[trader] {short} STARTUP FORCE SELL {_label} {round(_chg*100,1)}%', flush=True)
             with _use_key(_enc_blob, wallet) as _pk:
                 _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
@@ -1571,9 +1571,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
                     exit_reason = None
-                    if chg >= 0.20:
+                    if chg >= 0.12:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
-                    elif chg <= -0.05:
+                    elif chg <= -0.08:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
@@ -1591,12 +1591,22 @@ def user_trader_loop(stop_event, config, wallet: str):
 
                 # ── Pass 2: pick the single best entry ──
                 if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01:
-                    not_held   = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
-                    qualifying = [t for t in not_held if t['score'] >= 4.5]
+                    not_held = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
+                    qualifying = []
+                    for _t in not_held:
+                        _m5  = _t.get('change5m', 0)
+                        _v5m = _t.get('volume5m', 0)
+                        _v1h = _t.get('volume1h', 0)
+                        _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
+                        # Buy only on rising momentum (5-20% in 5m) with accelerating volume.
+                        # Skip tokens up 50%+ on the hour — momentum already played out.
+                        if 5 <= _m5 <= 20 and _vol_rising and _t.get('change1h', 0) < 50:
+                            qualifying.append(_t)
+                    qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (score≥4.5)')
+                                 str(total_live) + ' qualify (5-20% m5 + vol rising)')
                     if qualifying:
-                        best  = qualifying[0]  # list is sorted by score desc
+                        best  = qualifying[0]
                         bmint = best['mint']
                         label = best['symbol'] or bmint[:8]
                         sc    = best['score']
@@ -1610,49 +1620,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
-
-                            # Entry timing: if token is very extended (m5 > 30%), wait for 2-5% pullback
-                            if m5 > 30 and not pos.get('entry_waiting'):
-                                pos['entry_waiting']   = True
-                                pos['entry_ref_price'] = best['price']
-                                pos['entry_wait_count']= 0
-                                add_user_log(wallet, '[' + short + '] WAITING FOR ENTRY — ' + label +
-                                             ' extended (+' + str(round(m5,1)) + '%), watching for pullback')
-                            elif pos.get('entry_waiting'):
-                                ref = pos.get('entry_ref_price', best['price'])
-                                dip = (best['price'] - ref) / ref if ref > 0 else 0
-                                pos['entry_wait_count'] = pos.get('entry_wait_count', 0) + 1
-                                if -0.06 <= dip <= -0.02:
-                                    # Good pullback — buy now
-                                    add_user_log(wallet, '[' + short + '] PULLBACK ENTRY — ' + label +
-                                                 ' dipped ' + str(round(dip*100,1)) + '%')
-                                    pos.pop('entry_waiting', None)
-                                    pos.pop('entry_ref_price', None)
-                                    pos.pop('entry_wait_count', None)
-                                    with _use_key(_enc_blob, wallet) as _pk:
-                                        _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
-                                    pos['amount']     = spend / best['price']
-                                    pos['buy_price']  = best['price']
-                                    pos['spend']      = spend
-                                    pos['symbol']     = label
-                                    pos['opened_at']  = time.time()
-                                    open_pos += 1
-                                elif pos.get('entry_wait_count', 0) >= 5 or dip > 0.05:
-                                    # Timed out or ran away — cancel wait
-                                    add_user_log(wallet, '[' + short + '] ENTRY WAIT CANCELLED — ' + label)
-                                    pos.pop('entry_waiting', None)
-                                    pos.pop('entry_ref_price', None)
-                                    pos.pop('entry_wait_count', None)
-                                # else still waiting
-                            else:
-                                with _use_key(_enc_blob, wallet) as _pk:
-                                    _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
-                                pos['amount']     = spend / best['price']
-                                pos['buy_price']  = best['price']
-                                pos['spend']      = spend
-                                pos['symbol']     = label
-                                pos['opened_at']  = time.time()
-                                open_pos += 1
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
+                            pos['amount']    = spend / best['price']
+                            pos['buy_price'] = best['price']
+                            pos['spend']     = spend
+                            pos['symbol']    = label
+                            pos['opened_at'] = time.time()
+                            open_pos += 1
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 30))

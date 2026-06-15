@@ -9,7 +9,7 @@ Live at: https://www.orcagent.fun
 ## What it does
 
 - Scores 100+ tokens with Claude AI every 30 seconds
-- Buys on score ≥ 4.5/10, exits at +20% profit or −5% stop loss
+- Buys tokens showing 5–20% momentum in last 5 min with accelerating volume, exits at +12% take profit or −8% stop loss (100% position)
 - 5% performance fee on profitable trades only
 - Each user's private key is encrypted and stored — never exposed
 - Admin dashboard for monitoring trades, fees, and users
