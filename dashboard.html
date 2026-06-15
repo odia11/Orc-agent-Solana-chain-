@@ -88,7 +88,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .stat:nth-child(3){border-left:2px solid rgba(255,193,58,.5)}
 .stat-lbl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.12em;margin-bottom:7px}
 .stat-val{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;min-height:26px;display:flex;align-items:center}
-.stat-sub{font-size:11px;color:var(--dim);margin-top:4px}
+.stat-sub{font-size:11px;color:var(--dim);margin-top:4px;display:block}
 .stat-placeholder{font-size:12px;color:var(--border2);font-family:'Share Tech Mono',monospace;font-weight:400}
 .g{color:var(--green)}.r{color:var(--red)}.y{color:var(--yellow)}.b{color:var(--blue)}
 
@@ -887,8 +887,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="stat">
       <div class="stat-lbl">SOL Balance</div>
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
-      <div class="stat-sub">available to trade</div>
-      <div class="stat-sub" id="s-sol-usdc" style="color:var(--muted);margin-top:2px"></div>
+      <div class="stat-sub" style="display:block">available to trade</div>
+      <div class="stat-sub" id="s-sol-usdc" style="display:block;color:var(--muted);margin-top:3px"></div>
       <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">🔥 Burn &amp; Claim</button>
     </div>
     <div class="stat">
@@ -1445,12 +1445,12 @@ async function _fetchSolPrice(){
   }catch(e){}
 }
 _fetchSolPrice();
-setInterval(_fetchSolPrice,60000);
+setInterval(_fetchSolPrice,30000);
 
 function _updateSolUsdc(sol){
   const el=document.getElementById('s-sol-usdc');
   if(!el) return;
-  if(_solUsdPrice>0&&sol>0) el.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
+  if(_solUsdPrice>0) el.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
   else el.textContent='';
 }
 
