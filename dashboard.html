@@ -315,6 +315,23 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .chart-inner{position:relative;flex:1;min-height:0}
 .chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:11px;color:rgba(255,193,58,.4);letter-spacing:.08em;font-family:'Share Tech Mono',monospace;background:#0d1117;z-index:2}
 .slide-pumping{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:#0d1117;background:#00edaa;border-radius:4px;padding:2px 7px;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0}
+/* ── POSITION CHART MODAL ── */
+#pos-chart-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.82);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+#pos-chart-modal.open{display:flex}
+.pos-chart-wrap{background:#0a0a0f;border:1px solid rgba(0,237,170,.22);border-radius:12px;width:min(920px,96vw);height:min(580px,90vh);display:flex;flex-direction:column;position:relative;overflow:hidden}
+.pos-chart-hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid rgba(255,255,255,.06);flex-shrink:0}
+.pos-chart-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--green);letter-spacing:.1em}
+.pos-chart-close{background:none;border:1px solid rgba(255,255,255,.14);color:var(--muted);font-size:13px;width:26px;height:26px;border-radius:5px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;line-height:1}
+.pos-chart-close:hover{border-color:rgba(255,255,255,.4);color:var(--text)}
+.pos-chart-tf-bar{display:flex;gap:3px;padding:5px 10px;background:rgba(255,255,255,.02);border-bottom:1px solid rgba(255,255,255,.05);flex-shrink:0}
+.pos-chart-tf-bar .chart-tf-btn{border-color:rgba(0,237,170,.18);color:rgba(0,237,170,.4)}
+.pos-chart-tf-bar .chart-tf-btn:hover{border-color:rgba(0,237,170,.5);color:#00edaa}
+.pos-chart-tf-bar .chart-tf-btn.active{background:rgba(0,237,170,.1);border-color:rgba(0,237,170,.55);color:#00edaa}
+#pos-chart-container{flex:1;min-height:0;position:relative}
+.pos-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em;background:#0a0a0f;z-index:2}
+.pos-chart-btn{background:transparent;border:1px solid rgba(0,237,170,.18);color:rgba(0,237,170,.55);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'Share Tech Mono',monospace;white-space:nowrap}
+.pos-chart-btn:hover{border-color:rgba(0,237,170,.5);color:#00edaa;background:rgba(0,237,170,.05)}
+@media(max-width:600px){.pos-chart-wrap{width:100vw;height:100dvh;border-radius:0;border:none}#pos-chart-modal.open{align-items:flex-start}}
 .slide-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px}
 .slide-grid-cell{background:rgba(255,193,58,.03);border:1px solid rgba(255,193,58,.1);border-radius:6px;padding:7px 9px}
 .slide-grid-lbl{font-size:8px;color:rgba(255,255,255,.35);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;font-family:'Share Tech Mono',monospace}
@@ -907,7 +924,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th></tr></thead>
+        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Cost (USDC)</th><th>P&amp;L</th><th></th></tr></thead>
         <tbody id="positions-tbody"></tbody>
       </table>
     </div>
@@ -927,6 +944,25 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div id="lf-list" class="lf-list">
       <div class="lf-empty">No recent trades yet</div>
+    </div>
+  </div>
+
+  <!-- POSITION CHART MODAL -->
+  <div id="pos-chart-modal" onclick="if(event.target===this)closePosChart()">
+    <div class="pos-chart-wrap">
+      <div class="pos-chart-hdr">
+        <div class="pos-chart-title" id="pos-chart-title">CHART</div>
+        <button class="pos-chart-close" onclick="closePosChart()">✕</button>
+      </div>
+      <div class="pos-chart-tf-bar" id="pos-chart-tf-bar">
+        <button class="chart-tf-btn active" onclick="setPosChartTf('5m',this)">5m</button>
+        <button class="chart-tf-btn" onclick="setPosChartTf('15m',this)">15m</button>
+        <button class="chart-tf-btn" onclick="setPosChartTf('1h',this)">1h</button>
+        <button class="chart-tf-btn" onclick="setPosChartTf('4h',this)">4h</button>
+      </div>
+      <div id="pos-chart-container">
+        <div class="pos-chart-loading" id="pos-chart-loading">Loading chart…</div>
+      </div>
     </div>
   </div>
 
@@ -2371,9 +2407,89 @@ function renderPositions(detail){
       <td>${fmtPrice(p.current||0)}</td>
       <td>${fmtSolToUsdc(p.spend||0)}</td>
       <td class="${cls}">${sign}${fmtSolToUsdc(Math.abs(p.pnl||0))}<span style="opacity:.55;font-size:9px;margin-left:4px">(${sign}${(p.pnl_pct||0).toFixed(1)}%)</span></td>
+      <td><button class="pos-chart-btn" onclick="openPosChart('${esc(p.mint||'')}','${esc(p.symbol||'???')}',${p.current||0})">📈 Chart</button></td>
     </tr>`;
   }).join('');
 }
+
+// ── POSITION CHART MODAL ──
+let _posChart=null,_posSeries=null,_posVolSeries=null,_posPriceLine=null;
+let _posCurrentMint='',_posCurrentTf='5m';
+
+async function openPosChart(mint,symbol,currentPrice){
+  if(!mint) return;
+  _posCurrentMint=mint;
+  _posCurrentTf='5m';
+  document.getElementById('pos-chart-title').textContent=(symbol||mint.slice(0,8))+' — 5m';
+  document.querySelectorAll('#pos-chart-tf-bar .chart-tf-btn').forEach(b=>b.classList.toggle('active',b.textContent==='5m'));
+  document.getElementById('pos-chart-modal').classList.add('open');
+  document.body.style.overflow='hidden';
+  _initPosChart(currentPrice);
+  await _loadPosChartData();
+}
+
+function closePosChart(){
+  document.getElementById('pos-chart-modal').classList.remove('open');
+  document.body.style.overflow='';
+}
+
+async function setPosChartTf(tf,btn){
+  _posCurrentTf=tf;
+  document.querySelectorAll('#pos-chart-tf-bar .chart-tf-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const titleEl=document.getElementById('pos-chart-title');
+  titleEl.textContent=titleEl.textContent.replace(/— .+$/,'— '+tf);
+  await _loadPosChartData();
+}
+
+function _initPosChart(currentPrice){
+  const container=document.getElementById('pos-chart-container');
+  if(_posChart){
+    // Chart already exists — just refresh the price line
+    try{if(_posPriceLine) _posSeries.removePriceLine(_posPriceLine);}catch(e){}
+    if(currentPrice>0) _posPriceLine=_posSeries.createPriceLine({price:currentPrice,color:'#ffc13a',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'now'});
+    return;
+  }
+  _posChart=LightweightCharts.createChart(container,{
+    width:container.clientWidth,
+    height:container.clientHeight||400,
+    layout:{background:{type:'solid',color:'#0a0a0f'},textColor:'#9ca3af'},
+    grid:{vertLines:{color:'rgba(255,255,255,.04)'},horzLines:{color:'rgba(255,255,255,.04)'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    rightPriceScale:{borderColor:'rgba(255,255,255,.07)'},
+    timeScale:{borderColor:'rgba(255,255,255,.07)',timeVisible:true,secondsVisible:false},
+    handleScroll:true,handleScale:true,
+  });
+  _posSeries=_posChart.addCandlestickSeries({
+    upColor:'#00ff88',downColor:'#ff4444',
+    borderVisible:false,
+    wickUpColor:'#00ff88',wickDownColor:'#ff4444',
+  });
+  _posVolSeries=_posChart.addHistogramSeries({
+    priceFormat:{type:'volume'},priceScaleId:'pos-vol',
+  });
+  _posChart.priceScale('pos-vol').applyOptions({scaleMargins:{top:0.82,bottom:0}});
+  if(currentPrice>0) _posPriceLine=_posSeries.createPriceLine({price:currentPrice,color:'#ffc13a',lineWidth:1,lineStyle:2,axisLabelVisible:true,title:'now'});
+  new ResizeObserver(()=>{
+    if(container.clientWidth>0) _posChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  }).observe(container);
+}
+
+async function _loadPosChartData(){
+  const loadEl=document.getElementById('pos-chart-loading');
+  if(loadEl){loadEl.textContent='Loading chart…';loadEl.style.display='flex';}
+  const r=await fetch('/api/chart/'+encodeURIComponent(_posCurrentMint)+'?tf='+_posCurrentTf).then(r=>r.json()).catch(()=>null);
+  if(r?.candles?.length){
+    _posSeries.setData(r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c})));
+    _posVolSeries.setData(r.candles.map(c=>({time:c.t,value:c.v,color:c.c>=c.o?'rgba(0,255,136,.35)':'rgba(255,68,68,.35)'})));
+    _posChart.timeScale().fitContent();
+    if(loadEl) loadEl.style.display='none';
+  }else{
+    if(loadEl){loadEl.textContent='Chart unavailable for this token';loadEl.style.display='flex';}
+  }
+}
+
+document.addEventListener('keydown',e=>{if(e.key==='Escape') closePosChart();});
 
 // ── LIVE ACTIVITY FEED ──
 let _lfHistory=[], _lfPositions=[], _lfMintMap={}, _lfLastSeenTs=0;
