@@ -2113,13 +2113,19 @@ def api_get_tokens():
         except Exception:
             pass
 
-    wallets   = list(dict.fromkeys([wallet, trading_pk]))
+    # Query trading wallet first — that's where the bot's token accounts live.
+    # Session wallet follows in case the user also has accounts there.
+    wallets = list(dict.fromkeys([trading_pk, wallet]))
     all_accs, _ = _get_spl_token_accounts(wallets)
 
-    # ── Parse all accounts ──
-    parsed: list = []
-    mints_needed: list = []
-    seen_mints:   set  = set()
+    # ── Parse and immediately split: zero-balance vs has-balance ──
+    # Zero-balance accounts never need a DexScreener call — they are always
+    # safe to close and the recoverable lamports are known from the RPC data.
+    empty_accs:    list = []   # raw == 0
+    nonempty_accs: list = []   # raw > 0
+    ne_mints:      list = []   # unique non-empty mints (for price/symbol lookup)
+    seen_ne:       set  = set()
+
     for acc in all_accs:
         try:
             pub      = acc.get('pubkey', '')
@@ -2132,82 +2138,103 @@ def api_get_tokens():
             lamports = int(acc.get('account', {}).get('lamports', 2039280))
             mint_str = info.get('mint', '')
             owner_oc = info.get('owner', '')
-            raw_int  = int(raw_str) if raw_str.isdigit() else 0
-            parsed.append({
+            # Treat any non-digit or empty string as 0
+            raw_int  = int(raw_str) if (raw_str and raw_str.isdigit()) else 0
+            rec = {
                 'pubkey': pub, 'mint': mint_str, 'balance_str': ui_str,
                 'balance_ui': ui_float, 'raw': raw_int, 'decimals': decimals,
                 'lamports': lamports, 'owner': owner_oc,
-            })
-            if mint_str and mint_str not in seen_mints:
-                seen_mints.add(mint_str)
-                mints_needed.append(mint_str)
+            }
+            if raw_int == 0:
+                empty_accs.append(rec)
+            else:
+                nonempty_accs.append(rec)
+                if mint_str and mint_str not in seen_ne:
+                    seen_ne.add(mint_str)
+                    ne_mints.append(mint_str)
         except Exception:
             continue
 
-    # ── Batch-fetch USD prices from DexScreener (30 mints per request) ──
-    mint_price: dict = {}   # mint -> float price_usd, or None if unknown
-    for i in range(0, len(mints_needed), 30):
-        batch = mints_needed[i:i + 30]
+    # ── Fetch symbol + price ONLY for non-empty accounts ──
+    # DexScreener is skipped entirely for zero-balance accounts so a slow/rate-
+    # limited response doesn't delay showing the most important (empty) results.
+    mint_meta: dict = {}   # mint -> {'symbol': str, 'price_usd': float|None}
+    for i in range(0, len(ne_mints), 30):
+        batch = ne_mints[i:i + 30]
         try:
-            url = 'https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch)
-            r   = _dex_get(url, timeout=10)
+            r = _dex_get(
+                'https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch),
+                timeout=8,
+            )
             if r and r.status_code == 200:
-                best: dict = {}   # mint -> best priceUsd seen
+                best: dict = {}
                 for pair in (r.json().get('pairs') or []):
-                    base = (pair.get('baseToken') or {}).get('address', '')
+                    bt  = pair.get('baseToken') or {}
+                    base = bt.get('address', '')
+                    sym  = bt.get('symbol', '')
                     p    = float(pair.get('priceUsd') or 0)
-                    if base in seen_mints and p > 0:
-                        if p > best.get(base, 0):
-                            best[base] = p
+                    if base in seen_ne:
+                        cur = best.get(base, {})
+                        if p > cur.get('price_usd', 0):
+                            best[base] = {'symbol': sym, 'price_usd': p or None}
                 for m in batch:
-                    mint_price[m] = best.get(m)   # None if no pair found
+                    mint_meta[m] = best.get(m) or {'symbol': '', 'price_usd': None}
         except Exception:
             for m in batch:
-                mint_price.setdefault(m, None)
+                mint_meta.setdefault(m, {'symbol': '', 'price_usd': None})
 
-    sol_px   = _sol_price_usd if _sol_price_usd > 1 else 150.0
-    DUST_USD = 0.01   # < $0.01 USD is considered dust
+    DUST_USD      = 0.01
+    REASON_ORDER  = {'empty': 0, 'dust': 1, 'unknown': 2, 'normal': 3}
+    tokens: list  = []
 
-    # ── Classify & build result ──
-    _REASON_ORDER = {'empty': 0, 'dust': 1, 'unknown': 2, 'normal': 3}
-    tokens: list = []
-    for a in parsed:
-        mint     = a['mint']
-        price    = mint_price.get(mint)       # None = no DexScreener data
-        ui_amt   = a['balance_ui']
-        raw_int  = a['raw']
-        owned    = a['owner'] == trading_pk
+    # ── Zero-balance accounts — always included, no price check needed ──
+    for a in empty_accs:
+        owned = a['owner'] == trading_pk
+        tokens.append({
+            'pubkey':    a['pubkey'],
+            'mint':      a['mint'],
+            'symbol':    '',                       # no live symbol for dead accounts
+            'balance':   '0',
+            'raw':       0,
+            'decimals':  a['decimals'],
+            'sol_rent':  round(a['lamports'] / 1e9, 6),
+            'price_usd': None,
+            'value_usd': 0.0,
+            'closeable': True,
+            'can_close': owned,                    # only blocked if we lack the key
+            'reason':    'empty',
+            'owned':     owned,
+        })
 
-        is_empty = raw_int == 0
+    # ── Non-empty accounts — classify by USD value ──
+    for a in nonempty_accs:
+        mint  = a['mint']
+        meta  = mint_meta.get(mint) or {'symbol': '', 'price_usd': None}
+        sym   = meta.get('symbol', '')
+        price = meta.get('price_usd')          # None = DexScreener had no data
+        owned = a['owner'] == trading_pk
+
         if price is not None:
-            value_usd = ui_amt * price
-            is_dust   = not is_empty and value_usd < DUST_USD
-            is_unknown = False
+            value_usd = a['balance_ui'] * price
+            if value_usd < DUST_USD:
+                reason, closeable = 'dust', True
+            else:
+                reason, closeable = 'normal', False
         else:
-            value_usd  = None
-            is_dust    = False
-            is_unknown = not is_empty   # non-empty with no price = unverified
+            value_usd = None
+            reason, closeable = 'unknown', True   # unknown = treat as burnable
 
-        if is_empty:
-            reason = 'empty'
-        elif is_dust:
-            reason = 'dust'
-        elif is_unknown:
-            reason = 'unknown'
-        else:
-            reason = 'normal'
-
-        closeable = is_empty or is_dust or is_unknown
         can_close = owned and (closeable if not scan_all else True)
 
         if not scan_all and not closeable:
-            continue   # hide valuable known tokens in smart mode
+            continue   # hide tokens with real known value in smart mode
 
         tokens.append({
             'pubkey':    a['pubkey'],
             'mint':      mint,
+            'symbol':    sym,
             'balance':   a['balance_str'],
-            'raw':       raw_int,
+            'raw':       a['raw'],
             'decimals':  a['decimals'],
             'sol_rent':  round(a['lamports'] / 1e9, 6),
             'price_usd': round(price, 8) if price else None,
@@ -2218,9 +2245,22 @@ def api_get_tokens():
             'owned':     owned,
         })
 
-    tokens.sort(key=lambda t: (_REASON_ORDER.get(t['reason'], 9), -t['sol_rent']))
-    return jsonify({'ok': True, 'tokens': tokens,
-                    'trading_wallet': trading_pk, 'scan_all': scan_all})
+    tokens.sort(key=lambda t: (REASON_ORDER.get(t['reason'], 9), -t['sol_rent']))
+
+    closeable_tokens = [t for t in tokens if t['can_close']]
+    return jsonify({
+        'ok':             True,
+        'tokens':         tokens,
+        'trading_wallet': trading_pk,
+        'scan_all':       scan_all,
+        'stats': {
+            'total':           len(tokens),
+            'empty':           sum(1 for t in tokens if t['reason'] == 'empty'),
+            'dust':            sum(1 for t in tokens if t['reason'] == 'dust'),
+            'unknown':         sum(1 for t in tokens if t['reason'] == 'unknown'),
+            'recoverable_sol': round(sum(t['sol_rent'] for t in closeable_tokens), 6),
+        },
+    })
 
 
 # ── CLAIM SOL ──

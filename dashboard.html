@@ -781,7 +781,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
       <div class="inc-scan-warn" id="inc-scan-warn">⚠ Scan All mode shows tokens that may have value. Unchecked by default — only select accounts you are sure you want to close.</div>
       <div class="inc-controls">
-        <span class="inc-found"><span id="inc-found-count">0</span> accounts found</span>
+        <span class="inc-found" id="inc-found-count">Scanning…</span>
         <div class="inc-ctrl-btns">
           <button class="inc-ctrl-btn" onclick="_incSelectAll(true)">Select All</button>
           <button class="inc-ctrl-btn" onclick="_incSelectAll(false)">None</button>
@@ -2770,22 +2770,26 @@ let _incTokens=[], _incScanAll=false;
 
 function _incRenderRow(t, i){
   const shortMint=t.mint?(t.mint.slice(0,6)+'…'+t.mint.slice(-4)):'—';
+  const label=t.symbol?t.symbol:shortMint;
   const solscanUrl='https://solscan.io/token/'+(t.mint||'');
-  const solRent='~'+(t.sol_rent||0.002039).toFixed(4)+' SOL';
+  const solRent='+'+(t.sol_rent||0.00203928).toFixed(6)+' SOL';
 
-  let badge='';
-  let preChecked=t.can_close;
+  let badge='', preChecked=t.can_close;
   if(t.reason==='empty')        badge='<span class="inc-badge inc-badge-empty">EMPTY</span>';
   else if(t.reason==='dust')    badge='<span class="inc-badge inc-badge-dust">DUST</span>';
   else if(t.reason==='unknown') badge='<span class="inc-badge inc-badge-unknown">UNVERIFIED</span>';
   else{badge='<span class="inc-badge inc-badge-value">HAS VALUE</span>';preChecked=false;}
 
-  let valueText='';
-  if(t.value_usd!=null){
+  // Sub-line: balance and USD value
+  let sub='';
+  if(t.reason==='empty'){
+    sub='No balance — rent only';
+  } else if(t.value_usd!=null){
     const v=t.value_usd;
-    valueText='$'+(v<0.0001?v.toExponential(2):v<0.01?v.toFixed(5):v.toFixed(2));
-  } else if(t.balance&&t.balance!=='0'){
-    valueText=t.balance+' tokens';
+    const vStr=v<0.000001?v.toExponential(2):v<0.01?v.toFixed(6):v.toFixed(4);
+    sub=(t.balance||'0')+' tokens &nbsp;·&nbsp; $'+vStr;
+  } else {
+    sub=(t.balance||'0')+' tokens';
   }
 
   const disAttr=t.can_close?'':'disabled';
@@ -2794,13 +2798,13 @@ function _incRenderRow(t, i){
   const solLabel=t.can_close?solRent:'No key';
 
   return `<label class="${rowCls}">
-    <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-sol="${t.sol_rent||0.002039}" ${preChecked?'checked':''} ${disAttr} onchange="_incUpdateSummary()">
+    <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-sol="${t.sol_rent||0.00203928}" ${preChecked?'checked':''} ${disAttr} onchange="_incUpdateSummary()">
     <div class="inc-token-info">
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
-        <a class="inc-token-mint" href="${solscanUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t.mint||''}">${shortMint}</a>
+        <a class="inc-token-mint" href="${solscanUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t.mint||''}">${esc(label)}</a>
         ${badge}
       </div>
-      <span class="inc-value">${valueText}</span>
+      <span class="inc-value">${sub}</span>
     </div>
     <span class="${solCls}">${solLabel}</span>
   </label>`;
@@ -2825,6 +2829,7 @@ async function _incLoad(scanAll){
   }
 
   _incTokens=r.tokens||[];
+  const stats=r.stats||{};
 
   // Update mode UI
   const pill=document.getElementById('inc-mode-pill');
@@ -2846,7 +2851,12 @@ async function _incLoad(scanAll){
     return;
   }
 
-  document.getElementById('inc-found-count').textContent=_incTokens.length;
+  const recSol=stats.recoverable_sol!=null?stats.recoverable_sol.toFixed(6):null;
+  let foundParts=[_incTokens.length+' account'+(_incTokens.length!==1?'s':'')];
+  if(stats.empty) foundParts.push(stats.empty+' empty');
+  if(stats.dust)  foundParts.push(stats.dust+' dust');
+  if(recSol)      foundParts.push('~'+recSol+' SOL recoverable');
+  document.getElementById('inc-found-count').textContent=foundParts.join(' · ');
   document.getElementById('inc-token-list').innerHTML=_incTokens.map(_incRenderRow).join('');
   _incUpdateSummary();
   document.getElementById('inc-body').style.display='block';
