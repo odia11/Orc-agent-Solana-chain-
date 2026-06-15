@@ -529,9 +529,21 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .lf-toast{font-size:10px;padding:8px 12px}
 }
 
+#update-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#1a4a2a,#0f3320);border-bottom:2px solid #4ade80;padding:10px 16px;text-align:center;animation:ub-slide .35s ease}
+@keyframes ub-slide{from{transform:translateY(-100%)}to{transform:translateY(0)}}
+#update-banner span{color:#e0ffe8;font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:.04em}
+#update-banner button{margin-left:14px;background:#4ade80;color:#0a1a10;border:none;border-radius:6px;padding:5px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em}
+#update-banner button:hover{background:#6aee9a}
+
 </style>
 </head>
 <body>
+
+<!-- UPDATE BANNER -->
+<div id="update-banner">
+  <span>&#x1F4E6; A new update is available &mdash; please refresh the page</span>
+  <button onclick="location.reload()">Refresh Now</button>
+</div>
 
 <!-- ORC DANCE OVERLAY -->
 <div id="orc-overlay">
@@ -2630,6 +2642,20 @@ setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,10000);
 setInterval(fetchCarousel,60000);
+
+// ── VERSION POLLING ──
+let _pageVersion=null;
+(async()=>{
+  const r=await fetch('/api/version').then(r=>r.json()).catch(()=>null);
+  if(r?.version) _pageVersion=r.version;
+})();
+setInterval(async()=>{
+  if(!_pageVersion) return;
+  const r=await fetch('/api/version').then(r=>r.json()).catch(()=>null);
+  if(r?.version && r.version!==_pageVersion){
+    document.getElementById('update-banner').style.display='block';
+  }
+},30000);
 
 // ── CLAIM SOL ──
 async function claimSol(){

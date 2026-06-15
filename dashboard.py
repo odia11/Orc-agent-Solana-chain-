@@ -1735,6 +1735,26 @@ def _honeypot():
     _record_ip_failure(ip)
     return '', 404
 
+# ── VERSION ──
+import subprocess as _subprocess, time as _time
+
+def _app_version() -> str:
+    try:
+        h = _subprocess.check_output(['git', 'rev-parse', '--short', 'HEAD'],
+                                      stderr=_subprocess.DEVNULL, timeout=2).decode().strip()
+        if h:
+            return h
+    except Exception:
+        pass
+    return str(int(_time.time()))
+
+_APP_VERSION: str = _app_version()
+
+@app.route('/api/version')
+@rate_limit(120, 60)
+def api_version():
+    return jsonify({'version': _APP_VERSION})
+
 # ── CSRF TOKEN ──
 @app.route('/api/csrf-token')
 @rate_limit(60, 60)
