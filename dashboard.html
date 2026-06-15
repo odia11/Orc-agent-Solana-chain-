@@ -493,11 +493,30 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .inc-token-mint:hover{color:var(--blue);text-decoration:underline}
 .inc-token-bal{display:block;font-size:9px;color:var(--muted);margin-top:2px}
 .inc-token-sol{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:var(--green);white-space:nowrap;flex-shrink:0}
+.inc-scan-bar{display:flex;align-items:center;justify-content:space-between;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;margin-bottom:12px;gap:8px;flex-wrap:wrap}
+.inc-scan-label{font-size:10px;color:var(--dim);display:flex;align-items:center;gap:6px}
+.inc-scan-pill{font-size:8px;padding:2px 7px;border-radius:10px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.06em}
+.inc-scan-pill.smart{background:rgba(0,237,170,.15);color:var(--green);border:1px solid rgba(0,237,170,.35)}
+.inc-scan-pill.all{background:rgba(255,193,58,.15);color:var(--yellow);border:1px solid rgba(255,193,58,.35)}
 .inc-controls{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;gap:8px;flex-wrap:wrap}
 .inc-found{font-size:10px;color:var(--dim)}
-.inc-ctrl-btns{display:flex;gap:6px}
+.inc-ctrl-btns{display:flex;gap:6px;flex-wrap:wrap}
 .inc-ctrl-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;letter-spacing:.04em;transition:all .15s}
 .inc-ctrl-btn:hover{border-color:var(--green);color:var(--green)}
+.inc-ctrl-btn.scan-all-btn{border-color:rgba(255,193,58,.4);color:var(--yellow)}
+.inc-ctrl-btn.scan-all-btn:hover{border-color:var(--yellow);background:rgba(255,193,58,.08)}
+.inc-ctrl-btn.scan-smart-btn{border-color:rgba(0,237,170,.4);color:var(--green)}
+.inc-ctrl-btn.scan-smart-btn:hover{border-color:var(--green);background:rgba(0,237,170,.08)}
+.inc-badge{font-size:7px;padding:2px 6px;border-radius:3px;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.08em;white-space:nowrap;flex-shrink:0}
+.inc-badge-empty{background:rgba(0,237,170,.12);color:var(--green);border:1px solid rgba(0,237,170,.3)}
+.inc-badge-dust{background:rgba(255,193,58,.12);color:var(--yellow);border:1px solid rgba(255,193,58,.3)}
+.inc-badge-unknown{background:rgba(106,143,175,.12);color:var(--dim);border:1px solid var(--border2)}
+.inc-badge-value{background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.3)}
+.inc-row-disabled{opacity:.45}
+.inc-token-sol-dim{color:var(--muted)!important}
+.inc-value{font-size:9px;color:var(--muted);margin-top:2px}
+.inc-scan-warn{background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.3);border-radius:7px;padding:8px 12px;font-size:10px;color:var(--yellow);margin-bottom:10px;display:none;line-height:1.55}
+.inc-scan-warn.show{display:block}
 .inc-summary-bar{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .inc-summary-text{font-size:10px;color:var(--dim)}
 .inc-sol-est{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--green)}
@@ -749,12 +768,20 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div class="s-card inc-card">
     <button class="s-close" onclick="closeIncinerator()">✕</button>
     <div class="s-title">🔥 Token Incinerator</div>
-    <div class="s-sub">Burn empty &amp; dust token accounts — recover SOL rent (~0.002 per account)</div>
+    <div class="s-sub">Burn empty &amp; dust token accounts — recover ~0.002 SOL rent per account</div>
     <div id="inc-status" class="s-msg" style="display:none"></div>
-    <div id="inc-loading" class="inc-loading">⏳ Scanning wallet for burnable accounts…</div>
+    <div id="inc-loading" class="inc-loading">⏳ Scanning wallet &amp; fetching token prices…</div>
     <div id="inc-body" style="display:none">
+      <div class="inc-scan-bar">
+        <span class="inc-scan-label">Mode: <span class="inc-scan-pill smart" id="inc-mode-pill">Smart Scan</span></span>
+        <div class="inc-ctrl-btns">
+          <button class="inc-ctrl-btn scan-all-btn" id="inc-scan-all-btn" onclick="_incSetMode(true)">📋 Scan All Tokens</button>
+          <button class="inc-ctrl-btn scan-smart-btn" id="inc-scan-smart-btn" onclick="_incSetMode(false)" style="display:none">🎯 Smart Scan</button>
+        </div>
+      </div>
+      <div class="inc-scan-warn" id="inc-scan-warn">⚠ Scan All mode shows tokens that may have value. Unchecked by default — only select accounts you are sure you want to close.</div>
       <div class="inc-controls">
-        <span class="inc-found"><span id="inc-found-count">0</span> burnable accounts found</span>
+        <span class="inc-found"><span id="inc-found-count">0</span> accounts found</span>
         <div class="inc-ctrl-btns">
           <button class="inc-ctrl-btn" onclick="_incSelectAll(true)">Select All</button>
           <button class="inc-ctrl-btn" onclick="_incSelectAll(false)">None</button>
@@ -769,7 +796,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div id="inc-empty" class="inc-empty" style="display:none">
       <div style="font-size:22px;margin-bottom:8px">✅</div>
-      <b>Wallet is clean!</b><br>No empty or dust token accounts found.
+      <b>Wallet is clean!</b><br>No empty or dust token accounts found.<br>
+      <button class="inc-ctrl-btn" style="margin-top:12px" onclick="_incSetMode(true)">📋 Scan All Tokens</button>
     </div>
   </div>
 </div>
@@ -2738,20 +2766,56 @@ setInterval(async()=>{
 },30000);
 
 // ── TOKEN INCINERATOR ──
-let _incTokens=[];
+let _incTokens=[], _incScanAll=false;
 
-async function openIncinerator(){
-  if(!phantomKey) return;
-  const modal=document.getElementById('incinerator-modal');
-  modal.classList.add('open');
-  // reset state
+function _incRenderRow(t, i){
+  const shortMint=t.mint?(t.mint.slice(0,6)+'…'+t.mint.slice(-4)):'—';
+  const solscanUrl='https://solscan.io/token/'+(t.mint||'');
+  const solRent='~'+(t.sol_rent||0.002039).toFixed(4)+' SOL';
+
+  let badge='';
+  let preChecked=t.can_close;
+  if(t.reason==='empty')        badge='<span class="inc-badge inc-badge-empty">EMPTY</span>';
+  else if(t.reason==='dust')    badge='<span class="inc-badge inc-badge-dust">DUST</span>';
+  else if(t.reason==='unknown') badge='<span class="inc-badge inc-badge-unknown">UNVERIFIED</span>';
+  else{badge='<span class="inc-badge inc-badge-value">HAS VALUE</span>';preChecked=false;}
+
+  let valueText='';
+  if(t.value_usd!=null){
+    const v=t.value_usd;
+    valueText='$'+(v<0.0001?v.toExponential(2):v<0.01?v.toFixed(5):v.toFixed(2));
+  } else if(t.balance&&t.balance!=='0'){
+    valueText=t.balance+' tokens';
+  }
+
+  const disAttr=t.can_close?'':'disabled';
+  const rowCls='inc-token-row'+(t.can_close?'':' inc-row-disabled');
+  const solCls='inc-token-sol'+(t.can_close?'':' inc-token-sol-dim');
+  const solLabel=t.can_close?solRent:'No key';
+
+  return `<label class="${rowCls}">
+    <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-sol="${t.sol_rent||0.002039}" ${preChecked?'checked':''} ${disAttr} onchange="_incUpdateSummary()">
+    <div class="inc-token-info">
+      <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
+        <a class="inc-token-mint" href="${solscanUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t.mint||''}">${shortMint}</a>
+        ${badge}
+      </div>
+      <span class="inc-value">${valueText}</span>
+    </div>
+    <span class="${solCls}">${solLabel}</span>
+  </label>`;
+}
+
+async function _incLoad(scanAll){
+  _incScanAll=scanAll;
   document.getElementById('inc-loading').style.display='block';
   document.getElementById('inc-body').style.display='none';
   document.getElementById('inc-empty').style.display='none';
   const st=document.getElementById('inc-status');
   st.style.display='none'; st.className='s-msg';
 
-  const r=await fetch('/api/get-tokens').then(r=>r.json()).catch(()=>null);
+  const url='/api/get-tokens'+(scanAll?'?scan_all=1':'');
+  const r=await fetch(url).then(r=>r.json()).catch(()=>null);
   document.getElementById('inc-loading').style.display='none';
 
   if(!r||!r.ok){
@@ -2760,7 +2824,22 @@ async function openIncinerator(){
     return;
   }
 
-  _incTokens=(r.tokens||[]).filter(t=>t.can_close);
+  _incTokens=r.tokens||[];
+
+  // Update mode UI
+  const pill=document.getElementById('inc-mode-pill');
+  const saBtn=document.getElementById('inc-scan-all-btn');
+  const ssBtn=document.getElementById('inc-scan-smart-btn');
+  const warn=document.getElementById('inc-scan-warn');
+  if(scanAll){
+    pill.textContent='All Tokens'; pill.className='inc-scan-pill all';
+    saBtn.style.display='none'; ssBtn.style.display='';
+    warn.classList.add('show');
+  } else {
+    pill.textContent='Smart Scan'; pill.className='inc-scan-pill smart';
+    saBtn.style.display=''; ssBtn.style.display='none';
+    warn.classList.remove('show');
+  }
 
   if(!_incTokens.length){
     document.getElementById('inc-empty').style.display='block';
@@ -2768,25 +2847,19 @@ async function openIncinerator(){
   }
 
   document.getElementById('inc-found-count').textContent=_incTokens.length;
-  const list=document.getElementById('inc-token-list');
-  list.innerHTML=_incTokens.map((t,i)=>{
-    const shortMint=t.mint?(t.mint.slice(0,8)+'…'+t.mint.slice(-6)):'—';
-    const solscanUrl='https://solscan.io/token/'+t.mint;
-    const bal=t.raw===0?'<span style="color:var(--green)">Empty account</span>'
-      :`<span style="color:var(--yellow)">Dust: ${t.balance} tokens</span>`;
-    const solRent='~'+(t.sol_rent||0.002039).toFixed(4)+' SOL';
-    return `<label class="inc-token-row">
-      <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-sol="${t.sol_rent||0.002039}" checked onchange="_incUpdateSummary()">
-      <div class="inc-token-info">
-        <a class="inc-token-mint" href="${solscanUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t.mint}">${shortMint}</a>
-        <span class="inc-token-bal">${bal}</span>
-      </div>
-      <span class="inc-token-sol">${solRent}</span>
-    </label>`;
-  }).join('');
-
+  document.getElementById('inc-token-list').innerHTML=_incTokens.map(_incRenderRow).join('');
   _incUpdateSummary();
   document.getElementById('inc-body').style.display='block';
+}
+
+async function openIncinerator(){
+  if(!phantomKey) return;
+  document.getElementById('incinerator-modal').classList.add('open');
+  await _incLoad(false);
+}
+
+async function _incSetMode(all){
+  await _incLoad(all);
 }
 
 function _incUpdateSummary(){
@@ -2796,12 +2869,12 @@ function _incUpdateSummary(){
   cbs.forEach(cb=>sol+=parseFloat(cb.dataset.sol||0));
   document.getElementById('inc-summary-text').textContent=count+' account'+(count!==1?'s':'')+' selected';
   document.getElementById('inc-sol-est').textContent='~'+sol.toFixed(4)+' SOL';
-  const burnBtn=document.getElementById('inc-burn-btn');
-  burnBtn.disabled=count===0;
+  document.getElementById('inc-burn-btn').disabled=count===0;
 }
 
 function _incSelectAll(all){
-  document.querySelectorAll('.inc-checkbox').forEach(cb=>cb.checked=all);
+  // In select-all, only select accounts we can actually close
+  document.querySelectorAll('.inc-checkbox:not(:disabled)').forEach(cb=>cb.checked=all);
   _incUpdateSummary();
 }
 
@@ -2834,7 +2907,7 @@ async function burnSelected(){
       st.className='s-msg err';
       btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';
     }
-  }catch(e){
+  } catch(e){
     st.textContent='Error: '+e.message;
     st.className='s-msg err'; st.style.display='block';
     btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';

@@ -2098,6 +2098,8 @@ def api_get_tokens():
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
 
+    scan_all = request.args.get('scan_all', '').lower() in ('1', 'true', 'yes')
+
     conn = sqlite3.connect(DB_FILE)
     row  = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
     conn.close()
@@ -2111,10 +2113,13 @@ def api_get_tokens():
         except Exception:
             pass
 
-    wallets = list(dict.fromkeys([wallet, trading_pk]))
+    wallets   = list(dict.fromkeys([wallet, trading_pk]))
     all_accs, _ = _get_spl_token_accounts(wallets)
 
-    tokens = []
+    # ── Parse all accounts ──
+    parsed: list = []
+    mints_needed: list = []
+    seen_mints:   set  = set()
     for acc in all_accs:
         try:
             pub      = acc.get('pubkey', '')
@@ -2123,26 +2128,99 @@ def api_get_tokens():
             decimals = int(tok_amt.get('decimals', 0))
             raw_str  = str(tok_amt.get('amount', '0'))
             ui_str   = tok_amt.get('uiAmountString', '0')
+            ui_float = float(tok_amt.get('uiAmount') or 0)
             lamports = int(acc.get('account', {}).get('lamports', 2039280))
             mint_str = info.get('mint', '')
             owner_oc = info.get('owner', '')
-            raw_int  = int(raw_str) if raw_str.isdigit() else 1
-            closeable = raw_int == 0 or raw_int < _DUST_THRESHOLD
-            tokens.append({
-                'pubkey':    pub,
-                'mint':      mint_str,
-                'balance':   ui_str,
-                'raw':       raw_int,
-                'decimals':  decimals,
-                'sol_rent':  round(lamports / 1e9, 6),
-                'closeable': closeable,
-                'can_close': closeable and (owner_oc == trading_pk),
-                'has_balance': raw_int > 0,
+            raw_int  = int(raw_str) if raw_str.isdigit() else 0
+            parsed.append({
+                'pubkey': pub, 'mint': mint_str, 'balance_str': ui_str,
+                'balance_ui': ui_float, 'raw': raw_int, 'decimals': decimals,
+                'lamports': lamports, 'owner': owner_oc,
             })
+            if mint_str and mint_str not in seen_mints:
+                seen_mints.add(mint_str)
+                mints_needed.append(mint_str)
         except Exception:
             continue
 
-    return jsonify({'ok': True, 'tokens': tokens, 'trading_wallet': trading_pk})
+    # ── Batch-fetch USD prices from DexScreener (30 mints per request) ──
+    mint_price: dict = {}   # mint -> float price_usd, or None if unknown
+    for i in range(0, len(mints_needed), 30):
+        batch = mints_needed[i:i + 30]
+        try:
+            url = 'https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch)
+            r   = _dex_get(url, timeout=10)
+            if r and r.status_code == 200:
+                best: dict = {}   # mint -> best priceUsd seen
+                for pair in (r.json().get('pairs') or []):
+                    base = (pair.get('baseToken') or {}).get('address', '')
+                    p    = float(pair.get('priceUsd') or 0)
+                    if base in seen_mints and p > 0:
+                        if p > best.get(base, 0):
+                            best[base] = p
+                for m in batch:
+                    mint_price[m] = best.get(m)   # None if no pair found
+        except Exception:
+            for m in batch:
+                mint_price.setdefault(m, None)
+
+    sol_px   = _sol_price_usd if _sol_price_usd > 1 else 150.0
+    DUST_USD = 0.01   # < $0.01 USD is considered dust
+
+    # ── Classify & build result ──
+    _REASON_ORDER = {'empty': 0, 'dust': 1, 'unknown': 2, 'normal': 3}
+    tokens: list = []
+    for a in parsed:
+        mint     = a['mint']
+        price    = mint_price.get(mint)       # None = no DexScreener data
+        ui_amt   = a['balance_ui']
+        raw_int  = a['raw']
+        owned    = a['owner'] == trading_pk
+
+        is_empty = raw_int == 0
+        if price is not None:
+            value_usd = ui_amt * price
+            is_dust   = not is_empty and value_usd < DUST_USD
+            is_unknown = False
+        else:
+            value_usd  = None
+            is_dust    = False
+            is_unknown = not is_empty   # non-empty with no price = unverified
+
+        if is_empty:
+            reason = 'empty'
+        elif is_dust:
+            reason = 'dust'
+        elif is_unknown:
+            reason = 'unknown'
+        else:
+            reason = 'normal'
+
+        closeable = is_empty or is_dust or is_unknown
+        can_close = owned and (closeable if not scan_all else True)
+
+        if not scan_all and not closeable:
+            continue   # hide valuable known tokens in smart mode
+
+        tokens.append({
+            'pubkey':    a['pubkey'],
+            'mint':      mint,
+            'balance':   a['balance_str'],
+            'raw':       raw_int,
+            'decimals':  a['decimals'],
+            'sol_rent':  round(a['lamports'] / 1e9, 6),
+            'price_usd': round(price, 8) if price else None,
+            'value_usd': round(value_usd, 4) if value_usd is not None else None,
+            'closeable': closeable,
+            'can_close': can_close,
+            'reason':    reason,
+            'owned':     owned,
+        })
+
+    tokens.sort(key=lambda t: (_REASON_ORDER.get(t['reason'], 9), -t['sol_rent']))
+    return jsonify({'ok': True, 'tokens': tokens,
+                    'trading_wallet': trading_pk, 'scan_all': scan_all})
 
 
 # ── CLAIM SOL ──
