@@ -555,7 +555,7 @@ def _redact_keys(text: str) -> str:
 def _security_selftest() -> bool:
     STATE_ALLOWED    = frozenset({
         'trader_running', 'usdc', 'sol', 'positions', 'positions_detail',
-        'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key',
+        'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key', 'sol_price',
     })
     SETTINGS_ALLOWED = frozenset({
         'ok', 'has_trading_key', 'max_trade_size', 'min_trade_size', 'daily_loss_limit', 'msg',
@@ -620,7 +620,7 @@ def _run_security_checks() -> list:
     # 3. /api/state schema contains no forbidden response fields
     _state_schema = frozenset({
         'trader_running', 'usdc', 'sol', 'positions', 'positions_detail',
-        'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key',
+        'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key', 'sol_price',
     })
     leaked = _FORBIDDEN_RESPONSE_KEYS & _state_schema
     if leaked:
@@ -836,6 +836,8 @@ state = {
     'token_of_the_day': None,
     'totd_updated_at': 0.0,
 }
+
+_sol_price_usd: float = 0.0  # refreshed each token_loop cycle via DexScreener
 
 # ── DEXSCREENER HTTP HELPERS ──
 _DEX_HEADERS   = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
@@ -1282,6 +1284,19 @@ def token_loop():
             add_log(str(len(qualifying)) + '/' + str(total_disc) + ' qualify (score≥4.5) — '
                     + ('best: ' + display[0]['symbol'] + ' ' + str(display[0]['score']) + '/10'
                        if display else 'no tokens'))
+            # Refresh SOL/USD price once per scan cycle
+            global _sol_price_usd
+            try:
+                _sr = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + SOL_MINT, timeout=6)
+                if _sr and _sr.status_code == 200:
+                    _pairs = (_sr.json().get('pairs') or [])
+                    _p = next((p for p in _pairs if (p.get('quoteToken') or {}).get('address') == USDC_MINT), _pairs[0] if _pairs else None)
+                    if _p:
+                        _sp = float(_p.get('priceUsd', 0) or 0)
+                        if _sp > 1:
+                            _sol_price_usd = _sp
+            except Exception:
+                pass
         except: pass
         time.sleep(120)
 
@@ -1941,6 +1956,7 @@ def api_state():
             'wallet':           wallet,
             'is_admin':         _is_owner(wallet),
             'has_trading_key':  htk,
+            'sol_price':        _sol_price_usd,
         })
     safe_sys_logs = [{'t': ln.get('t', ''), 'msg': _redact_keys(str(ln.get('msg', '')))}
                      for ln in state['log_lines'][:20]]
@@ -1953,6 +1969,7 @@ def api_state():
         'wallet':          state.get('wallet', ''),
         'is_admin':        False,
         'has_trading_key': False,
+        'sol_price':       _sol_price_usd,
     })
 
 # ── TRADER START/STOP ──
