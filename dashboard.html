@@ -803,6 +803,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-lbl">SOL Balance</div>
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub">available to trade</div>
+      <div class="stat-sub" id="s-sol-usdc" style="color:var(--muted);margin-top:2px"></div>
       <button id="claim-sol-btn" class="claim-sol-btn" onclick="claimSol()" title="Close empty token accounts and reclaim rent SOL">⚡ Claim SOL</button>
     </div>
     <div class="stat">
@@ -1350,11 +1351,31 @@ document.addEventListener('visibilitychange', async function(){
 });
 
 // ── BALANCE REFRESH ──
+let _solUsdPrice=0;
+async function _fetchSolPrice(){
+  try{
+    const r=await fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT').then(r=>r.json());
+    const p=parseFloat(r?.price||0);
+    if(p>1) _solUsdPrice=p;
+  }catch(e){}
+}
+_fetchSolPrice();
+setInterval(_fetchSolPrice,60000);
+
+function _updateSolUsdc(sol){
+  const el=document.getElementById('s-sol-usdc');
+  if(!el) return;
+  if(_solUsdPrice>0&&sol>0) el.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
+  else el.textContent='';
+}
+
 async function fetchBalance(){
   if(!phantomKey||!appVisible()) return;
   const r=await fetch('/api/balance').then(r=>r.json()).catch(()=>null);
   if(r?.ok){
-    document.getElementById('s-sol').textContent=(+r.sol||0).toFixed(4);
+    const sol=+r.sol||0;
+    document.getElementById('s-sol').textContent=sol.toFixed(4);
+    _updateSolUsdc(sol);
   }
 }
 
@@ -1400,7 +1421,9 @@ async function fetchState(){
   document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
   if(phantomKey){
     if(r.sol!=null){
-      document.getElementById('s-sol').textContent=(+r.sol).toFixed(4);
+      const _sv=+r.sol;
+      document.getElementById('s-sol').textContent=_sv.toFixed(4);
+      _updateSolUsdc(_sv);
       const uw=document.getElementById('usdc-warn');
       if(uw) uw.style.display=(+r.sol<0.02)?'block':'none';
     }
