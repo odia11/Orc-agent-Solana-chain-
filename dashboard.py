@@ -17,11 +17,14 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 @app.before_request
 def _security_gate():
     """Runs before every other before_request hook (registration order).
-    IP-based blocking has been removed — this only logs scanner/exploit probe
-    paths for visibility. It never blocks a request based on IP."""
+    IP-based blocking/banning has been removed — this only logs scanner/exploit
+    probe paths for visibility, and applies a soft global rate limit (429,
+    never a ban) to blunt DDoS-style floods without locking out real users."""
     ip = request.remote_addr or '0.0.0.0'
     if _BLOCKED_PROBE_RE.search(request.path):
         _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
+    if not _rate_ok('global:' + ip, 60, 60):
+        return jsonify({'error': 'Too many requests'}), 429
     return None
 
 @app.before_request
@@ -1861,8 +1864,6 @@ def save_settings():
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
-    if _is_banned(ip):
-        return jsonify({'ok': False, 'msg': 'Access temporarily blocked'}), 429
     data            = request.json or {}
     private_key_raw = data.get('private_key', '').strip()
     try:
@@ -2028,8 +2029,6 @@ def start_trader():
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
-    if _is_banned(ip):
-        return jsonify({'ok': False, 'msg': 'Access temporarily blocked'}), 429
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
