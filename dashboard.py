@@ -2183,6 +2183,96 @@ def api_state():
         'sol_price':       _sol_price_usd,
     })
 
+# ── PUMP SCANNER ──
+@app.route('/api/pump-scanner')
+@rate_limit(30, 60)
+def api_pump_scanner():
+    """Tokens pumping ≥15% in the last 5m or 1h, reusing the already-scanned/filtered
+    state['tokens'] snapshot (liquidity≥15000, volume5m≥1000) instead of issuing a
+    fresh DexScreener call — keeps this endpoint cheap and consistent with the rest
+    of the dashboard."""
+    live    = state.get('tokens', [])
+    pumping = [t for t in live if t.get('change5m', 0) >= 15 or t.get('change1h', 0) >= 15]
+    pumping.sort(key=lambda t: t.get('change5m', 0), reverse=True)
+    pumping = pumping[:10]
+    out = [{
+        'mint':      t['mint'],
+        'symbol':    t['symbol'],
+        'name':      t['name'],
+        'price':     t['price'],
+        'change5m':  t['change5m'],
+        'change1h':  t['change1h'],
+        'change24h': t['change24h'],
+        'volume24h': t['volume24h'],
+        'liquidity': t['liquidity'],
+        'fdv':       t['fdv'],
+    } for t in pumping]
+    return jsonify({'ok': True, 'tokens': out})
+
+@app.route('/api/pump-scanner/buy', methods=['POST'])
+@rate_limit(10, 60)
+def api_pump_scanner_buy():
+    ip     = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    mint = str((request.json or {}).get('mint', '')).strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False,
+                        'msg': 'Trading suspended — security check failure. Contact admin to resume.'}), 503
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c   = conn.cursor()
+        c.execute('SELECT encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    enc_blob       = row[0]
+    min_trade_usdc = float(row[1]) if row[1] is not None else 1.0
+
+    token_data = get_token_data(mint)
+    if not token_data or token_data['price'] <= 0:
+        return jsonify({'ok': False, 'msg': 'Could not fetch a live price for this token'}), 400
+
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            trading_wallet = str(_KP.from_base58_string(_pk).pubkey())
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+
+    us_sol = _get_user_sol(trading_wallet)
+    # Manual snipe uses the user's configured minimum trade size (conservative default
+    # for a one-off pick outside the scoring algorithm), converted to SOL.
+    spend = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
+    spend = round(min(spend, us_sol), 4)
+    if spend < 0.001:
+        return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to buy'}), 400
+
+    with _use_key(enc_blob, wallet) as _pk:
+        ok = _execute_user_swap(wallet, _pk, 'buy', mint, str(spend))
+    if not ok:
+        return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
+
+    us = get_user_state(wallet)
+    pos = us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
+    pos['amount']    = pos.get('amount', 0.0) + spend / token_data['price']
+    pos['buy_price'] = token_data['price']
+    pos['spend']     = pos.get('spend', 0.0) + spend
+    pos['symbol']    = token_data['symbol'] or mint[:8]
+    pos['opened_at'] = time.time()
+    us['positions'][mint] = pos
+    short = wallet[:6] + '...' + wallet[-4:]
+    add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
+                 ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
+    note = '' if us.get('trader_running') else ' — start the trader for automatic TP/SL on this position'
+    return jsonify({'ok': True, 'msg': 'Bought ' + pos['symbol'] + note, 'symbol': pos['symbol'], 'spend': spend})
+
 # ── TRADER START/STOP ──
 @app.route('/api/trader/start', methods=['POST'])
 @rate_limit(5, 60)
