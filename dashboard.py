@@ -1,8 +1,8 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii
 from contextlib import contextmanager
 from flask import Flask, jsonify, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -146,6 +146,13 @@ except Exception:
     print('CRITICAL: ENCRYPTION_KEY is not a valid Fernet key. Refusing to start.', flush=True)
     sys.exit(1)
 
+# Non-reversible fingerprint of ENCRYPTION_KEY — safe to log (unlike the key itself).
+# Logged at startup and alongside every encrypt/decrypt so a key mismatch between when a
+# private key was *saved* and when it's later *decrypted* (e.g. ENCRYPTION_KEY rotated or
+# differs between environments) shows up immediately as mismatched fingerprints in the logs.
+_enc_key_fingerprint = hashlib.sha256(_enc_key_str.encode()).hexdigest()[:8]
+print(f'[startup] ENCRYPTION_KEY fingerprint: {_enc_key_fingerprint} (sha256 prefix — not the key itself)', flush=True)
+
 def _wallet_fernet(wallet: str) -> Fernet:
     """Derive a wallet-specific Fernet key via HMAC-SHA256(ENCRYPTION_KEY, wallet_address)."""
     derived = hmac.digest(_enc_key_str.encode(), wallet.encode(), 'sha256')
@@ -156,14 +163,42 @@ def encrypt_private_key(raw: str, wallet: str) -> str:
     Result is prefixed with 'v2:' to distinguish from legacy single-layer ciphertext."""
     l1 = _fernet.encrypt(raw.encode())
     l2 = _wallet_fernet(wallet).encrypt(l1)
+    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    print(f'[encrypt] wallet={short_w} enc_key_fp={_enc_key_fingerprint}', flush=True)
     return 'v2:' + l2.decode()
 
 def decrypt_private_key(enc: str, wallet: str) -> str:
-    """Decrypt v2 (double-encrypted) or legacy v1 (single Fernet layer) private key."""
-    if enc.startswith('v2:'):
-        l1 = _wallet_fernet(wallet).decrypt(enc[3:].encode())
-        return _fernet.decrypt(l1).decode()
-    return _fernet.decrypt(enc.encode()).decode()  # legacy v1 — migrated on next save
+    """Decrypt v2 (double-encrypted) or legacy v1 (single Fernet layer) private key.
+    Logs the specific failure category (bad input / malformed ciphertext / wrong key or
+    corrupted blob / encoding issue) before re-raising, so the real cause is visible in
+    prod logs instead of a generic failure. Never logs key or plaintext material."""
+    short_w  = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    blob_len = len(enc) if isinstance(enc, str) else -1
+    is_v2    = isinstance(enc, str) and enc.startswith('v2:')
+    try:
+        if not isinstance(enc, str) or not enc:
+            raise ValueError(f'encrypted blob is {"empty" if enc == "" else type(enc).__name__}, expected non-empty str')
+        if is_v2:
+            l1 = _wallet_fernet(wallet).decrypt(enc[3:].encode())
+            return _fernet.decrypt(l1).decode()
+        return _fernet.decrypt(enc.encode()).decode()  # legacy v1 — migrated on next save
+    except InvalidToken:
+        print(f'[decrypt] ✗ InvalidToken  wallet={short_w} v2={is_v2} blob_len={blob_len} '
+              f'enc_key_fp={_enc_key_fingerprint} — either ENCRYPTION_KEY does not match the key '
+              f'used to encrypt this blob (compare fingerprints against the [encrypt] log line '
+              f'for this wallet), or the ciphertext is corrupted/tampered.', flush=True)
+        raise
+    except (binascii.Error, ValueError) as e:
+        print(f'[decrypt] ✗ {type(e).__name__}  wallet={short_w} v2={is_v2} blob_len={blob_len} '
+              f'— malformed ciphertext / wrong key format: {e}', flush=True)
+        raise
+    except UnicodeDecodeError as e:
+        print(f'[decrypt] ✗ UnicodeDecodeError  wallet={short_w} v2={is_v2} blob_len={blob_len} '
+              f'— decrypted bytes are not valid UTF-8 text (encoding issue): {e}', flush=True)
+        raise
+    except Exception as e:
+        print(f'[decrypt] ✗ Unexpected {type(e).__name__}  wallet={short_w} v2={is_v2} blob_len={blob_len}: {e}', flush=True)
+        raise
 
 # ── PERFORMANCE FEE COLLECTION ──
 def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> str:
