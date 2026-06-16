@@ -79,6 +79,12 @@ LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
 DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
+DIFFICULTY_PRESETS = {
+    'EASY':   {'tp': 0.08, 'sl': 0.02, 'm5_min': 0,  'm5_max': None},
+    'MEDIUM': {'tp': 0.12, 'sl': 0.08, 'm5_min': 5,  'm5_max': 20},
+    'HARD':   {'tp': 0.20, 'sl': 0.12, 'm5_min': 10, 'm5_max': 35},
+}
+
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT         = 'So11111111111111111111111111111111111111112'
@@ -531,6 +537,10 @@ def init_db():
         pass
     try:
         c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 0.01')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute("ALTER TABLE users ADD COLUMN difficulty TEXT DEFAULT 'MEDIUM'")
     except sqlite3.OperationalError:
         pass
     # Fix stale users still on the old UI defaults (min=3, max=5, daily=50)
@@ -1517,7 +1527,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, difficulty FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -1533,6 +1543,12 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     user_id          = row[0]
     daily_loss_limit = abs(float(row[2] if row[2] is not None else 10.0))
+    difficulty       = row[3] if (len(row) > 3 and row[3] in DIFFICULTY_PRESETS) else 'MEDIUM'
+    preset           = DIFFICULTY_PRESETS[difficulty]
+    take_profit      = preset['tp']
+    stop_loss        = preset['sl']
+    m5_min           = preset['m5_min']
+    m5_max           = preset['m5_max']
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -1550,12 +1566,14 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
-    add_user_log(wallet, '[' + short + '] Trader started — TP:12% SL:8% | momentum 5-20% in 5m + vol rising | max 5 pos | scan 30s')
+    _m5_desc = ('>0%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
+    print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}... difficulty={difficulty}', flush=True)
+    add_user_log(wallet, '[' + short + '] Trader started [' + difficulty + '] — TP:' + str(round(take_profit*100)) +
+                 '% SL:' + str(round(stop_loss*100)) + '% | momentum ' + _m5_desc + ' in 5m + vol rising | max 5 pos | scan 30s')
     positions = us['positions']
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
-    # Catches any positions that breached -5% while the stop-loss bug was active.
+    # Catches any positions that breached the stop-loss while the bot was offline.
     for _mint, _pos in list(positions.items()):
         if stop_event.is_set(): break
         if _pos.get('amount', 0) <= 0 or _pos.get('buy_price', 0) <= 0:
@@ -1566,7 +1584,7 @@ def user_trader_loop(stop_event, config, wallet: str):
             continue
         _chg = (_price - _pos['buy_price']) / _pos['buy_price']
         _label = (_td.get('symbol', '') if _td else '') or _pos.get('symbol', _mint[:8])
-        if _chg <= -0.08:
+        if _chg <= -stop_loss:
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             print(f'[trader] {short} STARTUP FORCE SELL {_label} {round(_chg*100,1)}%', flush=True)
             with _use_key(_enc_blob, wallet) as _pk:
@@ -1623,9 +1641,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
                     exit_reason = None
-                    if chg >= 0.12:
+                    if chg >= take_profit:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
-                    elif chg <= -0.08:
+                    elif chg <= -stop_loss:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
@@ -1651,13 +1669,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _v5m = _t.get('volume5m', 0)
                         _v1h = _t.get('volume1h', 0)
                         _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
-                        # Buy only on rising momentum (5-20% in 5m) with accelerating volume.
+                        # Buy only on rising momentum (range set by difficulty) with accelerating volume.
                         # Skip tokens up 50%+ on the hour — momentum already played out.
-                        if 5 <= _m5 <= 20 and _vol_rising and _t.get('change1h', 0) < 50:
+                        _m5_ok = (_m5 > m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max)
+                        if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50:
                             qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (5-20% m5 + vol rising)')
+                                 str(total_live) + ' qualify (' + _m5_desc + ' m5 + vol rising)')
                     if qualifying:
                         best  = qualifying[0]
                         bmint = best['mint']
@@ -1927,6 +1946,48 @@ def save_settings():
     get_user_state(wallet)['has_trading_key'] = final_has_key
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True, 'has_trading_key': final_has_key})
+
+# ── DIFFICULTY ──
+@app.route('/api/difficulty', methods=['GET'])
+@rate_limit(30, 60)
+def get_difficulty():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    conn = sqlite3.connect(DB_FILE)
+    c    = conn.cursor()
+    c.execute('SELECT difficulty FROM users WHERE wallet_address=?', (wallet,))
+    row  = c.fetchone()
+    conn.close()
+    difficulty = (row[0] if row and row[0] else 'MEDIUM')
+    if difficulty not in DIFFICULTY_PRESETS:
+        difficulty = 'MEDIUM'
+    return jsonify({'ok': True, 'difficulty': difficulty})
+
+@app.route('/api/difficulty', methods=['POST'])
+@rate_limit(10, 60)
+def save_difficulty():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    data       = request.json or {}
+    difficulty = str(data.get('difficulty', '')).strip().upper()
+    if difficulty not in DIFFICULTY_PRESETS:
+        return jsonify({'ok': False, 'msg': 'Invalid difficulty'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c   = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+        if row:
+            c.execute('UPDATE users SET difficulty=? WHERE wallet_address=?', (difficulty, wallet))
+        else:
+            c.execute('INSERT INTO users (wallet_address, difficulty) VALUES (?,?)', (wallet, difficulty))
+        conn.commit()
+    finally:
+        conn.close()
+    add_user_log(wallet, 'Difficulty set to ' + difficulty + ' for ' + wallet[:6] + '...' + wallet[-4:])
+    return jsonify({'ok': True, 'difficulty': difficulty})
 
 @app.route('/api/settings/key', methods=['DELETE'])
 @rate_limit(5, 60)

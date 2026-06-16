@@ -106,7 +106,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .badge-trade{background:rgba(106,163,255,.16);color:var(--blue);border:1px solid rgba(106,163,255,.35)}
 .mode-btn{padding:9px 18px;font-size:10px;font-weight:700;border-radius:7px;border:none;cursor:pointer;letter-spacing:.07em;transition:all .2s;font-family:'Orbitron',monospace;white-space:nowrap}
 .trade-btn{background:var(--blue);color:#fff}
-.trade-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.trade-btn:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px)}
+.trade-btn:disabled{cursor:not-allowed}
+.diff-row{display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;padding-top:10px;border-top:1px solid var(--border2)}
+.diff-label{font-size:9px;color:var(--dim);letter-spacing:.1em;font-family:'Orbitron',monospace;margin-right:2px}
+.diff-btn{font-size:9px;padding:5px 13px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.05em;transition:all .15s}
+.diff-btn:hover{border-color:var(--blue);color:#fff}
+.diff-btn.active[data-diff="EASY"]{background:var(--green);border-color:var(--green);color:#06140d}
+.diff-btn.active[data-diff="MEDIUM"]{background:var(--blue);border-color:var(--blue);color:#fff}
+.diff-btn.active[data-diff="HARD"]{background:var(--red);border-color:var(--red);color:#fff}
 
 /* ── MARKET PANEL ── */
 .market-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -980,12 +988,18 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="mode-icon">📈</div>
         <div class="mode-info">
           <div class="mode-title">TRADE MODE</div>
-          <div class="mode-desc">AI-powered momentum scalper. Buys tokens showing upward momentum (5-20% rise in last 5 min). Auto-exits at 12% take profit or 8% stop loss. Full 100% position exit on both targets.</div>
+          <div class="mode-desc">AI-powered momentum scalper. Select a difficulty below to set the entry filter and take-profit/stop-loss targets.</div>
         </div>
       </div>
       <div class="mode-right">
         <div class="badge badge-idle" id="trade-badge">IDLE</div>
-        <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ START TRADING</button>
+        <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45" title="Select a difficulty first">▶ START TRADING</button>
+      </div>
+      <div class="diff-row" id="diff-row">
+        <span class="diff-label">DIFFICULTY</span>
+        <button class="diff-btn" data-diff="EASY" onclick="setDifficulty('EASY')">EASY</button>
+        <button class="diff-btn" data-diff="MEDIUM" onclick="setDifficulty('MEDIUM')">MEDIUM</button>
+        <button class="diff-btn" data-diff="HARD" onclick="setDifficulty('HARD')">HARD</button>
       </div>
     </div>
     <div class="trade-warn" id="trade-warn"></div>
@@ -1414,8 +1428,6 @@ async function launchApp(){
     document.getElementById('wallet-short').textContent=short;
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
-    const tbMain=document.getElementById('trade-btn');
-    tbMain.disabled=false; tbMain.style.opacity=''; tbMain.title='';
     fetchBalance();
     fetch('/api/settings').then(r=>r.json()).then(r=>{
       if(r?.ok){
@@ -1426,9 +1438,9 @@ async function launchApp(){
         _updateKeyStatus();
       }
     }).catch(()=>{});
+    loadDifficulty();
   } else {
-    const tb=document.getElementById('trade-btn');
-    tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
+    setDifficultyUI(null);
   }
   updateAuthBtns();
   checkOwnerPanel();
@@ -2654,12 +2666,62 @@ function _lfStartCountdown(){
   },1000);
 }
 
+const DIFFICULTY_TEXT={
+  EASY:'AI-powered momentum scalper (EASY). Buys any token showing upward momentum in the last 5 min. Auto-exits at 8% take profit or 2% stop loss. Full 100% position exit on both targets.',
+  MEDIUM:'AI-powered momentum scalper (MEDIUM). Buys tokens showing upward momentum (5-20% rise in last 5 min). Auto-exits at 12% take profit or 8% stop loss. Full 100% position exit on both targets.',
+  HARD:'AI-powered momentum scalper (HARD). Buys tokens showing strong momentum (10-35% rise in last 5 min). Auto-exits at 20% take profit or 12% stop loss. Full 100% position exit on both targets.'
+};
+const DIFFICULTY_DEFAULT_DESC='AI-powered momentum scalper. Select a difficulty below to set the entry filter and take-profit/stop-loss targets.';
+let currentDifficulty=null;   // never pre-selected — user must click EASY/MEDIUM/HARD each session
+
+function setDifficultyUI(diff){
+  currentDifficulty=diff||null;
+  document.querySelectorAll('.diff-btn').forEach(b=>{
+    b.classList.toggle('active', !!diff && b.dataset.diff===diff);
+  });
+  const desc=document.querySelector('#trade-card .mode-desc');
+  if(desc) desc.textContent=currentDifficulty?DIFFICULTY_TEXT[currentDifficulty]:DIFFICULTY_DEFAULT_DESC;
+  _refreshTradeBtnState();
+}
+
+async function loadDifficulty(){
+  // Intentionally does not pre-select a difficulty on load — the START TRADING
+  // button stays disabled until the user explicitly clicks EASY/MEDIUM/HARD.
+  setDifficultyUI(null);
+}
+
+async function setDifficulty(diff){
+  if(diff===currentDifficulty) return;
+  if(typeof traderOn!=='undefined' && traderOn){
+    showTradeWarn('⚠️ Stop trading before changing difficulty — it applies on next start');
+    return;
+  }
+  const prev=currentDifficulty;
+  setDifficultyUI(diff);
+  try{
+    const res=await fetch('/api/difficulty',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({difficulty:diff})});
+    const rj=await res.json().catch(()=>null);
+    if(!rj||!rj.ok) setDifficultyUI(prev);
+  }catch(e){ setDifficultyUI(prev); }
+}
+
+function _refreshTradeBtnState(){
+  const tb=document.getElementById('trade-btn');
+  if(!tb) return;
+  if(traderOn){ tb.disabled=false; tb.title=''; tb.style.opacity=''; return; }
+  if(!phantomKey){
+    tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
+  } else if(!currentDifficulty){
+    tb.disabled=true; tb.title='Select a difficulty first'; tb.style.opacity='.45';
+  } else {
+    tb.disabled=false; tb.title=''; tb.style.opacity='';
+  }
+}
+
 function updateBtns(){
   const tb=document.getElementById('trade-btn');
   const tbadge=document.getElementById('trade-badge');
   const tc=document.getElementById('trade-card');
-  // Fallback: never leave button disabled when wallet is connected
-  if(phantomKey && tb.disabled){ tb.disabled=false; tb.style.opacity=''; }
   if(traderOn){
     tb.textContent='■ STOP TRADING';
     tbadge.textContent='RUNNING';tbadge.className='badge badge-trade';
@@ -2669,9 +2731,14 @@ function updateBtns(){
     tbadge.textContent='IDLE';tbadge.className='badge badge-idle';
     tc.className='mode';
   }
+  _refreshTradeBtnState();
 }
 
 async function toggleTrader(){
+  if(!traderOn && !currentDifficulty){
+    showTradeWarn('⚠️ Select a difficulty first');
+    return;
+  }
   if(!traderOn && !settingsHasKey){
     showTradeWarn('⚠️ Add your trading wallet private key in Settings first');
     openSettings();
@@ -2689,7 +2756,7 @@ async function toggleTrader(){
   const tb=document.getElementById('trade-btn');
   tb.disabled=true; tb.style.opacity='.6';
   // Watchdog: re-enable after 5 s regardless, so a hung request never leaves the button stuck
-  const watchdog=setTimeout(()=>{ tb.disabled=false; tb.style.opacity=''; },5000);
+  const watchdog=setTimeout(()=>{ _refreshTradeBtnState(); },5000);
   try{
     const res=await fetch(starting?'/api/trader/start':'/api/trader/stop',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({interval:300,trade_pct:0.20,max_usdc:1.0})});
     const rj=await res.json().catch(()=>null);
@@ -2701,7 +2768,7 @@ async function toggleTrader(){
     }
     await fetchState();    // authoritative sync
   }catch(e){ console.error('toggleTrader',e); }
-  finally{ clearTimeout(watchdog); tb.disabled=false; tb.style.opacity=''; }
+  finally{ clearTimeout(watchdog); _refreshTradeBtnState(); }
 }
 
 // ── MOBILE DETECTION & ONBOARD SETUP ──
