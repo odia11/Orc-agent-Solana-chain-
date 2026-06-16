@@ -15,6 +15,27 @@ app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 @app.before_request
+def _security_gate():
+    """Runs before every other before_request hook (registration order).
+    Blocks permanently-banned IPs, scanner/exploit probe paths, and IPs that
+    exceed the global per-IP request rate, before any routing or view code runs."""
+    ip = request.remote_addr or '0.0.0.0'
+    if ip in _PERMANENT_BAN_IPS:
+        return jsonify({'error': 'Forbidden'}), 403
+    if _is_banned(ip):
+        return jsonify({'error': 'Forbidden'}), 403
+    if _BLOCKED_PROBE_RE.search(request.path):
+        _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
+        _record_ip_failure(ip, duration=86400, threshold=3, window=3600)
+        return jsonify({'error': 'Forbidden'}), 403
+    if not _is_owner(session.get('wallet', '')):
+        if not _rate_ok('global:' + ip, 30, 60):
+            _ban_ip(ip, 86400)
+            _log_security_event('rate_limit_ban', 'anonymous', f'{ip} exceeded 30 req/min — banned 24h')
+            return jsonify({'error': 'Too many requests'}), 429
+    return None
+
+@app.before_request
 def _refresh_session():
     if session.get('wallet'):
         session.modified = True  # extend cookie lifetime on every API call
@@ -185,6 +206,22 @@ def is_valid_solana_private_key(key: str) -> bool:
         except Exception:
             pass
     return False
+
+# ── IP BLOCKLIST / HONEYPOT GATE ──
+# IPs in this set are blocked unconditionally — never expires, no DB round-trip needed.
+_PERMANENT_BAN_IPS = frozenset({'152.233.12.241'})
+
+# Any request path matching this is a known scanner/exploit probe — never legitimate
+# traffic for this app. Dotfile segments (e.g. /.env, /.git/config) are blocked except
+# /.well-known/ (used for ACME/domain-verification). wp-* and config.php cover the most
+# common CMS-scanner probes.
+_BLOCKED_PROBE_RE = re.compile(
+    r'(^|/)\.(?!well-known(/|$))[^/]*'
+    r'|/wp-admin(/|$)'
+    r'|/wp-login\.php$'
+    r'|/config\.php$',
+    re.IGNORECASE,
+)
 
 # ── RATE LIMITING ──
 _rl_lock: threading.Lock = threading.Lock()
@@ -518,6 +555,11 @@ def init_db():
         timestamp  TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_seclog_ts ON security_log(timestamp)')
+    c.execute('''CREATE TABLE IF NOT EXISTS banned_ips (
+        ip         TEXT PRIMARY KEY,
+        expires_at REAL NOT NULL,
+        banned_at  TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
     # Migrate: add key_hash column to users if not already present
     try:
         c.execute('ALTER TABLE users ADD COLUMN key_hash TEXT DEFAULT ""')
@@ -535,7 +577,7 @@ _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
 _SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
 
 # Paths that should never be legitimately accessed — any hit is a scan/probe.
-_HONEYPOT_PATHS = frozenset({'/.env', '/wp-login.php', '/admin', '/phpmyadmin', '/config.php', '/.git/config'})
+_HONEYPOT_PATHS = frozenset({'/.env', '/wp-login.php', '/admin', '/phpmyadmin', '/config.php', '/.git/config', '/wp-admin'})
 
 # Fields that must never appear in any JSON response body.
 # Includes DB column names so a runaway SELECT * can never accidentally expose them.
@@ -757,11 +799,48 @@ def _check_wallet_multi_ip(wallet: str, ip: str) -> bool:
     return False
 
 def _is_banned(ip: str) -> bool:
+    if ip in _PERMANENT_BAN_IPS:
+        return True
     expires = _ip_ban.get(ip, 0)
     if time.time() < expires:
         return True
     _ip_ban.pop(ip, None)
     return False
+
+def _persist_ban(ip: str, expires: float) -> None:
+    """Write the ban to SQLite so it survives a redeploy (DB lives on the Railway volume)."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute(
+            'INSERT INTO banned_ips (ip, expires_at) VALUES (?,?) '
+            'ON CONFLICT(ip) DO UPDATE SET expires_at=excluded.expires_at',
+            (ip, expires))
+        conn.commit()
+        conn.close()
+    except Exception:
+        pass
+
+def _ban_ip(ip: str, duration: int) -> None:
+    expires = time.time() + duration
+    _ip_ban[ip] = expires
+    _persist_ban(ip, expires)
+    print(f'SECURITY: IP {ip} banned for {duration}s', flush=True)
+
+def _load_banned_ips() -> None:
+    """Restore active bans from SQLite on startup so they survive a redeploy."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        now  = time.time()
+        c.execute('DELETE FROM banned_ips WHERE expires_at < ?', (now,))
+        c.execute('SELECT ip, expires_at FROM banned_ips')
+        rows = c.fetchall()
+        conn.commit()
+        conn.close()
+        for ip, expires in rows:
+            _ip_ban[ip] = expires
+    except Exception:
+        pass
 
 def _record_ip_failure(ip: str, duration: int = 3600, threshold: int = 3, window: int = 600) -> None:
     """Ban IP for duration seconds after threshold failures within window seconds."""
@@ -770,8 +849,7 @@ def _record_ip_failure(ip: str, duration: int = 3600, threshold: int = 3, window
     hits.append(now)
     _ip_warn[ip] = hits
     if len(hits) >= threshold:
-        _ip_ban[ip] = now + duration
-        print(f'SECURITY: IP {ip} banned {duration}s after {len(hits)} failures', flush=True)
+        _ban_ip(ip, duration)
 
 @contextmanager
 def _use_key(enc_blob: str, wallet: str):
@@ -1700,18 +1778,21 @@ def index():
 
 # ── HONEYPOTS ──
 # These paths are never legitimately accessed. Any hit means a scanner or attacker.
-# Log the IP, increment failure count (triggering ban on repeat hits), return 404.
+# In practice _security_gate() (registered above, runs first) already intercepts
+# these via _BLOCKED_PROBE_RE — this handler is defense-in-depth and keeps the
+# routes registered so the self-audit's "honeypots present" check stays meaningful.
 @app.route('/.env')
 @app.route('/wp-login.php')
 @app.route('/admin')
 @app.route('/phpmyadmin')
 @app.route('/config.php')
 @app.route('/.git/config')
+@app.route('/wp-admin')
 def _honeypot():
     ip = request.remote_addr or 'unknown'
     _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
-    _record_ip_failure(ip)
-    return '', 404
+    _record_ip_failure(ip, duration=86400, threshold=3, window=3600)
+    return jsonify({'error': 'Forbidden'}), 403
 
 # ── VERSION ──
 import subprocess as _subprocess, time as _time
@@ -2938,19 +3019,22 @@ def admin_bans():
         return jsonify({'error': 'Unauthorized'}), 403
     now  = time.time()
     bans = []
+    for ip in _PERMANENT_BAN_IPS:
+        bans.append({'ip': ip, 'expires_at': None, 'mins_left': None, 'permanent': True})
     for ip, expires in list(_ip_ban.items()):
         if expires > now:
             bans.append({
                 'ip':         ip,
                 'expires_at': int(expires),
                 'mins_left':  round((expires - now) / 60, 1),
+                'permanent':  False,
             })
         else:
             _ip_ban.pop(ip, None)
             _ip_warn.pop(ip, None)
     with _rl_lock:
         rl_bucket_count = len(_rl_hits)
-    return jsonify({'bans': sorted(bans, key=lambda x: x['mins_left'], reverse=True),
+    return jsonify({'bans': sorted(bans, key=lambda x: (not x['permanent'], x['mins_left'] or 0), reverse=True),
                     'rl_bucket_count': rl_bucket_count})
 
 
@@ -2965,9 +3049,18 @@ def admin_clear_ratelimit():
     data   = request.json or {}
     target = (data.get('ip') or '').strip()
     if target:
+        if target in _PERMANENT_BAN_IPS:
+            return jsonify({'ok': False, 'msg': f'{target} is permanently banned in code and cannot be cleared here'})
         banned = target in _ip_ban
         _ip_ban.pop(target, None)
         _ip_warn.pop(target, None)
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.execute('DELETE FROM banned_ips WHERE ip=?', (target,))
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
         with _rl_lock:
             keys = [k for k in list(_rl_hits) if k.endswith(':' + target)]
             for k in keys:
@@ -2982,12 +3075,19 @@ def admin_clear_ratelimit():
         n_rl   = len(_rl_hits)
         _ip_ban.clear()
         _ip_warn.clear()
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            conn.execute('DELETE FROM banned_ips')
+            conn.commit()
+            conn.close()
+        except Exception:
+            pass
         with _rl_lock:
             _rl_hits.clear()
         print(f'[admin] clear_ratelimit: {wallet[:8]}… cleared ALL '
               f'({n_bans} bans, {n_rl} rl buckets)', flush=True)
         return jsonify({'ok': True,
-                        'msg': f'Cleared all — {n_bans} ban(s) and {n_rl} rate-limit bucket(s) removed'})
+                        'msg': f'Cleared all — {n_bans} ban(s) and {n_rl} rate-limit bucket(s) removed (permanent code-level bans unaffected)'})
 
 
 @app.route('/api/admin/test', methods=['POST'])
@@ -3274,6 +3374,7 @@ if not OWNER_WALLET:
     print('         is_admin will never be true for any user.')
     print('         Set OWNER_WALLET in Railway Variables and redeploy.')
 init_db()
+_load_banned_ips()
 threading.Thread(target=token_loop,            daemon=True).start()
 threading.Thread(target=totd_loop,             daemon=True).start()
 threading.Thread(target=_cleanup_loop,         daemon=True).start()
