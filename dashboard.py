@@ -2244,40 +2244,46 @@ def api_balance():
     return jsonify({'ok': True, 'sol': us.get('sol', 0.0), 'usdc': us.get('usdc', 0.0)})
 
 # ── TOKEN ACCOUNT HELPERS ──
-_SPL_PROG_STR = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+_SPL_PROG_STR        = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+_SPL_PROG_2022_STR   = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'  # Token-2022 / Token Extensions
+_SPL_PROGRAMS        = [_SPL_PROG_STR, _SPL_PROG_2022_STR]
 _DUST_THRESHOLD = 1000  # raw tokens below which an account is considered dust
 
 def _get_spl_token_accounts(wallets: list) -> tuple:
-    """Fetch all SPL token accounts for one or more wallet addresses.
+    """Fetch all SPL token accounts for one or more wallet addresses, across both
+    the legacy Token program and Token-2022 (many newer mints/empty accounts only
+    exist under Token-2022, so skipping it made the incinerator miss real accounts).
     Deduplicates by pubkey. Returns (accounts_list, working_rpc_url)."""
     headers = {'Content-Type': 'application/json'}
     all_accs: list = []
     working_rpc: str = CLAIM_SOL_RPCS[-1]
     seen: set = set()
     for owner in wallets:
-        payload = {
-            'jsonrpc': '2.0', 'id': 1,
-            'method':  'getTokenAccountsByOwner',
-            'params':  [owner, {'programId': _SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
-        }
-        for rpc in CLAIM_SOL_RPCS:
-            time.sleep(0.6)
-            try:
-                r = requests.post(rpc, json=payload, headers=headers, timeout=15)
-                if r.status_code != 200:
+        for prog in _SPL_PROGRAMS:
+            payload = {
+                'jsonrpc': '2.0', 'id': 1,
+                'method':  'getTokenAccountsByOwner',
+                'params':  [owner, {'programId': prog}, {'encoding': 'jsonParsed'}],
+            }
+            for rpc in CLAIM_SOL_RPCS:
+                time.sleep(0.6)
+                try:
+                    r = requests.post(rpc, json=payload, headers=headers, timeout=15)
+                    if r.status_code != 200:
+                        continue
+                    resp = r.json()
+                    if 'error' in resp:
+                        continue
+                    for acc in resp.get('result', {}).get('value', []):
+                        pub = acc.get('pubkey', '')
+                        if pub and pub not in seen:
+                            seen.add(pub)
+                            acc['_token_program'] = prog
+                            all_accs.append(acc)
+                    working_rpc = rpc
+                    break
+                except Exception:
                     continue
-                resp = r.json()
-                if 'error' in resp:
-                    continue
-                for acc in resp.get('result', {}).get('value', []):
-                    pub = acc.get('pubkey', '')
-                    if pub and pub not in seen:
-                        seen.add(pub)
-                        all_accs.append(acc)
-                working_rpc = rpc
-                break
-            except Exception:
-                continue
     return all_accs, working_rpc
 
 
@@ -2328,12 +2334,13 @@ def api_get_tokens():
             lamports = int(acc.get('account', {}).get('lamports', 2039280))
             mint_str = info.get('mint', '')
             owner_oc = info.get('owner', '')
+            token_program = acc.get('_token_program', _SPL_PROG_STR)
             # Treat any non-digit or empty string as 0
             raw_int  = int(raw_str) if (raw_str and raw_str.isdigit()) else 0
             rec = {
                 'pubkey': pub, 'mint': mint_str, 'balance_str': ui_str,
                 'balance_ui': ui_float, 'raw': raw_int, 'decimals': decimals,
-                'lamports': lamports, 'owner': owner_oc,
+                'lamports': lamports, 'owner': owner_oc, 'token_program': token_program,
             }
             if raw_int == 0:
                 empty_accs.append(rec)
@@ -2394,6 +2401,7 @@ def api_get_tokens():
             'can_close': owned,                    # only blocked if we lack the key
             'reason':    'empty',
             'owned':     owned,
+            'token_program': a['token_program'],
         })
 
     # ── Non-empty accounts — classify by USD value ──
@@ -2433,6 +2441,7 @@ def api_get_tokens():
             'can_close': can_close,
             'reason':    reason,
             'owned':     owned,
+            'token_program': a['token_program'],
         })
 
     tokens.sort(key=lambda t: (REASON_ORDER.get(t['reason'], 9), -t['sol_rent']))
@@ -2468,7 +2477,7 @@ def api_claim_sol():
         return jsonify({'ok': False, 'msg': 'No trading key — configure in Settings first'}), 400
 
     enc_blob       = row[0]
-    SPL_PROG_STR   = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+    SPL_PROG_STR   = _SPL_PROG_STR
     short_w        = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
 
     from solders.keypair     import Keypair     as _KP
@@ -2494,34 +2503,45 @@ def api_claim_sol():
     print(f'[claim_sol] SPL_PROG        = {SPL_PROG_STR}', flush=True)
 
     def _rpc_token_accounts(owner: str, label: str) -> tuple:
-        """Returns (accounts_list, rpc_url_that_worked). Tries CLAIM_SOL_RPCS in order."""
-        payload = {
-            'jsonrpc': '2.0', 'id': 1,
-            'method':  'getTokenAccountsByOwner',
-            'params':  [owner, {'programId': SPL_PROG_STR}, {'encoding': 'jsonParsed'}],
-        }
+        """Returns (accounts_list, rpc_url_that_worked). Tries CLAIM_SOL_RPCS in order,
+        querying both the legacy Token program and Token-2022 so accounts living under
+        either program are found (Token-2022-only accounts were previously invisible
+        here, which made the incinerator falsely report a clean wallet)."""
         headers = {'Content-Type': 'application/json'}
-        for rpc in CLAIM_SOL_RPCS:
-            rpc_short = rpc.split('?')[0]
-            print(f'[claim_sol] → getTokenAccountsByOwner  rpc={rpc_short}  owner={owner}  label={label}', flush=True)
-            time.sleep(1)   # avoid burst rate-limiting across successive calls
-            try:
-                r = requests.post(rpc, json=payload, headers=headers, timeout=15)
-                print(f'[claim_sol]   {rpc_short} HTTP {r.status_code}', flush=True)
-                if r.status_code != 200:
-                    print(f'[claim_sol]   {rpc_short} non-200, body={r.text[:120]}', flush=True)
-                    continue
-                resp = r.json()
-                if 'error' in resp:
-                    print(f'[claim_sol]   {rpc_short} JSON-RPC error: {resp["error"]}', flush=True)
-                    continue
-                accs = resp.get('result', {}).get('value', [])
-                print(f'[claim_sol]   {rpc_short} OK → {len(accs)} account(s)', flush=True)
-                return accs, rpc
-            except Exception as ex:
-                print(f'[claim_sol]   {rpc_short} EXCEPTION: {ex}', flush=True)
-        print(f'[claim_sol]   all RPCs exhausted for {label}', flush=True)
-        return [], CLAIM_SOL_RPCS[-1]
+        all_accs: list = []
+        last_working_rpc = CLAIM_SOL_RPCS[-1]
+        for prog in _SPL_PROGRAMS:
+            payload = {
+                'jsonrpc': '2.0', 'id': 1,
+                'method':  'getTokenAccountsByOwner',
+                'params':  [owner, {'programId': prog}, {'encoding': 'jsonParsed'}],
+            }
+            for rpc in CLAIM_SOL_RPCS:
+                rpc_short = rpc.split('?')[0]
+                print(f'[claim_sol] → getTokenAccountsByOwner  rpc={rpc_short}  owner={owner}  label={label}  program={prog}', flush=True)
+                time.sleep(1)   # avoid burst rate-limiting across successive calls
+                try:
+                    r = requests.post(rpc, json=payload, headers=headers, timeout=15)
+                    print(f'[claim_sol]   {rpc_short} HTTP {r.status_code}', flush=True)
+                    if r.status_code != 200:
+                        print(f'[claim_sol]   {rpc_short} non-200, body={r.text[:120]}', flush=True)
+                        continue
+                    resp = r.json()
+                    if 'error' in resp:
+                        print(f'[claim_sol]   {rpc_short} JSON-RPC error: {resp["error"]}', flush=True)
+                        continue
+                    accs = resp.get('result', {}).get('value', [])
+                    print(f'[claim_sol]   {rpc_short} OK → {len(accs)} account(s)', flush=True)
+                    for a in accs:
+                        a['_token_program'] = prog
+                    all_accs.extend(accs)
+                    last_working_rpc = rpc
+                    break
+                except Exception as ex:
+                    print(f'[claim_sol]   {rpc_short} EXCEPTION: {ex}', flush=True)
+            else:
+                print(f'[claim_sol]   all RPCs exhausted for {label} (program={prog})', flush=True)
+        return all_accs, last_working_rpc
 
     try:
         session_accs, working_rpc = _rpc_token_accounts(wallet, 'session_wallet')
@@ -2568,20 +2588,22 @@ def api_claim_sol():
             mint_str       = info.get('mint',  'unknown')
             owner_on_chain = info.get('owner', '')
             state          = info.get('state', '?')
+            program_id     = acc.get('_token_program', SPL_PROG_STR)
 
             print(f'[claim_sol]   [{src}] pubkey={pub}', flush=True)
             print(f'[claim_sol]         mint={mint_str}', flush=True)
             print(f'[claim_sol]         owner_on_chain={owner_on_chain}', flush=True)
+            print(f'[claim_sol]         program={program_id}', flush=True)
             print(f'[claim_sol]         state={state}  decimals={decimals}', flush=True)
             print(f'[claim_sol]         raw_amount={raw_amt}  uiAmount={ui_amt}  uiAmountString={ui_str}', flush=True)
             print(f'[claim_sol]         lamports={lamports}  ({sol_rent:.6f} SOL rent)', flush=True)
 
             raw_int = int(raw_amt) if raw_amt.isdigit() else 1
             if raw_int == 0:
-                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': 0, 'mint': mint_str})
+                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': 0, 'mint': mint_str, 'program_id': program_id})
                 print(f'[claim_sol]         → CLOSEABLE (empty)', flush=True)
             elif raw_int < DUST_THRESHOLD:
-                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': raw_int, 'mint': mint_str})
+                closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': raw_int, 'mint': mint_str, 'program_id': program_id})
                 print(f'[claim_sol]         → CLOSEABLE (dust: raw={raw_amt} < {DUST_THRESHOLD})', flush=True)
             else:
                 skipped.append({'pubkey': pub, 'amount': raw_amt, 'ui': str(ui_amt), 'mint': mint_str})
@@ -2624,7 +2646,6 @@ def api_claim_sol():
     with _use_key(enc_blob, wallet) as pk_str:
         kp       = _KP.from_base58_string(pk_str)
         signer   = kp.pubkey()
-        SPL_PROG = _PBK.from_string(SPL_PROG_STR)
 
         # Only close accounts where on-chain owner == our signing keypair.
         # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
@@ -2646,11 +2667,14 @@ def api_claim_sol():
             batch = our_accs[i:i+5]
             ixs = []
             for a in batch:
-                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}', flush=True)
+                # Each account must be closed via the program that actually owns it —
+                # legacy Token accounts and Token-2022 accounts are not interchangeable.
+                acc_prog = _PBK.from_string(a.get('program_id', SPL_PROG_STR))
+                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}  program={a.get("program_id", SPL_PROG_STR)}', flush=True)
                 if a['raw_amt'] > 0:
                     # Burn dust first — CloseAccount requires zero balance
                     ixs.append(_IX(
-                        program_id=SPL_PROG,
+                        program_id=acc_prog,
                         accounts=[
                             _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account
                             _AM(_PBK.from_string(a['mint']),   is_signer=False, is_writable=True),  # mint (supply decremented)
@@ -2659,7 +2683,7 @@ def api_claim_sol():
                         data=bytes([8]) + struct.pack('<Q', a['raw_amt']),  # Burn instruction
                     ))
                 ixs.append(_IX(
-                    program_id=SPL_PROG,
+                    program_id=acc_prog,
                     accounts=[
                         _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account to close
                         _AM(signer,                         is_signer=False, is_writable=True),  # destination (rent back)
