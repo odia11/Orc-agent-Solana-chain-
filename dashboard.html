@@ -1258,8 +1258,12 @@ let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=fa
 // ── CSRF TOKEN ──
 let _csrfToken = '';
 
-// Override fetch globally: inject X-CSRF-Token into all mutating requests.
-// The override is installed synchronously so it covers every fetch call below.
+// Shared client secret, injected server-side at page-serve time (see index() in
+// dashboard.py). Empty string when X_CLIENT_SECRET isn't configured on the server.
+const _CLIENT_SECRET = '__X_CLIENT_SECRET__';
+
+// Override fetch globally: inject X-CSRF-Token and X-Client-Secret into all mutating
+// requests. The override is installed synchronously so it covers every fetch call below.
 // _csrfToken is populated asynchronously by _initCsrf(); it's empty until then
 // but the server only requires it for authenticated sessions, so the race is safe.
 (function(){
@@ -1267,8 +1271,11 @@ let _csrfToken = '';
   window.fetch = function(url, opts) {
     opts = Object.assign({}, opts || {});
     const method = ((opts.method || 'GET') + '').toUpperCase();
-    if (['POST','PUT','PATCH','DELETE'].includes(method) && _csrfToken) {
-      opts.headers = Object.assign({}, opts.headers || {}, {'X-CSRF-Token': _csrfToken});
+    if (['POST','PUT','PATCH','DELETE'].includes(method)) {
+      const extra = {};
+      if (_csrfToken) extra['X-CSRF-Token'] = _csrfToken;
+      if (_CLIENT_SECRET) extra['X-Client-Secret'] = _CLIENT_SECRET;
+      opts.headers = Object.assign({}, opts.headers || {}, extra);
     }
     return _origFetch(url, opts);
   };

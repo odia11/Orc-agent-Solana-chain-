@@ -1,6 +1,6 @@
 import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets
 from contextlib import contextmanager
-from flask import Flask, jsonify, request, send_from_directory, session
+from flask import Flask, jsonify, request, session
 from werkzeug.middleware.proxy_fix import ProxyFix
 from cryptography.fernet import Fernet
 from dotenv import load_dotenv
@@ -23,6 +23,14 @@ def _security_gate():
     ip = request.remote_addr or '0.0.0.0'
     if _BLOCKED_PROBE_RE.search(request.path):
         _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
+    if request.query_string and _SUSPICIOUS_INPUT_RE.search(request.query_string.decode('utf-8', 'ignore')):
+        _log_security_event('suspicious_input', session.get('wallet', 'anonymous'),
+                            f'querystring on {request.path} from {ip}')
+    if request.method in ('POST', 'PUT', 'PATCH') and (request.content_type or '').startswith('application/json'):
+        body = request.get_data(as_text=True) or ''
+        if body and _SUSPICIOUS_INPUT_RE.search(body):
+            _log_security_event('suspicious_input', session.get('wallet', 'anonymous'),
+                                f'request body on {request.path} from {ip}')
     if not _rate_ok('global:' + ip, 60, 60):
         return jsonify({'error': 'Too many requests'}), 429
     return None
@@ -52,6 +60,13 @@ def _validate_csrf(token: str) -> bool:
 @app.before_request
 def _csrf_check():
     if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and request.path.startswith('/api/'):
+        # ── 0. Shared client secret (only enforced if X_CLIENT_SECRET is configured) ──
+        if X_CLIENT_SECRET:
+            sent = request.headers.get('X-Client-Secret', '')
+            if not sent or not hmac.compare_digest(sent.encode(), X_CLIENT_SECRET.encode()):
+                _log_security_event('client_secret_fail', session.get('wallet', 'unknown'),
+                                    f'bad/missing X-Client-Secret on {request.path}')
+                return jsonify({'error': 'Forbidden'}), 403
         # ── 1. Origin / Host validation ──────────────────────────────────────
         origin = request.headers.get('Origin', '')
         if origin:
@@ -95,6 +110,11 @@ OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
+# Optional shared secret the frontend echoes back on every mutating request.
+# Defense-in-depth against scripted bots that POST straight to the API without ever
+# loading the page (and therefore never seeing this value). Skipped entirely when unset,
+# so local/dev deployments without the env var keep working unchanged.
+X_CLIENT_SECRET  = os.environ.get('X_CLIENT_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
 
 # Ordered list of RPC endpoints for claim_sol queries.
@@ -219,7 +239,19 @@ _BLOCKED_PROBE_RE = re.compile(
     r'(^|/)\.(?!well-known(/|$))[^/]*'
     r'|/wp-admin(/|$)'
     r'|/wp-login\.php$'
-    r'|/config\.php$',
+    r'|/config\.php$'
+    r'|/phpinfo(\.php)?$',
+    re.IGNORECASE,
+)
+
+# Common SQL-injection / XSS / path-traversal signatures in request bodies or query
+# strings. Logging only — never blocks, since legitimate input could rarely overlap
+# (e.g. a token symbol containing "or"). Lets the security_log surface real attack
+# attempts without risking false-positive lockouts of real users.
+_SUSPICIOUS_INPUT_RE = re.compile(
+    r"union\s+select|select\s+.*\s+from|insert\s+into|drop\s+table|"
+    r"'\s*or\s*'?1'?\s*=\s*'?1|;\s*--|<script[\s>]|javascript:|onerror\s*=|"
+    r"\.\./\.\.|%00|\bexec\s*\(",
     re.IGNORECASE,
 )
 
@@ -598,7 +630,7 @@ _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
 _SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
 
 # Paths that should never be legitimately accessed — any hit is a scan/probe.
-_HONEYPOT_PATHS = frozenset({'/.env', '/wp-login.php', '/admin', '/phpmyadmin', '/config.php', '/.git/config', '/wp-admin'})
+_HONEYPOT_PATHS = frozenset({'/.env', '/wp-login.php', '/admin', '/phpmyadmin', '/config.php', '/.git/config', '/wp-admin', '/phpinfo', '/phpinfo.php'})
 
 # Fields that must never appear in any JSON response body.
 # Includes DB column names so a runaway SELECT * can never accidentally expose them.
@@ -1776,9 +1808,16 @@ def _security_headers(resp):
     resp.headers.setdefault('Referrer-Policy',          'strict-origin-when-cross-origin')
     resp.headers.setdefault('Permissions-Policy',       'camera=(), microphone=(), geolocation=()')
     resp.headers.setdefault('Content-Security-Policy',
-        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; "
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://unpkg.com; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self' https://api.binance.com; "
         "frame-src https://dexscreener.com; "
-        "object-src 'none'")
+        "object-src 'none'; "
+        "base-uri 'self'; "
+        "form-action 'self'")
     if os.getenv('RAILWAY_ENVIRONMENT'):
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
     # Scan JSON responses for possible private key leak (87-88 char base58 = private key length).
@@ -1821,7 +1860,12 @@ def _security_headers(resp):
 
 @app.route('/')
 def index():
-    return send_from_directory(BASE, 'dashboard.html')
+    # Inject the client secret (if configured) so the frontend can echo it back
+    # on mutating requests — see X_CLIENT_SECRET / _csrf_check above.
+    with open(os.path.join(BASE, 'dashboard.html'), 'r', encoding='utf-8') as f:
+        html = f.read()
+    html = html.replace('__X_CLIENT_SECRET__', X_CLIENT_SECRET)
+    return app.response_class(html, mimetype='text/html')
 
 # ── HONEYPOTS ──
 # These paths are never legitimately accessed. Any hit means a scanner or attacker.
@@ -1835,6 +1879,8 @@ def index():
 @app.route('/config.php')
 @app.route('/.git/config')
 @app.route('/wp-admin')
+@app.route('/phpinfo')
+@app.route('/phpinfo.php')
 def _honeypot():
     ip = request.remote_addr or 'unknown'
     _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
@@ -2153,7 +2199,8 @@ def start_trader():
         kr = c.fetchone()
         conn.close()
     except Exception as e:
-        return jsonify({'ok': False, 'msg': 'DB error: ' + str(e)[:60]}), 500
+        print(f'[start_trader] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Internal error — please try again'}), 500
     if not kr or not kr[0]:
         return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
     if _sec_check_state.get('trading_paused'):
@@ -2436,7 +2483,8 @@ def api_claim_sol():
             _kp_probe  = _KP.from_base58_string(_pk_tmp)
             trading_pk = str(_kp_probe.pubkey())
     except Exception as e:
-        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key: ' + str(e)[:80]}), 500
+        print(f'[claim_sol] key decrypt error: {_redact_keys(str(e))}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Cannot access trading key — please re-save it in Settings'}), 500
 
     print(f'[claim_sol] ═══ START ═══', flush=True)
     print(f'[claim_sol] session_wallet  = {wallet}', flush=True)
@@ -2486,7 +2534,8 @@ def api_claim_sol():
             trading_accs = []
             print(f'[claim_sol]   trading_wallet == session_wallet, skipping duplicate query', flush=True)
     except Exception as e:
-        return jsonify({'ok': False, 'msg': 'RPC request failed: ' + str(e)}), 500
+        print(f'[claim_sol] RPC request failed: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'RPC request failed — please try again shortly'}), 500
 
     print(f'[claim_sol] working_rpc = {working_rpc.split("?")[0]}', flush=True)
 
