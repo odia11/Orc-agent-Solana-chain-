@@ -107,6 +107,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .mode-btn{padding:9px 18px;font-size:10px;font-weight:700;border-radius:7px;border:none;cursor:pointer;letter-spacing:.07em;transition:all .2s;font-family:'Orbitron',monospace;white-space:nowrap}
 .trade-btn{background:var(--blue);color:#fff}
 .trade-btn:hover{filter:brightness(1.1);transform:translateY(-1px)}
+.diff-row{display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;padding-top:10px;border-top:1px solid var(--border2)}
+.diff-label{font-size:9px;color:var(--dim);letter-spacing:.1em;font-family:'Orbitron',monospace;margin-right:2px}
+.diff-btn{font-size:9px;padding:5px 13px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.05em;transition:all .15s}
+.diff-btn:hover{border-color:var(--blue);color:#fff}
+.diff-btn.active[data-diff="EASY"]{background:var(--green);border-color:var(--green);color:#06140d}
+.diff-btn.active[data-diff="MEDIUM"]{background:var(--blue);border-color:var(--blue);color:#fff}
+.diff-btn.active[data-diff="HARD"]{background:var(--red);border-color:var(--red);color:#fff}
 
 /* ── MARKET PANEL ── */
 .market-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -987,6 +994,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="badge badge-idle" id="trade-badge">IDLE</div>
         <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()">▶ START TRADING</button>
       </div>
+      <div class="diff-row" id="diff-row">
+        <span class="diff-label">DIFFICULTY</span>
+        <button class="diff-btn" data-diff="EASY" onclick="setDifficulty('EASY')">EASY</button>
+        <button class="diff-btn" data-diff="MEDIUM" onclick="setDifficulty('MEDIUM')">MEDIUM</button>
+        <button class="diff-btn" data-diff="HARD" onclick="setDifficulty('HARD')">HARD</button>
+      </div>
     </div>
     <div class="trade-warn" id="trade-warn"></div>
   </div>
@@ -1426,6 +1439,7 @@ async function launchApp(){
         _updateKeyStatus();
       }
     }).catch(()=>{});
+    loadDifficulty();
   } else {
     const tb=document.getElementById('trade-btn');
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
@@ -2652,6 +2666,46 @@ function _lfStartCountdown(){
     if(el) el.textContent=_lfCountdownVal>0?'↻ '+_lfCountdownVal+'s':'refreshing…';
     if(_lfCountdownVal===0) _lfCountdownVal=10;
   },1000);
+}
+
+const DIFFICULTY_TEXT={
+  EASY:'AI-powered momentum scalper (EASY). Buys any token showing upward momentum in the last 5 min. Auto-exits at 8% take profit or 2% stop loss. Full 100% position exit on both targets.',
+  MEDIUM:'AI-powered momentum scalper (MEDIUM). Buys tokens showing upward momentum (5-20% rise in last 5 min). Auto-exits at 12% take profit or 8% stop loss. Full 100% position exit on both targets.',
+  HARD:'AI-powered momentum scalper (HARD). Buys tokens showing strong momentum (10-35% rise in last 5 min). Auto-exits at 20% take profit or 12% stop loss. Full 100% position exit on both targets.'
+};
+let currentDifficulty='MEDIUM';
+
+function setDifficultyUI(diff){
+  if(!DIFFICULTY_TEXT[diff]) diff='MEDIUM';
+  currentDifficulty=diff;
+  document.querySelectorAll('.diff-btn').forEach(b=>{
+    b.classList.toggle('active', b.dataset.diff===diff);
+  });
+  const desc=document.querySelector('#trade-card .mode-desc');
+  if(desc) desc.textContent=DIFFICULTY_TEXT[diff];
+}
+
+async function loadDifficulty(){
+  try{
+    const res=await fetch('/api/difficulty');
+    const rj=await res.json().catch(()=>null);
+    setDifficultyUI(rj&&rj.ok?(rj.difficulty||'MEDIUM'):'MEDIUM');
+  }catch(e){ setDifficultyUI('MEDIUM'); }
+}
+
+async function setDifficulty(diff){
+  if(diff===currentDifficulty) return;
+  if(typeof traderOn!=='undefined' && traderOn){
+    showTradeWarn('⚠️ Stop trading before changing difficulty — it applies on next start');
+    return;
+  }
+  const prev=currentDifficulty;
+  setDifficultyUI(diff);
+  try{
+    const res=await fetch('/api/difficulty',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({difficulty:diff})});
+    const rj=await res.json().catch(()=>null);
+    if(!rj||!rj.ok) setDifficultyUI(prev);
+  }catch(e){ setDifficultyUI(prev); }
 }
 
 function updateBtns(){
