@@ -3191,6 +3191,16 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
 
         try:
             with _use_key(enc_blob, user_wallet) as pk:
+                from solders.keypair import Keypair as _KP_fr
+                signer = str(_KP_fr.from_base58_string(pk).pubkey())
+                signer_sol = _get_user_sol(signer)
+                if signer_sol < 0.001:
+                    print(f'[fee-recovery] {sw} signer={signer[:6]}...{signer[-4:]} has '
+                          f'{signer_sol:.6f} SOL (<0.001) — not enough to cover the network fee, '
+                          f'skipping', flush=True)
+                    results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
+                                    'status': 'skipped_low_balance', 'sol_balance': signer_sol})
+                    continue
                 tx_sig = send_sol_fee(pk, OWNER_WALLET, total_fee)
 
             # Mark every trade in this batch as paid and record in fees table
