@@ -492,14 +492,15 @@ def init_db():
             conn.commit()
     c.execute('CREATE TABLE IF NOT EXISTS server_config (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     c.execute('''CREATE TABLE IF NOT EXISTS users (
-        id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-        wallet_address        TEXT UNIQUE NOT NULL,
-        encrypted_private_key TEXT DEFAULT '',
-        trading_active        INTEGER DEFAULT 0,
-        max_trade_size        REAL DEFAULT 0.5,
-        min_trade_size        REAL DEFAULT 0.01,
-        daily_loss_limit      REAL DEFAULT 10.0,
-        created_at            TEXT DEFAULT CURRENT_TIMESTAMP
+        id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet_address           TEXT UNIQUE NOT NULL,
+        encrypted_private_key    TEXT DEFAULT '',
+        trading_active           INTEGER DEFAULT 0,
+        max_trade_size           REAL DEFAULT 10.0,
+        min_trade_size           REAL DEFAULT 1.0,
+        daily_loss_limit         REAL DEFAULT 50.0,
+        trade_size_unit_migrated INTEGER DEFAULT 1,
+        created_at               TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS trades (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -536,17 +537,20 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
-        c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 0.01')
+        c.execute('ALTER TABLE users ADD COLUMN min_trade_size REAL DEFAULT 1.0')
     except sqlite3.OperationalError:
         pass
     try:
         c.execute("ALTER TABLE users ADD COLUMN difficulty TEXT DEFAULT 'MEDIUM'")
     except sqlite3.OperationalError:
         pass
-    # Fix stale users still on the old UI defaults (min=3, max=5, daily=50)
-    c.execute('''UPDATE users
-                 SET min_trade_size=0.01, max_trade_size=0.5, daily_loss_limit=10.0
-                 WHERE min_trade_size=3 AND max_trade_size=5 AND daily_loss_limit=50''')
+    try:
+        # DEFAULT 0 here (existing rows still hold SOL-denominated amounts from
+        # before min/max_trade_size and daily_loss_limit became USDC-denominated —
+        # see _migrate_trade_size_units()). New rows always insert with this set to 1.
+        c.execute('ALTER TABLE users ADD COLUMN trade_size_unit_migrated INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
     c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_wallet    ON fees(user_wallet)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_timestamp ON fees(timestamp)')
@@ -898,6 +902,33 @@ state = {
 }
 
 _sol_price_usd: float = 0.0  # refreshed each token_loop cycle via DexScreener
+_trade_size_units_migrated: bool = False  # one-time SOL→USDC migration guard, see _migrate_trade_size_units()
+
+def _migrate_trade_size_units(sol_price: float) -> None:
+    """One-time migration: min_trade_size/max_trade_size/daily_loss_limit used to be
+    SOL-denominated. Now that the Settings UI treats them as USDC, convert any
+    pre-existing (unmigrated) rows to their dollar-equivalent at the given SOL
+    price so existing users' real trade-size/loss-limit behavior doesn't silently
+    shrink ~100x+ after this change. Guarded by trade_size_unit_migrated so it
+    only ever runs once per row, even across redeploys."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM users WHERE trade_size_unit_migrated=0')
+        n = c.fetchone()[0]
+        if n:
+            c.execute('''UPDATE users SET
+                         min_trade_size           = ROUND(min_trade_size   * ?, 2),
+                         max_trade_size           = ROUND(max_trade_size   * ?, 2),
+                         daily_loss_limit         = ROUND(daily_loss_limit * ?, 2),
+                         trade_size_unit_migrated = 1
+                       WHERE trade_size_unit_migrated = 0''', (sol_price, sol_price, sol_price))
+            conn.commit()
+            print(f'[migration] converted {n} user(s) trade-size settings from SOL to USDC '
+                  f'at ${sol_price:.2f}/SOL', flush=True)
+        conn.close()
+    except Exception as e:
+        print(f'[migration] trade_size_unit migration failed: {e}', flush=True)
 
 # ── DEXSCREENER HTTP HELPERS ──
 _DEX_HEADERS   = {'User-Agent': 'Mozilla/5.0 OrcAgent/1.0', 'Accept': 'application/json'}
@@ -1345,7 +1376,7 @@ def token_loop():
                     + ('best: ' + display[0]['symbol'] + ' ' + str(display[0]['score']) + '/10'
                        if display else 'no tokens'))
             # Refresh SOL/USD price once per scan cycle
-            global _sol_price_usd
+            global _sol_price_usd, _trade_size_units_migrated
             try:
                 _sr = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + SOL_MINT, timeout=6)
                 if _sr and _sr.status_code == 200:
@@ -1355,6 +1386,9 @@ def token_loop():
                         _sp = float(_p.get('priceUsd', 0) or 0)
                         if _sp > 1:
                             _sol_price_usd = _sp
+                            if not _trade_size_units_migrated:
+                                _migrate_trade_size_units(_sp)
+                                _trade_size_units_migrated = True
             except Exception:
                 pass
         except: pass
@@ -1527,7 +1561,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, difficulty FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, difficulty, min_trade_size, max_trade_size FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -1542,8 +1576,10 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     user_id          = row[0]
-    daily_loss_limit = abs(float(row[2] if row[2] is not None else 10.0))
+    daily_loss_limit = abs(float(row[2] if row[2] is not None else 50.0))
     difficulty       = row[3] if (len(row) > 3 and row[3] in DIFFICULTY_PRESETS) else 'MEDIUM'
+    min_trade_usdc   = float(row[4]) if (len(row) > 4 and row[4] is not None) else 1.0
+    max_trade_usdc   = float(row[5]) if (len(row) > 5 and row[5] is not None) else 10.0
     preset           = DIFFICULTY_PRESETS[difficulty]
     take_profit      = preset['tp']
     stop_loss        = preset['sl']
@@ -1687,8 +1723,15 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
                         trade_pct = 0.60 if sc >= 7 else config.get('trade_pct', 0.40)
-                        spend = round(us_sol * trade_pct, 4)
-                        if spend >= 0.001:
+                        spend = us_sol * trade_pct
+                        # min/max trade size are USDC-denominated in the UI — convert to
+                        # SOL at the current price before clamping the SOL-denominated spend.
+                        if _sol_price_usd > 0:
+                            min_spend_sol = min_trade_usdc / _sol_price_usd
+                            max_spend_sol = max_trade_usdc / _sol_price_usd
+                            spend = min(max(spend, min_spend_sol), max_spend_sol)
+                        spend = round(spend, 4)
+                        if spend >= 0.001 and spend <= us_sol:
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
@@ -1870,10 +1913,10 @@ def get_settings():
     get_user_state(wallet)['has_trading_key'] = has_key
     if row:
         return jsonify({'ok': True, 'has_trading_key': has_key,
-                        'max_trade_size': row[1] if row[1] is not None else 0.5,
-                        'min_trade_size': row[2] if row[2] is not None else 0.01,
-                        'daily_loss_limit': row[3] if row[3] is not None else 10.0})
-    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 0.5, 'min_trade_size': 0.01, 'daily_loss_limit': 10.0})
+                        'max_trade_size': row[1] if row[1] is not None else 10.0,
+                        'min_trade_size': row[2] if row[2] is not None else 1.0,
+                        'daily_loss_limit': row[3] if row[3] is not None else 50.0})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 10.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -1886,20 +1929,20 @@ def save_settings():
     data            = request.json or {}
     private_key_raw = data.get('private_key', '').strip()
     try:
-        max_trade_size = float(data.get('max_trade_size', 0.5))
+        max_trade_size = float(data.get('max_trade_size', 10.0))
     except (ValueError, TypeError):
-        max_trade_size = 0.5
+        max_trade_size = 10.0
     try:
-        min_trade_size = float(data.get('min_trade_size', 0.01))
+        min_trade_size = float(data.get('min_trade_size', 1.0))
     except (ValueError, TypeError):
-        min_trade_size = 0.01
+        min_trade_size = 1.0
     try:
-        daily_loss_limit = float(data.get('daily_loss_limit', 10.0))
+        daily_loss_limit = float(data.get('daily_loss_limit', 50.0))
     except (ValueError, TypeError):
-        daily_loss_limit = 10.0
-    max_trade_size   = max(0.1,  min(max_trade_size,   10000.0))
-    min_trade_size   = max(0.01, min(min_trade_size,   max_trade_size))
-    daily_loss_limit = max(0.1,  min(daily_loss_limit, 50000.0))
+        daily_loss_limit = 50.0
+    max_trade_size   = max(1.0, min(max_trade_size,   100000.0))
+    min_trade_size   = max(1.0, min(min_trade_size,   max_trade_size))
+    daily_loss_limit = max(1.0, min(daily_loss_limit, 500000.0))
 
     # Validate, double-encrypt, and verify round-trip before touching the DB
     encrypted = ''   # initialised here so it is always defined in the INSERT branch below
@@ -1936,7 +1979,7 @@ def save_settings():
                           (max_trade_size, min_trade_size, daily_loss_limit, wallet))
                 final_enc = row[1]
         else:
-            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, min_trade_size, daily_loss_limit) VALUES (?,?,?,?,?,?)',
+            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_size_unit_migrated) VALUES (?,?,?,?,?,?,1)',
                       (wallet, encrypted or '', new_hash or '', max_trade_size, min_trade_size, daily_loss_limit))
             final_enc = encrypted or ''
         conn.commit()
@@ -1982,7 +2025,7 @@ def save_difficulty():
         if row:
             c.execute('UPDATE users SET difficulty=? WHERE wallet_address=?', (difficulty, wallet))
         else:
-            c.execute('INSERT INTO users (wallet_address, difficulty) VALUES (?,?)', (wallet, difficulty))
+            c.execute('INSERT INTO users (wallet_address, difficulty, trade_size_unit_migrated) VALUES (?,?,1)', (wallet, difficulty))
         conn.commit()
     finally:
         conn.close()
