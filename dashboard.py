@@ -551,6 +551,19 @@ def init_db():
         c.execute('ALTER TABLE users ADD COLUMN trade_size_unit_migrated INTEGER DEFAULT 0')
     except sqlite3.OperationalError:
         pass
+    # One-time hard reset of every user's trade-size settings to flat USDC defaults
+    # (the earlier price-based SOL->USDC conversion produced inconsistent values).
+    # Guarded by server_config so it never re-fires and wipes a user's later changes.
+    c.execute("SELECT value FROM server_config WHERE key='trade_size_reset_v1'")
+    if not c.fetchone():
+        c.execute('''UPDATE users SET
+                     min_trade_size           = 1.0,
+                     max_trade_size           = 10.0,
+                     daily_loss_limit         = 50.0,
+                     trade_size_unit_migrated = 1''')
+        c.execute("INSERT INTO server_config (key, value) VALUES ('trade_size_reset_v1', 'done')")
+        conn.commit()
+        print('[migration] reset all users trade-size settings to USDC defaults (1/10/50)', flush=True)
     c.execute('CREATE INDEX IF NOT EXISTS idx_trades_user_id ON trades(user_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_wallet    ON fees(user_wallet)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_fees_timestamp ON fees(timestamp)')
