@@ -620,6 +620,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .ps-live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;flex-shrink:0}
 .ps-live-label{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--green);letter-spacing:.14em}
 .ps-countdown{font-size:8px;color:var(--border2);letter-spacing:.06em}
+.ps-info-btn{cursor:pointer;font-size:11px;color:var(--muted);margin-left:4px;user-select:none;opacity:.8}
+.ps-info-btn:hover{opacity:1}
+.ps-info-tooltip{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:50;width:280px;max-width:calc(100vw - 48px);background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px 14px;font-size:11px;line-height:1.6;color:var(--dim);box-shadow:0 8px 28px rgba(0,0,0,.5)}
+.ps-info-tooltip.open{display:block}
+@media(max-width:600px){
+  .ps-info-tooltip{width:240px}
+}
 .ps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px}
 .ps-empty{text-align:center;padding:24px;font-size:11px;color:var(--muted);letter-spacing:.08em;grid-column:1/-1}
 .ps-buy-btn{width:100%;margin-top:8px;background:var(--green);color:var(--bg);border:none;border-radius:6px;padding:8px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:filter .15s}
@@ -1001,8 +1008,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <!-- PUMP SCANNER -->
   <div class="pump-scanner-panel" id="pump-scanner-panel">
     <div class="ps-header">
-      <div class="ps-header-left">
-        <div class="panel-hdr" style="margin-bottom:0">🚀 PUMP SCANNER</div>
+      <div class="ps-header-left" style="position:relative">
+        <div class="panel-hdr" style="margin-bottom:0">🚀 PUMP SCANNER
+          <span class="ps-info-btn" id="ps-info-btn" onclick="togglePsInfo(event)">ℹ️</span>
+        </div>
+        <div class="ps-info-tooltip" id="ps-info-tooltip">
+          🚀 Pump Scanner scans live Solana tokens every 30 seconds and shows tokens that have pumped at least 15% in the last 5 minutes. Click BUY to instantly buy a token with your bot. Take profit and stop loss are managed automatically based on your chosen difficulty level.
+        </div>
       </div>
       <div class="ps-header-right">
         <span class="ps-live-dot"></span>
@@ -1792,6 +1804,20 @@ function renderMarket(tokens){
 }
 
 // ── PUMP SCANNER ──
+function togglePsInfo(e){
+  e.stopPropagation();
+  const tip=document.getElementById('ps-info-tooltip');
+  if(!tip) return;
+  tip.classList.toggle('open');
+}
+document.addEventListener('click',(e)=>{
+  const tip=document.getElementById('ps-info-tooltip');
+  const btn=document.getElementById('ps-info-btn');
+  if(tip&&tip.classList.contains('open')&&!tip.contains(e.target)&&e.target!==btn){
+    tip.classList.remove('open');
+  }
+});
+
 let _psCountdownTimer=null,_psCountdownVal=30;
 async function fetchPumpScanner(){
   if(!appVisible()) return;
