@@ -2183,6 +2183,96 @@ def api_state():
         'sol_price':       _sol_price_usd,
     })
 
+# ── PUMP SCANNER ──
+@app.route('/api/pump-scanner')
+@rate_limit(30, 60)
+def api_pump_scanner():
+    """Tokens pumping ≥15% in the last 5m or 1h, reusing the already-scanned/filtered
+    state['tokens'] snapshot (liquidity≥15000, volume5m≥1000) instead of issuing a
+    fresh DexScreener call — keeps this endpoint cheap and consistent with the rest
+    of the dashboard."""
+    live    = state.get('tokens', [])
+    pumping = [t for t in live if t.get('change5m', 0) >= 15 or t.get('change1h', 0) >= 15]
+    pumping.sort(key=lambda t: t.get('change5m', 0), reverse=True)
+    pumping = pumping[:10]
+    out = [{
+        'mint':      t['mint'],
+        'symbol':    t['symbol'],
+        'name':      t['name'],
+        'price':     t['price'],
+        'change5m':  t['change5m'],
+        'change1h':  t['change1h'],
+        'change24h': t['change24h'],
+        'volume24h': t['volume24h'],
+        'liquidity': t['liquidity'],
+        'fdv':       t['fdv'],
+    } for t in pumping]
+    return jsonify({'ok': True, 'tokens': out})
+
+@app.route('/api/pump-scanner/buy', methods=['POST'])
+@rate_limit(10, 60)
+def api_pump_scanner_buy():
+    ip     = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    mint = str((request.json or {}).get('mint', '')).strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False,
+                        'msg': 'Trading suspended — security check failure. Contact admin to resume.'}), 503
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c   = conn.cursor()
+        c.execute('SELECT encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    enc_blob       = row[0]
+    min_trade_usdc = float(row[1]) if row[1] is not None else 1.0
+
+    token_data = get_token_data(mint)
+    if not token_data or token_data['price'] <= 0:
+        return jsonify({'ok': False, 'msg': 'Could not fetch a live price for this token'}), 400
+
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            trading_wallet = str(_KP.from_base58_string(_pk).pubkey())
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+
+    us_sol = _get_user_sol(trading_wallet)
+    # Manual snipe uses the user's configured minimum trade size (conservative default
+    # for a one-off pick outside the scoring algorithm), converted to SOL.
+    spend = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
+    spend = round(min(spend, us_sol), 4)
+    if spend < 0.001:
+        return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to buy'}), 400
+
+    with _use_key(enc_blob, wallet) as _pk:
+        ok = _execute_user_swap(wallet, _pk, 'buy', mint, str(spend))
+    if not ok:
+        return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
+
+    us = get_user_state(wallet)
+    pos = us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
+    pos['amount']    = pos.get('amount', 0.0) + spend / token_data['price']
+    pos['buy_price'] = token_data['price']
+    pos['spend']     = pos.get('spend', 0.0) + spend
+    pos['symbol']    = token_data['symbol'] or mint[:8]
+    pos['opened_at'] = time.time()
+    us['positions'][mint] = pos
+    short = wallet[:6] + '...' + wallet[-4:]
+    add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
+                 ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
+    note = '' if us.get('trader_running') else ' — start the trader for automatic TP/SL on this position'
+    return jsonify({'ok': True, 'msg': 'Bought ' + pos['symbol'] + note, 'symbol': pos['symbol'], 'spend': spend})
+
 # ── TRADER START/STOP ──
 @app.route('/api/trader/start', methods=['POST'])
 @rate_limit(5, 60)
@@ -2643,79 +2733,96 @@ def api_claim_sol():
     failed   = []
     last_err = ''
 
-    with _use_key(enc_blob, wallet) as pk_str:
-        kp       = _KP.from_base58_string(pk_str)
-        signer   = kp.pubkey()
+    our_accs: list = []
+    other_accs: list = []
+    try:
+        with _use_key(enc_blob, wallet) as pk_str:
+            kp       = _KP.from_base58_string(pk_str)
+            signer   = kp.pubkey()
 
-        # Only close accounts where on-chain owner == our signing keypair.
-        # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
-        our_accs   = [a for a in closeable if a['owner'] == str(signer)]
-        other_accs = [a for a in closeable if a['owner'] != str(signer)]
-        if other_accs:
-            print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
-                  f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
+            if str(signer) != trading_pk:
+                print(f'[claim_sol] ⚠ WARNING: signer ({signer}) != trading_pk computed '
+                      f'earlier ({trading_pk}) — decrypted key may be inconsistent', flush=True)
 
-        print(f'[claim_sol] ─── close phase ───', flush=True)
-        print(f'[claim_sol] signer (trading keypair) = {str(signer)}', flush=True)
-        print(f'[claim_sol] our_accs   (owner==signer)  : {len(our_accs)}', flush=True)
-        print(f'[claim_sol] other_accs (owner!=signer)  : {len(other_accs)}', flush=True)
-        for a in other_accs:
-            print(f'[claim_sol]   other: pubkey={a["pubkey"]}  owner={a["owner"]}', flush=True)
-        print(f'[claim_sol] destination (rent back) = {str(signer)}', flush=True)
+            # Only close accounts where on-chain owner == our signing keypair.
+            # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
+            our_accs   = [a for a in closeable if a['owner'] == str(signer)]
+            other_accs = [a for a in closeable if a['owner'] != str(signer)]
+            if other_accs:
+                print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
+                      f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
 
-        for i in range(0, len(our_accs), 5):   # small batches — most reliable
-            batch = our_accs[i:i+5]
-            ixs = []
-            for a in batch:
-                # Each account must be closed via the program that actually owns it —
-                # legacy Token accounts and Token-2022 accounts are not interchangeable.
-                acc_prog = _PBK.from_string(a.get('program_id', SPL_PROG_STR))
-                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}  program={a.get("program_id", SPL_PROG_STR)}', flush=True)
-                if a['raw_amt'] > 0:
-                    # Burn dust first — CloseAccount requires zero balance
-                    ixs.append(_IX(
-                        program_id=acc_prog,
-                        accounts=[
-                            _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account
-                            _AM(_PBK.from_string(a['mint']),   is_signer=False, is_writable=True),  # mint (supply decremented)
-                            _AM(signer,                         is_signer=True,  is_writable=False), # authority
-                        ],
-                        data=bytes([8]) + struct.pack('<Q', a['raw_amt']),  # Burn instruction
-                    ))
-                ixs.append(_IX(
-                    program_id=acc_prog,
-                    accounts=[
-                        _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account to close
-                        _AM(signer,                         is_signer=False, is_writable=True),  # destination (rent back)
-                        _AM(signer,                         is_signer=True,  is_writable=False), # authority (must match owner)
-                    ],
-                    data=bytes([9]),  # CloseAccount instruction index
-                ))
-            try:
-                bh_resp = requests.post(working_rpc, json={
-                    'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
-                }, timeout=10).json()
-                bh  = bh_resp['result']['value']['blockhash']
-                tx  = _TX.new_signed_with_payer(ixs, signer, [kp], _SH.from_string(bh))
-                res = requests.post(working_rpc, json={
-                    'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
-                    'params': [base64.b64encode(bytes(tx)).decode(),
-                               {'encoding': 'base64', 'skipPreflight': False}],
-                }, timeout=30).json()
-                rpc_short = working_rpc.split('?')[0]
-                print(f'[claim_sol] sendTransaction via {rpc_short} response: {res}', flush=True)
-                if 'error' in res:
-                    last_err = str(res['error'])
+            print(f'[claim_sol] ─── close phase ───', flush=True)
+            print(f'[claim_sol] signer (trading keypair) = {str(signer)}', flush=True)
+            print(f'[claim_sol] our_accs   (owner==signer)  : {len(our_accs)}', flush=True)
+            print(f'[claim_sol] other_accs (owner!=signer)  : {len(other_accs)}', flush=True)
+            for a in other_accs:
+                print(f'[claim_sol]   other: pubkey={a["pubkey"]}  owner={a["owner"]}', flush=True)
+            print(f'[claim_sol] destination (rent back) = {str(signer)}', flush=True)
+
+            for i in range(0, len(our_accs), 5):   # small batches — most reliable
+                batch = our_accs[i:i+5]
+                # Instruction building now lives INSIDE the try block below — a single
+                # malformed pubkey/mint string used to throw here, uncaught, crashing the
+                # whole request with a bare 500 (frontend then showed a generic fallback
+                # message instead of the real error).
+                try:
+                    ixs = []
+                    for a in batch:
+                        # Each account must be closed via the program that actually owns it —
+                        # legacy Token accounts and Token-2022 accounts are not interchangeable.
+                        acc_prog = _PBK.from_string(a.get('program_id', SPL_PROG_STR))
+                        print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}  program={a.get("program_id", SPL_PROG_STR)}', flush=True)
+                        if a['raw_amt'] > 0:
+                            # Burn dust first — CloseAccount requires zero balance
+                            ixs.append(_IX(
+                                program_id=acc_prog,
+                                accounts=[
+                                    _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account
+                                    _AM(_PBK.from_string(a['mint']),   is_signer=False, is_writable=True),  # mint (supply decremented)
+                                    _AM(signer,                         is_signer=True,  is_writable=False), # authority
+                                ],
+                                data=bytes([8]) + struct.pack('<Q', a['raw_amt']),  # Burn instruction
+                            ))
+                        ixs.append(_IX(
+                            program_id=acc_prog,
+                            accounts=[
+                                _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account to close
+                                _AM(signer,                         is_signer=False, is_writable=True),  # destination (rent back)
+                                _AM(signer,                         is_signer=True,  is_writable=False), # authority (must match owner)
+                            ],
+                            data=bytes([9]),  # CloseAccount instruction index
+                        ))
+
+                    bh_resp = requests.post(working_rpc, json={
+                        'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+                    }, timeout=10).json()
+                    bh  = bh_resp['result']['value']['blockhash']
+                    tx  = _TX.new_signed_with_payer(ixs, signer, [kp], _SH.from_string(bh))
+                    res = requests.post(working_rpc, json={
+                        'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+                        'params': [base64.b64encode(bytes(tx)).decode(),
+                                   {'encoding': 'base64', 'skipPreflight': False}],
+                    }, timeout=30).json()
+                    rpc_short = working_rpc.split('?')[0]
+                    print(f'[claim_sol] sendTransaction via {rpc_short} response: {res}', flush=True)
+                    if 'error' in res:
+                        last_err = str(res['error'])
+                        failed.extend(batch)
+                        print(f'[claim_sol] ✗ TX failed: {last_err}', flush=True)
+                    else:
+                        sig = str(res.get('result', ''))
+                        tx_sigs.append(sig)
+                        print(f'[claim_sol] ✓ {len(batch)} closed TX:{sig[:20]}', flush=True)
+                except Exception as e:
+                    last_err = _redact_keys(str(e))
                     failed.extend(batch)
-                    print(f'[claim_sol] ✗ TX failed: {last_err}', flush=True)
-                else:
-                    sig = str(res.get('result', ''))
-                    tx_sigs.append(sig)
-                    print(f'[claim_sol] ✓ {len(batch)} closed TX:{sig[:20]}', flush=True)
-            except Exception as e:
-                last_err = str(e)
-                failed.extend(batch)
-                print(f'[claim_sol] ✗ TX exception: {e}', flush=True)
+                    print(f'[claim_sol] ✗ batch exception: {last_err}', flush=True)
+    except Exception as e:
+        err_msg = _redact_keys(str(e))
+        print(f'[claim_sol] ✗ FATAL error during close phase: {err_msg}', flush=True)
+        return jsonify({'ok': False, 'msg': f'Close transaction failed: {err_msg}',
+                        'debug': {'error': err_msg, 'trading_wallet': trading_pk}}), 500
 
     closed        = len(our_accs) - len(failed)
     skipped_other = len(other_accs)
@@ -2736,6 +2843,8 @@ def api_claim_sol():
     msg = f'Closed {closed} empty account{"s" if closed != 1 else ""} — reclaimed ~{reclaimed:.5f} SOL'
     if skipped_other:
         msg += f' ({skipped_other} account{"s" if skipped_other != 1 else ""} owned by different key — use sol-incinerator.com directly)'
+    if failed:
+        msg += f' — {len(failed)} account{"s" if len(failed) != 1 else ""} failed to close: {last_err}'
     add_user_log(wallet, '[claim] ' + msg)
     threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
     return jsonify({'ok': True, 'msg': msg, 'reclaimed': round(reclaimed, 6),
