@@ -17,25 +17,11 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 @app.before_request
 def _security_gate():
     """Runs before every other before_request hook (registration order).
-    Blocks permanently-banned IPs, scanner/exploit probe paths, and IPs that
-    exceed the global per-IP request rate, before any routing or view code runs.
-    Owner/trusted IPs (_OWNER_IPS) bypass every check below — they can never be banned."""
+    IP-based blocking has been removed — this only logs scanner/exploit probe
+    paths for visibility. It never blocks a request based on IP."""
     ip = request.remote_addr or '0.0.0.0'
-    if ip in _OWNER_IPS:
-        return None
-    if ip in _PERMANENT_BAN_IPS:
-        return jsonify({'error': 'Forbidden'}), 403
-    if _is_banned(ip):
-        return jsonify({'error': 'Forbidden'}), 403
     if _BLOCKED_PROBE_RE.search(request.path):
         _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
-        _record_ip_failure(ip, duration=86400, threshold=3, window=3600)
-        return jsonify({'error': 'Forbidden'}), 403
-    if not _is_owner(session.get('wallet', '')):
-        if not _rate_ok('global:' + ip, 30, 60):
-            _ban_ip(ip, 86400)
-            _log_security_event('rate_limit_ban', 'anonymous', f'{ip} exceeded 30 req/min — banned 24h')
-            return jsonify({'error': 'Too many requests'}), 429
     return None
 
 @app.before_request
@@ -210,13 +196,8 @@ def is_valid_solana_private_key(key: str) -> bool:
             pass
     return False
 
-# ── IP BLOCKLIST / HONEYPOT GATE ──
-# IPs in this set are blocked unconditionally — never expires, no DB round-trip needed.
-_PERMANENT_BAN_IPS = frozenset({'152.233.12.241'})
-
+# ── HONEYPOT GATE (logging only — no IP blocking) ──
 # Owner/trusted IPs — set via Railway env var, comma-separated (e.g. "1.2.3.4,5.6.7.8").
-# Checked before every ban/probe/rate-limit gate so these IPs can never be banned,
-# even by the automated honeypot or rate-limit logic.
 _OWNER_IPS = frozenset(
     ip.strip() for ip in os.environ.get('OWNER_IP_WHITELIST', '').split(',') if ip.strip()
 )
@@ -809,63 +790,35 @@ def _check_wallet_multi_ip(wallet: str, ip: str) -> bool:
     return False
 
 def _is_banned(ip: str) -> bool:
-    if ip in _OWNER_IPS:
-        return False
-    if ip in _PERMANENT_BAN_IPS:
-        return True
-    expires = _ip_ban.get(ip, 0)
-    if time.time() < expires:
-        return True
-    _ip_ban.pop(ip, None)
+    """IP banning has been disabled. Kept as a stub returning False so existing
+    call sites don't need to change."""
     return False
 
-def _persist_ban(ip: str, expires: float) -> None:
-    """Write the ban to SQLite so it survives a redeploy (DB lives on the Railway volume)."""
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        conn.execute(
-            'INSERT INTO banned_ips (ip, expires_at) VALUES (?,?) '
-            'ON CONFLICT(ip) DO UPDATE SET expires_at=excluded.expires_at',
-            (ip, expires))
-        conn.commit()
-        conn.close()
-    except Exception:
-        pass
-
 def _ban_ip(ip: str, duration: int) -> None:
-    if ip in _OWNER_IPS:
-        return
-    expires = time.time() + duration
-    _ip_ban[ip] = expires
-    _persist_ban(ip, expires)
-    print(f'SECURITY: IP {ip} banned for {duration}s', flush=True)
+    """No-op — IP banning has been disabled. Regular users must always be able
+    to reach the site, so nothing in this codebase is allowed to block by IP
+    anymore. Kept as a stub so existing call sites don't need to change."""
+    return
 
 def _load_banned_ips() -> None:
-    """Restore active bans from SQLite on startup so they survive a redeploy."""
+    """IP banning has been disabled. Wipe any bans persisted before this change
+    so nobody stays locked out across the upgrade."""
     try:
         conn = sqlite3.connect(DB_FILE)
-        c    = conn.cursor()
-        now  = time.time()
-        c.execute('DELETE FROM banned_ips WHERE expires_at < ?', (now,))
-        if _OWNER_IPS:
-            c.executemany('DELETE FROM banned_ips WHERE ip=?', [(ip,) for ip in _OWNER_IPS])
-        c.execute('SELECT ip, expires_at FROM banned_ips')
-        rows = c.fetchall()
+        conn.execute('DELETE FROM banned_ips')
         conn.commit()
         conn.close()
-        for ip, expires in rows:
-            _ip_ban[ip] = expires
     except Exception:
         pass
+    _ip_ban.clear()
+    _ip_warn.clear()
 
 def _record_ip_failure(ip: str, duration: int = 3600, threshold: int = 3, window: int = 600) -> None:
-    """Ban IP for duration seconds after threshold failures within window seconds."""
+    """Tracks recent failures for visibility only — no longer escalates to a ban."""
     now  = time.time()
     hits = [t for t in _ip_warn.get(ip, []) if now - t < window]
     hits.append(now)
     _ip_warn[ip] = hits
-    if len(hits) >= threshold:
-        _ban_ip(ip, duration)
 
 @contextmanager
 def _use_key(enc_blob: str, wallet: str):
@@ -1806,11 +1759,8 @@ def index():
 @app.route('/wp-admin')
 def _honeypot():
     ip = request.remote_addr or 'unknown'
-    if ip in _OWNER_IPS:
-        return jsonify({'error': 'Not found'}), 404
     _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
-    _record_ip_failure(ip, duration=86400, threshold=3, window=3600)
-    return jsonify({'error': 'Forbidden'}), 403
+    return jsonify({'error': 'Not found'}), 404
 
 # ── VERSION ──
 import subprocess as _subprocess, time as _time
@@ -3037,8 +2987,6 @@ def admin_bans():
         return jsonify({'error': 'Unauthorized'}), 403
     now  = time.time()
     bans = []
-    for ip in _PERMANENT_BAN_IPS:
-        bans.append({'ip': ip, 'expires_at': None, 'mins_left': None, 'permanent': True})
     for ip, expires in list(_ip_ban.items()):
         if expires > now:
             bans.append({
@@ -3068,8 +3016,6 @@ def admin_clear_ratelimit():
     data   = request.json or {}
     target = (data.get('ip') or '').strip()
     if target:
-        if target in _PERMANENT_BAN_IPS:
-            return jsonify({'ok': False, 'msg': f'{target} is permanently banned in code and cannot be cleared here'})
         banned = target in _ip_ban
         _ip_ban.pop(target, None)
         _ip_warn.pop(target, None)
