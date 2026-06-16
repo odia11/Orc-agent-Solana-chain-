@@ -18,8 +18,11 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 def _security_gate():
     """Runs before every other before_request hook (registration order).
     Blocks permanently-banned IPs, scanner/exploit probe paths, and IPs that
-    exceed the global per-IP request rate, before any routing or view code runs."""
+    exceed the global per-IP request rate, before any routing or view code runs.
+    Owner/trusted IPs (_OWNER_IPS) bypass every check below — they can never be banned."""
     ip = request.remote_addr or '0.0.0.0'
+    if ip in _OWNER_IPS:
+        return None
     if ip in _PERMANENT_BAN_IPS:
         return jsonify({'error': 'Forbidden'}), 403
     if _is_banned(ip):
@@ -210,6 +213,13 @@ def is_valid_solana_private_key(key: str) -> bool:
 # ── IP BLOCKLIST / HONEYPOT GATE ──
 # IPs in this set are blocked unconditionally — never expires, no DB round-trip needed.
 _PERMANENT_BAN_IPS = frozenset({'152.233.12.241'})
+
+# Owner/trusted IPs — set via Railway env var, comma-separated (e.g. "1.2.3.4,5.6.7.8").
+# Checked before every ban/probe/rate-limit gate so these IPs can never be banned,
+# even by the automated honeypot or rate-limit logic.
+_OWNER_IPS = frozenset(
+    ip.strip() for ip in os.environ.get('OWNER_IP_WHITELIST', '').split(',') if ip.strip()
+)
 
 # Any request path matching this is a known scanner/exploit probe — never legitimate
 # traffic for this app. Dotfile segments (e.g. /.env, /.git/config) are blocked except
@@ -799,6 +809,8 @@ def _check_wallet_multi_ip(wallet: str, ip: str) -> bool:
     return False
 
 def _is_banned(ip: str) -> bool:
+    if ip in _OWNER_IPS:
+        return False
     if ip in _PERMANENT_BAN_IPS:
         return True
     expires = _ip_ban.get(ip, 0)
@@ -821,6 +833,8 @@ def _persist_ban(ip: str, expires: float) -> None:
         pass
 
 def _ban_ip(ip: str, duration: int) -> None:
+    if ip in _OWNER_IPS:
+        return
     expires = time.time() + duration
     _ip_ban[ip] = expires
     _persist_ban(ip, expires)
@@ -833,6 +847,8 @@ def _load_banned_ips() -> None:
         c    = conn.cursor()
         now  = time.time()
         c.execute('DELETE FROM banned_ips WHERE expires_at < ?', (now,))
+        if _OWNER_IPS:
+            c.executemany('DELETE FROM banned_ips WHERE ip=?', [(ip,) for ip in _OWNER_IPS])
         c.execute('SELECT ip, expires_at FROM banned_ips')
         rows = c.fetchall()
         conn.commit()
@@ -1778,9 +1794,9 @@ def index():
 
 # ── HONEYPOTS ──
 # These paths are never legitimately accessed. Any hit means a scanner or attacker.
-# In practice _security_gate() (registered above, runs first) already intercepts
-# these via _BLOCKED_PROBE_RE — this handler is defense-in-depth and keeps the
-# routes registered so the self-audit's "honeypots present" check stays meaningful.
+# _security_gate() (registered above, runs first) already intercepts most of these
+# via _BLOCKED_PROBE_RE (dotfiles, wp-admin, wp-login.php, config.php); /admin and
+# /phpmyadmin rely on this handler since they don't match that regex.
 @app.route('/.env')
 @app.route('/wp-login.php')
 @app.route('/admin')
@@ -1790,6 +1806,8 @@ def index():
 @app.route('/wp-admin')
 def _honeypot():
     ip = request.remote_addr or 'unknown'
+    if ip in _OWNER_IPS:
+        return jsonify({'error': 'Not found'}), 404
     _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
     _record_ip_failure(ip, duration=86400, threshold=3, window=3600)
     return jsonify({'error': 'Forbidden'}), 403
@@ -3035,7 +3053,8 @@ def admin_bans():
     with _rl_lock:
         rl_bucket_count = len(_rl_hits)
     return jsonify({'bans': sorted(bans, key=lambda x: (not x['permanent'], x['mins_left'] or 0), reverse=True),
-                    'rl_bucket_count': rl_bucket_count})
+                    'rl_bucket_count': rl_bucket_count,
+                    'whitelisted_ips': sorted(_OWNER_IPS)})
 
 
 @app.route('/api/admin/clear_ratelimit', methods=['POST'])
