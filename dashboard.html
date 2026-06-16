@@ -2667,9 +2667,9 @@ function _lfStartCountdown(){
 }
 
 const DIFFICULTY_TEXT={
-  EASY:'AI-powered momentum scalper (EASY). Buys any token showing upward momentum in the last 5 min. Auto-exits at 8% take profit or 2% stop loss. Full 100% position exit on both targets.',
-  MEDIUM:'AI-powered momentum scalper (MEDIUM). Buys tokens showing upward momentum (5-20% rise in last 5 min). Auto-exits at 12% take profit or 8% stop loss. Full 100% position exit on both targets.',
-  HARD:'AI-powered momentum scalper (HARD). Buys tokens showing strong momentum (10-35% rise in last 5 min). Auto-exits at 20% take profit or 12% stop loss. Full 100% position exit on both targets.'
+  EASY:'AI-powered momentum scalper (EASY). Buys tokens that have risen at least 10% in the last 5 min. Auto-exits at 5% take profit or 3% stop loss. Full 100% position exit on both targets.',
+  MEDIUM:'AI-powered momentum scalper (MEDIUM). Buys tokens that have risen at least 10% in the last 5 min. Auto-exits at 12% take profit or 8% stop loss. Full 100% position exit on both targets.',
+  HARD:'AI-powered momentum scalper (HARD). Buys tokens that have risen at least 10% in the last 5 min. Auto-exits at 25% take profit or 12% stop loss. Full 100% position exit on both targets.'
 };
 const DIFFICULTY_DEFAULT_DESC='AI-powered momentum scalper. Select a difficulty below to set the entry filter and take-profit/stop-loss targets.';
 let currentDifficulty=null;   // never pre-selected — user must click EASY/MEDIUM/HARD each session
