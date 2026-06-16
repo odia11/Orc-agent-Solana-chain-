@@ -1870,6 +1870,10 @@ function renderPumpScanner(tokens){
 
 async function buyPumpToken(mint,sym,btn){
   if(!safeMint(mint)) return;
+  if(!currentDifficulty){
+    showLfToast('⚙️','Buying with MEDIUM settings','pos');
+    setDifficulty('MEDIUM');
+  }
   if(btn){ btn.disabled=true; btn.textContent='BUYING...'; }
   try{
     const r=await fetch('/api/pump-scanner/buy',{
