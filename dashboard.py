@@ -97,7 +97,7 @@ print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", 
 DIFFICULTY_PRESETS = {
     'EASY':   {'tp': 0.05, 'sl': 0.03, 'm5_min': 10, 'm5_max': None},
     'MEDIUM': {'tp': 0.12, 'sl': 0.08, 'm5_min': 10, 'm5_max': None},
-    'HARD':   {'tp': 0.25, 'sl': 0.12, 'm5_min': 10, 'm5_max': None},
+    'HARD':   {'tp': 0.25, 'sl': 0.05, 'm5_min': 10, 'm5_max': None},
 }
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
