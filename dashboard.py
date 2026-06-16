@@ -2643,79 +2643,96 @@ def api_claim_sol():
     failed   = []
     last_err = ''
 
-    with _use_key(enc_blob, wallet) as pk_str:
-        kp       = _KP.from_base58_string(pk_str)
-        signer   = kp.pubkey()
+    our_accs: list = []
+    other_accs: list = []
+    try:
+        with _use_key(enc_blob, wallet) as pk_str:
+            kp       = _KP.from_base58_string(pk_str)
+            signer   = kp.pubkey()
 
-        # Only close accounts where on-chain owner == our signing keypair.
-        # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
-        our_accs   = [a for a in closeable if a['owner'] == str(signer)]
-        other_accs = [a for a in closeable if a['owner'] != str(signer)]
-        if other_accs:
-            print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
-                  f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
+            if str(signer) != trading_pk:
+                print(f'[claim_sol] ⚠ WARNING: signer ({signer}) != trading_pk computed '
+                      f'earlier ({trading_pk}) — decrypted key may be inconsistent', flush=True)
 
-        print(f'[claim_sol] ─── close phase ───', flush=True)
-        print(f'[claim_sol] signer (trading keypair) = {str(signer)}', flush=True)
-        print(f'[claim_sol] our_accs   (owner==signer)  : {len(our_accs)}', flush=True)
-        print(f'[claim_sol] other_accs (owner!=signer)  : {len(other_accs)}', flush=True)
-        for a in other_accs:
-            print(f'[claim_sol]   other: pubkey={a["pubkey"]}  owner={a["owner"]}', flush=True)
-        print(f'[claim_sol] destination (rent back) = {str(signer)}', flush=True)
+            # Only close accounts where on-chain owner == our signing keypair.
+            # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
+            our_accs   = [a for a in closeable if a['owner'] == str(signer)]
+            other_accs = [a for a in closeable if a['owner'] != str(signer)]
+            if other_accs:
+                print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
+                      f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
 
-        for i in range(0, len(our_accs), 5):   # small batches — most reliable
-            batch = our_accs[i:i+5]
-            ixs = []
-            for a in batch:
-                # Each account must be closed via the program that actually owns it —
-                # legacy Token accounts and Token-2022 accounts are not interchangeable.
-                acc_prog = _PBK.from_string(a.get('program_id', SPL_PROG_STR))
-                print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}  program={a.get("program_id", SPL_PROG_STR)}', flush=True)
-                if a['raw_amt'] > 0:
-                    # Burn dust first — CloseAccount requires zero balance
-                    ixs.append(_IX(
-                        program_id=acc_prog,
-                        accounts=[
-                            _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account
-                            _AM(_PBK.from_string(a['mint']),   is_signer=False, is_writable=True),  # mint (supply decremented)
-                            _AM(signer,                         is_signer=True,  is_writable=False), # authority
-                        ],
-                        data=bytes([8]) + struct.pack('<Q', a['raw_amt']),  # Burn instruction
-                    ))
-                ixs.append(_IX(
-                    program_id=acc_prog,
-                    accounts=[
-                        _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account to close
-                        _AM(signer,                         is_signer=False, is_writable=True),  # destination (rent back)
-                        _AM(signer,                         is_signer=True,  is_writable=False), # authority (must match owner)
-                    ],
-                    data=bytes([9]),  # CloseAccount instruction index
-                ))
-            try:
-                bh_resp = requests.post(working_rpc, json={
-                    'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
-                }, timeout=10).json()
-                bh  = bh_resp['result']['value']['blockhash']
-                tx  = _TX.new_signed_with_payer(ixs, signer, [kp], _SH.from_string(bh))
-                res = requests.post(working_rpc, json={
-                    'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
-                    'params': [base64.b64encode(bytes(tx)).decode(),
-                               {'encoding': 'base64', 'skipPreflight': False}],
-                }, timeout=30).json()
-                rpc_short = working_rpc.split('?')[0]
-                print(f'[claim_sol] sendTransaction via {rpc_short} response: {res}', flush=True)
-                if 'error' in res:
-                    last_err = str(res['error'])
+            print(f'[claim_sol] ─── close phase ───', flush=True)
+            print(f'[claim_sol] signer (trading keypair) = {str(signer)}', flush=True)
+            print(f'[claim_sol] our_accs   (owner==signer)  : {len(our_accs)}', flush=True)
+            print(f'[claim_sol] other_accs (owner!=signer)  : {len(other_accs)}', flush=True)
+            for a in other_accs:
+                print(f'[claim_sol]   other: pubkey={a["pubkey"]}  owner={a["owner"]}', flush=True)
+            print(f'[claim_sol] destination (rent back) = {str(signer)}', flush=True)
+
+            for i in range(0, len(our_accs), 5):   # small batches — most reliable
+                batch = our_accs[i:i+5]
+                # Instruction building now lives INSIDE the try block below — a single
+                # malformed pubkey/mint string used to throw here, uncaught, crashing the
+                # whole request with a bare 500 (frontend then showed a generic fallback
+                # message instead of the real error).
+                try:
+                    ixs = []
+                    for a in batch:
+                        # Each account must be closed via the program that actually owns it —
+                        # legacy Token accounts and Token-2022 accounts are not interchangeable.
+                        acc_prog = _PBK.from_string(a.get('program_id', SPL_PROG_STR))
+                        print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}  program={a.get("program_id", SPL_PROG_STR)}', flush=True)
+                        if a['raw_amt'] > 0:
+                            # Burn dust first — CloseAccount requires zero balance
+                            ixs.append(_IX(
+                                program_id=acc_prog,
+                                accounts=[
+                                    _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account
+                                    _AM(_PBK.from_string(a['mint']),   is_signer=False, is_writable=True),  # mint (supply decremented)
+                                    _AM(signer,                         is_signer=True,  is_writable=False), # authority
+                                ],
+                                data=bytes([8]) + struct.pack('<Q', a['raw_amt']),  # Burn instruction
+                            ))
+                        ixs.append(_IX(
+                            program_id=acc_prog,
+                            accounts=[
+                                _AM(_PBK.from_string(a['pubkey']), is_signer=False, is_writable=True),  # token account to close
+                                _AM(signer,                         is_signer=False, is_writable=True),  # destination (rent back)
+                                _AM(signer,                         is_signer=True,  is_writable=False), # authority (must match owner)
+                            ],
+                            data=bytes([9]),  # CloseAccount instruction index
+                        ))
+
+                    bh_resp = requests.post(working_rpc, json={
+                        'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+                    }, timeout=10).json()
+                    bh  = bh_resp['result']['value']['blockhash']
+                    tx  = _TX.new_signed_with_payer(ixs, signer, [kp], _SH.from_string(bh))
+                    res = requests.post(working_rpc, json={
+                        'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+                        'params': [base64.b64encode(bytes(tx)).decode(),
+                                   {'encoding': 'base64', 'skipPreflight': False}],
+                    }, timeout=30).json()
+                    rpc_short = working_rpc.split('?')[0]
+                    print(f'[claim_sol] sendTransaction via {rpc_short} response: {res}', flush=True)
+                    if 'error' in res:
+                        last_err = str(res['error'])
+                        failed.extend(batch)
+                        print(f'[claim_sol] ✗ TX failed: {last_err}', flush=True)
+                    else:
+                        sig = str(res.get('result', ''))
+                        tx_sigs.append(sig)
+                        print(f'[claim_sol] ✓ {len(batch)} closed TX:{sig[:20]}', flush=True)
+                except Exception as e:
+                    last_err = _redact_keys(str(e))
                     failed.extend(batch)
-                    print(f'[claim_sol] ✗ TX failed: {last_err}', flush=True)
-                else:
-                    sig = str(res.get('result', ''))
-                    tx_sigs.append(sig)
-                    print(f'[claim_sol] ✓ {len(batch)} closed TX:{sig[:20]}', flush=True)
-            except Exception as e:
-                last_err = str(e)
-                failed.extend(batch)
-                print(f'[claim_sol] ✗ TX exception: {e}', flush=True)
+                    print(f'[claim_sol] ✗ batch exception: {last_err}', flush=True)
+    except Exception as e:
+        err_msg = _redact_keys(str(e))
+        print(f'[claim_sol] ✗ FATAL error during close phase: {err_msg}', flush=True)
+        return jsonify({'ok': False, 'msg': f'Close transaction failed: {err_msg}',
+                        'debug': {'error': err_msg, 'trading_wallet': trading_pk}}), 500
 
     closed        = len(our_accs) - len(failed)
     skipped_other = len(other_accs)
@@ -2736,6 +2753,8 @@ def api_claim_sol():
     msg = f'Closed {closed} empty account{"s" if closed != 1 else ""} — reclaimed ~{reclaimed:.5f} SOL'
     if skipped_other:
         msg += f' ({skipped_other} account{"s" if skipped_other != 1 else ""} owned by different key — use sol-incinerator.com directly)'
+    if failed:
+        msg += f' — {len(failed)} account{"s" if len(failed) != 1 else ""} failed to close: {last_err}'
     add_user_log(wallet, '[claim] ' + msg)
     threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
     return jsonify({'ok': True, 'msg': msg, 'reclaimed': round(reclaimed, 6),
