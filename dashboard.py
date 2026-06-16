@@ -80,9 +80,9 @@ DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
-    'EASY':   {'tp': 0.08, 'sl': 0.02, 'm5_min': 0,  'm5_max': None},
-    'MEDIUM': {'tp': 0.12, 'sl': 0.08, 'm5_min': 5,  'm5_max': 20},
-    'HARD':   {'tp': 0.20, 'sl': 0.12, 'm5_min': 10, 'm5_max': 35},
+    'EASY':   {'tp': 0.05, 'sl': 0.03, 'm5_min': 10, 'm5_max': None},
+    'MEDIUM': {'tp': 0.12, 'sl': 0.08, 'm5_min': 10, 'm5_max': None},
+    'HARD':   {'tp': 0.25, 'sl': 0.12, 'm5_min': 10, 'm5_max': None},
 }
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
@@ -1566,7 +1566,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         us['trader_running'] = False
         return
 
-    _m5_desc = ('>0%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
+    _m5_desc = ('≥' + str(m5_min) + '%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
     print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}... difficulty={difficulty}', flush=True)
     add_user_log(wallet, '[' + short + '] Trader started [' + difficulty + '] — TP:' + str(round(take_profit*100)) +
                  '% SL:' + str(round(stop_loss*100)) + '% | momentum ' + _m5_desc + ' in 5m + vol rising | max 5 pos | scan 30s')
@@ -1671,7 +1671,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
                         # Buy only on rising momentum (range set by difficulty) with accelerating volume.
                         # Skip tokens up 50%+ on the hour — momentum already played out.
-                        _m5_ok = (_m5 > m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max)
+                        _m5_ok = (_m5 >= m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max)
                         if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50:
                             qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
