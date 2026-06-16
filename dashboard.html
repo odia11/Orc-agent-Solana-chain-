@@ -115,6 +115,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .diff-btn.active[data-diff="EASY"]{background:var(--green);border-color:var(--green);color:#06140d}
 .diff-btn.active[data-diff="MEDIUM"]{background:var(--blue);border-color:var(--blue);color:#fff}
 .diff-btn.active[data-diff="HARD"]{background:var(--red);border-color:var(--red);color:#fff}
+.diff-modal-msg{font-size:12px;color:var(--dim);margin-bottom:20px;line-height:1.6;text-align:center}
+.diff-modal-row{display:flex;gap:10px;justify-content:center}
+.diff-modal-btn{flex:1;padding:16px 10px;border-radius:9px;background:var(--bg3);color:var(--muted);cursor:pointer;font-family:'Orbitron',monospace;font-weight:900;font-size:11px;letter-spacing:.06em;transition:all .15s}
+.diff-modal-btn[data-diff="EASY"]{border:1px solid rgba(0,237,170,.35)}
+.diff-modal-btn[data-diff="EASY"]:hover{background:var(--green);border-color:var(--green);color:#06140d}
+.diff-modal-btn[data-diff="MEDIUM"]{border:1px solid rgba(106,163,255,.35)}
+.diff-modal-btn[data-diff="MEDIUM"]:hover{background:var(--blue);border-color:var(--blue);color:#fff}
+.diff-modal-btn[data-diff="HARD"]{border:1px solid rgba(255,77,106,.35)}
+.diff-modal-btn[data-diff="HARD"]:hover{background:var(--red);border-color:var(--red);color:#fff}
 
 /* ── MARKET PANEL ── */
 .market-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -791,6 +800,20 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div>
 </div>
 
+<!-- DIFFICULTY MODAL -->
+<div class="s-modal" id="diff-modal" onclick="if(event.target===this)closeDifficultyModal()">
+  <div class="s-card" style="max-width:340px;text-align:center">
+    <button class="s-close" onclick="closeDifficultyModal()">✕</button>
+    <div class="s-title">⚡ DIFFICULTY REQUIRED</div>
+    <div class="diff-modal-msg">Please select a difficulty level first</div>
+    <div class="diff-modal-row">
+      <button class="diff-modal-btn" data-diff="EASY" onclick="selectDifficultyFromModal('EASY')">EASY</button>
+      <button class="diff-modal-btn" data-diff="MEDIUM" onclick="selectDifficultyFromModal('MEDIUM')">MEDIUM</button>
+      <button class="diff-modal-btn" data-diff="HARD" onclick="selectDifficultyFromModal('HARD')">HARD</button>
+    </div>
+  </div>
+</div>
+
 <!-- INCINERATOR MODAL -->
 <div class="s-modal" id="incinerator-modal" onclick="if(event.target===this)closeIncinerator()">
   <div class="s-card inc-card">
@@ -993,7 +1016,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
       <div class="mode-right">
         <div class="badge badge-idle" id="trade-badge">IDLE</div>
-        <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45" title="Select a difficulty first">▶ START TRADING</button>
+        <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45" title="Connect a wallet to enable trading">▶ START TRADING</button>
       </div>
       <div class="diff-row" id="diff-row">
         <span class="diff-label">DIFFICULTY</span>
@@ -2711,11 +2734,23 @@ function _refreshTradeBtnState(){
   if(traderOn){ tb.disabled=false; tb.title=''; tb.style.opacity=''; return; }
   if(!phantomKey){
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
-  } else if(!currentDifficulty){
-    tb.disabled=true; tb.title='Select a difficulty first'; tb.style.opacity='.45';
   } else {
-    tb.disabled=false; tb.title=''; tb.style.opacity='';
+    // Stays clickable even with no difficulty selected — clicking opens the
+    // difficulty modal instead of being a dead button (see toggleTrader()).
+    tb.disabled=false; tb.title=currentDifficulty?'':'Select a difficulty first'; tb.style.opacity='';
   }
+}
+
+function openDifficultyModal(){
+  document.getElementById('diff-modal').classList.add('open');
+}
+function closeDifficultyModal(){
+  document.getElementById('diff-modal').classList.remove('open');
+}
+async function selectDifficultyFromModal(diff){
+  await setDifficulty(diff);
+  closeDifficultyModal();
+  toggleTrader();
 }
 
 function updateBtns(){
@@ -2736,7 +2771,7 @@ function updateBtns(){
 
 async function toggleTrader(){
   if(!traderOn && !currentDifficulty){
-    showTradeWarn('⚠️ Select a difficulty first');
+    openDifficultyModal();
     return;
   }
   if(!traderOn && !settingsHasKey){
