@@ -3190,18 +3190,34 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
             continue
 
         try:
-            with _use_key(enc_blob, user_wallet) as pk:
-                from solders.keypair import Keypair as _KP_fr
-                signer = str(_KP_fr.from_base58_string(pk).pubkey())
-                signer_sol = _get_user_sol(signer)
-                if signer_sol < 0.001:
-                    print(f'[fee-recovery] {sw} signer={signer[:6]}...{signer[-4:]} has '
-                          f'{signer_sol:.6f} SOL (<0.001) — not enough to cover the network fee, '
-                          f'skipping', flush=True)
-                    results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
-                                    'status': 'skipped_low_balance', 'sol_balance': signer_sol})
-                    continue
-                tx_sig = send_sol_fee(pk, OWNER_WALLET, total_fee)
+            # ── Decrypt key — failures are silenced here and NEVER forwarded to
+            # any user-facing log or API response.  add_user_log is intentionally
+            # not called; the error only appears in server stdout so the admin can
+            # diagnose it without confusing the wallet owner.
+            try:
+                with _use_key(enc_blob, user_wallet) as pk:
+                    from solders.keypair import Keypair as _KP_fr
+                    signer = str(_KP_fr.from_base58_string(pk).pubkey())
+                    signer_sol = _get_user_sol(signer)
+                    if signer_sol < 0.001:
+                        print(f'[fee-recovery] {sw} signer={signer[:6]}...{signer[-4:]} has '
+                              f'{signer_sol:.6f} SOL (<0.001) — not enough to cover the network fee, '
+                              f'skipping', flush=True)
+                        results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
+                                        'status': 'skipped_low_balance', 'sol_balance': signer_sol})
+                        continue
+                    tx_sig = send_sol_fee(pk, OWNER_WALLET, total_fee)
+            except InvalidToken:
+                # Wrong ENCRYPTION_KEY for this wallet, or the stored blob is corrupted.
+                # decrypt_private_key() already printed the detailed reason with wallet + fingerprint.
+                # Skip silently — do NOT call add_user_log, no frontend notification sent.
+                print(f'[fee-recovery] {sw} full_wallet={user_wallet} SKIP — key decryption '
+                      f'failed (InvalidToken, enc_key_fp={_enc_key_fingerprint}). '
+                      f'User must re-save their trading key in Settings. '
+                      f'This error is NOT forwarded to the user UI.', flush=True)
+                results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
+                                'status': 'skipped_decrypt_error'})
+                continue
 
             # Mark every trade in this batch as paid and record in fees table
             conn2 = sqlite3.connect(DB_FILE)
@@ -3224,6 +3240,8 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
                             'tx': tx_sig, 'status': 'sent'})
 
         except Exception as e:
+            # Covers send_sol_fee failure, DB errors, keypair derivation errors, etc.
+            # Decrypt errors are handled by the inner except above and never reach here.
             err = _redact_keys(str(e)[:200])
             print(f'[fee-recovery] ✗ {sw} FAILED: {err}', flush=True)
             results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
