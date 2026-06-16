@@ -2247,6 +2247,9 @@ def api_pump_scanner_buy():
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
 
     us_sol = _get_user_sol(trading_wallet)
+    if us_sol < 0.01:
+        return jsonify({'ok': False, 'low_balance': True, 'trading_wallet': trading_wallet,
+                        'msg': '⚠️ Insufficient SOL balance. Please send SOL to your trading wallet to start trading.'}), 400
     # Manual snipe uses the user's configured minimum trade size (conservative default
     # for a one-off pick outside the scoring algorithm), converted to SOL.
     spend = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02

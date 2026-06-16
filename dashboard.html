@@ -636,6 +636,20 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .ps-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr))}
 }
 
+/* ── LOW SOL BALANCE MODAL ── */
+#low-sol-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.82);backdrop-filter:blur(4px);align-items:center;justify-content:center}
+#low-sol-modal.open{display:flex}
+.low-sol-wrap{background:var(--bg2);border:1px solid var(--red);border-radius:12px;width:min(380px,90vw);padding:24px 22px;text-align:center}
+.low-sol-icon{font-size:28px;margin-bottom:8px}
+.low-sol-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--red);letter-spacing:.08em;margin-bottom:10px}
+.low-sol-msg{font-size:12px;color:var(--dim);line-height:1.6;margin-bottom:16px}
+.low-sol-addr-row{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;margin-bottom:16px}
+.low-sol-addr{flex:1;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text);word-break:break-all;text-align:left}
+.low-sol-copy-btn{background:var(--bg4);border:1px solid var(--border2);color:var(--text);font-size:9px;font-weight:700;letter-spacing:.06em;padding:6px 10px;border-radius:6px;cursor:pointer;flex-shrink:0;font-family:'Orbitron',monospace}
+.low-sol-copy-btn:hover{border-color:var(--green)}
+.low-sol-close-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.06em;padding:8px 16px;border-radius:6px;cursor:pointer;width:100%;font-family:'Orbitron',monospace}
+.low-sol-close-btn:hover{border-color:var(--text);color:var(--text)}
+
 #update-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#1a4a2a,#0f3320);border-bottom:2px solid #4ade80;padding:10px 16px;text-align:center;animation:ub-slide .35s ease}
 @keyframes ub-slide{from{transform:translateY(-100%)}to{transform:translateY(0)}}
 #update-banner span{color:#e0ffe8;font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:.04em}
@@ -1024,6 +1038,20 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div id="ps-grid" class="ps-grid">
       <div class="ps-empty">Scanning for pumping tokens...</div>
+    </div>
+  </div>
+
+  <!-- LOW SOL BALANCE MODAL -->
+  <div id="low-sol-modal" onclick="if(event.target===this)closeLowSolModal()">
+    <div class="low-sol-wrap">
+      <div class="low-sol-icon">⚠️</div>
+      <div class="low-sol-title">Insufficient SOL Balance</div>
+      <div class="low-sol-msg">Please send SOL to your trading wallet to start trading.</div>
+      <div class="low-sol-addr-row">
+        <span class="low-sol-addr" id="low-sol-addr"></span>
+        <button class="low-sol-copy-btn" onclick="copyLowSolAddr()">Copy</button>
+      </div>
+      <button class="low-sol-close-btn" onclick="closeLowSolModal()">Close</button>
     </div>
   </div>
 
@@ -1883,12 +1911,29 @@ async function buyPumpToken(mint,sym,btn){
     }).then(r=>r.json()).catch(()=>null);
     if(r?.ok){
       showLfToast('🚀',r.msg||('Bought '+sym),'pos');
+    } else if(r?.low_balance){
+      openLowSolModal(r.trading_wallet||'');
     } else {
       showLfToast('⚠️',r?.msg||'Buy failed — try again','neg');
     }
   } finally {
     if(btn){ btn.disabled=false; btn.textContent='BUY'; }
   }
+}
+
+function openLowSolModal(addr){
+  document.getElementById('low-sol-addr').textContent=addr||'(unable to determine trading wallet)';
+  document.getElementById('low-sol-modal').classList.add('open');
+}
+function closeLowSolModal(){
+  document.getElementById('low-sol-modal').classList.remove('open');
+}
+function copyLowSolAddr(){
+  const addr=document.getElementById('low-sol-addr').textContent;
+  if(!addr) return;
+  navigator.clipboard.writeText(addr);
+  const btn=document.querySelector('.low-sol-copy-btn');
+  if(btn){ const orig=btn.textContent; btn.textContent='✓ Copied!'; setTimeout(()=>btn.textContent=orig,2000); }
 }
 
 function _psStartCountdown(){
