@@ -2277,8 +2277,12 @@ def api_pump_scanner_buy():
 
     try:
         with _use_key(enc_blob, wallet) as _pk:
-            trading_wallet = str(_KP.from_base58_string(_pk).pubkey())
-    except Exception:
+            from solders.keypair import Keypair as _KP_buy
+            trading_wallet = str(_KP_buy.from_base58_string(_pk).pubkey())
+    except InvalidToken:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    except Exception as e:
+        print(f'[pump-scanner/buy] key error for {wallet[:6]}...{wallet[-4:]}: {type(e).__name__}: {e}', flush=True)
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
 
     us_sol = _get_user_sol(trading_wallet)
