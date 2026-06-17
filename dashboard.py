@@ -95,9 +95,9 @@ DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
-    'EASY':   {'tp': 0.05, 'sl': 0.03, 'm5_min': 10, 'm5_max': None},
-    'MEDIUM': {'tp': 0.12, 'sl': 0.08, 'm5_min': 10, 'm5_max': None},
-    'HARD':   {'tp': 0.25, 'sl': 0.05, 'm5_min': 10, 'm5_max': None},
+    'EASY':   {'tp': 0.09, 'sl': 0.05, 'crash': 0.15, 'm5_min': 10, 'm5_max': None},
+    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min': 10, 'm5_max': None},
+    'HARD':   {'tp': 0.35, 'sl': 0.05, 'crash': 0.15, 'm5_min': 10, 'm5_max': None},
 }
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
@@ -1683,6 +1683,7 @@ def user_trader_loop(stop_event, config, wallet: str):
     preset           = DIFFICULTY_PRESETS[difficulty]
     take_profit      = preset['tp']
     stop_loss        = preset['sl']
+    crash_exit       = preset['crash']
     m5_min           = preset['m5_min']
     m5_max           = preset['m5_max']
 
@@ -1704,8 +1705,9 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     _m5_desc = ('≥' + str(m5_min) + '%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
     print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}... difficulty={difficulty}', flush=True)
-    add_user_log(wallet, '[' + short + '] Trader started [' + difficulty + '] — TP:' + str(round(take_profit*100)) +
-                 '% SL:' + str(round(stop_loss*100)) + '% | momentum ' + _m5_desc + ' in 5m + vol rising | max 5 pos | scan 30s')
+    add_user_log(wallet, '[' + short + '] Trader started [' + difficulty + '] — TP:+' + str(round(take_profit*100)) +
+                 '% SL:-' + str(round(stop_loss*100)) + '% crash:-' + str(round(crash_exit*100)) +
+                 '% | momentum ' + _m5_desc + ' in 5m + not reversing | max 5 pos | scan 30s')
     positions = us['positions']
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
@@ -1720,9 +1722,9 @@ def user_trader_loop(stop_event, config, wallet: str):
             continue
         _chg = (_price - _pos['buy_price']) / _pos['buy_price']
         _label = (_td.get('symbol', '') if _td else '') or _pos.get('symbol', _mint[:8])
-        if _price < _pos['buy_price'] * 0.60:
+        if _price < _pos['buy_price'] * (1 - crash_exit):
             _cpct = str(round(_chg*100,1)) + '%'
-            add_user_log(wallet, f'[{short}] 🚨 [crash-exit] {_label} {_cpct} — price crashed >40% from entry, emergency sell on startup')
+            add_user_log(wallet, f'[{short}] 🚨 [crash-exit] {_label} {_cpct} — price crashed >{int(crash_exit*100)}% from entry, emergency sell on startup')
             print(f'[crash-exit] {short} STARTUP {_label} {_cpct} price={_price} entry={_pos["buy_price"]}', flush=True)
             with _use_key(_enc_blob, wallet) as _pk:
                 _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
@@ -1792,9 +1794,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if price <= 0:
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
-                    if price < pos['buy_price'] * 0.60:
+                    if price < pos['buy_price'] * (1 - crash_exit):
                         crash_pct = str(round(chg*100,1)) + '%'
-                        add_user_log(wallet, '[' + short + '] 🚨 [crash-exit] ' + label + ' ' + crash_pct + ' — price crashed >40% from entry, emergency exit')
+                        add_user_log(wallet, '[' + short + '] 🚨 [crash-exit] ' + label + ' ' + crash_pct + ' — price crashed >' + str(int(crash_exit*100)) + '% from entry, emergency exit')
                         print(f'[crash-exit] {short} {label} {crash_pct} price={price} entry={pos["buy_price"]}', flush=True)
                         with _use_key(_enc_blob, wallet) as _pk:
                             sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
