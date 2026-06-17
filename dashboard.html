@@ -62,6 +62,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── LAYOUT ── */
 .wrap{max-width:1280px;margin:0 auto;padding:1rem 1.25rem}
+@media(max-width:768px){
+  .wrap{padding:1rem;margin:0 auto}
+  .stats{grid-template-columns:repeat(2,1fr)}
+  .diff-row{flex-wrap:wrap;gap:6px}
+  .mode-desc{max-width:100%}
+  .panel-hdr{font-size:10px}
+}
 
 /* ── HEADER ── */
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:.875rem;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
@@ -632,8 +639,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .ps-buy-btn{width:100%;margin-top:8px;background:var(--green);color:var(--bg);border:none;border-radius:6px;padding:8px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:filter .15s}
 .ps-buy-btn:hover{filter:brightness(1.1)}
 .ps-buy-btn:disabled{opacity:.5;cursor:default;filter:none}
-@media(max-width:600px){
-  .ps-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,160px),1fr))}
+@media(max-width:768px){
+  .ps-grid{grid-template-columns:1fr}
+  .pump-scanner-panel{padding:12px}
+  .ps-header{flex-direction:row;align-items:center}
+  .mkt-card.hot{margin:0 auto;width:100%}
 }
 
 /* ── LOW SOL BALANCE MODAL ── */
