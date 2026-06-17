@@ -1700,6 +1700,22 @@ def user_trader_loop(stop_event, config, wallet: str):
             continue
         _chg = (_price - _pos['buy_price']) / _pos['buy_price']
         _label = (_td.get('symbol', '') if _td else '') or _pos.get('symbol', _mint[:8])
+        if _price < _pos['buy_price'] * 0.60:
+            _cpct = str(round(_chg*100,1)) + '%'
+            add_user_log(wallet, f'[{short}] 🚨 [crash-exit] {_label} {_cpct} — price crashed >40% from entry, emergency sell on startup')
+            print(f'[crash-exit] {short} STARTUP {_label} {_cpct} price={_price} entry={_pos["buy_price"]}', flush=True)
+            with _use_key(_enc_blob, wallet) as _pk:
+                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
+            if _sell_ok:
+                with _use_key(_enc_blob, wallet) as _pk:
+                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
+                                       _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
+                                       exit_reason='CRASH EXIT ' + _cpct)
+            else:
+                _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
+                                   _pos['amount'], _pos.get('spend', 0), mint=_mint, exit_reason='CRASH EXIT ' + _cpct)
+            positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+            continue  # skip normal stop-loss check — crash exit already handled
         if _chg <= -stop_loss:
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             print(f'[trader] {short} STARTUP FORCE SELL {_label} {round(_chg*100,1)}%', flush=True)
@@ -1756,6 +1772,23 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if price <= 0:
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
+                    if price < pos['buy_price'] * 0.60:
+                        crash_pct = str(round(chg*100,1)) + '%'
+                        add_user_log(wallet, '[' + short + '] 🚨 [crash-exit] ' + label + ' ' + crash_pct + ' — price crashed >40% from entry, emergency exit')
+                        print(f'[crash-exit] {short} {label} {crash_pct} price={price} entry={pos["buy_price"]}', flush=True)
+                        with _use_key(_enc_blob, wallet) as _pk:
+                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
+                        if sell_ok:
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                                   wallet=wallet, private_key=_pk, mint=mint, exit_reason='CRASH EXIT ' + crash_pct)
+                        else:
+                            add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position cleared')
+                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                               mint=mint, exit_reason='CRASH EXIT ' + crash_pct)
+                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                        open_pos -= 1
+                        continue  # skip normal TP/SL — crash exit already handled
                     exit_reason = None
                     if chg >= take_profit:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
