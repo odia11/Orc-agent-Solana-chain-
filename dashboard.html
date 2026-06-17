@@ -1535,7 +1535,7 @@ async function launchApp(){
   // ── 2. Show dashboard ──────────────────────────────────────────
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
-  document.getElementById('s-pos').textContent='0/3';
+  document.getElementById('s-pos').textContent='0/5';
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
@@ -1670,7 +1670,7 @@ async function fetchState(){
     settingsHasKey=r.has_trading_key;
     _updateKeyStatus();
   }
-  document.getElementById('s-pos').textContent=(r.positions??0)+'/3';
+  document.getElementById('s-pos').textContent=(r.positions??0)+'/5';
   if(phantomKey){
     if(r.sol!=null){
       const _sv=+r.sol;
@@ -2644,7 +2644,7 @@ function renderPositions(detail){
   const panel=document.getElementById('positions-panel');
   if(!detail||!detail.length){panel.style.display='none';return;}
   panel.style.display='block';
-  document.getElementById('pos-count').textContent=detail.length+'/3';
+  document.getElementById('pos-count').textContent=detail.length+'/5';
   document.getElementById('positions-tbody').innerHTML=detail.map(p=>{
     const isPos=p.pnl>=0;
     const cls=isPos?'td-pos':'td-neg';
