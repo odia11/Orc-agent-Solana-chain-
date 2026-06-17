@@ -983,6 +983,7 @@ state = {
 
 _sol_price_usd: float = 0.0  # refreshed each token_loop cycle via DexScreener
 _trade_size_units_migrated: bool = False  # one-time SOL→USDC migration guard, see _migrate_trade_size_units()
+_price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previous-cycle prices for reversal detection
 
 def _migrate_trade_size_units(sol_price: float) -> None:
     """One-time migration: min_trade_size/max_trade_size/daily_loss_limit used to be
@@ -1392,6 +1393,12 @@ def token_loop():
                 time.sleep(120)
                 continue
             total_disc = len(mints)
+            # Snapshot previous prices BEFORE overwriting state['tokens'] — used by
+            # reversal check in Pass 2 to skip tokens whose price is already falling.
+            global _price_snapshots
+            _snap_ts = time.time()
+            for _old_t in state.get('tokens', []):
+                _price_snapshots[_old_t['mint']] = {'price': _old_t['price'], 'ts': _snap_ts}
             all_tokens = []
             for i, mint in enumerate(mints):
                 if i > 0:
@@ -1818,14 +1825,23 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _v5m = _t.get('volume5m', 0)
                         _v1h = _t.get('volume1h', 0)
                         _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
-                        # Buy only on rising momentum (range set by difficulty) with accelerating volume.
-                        # Skip tokens up 50%+ on the hour — momentum already played out.
+                        # Require sustained uptrend: change5m >= 10% AND price is still
+                        # rising vs the previous scan cycle (~2 min ago). If price has
+                        # already pulled back below the last snapshot, the rally is
+                        # reversing — skip even if 5m change still looks good.
                         _m5_ok = (_m5 >= m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max)
-                        if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50:
+                        _snap = _price_snapshots.get(_t['mint'])
+                        _reversing = bool(
+                            _snap and
+                            (time.time() - _snap['ts']) < 150 and
+                            _t['price'] < _snap['price']
+                        )
+                        # Skip tokens up 50%+ on the hour — momentum already played out.
+                        if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50 and not _reversing:
                             qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (' + _m5_desc + ' m5 + vol rising)')
+                                 str(total_live) + ' qualify (' + _m5_desc + ' m5 + vol rising + not reversing)')
                     if qualifying:
                         best  = qualifying[0]
                         bmint = best['mint']
