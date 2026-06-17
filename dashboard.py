@@ -1781,19 +1781,53 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
                     if mint in live_map:
-                        price = live_map[mint]['price']
-                        label = live_map[mint]['symbol'] or pos.get('symbol', mint[:8])
+                        _tok      = live_map[mint]
+                        price     = _tok['price']
+                        label     = _tok['symbol'] or pos.get('symbol', mint[:8])
+                        cur_liq   = float(_tok.get('liquidity', 0) or 0)
+                        cur_vol24 = float(_tok.get('volume24h', 0) or 0)
                     else:
                         # Token left the live scan — fetch price directly so SL still fires
-                        _td   = get_token_data(mint)
-                        price = float(_td['price']) if _td else 0.0
-                        label = (_td['symbol'] if _td else '') or pos.get('symbol', mint[:8])
+                        _td       = get_token_data(mint)
+                        price     = float(_td['price']) if _td else 0.0
+                        label     = (_td['symbol'] if _td else '') or pos.get('symbol', mint[:8])
+                        cur_liq   = float(_td.get('liquidity', 0) or 0) if _td else 0.0
+                        cur_vol24 = float(_td.get('volume24h', 0) or 0) if _td else 0.0
                         if price > 0:
                             add_user_log(wallet, '[' + short + '] ' + label +
                                          ' not in scan — fetched price $' + str(round(price, 8)))
                     if price <= 0:
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
+
+                    # ── Rugpull detector — first check, before crash-exit and stop-loss ──
+                    _rug_reason = None
+                    if chg <= -0.60:
+                        _rug_reason = 'price -' + str(abs(round(chg*100, 1))) + '% from entry'
+                    elif cur_liq > 0 and pos.get('entry_liquidity', 0) > 0 and cur_liq < pos['entry_liquidity'] * 0.50:
+                        _liq_drop = round((1 - cur_liq / pos['entry_liquidity']) * 100, 1)
+                        _rug_reason = ('liquidity dropped ' + str(_liq_drop) + '% ($' +
+                                       str(int(pos['entry_liquidity'])) + ' → $' + str(int(cur_liq)) + ')')
+                    elif cur_vol24 > 0 and cur_vol24 < 1000:
+                        _rug_reason = '24h volume near-zero ($' + str(int(cur_vol24)) + ')'
+                    if _rug_reason:
+                        add_user_log(wallet, '[' + short + '] ⚠ Rugpull detected — emergency exit ' + label + ' | ' + _rug_reason)
+                        print(f'[rugpull-detected] {short} {label} — {_rug_reason}', flush=True)
+                        cooldown_tokens[label] = time.time() + 7200  # 2-hour cooldown
+                        with _use_key(_enc_blob, wallet) as _pk:
+                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
+                        if sell_ok:
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                                   wallet=wallet, private_key=_pk, mint=mint,
+                                                   exit_reason='RUGPULL ' + _rug_reason[:40])
+                        else:
+                            add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position cleared')
+                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                               mint=mint, exit_reason='RUGPULL ' + _rug_reason[:40])
+                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                        open_pos -= 1
+                        continue  # skip crash-exit and TP/SL
                     if price < pos['buy_price'] * (1 - crash_exit):
                         crash_pct = str(round(chg*100,1)) + '%'
                         add_user_log(wallet, '[' + short + '] 🚨 [crash-exit] ' + label + ' ' + crash_pct + ' — price crashed >' + str(int(crash_exit*100)) + '% from entry, emergency exit')
@@ -1886,11 +1920,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                             pos = positions[bmint]
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
-                            pos['amount']    = spend / best['price']
-                            pos['buy_price'] = best['price']
-                            pos['spend']     = spend
-                            pos['symbol']    = label
-                            pos['opened_at'] = time.time()
+                            pos['amount']          = spend / best['price']
+                            pos['buy_price']       = best['price']
+                            pos['spend']           = spend
+                            pos['symbol']          = label
+                            pos['opened_at']       = time.time()
+                            pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
                             open_pos += 1
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
@@ -2372,11 +2407,12 @@ def api_pump_scanner_buy():
 
     us = get_user_state(wallet)
     pos = us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
-    pos['amount']    = pos.get('amount', 0.0) + spend / token_data['price']
-    pos['buy_price'] = token_data['price']
-    pos['spend']     = pos.get('spend', 0.0) + spend
-    pos['symbol']    = token_data['symbol'] or mint[:8]
-    pos['opened_at'] = time.time()
+    pos['amount']          = pos.get('amount', 0.0) + spend / token_data['price']
+    pos['buy_price']       = token_data['price']
+    pos['spend']           = pos.get('spend', 0.0) + spend
+    pos['symbol']          = token_data['symbol'] or mint[:8]
+    pos['opened_at']       = time.time()
+    pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     us['positions'][mint] = pos
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
