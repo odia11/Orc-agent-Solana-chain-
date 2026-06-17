@@ -984,6 +984,7 @@ state = {
 _sol_price_usd: float = 0.0  # refreshed each token_loop cycle via DexScreener
 _trade_size_units_migrated: bool = False  # one-time SOL→USDC migration guard, see _migrate_trade_size_units()
 _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previous-cycle prices for reversal detection
+cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
 
 def _migrate_trade_size_units(sol_price: float) -> None:
     """One-time migration: min_trade_size/max_trade_size/daily_loss_limit used to be
@@ -1393,6 +1394,14 @@ def token_loop():
                 time.sleep(120)
                 continue
             total_disc = len(mints)
+            # Remove expired cooldown entries each scan cycle
+            global cooldown_tokens
+            _cd_now = time.time()
+            _cd_expired = [s for s, exp in cooldown_tokens.items() if exp <= _cd_now]
+            for _cd_s in _cd_expired:
+                cooldown_tokens.pop(_cd_s, None)
+                print(f'[cooldown] {_cd_s} cooldown expired — eligible again', flush=True)
+
             # Snapshot previous prices BEFORE overwriting state['tokens'] — used by
             # reversal check in Pass 2 to skip tokens whose price is already falling.
             global _price_snapshots
@@ -1500,6 +1509,10 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     today = now.strftime('%Y-%m-%d')
     pnl     = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
     pnl_pct = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
+
+    if pnl < 0 and symbol:
+        cooldown_tokens[symbol] = time.time() + 1800
+        print(f'[cooldown] {symbol} enters 30-min cooldown (pnl={pnl:.6f} SOL, exit_reason={exit_reason})', flush=True)
 
     # 5% performance fee on profitable trades only (collected in SOL)
     fee_amount = 0.0
@@ -1836,8 +1849,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                             (time.time() - _snap['ts']) < 150 and
                             _t['price'] < _snap['price']
                         )
+                        _tsym    = _t.get('symbol', '')
+                        _cd_exp  = cooldown_tokens.get(_tsym)
+                        _cooling = bool(_cd_exp and time.time() < _cd_exp)
+                        if _cooling:
+                            print(f'[cooldown] skip {_tsym} — {int(_cd_exp - time.time())}s remaining', flush=True)
                         # Skip tokens up 50%+ on the hour — momentum already played out.
-                        if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50 and not _reversing:
+                        if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50 and not _reversing and not _cooling:
                             qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
