@@ -1882,14 +1882,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _snap = _price_snapshots.get(_t['mint'])
                         _reversing = bool(
                             _snap and
-                            (_now_cd - _snap['ts']) < 150 and
-                            _t['price'] < _snap['price']
+                            _t['price'] < _snap['price'] * 0.98
                         )
                         _cd_exp  = cooldown_tokens.get(_tsym)
                         _cooling = bool(_cd_exp and _now_cd < _cd_exp)
 
-                        if _sc < 6.0:
-                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < 6.0)')
+                        if _sc < 5.0:
+                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < 5.0)')
                             continue
                         if not _m5_ok:
                             _skip_log.append(f'[skip] {_tsym}: change5m too low ({round(_m5,1)}% vs {_m5_desc})')
