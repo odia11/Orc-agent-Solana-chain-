@@ -1869,33 +1869,51 @@ def user_trader_loop(stop_event, config, wallet: str):
                 if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01:
                     not_held = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = []
+                    _skip_log  = []
+                    _now_cd    = time.time()
                     for _t in not_held:
-                        _m5  = _t.get('change5m', 0)
-                        _v5m = _t.get('volume5m', 0)
-                        _v1h = _t.get('volume1h', 0)
+                        _tsym = _t.get('symbol', '') or _t['mint'][:8]
+                        _sc   = _t.get('score', 0)
+                        _m5   = _t.get('change5m', 0)
+                        _v5m  = _t.get('volume5m', 0)
+                        _v1h  = _t.get('volume1h', 0)
                         _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
-                        # Require sustained uptrend: change5m >= 10% AND price is still
-                        # rising vs the previous scan cycle (~2 min ago). If price has
-                        # already pulled back below the last snapshot, the rally is
-                        # reversing — skip even if 5m change still looks good.
                         _m5_ok = (_m5 >= m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max)
                         _snap = _price_snapshots.get(_t['mint'])
                         _reversing = bool(
                             _snap and
-                            (time.time() - _snap['ts']) < 150 and
+                            (_now_cd - _snap['ts']) < 150 and
                             _t['price'] < _snap['price']
                         )
-                        _tsym    = _t.get('symbol', '')
                         _cd_exp  = cooldown_tokens.get(_tsym)
-                        _cooling = bool(_cd_exp and time.time() < _cd_exp)
+                        _cooling = bool(_cd_exp and _now_cd < _cd_exp)
+
+                        if _sc < 6.0:
+                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < 6.0)')
+                            continue
+                        if not _m5_ok:
+                            _skip_log.append(f'[skip] {_tsym}: change5m too low ({round(_m5,1)}% vs {_m5_desc})')
+                            continue
+                        if not _vol_rising:
+                            _skip_log.append(f'[skip] {_tsym}: vol not rising (v5m={int(_v5m)} v1h={int(_v1h)})')
+                            continue
+                        if _t.get('change1h', 0) >= 50:
+                            _skip_log.append(f'[skip] {_tsym}: 1h already +{round(_t.get("change1h",0),1)}% (momentum exhausted)')
+                            continue
+                        if _reversing:
+                            _skip_log.append(f'[skip] {_tsym}: reversing (cur={_t["price"]:.8f} < prev={_snap["price"]:.8f})')
+                            continue
                         if _cooling:
-                            print(f'[cooldown] skip {_tsym} — {int(_cd_exp - time.time())}s remaining', flush=True)
-                        # Skip tokens up 50%+ on the hour — momentum already played out.
-                        if _m5_ok and _vol_rising and _t.get('change1h', 0) < 50 and not _reversing and not _cooling:
-                            qualifying.append(_t)
+                            _skip_log.append(f'[skip] {_tsym}: cooldown ({int(_cd_exp - _now_cd)}s remaining)')
+                            continue
+                        qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
                                  str(total_live) + ' qualify (' + _m5_desc + ' m5 + vol rising + not reversing)')
+                    if not qualifying and _skip_log:
+                        print(f'[qualify] {short} 0/{len(not_held)} — skip reasons:', flush=True)
+                        for _sl in _skip_log:
+                            print(f'  {_sl}', flush=True)
                     if qualifying:
                         best  = qualifying[0]
                         bmint = best['mint']
