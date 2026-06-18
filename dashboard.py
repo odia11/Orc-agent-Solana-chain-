@@ -985,6 +985,7 @@ _sol_price_usd: float = 0.0  # refreshed each token_loop cycle via DexScreener
 _trade_size_units_migrated: bool = False  # one-time SOL→USDC migration guard, see _migrate_trade_size_units()
 _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previous-cycle prices for reversal detection
 cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
+profit_cooldown:  dict = {}  # user_id -> expiry_timestamp — 1-hour pause after 60% profit in 2h
 
 def _migrate_trade_size_units(sol_price: float) -> None:
     """One-time migration: min_trade_size/max_trade_size/daily_loss_limit used to be
@@ -1865,8 +1866,32 @@ def user_trader_loop(stop_event, config, wallet: str):
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
 
+                # ── Profit protection: gate Pass 2 without touching exit logic ──
+                _now_plk   = time.time()
+                _pc_exp    = profit_cooldown.get(user_id)
+                _pc_locked = False
+                if _pc_exp:
+                    if _now_plk < _pc_exp:
+                        _pc_locked = True
+                    else:
+                        profit_cooldown.pop(user_id, None)  # lock expired — clear
+                if not _pc_locked:
+                    _trades_2h = [t for t in us['trades_history'] if t.get('ts', 0) > _now_plk - 7200]
+                    _pnl_2h    = sum(t.get('pnl', 0) for t in _trades_2h)
+                    if _pnl_2h > 0:
+                        _start_bal = us_sol - _pnl_2h
+                        if _start_bal > 0.001 and _pnl_2h / _start_bal >= 0.60:
+                            profit_cooldown[user_id] = _now_plk + 3600
+                            _pc_locked = True
+                            print(f'[profit-lock] user {user_id} — 60% profit reached '
+                                  f'(pnl_2h={round(_pnl_2h,4)} SOL  '
+                                  f'start_bal≈{round(_start_bal,4)} SOL  '
+                                  f'ratio={round(_pnl_2h/_start_bal*100,1)}%) — pausing 1 hour', flush=True)
+                            add_user_log(wallet, '[' + short + '] 🔒 Profit target reached (+60%) — '
+                                         'bot paused for 1 hour to protect gains')
+
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01:
+                if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01 and not _pc_locked:
                     not_held = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = []
                     _skip_log  = []
