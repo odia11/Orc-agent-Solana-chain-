@@ -1183,6 +1183,7 @@ def get_token_data(mint):
             'makers24h':     int(p.get('makers', 0) or 0),
             'pairAddress':   p.get('pairAddress', '') or '',
             'pairCreatedAt': int(p.get('pairCreatedAt', 0) or 0),
+            'dexId':         (p.get('dexId', '') or '').lower(),
         }
     except: return None
 
@@ -1445,6 +1446,7 @@ def token_loop():
                     'txns24h_sells': data['txns24h_sells'],
                     'makers24h':     data['makers24h'],
                     'pairAddress':   data.get('pairAddress', '') or '',
+                    'dexId':         data.get('dexId', '') or '',
                 }
                 all_tokens.append(entry)
             # Sort by score descending — best opportunity first
@@ -1898,6 +1900,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                     _now_cd    = time.time()
                     for _t in not_held:
                         _tsym = _t.get('symbol', '') or _t['mint'][:8]
+                        _dex  = _t.get('dexId', '') or ''
+                        if 'pump' in _dex:
+                            _skip_log.append(f'[skip] {_tsym}: pumpswap — filtered out')
+                            continue
                         _sc   = _t.get('score', 0)
                         _m5   = _t.get('change5m', 0)
                         _v5m  = _t.get('volume5m', 0)
