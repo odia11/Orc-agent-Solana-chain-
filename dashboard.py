@@ -2307,6 +2307,46 @@ def save_avatar():
         conn.close()
     return jsonify({'ok': True, 'avatar_url': url})
 
+# ── LEADERBOARD ──
+@app.route('/api/leaderboard', methods=['GET'])
+@rate_limit(30, 60)
+def get_leaderboard():
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT t.user_id,
+                   u.username,
+                   u.wallet_address,
+                   u.avatar_url,
+                   SUM(t.pnl)  AS total_pnl,
+                   COUNT(*)    AS trade_count,
+                   MAX(t.pnl)  AS best_trade
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE date(t.timestamp) = date('now')
+            GROUP BY t.user_id
+            ORDER BY total_pnl DESC
+            LIMIT 10
+        ''')
+        rows = c.fetchall()
+    finally:
+        conn.close()
+    result = []
+    for rank, row in enumerate(rows, 1):
+        user_id, username, wallet, avatar_url, total_pnl, trade_count, best_trade = row
+        if not username:
+            username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
+        result.append({
+            'rank':        rank,
+            'username':    username,
+            'avatar_url':  avatar_url or '',
+            'total_pnl':   round(float(total_pnl or 0), 6),
+            'trade_count': int(trade_count or 0),
+            'best_trade':  round(float(best_trade or 0), 6),
+        })
+    return jsonify(result)
+
 # ── DIFFICULTY ──
 @app.route('/api/difficulty', methods=['GET'])
 @rate_limit(30, 60)
