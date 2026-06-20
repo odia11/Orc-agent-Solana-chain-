@@ -3915,17 +3915,19 @@ async function _tpcSendSol(){
   msgEl.textContent='';
 
   try{
+    if(!provider||!provider.publicKey) throw new Error('No wallet connected');
     await _waitForSolanaWeb3();
-    sendBtn.textContent='Confirm in wallet…';
-    const bhRes=await fetch('/api/solana/blockhash').then(r=>r.json()).catch(()=>null);
-    if(!bhRes?.ok) throw new Error(bhRes?.msg||'Could not fetch blockhash');
     const {Transaction,SystemProgram,PublicKey}=window.solanaWeb3;
+    const bhResp=await fetch('/api/solana/blockhash');
+    const bhData=await bhResp.json();
+    if(!bhData.blockhash) throw new Error('Could not get blockhash');
+    sendBtn.textContent='Confirm in wallet…';
     const fromPubkey=new PublicKey(provider.publicKey.toString());
     const toPubkey=new PublicKey(recipient);
     const lamports=BigInt(Math.floor(parseFloat(amount)*1000000000));
     if(lamports<1000n||lamports>10000000000n) throw new Error('Invalid amount');
     const tx=new Transaction();
-    tx.recentBlockhash=bhRes.blockhash;
+    tx.recentBlockhash=bhData.blockhash;
     tx.feePayer=fromPubkey;
     tx.add(SystemProgram.transfer({fromPubkey,toPubkey,lamports}));
     const signed=await provider.signTransaction(tx);
