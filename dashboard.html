@@ -1329,6 +1329,40 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- MY PERFORMANCE -->
+  <div class="perf-panel" id="perf-panel-main">
+    <div class="panel-hdr">My Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span><span id="perf-tz" style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;margin-left:6px;letter-spacing:.06em"></span></div>
+    <div class="perf-stats">
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Gross P&amp;L</div>
+        <div class="perf-stat-val" id="p-pnl">$0.00</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Return</div>
+        <div class="perf-stat-val" id="p-pct">0.00%</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Trades</div>
+        <div class="perf-stat-val" id="p-trades">0</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Win Rate</div>
+        <div class="perf-stat-val" id="p-wr">—</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Best Trade</div>
+        <div class="perf-stat-val td-pos" id="p-best">—</div>
+      </div>
+      <div class="perf-stat">
+        <div class="perf-stat-lbl">Worst Trade</div>
+        <div class="perf-stat-val td-neg" id="p-worst">—</div>
+      </div>
+    </div>
+    <div class="perf-chart-wrap">
+      <svg id="pnl-chart" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none" style="display:block"></svg>
+    </div>
+  </div>
+
   <!-- LIVE ACTIVITY FEED -->
   <div class="live-feed-panel" id="live-feed-panel">
     <div class="lf-header">
@@ -1446,38 +1480,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="trade-warn" id="trade-warn"></div>
   </div>
 
-  <!-- TODAY'S PERFORMANCE -->
-  <div class="perf-panel">
-    <div class="panel-hdr">Today's Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span><span id="perf-tz" style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;margin-left:6px;letter-spacing:.06em"></span></div>
-    <div class="perf-stats">
-      <div class="perf-stat">
-        <div class="perf-stat-lbl">Gross P&amp;L</div>
-        <div class="perf-stat-val" id="p-pnl">$0.00</div>
-      </div>
-      <div class="perf-stat">
-        <div class="perf-stat-lbl">Return</div>
-        <div class="perf-stat-val" id="p-pct">0.00%</div>
-      </div>
-      <div class="perf-stat">
-        <div class="perf-stat-lbl">Trades</div>
-        <div class="perf-stat-val" id="p-trades">0</div>
-      </div>
-      <div class="perf-stat">
-        <div class="perf-stat-lbl">Win Rate</div>
-        <div class="perf-stat-val" id="p-wr">—</div>
-      </div>
-      <div class="perf-stat">
-        <div class="perf-stat-lbl">Best Trade</div>
-        <div class="perf-stat-val td-pos" id="p-best">—</div>
-      </div>
-      <div class="perf-stat">
-        <div class="perf-stat-lbl">Worst Trade</div>
-        <div class="perf-stat-val td-neg" id="p-worst">—</div>
-      </div>
-    </div>
-    <div class="perf-chart-wrap">
-      <svg id="pnl-chart" width="100%" height="110" viewBox="0 0 600 110" preserveAspectRatio="none" style="display:block"></svg>
-    </div>
     <!-- HOW IT WORKS -->
     <div class="hiw-section">
       <div class="hiw-title">How OrcAgent Trades</div>
@@ -3043,24 +3045,33 @@ function renderPerfPanel(r){
 
 function renderPnlChart(curve){
   const svg=document.getElementById('pnl-chart');
-  const W=600,H=110,PAD=14;
+  const W=600,H=120,PAD=14,XPAD=36,BPAD=18;
   if(!curve.length){
-    svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" dominant-baseline="middle" fill="#4a7095" font-size="11" font-family="Share Tech Mono,monospace" letter-spacing="0.08em">NO TRADES YET TODAY</text>`;
+    svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" dominant-baseline="middle" fill="#4a7095" font-size="11" font-family="Share Tech Mono,monospace" letter-spacing="0.08em">NO TRADES TODAY YET</text>`;
     return;
   }
-  const pts=[{t:'start',v:0},...curve];
+  const pts=[{t:'00:00',v:0},...curve];
   const vals=pts.map(p=>p.v);
   const minV=Math.min(0,...vals), maxV=Math.max(0,...vals);
   const range=Math.max(maxV-minV,0.001);
-  const mX=i=>PAD+(i/Math.max(pts.length-1,1))*(W-PAD*2);
-  const mY=v=>PAD+(1-(v-minV)/range)*(H-PAD*2);
+  const chartH=H-PAD-BPAD;
+  const mX=i=>XPAD+(i/Math.max(pts.length-1,1))*(W-XPAD-PAD);
+  const mY=v=>PAD+(1-(v-minV)/range)*(chartH-PAD);
   const zY=mY(0);
   const lastV=pts[pts.length-1].v;
   const pos=lastV>=0;
   const col=pos?'#00edaa':'#ff4d6a';
   const lineStr=pts.map((p,i)=>mX(i)+','+mY(p.v)).join(' ');
   const areaStr=mX(0)+','+zY+' '+lineStr+' '+mX(pts.length-1)+','+zY;
-  const zeroLine=(minV<0&&maxV>0)?`<line x1="${PAD}" y1="${zY}" x2="${W-PAD}" y2="${zY}" stroke="var(--border2)" stroke-width="1" stroke-dasharray="4,3"/>`:'' ;
+  const zeroLine=(minV<0&&maxV>0)?`<line x1="${XPAD}" y1="${zY}" x2="${W-PAD}" y2="${zY}" stroke="var(--border2)" stroke-width="1" stroke-dasharray="4,3"/>`:'' ;
+  // Y-axis label (last value)
+  const yLabel=(lastV>=0?'+':'')+lastV.toFixed(4)+' ◎';
+  // X-axis time labels: first, middle, last
+  const labelIdxs=[0,Math.floor((pts.length-1)/2),pts.length-1];
+  const xLabels=labelIdxs.map(i=>{
+    const t=pts[i]?.t||'';
+    return `<text x="${mX(i)}" y="${H-3}" text-anchor="middle" fill="#4a7095" font-size="8" font-family="Share Tech Mono,monospace">${t}</text>`;
+  }).join('');
   svg.innerHTML=`
     <defs>
       <linearGradient id="cg" x1="0" y1="0" x2="0" y2="1">
@@ -3072,6 +3083,8 @@ function renderPnlChart(curve){
     <polyline points="${lineStr}" fill="none" stroke="${col}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
     ${zeroLine}
     <circle cx="${mX(pts.length-1)}" cy="${mY(lastV)}" r="3.5" fill="${col}"/>
+    <text x="${XPAD-2}" y="${mY(lastV)+4}" text-anchor="end" fill="${col}" font-size="8" font-family="Share Tech Mono,monospace">${yLabel}</text>
+    ${xLabels}
   `;
 }
 
@@ -4550,7 +4563,7 @@ async function fetchLeaderboard(){
 
 setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
-setInterval(fetchTrades,10000);
+setInterval(fetchTrades,30000);
 setInterval(fetchCarousel,60000);
 setInterval(fetchPumpScanner,30000);
 setInterval(fetchLeaderboard,30000);
