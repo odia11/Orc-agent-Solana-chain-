@@ -2292,20 +2292,26 @@ def save_avatar():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
-    url = str((request.json or {}).get('avatar_url', '')).strip()
-    if url:
-        if len(url) > 500:
-            return jsonify({'ok': False, 'msg': 'URL too long (max 500 chars)'})
-        if not re.match(r'^https?://', url):
-            return jsonify({'ok': False, 'msg': 'URL must start with http:// or https://'})
+    avatar_data = str((request.json or {}).get('avatar_data', '')).strip()
+    if avatar_data:
+        _ALLOWED_PREFIXES = (
+            'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+            'data:image/png;base64,',  'data:image/gif;base64,',
+            'data:image/webp;base64,',
+        )
+        if not any(avatar_data.startswith(p) for p in _ALLOWED_PREFIXES):
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, GIF, or WebP images are accepted'})
+        b64_part = avatar_data.split(',', 1)[1] if ',' in avatar_data else ''
+        if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
+            return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'})
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute('UPDATE users SET avatar_url=? WHERE wallet_address=?',
-                     (url if url else None, wallet))
+                     (avatar_data if avatar_data else None, wallet))
         conn.commit()
     finally:
         conn.close()
-    return jsonify({'ok': True, 'avatar_url': url})
+    return jsonify({'ok': True, 'avatar_url': avatar_data})
 
 # ── LEADERBOARD ──
 @app.route('/api/leaderboard', methods=['GET'])

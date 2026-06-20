@@ -856,17 +856,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
 
     <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:18px">
-      <div class="s-label">Profile Picture <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(optional · paste an image URL)</span></div>
+      <div class="s-label">Profile Picture <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(optional · JPEG/PNG/GIF/WebP · max 2 MB)</span></div>
       <div style="display:flex;gap:12px;align-items:center;margin-bottom:10px">
         <div id="s-avatar-preview" style="width:40px;height:40px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#1a3050;border:1px solid var(--border2);font-size:14px;font-weight:700;color:var(--blue)">
           <img id="s-avatar-img" style="display:none;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';document.getElementById('s-avatar-ini').style.display='block'">
           <span id="s-avatar-ini"></span>
         </div>
         <div style="flex:1">
-          <div style="display:flex;gap:8px">
-            <input id="s-avatar-url" class="s-input" type="url" placeholder="https://example.com/photo.png" style="flex:1" oninput="_previewAvatar(this.value.trim())">
-            <button onclick="saveAvatar()" id="s-avatar-btn" style="padding:9px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;transition:border-color .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border2)'">Save</button>
-          </div>
+          <input type="file" id="s-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="_onAvatarFile(this)">
+          <button onclick="document.getElementById('s-avatar-file').click()" id="s-avatar-btn" style="padding:9px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;transition:border-color .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border2)'">📷 Choose Photo</button>
           <div class="s-msg" id="s-avatar-msg" style="margin-top:8px;margin-bottom:0"></div>
         </div>
       </div>
@@ -3101,6 +3099,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 let settingsHasKey=false;
 let _displayName=null;
 let _avatarUrl=null;
+let _pendingAvatarData=null;
 
 function _getInitials(){
   if(_displayName) return _displayName.slice(0,2).toUpperCase();
@@ -3132,9 +3131,10 @@ function _previewAvatar(url){
 }
 
 function _syncSettingsAvatar(){
-  document.getElementById('s-avatar-url').value=_avatarUrl||'';
+  _pendingAvatarData=null;
   _previewAvatar(_avatarUrl||'');
   const m=document.getElementById('s-avatar-msg'); m.className='s-msg'; m.textContent='';
+  const fi=document.getElementById('s-avatar-file'); if(fi) fi.value='';
 }
 
 function toggleHowTo(btn){
@@ -3265,23 +3265,41 @@ async function saveUsername(){
   }
 }
 
+function _onAvatarFile(input){
+  const file=input.files[0];
+  if(!file) return;
+  const msgEl=document.getElementById('s-avatar-msg');
+  msgEl.className='s-msg'; msgEl.textContent='';
+  if(file.size>2*1024*1024){
+    msgEl.className='s-msg err'; msgEl.textContent='✗ Image too large (max 2 MB)'; input.value=''; return;
+  }
+  const reader=new FileReader();
+  reader.onload=function(e){
+    _pendingAvatarData=e.target.result;
+    _previewAvatar(_pendingAvatarData);
+    saveAvatar();
+  };
+  reader.readAsDataURL(file);
+}
+
 async function saveAvatar(){
   if(!phantomKey){alert('Connect a wallet first.');return;}
-  const url=document.getElementById('s-avatar-url').value.trim();
+  if(!_pendingAvatarData){return;}
   const msgEl=document.getElementById('s-avatar-msg');
   const btn=document.getElementById('s-avatar-btn');
   msgEl.className='s-msg'; msgEl.textContent='';
-  btn.textContent='Saving...'; btn.disabled=true;
+  btn.textContent='Uploading...'; btn.disabled=true;
   const r=await fetch('/api/avatar',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({avatar_url:url})
+    body:JSON.stringify({avatar_data:_pendingAvatarData})
   }).then(r=>r.json()).catch(()=>null);
-  btn.textContent='Save'; btn.disabled=false;
+  btn.textContent='📷 Choose Photo'; btn.disabled=false;
   if(r?.ok){
     msgEl.className='s-msg ok';
     msgEl.textContent='✓ Profile picture saved!';
     _avatarUrl=r.avatar_url||null;
+    _pendingAvatarData=null;
     _updateNavPill();
   } else {
     msgEl.className='s-msg err';
