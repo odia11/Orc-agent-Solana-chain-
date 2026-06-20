@@ -4180,7 +4180,7 @@ async function openProfileCard(userId){
           <span class="tpc-sol-recip" id="tpc-sol-recip">—</span>
         </div>
         <div class="tpc-sol-btns">
-          <button class="tpc-sol-send" id="tpc-sol-send-btn" onclick="_tpcSendSol()">Send</button>
+          <button class="tpc-sol-send" id="tpc-sol-send-btn" onclick="(async()=>{const sendBtn=this,amountInput=document.getElementById('tpc-sol-amount'),msgEl=document.getElementById('tpc-sol-msg');sendBtn.disabled=true;sendBtn.textContent='Sending...';msgEl.textContent='';try{const sig=await _tpcSendSol(parseFloat(amountInput.value),_tpcCurrentFullWallet);msgEl.className='tpc-sol-msg ok';msgEl.textContent='✓ Sent! '+sig.slice(0,8)+'...';sendBtn.textContent='✓ Sent';setTimeout(()=>{sendBtn.disabled=false;sendBtn.textContent='Send';},3000);}catch(e){msgEl.className='tpc-sol-msg err';msgEl.textContent='✗ '+(e.message||'Transaction failed');sendBtn.disabled=false;sendBtn.textContent='Send';}})()">Send</button>
           <button class="tpc-sol-cancel" onclick="_tpcCloseSolForm()">Cancel</button>
         </div>
         <div class="tpc-sol-msg" id="tpc-sol-msg"></div>
