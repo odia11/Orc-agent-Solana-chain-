@@ -3922,7 +3922,8 @@ async function _tpcSendSol(){
     const {Transaction,SystemProgram,PublicKey}=window.solanaWeb3;
     const fromPubkey=new PublicKey(provider.publicKey.toString());
     const toPubkey=new PublicKey(recipient);
-    const lamports=Math.round(amount*1e9);
+    const lamports=Math.floor(parseFloat(amount)*1000000000);
+    if(lamports<1000||lamports>10000000000) throw new Error('Invalid amount');
     const tx=new Transaction();
     tx.recentBlockhash=bhRes.blockhash;
     tx.feePayer=fromPubkey;
