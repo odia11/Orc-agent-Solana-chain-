@@ -620,33 +620,56 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 }
 
 /* ── TRADERS VIEW ── */
-.tv-wrap{border:1px solid rgba(0,237,170,.3);border-radius:12px;padding:20px;background:var(--bg2);box-shadow:0 0 0 1px rgba(0,237,170,.06),0 4px 32px rgba(0,237,170,.06);margin-bottom:1.5rem}
-.tv-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(0,237,170,.15);flex-wrap:wrap;gap:8px}
-.tv-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:var(--green);letter-spacing:.05em}
-.tv-hdr-right{display:flex;align-items:center;gap:8px}
-.tv-back-btn{background:transparent;border:1px solid rgba(0,237,170,.35);border-radius:6px;padding:5px 14px;color:var(--green);font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .15s}
-.tv-back-btn:hover{background:rgba(0,237,170,.08)}
-.tv-list{display:flex;flex-direction:column;gap:8px}
-.tv-empty{text-align:center;padding:32px;font-size:11px;color:var(--muted);letter-spacing:.08em}
-.tv-card{display:flex;align-items:center;gap:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;transition:border-color .2s}
-.tv-card:hover{border-color:var(--border2)}
-.tv-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;overflow:hidden;background:var(--bg4);border:1px solid var(--border2);position:relative}
+.tv-wrap{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;overflow:hidden;margin-bottom:1.5rem}
+/* Header */
+.tv-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:12px;background:linear-gradient(135deg,rgba(0,237,170,.04) 0%,transparent 60%)}
+.tv-hdr-left{}
+.tv-hdr-title{font-family:'Orbitron',monospace;font-size:17px;font-weight:900;color:var(--text);letter-spacing:.03em;margin-bottom:4px}
+.tv-hdr-sub{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+.tv-hdr-right{display:flex;align-items:center;gap:10px}
+.tv-live-pill{display:flex;align-items:center;gap:6px;background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.2);border-radius:20px;padding:5px 12px}
+.tv-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;flex-shrink:0}
+.tv-live-label{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--green);letter-spacing:.14em}
+.tv-countdown{font-size:9px;color:var(--muted);letter-spacing:.04em;margin-left:2px}
+.tv-back-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 16px;color:var(--dim);font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .2s;white-space:nowrap}
+.tv-back-btn:hover{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.05)}
+/* Feed list */
+.tv-list{display:flex;flex-direction:column}
+.tv-empty{text-align:center;padding:52px 20px;font-size:11px;color:var(--muted);letter-spacing:.1em}
+/* Row card */
+.tv-card{display:flex;align-items:center;gap:14px;padding:15px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.tv-card:last-child{border-bottom:none}
+.tv-card:hover{background:rgba(255,255,255,.022)}
+/* Avatar */
+.tv-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;overflow:hidden;border:1.5px solid rgba(255,255,255,.07);position:relative}
 .tv-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
-.tv-info{flex:1;min-width:0}
-.tv-name{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
-.tv-row2{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
-.tv-badge-open{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.08em;background:rgba(0,237,170,.15);color:var(--green);border:1px solid rgba(0,237,170,.4);flex-shrink:0}
-.tv-badge-win{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.08em;background:rgba(0,237,170,.1);color:var(--green);border:1px solid rgba(0,237,170,.25);flex-shrink:0}
-.tv-badge-loss{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.08em;background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.3);flex-shrink:0}
-.tv-token{font-size:11px;font-weight:700;color:var(--text)}
-.tv-pnl-pos{font-size:11px;font-weight:700;color:var(--green)}
-.tv-pnl-neg{font-size:11px;font-weight:700;color:var(--red)}
-.tv-time{font-size:9px;color:var(--muted)}
-.tv-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
-.tv-follow-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
-.tv-follow-btn:hover,.tv-follow-btn.followed{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.08)}
+/* Identity */
+.tv-identity{display:flex;flex-direction:column;gap:3px;flex-shrink:0;min-width:90px;max-width:130px}
+.tv-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+.tv-wallet{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)}
+/* Signal */
+.tv-signal{flex:1;display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
+.tv-badge-open{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:rgba(0,237,170,.1);color:var(--green);border:1px solid rgba(0,237,170,.25);flex-shrink:0}
+.tv-badge-win{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:#0F6E56;color:#5fffc4;flex-shrink:0;border:none}
+.tv-badge-loss{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:20px;background:#711B13;color:#ff8a80;flex-shrink:0;border:none}
+.tv-token{font-family:'Share Tech Mono',monospace;font-size:13px;font-weight:700;color:var(--text)}
+.tv-pnl-pos{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--green)}
+.tv-pnl-neg{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--red)}
+/* Right col */
+.tv-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.tv-time{font-size:10px;color:var(--muted);white-space:nowrap}
+.tv-follow-btn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:4px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-follow-btn:hover,.tv-follow-btn.followed{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.06)}
 .tv-follow-btn.followed::before{content:'✓ '}
-@media(max-width:480px){.tv-right{align-items:flex-start}.tv-card{flex-wrap:wrap}.tv-right{width:100%;flex-direction:row;justify-content:space-between}}
+@media(max-width:540px){
+  .tv-card{padding:12px 14px;gap:10px}
+  .tv-identity{min-width:60px;max-width:90px}
+  .tv-name{font-size:13px}
+  .tv-badge-win,.tv-badge-loss,.tv-badge-open{font-size:9px;padding:2px 8px}
+  .tv-pnl-pos,.tv-pnl-neg{font-size:11px}
+  .tv-hdr{padding:14px 14px 12px}
+  .tv-hdr-title{font-size:14px}
+}
 
 /* ── TRADER PROFILE CARD ── */
 #tv-profile-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:400;display:flex;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
@@ -1358,11 +1381,16 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div id="dash-traders" style="display:none">
     <div class="tv-wrap">
       <div class="tv-hdr">
-        <span class="tv-title">👥 TRADERS FEED</span>
+        <div class="tv-hdr-left">
+          <div class="tv-hdr-title">🐋 TRADERS</div>
+          <div class="tv-hdr-sub">Live activity feed · last 24h</div>
+        </div>
         <div class="tv-hdr-right">
-          <span class="lf-live-dot"></span>
-          <span class="lf-live-label">LIVE</span>
-          <span class="lf-countdown" id="tv-countdown"></span>
+          <div class="tv-live-pill">
+            <span class="tv-live-dot"></span>
+            <span class="tv-live-label">LIVE</span>
+            <span class="tv-countdown" id="tv-countdown"></span>
+          </div>
           <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
         </div>
       </div>
@@ -3554,32 +3582,30 @@ function renderTradersFeed(items){
     const avatarHtml=_tvAvatarHtml(e);
     const uid=e.user_id||0;
 
-    let signalHtml='', timeHtml='';
+    let signalHtml, timeStr;
     if(e.type==='open'){
       const pct=e.current_pnl_pct;
-      const pctStr=pct!=null?((pct>=0?'+':'')+pct.toFixed(1)+'%'):'';
+      const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'in trade';
       const pnlCls=pct!=null&&pct<0?'tv-pnl-neg':'tv-pnl-pos';
-      signalHtml=`<span class="tv-badge-open">LIVE</span><span class="tv-token">${esc(e.token)}</span>${pctStr?`<span class="${pnlCls}">📈 ${esc(pctStr)}</span>`:'<span class="tv-pnl-pos">📈 in trade</span>'}`;
-      timeHtml=`<span class="tv-time">${_tvTimeAgo(e.opened_at)}</span>`;
+      signalHtml=`<span class="tv-badge-open">● LIVE</span><span class="tv-token">${esc(e.token)}</span><span class="${pnlCls}">${esc(pctStr)}</span>`;
+      timeStr=_tvTimeAgo(e.opened_at);
     } else {
       const pnl=e.pnl||0;
       const pos=pnl>=0;
-      const icon=pos?'✅':'❌';
       const pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';
-      const pnlCls=pos?'tv-pnl-pos':'tv-pnl-neg';
-      const badgeCls=pos?'tv-badge-win':'tv-badge-loss';
-      const badgeTxt=pos?'WIN':'LOSS';
-      signalHtml=`<span class="${badgeCls}">${badgeTxt}</span><span class="tv-token">${esc(e.token)}</span><span class="${pnlCls}">${icon} ${esc(pnlStr)}</span>`;
-      timeHtml=`<span class="tv-time">${_tvTimeAgoStr(e.timestamp)}</span>`;
+      signalHtml=`<span class="${pos?'tv-badge-win':'tv-badge-loss'}">${pos?'✓ WIN':'✗ LOSS'}</span><span class="tv-token">${esc(e.token)}</span><span class="${pos?'tv-pnl-pos':'tv-pnl-neg'}">${esc(pnlStr)}</span>`;
+      timeStr=_tvTimeAgoStr(e.timestamp);
     }
 
-    return `<div class="tv-card" style="cursor:pointer" onclick="openProfileCard(${uid})">
+    return `<div class="tv-card" onclick="openProfileCard(${uid})">
       ${avatarHtml}
-      <div class="tv-info">
-        <div class="tv-name">${esc(e.username)}</div>
-        <div class="tv-row2">${signalHtml}&nbsp;${timeHtml}</div>
+      <div class="tv-identity">
+        <span class="tv-name">${esc(e.username)}</span>
+        <span class="tv-wallet">${esc(e.wallet)}</span>
       </div>
+      <div class="tv-signal">${signalHtml}</div>
       <div class="tv-right" onclick="event.stopPropagation()">
+        <span class="tv-time">${esc(timeStr)}</span>
         <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}')">${followTxt}</button>
       </div>
     </div>`;
