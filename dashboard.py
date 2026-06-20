@@ -702,6 +702,18 @@ def init_db():
         c.execute('ALTER TABLE trades ADD COLUMN mint_address TEXT DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN referral_code TEXT UNIQUE')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN referred_by TEXT')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0')
+    except sqlite3.OperationalError:
+        pass
     c.execute('''CREATE TABLE IF NOT EXISTS follows (
         follower_id  INTEGER NOT NULL,
         following_id INTEGER NOT NULL,
@@ -1046,13 +1058,24 @@ def _use_key(enc_blob: str, wallet: str):
                 pass
         _k = None
 
+_REF_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'   # no ambiguous 0/O/1/I
+
 def get_or_create_user(wallet: str) -> int:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
     conn.commit()
-    c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+    c.execute('SELECT id, referral_code FROM users WHERE wallet_address=?', (wallet,))
     row = c.fetchone()
+    if row and not row[1]:
+        for _ in range(10):
+            code = ''.join(secrets.choice(_REF_CHARS) for _ in range(8))
+            try:
+                c.execute('UPDATE users SET referral_code=? WHERE wallet_address=?', (code, wallet))
+                conn.commit()
+                break
+            except sqlite3.IntegrityError:
+                continue   # collision — try a new code
     conn.close()
     return row[0] if row else None
 
@@ -2316,6 +2339,18 @@ def api_token_candles(mint):
     return jsonify({'ok': True, 'candles': candles})
 
 
+_REF_CODE_RE = re.compile(r'^[A-Za-z0-9]{6,12}$')   # generous match; exact 8-char enforced at creation
+
+@app.route('/ref/<code>')
+def referral_redirect(code):
+    """Public referral link — stores the code in the session then sends the visitor to the
+    connect/dashboard page.  No login required; the code is applied when they first connect
+    their wallet via /api/wallet/set."""
+    if code and _REF_CODE_RE.match(code):
+        session['pending_referral'] = code.upper()
+    return redirect('/')
+
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
@@ -2488,6 +2523,26 @@ def set_wallet():
         try:
             get_or_create_user(address)
         except: pass
+        # Apply a pending referral stored when the user visited /ref/<code>
+        pending_ref = session.pop('pending_referral', None)
+        if pending_ref and isinstance(pending_ref, str) and re.match(r'^[A-Z0-9]{8}$', pending_ref):
+            try:
+                _conn_ref = sqlite3.connect(DB_FILE)
+                _c_ref    = _conn_ref.cursor()
+                _c_ref.execute('SELECT referred_by FROM users WHERE wallet_address=?', (address,))
+                _ref_row = _c_ref.fetchone()
+                if _ref_row and _ref_row[0] is None:
+                    _c_ref.execute('SELECT wallet_address FROM users WHERE referral_code=?', (pending_ref,))
+                    _referrer = _c_ref.fetchone()
+                    if _referrer and _referrer[0] != address:
+                        _c_ref.execute('UPDATE users SET referred_by=? WHERE wallet_address=?',
+                                       (pending_ref, address))
+                        _c_ref.execute('UPDATE users SET referral_count = referral_count + 1 '
+                                       'WHERE referral_code=?', (pending_ref,))
+                        _conn_ref.commit()
+                _conn_ref.close()
+            except Exception as _ref_e:
+                print(f'[referral] apply error: {_ref_e}', flush=True)
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])
         # Multi-IP detection: same wallet from 3+ IPs in 1 h → CRITICAL alert + pause trader
