@@ -657,6 +657,10 @@ def init_db():
         c.execute('ALTER TABLE users ADD COLUMN username TEXT DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -692,7 +696,7 @@ def _security_selftest() -> bool:
         'log_lines', 'tokens', 'wallet', 'is_admin', 'has_trading_key', 'sol_price',
     })
     SETTINGS_ALLOWED = frozenset({
-        'ok', 'has_trading_key', 'max_trade_size', 'min_trade_size', 'daily_loss_limit', 'msg',
+        'ok', 'has_trading_key', 'max_trade_size', 'min_trade_size', 'daily_loss_limit', 'msg', 'avatar_url',
     })
     passed = True
     for name, allowed in [('/api/state', STATE_ALLOWED), ('/api/settings', SETTINGS_ALLOWED)]:
@@ -2155,7 +2159,7 @@ def get_settings():
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
     conn = sqlite3.connect(DB_FILE)
     c    = conn.cursor()
-    c.execute('SELECT encrypted_private_key, max_trade_size, min_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (wallet,))
+    c.execute('SELECT encrypted_private_key, max_trade_size, min_trade_size, daily_loss_limit, avatar_url FROM users WHERE wallet_address=?', (wallet,))
     row  = c.fetchone()
     conn.close()
     has_key = bool(row and row[0])
@@ -2165,8 +2169,9 @@ def get_settings():
         return jsonify({'ok': True, 'has_trading_key': has_key,
                         'max_trade_size': row[1] if row[1] is not None else 10.0,
                         'min_trade_size': row[2] if row[2] is not None else 1.0,
-                        'daily_loss_limit': row[3] if row[3] is not None else 50.0})
-    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 10.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0})
+                        'daily_loss_limit': row[3] if row[3] is not None else 50.0,
+                        'avatar_url': row[4] or ''})
+    return jsonify({'ok': True, 'has_trading_key': False, 'max_trade_size': 10.0, 'min_trade_size': 1.0, 'daily_loss_limit': 50.0, 'avatar_url': ''})
 
 @app.route('/api/settings', methods=['POST'])
 @rate_limit(10, 60)
@@ -2279,6 +2284,28 @@ def save_username():
     finally:
         conn.close()
     return jsonify({'ok': True, 'username': username})
+
+# ── AVATAR ──
+@app.route('/api/avatar', methods=['POST'])
+@rate_limit(10, 60)
+def save_avatar():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    url = str((request.json or {}).get('avatar_url', '')).strip()
+    if url:
+        if len(url) > 500:
+            return jsonify({'ok': False, 'msg': 'URL too long (max 500 chars)'})
+        if not re.match(r'^https?://', url):
+            return jsonify({'ok': False, 'msg': 'URL must start with http:// or https://'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET avatar_url=? WHERE wallet_address=?',
+                     (url if url else None, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'avatar_url': url})
 
 # ── DIFFICULTY ──
 @app.route('/api/difficulty', methods=['GET'])
