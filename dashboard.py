@@ -2370,6 +2370,7 @@ def get_leaderboard():
             username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
         result.append({
             'rank':           rank,
+            'user_id':        user_id,
             'username':       username,
             'wallet_address': wallet or '',
             'avatar_url':     avatar_url or '',
@@ -2378,6 +2379,31 @@ def get_leaderboard():
             'best_trade':     round(float(best_trade or 0), 6),
         })
     return jsonify(result)
+
+# ── PLATFORM STATS ──
+@app.route('/api/platform/stats', methods=['GET'])
+@rate_limit(60, 60)
+def platform_stats():
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT COUNT(*), COALESCE(SUM(pnl), 0)
+            FROM trades
+            WHERE date(timestamp) = date(\'now\')
+        ''')
+        row = c.fetchone()
+    finally:
+        conn.close()
+    trades_today = int(row[0] or 0)
+    net_pnl_today = round(float(row[1] or 0), 4)
+    active = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
+    return jsonify({
+        'ok': True,
+        'trades_today': trades_today,
+        'net_pnl_today': net_pnl_today,
+        'active_traders': active,
+    })
 
 # ── SOCIAL FEED ──
 @app.route('/api/social/feed', methods=['GET'])

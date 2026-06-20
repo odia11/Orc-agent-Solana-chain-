@@ -620,24 +620,43 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 }
 
 /* ── TRADERS VIEW ── */
-.tv-wrap{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;overflow:hidden;margin-bottom:1.5rem}
-/* Header */
-.tv-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 16px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:12px;background:linear-gradient(135deg,rgba(0,237,170,.04) 0%,transparent 60%)}
-.tv-hdr-left{}
-.tv-hdr-title{font-family:'Orbitron',monospace;font-size:17px;font-weight:900;color:var(--text);letter-spacing:.03em;margin-bottom:4px}
-.tv-hdr-sub{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
-.tv-hdr-right{display:flex;align-items:center;gap:10px}
-.tv-live-pill{display:flex;align-items:center;gap:6px;background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.2);border-radius:20px;padding:5px 12px}
-.tv-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;flex-shrink:0}
-.tv-live-label{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--green);letter-spacing:.14em}
-.tv-countdown{font-size:9px;color:var(--muted);letter-spacing:.04em;margin-left:2px}
-.tv-back-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 16px;color:var(--dim);font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .2s;white-space:nowrap}
+/* Header bar — 56px full-width strip */
+.tv-hdr{height:56px;display:flex;align-items:center;justify-content:space-between;padding:0 2px;margin-bottom:14px;border-bottom:2px solid var(--border2);gap:12px;-webkit-font-smoothing:antialiased;font-smoothing:antialiased}
+.tv-hdr-left{display:flex;align-items:center;gap:12px;flex-shrink:0}
+.tv-hdr-title{font-family:'Orbitron',monospace;font-size:20px;font-weight:800;color:var(--text);text-transform:uppercase;letter-spacing:.025em;white-space:nowrap;-webkit-font-smoothing:antialiased}
+.tv-hdr-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
+.tv-live-pill{display:flex;align-items:center;gap:6px;background:rgba(0,237,170,.08);border:1px solid rgba(0,237,170,.22);border-radius:20px;padding:5px 11px}
+.tv-live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;flex-shrink:0}
+.tv-live-label{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:var(--green);letter-spacing:.12em}
+.tv-countdown{font-size:9px;color:var(--muted);letter-spacing:.04em;margin-left:1px}
+.tv-active-badge{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);background:var(--bg3);border:1px solid var(--border);border-radius:7px;padding:4px 10px;white-space:nowrap}
+.tv-active-badge b{color:var(--green);font-weight:700}
+.tv-back-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:6px 14px;color:var(--dim);font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .18s;white-space:nowrap}
 .tv-back-btn:hover{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.05)}
+/* Section panels */
+.tv-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.tv-section-hdr{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;padding:11px 16px 9px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.013)}
+/* Top traders rows */
+.tv-top-row{display:flex;align-items:center;gap:11px;padding:11px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.tv-top-row:last-child{border-bottom:none}
+.tv-top-row:hover{background:rgba(255,255,255,.018)}
+.tv-top-rank{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;width:18px;text-align:center;flex-shrink:0}
+.tv-top-avtr{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;position:relative;overflow:hidden;border:1.5px solid rgba(255,255,255,.07)}
+.tv-top-avtr img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tv-top-name{flex:1;font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;-webkit-font-smoothing:antialiased}
+.tv-top-pnl-pos{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--green);white-space:nowrap;flex-shrink:0}
+.tv-top-pnl-neg{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--red);white-space:nowrap;flex-shrink:0}
+/* Platform stats bar */
+.tv-platform-stats{display:grid;grid-template-columns:repeat(3,1fr);background:var(--bg2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px}
+.tv-pstat{padding:14px 10px;border-right:1px solid var(--border);text-align:center}
+.tv-pstat:last-child{border-right:none}
+.tv-pstat-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;-webkit-font-smoothing:antialiased}
+.tv-pstat-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em}
 /* Feed list */
 .tv-list{display:flex;flex-direction:column}
-.tv-empty{text-align:center;padding:52px 20px;font-size:11px;color:var(--muted);letter-spacing:.1em}
+.tv-empty{text-align:center;padding:48px 20px;font-size:11px;color:var(--muted);letter-spacing:.1em}
 /* Row card */
-.tv-card{display:flex;align-items:center;gap:14px;padding:15px 20px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.tv-card{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
 .tv-card:last-child{border-bottom:none}
 .tv-card:hover{background:rgba(255,255,255,.022)}
 /* Avatar */
@@ -645,7 +664,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tv-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 /* Identity */
 .tv-identity{display:flex;flex-direction:column;gap:3px;flex-shrink:0;min-width:90px;max-width:130px}
-.tv-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15}
+.tv-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.15;-webkit-font-smoothing:antialiased}
 .tv-wallet{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted)}
 /* Signal */
 .tv-signal{flex:1;display:flex;align-items:center;gap:8px;min-width:0;flex-wrap:wrap}
@@ -662,13 +681,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tv-follow-btn:hover,.tv-follow-btn.followed{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.06)}
 .tv-follow-btn.followed::before{content:'✓ '}
 @media(max-width:540px){
-  .tv-card{padding:12px 14px;gap:10px}
+  .tv-hdr{height:auto;padding:12px 0;flex-wrap:wrap}
+  .tv-hdr-title{font-size:15px}
+  .tv-card{padding:12px 12px;gap:10px}
   .tv-identity{min-width:60px;max-width:90px}
   .tv-name{font-size:13px}
   .tv-badge-win,.tv-badge-loss,.tv-badge-open{font-size:9px;padding:2px 8px}
   .tv-pnl-pos,.tv-pnl-neg{font-size:11px}
-  .tv-hdr{padding:14px 14px 12px}
-  .tv-hdr-title{font-size:14px}
+  .tv-platform-stats{grid-template-columns:repeat(3,1fr)}
+  .tv-pstat-val{font-size:13px}
 }
 
 /* ── TRADER PROFILE CARD ── */
@@ -1379,25 +1400,53 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- ── TRADERS VIEW ── -->
   <div id="dash-traders" style="display:none">
-    <div class="tv-wrap">
-      <div class="tv-hdr">
-        <div class="tv-hdr-left">
-          <div class="tv-hdr-title">🐋 TRADERS</div>
-          <div class="tv-hdr-sub">Live activity feed · last 24h</div>
-        </div>
-        <div class="tv-hdr-right">
-          <div class="tv-live-pill">
-            <span class="tv-live-dot"></span>
-            <span class="tv-live-label">LIVE</span>
-            <span class="tv-countdown" id="tv-countdown"></span>
-          </div>
-          <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
+
+    <!-- Header bar: 56px, full-width -->
+    <div class="tv-hdr">
+      <div class="tv-hdr-left">
+        <span class="tv-hdr-title">👥 TRADERS FEED</span>
+        <div class="tv-live-pill">
+          <span class="tv-live-dot"></span>
+          <span class="tv-live-label">LIVE</span>
+          <span class="tv-countdown" id="tv-countdown"></span>
         </div>
       </div>
+      <div class="tv-hdr-right">
+        <span class="tv-active-badge" id="tv-active-badge" style="display:none"></span>
+        <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
+      </div>
+    </div>
+
+    <!-- Top Traders -->
+    <div class="tv-panel">
+      <div class="tv-section-hdr">🏆 Top Traders Today</div>
+      <div id="tv-top-traders"><div class="tv-empty" style="padding:20px 0">—</div></div>
+    </div>
+
+    <!-- Platform Stats -->
+    <div class="tv-platform-stats">
+      <div class="tv-pstat">
+        <div class="tv-pstat-val" id="tv-pstat-trades">—</div>
+        <div class="tv-pstat-lbl">Trades Today</div>
+      </div>
+      <div class="tv-pstat">
+        <div class="tv-pstat-val" id="tv-pstat-pnl">—</div>
+        <div class="tv-pstat-lbl">Net PnL Today</div>
+      </div>
+      <div class="tv-pstat">
+        <div class="tv-pstat-val" id="tv-pstat-active">—</div>
+        <div class="tv-pstat-lbl">Active Traders</div>
+      </div>
+    </div>
+
+    <!-- Activity Feed -->
+    <div class="tv-panel">
+      <div class="tv-section-hdr">⚡ Recent Activity</div>
       <div id="tv-list" class="tv-list">
         <div class="tv-empty">Loading trader activity…</div>
       </div>
     </div>
+
   </div><!-- /dash-traders -->
 
   <!-- TRADER PROFILE CARD OVERLAY -->
@@ -3612,10 +3661,64 @@ function renderTradersFeed(items){
   }).join('');
 }
 
+function _tvTopAvatar(e){
+  const bg=_lbAvatarColor(e.username||e.wallet||'?');
+  const ini=(e.username||e.wallet||'?')[0].toUpperCase();
+  const img=e.avatar_url?`<img src="${esc(e.avatar_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`:'';
+  return `<div class="tv-top-avtr" style="background:${bg}">${img}<span style="${e.avatar_url?'opacity:0;position:absolute':''}">  ${ini}</span></div>`;
+}
+
+function renderTopTraders(entries){
+  const el=document.getElementById('tv-top-traders'); if(!el) return;
+  if(!entries||!entries.length){el.innerHTML='<div class="tv-empty" style="padding:16px 0">No trades yet today.</div>';return;}
+  const top=entries.slice(0,5);
+  const rankColors=['#FFD700','#C0C0C0','#CD7F32','var(--dim)','var(--dim)'];
+  el.innerHTML=top.map((e,i)=>{
+    const pnl=e.total_pnl||0;
+    const pos=pnl>=0;
+    const pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';
+    const pnlCls=pos?'tv-top-pnl-pos':'tv-top-pnl-neg';
+    const uid=e.user_id||0;
+    return `<div class="tv-top-row" onclick="openProfileCard(${uid})">
+      <span class="tv-top-rank" style="color:${rankColors[i]}">${i+1}</span>
+      ${_tvTopAvatar(e)}
+      <span class="tv-top-name">${esc(e.username||e.wallet||'Trader')}</span>
+      <span class="${pnlCls}">${esc(pnlStr)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderPlatformStats(s){
+  const tv=document.getElementById('tv-pstat-trades');
+  const pv=document.getElementById('tv-pstat-pnl');
+  const av=document.getElementById('tv-pstat-active');
+  if(tv) tv.textContent=s.trades_today??'—';
+  if(pv){
+    const n=s.net_pnl_today??null;
+    if(n!=null){
+      const pos=n>=0;
+      pv.textContent=(pos?'+':'')+Number(n).toFixed(4)+' SOL';
+      pv.style.color=pos?'var(--green)':'var(--red)';
+    } else {pv.textContent='—';}
+  }
+  if(av) av.textContent=s.active_traders??'—';
+  const badge=document.getElementById('tv-active-badge');
+  if(badge&&s.active_traders!=null){
+    badge.innerHTML=`<b>${s.active_traders}</b> active`;
+    badge.style.display='';
+  }
+}
+
 async function fetchTradersFeed(){
   if(!_tradersView) return;
-  const r=await fetch('/api/social/feed').then(r=>r.json()).catch(()=>null);
-  if(Array.isArray(r)) renderTradersFeed(r);
+  const [feed, lb, stats]=await Promise.all([
+    fetch('/api/social/feed').then(r=>r.json()).catch(()=>null),
+    fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
+    fetch('/api/platform/stats').then(r=>r.json()).catch(()=>null),
+  ]);
+  if(Array.isArray(feed)) renderTradersFeed(feed);
+  if(Array.isArray(lb)) renderTopTraders(lb);
+  if(stats&&stats.ok) renderPlatformStats(stats);
   _tvStartCountdown();
 }
 
