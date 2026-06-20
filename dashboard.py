@@ -2541,10 +2541,12 @@ def social_feed():
         for _mint, _pos in list(_us.get('positions', {}).items()):
             if not _pos.get('amount') or not _pos.get('buy_price'):
                 continue
-            _buy   = float(_pos['buy_price'])
-            _cur   = _mint_price.get(_mint)
+            _buy     = float(_pos['buy_price'])
+            _amount  = float(_pos.get('amount') or 0)
+            _cur     = _mint_price.get(_mint)
             _pnl_pct = round((_cur - _buy) / _buy * 100, 2) if _cur and _buy else None
-            _opened = float(_pos.get('opened_at') or 0)
+            _pnl_sol = round(_amount * (_cur - _buy), 6) if _cur and _buy and _amount else None
+            _opened  = float(_pos.get('opened_at') or 0)
             feed.append({
                 'type':            'open',
                 'user_id':         _info['user_id'],
@@ -2554,6 +2556,7 @@ def social_feed():
                 'token':           _pos.get('symbol') or _mint[:8],
                 'entry_price':     round(_buy, 8),
                 'current_pnl_pct': _pnl_pct,
+                'current_pnl_sol': _pnl_sol,
                 'opened_at':       int(_opened),
                 '_sort_ts':        _opened,
             })

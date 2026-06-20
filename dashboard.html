@@ -3745,14 +3745,23 @@ function renderTradersFeed(items){
     let signalHtml, timeStr;
     if(e.type==='open'){
       const pct=e.current_pnl_pct;
+      const sol=e.current_pnl_sol;
       const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'in trade';
       const pnlCls=pct!=null&&pct<0?'tv-pnl-neg':'tv-pnl-pos';
-      signalHtml=`<span class="tv-badge-open">● LIVE</span><span class="tv-token">${esc(e.token)}</span><span class="${pnlCls}">${esc(pctStr)}</span>`;
+      let solStr='';
+      if(sol!=null){
+        const solAbs=Math.abs(sol);
+        const solSign=sol>=0?'+':'-';
+        solStr=' / '+(sol>=0&&solAbs<0.0001?'<0.0001':solSign+solAbs.toFixed(4))+' SOL';
+      }
+      signalHtml=`<span class="tv-badge-open">● LIVE</span><span class="tv-token">${esc(e.token)}</span><span class="${pnlCls}">${esc(pctStr+solStr)}</span>`;
       timeStr=_tvTimeAgo(e.opened_at);
     } else {
       const pnl=e.pnl||0;
       const pos=pnl>=0;
-      const pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';
+      let pnlStr;
+      if(pos&&pnl<0.0001){pnlStr='<0.0001 SOL';}
+      else{pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';}
       signalHtml=`<span class="${pos?'tv-badge-win':'tv-badge-loss'}">${pos?'✓ WIN':'✗ LOSS'}</span><span class="tv-token">${esc(e.token)}</span><span class="${pos?'tv-pnl-pos':'tv-pnl-neg'}">${esc(pnlStr)}</span>`;
       timeStr=_tvTimeAgoStr(e.timestamp);
     }
