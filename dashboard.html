@@ -1974,6 +1974,7 @@ async function launchApp(){
   updateAuthBtns();
   checkOwnerPanel();
   _lastActivity = Date.now();
+  if('Notification' in window) Notification.requestPermission();
   await fetchState();
   fetchTrades();
   fetchCarousel();
@@ -2101,6 +2102,7 @@ async function fetchState(){
   if(r.log_lines){checkForTrades(r.log_lines);renderLog(r.log_lines);}
   renderMarket(r.tokens||[]);
   if((r.tokens||[]).length&&!_carTokens.length) fetchCarousel();
+  _checkClosedPositions(r.positions_detail||[]);
   renderPositions(r.positions_detail||[]);
   if(r.sol_price) _solPrice=r.sol_price;
   _lfBuildMintMap(r.tokens||[]);
@@ -2123,6 +2125,9 @@ function checkForTrades(lines){
   const m=lines[0]?.msg||'';
   if(m.startsWith('BUY ')&&!m.includes('FAILED'))showOrcDance('BUY EXECUTED! 🚀',m.substring(0,50));
   else if(m.includes('TAKE PROFIT'))showOrcDance('TAKE PROFIT! 💎',m.substring(0,50));
+  if(m.includes('bot paused for 1 hour to protect gains')||m.includes('60% profit')){
+    _pushNotif('🔒 Bot paused','60% profit target reached — bot paused for 1 hour to protect gains.');
+  }
   lastLogCount=lines.length;
 }
 
@@ -3335,6 +3340,37 @@ function _lfCheckNewTrades(recent){
     showLfToast(icon,msg,pnlPos?'pos':'neg');
   }
   if(newTrades.length) _lfLastSeenTs=Math.max(...recent.map(t=>t.ts||0));
+}
+
+// ── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
+let _prevPosMap = null; // null = not yet seeded; Map<mint, posObj> after first poll
+
+function _pushNotif(title, body){
+  if(!document.hidden) return;
+  if(Notification.permission !== 'granted') return;
+  try{ new Notification(title, {body, icon:'/favicon.ico'}); }catch(e){}
+}
+
+function _checkClosedPositions(currentPositions){
+  if(_prevPosMap === null){
+    // First poll after load: seed the map without firing notifications
+    _prevPosMap = new Map((currentPositions||[]).map(p=>[p.mint, p]));
+    return;
+  }
+  const currentMints = new Set((currentPositions||[]).map(p=>p.mint).filter(Boolean));
+  for(const [mint, pos] of _prevPosMap){
+    if(!currentMints.has(mint)){
+      const sym  = String(pos.symbol||mint.slice(0,6)).toUpperCase();
+      const pnl  = pos.pnl||0;
+      const sol  = Math.abs(pnl).toFixed(4);
+      if(pnl >= 0){
+        _pushNotif('✅ '+sym+' sold — WIN', '+'+sol+' SOL profit!');
+      } else {
+        _pushNotif('❌ '+sym+' sold — LOSS', '-'+sol+' SOL loss');
+      }
+    }
+  }
+  _prevPosMap = new Map((currentPositions||[]).map(p=>[p.mint, p]));
 }
 
 function _lfCheckNewBuys(positions){
