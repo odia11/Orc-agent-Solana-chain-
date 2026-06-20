@@ -4092,28 +4092,34 @@ def admin_users():
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
+        today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        c.execute('''SELECT wallet_address, encrypted_private_key, created_at,
-                            max_trade_size, min_trade_size, daily_loss_limit
-                     FROM users ORDER BY created_at DESC''')
+        c.execute('SELECT id, wallet_address, encrypted_private_key, created_at FROM users ORDER BY created_at DESC')
         rows = c.fetchall()
-        conn.close()
         users = []
-        for r in rows:
-            w   = r[0] or ''
+        for uid, w, enc_key, created in rows:
+            w = w or ''
             us  = user_states.get(w, {})
             pos = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+            c.execute('SELECT COUNT(*) FROM trades WHERE user_id=?', (uid,))
+            total_trades = int((c.fetchone() or (0,))[0])
+            c.execute('SELECT COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND date(timestamp)=?', (uid, today))
+            pnl_today = round(float((c.fetchone() or (0,))[0]), 4)
+            c.execute('SELECT timestamp FROM trades WHERE user_id=? ORDER BY timestamp DESC LIMIT 1', (uid,))
+            last_row = c.fetchone()
+            last_seen = (last_row[0] or '')[:16] if last_row else ''
             users.append({
-                'wallet':     w[:4] + '...' + w[-4:] if len(w) >= 8 else w,
-                'has_key':    bool(r[1]),
-                'trading':    us.get('trader_running', False),
-                'positions':  pos,
-                'max_trade':  r[3],
-                'min_trade':  r[4],
-                'loss_limit': r[5],
-                'created':    (r[2] or '')[:10],
+                'wallet_full': w,
+                'wallet':      w[:4] + '...' + w[-4:] if len(w) >= 8 else w,
+                'has_key':     bool(enc_key),
+                'trading':     us.get('trader_running', False),
+                'positions':   pos,
+                'total_trades': total_trades,
+                'pnl_today':   pnl_today,
+                'last_seen':   last_seen,
             })
+        conn.close()
         return jsonify({'users': users, 'total': len(users)})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
@@ -4151,6 +4157,159 @@ def admin_fees():
                         'fees_failed_total': fees_failed_total, 'transactions': txs})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/stats')
+@rate_limit(20, 60)
+def admin_stats():
+    wallet = _current_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*) FROM users')
+        total_users = int((c.fetchone() or (0,))[0])
+        c.execute('SELECT COUNT(*) FROM trades')
+        total_trades = int((c.fetchone() or (0,))[0])
+        c.execute('SELECT COALESCE(SUM(ABS(pnl)),0) FROM trades')
+        volume_sol = round(float((c.fetchone() or (0,))[0]), 4)
+        conn.close()
+        active_bots = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
+        return jsonify({'ok': True, 'users': total_users, 'trades': total_trades,
+                        'volume_sol': volume_sol, 'active_bots': active_bots})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/fee-stats')
+@rate_limit(20, 60)
+def admin_fee_stats():
+    wallet = _current_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        ok_f = "(status IS NULL OR status='ok') AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')"
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_f}')
+        collected = round(float((c.fetchone() or (0,))[0]), 4)
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_f} AND timestamp LIKE ?', (today + '%',))
+        today_sol = round(float((c.fetchone() or (0,))[0]), 4)
+        # Pending = 5% of profitable trades not yet paid
+        c.execute('''SELECT COALESCE(SUM(t.pnl * 0.05), 0) FROM trades t
+                     WHERE t.pnl > 0 AND (t.fee_paid IS NULL OR t.fee_paid = 0)''')
+        pending = round(float((c.fetchone() or (0,))[0]), 4)
+        conn.close()
+        return jsonify({'ok': True, 'collected': collected, 'pending': pending, 'today': today_sol})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/collect-fees', methods=['POST'])
+@rate_limit(5, 60)
+def admin_collect_fees():
+    wallet = _current_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+    result = _recover_uncollected_fees(triggered_by='admin-panel')
+    if result.get('ok'):
+        return jsonify({'ok': True, 'msg': f"Collected {result.get('total_sol', 0):.4f} SOL",
+                        'total_sol': result.get('total_sol', 0)})
+    return jsonify({'ok': False, 'error': result.get('error', 'Recovery failed')}), 500
+
+@app.route('/api/admin/force-pause', methods=['POST'])
+@rate_limit(20, 60)
+def admin_force_pause():
+    caller = _current_wallet()
+    if not caller or not _is_owner(caller):
+        return jsonify({'error': 'Unauthorized'}), 403
+    target = str((request.json or {}).get('wallet', '')).strip()
+    if not is_valid_solana_address(target):
+        return jsonify({'error': 'Invalid wallet'}), 400
+    us = user_states.get(target)
+    if not us:
+        return jsonify({'error': 'User not found or not active'}), 404
+    if us.get('trader_stop'):
+        us['trader_stop'].set()
+    us['trader_running'] = False
+    print(f'[admin] force-pause {target[:8]}… by owner', flush=True)
+    return jsonify({'ok': True, 'msg': f'Bot paused for {target[:8]}…'})
+
+@app.route('/api/admin/force-resume', methods=['POST'])
+@rate_limit(20, 60)
+def admin_force_resume():
+    caller = _current_wallet()
+    if not caller or not _is_owner(caller):
+        return jsonify({'error': 'Unauthorized'}), 403
+    target = str((request.json or {}).get('wallet', '')).strip()
+    if not is_valid_solana_address(target):
+        return jsonify({'error': 'Invalid wallet'}), 400
+    # Resume requires the user to be in user_states and have a valid key
+    us = get_user_state(target)
+    if us.get('trader_running'):
+        return jsonify({'ok': True, 'msg': 'Bot already running'})
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT id, encrypted_private_key, max_trade_size, min_trade_size, daily_loss_limit FROM users WHERE wallet_address=?', (target,))
+        row = c.fetchone()
+        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    if not row or not row[1]:
+        return jsonify({'error': 'User has no trading key — cannot resume'}), 400
+    config = {
+        'user_id':         row[0],
+        'max_trade_size':  row[2] or 0.01,
+        'min_trade_size':  row[3] or 0.001,
+        'daily_loss_limit': row[4] or 0.05,
+    }
+    stop_ev = threading.Event()
+    us['trader_stop']   = stop_ev
+    us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(stop_ev, config, target), daemon=True)
+    us['trader_thread'].start()
+    us['trader_running'] = True
+    print(f'[admin] force-resume {target[:8]}… by owner', flush=True)
+    return jsonify({'ok': True, 'msg': f'Bot resumed for {target[:8]}…'})
+
+@app.route('/api/admin/force-close-all', methods=['POST'])
+@rate_limit(10, 60)
+def admin_force_close_all():
+    caller = _current_wallet()
+    if not caller or not _is_owner(caller):
+        return jsonify({'error': 'Unauthorized'}), 403
+    target = str((request.json or {}).get('wallet', '')).strip()
+    if not is_valid_solana_address(target):
+        return jsonify({'error': 'Invalid wallet'}), 400
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (target,))
+        row = c.fetchone()
+        conn.close()
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    if not row or not row[1]:
+        return jsonify({'error': 'User not found or has no trading key'}), 400
+    us = user_states.get(target, {})
+    positions = {k: v for k, v in us.get('positions', {}).items() if v.get('amount', 0) > 0}
+    if not positions:
+        return jsonify({'ok': True, 'msg': 'No open positions to close'})
+    try:
+        from cryptography.fernet import Fernet
+        fernet = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
+        pk = fernet.decrypt(row[1].encode()).decode()
+    except Exception as e:
+        return jsonify({'error': 'Key decryption failed'}), 500
+    closed, failed = 0, 0
+    for mint in list(positions.keys()):
+        try:
+            from orcagent_solana import sell_token
+            sell_token(pk, mint, target)
+            closed += 1
+        except Exception:
+            failed += 1
+    print(f'[admin] force-close-all {target[:8]}… closed={closed} failed={failed}', flush=True)
+    return jsonify({'ok': True, 'msg': f'Closed {closed} position(s)' + (f', {failed} failed' if failed else '')})
 
 def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
     """Send all unpaid fees (fee_paid=0, pnl>0) from each user's trading wallet to OWNER_WALLET.

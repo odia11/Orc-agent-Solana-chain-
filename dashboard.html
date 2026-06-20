@@ -808,32 +808,31 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .lb-pnl{font-size:11px;font-weight:700;font-family:'Orbitron',monospace;text-align:right;flex-shrink:0;white-space:nowrap}
 @media(max-width:480px){.lb-pnl{font-size:9px}.lb-rank{width:18px}}
 
-/* ── PUMP SCANNER ── */
-.pump-scanner-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
-.ps-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
-.ps-header-left{display:flex;align-items:center;gap:8px}
-.ps-header-right{display:flex;align-items:center;gap:8px}
-.ps-live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.5s infinite;flex-shrink:0}
-.ps-live-label{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--green);letter-spacing:.14em}
-.ps-countdown{font-size:8px;color:var(--border2);letter-spacing:.06em}
-.ps-info-btn{cursor:pointer;font-size:11px;color:var(--muted);margin-left:4px;user-select:none;opacity:.8}
-.ps-info-btn:hover{opacity:1}
-.ps-info-tooltip{display:none;position:absolute;top:calc(100% + 8px);left:0;z-index:50;width:280px;max-width:calc(100vw - 48px);background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:12px 14px;font-size:11px;line-height:1.6;color:var(--dim);box-shadow:0 8px 28px rgba(0,0,0,.5)}
-.ps-info-tooltip.open{display:block}
-@media(max-width:600px){
-  .ps-info-tooltip{width:240px}
-}
-.ps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,220px),1fr));gap:10px}
-.ps-empty{text-align:center;padding:24px;font-size:11px;color:var(--muted);letter-spacing:.08em;grid-column:1/-1}
-.ps-buy-btn{width:100%;margin-top:8px;background:var(--green);color:var(--bg);border:none;border-radius:6px;padding:8px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;cursor:pointer;transition:filter .15s}
-.ps-buy-btn:hover{filter:brightness(1.1)}
-.ps-buy-btn:disabled{opacity:.5;cursor:default;filter:none}
-@media(max-width:768px){
-  .ps-grid{grid-template-columns:1fr}
-  .pump-scanner-panel{padding:12px}
-  .ps-header{flex-direction:row;align-items:center}
-  .mkt-card.hot{margin:0 auto;width:100%}
-}
+/* ── INLINE ADMIN PANEL ── */
+.iadmin-panel{background:var(--bg2);border:2px solid rgba(255,193,58,.4);border-radius:10px;padding:16px;margin-bottom:1.25rem;box-shadow:0 0 0 1px rgba(255,193,58,.06),0 4px 24px rgba(255,193,58,.06)}
+.iadmin-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px}
+@media(max-width:640px){.iadmin-grid{grid-template-columns:1fr}}
+.iadmin-card{background:var(--bg3);border:1px solid rgba(255,193,58,.15);border-radius:9px;padding:14px;display:flex;flex-direction:column}
+.iadmin-card-hdr{font-size:9px;color:#f0b90b;text-transform:uppercase;letter-spacing:.12em;font-weight:700;margin-bottom:12px;padding-bottom:6px;border-bottom:1px solid rgba(255,193,58,.12)}
+.iadmin-stat{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+.iadmin-stat:last-of-type{margin-bottom:0}
+.iadmin-stat-lbl{font-size:10px;color:var(--muted)}
+.iadmin-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:#f0b90b}
+.iadmin-collect-btn{width:100%;margin-top:10px;background:rgba(255,193,58,.1);border:1px solid rgba(255,193,58,.4);border-radius:6px;padding:7px;font-family:'Share Tech Mono',monospace;font-size:10px;color:#f0b90b;cursor:pointer;transition:all .15s;letter-spacing:.06em}
+.iadmin-collect-btn:hover{background:rgba(255,193,58,.2)}.iadmin-collect-btn:disabled{opacity:.5;cursor:default}
+.iadmin-table-wrap{overflow-y:auto;max-height:190px;border:1px solid rgba(255,193,58,.12);border-radius:6px;margin-top:4px;flex:1}
+.iadmin-table{width:100%;border-collapse:collapse;font-size:10px}
+.iadmin-table th{padding:5px 8px;text-align:left;color:#f0b90b;font-size:8px;letter-spacing:.08em;text-transform:uppercase;border-bottom:1px solid rgba(255,193,58,.15);background:rgba(255,193,58,.04);position:sticky;top:0;white-space:nowrap}
+.iadmin-table td{padding:5px 8px;border-bottom:1px solid rgba(255,193,58,.06);color:var(--dim);cursor:pointer;white-space:nowrap;font-size:9px}
+.iadmin-table tbody tr:hover td{background:rgba(255,193,58,.04)}
+.iadmin-table tbody tr.ia-sel td{background:rgba(255,193,58,.1);color:var(--text)}
+.iadmin-sel-lbl{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:12px;min-height:1.4em;word-break:break-all}
+.iadmin-action-btns{display:flex;flex-direction:column;gap:8px;margin-top:auto}
+.iadmin-action-btn{background:transparent;border:1px solid rgba(255,193,58,.3);border-radius:6px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;text-align:left;transition:all .15s;letter-spacing:.04em}
+.iadmin-action-btn:hover:not(:disabled){border-color:#f0b90b;color:#f0b90b}
+.iadmin-action-btn:disabled{opacity:.35;cursor:default}
+.iadmin-action-btn.ia-danger{border-color:rgba(255,77,106,.3);color:rgba(255,77,106,.6)}
+.iadmin-action-btn.ia-danger:hover:not(:disabled){border-color:var(--red);color:var(--red)}
 
 /* ── MOBILE LAYOUT ── */
 @media(max-width:768px){
@@ -1373,25 +1372,46 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- PUMP SCANNER -->
-  <div class="pump-scanner-panel" id="pump-scanner-panel">
-    <div class="ps-header">
-      <div class="ps-header-left" style="position:relative">
-        <div class="panel-hdr" style="margin-bottom:0">🚀 PUMP SCANNER
-          <span class="ps-info-btn" id="ps-info-btn" onclick="togglePsInfo(event)">ℹ️</span>
-        </div>
-        <div class="ps-info-tooltip" id="ps-info-tooltip">
-          🚀 Pump Scanner scans live Solana tokens every 30 seconds and shows tokens that have pumped at least 15% in the last 5 minutes. Click BUY to instantly buy a token with your bot. Take profit and stop loss are managed automatically based on your chosen difficulty level.
+  <!-- INLINE ADMIN PANEL (owner only) -->
+  <div class="iadmin-panel" id="iadmin-panel" style="display:none">
+    <div class="panel-hdr" style="color:#f0b90b;margin-bottom:14px">👑 Admin Overview</div>
+    <div class="iadmin-grid">
+      <!-- Card 1: Platform Stats -->
+      <div class="iadmin-card">
+        <div class="iadmin-card-hdr">Platform Stats</div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Total Users</span><span class="iadmin-stat-val" id="ia-users">—</span></div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Total Trades</span><span class="iadmin-stat-val" id="ia-trades">—</span></div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Volume SOL</span><span class="iadmin-stat-val" id="ia-volume">—</span></div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Active Bots</span><span class="iadmin-stat-val" id="ia-bots">—</span></div>
+      </div>
+      <!-- Card 2: Fee Overview -->
+      <div class="iadmin-card">
+        <div class="iadmin-card-hdr">Fee Overview</div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Collected SOL</span><span class="iadmin-stat-val" id="ia-fee-total">—</span></div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Pending SOL</span><span class="iadmin-stat-val" id="ia-fee-pending">—</span></div>
+        <div class="iadmin-stat"><span class="iadmin-stat-lbl">Today SOL</span><span class="iadmin-stat-val" id="ia-fee-today">—</span></div>
+        <button class="iadmin-collect-btn" id="ia-collect-btn" onclick="iadminCollectFees()">💰 Collect All</button>
+      </div>
+      <!-- Card 3: User Table -->
+      <div class="iadmin-card">
+        <div class="iadmin-card-hdr">Users — click to select</div>
+        <div class="iadmin-table-wrap">
+          <table class="iadmin-table">
+            <thead><tr><th>Wallet</th><th>Bot</th><th>Pos</th><th>Trades</th><th>PnL</th><th>Last Seen</th></tr></thead>
+            <tbody id="ia-users-tbody"><tr><td colspan="6" style="text-align:center;padding:12px;color:var(--muted)">Loading…</td></tr></tbody>
+          </table>
         </div>
       </div>
-      <div class="ps-header-right">
-        <span class="ps-live-dot"></span>
-        <span class="ps-live-label">LIVE</span>
-        <span class="ps-countdown" id="ps-countdown"></span>
+      <!-- Card 4: Force Actions -->
+      <div class="iadmin-card">
+        <div class="iadmin-card-hdr">Force Actions</div>
+        <div class="iadmin-sel-lbl" id="ia-sel-lbl">← select a user from the table</div>
+        <div class="iadmin-action-btns">
+          <button class="iadmin-action-btn" id="ia-btn-pause"    disabled onclick="iadminForce('pause')">⏸ Pause Bot</button>
+          <button class="iadmin-action-btn" id="ia-btn-resume"   disabled onclick="iadminForce('resume')">▶ Resume Bot</button>
+          <button class="iadmin-action-btn ia-danger" id="ia-btn-closeall" disabled onclick="iadminForce('close-all')">✕ Close All Positions</button>
+        </div>
       </div>
-    </div>
-    <div id="ps-grid" class="ps-grid">
-      <div class="ps-empty">Scanning for pumping tokens...</div>
     </div>
   </div>
 
@@ -1938,7 +1958,6 @@ async function launchApp(){
   await fetchState();
   fetchTrades();
   fetchPnlChart();
-  fetchPumpScanner();
   fetchLeaderboard();
 }
 
@@ -2203,7 +2222,6 @@ function renderMarket(tokens){
     <div class="mkt-score-track"><div class="mkt-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
     <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
-  ${mint?`<button class="ps-buy-btn" style="margin-top:8px;width:100%" onclick="event.stopPropagation();buyPumpToken('${mint}','${sym}',this)">BUY</button>`:''}
 </div>`;
   };
 
@@ -2220,112 +2238,7 @@ function renderMarket(tokens){
   ticker.innerHTML=tickHtml+tickHtml;
 }
 
-// ── PUMP SCANNER ──
-function togglePsInfo(e){
-  e.stopPropagation();
-  const tip=document.getElementById('ps-info-tooltip');
-  if(!tip) return;
-  tip.classList.toggle('open');
-}
-document.addEventListener('click',(e)=>{
-  const tip=document.getElementById('ps-info-tooltip');
-  const btn=document.getElementById('ps-info-btn');
-  if(tip&&tip.classList.contains('open')&&!tip.contains(e.target)&&e.target!==btn){
-    tip.classList.remove('open');
-  }
-});
-
-let _psCountdownTimer=null,_psCountdownVal=30;
-async function fetchPumpScanner(){
-  if(!appVisible()) return;
-  const r=await fetch('/api/pump-scanner').then(r=>r.json()).catch(()=>null);
-  if(r?.ok) renderPumpScanner(r.tokens||[]);
-  _psStartCountdown();
-}
-
-function renderPumpScanner(tokens){
-  const grid=document.getElementById('ps-grid');
-  if(!grid) return;
-  if(!tokens?.length){
-    grid.innerHTML='<div class="ps-empty">No tokens pumping ≥15% right now — rescanning...</div>';
-    return;
-  }
-  const fmtChg=v=>(v>=0?'+':'')+((v??0).toFixed(1))+'%';
-  const chgCls=v=>(v??0)>=0?'up':'dn';
-
-  const makeCard=t=>{
-    const sym=esc(t.symbol||'???');
-    const name=esc(t.name||t.symbol||'Unknown');
-    const mint=safeMint(t.mint);
-    const m5=t.change5m??0,h1=t.change1h??0,h24=t.change24h??0;
-    return `<div class="mkt-card hot">
-  <div class="mkt-top">
-    <div class="mkt-id">
-      <div class="mkt-sym">${sym}</div>
-      <div class="mkt-name">${name}</div>
-    </div>
-  </div>
-  <div class="pump-badge">🚀 +${m5.toFixed(1)}% / 5M</div>
-  <span class="mkt-price">${fmtPrice(t.price)}</span>
-  <div class="chg-grid">
-    <div class="chg-cell"><div class="chg-period">5M</div><div class="chg-pct ${chgCls(m5)}">${fmtChg(m5)}</div></div>
-    <div class="chg-cell"><div class="chg-period">1H</div><div class="chg-pct ${chgCls(h1)}">${fmtChg(h1)}</div></div>
-    <div class="chg-cell"><div class="chg-period">24H</div><div class="chg-pct ${chgCls(h24)}">${fmtChg(h24)}</div></div>
-  </div>
-  <div class="mkt-divider"></div>
-  <div class="mkt-meta-row">
-    <div class="mkt-meta-cell"><div class="mkt-stat-lbl">Vol 24H</div><div class="mkt-stat-val">${fmtNum(t.volume24h||0)}</div></div>
-    <div class="mkt-meta-cell"><div class="mkt-stat-lbl">Liq</div><div class="mkt-stat-val">${fmtNum(t.liquidity||0)}</div></div>
-    <div class="mkt-meta-cell"><div class="mkt-stat-lbl">MCap</div><div class="mkt-stat-val">${fmtNum(t.fdv||0)}</div></div>
-  </div>
-  ${mint?`<button class="ps-buy-btn" onclick="buyPumpToken('${mint}','${sym.replace(/'/g,"\\'")}',this)">BUY</button>`:''}
-</div>`;
-  };
-
-  grid.innerHTML=tokens.map(makeCard).join('');
-}
-
-async function buyPumpToken(mint,sym,btn){
-  if(!safeMint(mint)) return;
-  if(!currentDifficulty){
-    showLfToast('⚙️','Buying with MEDIUM settings','pos');
-    setDifficulty('MEDIUM');
-  }
-  if(btn){ btn.disabled=true; btn.textContent='Buying...'; btn.style.color=''; }
-  try{
-    const r=await fetch('/api/pump-scanner/buy',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({mint})
-    }).then(r=>r.json()).catch(()=>null);
-    if(r?.ok){
-      showLfToast('🚀',r.msg||('Bought '+sym),'pos');
-      if(btn){
-        btn.textContent='✓ Bought!';
-        btn.style.color='var(--green)';
-        setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; btn.style.color=''; },2000);
-      }
-    } else if(r?.low_balance){
-      openLowSolModal(r.trading_wallet||'');
-      if(btn){ btn.disabled=false; btn.textContent='BUY'; }
-    } else {
-      const errMsg=(r?.msg||'Buy failed').slice(0,28);
-      showLfToast('⚠️',r?.msg||'Buy failed — try again','neg');
-      if(btn){
-        btn.textContent='✗ '+errMsg;
-        btn.style.color='var(--red)';
-        setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; btn.style.color=''; },2000);
-      }
-    }
-  } catch(e){
-    if(btn){
-      btn.textContent='✗ Error';
-      btn.style.color='var(--red)';
-      setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; btn.style.color=''; },2000);
-    }
-  }
-}
-
+// ── LOW SOL BALANCE MODAL ──
 function openLowSolModal(addr){
   document.getElementById('low-sol-addr').textContent=addr||'(unable to determine trading wallet)';
   document.getElementById('low-sol-modal').classList.add('open');
@@ -2341,16 +2254,104 @@ function copyLowSolAddr(){
   if(btn){ const orig=btn.textContent; btn.textContent='✓ Copied!'; setTimeout(()=>btn.textContent=orig,2000); }
 }
 
-function _psStartCountdown(){
-  if(_psCountdownTimer) clearInterval(_psCountdownTimer);
-  _psCountdownVal=30;
-  const el=document.getElementById('ps-countdown');
-  if(el) el.textContent='↻ '+_psCountdownVal+'s';
-  _psCountdownTimer=setInterval(()=>{
-    _psCountdownVal=Math.max(0,_psCountdownVal-1);
-    if(el) el.textContent=_psCountdownVal>0?'↻ '+_psCountdownVal+'s':'refreshing…';
-    if(_psCountdownVal===0) _psCountdownVal=30;
-  },1000);
+// ── INLINE ADMIN PANEL ──
+let _iadminSelWallet='';
+
+function _iadminSetVisible(show){
+  const el=document.getElementById('iadmin-panel');
+  if(el) el.style.display=show?'':'none';
+}
+
+async function iadminRefresh(){
+  await Promise.all([iadminFetchStats(),iadminFetchFeeStats(),iadminFetchUsers()]);
+}
+
+async function iadminFetchStats(){
+  const r=await fetch('/api/admin/stats').then(r=>r.json()).catch(()=>null);
+  if(!r?.ok) return;
+  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  s('ia-users',  r.users??'—');
+  s('ia-trades', r.trades??'—');
+  s('ia-volume', r.volume_sol!=null?r.volume_sol.toFixed(2)+' SOL':'—');
+  s('ia-bots',   r.active_bots??'—');
+}
+
+async function iadminFetchFeeStats(){
+  const r=await fetch('/api/admin/fee-stats').then(r=>r.json()).catch(()=>null);
+  if(!r?.ok) return;
+  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  s('ia-fee-total',   r.collected!=null?r.collected.toFixed(4)+' SOL':'—');
+  s('ia-fee-pending', r.pending!=null?r.pending.toFixed(4)+' SOL':'—');
+  s('ia-fee-today',   r.today!=null?r.today.toFixed(4)+' SOL':'—');
+}
+
+async function iadminFetchUsers(){
+  const r=await fetch('/api/admin/users').then(r=>r.json()).catch(()=>null);
+  const tbody=document.getElementById('ia-users-tbody');
+  if(!tbody) return;
+  const users=r?.users||[];
+  if(!users.length){
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;padding:12px;color:var(--muted)">No users</td></tr>';
+    return;
+  }
+  tbody.innerHTML=users.map(u=>{
+    const pnl=u.pnl_today!=null?((u.pnl_today>=0?'+':'')+u.pnl_today.toFixed(3)):'—';
+    const pnlClr=u.pnl_today>0?'var(--green)':u.pnl_today<0?'var(--red)':'';
+    const botClr=u.trading?'var(--green)':'var(--muted)';
+    const isSel=_iadminSelWallet&&_iadminSelWallet===(u.wallet_full||'');
+    return `<tr class="${isSel?'ia-sel':''}" onclick="iadminSelectUser(${JSON.stringify(u.wallet_full||'')},${JSON.stringify(u.wallet||'')})">
+      <td title="${esc(u.wallet_full||u.wallet||'')}">${esc(u.wallet||'')}</td>
+      <td style="color:${botClr}">${u.trading?'ON':'OFF'}</td>
+      <td>${u.positions??0}</td>
+      <td>${u.total_trades??0}</td>
+      <td style="color:${pnlClr}">${pnl}</td>
+      <td style="color:var(--muted)">${esc(u.last_seen||'—')}</td>
+    </tr>`;
+  }).join('');
+}
+
+function iadminSelectUser(walletFull,walletShort){
+  _iadminSelWallet=walletFull;
+  const lbl=document.getElementById('ia-sel-lbl');
+  if(lbl) lbl.textContent=walletShort||(walletFull.slice(0,6)+'...'+walletFull.slice(-4));
+  ['ia-btn-pause','ia-btn-resume','ia-btn-closeall'].forEach(id=>{
+    const el=document.getElementById(id);
+    if(el) el.disabled=!walletFull;
+  });
+  document.querySelectorAll('#ia-users-tbody tr').forEach(tr=>{
+    tr.classList.toggle('ia-sel',tr.onclick&&tr.onclick.toString().includes(JSON.stringify(walletFull)));
+  });
+}
+
+async function iadminCollectFees(){
+  const btn=document.getElementById('ia-collect-btn');
+  if(btn){btn.disabled=true;btn.textContent='Collecting…';}
+  const r=await fetch('/api/admin/collect-fees',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(r=>r.json()).catch(()=>null);
+  if(btn){btn.disabled=false;btn.textContent='💰 Collect All';}
+  if(r?.ok){
+    showLfToast('💰',r.msg||(r.total_sol!=null?'Collected '+r.total_sol.toFixed(4)+' SOL':'Done'),'pos');
+    iadminFetchFeeStats();
+  }else{
+    showLfToast('⚠️',r?.error||'Collection failed','neg');
+  }
+}
+
+async function iadminForce(action){
+  if(!_iadminSelWallet){showLfToast('⚠️','No user selected','neg');return;}
+  const btnId=action==='pause'?'ia-btn-pause':action==='resume'?'ia-btn-resume':'ia-btn-closeall';
+  const btn=document.getElementById(btnId);
+  if(btn) btn.disabled=true;
+  const r=await fetch('/api/admin/force-'+action,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({wallet:_iadminSelWallet})
+  }).then(r=>r.json()).catch(()=>null);
+  if(btn) btn.disabled=false;
+  if(r?.ok){
+    showLfToast('👑',r.msg||'Done','pos');
+    setTimeout(iadminFetchUsers,800);
+  }else{
+    showLfToast('⚠️',r?.error||'Action failed','neg');
+  }
 }
 
 // ── TOKEN OF THE DAY + LIVE CHART ──
@@ -2381,11 +2382,14 @@ function checkOwnerPanel(){
   if(_isAdmin){
     if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
+    _iadminSetVisible(true);
+    iadminRefresh();
     fetchAudit();
-    if(!_adminTimer) _adminTimer=setInterval(()=>{ if(_adminView) fetchAdminOverview(); },60000);
+    if(!_adminTimer) _adminTimer=setInterval(()=>{ if(_adminView) fetchAdminOverview(); else iadminRefresh(); },60000);
   } else {
     if(adminBtn) adminBtn.style.display='none';
     if(healthBtn) healthBtn.style.display='none';
+    _iadminSetVisible(false);
     if(_adminView) toggleAdminView();
     closeHealthPanel();
     if(_adminTimer){clearInterval(_adminTimer);_adminTimer=null;}
@@ -4315,7 +4319,6 @@ setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,30000);
 setInterval(fetchPnlChart,30000);
-setInterval(fetchPumpScanner,30000);
 setInterval(fetchLeaderboard,30000);
 setInterval(fetchTradersFeed,15000);
 
