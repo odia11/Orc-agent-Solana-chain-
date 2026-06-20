@@ -1413,6 +1413,19 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
           <button class="iadmin-action-btn ia-danger" id="ia-btn-closeall" disabled onclick="iadminForce('close-all')">✕ Close All Positions</button>
         </div>
       </div>
+      <!-- Card 5: Database Backups (full-width) -->
+      <div class="iadmin-card" style="grid-column:1/-1">
+        <div class="iadmin-card-hdr" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Database Backups</span>
+          <button class="iadmin-action-btn" style="padding:3px 10px;font-size:9px;margin:0" onclick="iadminFetchBackups()">↺ Refresh</button>
+        </div>
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="iadmin-stat"><span class="iadmin-stat-lbl">Last Backup</span><span class="iadmin-stat-val" id="ia-bkp-last" style="font-size:11px;font-family:'Share Tech Mono',monospace">—</span></div>
+          <div class="iadmin-stat"><span class="iadmin-stat-lbl">Files Stored</span><span class="iadmin-stat-val" id="ia-bkp-count">—</span></div>
+          <div class="iadmin-stat"><span class="iadmin-stat-lbl">Total Size</span><span class="iadmin-stat-val" id="ia-bkp-size" style="font-size:11px">—</span></div>
+        </div>
+        <div id="ia-bkp-list" style="font-size:10px;color:var(--muted);line-height:2;font-family:'Share Tech Mono',monospace"></div>
+      </div>
     </div>
   </div>
 
@@ -2264,7 +2277,30 @@ function _iadminSetVisible(show){
 }
 
 async function iadminRefresh(){
-  await Promise.all([iadminFetchStats(),iadminFetchFeeStats(),iadminFetchUsers()]);
+  await Promise.all([iadminFetchStats(),iadminFetchFeeStats(),iadminFetchUsers(),iadminFetchBackups()]);
+}
+
+function _fmtBytes(b){
+  if(b>=1048576) return (b/1048576).toFixed(1)+' MB';
+  if(b>=1024)    return (b/1024).toFixed(0)+' KB';
+  return b+' B';
+}
+
+async function iadminFetchBackups(){
+  const r=await fetch('/api/admin/backups').then(r=>r.json()).catch(()=>null);
+  if(!r?.ok) return;
+  const bkps=r.backups||[];
+  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  s('ia-bkp-count', bkps.length||'0');
+  const totalBytes=bkps.reduce((a,b)=>a+b.size,0);
+  s('ia-bkp-size',  bkps.length?_fmtBytes(totalBytes):'—');
+  s('ia-bkp-last',  bkps.length?bkps[0].date:'Never');
+  const listEl=document.getElementById('ia-bkp-list');
+  if(listEl){
+    listEl.innerHTML=bkps.map(b=>
+      `<span style="color:var(--dim)">${esc(b.filename)}</span>&nbsp;·&nbsp;${_fmtBytes(b.size)}&nbsp;·&nbsp;${esc(b.date)}`
+    ).join('<br>')||'<span style="color:var(--muted)">No backups yet — first backup runs 60 s after startup</span>';
+  }
 }
 
 async function iadminFetchStats(){

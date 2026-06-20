@@ -1,4 +1,10 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
+    from apscheduler.triggers.cron import CronTrigger as _CronTrigger
+    _APSCHEDULER_OK = True
+except ImportError:
+    _APSCHEDULER_OK = False
 from contextlib import contextmanager
 from flask import Flask, jsonify, request, session, render_template, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -92,6 +98,7 @@ BASE         = os.path.dirname(os.path.abspath(__file__))
 _DATA_DIR    = '/data' if os.path.exists('/data') else BASE
 LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
 DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
+BACKUP_DIR   = os.path.join(_DATA_DIR, 'backups')
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
@@ -4368,6 +4375,29 @@ def admin_force_close_all():
     print(f'[admin] force-close-all {target[:8]}… closed={closed} failed={failed}', flush=True)
     return jsonify({'ok': True, 'msg': f'Closed {closed} position(s)' + (f', {failed} failed' if failed else '')})
 
+@app.route('/api/admin/backups')
+@rate_limit(20, 60)
+def admin_backups():
+    caller = _current_wallet()
+    if not caller or not _is_owner(caller):
+        return jsonify({'error': 'Unauthorized'}), 403
+    backups = []
+    try:
+        if os.path.isdir(BACKUP_DIR):
+            for fname in sorted(os.listdir(BACKUP_DIR), reverse=True):
+                if fname.startswith('orcagent_') and fname.endswith('.db'):
+                    fpath = os.path.join(BACKUP_DIR, fname)
+                    stat  = os.stat(fpath)
+                    date_str = fname.replace('orcagent_', '').replace('.db', '')
+                    backups.append({
+                        'filename': fname,
+                        'size':     stat.st_size,
+                        'date':     date_str,
+                    })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+    return jsonify({'ok': True, 'backups': backups, 'backup_dir': BACKUP_DIR})
+
 def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
     """Send all unpaid fees (fee_paid=0, pnl>0) from each user's trading wallet to OWNER_WALLET.
     Returns a summary dict. Safe to call from a background thread or an API endpoint."""
@@ -4949,6 +4979,70 @@ def _startup_fee_recovery():
     _recover_uncollected_fees(triggered_by='startup')
 
 threading.Thread(target=_startup_fee_recovery, daemon=True).start()
+
+# ── DAILY DATABASE BACKUP ────────────────────────────────────────────────────
+def backup_database() -> bool:
+    """
+    Hot-copy orcagent.db to BACKUP_DIR/orcagent_YYYY-MM-DD.db using the
+    sqlite3 online backup API (safe under concurrent reads/writes).
+    Retains the 7 most recent files; older ones are deleted.
+    Returns True on success.
+    """
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        date_str  = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+        dest_path = os.path.join(BACKUP_DIR, f'orcagent_{date_str}.db')
+        # Use sqlite3 online backup so we never read a torn page
+        src  = sqlite3.connect(DB_FILE)
+        dest = sqlite3.connect(dest_path)
+        try:
+            src.backup(dest)
+        finally:
+            dest.close()
+            src.close()
+        size_kb = os.path.getsize(dest_path) // 1024
+        print(f'[backup] ✓ {dest_path} ({size_kb} KB)', flush=True)
+    except Exception as e:
+        print(f'[backup] ✗ failed: {e}', flush=True)
+        return False
+
+    # Prune — keep only the 7 newest files
+    try:
+        files = sorted(
+            [f for f in os.listdir(BACKUP_DIR) if f.startswith('orcagent_') and f.endswith('.db')],
+            reverse=True,
+        )
+        for old in files[7:]:
+            old_path = os.path.join(BACKUP_DIR, old)
+            os.remove(old_path)
+            print(f'[backup] pruned {old}', flush=True)
+    except Exception as e:
+        print(f'[backup] prune error: {e}', flush=True)
+
+    return True
+
+def _start_backup_scheduler():
+    if not _APSCHEDULER_OK:
+        print('[backup] APScheduler not available — install apscheduler for scheduled backups', flush=True)
+        # Fall back to a simple thread-based 60-second delay + no recurring schedule
+        def _once():
+            time.sleep(60)
+            backup_database()
+        threading.Thread(target=_once, daemon=True).start()
+        return
+    try:
+        _sched = _BgScheduler(timezone='UTC')
+        # Daily at 03:00 UTC
+        _sched.add_job(backup_database, _CronTrigger(hour=3, minute=0), id='daily_backup', replace_existing=True)
+        # One-shot startup backup after 60 s
+        run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
+        _sched.add_job(backup_database, 'date', run_date=run_at, id='startup_backup')
+        _sched.start()
+        print('[backup] scheduler started — daily 03:00 UTC, startup in 60 s', flush=True)
+    except Exception as e:
+        print(f'[backup] scheduler error: {e}', flush=True)
+
+_start_backup_scheduler()
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
