@@ -6,7 +6,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>OrcAgent — Solana Trading Terminal</title>
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/@solana/web3.js@1.95.4/lib/index.iife.min.js"></script>
+<script src="https://unpkg.com/@solana/web3.js@1.95.4/lib/index.iife.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -3850,9 +3850,13 @@ function _tpcRecentHtml(userId){
 // ── SEND SOL ──
 let _tpcCurrentFullWallet = '';
 
-function _loadSolanaWeb3(){
-  if(!window.solanaWeb3) throw new Error('@solana/web3.js not loaded');
-  return Promise.resolve(window.solanaWeb3);
+async function _waitForSolanaWeb3(timeout=10000){
+  const start=Date.now();
+  while(!window.solanaWeb3){
+    if(Date.now()-start>timeout) throw new Error('solana/web3.js load timeout');
+    await new Promise(r=>setTimeout(r,100));
+  }
+  return window.solanaWeb3;
 }
 
 function _tpcOpenSolForm(){
@@ -3911,7 +3915,7 @@ async function _tpcSendSol(){
   msgEl.textContent='';
 
   try{
-    await _loadSolanaWeb3();
+    await _waitForSolanaWeb3();
     sendBtn.textContent='Confirm in wallet…';
     const bhRes=await fetch('/api/solana/blockhash').then(r=>r.json()).catch(()=>null);
     if(!bhRes?.ok) throw new Error(bhRes?.msg||'Could not fetch blockhash');
