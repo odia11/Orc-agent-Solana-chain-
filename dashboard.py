@@ -653,6 +653,10 @@ def init_db():
         c.execute('ALTER TABLE users ADD COLUMN key_hash TEXT DEFAULT ""')
     except sqlite3.OperationalError:
         pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN username TEXT DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -2235,6 +2239,46 @@ def save_settings():
     get_user_state(wallet)['has_trading_key'] = final_has_key
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
     return jsonify({'ok': True, 'has_trading_key': final_has_key})
+
+# ── USERNAME ──
+@app.route('/api/username', methods=['GET'])
+@rate_limit(30, 60)
+def get_username():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    conn = sqlite3.connect(DB_FILE)
+    c    = conn.cursor()
+    c.execute('SELECT username FROM users WHERE wallet_address=?', (wallet,))
+    row  = c.fetchone()
+    conn.close()
+    return jsonify({'ok': True, 'username': (row[0] or '') if row else ''})
+
+@app.route('/api/username', methods=['POST'])
+@rate_limit(10, 60)
+def save_username():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    username = str((request.json or {}).get('username', '')).strip()
+    if username and len(username) > 20:
+        return jsonify({'ok': False, 'msg': 'Username must be 20 characters or fewer'})
+    if username and not re.match(r'^[a-zA-Z0-9_]+$', username):
+        return jsonify({'ok': False, 'msg': 'Only letters, numbers, and underscores allowed'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        if username:
+            c.execute('SELECT wallet_address FROM users WHERE username=? COLLATE NOCASE', (username,))
+            taken = c.fetchone()
+            if taken and taken[0] != wallet:
+                return jsonify({'ok': False, 'msg': 'Username already taken'})
+        c.execute('UPDATE users SET username=? WHERE wallet_address=?',
+                  (username if username else None, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'username': username})
 
 # ── DIFFICULTY ──
 @app.route('/api/difficulty', methods=['GET'])

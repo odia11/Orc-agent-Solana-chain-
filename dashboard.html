@@ -845,6 +845,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div style="height:14px"></div>
     <div class="s-msg" id="s-msg"></div>
     <button class="s-save" id="s-save-btn" onclick="saveSettings()" disabled>SAVE SETTINGS</button>
+
+    <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:18px">
+      <div class="s-label">Username <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(optional · max 20 chars · a–z 0–9 _)</span></div>
+      <div style="display:flex;gap:8px">
+        <input id="s-username" class="s-input" type="text" placeholder="e.g. trader123" maxlength="20" autocomplete="off" style="flex:1">
+        <button onclick="saveUsername()" id="s-username-btn" style="padding:9px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;transition:border-color .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border2)'">Save</button>
+      </div>
+      <div class="s-msg" id="s-username-msg" style="margin-top:8px;margin-bottom:0"></div>
+    </div>
   </div>
 </div>
 
@@ -1539,9 +1548,12 @@ async function launchApp(){
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
-    document.getElementById('wallet-short').textContent=short;
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
+    fetch('/api/username').then(r=>r.json()).then(r=>{
+      _displayName=r?.ok&&r.username?r.username:null;
+      _updateNavPill();
+    }).catch(()=>{ _updateNavPill(); });
     fetchBalance();
     fetch('/api/settings').then(r=>r.json()).then(r=>{
       if(r?.ok){
@@ -3063,6 +3075,13 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── SETTINGS MODAL ──
 let settingsHasKey=false;
+let _displayName=null;
+
+function _updateNavPill(){
+  if(!phantomKey) return;
+  const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
+  document.getElementById('wallet-short').textContent=_displayName||short;
+}
 
 function toggleHowTo(btn){
   const body=btn.nextElementSibling;
@@ -3140,7 +3159,7 @@ async function openSettings(){
   const saveBtn=document.getElementById('s-save-btn');
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
-    document.getElementById('s-user-label').textContent='Settings for '+short;
+    document.getElementById('s-user-label').textContent='Settings for '+(_displayName||short);
     saveBtn.disabled=false; saveBtn.style.opacity='1';
     const r=await fetch('/api/settings').then(r=>r.json()).catch(()=>null);
     if(r?.ok){
@@ -3150,6 +3169,10 @@ async function openSettings(){
       settingsHasKey=r.has_trading_key||false;
       _updateKeyStatus();
     }
+    const ru=await fetch('/api/username').then(r=>r.json()).catch(()=>null);
+    if(ru?.ok) document.getElementById('s-username').value=ru.username||'';
+    const unMsg=document.getElementById('s-username-msg');
+    unMsg.className='s-msg'; unMsg.textContent='';
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
     saveBtn.disabled=true; saveBtn.style.opacity='.45';
@@ -3160,6 +3183,30 @@ async function openSettings(){
 
 function closeSettings(){
   document.getElementById('settings-modal').classList.remove('open');
+}
+
+async function saveUsername(){
+  if(!phantomKey){alert('Connect a wallet first.');return;}
+  const val=document.getElementById('s-username').value.trim();
+  const msgEl=document.getElementById('s-username-msg');
+  const btn=document.getElementById('s-username-btn');
+  msgEl.className='s-msg'; msgEl.textContent='';
+  btn.textContent='Saving...'; btn.disabled=true;
+  const r=await fetch('/api/username',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({username:val})
+  }).then(r=>r.json()).catch(()=>null);
+  btn.textContent='Save'; btn.disabled=false;
+  if(r?.ok){
+    msgEl.className='s-msg ok';
+    msgEl.textContent='✓ Username saved!';
+    _displayName=r.username||null;
+    _updateNavPill();
+  } else {
+    msgEl.className='s-msg err';
+    msgEl.textContent='✗ '+(r?.msg||'Save failed');
+  }
 }
 
 function togglePrivVis(){
