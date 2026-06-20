@@ -2401,6 +2401,35 @@ def solana_blockhash():
             last_err = str(e)
     return jsonify({'ok': False, 'msg': last_err}), 502
 
+# ── SOLANA SEND RAW TX PROXY ──
+@app.route('/api/solana/send_raw', methods=['POST'])
+@rate_limit(20, 60)
+def solana_send_raw():
+    raw_tx = str((request.json or {}).get('raw_tx', '')).strip()
+    if not raw_tx:
+        return jsonify({'ok': False, 'msg': 'raw_tx is required'})
+    try:
+        base64.b64decode(raw_tx)  # validate it is valid base64
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'raw_tx is not valid base64'})
+    payload = {
+        'jsonrpc': '2.0', 'id': 1,
+        'method': 'sendTransaction',
+        'params': [raw_tx, {'encoding': 'base64'}],
+    }
+    last_err = 'No RPC available'
+    for rpc in CLAIM_SOL_RPCS:
+        try:
+            r = requests.post(rpc, json=payload, timeout=15)
+            data = r.json()
+            if 'result' in data:
+                return jsonify({'ok': True, 'signature': data['result']})
+            err = data.get('error', {})
+            last_err = err.get('message', str(err)) if err else 'Unknown RPC error'
+        except Exception as e:
+            last_err = str(e)
+    return jsonify({'ok': False, 'msg': last_err})
+
 # ── PLATFORM STATS ──
 @app.route('/api/platform/stats', methods=['GET'])
 @rate_limit(60, 60)
