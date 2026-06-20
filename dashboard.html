@@ -1131,7 +1131,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- HEADER -->
   <div class="header">
-    <div class="logo-row">
+    <div class="logo-row" onclick="_navLogoClick()" style="cursor:pointer" title="Back to dashboard">
       <svg width="34" height="34" viewBox="0 0 160 160">
         <ellipse cx="80" cy="105" rx="42" ry="47" fill="#1a4a2a"/>
         <ellipse cx="80" cy="78" rx="40" ry="38" fill="#1a4a2a"/>
@@ -3831,6 +3831,11 @@ async function fetchTradersFeed(){
   if(Array.isArray(lb)) renderTopTraders(lb);
   if(stats&&stats.ok) renderPlatformStats(stats);
   _tvStartCountdown();
+}
+
+function _navLogoClick(){
+  if(_tradersView){ closeTradersView(); return; }
+  window.scrollTo({top:0,behavior:'smooth'});
 }
 
 function openTradersView(){
