@@ -2354,6 +2354,111 @@ def get_leaderboard():
         })
     return jsonify(result)
 
+# ── SOCIAL FEED ──
+@app.route('/api/social/feed', methods=['GET'])
+@rate_limit(30, 60)
+def social_feed():
+    # Build mint→current_price from shared token state (best-effort; may be empty if scan hasn't run)
+    _mint_price: dict = {
+        t['mint']: float(t['price'])
+        for t in state.get('tokens', [])
+        if t.get('mint') and t.get('price')
+    }
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        # Load all users for enrichment lookups
+        c.execute('SELECT id, wallet_address, username, avatar_url FROM users')
+        _user_rows = c.fetchall()
+
+        # Recent closed trades — last 24 h
+        _cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        c.execute('''
+            SELECT user_id, token, entry_price, exit_price, pnl, timestamp
+            FROM trades
+            WHERE timestamp >= ?
+            ORDER BY timestamp DESC
+            LIMIT 100
+        ''', (_cutoff,))
+        _trade_rows = c.fetchall()
+    finally:
+        conn.close()
+
+    def _short(wallet: str) -> str:
+        return (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
+
+    # Build lookup maps
+    _wallet_info: dict = {}
+    _id_info:     dict = {}
+    for _uid, _wallet, _uname, _avatar in _user_rows:
+        _sw   = _short(_wallet)
+        _info = {
+            'user_id':    _uid,
+            'username':   _uname if _uname else _sw,
+            'avatar_url': _avatar or '',
+            'wallet':     _sw,
+        }
+        if _wallet:
+            _wallet_info[_wallet] = _info
+        _id_info[_uid] = _info
+
+    feed = []
+
+    # ── Open positions (in-memory) ──
+    for _wallet, _us in list(user_states.items()):
+        _info = _wallet_info.get(_wallet)
+        if not _info:
+            continue
+        for _mint, _pos in list(_us.get('positions', {}).items()):
+            if not _pos.get('amount') or not _pos.get('buy_price'):
+                continue
+            _buy   = float(_pos['buy_price'])
+            _cur   = _mint_price.get(_mint)
+            _pnl_pct = round((_cur - _buy) / _buy * 100, 2) if _cur and _buy else None
+            _opened = float(_pos.get('opened_at') or 0)
+            feed.append({
+                'type':            'open',
+                'user_id':         _info['user_id'],
+                'username':        _info['username'],
+                'avatar_url':      _info['avatar_url'],
+                'wallet':          _info['wallet'],
+                'token':           _pos.get('symbol') or _mint[:8],
+                'entry_price':     round(_buy, 8),
+                'current_pnl_pct': _pnl_pct,
+                'opened_at':       int(_opened),
+                '_sort_ts':        _opened,
+            })
+
+    # ── Closed trades (DB) ──
+    for _uid, _token, _entry, _exit, _pnl, _ts_str in _trade_rows:
+        _info = _id_info.get(_uid)
+        if not _info:
+            continue
+        try:
+            _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%dT%H:%M:%SZ').replace(
+                tzinfo=datetime.timezone.utc).timestamp()
+        except Exception:
+            _sort_ts = 0.0
+        feed.append({
+            'type':        'trade',
+            'user_id':     _info['user_id'],
+            'username':    _info['username'],
+            'avatar_url':  _info['avatar_url'],
+            'wallet':      _info['wallet'],
+            'token':       _token or '',
+            'entry_price': round(float(_entry or 0), 8),
+            'exit_price':  round(float(_exit  or 0), 8),
+            'pnl':         round(float(_pnl   or 0), 6),
+            'timestamp':   _ts_str or '',
+            '_sort_ts':    _sort_ts,
+        })
+
+    feed.sort(key=lambda x: x['_sort_ts'], reverse=True)
+    for _item in feed:
+        _item.pop('_sort_ts', None)
+    return jsonify(feed[:50])
+
 # ── DIFFICULTY ──
 @app.route('/api/difficulty', methods=['GET'])
 @rate_limit(30, 60)
