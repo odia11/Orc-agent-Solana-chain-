@@ -4022,14 +4022,14 @@ async function _tpcSendSol(){
   const sendBtn=document.getElementById('tpc-sol-send-btn');
   if(!amtEl||!msgEl||!sendBtn) return;
 
-  const amount=parseFloat(amtEl.value);
-  if(!amount||amount<0.000001||amount>10){
+  const amountSol=parseFloat(amtEl.value);
+  if(!amountSol||amountSol<0.000001||amountSol>10){
     msgEl.className='tpc-sol-msg err';
     msgEl.textContent='Enter a valid amount (max 10 SOL)';
     return;
   }
-  const recipient=_tpcCurrentFullWallet;
-  if(!recipient){
+  const recipientFullWallet=_tpcCurrentFullWallet;
+  if(!recipientFullWallet){
     msgEl.className='tpc-sol-msg err';
     msgEl.textContent='Recipient wallet not available';
     return;
@@ -4040,7 +4040,7 @@ async function _tpcSendSol(){
     msgEl.textContent='Wallet not connected';
     return;
   }
-  if(provider.publicKey.toString()===recipient){
+  if(provider.publicKey.toString()===recipientFullWallet){
     msgEl.className='tpc-sol-msg err';
     msgEl.textContent='Cannot send SOL to yourself';
     return;
@@ -4052,7 +4052,6 @@ async function _tpcSendSol(){
   msgEl.textContent='';
 
   try{
-    if(!provider||!provider.publicKey) throw new Error('No wallet connected');
     await _waitForSolanaWeb3();
     const {Transaction,SystemProgram,PublicKey}=window.solanaWeb3;
     const bhResp=await fetch('/api/solana/blockhash');
@@ -4060,8 +4059,8 @@ async function _tpcSendSol(){
     if(!bhData.blockhash) throw new Error('Could not get blockhash');
     sendBtn.textContent='Confirm in wallet…';
     const fromPubkey=new PublicKey(provider.publicKey.toString());
-    const toPubkey=new PublicKey(recipient);
-    const lamports=Math.floor(parseFloat(amount)*1e9);
+    const toPubkey=new PublicKey(recipientFullWallet);
+    const lamports=Math.floor(parseFloat(amountSol)*1000000000); // plain Number, not BigInt
     const ix=SystemProgram.transfer({fromPubkey,toPubkey,lamports});
     const tx=new Transaction({recentBlockhash:bhData.blockhash,feePayer:fromPubkey});
     tx.add(ix);
@@ -4069,21 +4068,17 @@ async function _tpcSendSol(){
     try{
       const resp=await provider.request({
         method:'sol_sendTransaction',
-        params:[{
-          to:recipient,
-          amount:Math.floor(parseFloat(amount)*1e9).toString(),
-          network:'mainnet-beta'
-        }]
+        params:[{to:recipientFullWallet,amount:lamports.toString(),network:'mainnet-beta'}]
       });
-      return resp.signature||resp;
+      sig=resp.signature||resp;
     }catch(e1){
-      console.log('sol_sendTransaction failed, trying fallback:',e1);
+      console.log('sol_sendTransaction failed, trying sendTransaction fallback:',e1);
+      sig=await provider.sendTransaction(tx,[]);
     }
-    sig=await provider.sendTransaction(tx,[]);
-    return sig;
     msgEl.className='tpc-sol-msg ok';
-    msgEl.textContent='✓ Sent! '+(sig?sig.slice(0,8)+'…':'OK');
+    msgEl.textContent='✓ Sent! '+(sig?String(sig).slice(0,8)+'…':'OK');
     sendBtn.textContent='✓ Sent';
+    setTimeout(()=>{ sendBtn.disabled=false; sendBtn.textContent='Send'; },3000);
   }catch(e){
     msgEl.className='tpc-sol-msg err';
     msgEl.textContent='✗ '+(e?.message||'Transaction failed');
