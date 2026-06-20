@@ -4160,6 +4160,7 @@ function _tvpPositionsHtml(positions){
 
 async function openProfileCard(userId){
   if(!userId) return;
+  if(!_tradersView) openTradersView();
   _tvProfileOpen = true;
   const view = document.getElementById('tv-profile-view');
   document.getElementById('tv-layout').style.display = 'none';
