@@ -2344,12 +2344,13 @@ def get_leaderboard():
         if not username:
             username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
         result.append({
-            'rank':        rank,
-            'username':    username,
-            'avatar_url':  avatar_url or '',
-            'total_pnl':   round(float(total_pnl or 0), 6),
-            'trade_count': int(trade_count or 0),
-            'best_trade':  round(float(best_trade or 0), 6),
+            'rank':           rank,
+            'username':       username,
+            'wallet_address': wallet or '',
+            'avatar_url':     avatar_url or '',
+            'total_pnl':      round(float(total_pnl or 0), 6),
+            'trade_count':    int(trade_count or 0),
+            'best_trade':     round(float(best_trade or 0), 6),
         })
     return jsonify(result)
 

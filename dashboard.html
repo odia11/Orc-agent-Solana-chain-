@@ -619,6 +619,22 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .lf-toast{font-size:10px;padding:8px 12px}
 }
 
+/* ── DAILY LEADERBOARD ── */
+.lb-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.lb-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.lb-list{display:flex;flex-direction:column;gap:6px}
+.lb-empty{text-align:center;padding:20px;font-size:11px;color:var(--muted);letter-spacing:.08em}
+.lb-row{display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--bg3)}
+.lb-row.lb-me{border-left:3px solid var(--green);padding-left:8px}
+.lb-rank{width:22px;text-align:center;font-size:11px;font-weight:700;flex-shrink:0;font-family:'Orbitron',monospace}
+.lb-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;overflow:hidden;background:var(--bg4);border:1px solid var(--border2);position:relative}
+.lb-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.lb-info{flex:1;min-width:0}
+.lb-name{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-meta{font-size:9px;color:var(--muted);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lb-pnl{font-size:11px;font-weight:700;font-family:'Orbitron',monospace;text-align:right;flex-shrink:0;white-space:nowrap}
+@media(max-width:480px){.lb-pnl{font-size:9px}.lb-rank{width:18px}}
+
 /* ── PUMP SCANNER ── */
 .pump-scanner-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 .ps-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
@@ -1056,6 +1072,23 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div id="lf-list" class="lf-list">
       <div class="lf-empty">No recent trades yet</div>
+    </div>
+  </div>
+
+  <!-- DAILY LEADERBOARD -->
+  <div class="lb-panel" id="lb-panel">
+    <div class="lb-header">
+      <div class="lf-header-left">
+        <div class="panel-hdr" style="margin-bottom:0">🏆 DAILY LEADERBOARD</div>
+      </div>
+      <div class="lf-header-right">
+        <span class="lf-live-dot"></span>
+        <span class="lf-live-label">LIVE</span>
+        <span class="lf-countdown" id="lb-countdown"></span>
+      </div>
+    </div>
+    <div id="lb-list" class="lb-list">
+      <div class="lb-empty">No trades today yet — be the first!</div>
     </div>
   </div>
 
@@ -1597,6 +1630,7 @@ async function launchApp(){
   fetchTrades();
   fetchCarousel();
   fetchPumpScanner();
+  fetchLeaderboard();
 }
 
 // ── LAUNCH WITH 5s TIMEOUT (prevents button getting stuck) ─────────────────
@@ -3353,11 +3387,81 @@ async function saveSettings(){
   }
 }
 
+// ── DAILY LEADERBOARD ──
+let _lbCountdownTimer=null,_lbCountdownVal=30;
+
+function _lbStartCountdown(){
+  if(_lbCountdownTimer) clearInterval(_lbCountdownTimer);
+  _lbCountdownVal=30;
+  const el=document.getElementById('lb-countdown');
+  if(el) el.textContent='↻ '+_lbCountdownVal+'s';
+  _lbCountdownTimer=setInterval(()=>{
+    _lbCountdownVal=Math.max(0,_lbCountdownVal-1);
+    if(el) el.textContent=_lbCountdownVal>0?'↻ '+_lbCountdownVal+'s':'refreshing…';
+    if(_lbCountdownVal===0) _lbCountdownVal=30;
+  },1000);
+}
+
+const _LB_AVATAR_COLORS=['#1a5276','#0e4d3a','#2d3561','#4a235a','#5b2333','#1b4332','#154360','#3d1a00'];
+function _lbAvatarColor(name){
+  let h=0; for(let i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))>>>0;
+  return _LB_AVATAR_COLORS[h%_LB_AVATAR_COLORS.length];
+}
+
+function _lbAvatarHtml(e){
+  const name=e.username||'?';
+  const ini=esc(name[0].toUpperCase());
+  const bg=_lbAvatarColor(name);
+  if(e.avatar_url){
+    return `<div class="lb-avatar" style="background:${bg}"><img src="${e.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
+  }
+  return `<div class="lb-avatar" style="background:${bg}">${ini}</div>`;
+}
+
+function _lbRankHtml(rank){
+  const colors=['#FFD700','#C0C0C0','#CD7F32'];
+  const color=rank<=3?colors[rank-1]:'var(--muted)';
+  return `<div class="lb-rank" style="color:${color}">#${rank}</div>`;
+}
+
+function renderLeaderboard(entries){
+  const list=document.getElementById('lb-list');
+  if(!list) return;
+  if(!entries||!entries.length){
+    list.innerHTML='<div class="lb-empty">No trades today yet — be the first!</div>';
+    return;
+  }
+  list.innerHTML=entries.map(e=>{
+    const isMe=!!(phantomKey&&e.wallet_address===phantomKey);
+    const pnlPos=e.total_pnl>=0;
+    const pnlColor=pnlPos?'var(--green)':'var(--red)';
+    const pnlStr=(pnlPos?'+':'')+e.total_pnl.toFixed(4)+' SOL';
+    const bestStr=(e.best_trade>=0?'+':'')+e.best_trade.toFixed(4);
+    return `<div class="lb-row${isMe?' lb-me':''}">
+      ${_lbRankHtml(e.rank)}
+      ${_lbAvatarHtml(e)}
+      <div class="lb-info">
+        <div class="lb-name">${esc(e.username)}</div>
+        <div class="lb-meta">(${e.trade_count} trade${e.trade_count===1?'':'s'}) &nbsp;·&nbsp; best: ${esc(bestStr)}</div>
+      </div>
+      <div class="lb-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
+    </div>`;
+  }).join('');
+}
+
+async function fetchLeaderboard(){
+  if(!appVisible()) return;
+  const r=await fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null);
+  if(Array.isArray(r)) renderLeaderboard(r);
+  _lbStartCountdown();
+}
+
 setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,10000);
 setInterval(fetchCarousel,60000);
 setInterval(fetchPumpScanner,30000);
+setInterval(fetchLeaderboard,30000);
 
 // ── VERSION POLLING ──
 let _pageVersion=null;
