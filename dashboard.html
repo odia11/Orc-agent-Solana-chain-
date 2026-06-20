@@ -3928,17 +3928,20 @@ async function _tpcSendSol(){
     const ix=SystemProgram.transfer({fromPubkey,toPubkey,lamports});
     const tx=new Transaction({recentBlockhash:bhData.blockhash,feePayer:fromPubkey});
     tx.add(ix);
-    const signed=await provider.signTransaction(tx);
-    const serialized=signed.serialize();
-    const b64=btoa(Array.from(serialized).map(b=>String.fromCharCode(b)).join(''));
-    const sendResp=await fetch('/api/solana/send_raw',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({raw_tx:b64})
-    });
-    const result=await sendResp.json();
-    if(!result.ok) throw new Error(result.msg);
-    const sig=result.signature;
+    let sig;
+    try{
+      const resp=await provider.request({
+        method:'sol_sendTransaction',
+        params:[{
+          to:recipient,
+          amount:Math.floor(parseFloat(amount)*1e9).toString(),
+          network:'mainnet-beta'
+        }]
+      });
+      return resp.signature||resp;
+    }catch(e1){
+      console.log('sol_sendTransaction failed, trying fallback:',e1);
+    }
     msgEl.className='tpc-sol-msg ok';
     msgEl.textContent='✓ Sent! '+(sig?sig.slice(0,8)+'…':'OK');
     sendBtn.textContent='✓ Sent';
