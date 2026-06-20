@@ -4302,7 +4302,8 @@ function renderLeaderboard(entries){
     const pnlColor=pnlPos?'var(--green)':'var(--red)';
     const pnlStr=(pnlPos?'+':'')+e.total_pnl.toFixed(4)+' SOL';
     const bestStr=(e.best_trade>=0?'+':'')+e.best_trade.toFixed(4);
-    return `<div class="lb-row${isMe?' lb-me':''}">
+    const uid=e.user_id||0;
+    return `<div class="lb-row${isMe?' lb-me':''}" style="cursor:pointer" onclick="openProfileCard(${uid})">
       ${_lbRankHtml(e.rank)}
       ${_lbAvatarHtml(e)}
       <div class="lb-info">
