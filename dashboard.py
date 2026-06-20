@@ -2661,6 +2661,10 @@ def profile_user_trades(user_id: int):
             LIMIT 50
         ''', (user_id, today))
         trade_rows = c.fetchall()
+        c.execute('SELECT COUNT(*), COALESCE(SUM(pnl),0) FROM trades WHERE user_id=?', (user_id,))
+        all_stats = c.fetchone()
+        c.execute('SELECT COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND date(timestamp)=?', (user_id, today))
+        today_pnl_row = c.fetchone()
     finally:
         conn.close()
 
@@ -2674,6 +2678,10 @@ def profile_user_trades(user_id: int):
             'timestamp':   str(ts or ''),
             'exit_reason': str(reason or ''),
         })
+
+    total_closed  = int(all_stats[0] or 0) if all_stats else 0
+    total_pnl_all = round(float(all_stats[1] or 0), 6) if all_stats else 0.0
+    today_pnl     = round(float(today_pnl_row[0] or 0), 6) if today_pnl_row else 0.0
 
     us = user_states.get(wallet, {})
     mint_price = {t['mint']: float(t['price'])
@@ -2697,7 +2705,28 @@ def profile_user_trades(user_id: int):
             'opened_at': int(pos.get('opened_at', 0)),
         })
 
-    return jsonify({'ok': True, 'trades': trades, 'positions': positions})
+    sol_balance = 0.0
+    if wallet and _PROXY_RPCS:
+        for _rpc in _PROXY_RPCS:
+            try:
+                _r = requests.post(_rpc, json={
+                    'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+                }, timeout=5)
+                sol_balance = round(_r.json()['result']['value'] / 1e9, 4)
+                break
+            except Exception:
+                continue
+
+    return jsonify({
+        'ok':           True,
+        'trades':       trades,
+        'positions':    positions,
+        'sol_balance':  sol_balance,
+        'open_count':   len(positions),
+        'total_closed': total_closed,
+        'total_pnl':    total_pnl_all,
+        'today_pnl':    today_pnl,
+    })
 
 # ── FOLLOW / UNFOLLOW ──
 @app.route('/api/follow/<int:target_id>', methods=['POST'])

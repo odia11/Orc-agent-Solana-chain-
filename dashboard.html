@@ -793,6 +793,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tvp-table tr:first-child td{border-top:none}
 .tvp-empty{font-size:11px;color:var(--muted);padding:14px 0;text-align:center;letter-spacing:.08em}
 .tvp-loading{text-align:center;padding:48px 0;font-size:11px;color:var(--muted);letter-spacing:.08em}
+.tvp-stats4{display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg2);border:1px solid var(--border2);border-radius:10px;overflow:hidden;margin-bottom:14px}
+.tvp-stat4{text-align:center;padding:12px 6px;border-right:1px solid rgba(255,255,255,.06)}
+.tvp-stat4:last-child{border-right:none}
+.tvp-stat4-val{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;font-family:'Orbitron',monospace;letter-spacing:.02em}
+.tvp-stat4-lbl{font-size:8px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+@media(max-width:600px){.tvp-stats4{grid-template-columns:repeat(2,1fr)}.tvp-stat4:nth-child(2){border-right:none}.tvp-stat4:nth-child(1),.tvp-stat4:nth-child(2){border-bottom:1px solid rgba(255,255,255,.06)}}
 
 /* ── DAILY LEADERBOARD ── */
 .lb-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -4140,11 +4146,13 @@ function _tvpPositionsHtml(positions){
   if(!positions?.length) return '';
   return `<table class="tvp-table">
     <thead><tr>
-      <th>Token</th><th>Entry</th><th>Current</th><th>PnL%</th><th>Open</th>
+      <th>Token</th><th>Entry</th><th>Current</th><th>PnL%</th><th>PnL SOL</th><th>Open</th>
     </tr></thead>
     <tbody>${positions.map(p=>{
       const pct=p.pnl_pct;
+      const sol=p.pnl_sol;
       const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'—';
+      const solStr=sol!=null?(sol>=0?'+':'')+sol.toFixed(4):'—';
       const pnlColor=(pct!=null&&pct<0)?'var(--red)':'var(--green)';
       const openStr=p.opened_at?_tvTimeAgo(p.opened_at):'—';
       return `<tr>
@@ -4152,6 +4160,7 @@ function _tvpPositionsHtml(positions){
         <td style="color:var(--muted)">${fmtPrice(p.entry)}</td>
         <td style="color:var(--muted)">${p.current!=null?fmtPrice(p.current):'—'}</td>
         <td style="color:${pnlColor};font-weight:700">${esc(pctStr)}</td>
+        <td style="color:${pnlColor};font-weight:700">${esc(solStr)}</td>
         <td style="color:var(--dim)">${esc(openStr)}</td>
       </tr>`;
     }).join('')}</tbody>
@@ -4185,6 +4194,13 @@ async function openProfileCard(userId){
   const tradesHtml = _tvpTradesHtml(td?.trades);
   const posHtml = _tvpPositionsHtml(td?.positions);
 
+  const solBal   = td?.sol_balance??0;
+  const openCnt  = td?.open_count??0;
+  const closedCnt= td?.total_closed??p.trade_count??0;
+  const allPnl   = td?.total_pnl??0;
+  const allPnlPos= allPnl>=0;
+  const allPnlStr= (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
+
   view.innerHTML = `
     <div class="tvp-back-bar">
       <button class="tvp-back-btn" onclick="closeTraderProfile()">← Traders Feed</button>
@@ -4200,6 +4216,7 @@ async function openProfileCard(userId){
           <div class="tvp-social-row">
             <span><strong id="tpc-follower-count">${p.follower_count}</strong> Followers</span>
             <span><strong>${p.following_count}</strong> Following</span>
+            <span style="margin-left:4px">· Avg hold ${esc(_tvFormatHold(p.avg_hold_seconds))} · Joined ${esc(_tvFormatJoined(p.joined_at))}</span>
           </div>
         </div>
         <div class="tvp-actions">
@@ -4226,29 +4243,31 @@ async function openProfileCard(userId){
       </div>
     </div>
 
-    <div class="tvp-card">
-      <div class="tpc-stats">
-        <div class="tpc-stat">
-          <div class="tpc-stat-val">🕐 ${esc(_tvFormatHold(p.avg_hold_seconds))}</div>
-          <div class="tpc-stat-lbl">Avg Hold</div>
-        </div>
-        <div class="tpc-stat">
-          <div class="tpc-stat-val">📊 ${p.trade_count}</div>
-          <div class="tpc-stat-lbl">Total Trades</div>
-        </div>
-        <div class="tpc-stat">
-          <div class="tpc-stat-val">📅 ${esc(_tvFormatJoined(p.joined_at))}</div>
-          <div class="tpc-stat-lbl">Joined</div>
-        </div>
+    <div class="tvp-stats4">
+      <div class="tvp-stat4">
+        <div class="tvp-stat4-val">◎ ${solBal.toFixed(4)}</div>
+        <div class="tvp-stat4-lbl">SOL Balance</div>
+      </div>
+      <div class="tvp-stat4">
+        <div class="tvp-stat4-val">${openCnt}</div>
+        <div class="tvp-stat4-lbl">Open Trades</div>
+      </div>
+      <div class="tvp-stat4">
+        <div class="tvp-stat4-val">${closedCnt}</div>
+        <div class="tvp-stat4-lbl">Closed Trades</div>
+      </div>
+      <div class="tvp-stat4">
+        <div class="tvp-stat4-val" style="color:${allPnlPos?'var(--green)':'var(--red)'}">${esc(allPnlStr)}</div>
+        <div class="tvp-stat4-lbl">All-time PnL</div>
       </div>
     </div>
+
+    ${posHtml?`<div class="tvp-section"><div class="tvp-section-hdr">Open Positions</div>${posHtml}</div>`:''}
 
     <div class="tvp-section">
       <div class="tvp-section-hdr">Today's Trades</div>
       ${tradesHtml}
     </div>
-
-    ${posHtml?`<div class="tvp-section"><div class="tvp-section-hdr">Open Positions</div>${posHtml}</div>`:''}
   `;
 }
 
