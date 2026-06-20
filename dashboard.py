@@ -3871,6 +3871,43 @@ def api_trades():
     recent       = state.get('trades_history', [])[-20:]
     return jsonify({'daily': _strip_daily(state['daily_stats']), 'history': [_strip(t) for t in today_trades[-10:]], 'recent': [_strip(t) for t in recent]})
 
+@app.route('/api/pnl_chart')
+@rate_limit(30, 60)
+def api_pnl_chart():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': True, 'points': [{'time': '00:00', 'cumulative_pnl': 0.0}]})
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            c = conn.cursor()
+            c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+            row = c.fetchone()
+            if not row:
+                return jsonify({'ok': True, 'points': [{'time': '00:00', 'cumulative_pnl': 0.0}]})
+            user_id = row[0]
+            c.execute(
+                '''SELECT strftime('%H:%M', timestamp) AS hm, pnl
+                   FROM trades
+                   WHERE user_id=? AND date(timestamp)=?
+                   ORDER BY timestamp ASC''',
+                (user_id, today)
+            )
+            rows = c.fetchall()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[pnl_chart] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'DB error'}), 500
+
+    points = [{'time': '00:00', 'cumulative_pnl': 0.0}]
+    running = 0.0
+    for hm, pnl in rows:
+        running = round(running + (pnl or 0.0), 6)
+        points.append({'time': hm or '??:??', 'cumulative_pnl': running})
+    return jsonify({'ok': True, 'points': points})
+
 @app.route('/api/log')
 @rate_limit(30, 60)
 def api_log():
