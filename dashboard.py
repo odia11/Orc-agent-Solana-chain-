@@ -20,6 +20,16 @@ app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
+@app.template_filter('fmtk')
+def _jinja_fmtk(v):
+    """Format a large number as 1.2K / 3.4M for use in Jinja2 templates."""
+    v = float(v or 0)
+    if v >= 1_000_000:
+        return f'{v / 1_000_000:.1f}M'
+    if v >= 1_000:
+        return f'{v / 1_000:.1f}K'
+    return f'{v:.0f}'
+
 @app.before_request
 def _security_gate():
     """Runs before every other before_request hook (registration order).
@@ -686,6 +696,10 @@ def init_db():
         pass
     try:
         c.execute('ALTER TABLE trades ADD COLUMN opened_at REAL DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN mint_address TEXT DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
     c.execute('''CREATE TABLE IF NOT EXISTS follows (
@@ -1719,10 +1733,11 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         try:
             conn.execute(
                 '''INSERT INTO trades
-                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
-                 now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None))
+                 now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
+                 mint or None))
             conn.commit()
         finally:
             conn.close()
@@ -2190,6 +2205,117 @@ def index():
     html = html.replace('__X_CLIENT_SECRET__', X_CLIENT_SECRET)
     return app.response_class(html, mimetype='text/html')
 
+_MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
+
+@app.route('/token/<mint_address>')
+def token_detail(mint_address):
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/')
+    if not _MINT_RE.match(mint_address or ''):
+        return redirect('/history')
+    token_info   = get_token_data(mint_address)
+    token_name   = (token_info or {}).get('name',   '')
+    token_symbol = (token_info or {}).get('symbol', '')
+    trades = []
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+        if row:
+            user_id = row[0]
+            c.execute(
+                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at
+                   FROM trades
+                   WHERE user_id=?
+                     AND (mint_address=?
+                          OR (mint_address IS NULL AND UPPER(token)=UPPER(?)))
+                   ORDER BY timestamp DESC''',
+                (user_id, mint_address, token_symbol)
+            )
+            for ts, token, entry, exit_p, amount, pnl, opened_at in c.fetchall():
+                pnl    = round(pnl   or 0.0, 6)
+                entry  = entry  or 0.0
+                exit_p = exit_p or 0.0
+                pnl_pct = round((exit_p - entry) / entry * 100, 2) if entry > 0 else 0.0
+                duration = ''
+                if opened_at:
+                    try:
+                        closed_dt = datetime.datetime.strptime((ts or '')[:19], '%Y-%m-%dT%H:%M:%S')
+                        opened_dt = datetime.datetime.utcfromtimestamp(float(opened_at))
+                        secs = max(0, int((closed_dt - opened_dt).total_seconds()))
+                        duration = (f'{secs // 3600}h {(secs % 3600) // 60}m'
+                                    if secs >= 3600 else f'{secs // 60}m {secs % 60}s')
+                    except Exception:
+                        pass
+                trades.append({
+                    'date': (ts or '')[:10], 'time': (ts or '')[11:16],
+                    'token':       token or '—',
+                    'entry_price': round(entry, 6), 'exit_price': round(exit_p, 6),
+                    'pnl': pnl, 'pnl_pct': pnl_pct, 'duration': duration,
+                    'result': 'win' if pnl >= 0 else 'loss',
+                })
+        conn.close()
+    except Exception as e:
+        print(f'[token_detail] DB error: {e}', flush=True)
+    mint_short = mint_address[:4] + '…' + mint_address[-4:] if len(mint_address) >= 8 else mint_address
+    return render_template(
+        'token.html',
+        mint_address=mint_address,
+        mint_short=mint_short,
+        token_name=token_name,
+        token_symbol=token_symbol,
+        token_info=token_info or {},
+        trades=trades,
+        wallet=wallet,
+        wallet_short=(wallet[:4] + '…' + wallet[-4:]) if len(wallet) >= 8 else wallet,
+        is_admin=_is_owner(wallet),
+    )
+
+
+@app.route('/api/token/<mint>/candles')
+def api_token_candles(mint):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'candles': []})
+    if not _MINT_RE.match(mint or ''):
+        return jsonify({'ok': False, 'candles': []})
+    range_param = request.args.get('range', '7d').lower()
+    if range_param not in ('1d', '7d', '30d'):
+        range_param = '7d'
+    pair_address = ''
+    try:
+        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint)
+        if r:
+            pairs = r.json().get('pairs') or []
+            if pairs:
+                pair_address = pairs[0].get('pairAddress') or ''
+    except Exception:
+        pass
+    candles = []
+    if pair_address:
+        try:
+            if range_param == '1d':
+                gt_path = 'hour?aggregate=1&limit=24'
+            elif range_param == '7d':
+                gt_path = 'hour?aggregate=4&limit=42'
+            else:
+                gt_path = 'day?aggregate=1&limit=30'
+            gt_url = (f'https://api.geckoterminal.com/api/v2/networks/solana'
+                      f'/pools/{pair_address}/ohlcv/{gt_path}&currency=usd')
+            r2 = requests.get(gt_url, headers={'Accept': 'application/json'}, timeout=8)
+            if r2.status_code == 200:
+                rows = (r2.json().get('data') or {}).get('attributes', {}).get('ohlcv_list') or []
+                for row in reversed(rows):   # GeckoTerminal returns newest-first
+                    ts, o, h, l, c, _v = row
+                    candles.append({'time': int(ts), 'open': float(o),
+                                    'high': float(h), 'low': float(l), 'close': float(c)})
+        except Exception as e:
+            print(f'[candles] error for {mint}: {e}', flush=True)
+    return jsonify({'ok': True, 'candles': candles})
+
+
 @app.route('/history')
 def history():
     wallet = _current_wallet()
@@ -2204,11 +2330,11 @@ def history():
         if row:
             user_id = row[0]
             c.execute(
-                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at
+                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address
                    FROM trades WHERE user_id=? ORDER BY timestamp DESC''',
                 (user_id,)
             )
-            for ts, token, entry, exit_p, amount, pnl, opened_at in c.fetchall():
+            for ts, token, entry, exit_p, amount, pnl, opened_at, mint_addr in c.fetchall():
                 pnl     = round(pnl   or 0.0, 6)
                 entry   = entry  or 0.0
                 exit_p  = exit_p or 0.0
@@ -2226,15 +2352,16 @@ def history():
                     except Exception:
                         pass
                 trades.append({
-                    'date':        (ts or '')[:10],
-                    'time':        (ts or '')[11:16],
-                    'token':       token or '—',
-                    'entry_price': round(entry,  6),
-                    'exit_price':  round(exit_p, 6),
-                    'pnl':         pnl,
-                    'pnl_pct':     pnl_pct,
-                    'duration':    duration,
-                    'result':      'win' if pnl >= 0 else 'loss',
+                    'date':         (ts or '')[:10],
+                    'time':         (ts or '')[11:16],
+                    'token':        token or '—',
+                    'entry_price':  round(entry,  6),
+                    'exit_price':   round(exit_p, 6),
+                    'pnl':          pnl,
+                    'pnl_pct':      pnl_pct,
+                    'duration':     duration,
+                    'result':       'win' if pnl >= 0 else 'loss',
+                    'mint_address': mint_addr or '',
                 })
         conn.close()
     except Exception as e:

@@ -2839,7 +2839,7 @@ function renderPositions(detail){
     const solC=_solPrice>0?(p.current||0)/_solPrice:0;
     const spendUsd=((p.spend||0)*_solPrice).toFixed(2);
     return `<tr id="pos-row-${esc(p.mint||'')}">
-      <td class="td-sym">${esc(p.symbol||'???')}</td>
+      <td class="td-sym">${p.mint?`<a href="/token/${esc(p.mint)}" style="color:inherit;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='inherit'">${esc(p.symbol||'???')}</a>`:esc(p.symbol||'???')}</td>
       <td style="color:var(--muted);font-size:10px">${openedStr}</td>
       <td>
         <div>${fmtPrice(p.entry||0)}</div>
@@ -3062,7 +3062,7 @@ function renderLiveFeed(){
     return `<div class="${itemCls}">
       ${logoHtml}
       <div class="lf-main">
-        <div class="lf-top-row">${badge}<span class="lf-sym">${esc(item.symbol||'???')}</span></div>
+        <div class="lf-top-row">${badge}${mint?`<a href="/token/${esc(mint)}" class="lf-sym" style="color:inherit;text-decoration:none" onmouseover="this.style.color='var(--green)'" onmouseout="this.style.color='inherit'">${esc(item.symbol||'???')}</a>`:`<span class="lf-sym">${esc(item.symbol||'???')}</span>`}</div>
         <div class="lf-prices">${priceHtml}</div>
         ${amtHtml}
       </div>

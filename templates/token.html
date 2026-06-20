@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{ token_symbol or 'Token' }} — OrcAgent</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1828;--bg2:#162236;--bg3:#1c2e48;--bg4:#213555;
+  --green:#00edaa;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
+  --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
+}
+html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 20% 0%,rgba(90,150,255,.07) 0%,transparent 55%),radial-gradient(ellipse at 80% 100%,rgba(0,232,154,.05) 0%,transparent 55%);font-family:'Share Tech Mono',monospace;color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+.page-wrap{max-width:1100px;margin:0 auto;padding:1.25rem 1rem 3rem}
+
+/* ── NAVBAR ── */
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:.875rem;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.logo-row{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
+.brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
+.dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center}
+a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green)}
+
+/* ── TOKEN HEADER ── */
+.tok-hdr{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:20px 22px;margin-bottom:1rem;display:flex;flex-direction:column;gap:10px}
+.tok-hdr-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.tok-name-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.tok-symbol{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--text);letter-spacing:.06em}
+.tok-name{font-size:13px;color:var(--muted);padding-top:3px}
+.tok-price{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;color:var(--text)}
+.tok-change-pos{font-size:12px;color:var(--green);font-weight:700}
+.tok-change-neg{font-size:12px;color:var(--red);font-weight:700}
+.tok-links{display:flex;gap:6px;flex-wrap:wrap}
+.tok-ext-link{background:var(--bg3);border:1px solid var(--border2);border-radius:5px;padding:4px 10px;font-size:9px;color:var(--dim);text-decoration:none;transition:all .15s;letter-spacing:.04em}
+.tok-ext-link:hover{border-color:var(--blue);color:var(--blue)}
+.tok-mint-row{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.tok-mint-addr{font-family:'Share Tech Mono',monospace;color:var(--dim);letter-spacing:.04em}
+.tok-copy-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0;transition:color .15s;line-height:1}
+.tok-copy-btn:hover{color:var(--text)}
+.tok-copy-msg{font-size:9px;color:var(--green);min-width:60px}
+
+/* ── STATS STRIP ── */
+.tok-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px;margin-bottom:1rem}
+.tok-stat{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:9px 14px}
+.tok-stat-lbl{font-size:8px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.tok-stat-val{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--dim)}
+.tok-stat-val.pos{color:var(--green)}.tok-stat-val.neg{color:var(--red)}
+
+/* ── CHART ── */
+.chart-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1rem}
+.chart-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+.chart-title{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;display:flex;align-items:center;gap:6px}
+.chart-title::before{content:'';width:2px;height:10px;background:var(--green);border-radius:2px}
+.chart-toggles{display:flex;gap:4px}
+.chart-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:3px 10px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.04em}
+.chart-btn:hover{border-color:var(--blue);color:var(--blue)}
+.chart-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.08)}
+#tok-chart{height:280px;position:relative;background:#0a0e1a;border-radius:6px;overflow:hidden}
+.chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em;background:#0a0e1a;z-index:2}
+.chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em}
+
+/* ── MY TRADE SUMMARY ── */
+.summary-bar{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px;margin-bottom:1rem}
+.sum-card{background:var(--bg2);border:1px solid var(--border2);border-radius:9px;padding:10px 14px}
+.sum-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
+.sum-val{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--text)}
+.sum-val.pos{color:var(--green)}.sum-val.neg{color:var(--red)}
+
+/* ── SECTION HEADER ── */
+.section-hdr{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.section-hdr::before{content:'';width:2px;height:10px;background:var(--blue);border-radius:2px}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:10px}
+.hist-table{width:100%;border-collapse:collapse;min-width:620px}
+.hist-table th{padding:8px 12px;text-align:left;color:var(--muted);font-size:8px;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--border2);background:var(--bg3);white-space:nowrap;font-weight:400}
+.hist-table td{padding:8px 12px;border-bottom:1px solid rgba(42,64,96,.4);color:var(--dim);font-size:11px;white-space:nowrap}
+.hist-table tbody tr:last-child td{border-bottom:none}
+.hist-table tbody tr:hover td{background:rgba(255,255,255,.02)}
+.hist-table td.pos{color:var(--green)}.hist-table td.neg{color:var(--red)}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.08em;font-family:'Orbitron',monospace}
+.badge-win{background:rgba(0,237,170,.12);border:1px solid rgba(0,237,170,.3);color:var(--green)}
+.badge-loss{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);color:var(--red)}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:64px 24px;color:var(--muted);font-size:13px;letter-spacing:.08em;border:1px solid var(--border2);border-radius:10px;background:var(--bg2);line-height:1.8}
+.empty-state svg{display:block;margin:0 auto 18px;opacity:.25}
+
+@media(max-width:600px){
+  .tok-price{font-size:20px}
+  .tok-symbol{font-size:17px}
+  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
+  #tok-chart{height:220px}
+}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg2)}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- NAVBAR -->
+  <div class="header">
+    <a class="logo-row" href="/">
+      <svg width="28" height="28" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00d68f" stroke-width="5"/>
+        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00d68f" stroke-width="4"/>
+        <circle cx="62" cy="52" r="9" fill="#00d68f"/>
+        <circle cx="98" cy="52" r="9" fill="#00d68f"/>
+        <circle cx="64" cy="50" r="3" fill="black"/><circle cx="100" cy="50" r="3" fill="black"/>
+      </svg>
+      <div>
+        <div class="brand">ORCAGENT</div>
+        <div class="brand-sub">Solana Smart Scalper v4</div>
+      </div>
+    </a>
+    <div class="header-right">
+      {% if wallet %}
+      <div class="wallet-pill"><div class="dot-green"></div><span>{{ wallet_short }}</span></div>
+      {% endif %}
+      <a href="/" class="hdr-btn">⬡ Dashboard</a>
+      <a href="/history" class="hdr-btn">📋 History</a>
+      {% if is_admin %}<span class="hdr-btn" style="border-color:rgba(255,193,58,.4);color:#f0b90b">👑 Admin</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- TOKEN HEADER -->
+  <div class="tok-hdr">
+    <div class="tok-hdr-top">
+      <div>
+        <div class="tok-name-row">
+          <span class="tok-symbol">{{ token_symbol or '???' }}</span>
+          {% if token_name %}<span class="tok-name">{{ token_name }}</span>{% endif %}
+        </div>
+        {% set tok_price = token_info.price | default(0) %}
+        {% set tok_ch24  = token_info.change24h | default(0) %}
+        <div style="margin-top:10px;display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+          {% if tok_price %}
+          <span class="tok-price">${{ '%.6g' | format(tok_price) }}</span>
+          <span class="{{ 'tok-change-pos' if tok_ch24 >= 0 else 'tok-change-neg' }}">{{ '+' if tok_ch24 >= 0 else '' }}{{ '%.2f' | format(tok_ch24) }}% (24h)</span>
+          {% else %}
+          <span class="tok-price" style="color:var(--muted)">—</span>
+          {% endif %}
+        </div>
+      </div>
+      <div class="tok-links">
+        <a href="https://dexscreener.com/solana/{{ mint_address }}" target="_blank" rel="noopener" class="tok-ext-link">DexScreener ↗</a>
+        <a href="https://solscan.io/token/{{ mint_address }}" target="_blank" rel="noopener" class="tok-ext-link">Solscan ↗</a>
+        <a href="https://birdeye.so/token/{{ mint_address }}?chain=solana" target="_blank" rel="noopener" class="tok-ext-link">BirdEye ↗</a>
+      </div>
+    </div>
+    <div class="tok-mint-row">
+      <span style="color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.1em">Mint</span>
+      <span class="tok-mint-addr" id="mint-addr-text">{{ mint_address }}</span>
+      <button class="tok-copy-btn" onclick="copyMint()" title="Copy mint address">📋</button>
+      <span class="tok-copy-msg" id="mint-copy-msg"></span>
+    </div>
+  </div>
+
+  <!-- STATS STRIP -->
+  {% if token_info %}
+  {% set ch1  = token_info.change1h  | default(0) %}
+  {% set ch6  = token_info.change6h  | default(0) %}
+  {% set vol  = token_info.volume24h | default(0) %}
+  {% set liq  = token_info.liquidity | default(0) %}
+  {% set fdv  = token_info.fdv       | default(0) %}
+  {% set txns = token_info.txns24h   | default(0) %}
+  <div class="tok-stats">
+    <div class="tok-stat">
+      <div class="tok-stat-lbl">1h Change</div>
+      <div class="tok-stat-val {{ 'pos' if ch1 >= 0 else 'neg' }}">{{ '+' if ch1 >= 0 else '' }}{{ '%.2f' | format(ch1) }}%</div>
+    </div>
+    <div class="tok-stat">
+      <div class="tok-stat-lbl">6h Change</div>
+      <div class="tok-stat-val {{ 'pos' if ch6 >= 0 else 'neg' }}">{{ '+' if ch6 >= 0 else '' }}{{ '%.2f' | format(ch6) }}%</div>
+    </div>
+    <div class="tok-stat">
+      <div class="tok-stat-lbl">24h Volume</div>
+      <div class="tok-stat-val">${{ vol | fmtk }}</div>
+    </div>
+    <div class="tok-stat">
+      <div class="tok-stat-lbl">Liquidity</div>
+      <div class="tok-stat-val">${{ liq | fmtk }}</div>
+    </div>
+    <div class="tok-stat">
+      <div class="tok-stat-lbl">FDV</div>
+      <div class="tok-stat-val">${{ fdv | fmtk }}</div>
+    </div>
+    <div class="tok-stat">
+      <div class="tok-stat-lbl">24h Txns</div>
+      <div class="tok-stat-val">{{ txns }}</div>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- CHART -->
+  <div class="chart-panel">
+    <div class="chart-hdr">
+      <div class="chart-title">Price Chart</div>
+      <div class="chart-toggles">
+        <button class="chart-btn active" onclick="_chartSetRange('1d',this)">1D</button>
+        <button class="chart-btn" onclick="_chartSetRange('7d',this)">7D</button>
+        <button class="chart-btn" onclick="_chartSetRange('30d',this)">30D</button>
+      </div>
+    </div>
+    <div id="tok-chart" style="position:relative">
+      <div class="chart-loading" id="chart-loading">LOADING…</div>
+      <div class="chart-empty" id="chart-empty">NO CHART DATA</div>
+    </div>
+  </div>
+
+  <!-- MY TRADES SUMMARY -->
+  <div class="section-hdr" style="margin-bottom:10px">My Trades on {{ token_symbol or mint_short }}</div>
+  {% if trades %}
+  <div class="summary-bar" id="summary-bar">
+    <div class="sum-card"><div class="sum-lbl">Total Trades</div><div class="sum-val" id="sum-total">{{ trades | length }}</div></div>
+    <div class="sum-card"><div class="sum-lbl">Win Rate</div><div class="sum-val" id="sum-wr">—</div></div>
+    <div class="sum-card"><div class="sum-lbl">Total PnL</div><div class="sum-val" id="sum-pnl">—</div></div>
+    <div class="sum-card"><div class="sum-lbl">Best Trade</div><div class="sum-val pos" id="sum-best">—</div></div>
+    <div class="sum-card"><div class="sum-lbl">Worst Trade</div><div class="sum-val neg" id="sum-worst">—</div></div>
+  </div>
+
+  <!-- TRADE TABLE -->
+  <div class="table-wrap">
+    <table class="hist-table">
+      <thead>
+        <tr>
+          <th>Date / Time</th>
+          <th>Buy Price</th>
+          <th>Sell Price</th>
+          <th>PnL (SOL)</th>
+          <th>PnL %</th>
+          <th>Duration</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in trades %}
+        <tr data-pnl="{{ t.pnl }}" data-result="{{ t.result }}">
+          <td style="color:var(--muted);font-size:10px">{{ t.date }}<br><span style="font-size:9px">{{ t.time }}</span></td>
+          <td>${{ '%.6f' | format(t.entry_price) }}</td>
+          <td>${{ '%.6f' | format(t.exit_price) }}</td>
+          <td class="{{ 'pos' if t.pnl >= 0 else 'neg' }}">{{ '+' if t.pnl >= 0 else '' }}{{ '%.4f' | format(t.pnl) }}</td>
+          <td class="{{ 'pos' if t.pnl_pct >= 0 else 'neg' }}">{{ '+' if t.pnl_pct >= 0 else '' }}{{ '%.2f' | format(t.pnl_pct) }}%</td>
+          <td style="color:var(--muted)">{{ t.duration if t.duration else '—' }}</td>
+          <td>
+            {% if t.result == 'win' %}<span class="badge badge-win">WIN</span>
+            {% else %}<span class="badge badge-loss">LOSS</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  {% else %}
+  <div class="empty-state">
+    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/>
+    </svg>
+    You haven't traded <strong style="color:var(--text)">{{ token_symbol or 'this token' }}</strong> yet.<br>
+    Trades will appear here once the bot executes a buy and sell.
+  </div>
+  {% endif %}
+
+</div><!-- /page-wrap -->
+
+<script>
+const MINT = {{ mint_address | tojson }};
+
+// ── Mint copy ──
+function copyMint() {
+  const addr = document.getElementById('mint-addr-text').textContent;
+  const msg  = document.getElementById('mint-copy-msg');
+  const btn  = document.querySelector('.tok-copy-btn');
+  const done = () => { msg.textContent = '✓ Copied'; btn.textContent = '✓';
+    setTimeout(() => { msg.textContent = ''; btn.textContent = '📋'; }, 2000); };
+  if (navigator.clipboard) navigator.clipboard.writeText(addr).then(done).catch(() => { _fallbackCopy(addr); done(); });
+  else { _fallbackCopy(addr); done(); }
+}
+function _fallbackCopy(t) {
+  const ta = document.createElement('textarea');
+  ta.value = t; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try { document.execCommand('copy'); } catch(_) {}
+  document.body.removeChild(ta);
+}
+
+// ── Summary stats from table rows ──
+(function() {
+  const rows = Array.from(document.querySelectorAll('tr[data-pnl]'));
+  if (!rows.length) return;
+  const pnls  = rows.map(r => parseFloat(r.dataset.pnl));
+  const wins  = rows.filter(r => r.dataset.result === 'win').length;
+  const total = rows.length;
+  const totalPnl = pnls.reduce((a, b) => a + b, 0);
+  const best  = Math.max(...pnls);
+  const worst = Math.min(...pnls);
+  const wr    = ((wins / total) * 100).toFixed(1);
+  const set = (id, v, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = v;
+    if (cls) el.classList.add(cls);
+  };
+  set('sum-wr',    wr + '%',                              wins / total >= 0.5 ? 'pos' : 'neg');
+  set('sum-pnl',   (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(4) + ' SOL', totalPnl >= 0 ? 'pos' : 'neg');
+  set('sum-best',  '+' + best.toFixed(4)  + ' SOL');
+  set('sum-worst', worst.toFixed(4)       + ' SOL');
+})();
+
+// ── LightweightCharts ──
+let _chart = null, _series = null, _currentRange = '1d';
+
+function _initChart() {
+  const el = document.getElementById('tok-chart');
+  _chart = LightweightCharts.createChart(el, {
+    width:  el.clientWidth,
+    height: el.clientHeight || 280,
+    layout:  { background: { color: '#0a0e1a' }, textColor: '#6e8faf' },
+    grid:    { vertLines: { color: '#1c2e48' }, horzLines: { color: '#1c2e48' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#2a4060' },
+    timeScale: { borderColor: '#2a4060', timeVisible: true },
+    handleScroll: true, handleScale: true,
+  });
+  _series = _chart.addCandlestickSeries({
+    upColor:   '#00edaa', downColor: '#ff4d6a',
+    borderUpColor: '#00edaa', borderDownColor: '#ff4d6a',
+    wickUpColor:   '#00edaa', wickDownColor:   '#ff4d6a',
+  });
+  window.addEventListener('resize', () => {
+    if (_chart) _chart.resize(el.clientWidth, el.clientHeight || 280);
+  });
+}
+
+async function _loadChart(range) {
+  document.getElementById('chart-loading').style.display = 'flex';
+  document.getElementById('chart-empty').style.display   = 'none';
+  try {
+    const r = await fetch(`/api/token/${MINT}/candles?range=${range}`);
+    const d = await r.json();
+    if (!d.candles || !d.candles.length) {
+      document.getElementById('chart-loading').style.display = 'none';
+      document.getElementById('chart-empty').style.display   = 'flex';
+      return;
+    }
+    _series.setData(d.candles);
+    _chart.timeScale().fitContent();
+    document.getElementById('chart-loading').style.display = 'none';
+  } catch(e) {
+    document.getElementById('chart-loading').style.display = 'none';
+    document.getElementById('chart-empty').style.display   = 'flex';
+  }
+}
+
+function _chartSetRange(range, btn) {
+  _currentRange = range;
+  document.querySelectorAll('.chart-btn').forEach(b => b.classList.toggle('active', b === btn));
+  _loadChart(range);
+}
+
+_initChart();
+_loadChart('1d');
+</script>
+</body>
+</html>
