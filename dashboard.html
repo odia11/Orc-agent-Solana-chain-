@@ -722,8 +722,24 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tpc-follow-btn:hover{opacity:.85}
 .tpc-follow-btn.following{background:transparent;border-color:var(--border2);color:var(--dim)}
 .tpc-follow-btn.following:hover{border-color:var(--red);color:var(--red)}
-.tpc-dm-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 10px;color:var(--muted);cursor:pointer;font-size:13px;line-height:1;transition:border-color .15s}
-.tpc-dm-btn:hover{border-color:var(--blue);color:var(--blue)}
+.tpc-sol-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 11px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tpc-sol-btn:hover{border-color:var(--green);background:rgba(0,237,170,.07)}
+.tpc-sol-form{background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:14px;margin-top:10px;display:none}
+.tpc-sol-form.open{display:block}
+.tpc-sol-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.tpc-sol-lbl{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);white-space:nowrap;flex-shrink:0;width:80px}
+.tpc-sol-amount{flex:1;background:var(--bg4);border:1px solid var(--border2);border-radius:6px;padding:6px 10px;font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--text);width:100%;box-sizing:border-box;-webkit-appearance:none;appearance:none}
+.tpc-sol-amount:focus{outline:none;border-color:var(--green)}
+.tpc-sol-recip{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tpc-sol-btns{display:flex;gap:8px;margin-top:4px}
+.tpc-sol-send{background:var(--green);border:none;border-radius:6px;padding:7px 18px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:#000;cursor:pointer;transition:opacity .15s}
+.tpc-sol-send:hover:not(:disabled){opacity:.82}
+.tpc-sol-send:disabled{opacity:.45;cursor:default}
+.tpc-sol-cancel{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:7px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
+.tpc-sol-cancel:hover{border-color:var(--red);color:var(--red)}
+.tpc-sol-msg{font-family:'Share Tech Mono',monospace;font-size:11px;margin-top:8px;min-height:16px}
+.tpc-sol-msg.ok{color:var(--green)}
+.tpc-sol-msg.err{color:var(--red)}
 .tpc-divider{border:none;border-top:1px solid var(--border);margin:12px 0}
 .tpc-social{display:flex;gap:20px;margin-bottom:14px}
 .tpc-social-item{font-size:12px;color:var(--muted);cursor:default}
@@ -3790,6 +3806,7 @@ function _tvFormatJoined(iso){
 
 function closeProfileCard(){
   document.getElementById('tv-profile-overlay').classList.add('hidden');
+  _tpcCurrentFullWallet='';
 }
 
 function _tpcAvatarHtml(p){
@@ -3828,6 +3845,106 @@ function _tpcRecentHtml(userId){
   }).join('');
 }
 
+// ── SEND SOL ──
+let _tpcCurrentFullWallet = '';
+
+async function _loadSolanaWeb3(){
+  if(window.solanaWeb3) return window.solanaWeb3;
+  return new Promise((resolve,reject)=>{
+    if(document.getElementById('_sw3s')){
+      const t=setInterval(()=>{if(window.solanaWeb3){clearInterval(t);resolve(window.solanaWeb3);}},80);
+      return;
+    }
+    const s=document.createElement('script');
+    s.id='_sw3s';
+    s.src='https://unpkg.com/@solana/web3.js@1.95.4/lib/index.iife.min.js';
+    s.onload=()=>resolve(window.solanaWeb3);
+    s.onerror=()=>reject(new Error('Failed to load @solana/web3.js'));
+    document.head.appendChild(s);
+  });
+}
+
+function _tpcOpenSolForm(){
+  const form=document.getElementById('tpc-sol-form');
+  const recip=document.getElementById('tpc-sol-recip');
+  const msg=document.getElementById('tpc-sol-msg');
+  const inp=document.getElementById('tpc-sol-amount');
+  const btn=document.getElementById('tpc-sol-send-btn');
+  if(!form) return;
+  const w=_tpcCurrentFullWallet;
+  if(recip) recip.textContent=w?(w.slice(0,6)+'...'+w.slice(-4)):'—';
+  if(msg){msg.className='tpc-sol-msg';msg.textContent='';}
+  if(inp) inp.value='';
+  if(btn){btn.disabled=false;btn.textContent='Send';}
+  form.classList.toggle('open');
+}
+
+function _tpcCloseSolForm(){
+  const form=document.getElementById('tpc-sol-form');
+  if(form) form.classList.remove('open');
+}
+
+async function _tpcSendSol(){
+  const amtEl=document.getElementById('tpc-sol-amount');
+  const msgEl=document.getElementById('tpc-sol-msg');
+  const sendBtn=document.getElementById('tpc-sol-send-btn');
+  if(!amtEl||!msgEl||!sendBtn) return;
+
+  const amount=parseFloat(amtEl.value);
+  if(!amount||amount<0.000001||amount>10){
+    msgEl.className='tpc-sol-msg err';
+    msgEl.textContent='Enter a valid amount (max 10 SOL)';
+    return;
+  }
+  const recipient=_tpcCurrentFullWallet;
+  if(!recipient){
+    msgEl.className='tpc-sol-msg err';
+    msgEl.textContent='Recipient wallet not available';
+    return;
+  }
+  const provider=window.solana||window.solflare;
+  if(!provider?.publicKey){
+    msgEl.className='tpc-sol-msg err';
+    msgEl.textContent='Wallet not connected';
+    return;
+  }
+  if(provider.publicKey.toString()===recipient){
+    msgEl.className='tpc-sol-msg err';
+    msgEl.textContent='Cannot send SOL to yourself';
+    return;
+  }
+
+  sendBtn.disabled=true;
+  sendBtn.textContent='Loading…';
+  msgEl.className='tpc-sol-msg';
+  msgEl.textContent='';
+
+  try{
+    const web3=await _loadSolanaWeb3();
+    sendBtn.textContent='Confirm in wallet…';
+    const conn=new web3.Connection('https://api.mainnet-beta.solana.com','confirmed');
+    const from=provider.publicKey;
+    const to=new web3.PublicKey(recipient);
+    const lamports=Math.round(amount*web3.LAMPORTS_PER_SOL);
+    const {blockhash}=await conn.getLatestBlockhash();
+    const tx=new web3.Transaction().add(
+      web3.SystemProgram.transfer({fromPubkey:from,toPubkey:to,lamports})
+    );
+    tx.recentBlockhash=blockhash;
+    tx.feePayer=from;
+    const res=await provider.signAndSendTransaction(tx);
+    const sig=res?.signature||res;
+    msgEl.className='tpc-sol-msg ok';
+    msgEl.textContent='✓ Sent! '+( sig?sig.slice(0,8)+'…':'OK');
+    sendBtn.textContent='✓ Sent';
+  }catch(e){
+    msgEl.className='tpc-sol-msg err';
+    msgEl.textContent='✗ '+(e?.message||'Transaction failed');
+    sendBtn.disabled=false;
+    sendBtn.textContent='Send';
+  }
+}
+
 async function _tpcToggleFollow(userId, followKey){
   const btn=document.getElementById('tpc-follow-btn');
   if(!btn||btn.disabled) return;
@@ -3861,6 +3978,7 @@ async function openProfileCard(userId){
     return;
   }
 
+  _tpcCurrentFullWallet = p.wallet_address || '';
   const followKey=p.username+'|'+p.wallet;
   const isFollowing=_tvFollowed.has(followKey);
   const followCls='tpc-follow-btn'+(isFollowing?' following':'');
@@ -3879,8 +3997,23 @@ async function openProfileCard(userId){
         <button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">
           ${followTxt}
         </button>
-        <button class="tpc-dm-btn" title="Direct message (coming soon)">✉</button>
+        <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
       </div>
+    </div>
+    <div class="tpc-sol-form" id="tpc-sol-form">
+      <div class="tpc-sol-row">
+        <span class="tpc-sol-lbl">Amount (SOL)</span>
+        <input type="number" class="tpc-sol-amount" id="tpc-sol-amount" placeholder="0.01" min="0.001" max="10" step="0.001">
+      </div>
+      <div class="tpc-sol-row">
+        <span class="tpc-sol-lbl">To</span>
+        <span class="tpc-sol-recip" id="tpc-sol-recip">—</span>
+      </div>
+      <div class="tpc-sol-btns">
+        <button class="tpc-sol-send" id="tpc-sol-send-btn" onclick="_tpcSendSol()">Send</button>
+        <button class="tpc-sol-cancel" onclick="_tpcCloseSolForm()">Cancel</button>
+      </div>
+      <div class="tpc-sol-msg" id="tpc-sol-msg"></div>
     </div>
     <hr class="tpc-divider">
     <div class="tpc-social">

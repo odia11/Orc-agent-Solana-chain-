@@ -2552,6 +2552,7 @@ def get_profile(user_id: int):
         'avatar_url':      avatar_url or '',
         'bio':             bio or '',
         'wallet':          short_wallet,
+        'wallet_address':  wallet or '',
         'joined_at':       created_at or '',
         'trade_count':     int(trade_count or 0),
         'avg_hold_seconds': round(float(avg_hold), 1) if avg_hold else None,
