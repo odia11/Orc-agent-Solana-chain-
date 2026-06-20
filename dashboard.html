@@ -3929,8 +3929,8 @@ async function _tpcSendSol(){
     const tx=new Transaction({recentBlockhash:bhData.blockhash,feePayer:fromPubkey});
     tx.add(ix);
     const signed=await provider.signTransaction(tx);
-    const rawBytes=signed.serialize();
-    const b64=btoa(String.fromCharCode(...new Uint8Array(rawBytes)));
+    const serialized=signed.serialize();
+    const b64=btoa(Array.from(serialized).map(b=>String.fromCharCode(b)).join(''));
     const sendResp=await fetch('/api/solana/send_raw',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
@@ -3940,7 +3940,7 @@ async function _tpcSendSol(){
     if(!result.ok) throw new Error(result.msg);
     const sig=result.signature;
     msgEl.className='tpc-sol-msg ok';
-    msgEl.textContent='✓ Sent! '+( sig?sig.slice(0,8)+'…':'OK');
+    msgEl.textContent='✓ Sent! '+(sig?sig.slice(0,8)+'…':'OK');
     sendBtn.textContent='✓ Sent';
   }catch(e){
     msgEl.className='tpc-sol-msg err';
