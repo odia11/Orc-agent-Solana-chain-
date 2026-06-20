@@ -1657,13 +1657,28 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
           f'pnl_positive={pnl>0}  has_key={bool(private_key and wallet)}  '
           f'owner_wallet_set={_owner_set}', flush=True)
 
+    # Referred users receive a 10% discount on the performance fee (4.5% instead of 5%).
+    _applied_fee_rate = FEE_RATE
+    if wallet:
+        try:
+            _fconn = sqlite3.connect(DB_FILE)
+            _frow  = _fconn.execute(
+                'SELECT referred_by FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+            _fconn.close()
+            if _frow and _frow[0]:
+                _applied_fee_rate = round(FEE_RATE * 0.9, 6)
+        except Exception:
+            pass
+
     # Collect fees from ALL profitable trades regardless of who the session wallet belongs to.
     # The fee goes FROM the trading keypair TO OWNER_WALLET — these are different addresses,
     # so even the platform owner's trades generate a valid transfer.
     if pnl > 0.0 and wallet and private_key and _owner_set:
-        fee_amount = round(pnl * FEE_RATE, 6)
+        fee_amount   = round(pnl * _applied_fee_rate, 6)
+        _disc_note   = ' (10% referral discount)' if _applied_fee_rate < FEE_RATE else ''
         print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
-              f'(5% of {pnl:.6f} SOL profit)', flush=True)
+              f'({_applied_fee_rate * 100:.1f}% of {pnl:.6f} SOL profit{_disc_note})', flush=True)
 
         if fee_amount > 0:
             _pk   = private_key     # Python string — immutable, ref lives in thread args tuple
@@ -2535,11 +2550,14 @@ def set_wallet():
                     _c_ref.execute('SELECT wallet_address FROM users WHERE referral_code=?', (pending_ref,))
                     _referrer = _c_ref.fetchone()
                     if _referrer and _referrer[0] != address:
+                        _referrer_wallet = _referrer[0]
                         _c_ref.execute('UPDATE users SET referred_by=? WHERE wallet_address=?',
-                                       (pending_ref, address))
+                                       (_referrer_wallet, address))
                         _c_ref.execute('UPDATE users SET referral_count = referral_count + 1 '
-                                       'WHERE referral_code=?', (pending_ref,))
+                                       'WHERE wallet_address=?', (_referrer_wallet,))
                         _conn_ref.commit()
+                        print(f'[referral] {address[:6]}…{address[-4:]} referred by '
+                              f'{_referrer_wallet[:6]}…{_referrer_wallet[-4:]}', flush=True)
                 _conn_ref.close()
             except Exception as _ref_e:
                 print(f'[referral] apply error: {_ref_e}', flush=True)
