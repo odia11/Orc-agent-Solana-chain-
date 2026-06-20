@@ -874,6 +874,54 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .mkt-card.hot{margin:0 auto;width:100%}
 }
 
+/* ── MOBILE LAYOUT ── */
+@media(max-width:768px){
+  /* Navbar */
+  .brand-sub{display:none}
+  .hdr-btn,.hdr-btn-red{padding:5px 8px;font-size:9px}
+  .header-right{gap:5px}
+  .wallet-pill{padding:4px 9px;font-size:9px}
+
+  /* Open positions table: hide Invested column, compact text */
+  #positions-panel .trade-table th:nth-child(5),
+  #positions-panel .trade-table td:nth-child(5){display:none}
+  .pos-panel{padding:12px}
+  .trade-table{font-size:9px}
+  .trade-table th{font-size:7px;padding:5px 8px}
+  .trade-table td{padding:5px 8px}
+  .pos-act-wrap{flex-wrap:wrap;gap:3px}
+
+  /* Live activity feed */
+  .live-feed-panel{padding:12px}
+  .lf-amt{display:none}
+
+  /* Leaderboard compact rows */
+  .lb-panel{padding:12px}
+  .lb-row{padding:6px 8px;gap:7px}
+  .lb-avatar{width:28px;height:28px;font-size:11px}
+  .lb-name{font-size:10px}
+
+  /* Bottom padding for mobile browser chrome */
+  .wrap{padding-bottom:env(safe-area-inset-bottom,3rem)}
+}
+
+@media(max-width:480px){
+  /* Stats: single column */
+  .stats{grid-template-columns:1fr}
+  .stat-val{font-size:15px}
+  .brand{font-size:12px}
+
+  /* Positions table: also hide Opened column on very small screens */
+  #positions-panel .trade-table th:nth-child(2),
+  #positions-panel .trade-table td:nth-child(2){display:none}
+
+  /* Leaderboard: hide meta subtitle */
+  .lb-meta{display:none}
+
+  /* Header: reduce wallet pill text */
+  #wallet-short{display:none}
+}
+
 /* ── LOW SOL BALANCE MODAL ── */
 #low-sol-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.82);backdrop-filter:blur(4px);align-items:center;justify-content:center}
 #low-sol-modal.open{display:flex}
