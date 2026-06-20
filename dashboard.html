@@ -3942,6 +3942,8 @@ async function _tpcSendSol(){
     }catch(e1){
       console.log('sol_sendTransaction failed, trying fallback:',e1);
     }
+    sig=await provider.sendTransaction(tx,[]);
+    return sig;
     msgEl.className='tpc-sol-msg ok';
     msgEl.textContent='✓ Sent! '+(sig?sig.slice(0,8)+'…':'OK');
     sendBtn.textContent='✓ Sent';
