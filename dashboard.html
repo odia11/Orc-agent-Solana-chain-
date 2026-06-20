@@ -4021,7 +4021,6 @@ async function _tpcSendSol(amountSol, recipientFullWallet) {
   if (!provider || !provider.publicKey) throw new Error('No wallet connected');
   await _waitForSolanaWeb3();
   const web3 = window.solanaWeb3;
-  const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
   const fromPubkey = new web3.PublicKey(provider.publicKey.toString());
   const toPubkey = new web3.PublicKey(recipientFullWallet);
   const lamports = Math.floor(parseFloat(amountSol) * 1000000000);
@@ -4029,11 +4028,6 @@ async function _tpcSendSol(amountSol, recipientFullWallet) {
     web3.SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
   );
   transaction.feePayer = fromPubkey;
-  const { blockhash } = await connection.getRecentBlockhash();
-  transaction.recentBlockhash = blockhash;
-  const signed = await provider.signTransaction(transaction);
-  const signature = await connection.sendRawTransaction(signed.serialize());
-  return signature;
 }
 
 async function _tpcToggleFollow(userId, followKey){
