@@ -619,6 +619,35 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .lf-toast{font-size:10px;padding:8px 12px}
 }
 
+/* ── TRADERS VIEW ── */
+.tv-wrap{border:1px solid rgba(0,237,170,.3);border-radius:12px;padding:20px;background:var(--bg2);box-shadow:0 0 0 1px rgba(0,237,170,.06),0 4px 32px rgba(0,237,170,.06);margin-bottom:1.5rem}
+.tv-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid rgba(0,237,170,.15);flex-wrap:wrap;gap:8px}
+.tv-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:var(--green);letter-spacing:.05em}
+.tv-hdr-right{display:flex;align-items:center;gap:8px}
+.tv-back-btn{background:transparent;border:1px solid rgba(0,237,170,.35);border-radius:6px;padding:5px 14px;color:var(--green);font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .15s}
+.tv-back-btn:hover{background:rgba(0,237,170,.08)}
+.tv-list{display:flex;flex-direction:column;gap:8px}
+.tv-empty{text-align:center;padding:32px;font-size:11px;color:var(--muted);letter-spacing:.08em}
+.tv-card{display:flex;align-items:center;gap:10px;background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:10px 12px;transition:border-color .2s}
+.tv-card:hover{border-color:var(--border2)}
+.tv-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;overflow:hidden;background:var(--bg4);border:1px solid var(--border2);position:relative}
+.tv-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tv-info{flex:1;min-width:0}
+.tv-name{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+.tv-row2{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.tv-badge-open{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.08em;background:rgba(0,237,170,.15);color:var(--green);border:1px solid rgba(0,237,170,.4);flex-shrink:0}
+.tv-badge-win{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.08em;background:rgba(0,237,170,.1);color:var(--green);border:1px solid rgba(0,237,170,.25);flex-shrink:0}
+.tv-badge-loss{font-family:'Orbitron',monospace;font-size:7px;font-weight:700;padding:2px 6px;border-radius:3px;letter-spacing:.08em;background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.3);flex-shrink:0}
+.tv-token{font-size:11px;font-weight:700;color:var(--text)}
+.tv-pnl-pos{font-size:11px;font-weight:700;color:var(--green)}
+.tv-pnl-neg{font-size:11px;font-weight:700;color:var(--red)}
+.tv-time{font-size:9px;color:var(--muted)}
+.tv-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.tv-follow-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-follow-btn:hover,.tv-follow-btn.followed{border-color:var(--green);color:var(--green);background:rgba(0,237,170,.08)}
+.tv-follow-btn.followed::before{content:'✓ '}
+@media(max-width:480px){.tv-right{align-items:flex-start}.tv-card{flex-wrap:wrap}.tv-right{width:100%;flex-direction:row;justify-content:space-between}}
+
 /* ── DAILY LEADERBOARD ── */
 .lb-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 .lb-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -1008,6 +1037,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <span class="health-dot" id="health-dot"></span>HEALTH
       </button>
       <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:rgba(255,193,58,.4);color:#f0b90b" title="Owner admin dashboard">👑 Admin</button>
+      <button class="hdr-btn" id="traders-btn" onclick="openTradersView()" title="Live trader activity feed">👥 Traders</button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
@@ -1285,6 +1315,24 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div>
 
   </div><!-- /dash-main -->
+
+  <!-- ── TRADERS VIEW ── -->
+  <div id="dash-traders" style="display:none">
+    <div class="tv-wrap">
+      <div class="tv-hdr">
+        <span class="tv-title">👥 TRADERS FEED</span>
+        <div class="tv-hdr-right">
+          <span class="lf-live-dot"></span>
+          <span class="lf-live-label">LIVE</span>
+          <span class="lf-countdown" id="tv-countdown"></span>
+          <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
+        </div>
+      </div>
+      <div id="tv-list" class="tv-list">
+        <div class="tv-empty">Loading trader activity…</div>
+      </div>
+    </div>
+  </div><!-- /dash-traders -->
 
   <!-- ── ADMIN DASHBOARD VIEW (toggled by 👑 Admin button) ── -->
   <div id="dash-admin" style="display:none">
@@ -3387,6 +3435,140 @@ async function saveSettings(){
   }
 }
 
+// ── TRADERS VIEW ──
+let _tradersView=false, _tvCountdownTimer=null, _tvCountdownVal=15, _tvFollowed=new Set();
+
+function _tvStartCountdown(){
+  if(_tvCountdownTimer) clearInterval(_tvCountdownTimer);
+  _tvCountdownVal=15;
+  const el=document.getElementById('tv-countdown');
+  if(el) el.textContent='↻ '+_tvCountdownVal+'s';
+  _tvCountdownTimer=setInterval(()=>{
+    _tvCountdownVal=Math.max(0,_tvCountdownVal-1);
+    if(el) el.textContent=_tvCountdownVal>0?'↻ '+_tvCountdownVal+'s':'refreshing…';
+    if(_tvCountdownVal===0) _tvCountdownVal=15;
+  },1000);
+}
+
+function _tvTimeAgo(ts){
+  if(!ts) return '';
+  const sec=Math.floor(Date.now()/1000)-ts;
+  if(sec<60)   return sec+'s ago';
+  if(sec<3600) return Math.floor(sec/60)+'m ago';
+  if(sec<86400)return Math.floor(sec/3600)+'h ago';
+  return Math.floor(sec/86400)+'d ago';
+}
+
+function _tvTimeAgoStr(isoStr){
+  if(!isoStr) return '';
+  try{ return _tvTimeAgo(Math.floor(new Date(isoStr+'Z'.replace('ZZ','Z')).getTime()/1000)); }catch(e){ return ''; }
+}
+
+const _TV_AVATAR_COLORS=['#1a5276','#0e4d3a','#2d3561','#4a235a','#5b2333','#1b4332','#154360','#3d1a00'];
+function _tvAvatarColor(name){
+  let h=0; for(let i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))>>>0;
+  return _TV_AVATAR_COLORS[h%_TV_AVATAR_COLORS.length];
+}
+
+function _tvAvatarHtml(e){
+  const name=e.username||'?';
+  const ini=esc(name[0].toUpperCase());
+  const bg=_tvAvatarColor(name);
+  if(e.avatar_url){
+    return `<div class="tv-avatar" style="background:${bg}"><img src="${e.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
+  }
+  return `<div class="tv-avatar" style="background:${bg}">${ini}</div>`;
+}
+
+function _tvFollowToggle(btn, key){
+  if(_tvFollowed.has(key)){
+    _tvFollowed.delete(key);
+    btn.classList.remove('followed');
+    btn.textContent='Follow';
+  } else {
+    _tvFollowed.add(key);
+    btn.classList.add('followed');
+    btn.textContent='Following';
+  }
+}
+
+function renderTradersFeed(items){
+  const list=document.getElementById('tv-list');
+  if(!list) return;
+  if(!items||!items.length){
+    list.innerHTML='<div class="tv-empty">No trader activity in the last 24 hours yet.</div>';
+    return;
+  }
+  list.innerHTML=items.map(e=>{
+    const key=esc(e.username+'|'+e.wallet);
+    const isFollowed=_tvFollowed.has(e.username+'|'+e.wallet);
+    const followCls='tv-follow-btn'+(isFollowed?' followed':'');
+    const followTxt=isFollowed?'Following':'Follow';
+    const avatarHtml=_tvAvatarHtml(e);
+
+    let signalHtml='', timeHtml='';
+    if(e.type==='open'){
+      const pct=e.current_pnl_pct;
+      const pctStr=pct!=null?((pct>=0?'+':'')+pct.toFixed(1)+'%'):'';
+      const pnlCls=pct!=null&&pct<0?'tv-pnl-neg':'tv-pnl-pos';
+      signalHtml=`<span class="tv-badge-open">LIVE</span><span class="tv-token">${esc(e.token)}</span>${pctStr?`<span class="${pnlCls}">📈 ${esc(pctStr)}</span>`:'<span class="tv-pnl-pos">📈 in trade</span>'}`;
+      timeHtml=`<span class="tv-time">${_tvTimeAgo(e.opened_at)}</span>`;
+    } else {
+      const pnl=e.pnl||0;
+      const pos=pnl>=0;
+      const icon=pos?'✅':'❌';
+      const pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';
+      const pnlCls=pos?'tv-pnl-pos':'tv-pnl-neg';
+      const badgeCls=pos?'tv-badge-win':'tv-badge-loss';
+      const badgeTxt=pos?'WIN':'LOSS';
+      signalHtml=`<span class="${badgeCls}">${badgeTxt}</span><span class="tv-token">${esc(e.token)}</span><span class="${pnlCls}">${icon} ${esc(pnlStr)}</span>`;
+      timeHtml=`<span class="tv-time">${_tvTimeAgoStr(e.timestamp)}</span>`;
+    }
+
+    return `<div class="tv-card">
+      ${avatarHtml}
+      <div class="tv-info">
+        <div class="tv-name">${esc(e.username)}</div>
+        <div class="tv-row2">${signalHtml}&nbsp;${timeHtml}</div>
+      </div>
+      <div class="tv-right">
+        <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}')">${followTxt}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function fetchTradersFeed(){
+  if(!_tradersView) return;
+  const r=await fetch('/api/social/feed').then(r=>r.json()).catch(()=>null);
+  if(Array.isArray(r)) renderTradersFeed(r);
+  _tvStartCountdown();
+}
+
+function openTradersView(){
+  if(_tradersView) return;
+  _tradersView=true;
+  document.getElementById('dash-main').style.display='none';
+  if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
+    document.getElementById('dash-admin').style.display='none';
+  }
+  document.getElementById('dash-traders').style.display='';
+  const btn=document.getElementById('traders-btn');
+  if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(0,237,170,.08)';}
+  fetchTradersFeed();
+}
+
+function closeTradersView(){
+  if(!_tradersView) return;
+  _tradersView=false;
+  document.getElementById('dash-traders').style.display='none';
+  document.getElementById('dash-main').style.display='';
+  if(_tvCountdownTimer){clearInterval(_tvCountdownTimer);_tvCountdownTimer=null;}
+  const el=document.getElementById('tv-countdown'); if(el) el.textContent='';
+  const btn=document.getElementById('traders-btn');
+  if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
+}
+
 // ── DAILY LEADERBOARD ──
 let _lbCountdownTimer=null,_lbCountdownVal=30;
 
@@ -3462,6 +3644,7 @@ setInterval(fetchTrades,10000);
 setInterval(fetchCarousel,60000);
 setInterval(fetchPumpScanner,30000);
 setInterval(fetchLeaderboard,30000);
+setInterval(fetchTradersFeed,15000);
 
 // ── VERSION POLLING ──
 let _pageVersion=null;
