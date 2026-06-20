@@ -2380,6 +2380,27 @@ def get_leaderboard():
         })
     return jsonify(result)
 
+# ── SOLANA BLOCKHASH PROXY ──
+@app.route('/api/solana/blockhash', methods=['GET'])
+@rate_limit(60, 60)
+def solana_blockhash():
+    payload = {'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': []}
+    last_err = 'No RPC available'
+    for rpc in CLAIM_SOL_RPCS:
+        try:
+            r = requests.post(rpc, json=payload, timeout=8)
+            data = r.json()
+            val = data.get('result', {}).get('value', {})
+            if val.get('blockhash'):
+                return jsonify({
+                    'ok': True,
+                    'blockhash': val['blockhash'],
+                    'lastValidBlockHeight': val.get('lastValidBlockHeight', 0),
+                })
+        except Exception as e:
+            last_err = str(e)
+    return jsonify({'ok': False, 'msg': last_err}), 502
+
 # ── PLATFORM STATS ──
 @app.route('/api/platform/stats', methods=['GET'])
 @rate_limit(60, 60)
