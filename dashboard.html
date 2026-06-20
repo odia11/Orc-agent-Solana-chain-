@@ -4016,75 +4016,15 @@ function _tpcCloseSolForm(){
   if(form) form.classList.remove('open');
 }
 
-async function _tpcSendSol(){
-  const amtEl=document.getElementById('tpc-sol-amount');
-  const msgEl=document.getElementById('tpc-sol-msg');
-  const sendBtn=document.getElementById('tpc-sol-send-btn');
-  if(!amtEl||!msgEl||!sendBtn) return;
-
-  const amountSol=parseFloat(amtEl.value);
-  if(!amountSol||amountSol<0.000001||amountSol>10){
-    msgEl.className='tpc-sol-msg err';
-    msgEl.textContent='Enter a valid amount (max 10 SOL)';
-    return;
-  }
-  const recipientFullWallet=_tpcCurrentFullWallet;
-  if(!recipientFullWallet){
-    msgEl.className='tpc-sol-msg err';
-    msgEl.textContent='Recipient wallet not available';
-    return;
-  }
-  const provider=window.solana||window.solflare;
-  if(!provider?.publicKey){
-    msgEl.className='tpc-sol-msg err';
-    msgEl.textContent='Wallet not connected';
-    return;
-  }
-  if(provider.publicKey.toString()===recipientFullWallet){
-    msgEl.className='tpc-sol-msg err';
-    msgEl.textContent='Cannot send SOL to yourself';
-    return;
-  }
-
-  sendBtn.disabled=true;
-  sendBtn.textContent='Loading…';
-  msgEl.className='tpc-sol-msg';
-  msgEl.textContent='';
-
-  try{
-    await _waitForSolanaWeb3();
-    const {Transaction,SystemProgram,PublicKey}=window.solanaWeb3;
-    const bhResp=await fetch('/api/solana/blockhash');
-    const bhData=await bhResp.json();
-    if(!bhData.blockhash) throw new Error('Could not get blockhash');
-    sendBtn.textContent='Confirm in wallet…';
-    const fromPubkey=new PublicKey(provider.publicKey.toString());
-    const toPubkey=new PublicKey(recipientFullWallet);
-    const lamports=Math.floor(parseFloat(amountSol)*1000000000); // plain Number, not BigInt
-    const ix=SystemProgram.transfer({fromPubkey,toPubkey,lamports});
-    const tx=new Transaction({recentBlockhash:bhData.blockhash,feePayer:fromPubkey});
-    tx.add(ix);
-    let sig;
-    try{
-      const resp=await provider.request({
-        method:'sol_sendTransaction',
-        params:[{to:recipientFullWallet,amount:lamports.toString(),network:'mainnet-beta'}]
-      });
-      sig=resp.signature||resp;
-    }catch(e1){
-      console.log('sol_sendTransaction failed, trying sendTransaction fallback:',e1);
-      sig=await provider.sendTransaction(tx,[]);
-    }
-    msgEl.className='tpc-sol-msg ok';
-    msgEl.textContent='✓ Sent! '+(sig?String(sig).slice(0,8)+'…':'OK');
-    sendBtn.textContent='✓ Sent';
-    setTimeout(()=>{ sendBtn.disabled=false; sendBtn.textContent='Send'; },3000);
-  }catch(e){
-    msgEl.className='tpc-sol-msg err';
-    msgEl.textContent='✗ '+(e?.message||'Transaction failed');
-    sendBtn.disabled=false;
-    sendBtn.textContent='Send';
-  }
+async function _tpcSendSol(amountSol, recipientFullWallet) {
+  const provider = window.solana || window.solflare;
+  if (!provider || !provider.publicKey) throw new Error('No wallet connected');
+  await _waitForSolanaWeb3();
+  const web3 = window.solanaWeb3;
+  const connection = new web3.Connection('https://api.mainnet-beta.solana.com', 'confirmed');
+  const fromPubkey = new web3.PublicKey(provider.publicKey.toString());
+  const toPubkey = new web3.PublicKey(recipientFullWallet);
+  const lamports = Math.floor(parseFloat(amountSol) * 1000000000);
 }
 
 async function _tpcToggleFollow(userId, followKey){
