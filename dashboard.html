@@ -4028,6 +4028,11 @@ async function _tpcSendSol(amountSol, recipientFullWallet) {
     web3.SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
   );
   transaction.feePayer = fromPubkey;
+  const bhResp = await fetch('/api/solana/blockhash');
+  const bhData = await bhResp.json();
+  transaction.recentBlockhash = bhData.blockhash;
+  const result = await provider.signAndSendTransaction(transaction);
+  return result.signature || result;
 }
 
 async function _tpcToggleFollow(userId, followKey){
