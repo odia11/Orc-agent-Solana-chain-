@@ -2619,11 +2619,32 @@ def get_profile(user_id: int):
 
         c.execute('SELECT COUNT(*) FROM follows WHERE follower_id = ?', (user_id,))
         following_count = (c.fetchone() or [0])[0]
+
+        c.execute('SELECT COALESCE(SUM(pnl), 0) FROM trades WHERE user_id=?', (user_id,))
+        total_pnl_row = c.fetchone()
     finally:
         conn.close()
 
     short_wallet = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
     display_name = username if username else short_wallet
+    total_pnl    = round(float(total_pnl_row[0] or 0), 6) if total_pnl_row else 0.0
+
+    # Live open position count from in-memory state
+    us = user_states.get(wallet or '', {})
+    open_count = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+
+    # SOL balance — best-effort, non-blocking
+    sol_balance = 0.0
+    if wallet and _PROXY_RPCS:
+        for _rpc in _PROXY_RPCS:
+            try:
+                _r = requests.post(_rpc, json={
+                    'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+                }, timeout=5)
+                sol_balance = round(_r.json()['result']['value'] / 1e9, 4)
+                break
+            except Exception:
+                continue
 
     return jsonify({
         'ok':              True,
@@ -2638,6 +2659,10 @@ def get_profile(user_id: int):
         'avg_hold_seconds': round(float(avg_hold), 1) if avg_hold else None,
         'follower_count':  int(follower_count),
         'following_count': int(following_count),
+        'sol_balance':     sol_balance,
+        'open_trades':     open_count,
+        'closed_trades':   int(trade_count or 0),
+        'total_pnl':       total_pnl,
     })
 
 # ── PROFILE TRADES ──

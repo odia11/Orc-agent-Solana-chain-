@@ -4194,10 +4194,10 @@ async function openProfileCard(userId){
   const tradesHtml = _tvpTradesHtml(td?.trades);
   const posHtml = _tvpPositionsHtml(td?.positions);
 
-  const solBal   = td?.sol_balance??0;
-  const openCnt  = td?.open_count??0;
-  const closedCnt= td?.total_closed??p.trade_count??0;
-  const allPnl   = td?.total_pnl??0;
+  const solBal   = p.sol_balance??td?.sol_balance??0;
+  const openCnt  = p.open_trades??td?.open_count??0;
+  const closedCnt= p.closed_trades??td?.total_closed??p.trade_count??0;
+  const allPnl   = p.total_pnl??td?.total_pnl??0;
   const allPnlPos= allPnl>=0;
   const allPnlStr= (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
 
