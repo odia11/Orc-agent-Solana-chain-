@@ -253,6 +253,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
 .perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center}
 .pos-panel{background:var(--bg2);border:1px solid rgba(0,237,170,.4);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+/* ── PNL PERFORMANCE CHART ── */
+.pnlc-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.pnlc-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.pnlc-toggles{display:flex;gap:4px}
+.pnlc-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:3px 10px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.06em}
+.pnlc-btn:hover{border-color:#00ff88;color:#00ff88}
+.pnlc-btn.active{border-color:#00ff88;color:#00ff88;background:rgba(0,255,136,.08)}
+#pnlc-container{height:200px;position:relative;background:#0a0e1a;border-radius:6px;overflow:hidden}
+#pnlc-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.1em;pointer-events:none}
 /* Admin panel */
 .admin-panel{background:var(--bg2);border:2px solid rgba(255,77,106,.5);border-radius:10px;padding:16px;margin-bottom:1.25rem;box-shadow:0 0 0 1px rgba(255,77,106,.1),0 4px 28px rgba(255,77,106,.1)}
 .admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.25);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
@@ -1281,6 +1290,21 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- PNL PERFORMANCE CHART -->
+  <div class="pnlc-panel" id="pnlc-panel">
+    <div class="pnlc-hdr">
+      <div class="panel-hdr" style="margin-bottom:0">PnL Performance &nbsp;<span id="pnlc-val" style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700"></span></div>
+      <div class="pnlc-toggles">
+        <button class="pnlc-btn active" onclick="_pnlSetRange('1d',this)">1D</button>
+        <button class="pnlc-btn" onclick="_pnlSetRange('7d',this)">7D</button>
+        <button class="pnlc-btn" onclick="_pnlSetRange('30d',this)">30D</button>
+      </div>
+    </div>
+    <div id="pnlc-container">
+      <div id="pnlc-empty">NO TRADES YET</div>
+    </div>
+  </div>
+
   <!-- MY PERFORMANCE -->
   <div class="perf-panel" id="perf-panel-main">
     <div class="panel-hdr">My Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span><span id="perf-tz" style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;margin-left:6px;letter-spacing:.06em"></span></div>
@@ -1913,6 +1937,7 @@ async function launchApp(){
   if('Notification' in window) Notification.requestPermission();
   await fetchState();
   fetchTrades();
+  fetchPnlChart();
   fetchPumpScanner();
   fetchLeaderboard();
 }
@@ -4222,9 +4247,74 @@ async function fetchLeaderboard(){
   _lbStartCountdown();
 }
 
+// ── PNL PERFORMANCE CHART (LightweightCharts) ──────────────────────────────
+let _pnlcChart=null,_pnlcSeries=null,_pnlcRange='1d';
+
+async function fetchPnlChart(){
+  if(!appVisible()) return;
+  try{
+    const r=await fetch('/api/pnl_chart?range='+_pnlcRange).then(r=>r.json());
+    _renderPnlcChart(r.data||[]);
+  }catch(e){}
+}
+
+function _renderPnlcChart(pts){
+  const container=document.getElementById('pnlc-container');
+  const emptyEl=document.getElementById('pnlc-empty');
+  const valEl=document.getElementById('pnlc-val');
+  if(!container) return;
+
+  if(!pts||!pts.length){
+    if(emptyEl){emptyEl.style.display='flex';}
+    if(valEl){valEl.textContent='';valEl.style.color='';}
+    return;
+  }
+  if(emptyEl) emptyEl.style.display='none';
+
+  const lastVal=pts[pts.length-1].value;
+  const isPos=lastVal>=0;
+  const lineClr=isPos?'#00ff88':'#ff4444';
+  const topClr=isPos?'rgba(0,255,136,0.25)':'rgba(255,68,68,0.25)';
+  const botClr=isPos?'rgba(0,255,136,0)':'rgba(255,68,68,0)';
+
+  if(valEl){
+    valEl.textContent=(isPos?'+':'')+lastVal.toFixed(4)+' SOL';
+    valEl.style.color=lineClr;
+  }
+
+  if(!_pnlcChart){
+    _pnlcChart=LightweightCharts.createChart(container,{
+      width:container.clientWidth,height:200,
+      layout:{background:{type:'solid',color:'#0a0e1a'},textColor:'#6e8faf'},
+      grid:{vertLines:{visible:false},horzLines:{visible:false}},
+      crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
+      rightPriceScale:{borderColor:'#2a4060',scaleMargins:{top:0.1,bottom:0.1}},
+      timeScale:{borderColor:'#2a4060',timeVisible:_pnlcRange==='1d',secondsVisible:false},
+      handleScroll:false,handleScale:false,
+    });
+    _pnlcSeries=_pnlcChart.addAreaSeries({lineColor:lineClr,topColor:topClr,bottomColor:botClr,lineWidth:2});
+    new ResizeObserver(()=>{
+      if(container.clientWidth>0) _pnlcChart.applyOptions({width:container.clientWidth});
+    }).observe(container);
+  }else{
+    _pnlcChart.applyOptions({timeScale:{timeVisible:_pnlcRange==='1d'}});
+    _pnlcSeries.applyOptions({lineColor:lineClr,topColor:topClr,bottomColor:botClr});
+  }
+  _pnlcSeries.setData(pts);
+  _pnlcChart.timeScale().fitContent();
+}
+
+function _pnlSetRange(range,btn){
+  _pnlcRange=range;
+  document.querySelectorAll('.pnlc-btn').forEach(b=>b.classList.remove('active'));
+  if(btn) btn.classList.add('active');
+  fetchPnlChart();
+}
+
 setInterval(fetchState,10000);
 setInterval(fetchMarketOnly,30000);
 setInterval(fetchTrades,30000);
+setInterval(fetchPnlChart,30000);
 setInterval(fetchPumpScanner,30000);
 setInterval(fetchLeaderboard,30000);
 setInterval(fetchTradersFeed,15000);

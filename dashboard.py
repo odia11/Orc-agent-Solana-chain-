@@ -3947,10 +3947,15 @@ def api_trades():
 @app.route('/api/pnl_chart')
 @rate_limit(30, 60)
 def api_pnl_chart():
+    import calendar as _calendar
     wallet = _current_wallet()
     if not wallet:
-        return jsonify({'ok': True, 'points': [{'time': '00:00', 'cumulative_pnl': 0.0}]})
-    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+        return jsonify({'ok': True, 'data': []})
+
+    range_param = request.args.get('range', '1d').lower()
+    days = {'1d': 1, '7d': 7, '30d': 30}.get(range_param, 7)
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+
     try:
         conn = sqlite3.connect(DB_FILE)
         try:
@@ -3958,14 +3963,13 @@ def api_pnl_chart():
             c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
             if not row:
-                return jsonify({'ok': True, 'points': [{'time': '00:00', 'cumulative_pnl': 0.0}]})
+                return jsonify({'ok': True, 'data': []})
             user_id = row[0]
             c.execute(
-                '''SELECT strftime('%H:%M', timestamp) AS hm, pnl
-                   FROM trades
-                   WHERE user_id=? AND date(timestamp)=?
+                '''SELECT timestamp, pnl FROM trades
+                   WHERE user_id=? AND timestamp >= ?
                    ORDER BY timestamp ASC''',
-                (user_id, today)
+                (user_id, cutoff)
             )
             rows = c.fetchall()
         finally:
@@ -3974,12 +3978,29 @@ def api_pnl_chart():
         print(f'[pnl_chart] DB error: {e}', flush=True)
         return jsonify({'ok': False, 'msg': 'DB error'}), 500
 
-    points = [{'time': '00:00', 'cumulative_pnl': 0.0}]
+    if not rows:
+        return jsonify({'ok': True, 'data': []})
+
+    points = []
     running = 0.0
-    for hm, pnl in rows:
+    for ts_str, pnl in rows:
         running = round(running + (pnl or 0.0), 6)
-        points.append({'time': hm or '??:??', 'cumulative_pnl': running})
-    return jsonify({'ok': True, 'points': points})
+        try:
+            dt = datetime.datetime.strptime(ts_str[:19], '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            continue
+        if days == 1:
+            # Unix timestamp (seconds) so LightweightCharts shows intraday time axis
+            ts = int(_calendar.timegm(dt.timetuple()))
+            points.append({'time': ts, 'value': running})
+        else:
+            # Daily aggregation: update last entry if same date, else append
+            date_str = dt.strftime('%Y-%m-%d')
+            if points and points[-1]['time'] == date_str:
+                points[-1]['value'] = running
+            else:
+                points.append({'time': date_str, 'value': running})
+    return jsonify({'ok': True, 'data': points})
 
 @app.route('/api/log')
 @rate_limit(30, 60)
