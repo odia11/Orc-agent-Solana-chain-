@@ -97,8 +97,10 @@ BASE         = os.path.dirname(os.path.abspath(__file__))
 # Use Railway persistent volume when available so the DB and logs survive redeploys.
 _DATA_DIR    = '/data' if os.path.exists('/data') else BASE
 LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
-DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
-BACKUP_DIR   = os.path.join(_DATA_DIR, 'backups')
+DB_FILE        = os.path.join(_DATA_DIR, 'orcagent.db')
+BACKUP_DIR     = os.path.join(_DATA_DIR, 'backups')
+HEARTBEAT_FILE = os.path.join(_DATA_DIR, 'heartbeat.txt')
+_APP_START     = time.time()
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
@@ -2167,6 +2169,17 @@ def _security_headers(resp):
         except Exception:
             pass
     return resp
+
+@app.route('/health')
+def health():
+    uptime  = int(time.time() - _APP_START)
+    last_hb = None
+    try:
+        with open(HEARTBEAT_FILE) as _f:
+            last_hb = _f.read().strip()
+    except FileNotFoundError:
+        pass
+    return jsonify({'status': 'ok', 'uptime': uptime, 'last_heartbeat': last_hb})
 
 @app.route('/')
 def index():
@@ -4964,6 +4977,17 @@ if not OWNER_WALLET:
     print('         Set OWNER_WALLET in Railway Variables and redeploy.')
 init_db()
 _load_banned_ips()
+def _heartbeat_loop():
+    while True:
+        try:
+            ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')
+            with open(HEARTBEAT_FILE, 'w') as _hf:
+                _hf.write(ts)
+        except Exception as _e:
+            print(f'[heartbeat] write error: {_e}', flush=True)
+        time.sleep(60)
+
+threading.Thread(target=_heartbeat_loop,       daemon=True).start()
 threading.Thread(target=token_loop,            daemon=True).start()
 threading.Thread(target=totd_loop,             daemon=True).start()
 threading.Thread(target=_cleanup_loop,         daemon=True).start()

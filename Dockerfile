@@ -21,5 +21,6 @@ COPY . .
 # Railway injects PORT at runtime; expose it as documentation only
 EXPOSE 8080
 
-# Start gunicorn — PORT is supplied by Railway at container start, not baked in
-CMD ["sh", "-c", "gunicorn dashboard:app --bind 0.0.0.0:${PORT:-8080} --workers 1 --threads 4 --timeout 120"]
+# start.sh launches monitor.py in the background, then execs gunicorn as PID 1
+RUN chmod +x start.sh
+CMD ["sh", "start.sh"]

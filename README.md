@@ -41,6 +41,8 @@ Optional:
 | `ANTHROPIC_API_KEY` | Claude API key for AI token scoring. |
 | `HELIUS_API_KEY` | Helius RPC API key for reliable Solana RPC. |
 | `BIRDEYE_API_KEY` | BirdEye API key for token data. |
+| `TELEGRAM_BOT_TOKEN` | Telegram bot token (from @BotFather) for uptime alerts. |
+| `TELEGRAM_CHAT_ID` | Telegram chat or channel ID to receive uptime alerts. |
 
 ---
 
