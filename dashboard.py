@@ -105,6 +105,7 @@ USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT         = 'So11111111111111111111111111111111111111112'
 SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
 SOLANA_RPC_URL   = os.environ.get('SOLANA_RPC_URL', '')   # set in Railway — overrides all fallbacks
+HELIUS_RPC       = os.environ.get('HELIUS_RPC', '')        # full Helius URL e.g. https://mainnet.helius-rpc.com/?api-key=xxx
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
@@ -117,12 +118,14 @@ PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
 X_CLIENT_SECRET  = os.environ.get('X_CLIENT_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
 
-# Ordered list of RPC endpoints for claim_sol queries.
-# SOLANA_RPC_URL (Railway env var) is always first when set — use it for a real Helius key.
+# Ordered list of RPC endpoints for claim_sol / blockhash / send_raw queries.
+# Priority: SOLANA_RPC_URL → HELIUS_RPC → HELIUS_API_KEY → public fallbacks
 def _build_claim_rpcs() -> list:
     rpcs = []
     if SOLANA_RPC_URL:
         rpcs.append(SOLANA_RPC_URL)
+    if HELIUS_RPC:
+        rpcs.append(HELIUS_RPC)
     if HELIUS_API_KEY:
         rpcs.append(f'https://mainnet.helius-rpc.com/?api-key={HELIUS_API_KEY}')
     rpcs.append('https://solana-mainnet.g.alchemy.com/v2/demo')
@@ -130,6 +133,13 @@ def _build_claim_rpcs() -> list:
     rpcs.append('https://api.mainnet-beta.solana.com')
     return rpcs
 CLAIM_SOL_RPCS = _build_claim_rpcs()
+def _rpc_label(url: str) -> str:
+    if 'helius' in url: return 'Helius'
+    if 'alchemy' in url: return 'Alchemy'
+    if 'mainnet-beta' in url: return 'mainnet-beta'
+    return url[:40]
+print(f'[rpc] CLAIM_SOL_RPCS ({len(CLAIM_SOL_RPCS)} endpoints): '
+      + ', '.join(_rpc_label(u) for u in CLAIM_SOL_RPCS), flush=True)
 
 # ── FERNET ENCRYPTION ──
 # ENCRYPTION_KEY must be set as an environment variable. No fallback — app refuses to start
@@ -2387,9 +2397,14 @@ def solana_blockhash():
     payload = {'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': []}
     last_err = 'No RPC available'
     for rpc in CLAIM_SOL_RPCS:
+        label = _rpc_label(rpc)
         try:
             r = requests.post(rpc, json=payload, timeout=8)
             data = r.json()
+            if 'error' in data:
+                last_err = f'{label}: RPC error {data["error"]}'
+                print(f'[blockhash] {last_err}', flush=True)
+                continue
             val = data.get('result', {}).get('value', {})
             if val.get('blockhash'):
                 return jsonify({
@@ -2397,8 +2412,12 @@ def solana_blockhash():
                     'blockhash': val['blockhash'],
                     'lastValidBlockHeight': val.get('lastValidBlockHeight', 0),
                 })
+            last_err = f'{label}: no blockhash in response: {data}'
+            print(f'[blockhash] {last_err}', flush=True)
         except Exception as e:
-            last_err = str(e)
+            last_err = f'{label}: {e}'
+            print(f'[blockhash] ERROR {last_err}', flush=True)
+    print(f'[blockhash] all RPCs failed, last_err={last_err}', flush=True)
     return jsonify({'ok': False, 'msg': last_err}), 502
 
 # ── SOLANA SEND RAW TX PROXY ──
