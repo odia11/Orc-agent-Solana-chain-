@@ -3924,12 +3924,10 @@ async function _tpcSendSol(){
     sendBtn.textContent='Confirm in wallet…';
     const fromPubkey=new PublicKey(provider.publicKey.toString());
     const toPubkey=new PublicKey(recipient);
-    const lamports=BigInt(Math.floor(parseFloat(amount)*1000000000));
-    if(lamports<1000n||lamports>10000000000n) throw new Error('Invalid amount');
-    const tx=new Transaction();
-    tx.recentBlockhash=bhData.blockhash;
-    tx.feePayer=fromPubkey;
-    tx.add(SystemProgram.transfer({fromPubkey,toPubkey,lamports}));
+    const lamports=Math.floor(parseFloat(amount)*1e9);
+    const ix=SystemProgram.transfer({fromPubkey,toPubkey,lamports});
+    const tx=new Transaction({recentBlockhash:bhData.blockhash,feePayer:fromPubkey});
+    tx.add(ix);
     const signed=await provider.signTransaction(tx);
     const rawBytes=signed.serialize();
     const b64=btoa(String.fromCharCode(...new Uint8Array(rawBytes)));
