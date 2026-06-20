@@ -2390,13 +2390,18 @@ def get_leaderboard():
         })
     return jsonify(result)
 
+# Two-entry RPC list for the frontend proxy endpoints:
+# SOLANA_RPC_URL (Railway env var) first; public mainnet-beta as fallback.
+_PROXY_RPCS = [u for u in [SOLANA_RPC_URL, SOLANA_RPC] if u]
+print(f'[rpc] PROXY_RPCS: {_PROXY_RPCS}', flush=True)
+
 # ── SOLANA BLOCKHASH PROXY ──
 @app.route('/api/solana/blockhash', methods=['GET'])
 @rate_limit(60, 60)
 def solana_blockhash():
     payload = {'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': []}
     last_err = 'No RPC available'
-    for rpc in CLAIM_SOL_RPCS:
+    for rpc in _PROXY_RPCS:
         label = _rpc_label(rpc)
         try:
             r = requests.post(rpc, json=payload, timeout=8)
@@ -2412,12 +2417,12 @@ def solana_blockhash():
                     'blockhash': val['blockhash'],
                     'lastValidBlockHeight': val.get('lastValidBlockHeight', 0),
                 })
-            last_err = f'{label}: no blockhash in response: {data}'
+            last_err = f'{label}: unexpected response: {data}'
             print(f'[blockhash] {last_err}', flush=True)
         except Exception as e:
             last_err = f'{label}: {e}'
             print(f'[blockhash] ERROR {last_err}', flush=True)
-    print(f'[blockhash] all RPCs failed, last_err={last_err}', flush=True)
+    print(f'[blockhash] all RPCs failed — {last_err}', flush=True)
     return jsonify({'ok': False, 'msg': last_err}), 502
 
 # ── SOLANA SEND RAW TX PROXY ──
@@ -2428,7 +2433,7 @@ def solana_send_raw():
     if not raw_tx:
         return jsonify({'ok': False, 'msg': 'raw_tx is required'})
     try:
-        base64.b64decode(raw_tx)  # validate it is valid base64
+        base64.b64decode(raw_tx)
     except Exception:
         return jsonify({'ok': False, 'msg': 'raw_tx is not valid base64'})
     payload = {
@@ -2437,16 +2442,19 @@ def solana_send_raw():
         'params': [raw_tx, {'encoding': 'base64'}],
     }
     last_err = 'No RPC available'
-    for rpc in CLAIM_SOL_RPCS:
+    for rpc in _PROXY_RPCS:
+        label = _rpc_label(rpc)
         try:
             r = requests.post(rpc, json=payload, timeout=15)
             data = r.json()
             if 'result' in data:
                 return jsonify({'ok': True, 'signature': data['result']})
             err = data.get('error', {})
-            last_err = err.get('message', str(err)) if err else 'Unknown RPC error'
+            last_err = f'{label}: ' + (err.get('message', str(err)) if err else 'unknown RPC error')
+            print(f'[send_raw] {last_err}', flush=True)
         except Exception as e:
-            last_err = str(e)
+            last_err = f'{label}: {e}'
+            print(f'[send_raw] ERROR {last_err}', flush=True)
     return jsonify({'ok': False, 'msg': last_err})
 
 # ── PLATFORM STATS ──
