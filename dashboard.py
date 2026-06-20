@@ -2316,6 +2316,57 @@ def api_token_candles(mint):
     return jsonify({'ok': True, 'candles': candles})
 
 
+@app.route('/leaderboard')
+def leaderboard():
+    session_wallet = _current_wallet()   # may be '' — page is public
+    entries = []
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('''
+            SELECT
+                u.wallet_address,
+                ROUND(SUM(t.pnl), 4)                                                    AS total_pnl,
+                ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
+                      * 100.0 / COUNT(*), 1)                                            AS win_rate,
+                COUNT(*)                                                                 AS trade_count,
+                ROUND(MAX(t.pnl), 4)                                                    AS best_trade
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
+            GROUP BY t.user_id
+            ORDER BY total_pnl DESC
+            LIMIT 50
+        ''')
+        rows = c.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f'[leaderboard] DB error: {e}', flush=True)
+        rows = []
+    for rank, (wallet, total_pnl, win_rate, trade_count, best_trade) in enumerate(rows, 1):
+        wallet = wallet or ''
+        is_me  = bool(session_wallet and wallet == session_wallet)
+        anon   = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else (wallet or '???')
+        entries.append({
+            'rank':        rank,
+            'wallet':      anon,
+            'total_pnl':   round(float(total_pnl   or 0), 4),
+            'win_rate':    round(float(win_rate     or 0), 1),
+            'trade_count': int  (trade_count        or 0),
+            'best_trade':  round(float(best_trade   or 0), 4),
+            'is_me':       is_me,
+        })
+    wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
+                    if len(session_wallet) >= 8 else '')
+    return render_template(
+        'leaderboard.html',
+        entries=entries,
+        wallet=session_wallet,
+        wallet_short=wallet_short,
+        is_admin=_is_owner(session_wallet),
+    )
+
+
 @app.route('/history')
 def history():
     wallet = _current_wallet()
