@@ -772,6 +772,28 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tpc-trade-time{font-size:9px;color:var(--muted);flex-shrink:0}
 .tpc-loading{text-align:center;padding:40px 0;font-size:11px;color:var(--muted);letter-spacing:.08em}
 
+/* ── TRADER PROFILE FULL PAGE VIEW ── */
+#tv-profile-view{padding:0 0 40px}
+.tvp-back-bar{padding:12px 0 14px}
+.tvp-back-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s}
+.tvp-back-btn:hover{border-color:var(--text);color:var(--text)}
+.tvp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:20px;margin-bottom:14px}
+.tvp-top{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+.tvp-meta{flex:1;min-width:0}
+.tvp-username{font-size:20px;font-weight:700;color:var(--text);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tvp-wallet{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:6px}
+.tvp-social-row{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-top:6px}
+.tvp-social-row strong{color:var(--text);font-family:'Orbitron',monospace;font-size:13px;margin-right:4px}
+.tvp-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0;padding-top:2px}
+.tvp-section{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:14px}
+.tvp-section-hdr{font-size:9px;font-family:'Orbitron',monospace;font-weight:700;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
+.tvp-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:11px}
+.tvp-table th{text-align:left;font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;padding:0 6px 8px;font-weight:400;white-space:nowrap}
+.tvp-table td{padding:7px 6px;border-top:1px solid rgba(255,255,255,.05);white-space:nowrap}
+.tvp-table tr:first-child td{border-top:none}
+.tvp-empty{font-size:11px;color:var(--muted);padding:14px 0;text-align:center;letter-spacing:.08em}
+.tvp-loading{text-align:center;padding:48px 0;font-size:11px;color:var(--muted);letter-spacing:.08em}
+
 /* ── DAILY LEADERBOARD ── */
 .lb-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 .lb-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
@@ -1459,8 +1481,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
     </div>
 
+    <!-- Profile full-page view (shown instead of tv-layout) -->
+    <div id="tv-profile-view" style="display:none"></div>
+
     <!-- Two-column body -->
-    <div class="tv-layout">
+    <div class="tv-layout" id="tv-layout">
 
       <!-- Left 65%: Activity Feed -->
       <div class="tv-main">
@@ -3857,7 +3882,10 @@ async function fetchTradersFeed(){
 }
 
 function _navLogoClick(){
-  if(_tradersView){ closeTradersView(); return; }
+  if(_tradersView){
+    if(_tvProfileOpen){ closeTraderProfile(); return; }
+    closeTradersView(); return;
+  }
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -3877,6 +3905,15 @@ function openTradersView(){
 function closeTradersView(){
   if(!_tradersView) return;
   _tradersView=false;
+  // If a profile is open, reset it so re-opening traders view shows the feed
+  if(typeof _tvProfileOpen!=='undefined'&&_tvProfileOpen){
+    _tvProfileOpen=false;
+    _tpcCurrentFullWallet='';
+    const pv=document.getElementById('tv-profile-view');
+    if(pv) pv.style.display='none';
+    const tl=document.getElementById('tv-layout');
+    if(tl) tl.style.display='';
+  }
   document.getElementById('dash-traders').style.display='none';
   document.getElementById('dash-main').style.display='';
   if(_tvCountdownTimer){clearInterval(_tvCountdownTimer);_tvCountdownTimer=null;}
@@ -4069,82 +4106,154 @@ async function _tpcToggleFollow(userId, followKey){
   if(fc) fc.textContent=r.follower_count;
 }
 
+let _tvProfileOpen = false;
+
+function closeTraderProfile(){
+  _tvProfileOpen = false;
+  _tpcCurrentFullWallet = '';
+  document.getElementById('tv-profile-view').style.display = 'none';
+  document.getElementById('tv-layout').style.display = '';
+}
+
+function _tvpTradesHtml(trades){
+  if(!trades?.length) return '<div class="tvp-empty">No trades today</div>';
+  return `<table class="tvp-table">
+    <thead><tr>
+      <th>Token</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Time</th>
+    </tr></thead>
+    <tbody>${trades.map(t=>{
+      const pos=t.pnl>=0;
+      const pnlStr=(pos?'+':'')+t.pnl.toFixed(4)+' SOL';
+      const pnlColor=pos?'var(--green)':'var(--red)';
+      return `<tr>
+        <td style="font-weight:700;color:var(--text)">${esc(t.token)}</td>
+        <td style="color:var(--muted)">${fmtPrice(t.entry)}</td>
+        <td style="color:var(--muted)">${fmtPrice(t.exit)}</td>
+        <td style="color:${pnlColor};font-weight:700">${esc(pnlStr)}</td>
+        <td style="color:var(--dim)">${esc(_tvTimeAgoStr(t.timestamp))}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
+function _tvpPositionsHtml(positions){
+  if(!positions?.length) return '';
+  return `<table class="tvp-table">
+    <thead><tr>
+      <th>Token</th><th>Entry</th><th>Current</th><th>PnL%</th><th>Open</th>
+    </tr></thead>
+    <tbody>${positions.map(p=>{
+      const pct=p.pnl_pct;
+      const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'—';
+      const pnlColor=(pct!=null&&pct<0)?'var(--red)':'var(--green)';
+      const openStr=p.opened_at?_tvTimeAgo(p.opened_at):'—';
+      return `<tr>
+        <td style="font-weight:700;color:var(--text)">${esc(p.token)}</td>
+        <td style="color:var(--muted)">${fmtPrice(p.entry)}</td>
+        <td style="color:var(--muted)">${p.current!=null?fmtPrice(p.current):'—'}</td>
+        <td style="color:${pnlColor};font-weight:700">${esc(pctStr)}</td>
+        <td style="color:var(--dim)">${esc(openStr)}</td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+}
+
 async function openProfileCard(userId){
   if(!userId) return;
-  const overlay=document.getElementById('tv-profile-overlay');
-  const card=document.getElementById('tpc-card');
-  overlay.classList.remove('hidden');
-  card.innerHTML=`<button class="tpc-close" onclick="closeProfileCard()">✕</button><div class="tpc-loading">Loading profile…</div>`;
+  _tvProfileOpen = true;
+  const view = document.getElementById('tv-profile-view');
+  document.getElementById('tv-layout').style.display = 'none';
+  view.style.display = '';
+  view.innerHTML = '<div class="tvp-loading">Loading profile…</div>';
 
-  const p=await fetch('/api/profile/'+userId).then(r=>r.json()).catch(()=>null);
-  if(!p||!p.ok){
-    card.innerHTML=`<button class="tpc-close" onclick="closeProfileCard()">✕</button><div class="tpc-loading" style="color:var(--red)">Failed to load profile.</div>`;
+  const [p, td] = await Promise.all([
+    fetch('/api/profile/'+userId).then(r=>r.json()).catch(()=>null),
+    fetch('/api/profile/'+userId+'/trades').then(r=>r.json()).catch(()=>null),
+  ]);
+
+  if(!p?.ok){
+    view.innerHTML = '<div class="tvp-back-bar"><button class="tvp-back-btn" onclick="closeTraderProfile()">← Traders Feed</button></div><div class="tvp-loading" style="color:var(--red)">Failed to load profile.</div>';
     return;
   }
 
   _tpcCurrentFullWallet = p.wallet_address || '';
-  const followKey=p.username+'|'+p.wallet;
-  const isFollowing=_tvFollowed.has(followKey);
-  const followCls='tpc-follow-btn'+(isFollowing?' following':'');
-  const followTxt=isFollowing?'Following':'Follow';
+  const followKey = p.username+'|'+p.wallet;
+  const isFollowing = _tvFollowed.has(followKey);
+  const followCls = 'tpc-follow-btn'+(isFollowing?' following':'');
+  const followTxt = isFollowing?'Following':'Follow';
+  const tradesHtml = _tvpTradesHtml(td?.trades);
+  const posHtml = _tvpPositionsHtml(td?.positions);
 
-  card.innerHTML=`
-    <button class="tpc-close" onclick="closeProfileCard()">✕</button>
-    <div class="tpc-top">
-      ${_tpcAvatarHtml(p)}
-      <div class="tpc-meta">
-        <div class="tpc-username">${esc(p.username)}</div>
-        <div class="tpc-wallet">${esc(p.wallet)}</div>
-        ${p.bio?`<div class="tpc-bio">${esc(p.bio)}</div>`:''}
+  view.innerHTML = `
+    <div class="tvp-back-bar">
+      <button class="tvp-back-btn" onclick="closeTraderProfile()">← Traders Feed</button>
+    </div>
+
+    <div class="tvp-card">
+      <div class="tvp-top">
+        ${_tpcAvatarHtml(p)}
+        <div class="tvp-meta">
+          <div class="tvp-username">${esc(p.username)}</div>
+          <div class="tvp-wallet">${esc(p.wallet)}</div>
+          ${p.bio?`<div class="tpc-bio">${esc(p.bio)}</div>`:''}
+          <div class="tvp-social-row">
+            <span><strong id="tpc-follower-count">${p.follower_count}</strong> Followers</span>
+            <span><strong>${p.following_count}</strong> Following</span>
+          </div>
+        </div>
+        <div class="tvp-actions">
+          <button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">
+            ${followTxt}
+          </button>
+          <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
+        </div>
       </div>
-      <div class="tpc-actions">
-        <button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">
-          ${followTxt}
-        </button>
-        <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
+      <div class="tpc-sol-form" id="tpc-sol-form" style="margin-top:14px">
+        <div class="tpc-sol-row">
+          <span class="tpc-sol-lbl">Amount (SOL)</span>
+          <input type="number" class="tpc-sol-amount" id="tpc-sol-amount" placeholder="0.01" min="0.001" max="10" step="0.001">
+        </div>
+        <div class="tpc-sol-row">
+          <span class="tpc-sol-lbl">To</span>
+          <span class="tpc-sol-recip" id="tpc-sol-recip">—</span>
+        </div>
+        <div class="tpc-sol-btns">
+          <button class="tpc-sol-send" id="tpc-sol-send-btn" onclick="_tpcSendSol()">Send</button>
+          <button class="tpc-sol-cancel" onclick="_tpcCloseSolForm()">Cancel</button>
+        </div>
+        <div class="tpc-sol-msg" id="tpc-sol-msg"></div>
       </div>
     </div>
-    <div class="tpc-sol-form" id="tpc-sol-form">
-      <div class="tpc-sol-row">
-        <span class="tpc-sol-lbl">Amount (SOL)</span>
-        <input type="number" class="tpc-sol-amount" id="tpc-sol-amount" placeholder="0.01" min="0.001" max="10" step="0.001">
-      </div>
-      <div class="tpc-sol-row">
-        <span class="tpc-sol-lbl">To</span>
-        <span class="tpc-sol-recip" id="tpc-sol-recip">—</span>
-      </div>
-      <div class="tpc-sol-btns">
-        <button class="tpc-sol-send" id="tpc-sol-send-btn" onclick="_tpcSendSol()">Send</button>
-        <button class="tpc-sol-cancel" onclick="_tpcCloseSolForm()">Cancel</button>
-      </div>
-      <div class="tpc-sol-msg" id="tpc-sol-msg"></div>
-    </div>
-    <hr class="tpc-divider">
-    <div class="tpc-social">
-      <div class="tpc-social-item"><strong id="tpc-follower-count">${p.follower_count}</strong>Followers</div>
-      <div class="tpc-social-item"><strong>${p.following_count}</strong>Following</div>
-    </div>
-    <div class="tpc-stats">
-      <div class="tpc-stat">
-        <div class="tpc-stat-val">🕐 ${esc(_tvFormatHold(p.avg_hold_seconds))}</div>
-        <div class="tpc-stat-lbl">Avg Hold</div>
-      </div>
-      <div class="tpc-stat">
-        <div class="tpc-stat-val">📊 ${p.trade_count}</div>
-        <div class="tpc-stat-lbl">Trades</div>
-      </div>
-      <div class="tpc-stat">
-        <div class="tpc-stat-val">📅 ${esc(_tvFormatJoined(p.joined_at))}</div>
-        <div class="tpc-stat-lbl">Joined</div>
+
+    <div class="tvp-card">
+      <div class="tpc-stats">
+        <div class="tpc-stat">
+          <div class="tpc-stat-val">🕐 ${esc(_tvFormatHold(p.avg_hold_seconds))}</div>
+          <div class="tpc-stat-lbl">Avg Hold</div>
+        </div>
+        <div class="tpc-stat">
+          <div class="tpc-stat-val">📊 ${p.trade_count}</div>
+          <div class="tpc-stat-lbl">Total Trades</div>
+        </div>
+        <div class="tpc-stat">
+          <div class="tpc-stat-val">📅 ${esc(_tvFormatJoined(p.joined_at))}</div>
+          <div class="tpc-stat-lbl">Joined</div>
+        </div>
       </div>
     </div>
-    <div class="tpc-trades-hdr">Recent Activity</div>
-    ${_tpcRecentHtml(userId)}
+
+    <div class="tvp-section">
+      <div class="tvp-section-hdr">Today's Trades</div>
+      ${tradesHtml}
+    </div>
+
+    ${posHtml?`<div class="tvp-section"><div class="tvp-section-hdr">Open Positions</div>${posHtml}</div>`:''}
   `;
 }
 
 // ── DAILY LEADERBOARD ──
 let _lbCountdownTimer=null,_lbCountdownVal=30;
+
 
 function _lbStartCountdown(){
   if(_lbCountdownTimer) clearInterval(_lbCountdownTimer);

@@ -2640,6 +2640,65 @@ def get_profile(user_id: int):
         'following_count': int(following_count),
     })
 
+# ── PROFILE TRADES ──
+@app.route('/api/profile/<int:user_id>/trades', methods=['GET'])
+@rate_limit(30, 60)
+def profile_user_trades(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT wallet_address FROM users WHERE id=?', (user_id,))
+        row = c.fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        wallet = row[0] or ''
+        today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+        c.execute('''
+            SELECT token, entry_price, exit_price, pnl, timestamp, exit_reason
+            FROM trades
+            WHERE user_id=? AND date(timestamp)=?
+            ORDER BY timestamp DESC
+            LIMIT 50
+        ''', (user_id, today))
+        trade_rows = c.fetchall()
+    finally:
+        conn.close()
+
+    trades = []
+    for token, entry, exit_p, pnl, ts, reason in trade_rows:
+        trades.append({
+            'token':       str(token or ''),
+            'entry':       round(float(entry or 0), 8),
+            'exit':        round(float(exit_p or 0), 8),
+            'pnl':         round(float(pnl or 0), 6),
+            'timestamp':   str(ts or ''),
+            'exit_reason': str(reason or ''),
+        })
+
+    us = user_states.get(wallet, {})
+    mint_price = {t['mint']: float(t['price'])
+                  for t in state.get('tokens', []) if t.get('mint') and t.get('price')}
+    positions = []
+    for mint, pos in us.get('positions', {}).items():
+        if not pos.get('amount') or not pos.get('buy_price'):
+            continue
+        buy    = float(pos['buy_price'])
+        amount = float(pos.get('amount', 0))
+        cur    = mint_price.get(mint)
+        pnl_pct = round((cur - buy) / buy * 100, 2) if cur and buy else None
+        pnl_sol = round(amount * (cur - buy), 6)    if cur and buy and amount else None
+        positions.append({
+            'mint':      mint,
+            'token':     str(pos.get('symbol', mint[:8])),
+            'entry':     round(buy, 8),
+            'current':   round(cur, 8) if cur else None,
+            'pnl_pct':   pnl_pct,
+            'pnl_sol':   pnl_sol,
+            'opened_at': int(pos.get('opened_at', 0)),
+        })
+
+    return jsonify({'ok': True, 'trades': trades, 'positions': positions})
+
 # ── FOLLOW / UNFOLLOW ──
 @app.route('/api/follow/<int:target_id>', methods=['POST'])
 @rate_limit(30, 60)
