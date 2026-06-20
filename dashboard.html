@@ -2076,8 +2076,6 @@ function renderMarket(tokens){
   const makeCard=t=>{
     const hot=t.score>=7,cold=t.score<=2;
     const baseCls='mkt-card'+(hot?' hot':cold?' cold':'');
-    const sigLabel=hot?'BUY':cold?'SELL':'HOLD';
-    const sigCls=hot?'mkt-sig sig-buy':cold?'mkt-sig sig-sell':'mkt-sig sig-hold';
     const barPct=Math.min(100,Math.max(0,(t.score??0)/10*100)).toFixed(1);
     const barColor=hot?'var(--green)':cold?'var(--red)':'var(--yellow)';
     const scoreCol=hot?'var(--green)':cold?'var(--red)':'var(--muted)';
@@ -2094,7 +2092,6 @@ function renderMarket(tokens){
       <div class="mkt-sym">${sym}</div>
       <div class="mkt-name">${name}</div>
     </div>
-    <span class="${sigCls}">${sigLabel}</span>
   </div>
   ${pumping?'<div class="pump-badge">🚀 PUMPING</div>':''}
   <span class="mkt-price">${fmtPrice(t.price)}</span>
@@ -2121,6 +2118,7 @@ function renderMarket(tokens){
     <div class="mkt-score-track"><div class="mkt-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
     <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
+  ${mint?`<button class="ps-buy-btn" style="margin-top:8px;width:100%" onclick="event.stopPropagation();buyPumpToken('${mint}','${sym}',this)">BUY</button>`:''}
 </div>`;
   };
 
@@ -2208,7 +2206,7 @@ async function buyPumpToken(mint,sym,btn){
     showLfToast('⚙️','Buying with MEDIUM settings','pos');
     setDifficulty('MEDIUM');
   }
-  if(btn){ btn.disabled=true; btn.textContent='BUYING...'; }
+  if(btn){ btn.disabled=true; btn.textContent='Buying...'; btn.style.color=''; }
   try{
     const r=await fetch('/api/pump-scanner/buy',{
       method:'POST',
@@ -2217,13 +2215,29 @@ async function buyPumpToken(mint,sym,btn){
     }).then(r=>r.json()).catch(()=>null);
     if(r?.ok){
       showLfToast('🚀',r.msg||('Bought '+sym),'pos');
+      if(btn){
+        btn.textContent='✓ Bought!';
+        btn.style.color='var(--green)';
+        setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; btn.style.color=''; },2000);
+      }
     } else if(r?.low_balance){
       openLowSolModal(r.trading_wallet||'');
+      if(btn){ btn.disabled=false; btn.textContent='BUY'; }
     } else {
+      const errMsg=(r?.msg||'Buy failed').slice(0,28);
       showLfToast('⚠️',r?.msg||'Buy failed — try again','neg');
+      if(btn){
+        btn.textContent='✗ '+errMsg;
+        btn.style.color='var(--red)';
+        setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; btn.style.color=''; },2000);
+      }
     }
-  } finally {
-    if(btn){ btn.disabled=false; btn.textContent='BUY'; }
+  } catch(e){
+    if(btn){
+      btn.textContent='✗ Error';
+      btn.style.color='var(--red)';
+      setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; btn.style.color=''; },2000);
+    }
   }
 }
 
