@@ -78,7 +78,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative}
+.nav-av-popup{position:absolute;top:calc(100% + 8px);right:0;z-index:300;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px 14px 12px;min-width:152px;box-shadow:0 8px 28px rgba(0,0,0,.55);display:flex;flex-direction:column;align-items:center;gap:10px}
+.nav-av-popup-circle{width:54px;height:54px;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#1a3050;font-size:17px;font-weight:700;color:var(--blue);flex-shrink:0}
+.nav-av-popup-circle img{width:100%;height:100%;object-fit:cover}
+.nav-av-chg-btn{width:100%;padding:7px 0;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;transition:border-color .15s}
+.nav-av-chg-btn:hover{border-color:var(--blue)}
+.nav-av-msg{font-size:9px;text-align:center;min-height:12px}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .hdr-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
@@ -1179,11 +1185,21 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none">
-        <div id="nav-avatar-wrap" style="width:24px;height:24px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#1a3050;font-size:8px;font-weight:700;color:var(--blue)">
+        <div id="nav-avatar-wrap" onclick="_navAvatarClick(event)" style="width:24px;height:24px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#1a3050;font-size:8px;font-weight:700;color:var(--blue);cursor:pointer" title="Change profile picture">
           <img id="nav-avatar-img" style="display:none;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';document.getElementById('nav-avatar-ini').style.display='block'">
           <span id="nav-avatar-ini"></span>
         </div>
         <div class="dot-green"></div><span id="wallet-short"></span>
+        <!-- avatar quick-change popup -->
+        <div id="nav-avatar-popup" class="nav-av-popup" style="display:none" onclick="event.stopPropagation()">
+          <div class="nav-av-popup-circle" id="nav-pop-circle">
+            <img id="nav-pop-img" style="display:none;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';document.getElementById('nav-pop-ini').style.display='flex'">
+            <span id="nav-pop-ini"></span>
+          </div>
+          <button class="nav-av-chg-btn" onclick="document.getElementById('nav-avatar-file').click()">📷 Change photo</button>
+          <input type="file" id="nav-avatar-file" accept="image/jpeg,image/png,image/gif,image/webp" style="display:none" onchange="_onNavAvatarFile(this)">
+          <div class="nav-av-msg" id="nav-avatar-msg"></div>
+        </div>
       </div>
       <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
         <span class="health-dot" id="health-dot"></span>HEALTH
@@ -3479,6 +3495,74 @@ function _updateNavPill(){
   } else {
     img.style.display='none'; ini.style.display='block'; ini.textContent=_getInitials();
   }
+}
+
+function _navAvatarClick(e){
+  e.stopPropagation();
+  const pop=document.getElementById('nav-avatar-popup');
+  if(!pop) return;
+  const opening=pop.style.display==='none';
+  if(opening){
+    // sync popup preview to current avatar state
+    const img=document.getElementById('nav-pop-img');
+    const ini=document.getElementById('nav-pop-ini');
+    const msg=document.getElementById('nav-avatar-msg');
+    if(msg) msg.textContent='';
+    if(_avatarUrl){
+      img.src=_avatarUrl; img.style.display='block'; ini.style.display='none';
+    } else {
+      img.style.display='none'; ini.style.display='flex'; ini.textContent=_getInitials();
+    }
+    pop.style.display='flex';
+    setTimeout(()=>document.addEventListener('click',_closeNavAvatarPopup,{once:true}),0);
+  } else {
+    _closeNavAvatarPopup();
+  }
+}
+
+function _closeNavAvatarPopup(){
+  const pop=document.getElementById('nav-avatar-popup');
+  if(pop) pop.style.display='none';
+}
+
+async function _onNavAvatarFile(input){
+  const file=input.files[0];
+  if(!file) return;
+  const msgEl=document.getElementById('nav-avatar-msg');
+  msgEl.style.color='var(--dim)'; msgEl.textContent='';
+  if(file.size>2*1024*1024){
+    msgEl.style.color='var(--red)'; msgEl.textContent='✗ Too large (max 2 MB)';
+    input.value=''; return;
+  }
+  const reader=new FileReader();
+  reader.onload=async function(ev){
+    const data=ev.target.result;
+    msgEl.style.color='var(--dim)'; msgEl.textContent='Uploading…';
+    const r=await fetch('/api/avatar',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({avatar_data:data})
+    }).then(r=>r.json()).catch(()=>null);
+    input.value='';
+    if(r?.ok){
+      _avatarUrl=r.avatar_url||null;
+      _updateNavPill();
+      _previewAvatar(_avatarUrl||'');
+      // update popup preview
+      const img=document.getElementById('nav-pop-img');
+      const ini=document.getElementById('nav-pop-ini');
+      if(_avatarUrl){
+        img.src=_avatarUrl; img.style.display='block'; ini.style.display='none';
+      } else {
+        img.style.display='none'; ini.style.display='flex'; ini.textContent=_getInitials();
+      }
+      msgEl.style.color='var(--green)'; msgEl.textContent='✓ Saved!';
+      setTimeout(_closeNavAvatarPopup,1400);
+    } else {
+      msgEl.style.color='var(--red)'; msgEl.textContent='✗ '+(r?.msg||'Upload failed');
+    }
+  };
+  reader.readAsDataURL(file);
 }
 
 function _previewAvatar(url){
