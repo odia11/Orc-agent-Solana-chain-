@@ -455,6 +455,31 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .how-to-item::before{content:'–';position:absolute;left:0;color:var(--muted)}
 .welcome-banner{background:rgba(106,163,255,.07);border:1px solid rgba(106,163,255,.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px;font-size:11px;color:var(--blue);line-height:1.65}
 .welcome-banner.hide{display:none}
+/* ── setup wizard ── */
+#setup-wizard{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:500;display:flex;align-items:center;justify-content:center;padding:1rem}
+#setup-wizard.hide{display:none}
+.swiz-card{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:28px 24px 22px;width:100%;max-width:380px;box-shadow:0 14px 44px rgba(0,0,0,.65)}
+.swiz-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
+.swiz-title{font-size:13px;font-weight:700;color:var(--text);letter-spacing:.04em}
+.swiz-skip-btn{background:none;border:none;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;padding:2px 6px;transition:color .15s}
+.swiz-skip-btn:hover{color:var(--text)}
+.swiz-prog-track{height:3px;background:var(--bg3);border-radius:2px;margin-bottom:6px;overflow:hidden}
+.swiz-prog-bar{height:100%;background:var(--blue);border-radius:2px;transition:width .35s}
+.swiz-step-lbl{font-size:9px;color:var(--dim);margin-bottom:20px;letter-spacing:.06em}
+.swiz-body{min-height:148px;text-align:center}
+.swiz-step-icon{font-size:30px;margin-bottom:10px}
+.swiz-step-h{font-size:14px;font-weight:700;color:var(--text);margin-bottom:8px}
+.swiz-step-p{font-size:11px;color:var(--dim);line-height:1.65;margin-bottom:16px}
+.swiz-check{display:inline-flex;align-items:center;gap:6px;background:rgba(0,200,100,.1);border:1px solid rgba(0,200,100,.3);border-radius:20px;padding:6px 16px;font-size:10px;color:var(--green);font-weight:700}
+.swiz-action-btn{width:100%;padding:10px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:11px;cursor:pointer;transition:border-color .15s;margin-top:4px}
+.swiz-action-btn:hover{border-color:var(--blue)}
+.swiz-addr-box{background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:9px 12px;font-size:9px;color:var(--blue);word-break:break-all;margin-bottom:12px;display:flex;align-items:center;gap:8px;justify-content:space-between;text-align:left}
+.swiz-copy-btn{background:none;border:none;color:var(--dim);cursor:pointer;font-size:13px;flex-shrink:0;padding:0;transition:color .15s}
+.swiz-copy-btn:hover{color:var(--text)}
+.swiz-qr{width:96px;height:96px;border:2px dashed var(--border2);border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--dim);font-size:9px;gap:5px;margin:0 auto 6px}
+.swiz-footer{display:flex;justify-content:flex-end;margin-top:20px}
+.swiz-next-btn{background:var(--blue);border:none;border-radius:8px;padding:9px 22px;color:#000;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;transition:opacity .15s}
+.swiz-next-btn:hover{opacity:.85}
 .wb-dismiss{background:none;border:1px solid rgba(106,163,255,.35);border-radius:5px;color:var(--blue);font-family:'Share Tech Mono',monospace;font-size:9px;padding:4px 10px;cursor:pointer;white-space:nowrap;margin-top:7px;display:inline-block;transition:background .15s}
 .wb-dismiss:hover{background:rgba(106,163,255,.12)}
 .trade-warn{background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.3);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-top:10px;display:none;line-height:1.55}
@@ -3598,10 +3623,79 @@ function _checkWelcomeBanner(){
   } else {
     banner.classList.add('hide');
   }
+  _checkSetupWizard();
 }
 function dismissWelcome(){
   localStorage.setItem('orca_welcome_dismissed','1');
   document.getElementById('welcome-banner').classList.add('hide');
+}
+
+// ── SETUP WIZARD ──────────────────────────────────────────────────────────────
+let _wizardStep=0;
+
+function _wizardStepHtml(step){
+  if(step===1) return `
+    <div class="swiz-step-icon">⬡</div>
+    <div class="swiz-step-h">Connect your wallet</div>
+    <div class="swiz-step-p">Link your Phantom or Solflare wallet so OrcAgent knows who you are.</div>
+    <span class="swiz-check">✓ Wallet connected</span>`;
+  if(step===2) return `
+    <div class="swiz-step-icon">🔑</div>
+    <div class="swiz-step-h">Add your trading key</div>
+    <div class="swiz-step-p">OrcAgent needs your trading wallet private key to execute trades on your behalf. It is encrypted and never exposed.</div>
+    <button class="swiz-action-btn" onclick="openSettings()">⚙ Open Settings</button>`;
+  const addr=phantomKey||'—';
+  return `
+    <div class="swiz-step-icon">◎</div>
+    <div class="swiz-step-h">Fund your trading wallet</div>
+    <div class="swiz-step-p">Send SOL to your trading wallet so the bot can buy tokens.</div>
+    <div class="swiz-addr-box">
+      <span>${addr}</span>
+      <button class="swiz-copy-btn" onclick="_wizardCopyAddr()" title="Copy">⧉</button>
+    </div>
+    <div class="swiz-qr"><span style="font-size:26px">▦</span><span>QR placeholder</span></div>`;
+}
+
+function _checkSetupWizard(){
+  if(localStorage.getItem('orca_wizard_dismissed')||!phantomKey){
+    if(_wizardStep>0) _hideSetupWizard();
+    return;
+  }
+  if(settingsHasKey&&_wizardStep===0) return; // already set up before wizard ran
+  if(settingsHasKey&&_wizardStep===2){ _showSetupWizard(3); return; } // key just saved
+  if(!settingsHasKey&&_wizardStep===0) _showSetupWizard(1);
+}
+
+function _showSetupWizard(step){
+  _wizardStep=step;
+  const el=document.getElementById('setup-wizard');
+  if(!el) return;
+  el.classList.remove('hide');
+  document.getElementById('swiz-prog-bar').style.width=Math.round(step/3*100)+'%';
+  document.getElementById('swiz-step-lbl').textContent='Step '+step+' of 3';
+  document.getElementById('swiz-body').innerHTML=_wizardStepHtml(step);
+  document.getElementById('swiz-next-btn').textContent=step===3?'Done ✓':'Next →';
+}
+
+function _hideSetupWizard(){
+  _wizardStep=0;
+  const el=document.getElementById('setup-wizard');
+  if(el) el.classList.add('hide');
+}
+
+function _wizardNext(){
+  if(_wizardStep>=3){ _wizardSkip(); return; }
+  _showSetupWizard(_wizardStep+1);
+}
+
+function _wizardSkip(){
+  localStorage.setItem('orca_wizard_dismissed','1');
+  _hideSetupWizard();
+}
+
+function _wizardCopyAddr(){
+  if(!phantomKey) return;
+  navigator.clipboard.writeText(phantomKey).then(()=>showLfToast('◎','Address copied!','ok')).catch(()=>{});
 }
 
 function showTradeWarn(msg){
@@ -4706,5 +4800,21 @@ async function triggerAudit(){
 // refreshes, tab switches, and browser restarts. The only way to clear the saved
 // session is an explicit "Disconnect" button click, which calls doLogout().
 </script>
+
+<!-- ── SETUP WIZARD ── -->
+<div id="setup-wizard" class="hide">
+  <div class="swiz-card">
+    <div class="swiz-hdr">
+      <span class="swiz-title">⬡ Setup Guide</span>
+      <button class="swiz-skip-btn" onclick="_wizardSkip()">Skip</button>
+    </div>
+    <div class="swiz-prog-track"><div class="swiz-prog-bar" id="swiz-prog-bar" style="width:33%"></div></div>
+    <div class="swiz-step-lbl" id="swiz-step-lbl">Step 1 of 3</div>
+    <div class="swiz-body" id="swiz-body"></div>
+    <div class="swiz-footer">
+      <button class="swiz-next-btn" id="swiz-next-btn" onclick="_wizardNext()">Next →</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
