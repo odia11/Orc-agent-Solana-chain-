@@ -2977,6 +2977,64 @@ def stop_trader():
     us['trader_running'] = False
     return jsonify({'ok': True})
 
+# ── MANUAL SELL ──
+@app.route('/api/sell', methods=['POST'])
+@rate_limit(10, 60)
+def manual_sell():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    mint = str((request.json or {}).get('mint', '')).strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False,
+                        'msg': 'Trading suspended — security check failure. Contact admin to resume.'}), 503
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    user_id, enc_blob = row
+    us  = get_user_state(wallet)
+    pos = us.get('positions', {}).get(mint)
+    if not pos or pos.get('amount', 0) <= 0:
+        return jsonify({'ok': False, 'msg': 'No open position for this token'}), 400
+    amount = pos['amount']
+    symbol = pos.get('symbol', mint[:8])
+    entry  = pos.get('buy_price', 0.0)
+    spend  = pos.get('spend', 0.0)
+    short  = wallet[:6] + '...' + wallet[-4:]
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(amount))
+    except InvalidToken:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    except Exception as e:
+        print(f'[manual-sell] key error for {short}: {type(e).__name__}: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    live_map  = {t['mint']: t for t in state.get('tokens', [])}
+    cur_price = live_map.get(mint, {}).get('price', entry)
+    if sell_ok:
+        with _use_key(enc_blob, wallet) as _pk:
+            _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
+                               wallet=wallet, private_key=_pk, mint=mint,
+                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0))
+        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
+    else:
+        _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
+                           mint=mint, exit_reason='MANUAL SELL',
+                           opened_at=pos.get('opened_at', 0.0))
+        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position cleared')
+    us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+    if not sell_ok:
+        return jsonify({'ok': False, 'msg': 'Sell transaction failed — check logs for details'}), 500
+    return jsonify({'ok': True, 'symbol': symbol})
+
 # ── BALANCE ──
 @app.route('/api/balance')
 @rate_limit(10, 60)

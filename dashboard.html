@@ -357,6 +357,18 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .pos-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em;background:#0d0d0d;z-index:2}
 .pos-chart-btn{background:transparent;border:1px solid rgba(0,237,170,.18);color:rgba(0,237,170,.55);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'Share Tech Mono',monospace;white-space:nowrap}
 .pos-chart-btn:hover{border-color:rgba(0,237,170,.5);color:#00edaa;background:rgba(0,237,170,.05)}
+.pos-act-wrap{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}
+.pos-sell-btn{background:transparent;border:1px solid rgba(255,80,80,.3);color:rgba(255,100,100,.7);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'Share Tech Mono',monospace;white-space:nowrap}
+.pos-sell-btn:hover{border-color:rgba(255,80,80,.7);color:#ff5050;background:rgba(255,80,80,.07)}
+.pos-sell-btn:disabled{opacity:.4;cursor:not-allowed}
+.pos-sell-conf{display:flex;gap:4px;align-items:center;flex-wrap:wrap}
+.pos-sell-conf-label{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;white-space:nowrap}
+.pos-sell-confirm-btn{background:rgba(255,80,80,.12);border:1px solid rgba(255,80,80,.5);color:#ff5050;font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:all .15s}
+.pos-sell-confirm-btn:hover{background:rgba(255,80,80,.22);border-color:#ff5050}
+.pos-sell-confirm-btn:disabled{opacity:.4;cursor:not-allowed}
+.pos-sell-cancel-btn{background:transparent;border:1px solid rgba(255,255,255,.14);color:var(--muted);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:all .15s}
+.pos-sell-cancel-btn:hover{border-color:rgba(255,255,255,.3);color:var(--text)}
+.pos-sell-err{font-size:10px;color:#ff5050;font-family:'Share Tech Mono',monospace}
 @media(max-width:600px){.pos-chart-wrap{width:100vw;height:100dvh;border-radius:0;border:none}#pos-chart-modal.open{align-items:flex-start}}
 .slide-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:5px;margin-bottom:7px}
 .slide-grid-cell{background:rgba(255,193,58,.03);border:1px solid rgba(255,193,58,.1);border-radius:6px;padding:7px 9px}
@@ -2939,7 +2951,7 @@ function renderPositions(detail){
     const solE=_solPrice>0?(p.entry||0)/_solPrice:0;
     const solC=_solPrice>0?(p.current||0)/_solPrice:0;
     const spendUsd=((p.spend||0)*_solPrice).toFixed(2);
-    return `<tr>
+    return `<tr id="pos-row-${esc(p.mint||'')}">
       <td class="td-sym">${esc(p.symbol||'???')}</td>
       <td style="color:var(--muted);font-size:10px">${openedStr}</td>
       <td>
@@ -2958,9 +2970,63 @@ function renderPositions(detail){
         <div>${sign}${fmtSolToUsdc(Math.abs(p.pnl||0))}</div>
         <div style="font-size:9px;opacity:.6;margin-top:1px">${sign}${Math.abs(p.pnl_pct||0).toFixed(1)}%</div>
       </td>
-      <td><button class="pos-chart-btn" onclick="openPosChart('${esc(p.mint||'')}','${esc(p.symbol||'???')}',${p.current||0})">📈 Chart</button></td>
+      <td><div class="pos-act-wrap" id="pos-act-${esc(p.mint||'')}">
+        <button class="pos-chart-btn" onclick="openPosChart('${esc(p.mint||'')}','${esc(p.symbol||'???')}',${p.current||0})">📈 Chart</button>
+        <button class="pos-sell-btn" onclick="_posStartSell('${esc(p.mint||'')}','${esc(p.symbol||'???')}')">✕ Sell</button>
+      </div></td>
     </tr>`;
   }).join('');
+}
+
+// ── POSITION SELL ──
+function _posStartSell(mint, symbol) {
+  const wrap = document.getElementById('pos-act-' + mint);
+  if (!wrap) return;
+  wrap.dataset.origHtml = wrap.innerHTML;
+  wrap.innerHTML = `<div class="pos-sell-conf">
+    <span class="pos-sell-conf-label">Sell ${esc(symbol)}?</span>
+    <button class="pos-sell-confirm-btn" onclick="_posConfirmSell('${esc(mint)}','${esc(symbol)}')">Confirm Sell</button>
+    <button class="pos-sell-cancel-btn" onclick="_posCancelSell('${esc(mint)}')">Cancel</button>
+  </div>`;
+}
+
+function _posCancelSell(mint) {
+  const wrap = document.getElementById('pos-act-' + mint);
+  if (!wrap || !wrap.dataset.origHtml) return;
+  wrap.innerHTML = wrap.dataset.origHtml;
+  delete wrap.dataset.origHtml;
+}
+
+async function _posConfirmSell(mint, symbol) {
+  const wrap = document.getElementById('pos-act-' + mint);
+  if (!wrap) return;
+  const confirmBtn = wrap.querySelector('.pos-sell-confirm-btn');
+  const cancelBtn  = wrap.querySelector('.pos-sell-cancel-btn');
+  if (confirmBtn) { confirmBtn.disabled = true; confirmBtn.textContent = 'Selling…'; }
+  if (cancelBtn)  { cancelBtn.disabled = true; }
+  try {
+    const resp = await fetch('/api/sell', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({mint})
+    });
+    const data = await resp.json();
+    if (data.ok) {
+      const row = document.getElementById('pos-row-' + mint);
+      if (row) row.remove();
+      showLfToast('✓', (data.symbol || symbol) + ' sold', 'pos');
+    } else {
+      wrap.innerHTML = `<div class="pos-sell-conf">
+        <span class="pos-sell-err">✗ ${esc(data.msg || 'Sell failed')}</span>
+        <button class="pos-sell-cancel-btn" onclick="_posCancelSell('${esc(mint)}')">Dismiss</button>
+      </div>`;
+    }
+  } catch(e) {
+    wrap.innerHTML = `<div class="pos-sell-conf">
+      <span class="pos-sell-err">✗ Network error</span>
+      <button class="pos-sell-cancel-btn" onclick="_posCancelSell('${esc(mint)}')">Dismiss</button>
+    </div>`;
+  }
 }
 
 // ── POSITION CHART MODAL ──
