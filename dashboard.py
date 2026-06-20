@@ -2058,7 +2058,18 @@ def _security_headers(resp):
         try:
             body = resp.get_data(as_text=True)
             # ── 1. Block 87-88 char base58 on sensitive endpoints ──
-            if _KEY_LEAK_RE.search(body):
+            # Build a sanitised copy that omits avatar fields — those legitimately
+            # contain long base64 strings that would otherwise trigger false positives.
+            _scan_body = body
+            try:
+                _scan_obj = json.loads(body)
+                if isinstance(_scan_obj, dict):
+                    for _skip in ('avatar_url', 'avatar_data'):
+                        _scan_obj.pop(_skip, None)
+                    _scan_body = json.dumps(_scan_obj)
+            except Exception:
+                pass
+            if _KEY_LEAK_RE.search(_scan_body):
                 if path in _SENSITIVE_PATHS:
                     print(f'SECURITY ALERT: possible key leak in {path} — response blocked', flush=True)
                     try:
