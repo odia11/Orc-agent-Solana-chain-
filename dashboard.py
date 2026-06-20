@@ -2457,6 +2457,95 @@ def solana_send_raw():
             print(f'[send_raw] ERROR {last_err}', flush=True)
     return jsonify({'ok': False, 'msg': last_err})
 
+# ── SOLANA BUILD TRANSFER ──
+_B58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+def _b58decode(s: str) -> bytes:
+    n = 0
+    for ch in s:
+        n = n * 58 + _B58_ALPHABET.index(ch)
+    pad = len(s) - len(s.lstrip('1'))
+    if n == 0:
+        return b'\x00' * pad
+    return b'\x00' * pad + n.to_bytes((n.bit_length() + 7) // 8, 'big')
+
+def _compact_u16(n: int) -> bytes:
+    out = []
+    while True:
+        b = n & 0x7f
+        n >>= 7
+        if n:
+            b |= 0x80
+        out.append(b)
+        if not n:
+            break
+    return bytes(out)
+
+@app.route('/api/solana/build_transfer', methods=['POST'])
+@rate_limit(30, 60)
+def solana_build_transfer():
+    body = request.json or {}
+    from_wallet = str(body.get('from_wallet', '')).strip()
+    to_wallet   = str(body.get('to_wallet',   '')).strip()
+    lamports_raw = body.get('lamports')
+
+    if not is_valid_solana_address(from_wallet):
+        return jsonify({'ok': False, 'msg': 'Invalid from_wallet'}), 400
+    if not is_valid_solana_address(to_wallet):
+        return jsonify({'ok': False, 'msg': 'Invalid to_wallet'}), 400
+    try:
+        lamports = int(lamports_raw)
+        if lamports <= 0:
+            raise ValueError('must be positive')
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid lamports'}), 400
+
+    # Fetch blockhash
+    blockhash = None
+    last_err  = 'No RPC available'
+    for rpc in _PROXY_RPCS:
+        try:
+            r = requests.post(rpc, json={'jsonrpc':'2.0','id':1,'method':'getLatestBlockhash','params':[]}, timeout=8)
+            val = r.json().get('result', {}).get('value', {})
+            if val.get('blockhash'):
+                blockhash = val['blockhash']
+                break
+        except Exception as e:
+            last_err = str(e)
+    if not blockhash:
+        return jsonify({'ok': False, 'msg': f'Could not fetch blockhash: {last_err}'}), 502
+
+    # Decode keys; SystemProgram = 32 zero bytes (base58 "111...1")
+    from_b  = _b58decode(from_wallet)
+    to_b    = _b58decode(to_wallet)
+    sys_b   = bytes(32)
+    bh_b    = _b58decode(blockhash)
+
+    # SystemProgram Transfer: discriminator=2 (u32 LE) + lamports (u64 LE)
+    ix_data = struct.pack('<IQ', 2, lamports)
+
+    # Instruction: program_idx=2, accounts=[0,1], data
+    instruction = (
+        bytes([2]) +
+        _compact_u16(2) + bytes([0, 1]) +
+        _compact_u16(len(ix_data)) + ix_data
+    )
+
+    # Message: header + account_keys + blockhash + instructions
+    message = (
+        bytes([1, 0, 1]) +                      # 1 sig required, 0 readonly signed, 1 readonly unsigned
+        _compact_u16(3) + from_b + to_b + sys_b +
+        bh_b +
+        _compact_u16(1) + instruction
+    )
+
+    # Full transaction: 1 signature slot (64 zero bytes) + message
+    tx_bytes = _compact_u16(1) + bytes(64) + message
+    tx_b64   = base64.b64encode(tx_bytes).decode()
+
+    print(f'[build_transfer] {from_wallet[:8]}→{to_wallet[:8]} {lamports} lamports bh={blockhash[:8]}', flush=True)
+    return jsonify({'ok': True, 'tx_b64': tx_b64})
+
 # ── PLATFORM STATS ──
 @app.route('/api/platform/stats', methods=['GET'])
 @rate_limit(60, 60)
