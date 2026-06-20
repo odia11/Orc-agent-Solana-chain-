@@ -95,9 +95,9 @@ DB_FILE      = os.path.join(_DATA_DIR, 'orcagent.db')
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
-    'EASY':   {'tp': 0.09, 'sl': 0.05, 'crash': 0.15, 'm5_min': 10, 'm5_max': None},
-    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min': 10, 'm5_max': None},
-    'HARD':   {'tp': 0.35, 'sl': 0.05, 'crash': 0.15, 'm5_min': 10, 'm5_max': None},
+    'EASY':   {'tp': 0.09, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
+    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
+    'HARD':   {'tp': 0.35, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
 }
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
