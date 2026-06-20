@@ -4019,19 +4019,17 @@ function _tpcCloseSolForm(){
 async function _tpcSendSol(amountSol, recipientFullWallet) {
   const provider = window.solana || window.solflare;
   if (!provider || !provider.publicKey) throw new Error('No wallet connected');
-  await _waitForSolanaWeb3();
-  const web3 = window.solanaWeb3;
-  const fromPubkey = new web3.PublicKey(provider.publicKey.toString());
-  const toPubkey = new web3.PublicKey(recipientFullWallet);
-  const lamports = Math.floor(parseFloat(amountSol) * 1000000000);
-  const transaction = new web3.Transaction().add(
-    web3.SystemProgram.transfer({ fromPubkey, toPubkey, lamports })
-  );
-  transaction.feePayer = fromPubkey;
-  const bhResp = await fetch('/api/solana/blockhash');
-  const bhData = await bhResp.json();
-  transaction.recentBlockhash = bhData.blockhash;
-  const result = await provider.signAndSendTransaction(transaction);
+  const lamports = Math.floor(parseFloat(amountSol) * 1e9);
+  const resp = await fetch('/api/solana/build_transfer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({from_wallet: provider.publicKey.toString(), to_wallet: recipientFullWallet, lamports})
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.msg);
+  const result = await provider.signAndSendTransaction({
+    serialize: () => Uint8Array.from(atob(data.tx_b64), c => c.charCodeAt(0))
+  });
   return result.signature || result;
 }
 
