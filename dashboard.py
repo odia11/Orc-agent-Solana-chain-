@@ -696,6 +696,16 @@ def init_db():
 # Matches base58 strings 87-88 chars long — Solana private key length.
 # Also matches TX signatures; actively block only on key-sensitive API paths.
 _KEY_LEAK_RE     = re.compile(r'[1-9A-HJ-NP-Za-km-z]{87,88}')
+# Exact-match variant — used by the field-level scanner so substrings inside
+# longer values (e.g. a data-URI that happens to contain 87 base58 chars) are ignored.
+_B58_EXACT_RE    = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{87,88}$')
+# Long base64 blob: 200+ chars using the full base64 alphabet (contains + or / or =).
+_BASE64_BLOB_RE  = re.compile(r'^[A-Za-z0-9+/=]{200,}$')
+# Field names whose values are always image/avatar data — never key material.
+_SKIP_IMAGE_FIELDS = frozenset({
+    'avatar', 'avatar_url', 'avatar_data',
+    'profile_image', 'image', 'photo', 'picture',
+})
 # Endpoints where any 87-88 char base58 string in the response triggers a hard block.
 # Admin endpoints that return TX hashes are excluded — TX sigs are the same length.
 _SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
@@ -717,6 +727,46 @@ def _redact_keys(text: str) -> str:
     """Replace 87-88 char base58 strings in text with [REDACTED].
     Covers both private keys and TX hashes — used for subprocess output before logging."""
     return _KEY_LEAK_RE.sub('[REDACTED]', text)
+
+def _scan_obj_for_key_leak(obj, _parent_key: str = '') -> tuple | None:
+    """
+    Recursively walk a decoded JSON object looking for Solana private key material.
+    Returns (field_path, redacted_snippet) on first hit, or None if clean.
+
+    Skips:
+    - Fields in _SKIP_IMAGE_FIELDS (avatar / image data)
+    - Strings containing '+' or '=' (base64 markers absent from base58)
+    - Strings >200 chars composed entirely of base64 chars
+    Flags:
+    - Strings matching base58 exactly at 87-88 chars
+    - Lists of exactly 64 ints in [0,255] (raw key byte array)
+    """
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k in _SKIP_IMAGE_FIELDS:
+                continue
+            hit = _scan_obj_for_key_leak(v, _parent_key=k)
+            if hit:
+                return hit
+    elif isinstance(obj, list):
+        # Raw key stored as a 64-element byte array
+        if (len(obj) == 64 and
+                all(isinstance(x, int) and 0 <= x <= 255 for x in obj)):
+            return (_parent_key or '[root]', '[64-int array]')
+        for item in obj:
+            hit = _scan_obj_for_key_leak(item, _parent_key=_parent_key)
+            if hit:
+                return hit
+    elif isinstance(obj, str):
+        # base64 always uses + or = — base58 never does
+        if '+' in obj or '=' in obj:
+            return None
+        # Long blob of base64-alphabet chars (e.g. data URI without padding stripped)
+        if len(obj) > 200 and _BASE64_BLOB_RE.match(obj):
+            return None
+        if _B58_EXACT_RE.match(obj):
+            return (_parent_key or '[root]', obj[:8] + '...')
+    return None
 
 def _security_selftest() -> bool:
     STATE_ALLOWED    = frozenset({
@@ -2057,21 +2107,32 @@ def _security_headers(resp):
         path = getattr(request, 'path', '')
         try:
             body = resp.get_data(as_text=True)
-            # ── 1. Block 87-88 char base58 on sensitive endpoints ──
-            # Build a sanitised copy that omits avatar fields — those legitimately
-            # contain long base64 strings that would otherwise trigger false positives.
-            _scan_body = body
+            # ── 1. Block Solana private key material on sensitive endpoints ──
+            # Walk the decoded JSON field-by-field with _scan_obj_for_key_leak so we
+            # can skip image/avatar fields and distinguish base64 blobs from base58 keys.
+            _key_hit = None
             try:
-                _scan_obj = json.loads(body)
-                if isinstance(_scan_obj, dict):
-                    for _skip in ('avatar_url', 'avatar_data'):
-                        _scan_obj.pop(_skip, None)
-                    _scan_body = json.dumps(_scan_obj)
+                _parsed = json.loads(body)
+                _key_hit = _scan_obj_for_key_leak(_parsed)
+                if _key_hit:
+                    print(f'[key_leak_scan] HIT on {path}: field={_key_hit[0]!r} '
+                          f'value={_key_hit[1]!r}', flush=True)
+                else:
+                    # Log what the old substr-scan would have flagged vs the new result,
+                    # so we can confirm false positives are now suppressed.
+                    _old_match = _KEY_LEAK_RE.search(body)
+                    if _old_match:
+                        print(f'[key_leak_scan] {path}: old scan would have flagged '
+                              f'{_old_match.group()[:8]!r}... → new scan: CLEAN (false positive suppressed)',
+                              flush=True)
             except Exception:
                 pass
-            if _KEY_LEAK_RE.search(_scan_body):
+            if _key_hit:
+                _hit_field, _hit_snippet = _key_hit
                 if path in _SENSITIVE_PATHS:
-                    print(f'SECURITY ALERT: possible key leak in {path} — response blocked', flush=True)
+                    print(f'SECURITY ALERT: possible key leak in {path} '
+                          f'(field={_hit_field!r}, value={_hit_snippet!r}) — response blocked',
+                          flush=True)
                     try:
                         _log_security_event('key_leak_blocked', _current_wallet() or 'unknown', path)
                     except Exception:
@@ -2080,7 +2141,8 @@ def _security_headers(resp):
                     r.status_code = 500
                     return r
                 else:
-                    print(f'SEC WARN: 87+ char base58 in {path} (expected for TX hashes)', flush=True)
+                    print(f'SEC WARN: possible key in {path} '
+                          f'(field={_hit_field!r}) — expected if TX hash', flush=True)
             # ── 2. Strip forbidden field names from JSON responses ──
             try:
                 payload = json.loads(body)
