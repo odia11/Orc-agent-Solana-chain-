@@ -661,6 +661,24 @@ def init_db():
         c.execute('ALTER TABLE users ADD COLUMN avatar_url TEXT DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
+    try:
+        c.execute('ALTER TABLE users ADD COLUMN bio TEXT DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN opened_at REAL DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    c.execute('''CREATE TABLE IF NOT EXISTS follows (
+        follower_id  INTEGER NOT NULL,
+        following_id INTEGER NOT NULL,
+        created_at   TEXT DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (follower_id, following_id),
+        FOREIGN KEY (follower_id)  REFERENCES users(id),
+        FOREIGN KEY (following_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_follows_follower  ON follows(follower_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)')
     conn.commit()
     conn.close()
 
@@ -1514,7 +1532,7 @@ def check_daily_reset_user(us: dict):
 
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
-                       exit_reason: str = ''):
+                       exit_reason: str = '', opened_at: float = 0.0):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -1632,10 +1650,10 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         try:
             conn.execute(
                 '''INSERT INTO trades
-                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp)
-                   VALUES (?,?,?,?,?,?,?,?,?)''',
+                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
-                 now.strftime('%Y-%m-%dT%H:%M:%SZ')))
+                 now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None))
             conn.commit()
         finally:
             conn.close()
@@ -1743,10 +1761,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
-                                       exit_reason='CRASH EXIT ' + _cpct)
+                                       exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0))
             else:
                 _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                   _pos['amount'], _pos.get('spend', 0), mint=_mint, exit_reason='CRASH EXIT ' + _cpct)
+                                   _pos['amount'], _pos.get('spend', 0), mint=_mint,
+                                   exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0))
             positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
             continue  # skip normal stop-loss check — crash exit already handled
         if _chg <= -stop_loss:
@@ -1758,10 +1777,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
-                                       exit_reason='STOP LOSS')
+                                       exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0))
             else:
                 _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                   _pos['amount'], _pos.get('spend', 0), mint=_mint, exit_reason='STOP LOSS')
+                                   _pos['amount'], _pos.get('spend', 0), mint=_mint,
+                                   exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0))
             positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
 
     try:
@@ -1831,11 +1851,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason='RUGPULL ' + _rug_reason[:40])
+                                                   exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0))
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position cleared')
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               mint=mint, exit_reason='RUGPULL ' + _rug_reason[:40])
+                                               mint=mint, exit_reason='RUGPULL ' + _rug_reason[:40],
+                                               opened_at=pos.get('opened_at', 0.0))
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
                         continue  # skip crash-exit and TP/SL
@@ -1848,11 +1869,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                                   wallet=wallet, private_key=_pk, mint=mint, exit_reason='CRASH EXIT ' + crash_pct)
+                                                   wallet=wallet, private_key=_pk, mint=mint,
+                                                   exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0))
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position cleared')
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               mint=mint, exit_reason='CRASH EXIT ' + crash_pct)
+                                               mint=mint, exit_reason='CRASH EXIT ' + crash_pct,
+                                               opened_at=pos.get('opened_at', 0.0))
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
                         continue  # skip normal TP/SL — crash exit already handled
@@ -1868,11 +1891,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                                   wallet=wallet, private_key=_pk, mint=mint, exit_reason=exit_reason)
+                                                   wallet=wallet, private_key=_pk, mint=mint,
+                                                   exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0))
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               mint=mint, exit_reason=exit_reason)
+                                               mint=mint, exit_reason=exit_reason,
+                                               opened_at=pos.get('opened_at', 0.0))
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
 
@@ -2458,6 +2483,117 @@ def social_feed():
     for _item in feed:
         _item.pop('_sort_ts', None)
     return jsonify(feed[:50])
+
+# ── PROFILE ──
+@app.route('/api/profile/<int:user_id>', methods=['GET'])
+@rate_limit(60, 60)
+def get_profile(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT u.id, u.username, u.avatar_url, u.bio, u.wallet_address, u.created_at,
+                   COUNT(t.id) AS trade_count,
+                   AVG(CASE WHEN t.opened_at IS NOT NULL AND t.opened_at > 0
+                            THEN CAST(strftime('%s', t.timestamp) AS REAL) - t.opened_at
+                            ELSE NULL END) AS avg_hold_seconds
+            FROM users u
+            LEFT JOIN trades t ON t.user_id = u.id
+            WHERE u.id = ?
+            GROUP BY u.id
+        ''', (user_id,))
+        row = c.fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+
+        uid, username, avatar_url, bio, wallet, created_at, trade_count, avg_hold = row
+
+        c.execute('SELECT COUNT(*) FROM follows WHERE following_id = ?', (user_id,))
+        follower_count = (c.fetchone() or [0])[0]
+
+        c.execute('SELECT COUNT(*) FROM follows WHERE follower_id = ?', (user_id,))
+        following_count = (c.fetchone() or [0])[0]
+    finally:
+        conn.close()
+
+    short_wallet = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
+    display_name = username if username else short_wallet
+
+    return jsonify({
+        'ok':              True,
+        'user_id':         uid,
+        'username':        display_name,
+        'avatar_url':      avatar_url or '',
+        'bio':             bio or '',
+        'wallet':          short_wallet,
+        'joined_at':       created_at or '',
+        'trade_count':     int(trade_count or 0),
+        'avg_hold_seconds': round(float(avg_hold), 1) if avg_hold else None,
+        'follower_count':  int(follower_count),
+        'following_count': int(following_count),
+    })
+
+# ── FOLLOW / UNFOLLOW ──
+@app.route('/api/follow/<int:target_id>', methods=['POST'])
+@rate_limit(30, 60)
+def toggle_follow(target_id: int):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address = ?', (wallet,))
+        me = c.fetchone()
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'})
+        me_id = me[0]
+
+        if me_id == target_id:
+            return jsonify({'ok': False, 'msg': 'Cannot follow yourself'})
+
+        c.execute('SELECT 1 FROM users WHERE id = ?', (target_id,))
+        if not c.fetchone():
+            return jsonify({'ok': False, 'msg': 'Target user not found'}), 404
+
+        c.execute('SELECT 1 FROM follows WHERE follower_id = ? AND following_id = ?', (me_id, target_id))
+        already = c.fetchone()
+
+        if already:
+            c.execute('DELETE FROM follows WHERE follower_id = ? AND following_id = ?', (me_id, target_id))
+            following = False
+        else:
+            c.execute(
+                'INSERT INTO follows (follower_id, following_id, created_at) VALUES (?, ?, ?)',
+                (me_id, target_id, datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')))
+            following = True
+
+        c.execute('SELECT COUNT(*) FROM follows WHERE following_id = ?', (target_id,))
+        follower_count = (c.fetchone() or [0])[0]
+        conn.commit()
+    finally:
+        conn.close()
+
+    return jsonify({'ok': True, 'following': following, 'follower_count': int(follower_count)})
+
+# ── BIO ──
+@app.route('/api/bio', methods=['POST'])
+@rate_limit(10, 60)
+def save_bio():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    bio = str((request.json or {}).get('bio', '')).strip()
+    if len(bio) > 100:
+        return jsonify({'ok': False, 'msg': 'Bio must be 100 characters or fewer'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET bio = ? WHERE wallet_address = ?', (bio or None, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'bio': bio})
 
 # ── DIFFICULTY ──
 @app.route('/api/difficulty', methods=['GET'])
