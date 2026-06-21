@@ -390,6 +390,30 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .hiw-card--deposit .hiw-card-name{color:#00d2b4}
 .hiw-card--safe{border-color:rgba(255,77,106,.22)}
 .hiw-card--safe .hiw-card-name{color:var(--red)}
+/* ── TIPS MODAL ── */
+#tips-modal{display:none;position:fixed;inset:0;z-index:600;background:rgba(8,14,24,.9);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
+#tips-modal.open{display:flex}
+.tips-box{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;padding:28px 24px 22px;width:100%;max-width:440px;position:relative;box-shadow:0 14px 44px rgba(0,0,0,.65)}
+.tips-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.tips-counter{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;letter-spacing:.08em}
+.tips-close{background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer;padding:0 4px;line-height:1;transition:color .15s}
+.tips-close:hover{color:var(--text)}
+.tips-dots{display:flex;gap:6px;justify-content:center;margin-bottom:22px}
+.tips-dot{width:7px;height:7px;border-radius:50%;background:var(--border2);transition:background .25s,transform .25s;cursor:pointer}
+.tips-dot.done{background:rgba(0,255,136,.35)}
+.tips-dot.active{background:var(--green);transform:scale(1.35)}
+.tips-slide-icon{font-size:32px;text-align:center;margin-bottom:10px}
+.tips-slide-title{font-family:'Orbitron',monospace;font-size:11px;font-weight:700;letter-spacing:.08em;text-align:center;margin-bottom:16px}
+.tips-items{list-style:none;padding:0;margin:0 0 6px;display:flex;flex-direction:column;gap:7px}
+.tips-item{font-size:11px;color:var(--dim);padding-left:14px;position:relative;line-height:1.6}
+.tips-item::before{content:'–';position:absolute;left:0;color:var(--muted)}
+.tips-note{font-size:11px;text-align:center;margin-top:10px}
+.tips-nav{display:flex;gap:10px;margin-top:22px}
+#tips-prev-btn{background:none;border:1px solid var(--border2);color:var(--dim);border-radius:8px;padding:10px 18px;font-family:'Share Tech Mono',monospace;font-size:11px;cursor:pointer;transition:all .15s;white-space:nowrap}
+#tips-prev-btn:hover:not(:disabled){border-color:var(--text);color:var(--text)}
+#tips-prev-btn:disabled{opacity:.3;cursor:not-allowed}
+#tips-next-btn{flex:1;background:var(--green);border:none;color:#000;border-radius:8px;padding:10px 18px;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;transition:filter .15s;letter-spacing:.04em}
+#tips-next-btn:hover{filter:brightness(1.1)}
 .trade-table-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:8px}
 .trade-table{width:100%;border-collapse:collapse;font-size:10px;min-width:420px}
 .trade-table th{color:var(--muted);text-transform:uppercase;letter-spacing:.08em;font-size:7px;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg3)}
@@ -1783,6 +1807,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <a href="/history" class="hdr-btn nav-mobile-hide" title="View trade history">📋 History</a>
       <a href="/leaderboard" class="hdr-btn nav-mobile-hide" title="Public leaderboard">🏆 Leaderboard</a>
       <button class="hdr-btn nav-mobile-hide" id="traders-btn" onclick="openTradersView()" title="Live trader activity feed">👥 Traders</button>
+      <button class="hdr-btn" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal()" title="Tips &amp; Help">? Help</button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
@@ -6048,6 +6073,70 @@ function copyDepositAddr() {
     copyFallback(); done();
   }
 }
+
+// ── TIPS MODAL ───────────────────────────────────────────────────────────────
+const _TIPS_DATA=[
+  {icon:'🔄',color:'#9b6bff',title:'Two Ways to Trade',
+   items:['🤖 <b>Auto Mode</b> — bot scans and trades automatically 24/7',
+          '🖐️ <b>Manual Mode</b> — pick tokens from Live Market and buy/sell yourself'],
+   note:'<span style="color:#00ff88;font-weight:700">Or use both at the same time!</span>'},
+  {icon:'🤖',color:'#00ff88',title:'Auto Trading',
+   items:['Bot scans 75+ tokens every 30 seconds',
+          'Buys on momentum + volume + liquidity signals',
+          'Sells at Take Profit or Stop Loss automatically']},
+  {icon:'🖐️',color:'#00bfff',title:'Manual Trading',
+   items:['Go to Live Solana Market on dashboard',
+          'Press BUY on any token to instantly buy',
+          'Press SELL to exit your position']},
+  {icon:'⚙️',color:'#f0b90b',title:'Difficulty Settings (Auto)',
+   items:['<span style="color:#00ff88">EASY</span>  — TP +25% / SL -15%',
+          '<span style="color:#6aa3ff">MEDIUM</span> — TP +40% / SL -20%',
+          '<span style="color:#ff4d6a">HARD</span>  — TP +60% / SL -25%']},
+  {icon:'💰',color:'#00d2b4',title:'Deposit SOL',
+   items:['Minimum 0.05 SOL to trade',
+          'Max 5 concurrent positions']},
+  {icon:'🔒',color:'#ff4d6a',title:'Stay Safe',
+   items:['Never share your private key',
+          'Start with small trade sizes']},
+];
+let _tipsStep=0;
+
+function openTipsModal(){
+  _tipsStep=0;
+  _renderTipsSlide();
+  document.getElementById('tips-modal').classList.add('open');
+}
+function closeTipsModal(){
+  localStorage.setItem('orcagent_tips_seen','1');
+  document.getElementById('tips-modal').classList.remove('open');
+}
+function _renderTipsSlide(){
+  const tip=_TIPS_DATA[_tipsStep];
+  const total=_TIPS_DATA.length;
+  const isLast=_tipsStep===total-1;
+  document.getElementById('tips-counter').textContent=(_tipsStep+1)+' / '+total;
+  document.getElementById('tips-dots').innerHTML=_TIPS_DATA.map((_,i)=>{
+    let c='tips-dot'+(i<_tipsStep?' done':i===_tipsStep?' active':'');
+    return '<div class="'+c+'" onclick="_tipJump('+i+')" title="Tip '+(i+1)+'"></div>';
+  }).join('');
+  const items=tip.items.map(t=>'<li class="tips-item">'+t+'</li>').join('');
+  const note=tip.note?'<div class="tips-note">'+tip.note+'</div>':'';
+  document.getElementById('tips-content').innerHTML=
+    '<div class="tips-slide-icon">'+tip.icon+'</div>'+
+    '<div class="tips-slide-title" style="color:'+tip.color+'">'+tip.title.toUpperCase()+'</div>'+
+    '<ul class="tips-items">'+items+'</ul>'+note;
+  document.getElementById('tips-prev-btn').disabled=_tipsStep===0;
+  document.getElementById('tips-next-btn').textContent=isLast?'Start Trading! ▶':'Next →';
+}
+function _tipJump(i){_tipsStep=i;_renderTipsSlide();}
+function tipsPrev(){if(_tipsStep>0){_tipsStep--;_renderTipsSlide();}}
+function tipsNext(){
+  if(_tipsStep<_TIPS_DATA.length-1){_tipsStep++;_renderTipsSlide();}
+  else{closeTipsModal();}
+}
+(function _checkTipsOnLoad(){
+  if(!localStorage.getItem('orcagent_tips_seen')) setTimeout(openTipsModal,600);
+}());
 </script>
 
 <!-- ── DEPOSIT SOL MODAL ── -->
@@ -6125,6 +6214,22 @@ function copyDepositAddr() {
     <div class="swiz-body" id="swiz-body"></div>
     <div class="swiz-footer">
       <button class="swiz-next-btn" id="swiz-next-btn" onclick="_wizardNext()">Next →</button>
+    </div>
+  </div>
+</div>
+
+<!-- TIPS MODAL -->
+<div id="tips-modal" onclick="if(event.target===this)closeTipsModal()">
+  <div class="tips-box">
+    <div class="tips-top">
+      <div class="tips-counter" id="tips-counter">1 / 6</div>
+      <button class="tips-close" onclick="closeTipsModal()" title="Close">✕</button>
+    </div>
+    <div class="tips-dots" id="tips-dots"></div>
+    <div id="tips-content"></div>
+    <div class="tips-nav">
+      <button id="tips-prev-btn" onclick="tipsPrev()">← Prev</button>
+      <button id="tips-next-btn" onclick="tipsNext()">Next →</button>
     </div>
   </div>
 </div>
