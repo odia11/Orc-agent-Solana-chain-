@@ -805,6 +805,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tpc-follow-btn.following:hover{border-color:var(--red);color:var(--red)}
 .tpc-sol-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 11px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap}
 .tpc-sol-btn:hover{border-color:var(--green);background:rgba(0,255,136,.07)}
+.tpc-copy-btn{background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:#f59e0b;cursor:pointer;transition:all .15s;white-space:nowrap}
+.tpc-copy-btn:hover{background:rgba(245,158,11,.26);border-color:#f59e0b}
+.tpc-stop-copy-btn{background:rgba(255,68,68,.14);border:1px solid rgba(255,68,68,.45);border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:var(--red);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tpc-stop-copy-btn:hover{background:rgba(255,68,68,.26);border-color:var(--red)}
+.copy-source-pill{display:inline-flex;align-items:center;gap:5px;background:rgba(245,158,11,.13);border:1px solid rgba(245,158,11,.4);border-radius:20px;padding:3px 11px;font-size:9px;color:#f59e0b;font-family:'Share Tech Mono',monospace;cursor:pointer;transition:all .15s;white-space:nowrap;letter-spacing:.04em;line-height:1.5}
+.copy-source-pill:hover{background:rgba(245,158,11,.26)}
 .tpc-sol-form{background:var(--bg3);border:1px solid var(--border);border-radius:9px;padding:14px;margin-top:10px;display:none}
 .tpc-sol-form.open{display:block}
 .tpc-sol-row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
@@ -1954,6 +1960,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
       <div class="mode-right">
         <div class="badge badge-idle" id="trade-badge">IDLE</div>
+        <div class="copy-source-pill" id="copy-source-pill" style="display:none" onclick="_stopCopyingConfirm()" title="Click to stop copying">📋 <span id="copy-source-label"></span></div>
         <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45" title="Connect a wallet to enable trading">▶ START TRADING</button>
       </div>
       <div class="diff-row" id="diff-row">
@@ -2234,7 +2241,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 </div><!-- /wrap -->
 
 <script>
-let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false;
+let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false, _copySource=null;
 
 // ── CSRF TOKEN ──
 let _csrfToken = '';
@@ -2336,6 +2343,7 @@ function doLogout(){
   document.getElementById('perf-share-btns').style.display='none';
   _resetRefCard();
   _resetBadges();
+  _copySource=null; _updateCopyPill();
   document.getElementById('app').style.display='none';
   document.getElementById('onboard').classList.remove('hide');
   document.getElementById('s-sol').innerHTML='<span class="stat-placeholder">——</span>';
@@ -2475,6 +2483,7 @@ async function launchApp(){
   fetchLeaderboard();
   fetchReferral();
   fetchBadges();
+  fetchCopyStatus();
   fetchPumpScanner();
 }
 
@@ -3065,6 +3074,61 @@ async function fetchBadges(){
 function _resetBadges(){
   const row = document.getElementById('badges-row');
   if(row){ row.innerHTML=''; row.style.display='none'; }
+}
+
+// ── COPY TRADING ──
+async function fetchCopyStatus(){
+  if(!phantomKey) return;
+  try{
+    const r=await fetch('/api/copy-trade/status').then(r=>r.json()).catch(()=>null);
+    if(r?.ok){ _copySource=r.copying?r.target_wallet:null; }
+  }catch(e){}
+  _updateCopyPill();
+}
+
+function _updateCopyPill(){
+  const pill=document.getElementById('copy-source-pill');
+  const lbl=document.getElementById('copy-source-label');
+  if(!pill||!lbl) return;
+  if(_copySource){
+    const short=_copySource.slice(0,6)+'...'+_copySource.slice(-4);
+    lbl.textContent='Copying: '+short;
+    pill.style.display='';
+  } else {
+    pill.style.display='none';
+  }
+}
+
+function _stopCopyingConfirm(){
+  if(!confirm('Stop copying this trader?')) return;
+  fetch('/api/copy-trade/stop',{method:'POST'})
+    .then(r=>r.json())
+    .then(r=>{ if(r?.ok){ _copySource=null; _updateCopyPill(); showLfToast('🟢','Stopped copying','pos'); } })
+    .catch(()=>{});
+}
+
+async function _tpcStartCopy(wallet, username){
+  const r=await fetch('/api/copy-trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_wallet:wallet})}).then(r=>r.json()).catch(()=>null);
+  if(r?.ok){
+    _copySource=wallet;
+    _updateCopyPill();
+    const btn=document.getElementById('tpc-copy-btn');
+    if(btn){ btn.className='tpc-stop-copy-btn'; btn.textContent='Stop Copying'; btn.onclick=()=>_tpcStopCopy(); }
+    showLfToast('🟢','Now copying '+username,'pos');
+  }
+}
+
+async function _tpcStopCopy(){
+  const r=await fetch('/api/copy-trade/stop',{method:'POST'}).then(r=>r.json()).catch(()=>null);
+  if(r?.ok){
+    const prevWallet=_tpcCurrentFullWallet;
+    _copySource=null;
+    _updateCopyPill();
+    const btn=document.getElementById('tpc-copy-btn');
+    const username=document.querySelector('.tvp-username')?.textContent||'trader';
+    if(btn){ btn.className='tpc-copy-btn'; btn.textContent='Copy Trader'; btn.onclick=()=>_tpcStartCopy(prevWallet,username); }
+    showLfToast('🟢','Stopped copying','pos');
+  }
 }
 
 // ── REFERRAL CARD ──
@@ -4867,9 +4931,10 @@ async function openProfileCard(userId){
   view.style.display = '';
   view.innerHTML = '<div class="tvp-loading">Loading profile…</div>';
 
-  const [p, td] = await Promise.all([
+  const [p, td, copyStatus] = await Promise.all([
     fetch('/api/profile/'+userId).then(r=>r.json()).catch(()=>null),
     fetch('/api/profile/'+userId+'/trades').then(r=>r.json()).catch(()=>null),
+    phantomKey ? fetch('/api/copy-trade/status').then(r=>r.json()).catch(()=>null) : Promise.resolve(null),
   ]);
 
   if(!p?.ok){
@@ -4883,6 +4948,13 @@ async function openProfileCard(userId){
   const isFollowing = _tvFollowed.has(followKey);
   const followCls = 'tpc-follow-btn'+(isFollowing?' following':'');
   const followTxt = isFollowing?'Following':'Follow';
+  const _isSelf = phantomKey && _tpcCurrentFullWallet === phantomKey;
+  const isCopyingThis = !_isSelf && copyStatus?.ok && copyStatus.copying && copyStatus.target_wallet === _tpcCurrentFullWallet;
+  const copyBtnHtml = (!_isSelf && phantomKey)
+    ? (isCopyingThis
+        ? `<button class="tpc-stop-copy-btn" id="tpc-copy-btn" onclick="_tpcStopCopy()">Stop Copying</button>`
+        : `<button class="tpc-copy-btn" id="tpc-copy-btn" onclick="_tpcStartCopy('${_tpcCurrentFullWallet.replace(/'/g,"\\'")}','${esc(p.username).replace(/'/g,"\\'")}')">Copy Trader</button>`)
+    : '';
   const tradesHtml = _tvpTradesHtml(td?.trades);
   const posHtml = _tvpPositionsHtml(td?.positions);
 
@@ -4916,6 +4988,7 @@ async function openProfileCard(userId){
           <button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">
             ${followTxt}
           </button>
+          ${copyBtnHtml}
           <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
         </div>
       </div>
