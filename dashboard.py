@@ -3620,6 +3620,53 @@ def toggle_follow(target_id: int):
 
     return jsonify({'ok': True, 'following': following, 'follower_count': int(follower_count)})
 
+# ── FOLLOWERS / FOLLOWING LISTS ──
+@app.route('/api/profile/<int:user_id>/followers', methods=['GET'])
+@rate_limit(30, 60)
+def get_followers(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            FROM follows f
+            JOIN users u ON u.id = f.follower_id
+            WHERE f.following_id = ?
+            ORDER BY f.created_at DESC
+            LIMIT 200
+        ''', (user_id,))
+        rows = c.fetchall()
+    finally:
+        conn.close()
+    users = []
+    for uid, username, avatar_url, wallet in rows:
+        short = (wallet[:6] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
+        users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '', 'wallet': short, 'wallet_address': wallet or ''})
+    return jsonify({'ok': True, 'users': users})
+
+@app.route('/api/profile/<int:user_id>/following', methods=['GET'])
+@rate_limit(30, 60)
+def get_following(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            FROM follows f
+            JOIN users u ON u.id = f.following_id
+            WHERE f.follower_id = ?
+            ORDER BY f.created_at DESC
+            LIMIT 200
+        ''', (user_id,))
+        rows = c.fetchall()
+    finally:
+        conn.close()
+    users = []
+    for uid, username, avatar_url, wallet in rows:
+        short = (wallet[:6] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
+        users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '', 'wallet': short, 'wallet_address': wallet or ''})
+    return jsonify({'ok': True, 'users': users})
+
 # ── BIO ──
 @app.route('/api/bio', methods=['POST'])
 @rate_limit(10, 60)
