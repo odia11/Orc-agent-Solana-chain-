@@ -167,13 +167,32 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .swipe-hint{display:none;font-size:10px;color:var(--muted);text-align:right;margin:-4px 0 6px;letter-spacing:.05em}
 @media(max-width:600px){.swipe-hint{display:block}}
 .usdc-warn{display:none;margin:0 0 10px;padding:10px 14px;background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.25);border-radius:8px;font-size:11px;color:#f0b90b;line-height:1.5}
-.claim-sol-btn{display:block;margin:5px auto 0;padding:3px 10px;font-size:10px;background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.2);border-radius:4px;color:var(--green);cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:background .15s}
-.claim-sol-btn:hover{background:rgba(0,255,136,.18)}
-.claim-sol-btn:disabled{opacity:.45;cursor:default}
-.deposit-sol-btn{display:block;margin:4px auto 0;padding:3px 10px;font-size:10px;background:rgba(106,163,255,.08);border:1px solid rgba(106,163,255,.22);border-radius:4px;color:var(--blue);cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:background .15s}
-.deposit-sol-btn:hover{background:rgba(106,163,255,.18)}
-.withdraw-sol-btn{display:block;margin:4px auto 0;padding:3px 10px;font-size:10px;background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.22);border-radius:4px;color:var(--yellow);cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:background .15s}
-.withdraw-sol-btn:hover{background:rgba(255,193,58,.17)}
+.claim-sol-btn,.deposit-sol-btn,.withdraw-sol-btn{
+  display:block;
+  width:100%;
+  padding:8px 16px;
+  margin-top:7px;
+  font-family:inherit;
+  font-size:13px;
+  font-weight:500;
+  letter-spacing:.5px;
+  color:#fff;
+  background:transparent;
+  border:1px solid rgba(255,255,255,.15);
+  border-radius:6px;
+  cursor:pointer;
+  text-align:center;
+  transition:border-color .15s,color .15s;
+}
+.claim-sol-btn:hover,.deposit-sol-btn:hover,.withdraw-sol-btn:hover{
+  border-color:#00ff88;
+  color:#00ff88;
+  background:transparent;
+}
+.claim-sol-btn:disabled,.deposit-sol-btn:disabled,.withdraw-sol-btn:disabled{
+  opacity:.4;
+  cursor:default;
+}
 /* ── DEPOSIT MODAL QR ── */
 #dep-qr canvas,#dep-qr img{border-radius:8px;display:block}
 .claim-msg{margin:0 0 8px;padding:8px 12px;border-radius:7px;font-size:11px;line-height:1.5}
@@ -1613,9 +1632,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub" style="display:block">available to trade</div>
       <div class="stat-sub" id="s-sol-usdc" style="display:block;color:var(--muted);margin-top:3px"></div>
-      <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">🔥 Burn &amp; Claim</button>
-      <button id="deposit-sol-btn" class="deposit-sol-btn" onclick="openDepositModal()" style="display:none" title="Show deposit address">⬇ Deposit SOL</button>
-      <button id="withdraw-sol-btn" class="withdraw-sol-btn" onclick="openWithdrawModal()" style="display:none" title="Withdraw SOL to another wallet">⬆ Withdraw SOL</button>
+      <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">Burn &amp; Claim</button>
+      <button id="deposit-sol-btn" class="deposit-sol-btn" onclick="openDepositModal()" style="display:none" title="Show deposit address">Deposit SOL</button>
+      <button id="withdraw-sol-btn" class="withdraw-sol-btn" onclick="openWithdrawModal()" style="display:none" title="Withdraw SOL to another wallet">Withdraw SOL</button>
     </div>
     <div class="stat">
       <div class="stat-lbl">Open Positions</div>
