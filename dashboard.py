@@ -3219,12 +3219,32 @@ def platform_stats():
 @app.route('/api/social/feed', methods=['GET'])
 @rate_limit(30, 60)
 def social_feed():
+    feed_filter = request.args.get('filter', 'all')
+
     # Build mint→current_price from shared token state (best-effort; may be empty if scan hasn't run)
     _mint_price: dict = {
         t['mint']: float(t['price'])
         for t in state.get('tokens', [])
         if t.get('mint') and t.get('price')
     }
+
+    # Resolve set of allowed user_ids when filter=following
+    _allowed_ids: set | None = None
+    if feed_filter == 'following':
+        _my_wallet = session.get('wallet')
+        if _my_wallet:
+            _fc = sqlite3.connect(DB_FILE)
+            try:
+                _me_row = _fc.execute('SELECT id FROM users WHERE wallet_address=?', (_my_wallet,)).fetchone()
+                if _me_row:
+                    _rows = _fc.execute('SELECT following_id FROM follows WHERE follower_id=?', (_me_row[0],)).fetchall()
+                    _allowed_ids = {r[0] for r in _rows}
+                else:
+                    _allowed_ids = set()
+            finally:
+                _fc.close()
+        else:
+            _allowed_ids = set()
 
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -3317,6 +3337,9 @@ def social_feed():
             'timestamp':   _ts_str or '',
             '_sort_ts':    _sort_ts,
         })
+
+    if _allowed_ids is not None:
+        feed = [f for f in feed if f.get('user_id') in _allowed_ids]
 
     feed.sort(key=lambda x: x['_sort_ts'], reverse=True)
     for _item in feed:

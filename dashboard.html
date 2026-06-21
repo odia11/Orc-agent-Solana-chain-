@@ -736,6 +736,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* Section panel (activity feed) */
 .tv-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px}
 .tv-section-hdr{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;padding:11px 16px 9px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.013)}
+.tv-feed-tabs{display:flex;gap:6px;padding:10px 16px 6px}
+.tv-feed-tab{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.06em;padding:5px 14px;border-radius:20px;border:1px solid rgba(255,255,255,.18);background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;line-height:1.2}
+.tv-feed-tab:hover{border-color:rgba(0,255,136,.45);color:var(--text)}
+.tv-feed-tab.active{background:var(--green);border-color:var(--green);color:#060d08;font-weight:700}
 /* Feed list */
 .tv-list{display:flex;flex-direction:column}
 .tv-empty{text-align:center;padding:48px 20px;font-size:11px;color:var(--muted);letter-spacing:.1em}
@@ -2064,6 +2068,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="tv-main">
         <div class="tv-panel">
           <div class="tv-section-hdr">⚡ Recent Activity</div>
+          <div class="tv-feed-tabs">
+            <button class="tv-feed-tab active" id="tv-tab-all" onclick="setTvFeedFilter('all')">All Traders</button>
+            <button class="tv-feed-tab" id="tv-tab-following" onclick="setTvFeedFilter('following')">Following</button>
+          </div>
           <div id="tv-list" class="tv-list">
             <div class="tv-empty">Loading trader activity…</div>
           </div>
@@ -4437,7 +4445,7 @@ async function saveSettings(){
 }
 
 // ── TRADERS VIEW ──
-let _tradersView=false, _tvCountdownTimer=null, _tvCountdownVal=15, _tvFollowed=new Set(), _tvFeedCache=[];
+let _tradersView=false, _tvCountdownTimer=null, _tvCountdownVal=15, _tvFollowed=new Set(), _tvFeedCache=[], _tvFeedFilter='all';
 
 function _tvStartCountdown(){
   if(_tvCountdownTimer) clearInterval(_tvCountdownTimer);
@@ -4596,14 +4604,29 @@ function renderPlatformStats(s){
   }
 }
 
+function setTvFeedFilter(filter){
+  _tvFeedFilter=filter;
+  document.getElementById('tv-tab-all').classList.toggle('active', filter==='all');
+  document.getElementById('tv-tab-following').classList.toggle('active', filter==='following');
+  const list=document.getElementById('tv-list');
+  if(list) list.innerHTML='<div class="tv-empty">Loading…</div>';
+  fetchTradersFeed();
+}
+
 async function fetchTradersFeed(){
   if(!_tradersView) return;
+  const feedUrl='/api/social/feed'+(_tvFeedFilter==='following'?'?filter=following':'');
   const [feed, lb, stats]=await Promise.all([
-    fetch('/api/social/feed').then(r=>r.json()).catch(()=>null),
+    fetch(feedUrl).then(r=>r.json()).catch(()=>null),
     fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
     fetch('/api/platform/stats').then(r=>r.json()).catch(()=>null),
   ]);
-  if(Array.isArray(feed)) renderTradersFeed(feed);
+  if(_tvFeedFilter==='following' && Array.isArray(feed) && feed.length===0){
+    const list=document.getElementById('tv-list');
+    if(list) list.innerHTML='<div class="tv-empty" style="padding:24px 16px;font-size:11px;line-height:1.7;color:var(--muted)">Follow some traders to see their activity here.<br><span style="font-size:10px;opacity:.6">Click any trader\'s name in the feed to view their profile and follow them.</span></div>';
+  } else if(Array.isArray(feed)){
+    renderTradersFeed(feed);
+  }
   if(Array.isArray(lb)) renderTopTraders(lb);
   if(stats&&stats.ok) renderPlatformStats(stats);
   _tvStartCountdown();
@@ -4620,6 +4643,11 @@ function _navLogoClick(){
 function openTradersView(){
   if(_tradersView) return;
   _tradersView=true;
+  _tvFeedFilter='all';
+  const tabAll=document.getElementById('tv-tab-all');
+  const tabFollowing=document.getElementById('tv-tab-following');
+  if(tabAll){tabAll.classList.add('active');}
+  if(tabFollowing){tabFollowing.classList.remove('active');}
   document.getElementById('dash-main').style.display='none';
   if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
     document.getElementById('dash-admin').style.display='none';
