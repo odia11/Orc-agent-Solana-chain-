@@ -4623,7 +4623,7 @@ function renderTradersFeed(items){
   if(!list) return;
   _tvFeedCache=Array.isArray(items)?items:[];
   if(!items||!items.length){
-    list.innerHTML='<div class="tv-empty">No trader activity in the last 24 hours yet.</div>';
+    list.innerHTML='<div class="tv-empty">No trader activity yet.</div>';
     return;
   }
   list.innerHTML=items.map(e=>{
@@ -4737,6 +4737,7 @@ async function fetchTradersFeed(){
     fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
     fetch('/api/platform/stats').then(r=>r.json()).catch(()=>null),
   ]);
+  console.log('[feed] received', Array.isArray(feed) ? feed.length : 0, 'items', feed);
   if(_tvFeedFilter==='following' && Array.isArray(feed) && feed.length===0){
     const list=document.getElementById('tv-list');
     if(list) list.innerHTML='<div class="tv-empty" style="padding:24px 16px;font-size:11px;line-height:1.7;color:var(--muted)">Follow some traders to see their activity here.<br><span style="font-size:10px;opacity:.6">Click any trader\'s name in the feed to view their profile and follow them.</span></div>';

@@ -3270,15 +3270,15 @@ def social_feed():
         c.execute('SELECT id, wallet_address, username, avatar_url FROM users')
         _user_rows = c.fetchall()
 
-        # Recent closed trades — last 24 h
-        _cutoff = (datetime.datetime.utcnow() - datetime.timedelta(hours=24)).strftime('%Y-%m-%dT%H:%M:%SZ')
+        # Recent closed trades — no time cap, just newest 50 across ALL users
         c.execute('''
-            SELECT user_id, token, entry_price, exit_price, pnl, timestamp
-            FROM trades
-            WHERE timestamp >= ?
-            ORDER BY timestamp DESC
-            LIMIT 100
-        ''', (_cutoff,))
+            SELECT t.user_id, t.token, t.entry_price, t.exit_price, t.pnl, t.timestamp,
+                   u.username, u.avatar_url, u.wallet_address
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            ORDER BY t.timestamp DESC
+            LIMIT 50
+        ''')
         _trade_rows = c.fetchall()
     finally:
         conn.close()
@@ -3332,21 +3332,25 @@ def social_feed():
             })
 
     # ── Closed trades (DB) ──
-    for _uid, _token, _entry, _exit, _pnl, _ts_str in _trade_rows:
-        _info = _id_info.get(_uid)
-        if not _info:
-            continue
+    for _uid, _token, _entry, _exit, _pnl, _ts_str, _uname, _avatar, _wallet in _trade_rows:
+        _sw = _short(_wallet or '')
+        _display = _uname if _uname else _sw
         try:
             _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%dT%H:%M:%SZ').replace(
                 tzinfo=datetime.timezone.utc).timestamp()
         except Exception:
-            _sort_ts = 0.0
+            try:
+                # fallback for SQLite default CURRENT_TIMESTAMP format
+                _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%d %H:%M:%S').replace(
+                    tzinfo=datetime.timezone.utc).timestamp()
+            except Exception:
+                _sort_ts = 0.0
         feed.append({
             'type':        'trade',
-            'user_id':     _info['user_id'],
-            'username':    _info['username'],
-            'avatar_url':  _info['avatar_url'],
-            'wallet':      _info['wallet'],
+            'user_id':     _uid,
+            'username':    _display,
+            'avatar_url':  _avatar or '',
+            'wallet':      _sw,
             'token':       _token or '',
             'entry_price': round(float(_entry or 0), 8),
             'exit_price':  round(float(_exit  or 0), 8),
