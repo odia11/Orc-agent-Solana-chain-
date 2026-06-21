@@ -775,6 +775,7 @@ _SKIP_IMAGE_FIELDS = frozenset({
     'avatar', 'avatar_url', 'avatar_data',
     'profile_image', 'image', 'photo', 'picture',
     'tx', 'signature', 'sig',
+    'wallet', 'wallet_address', 'truncated_wallet', 'short_wallet',
 })
 # Endpoints where any 87-88 char base58 string in the response triggers a hard block.
 # Admin endpoints that return TX hashes are excluded — TX sigs are the same length.
