@@ -775,9 +775,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* Right col */
 .tv-right{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
 .tv-time{font-size:10px;color:var(--muted);white-space:nowrap}
-.tv-follow-btn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:4px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
-.tv-follow-btn:hover,.tv-follow-btn.followed{border-color:var(--green);color:var(--green);background:rgba(0,255,136,.06)}
-.tv-follow-btn.followed::before{content:'✓ '}
+.tv-follow-btn{background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-follow-btn:hover{border-color:rgba(0,255,136,.45);color:var(--green)}
+.tv-follow-btn.followed{border-color:var(--green);background:rgba(0,255,136,.1);font-size:0}
+.tv-follow-btn.followed::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
+.tv-follow-btn.followed:hover{border-color:#ff4444;background:rgba(255,68,68,.1)}
+.tv-follow-btn.followed:hover::before{content:'Unfollow';color:#ff4444}
+.lb-row .tv-follow-btn{padding:3px 10px;flex-shrink:0}
 @media(max-width:720px){
   .tv-layout{grid-template-columns:1fr}
   .tv-sidebar{position:static;border-left:none;border-top:1px solid rgba(255,255,255,.06);padding:20px 0 0 0;max-height:none;overflow-y:visible}
@@ -809,10 +813,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tpc-wallet{font-size:12px;color:var(--muted);margin-bottom:6px;font-family:'Share Tech Mono',monospace}
 .tpc-bio{font-size:13px;color:var(--dim);font-style:italic;line-height:1.5;margin-top:4px;word-break:break-word}
 .tpc-actions{display:flex;gap:6px;flex-shrink:0;padding-top:2px}
-.tpc-follow-btn{background:var(--blue);border:1px solid transparent;border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:#fff;cursor:pointer;font-weight:700;transition:all .15s;white-space:nowrap}
-.tpc-follow-btn:hover{opacity:.85}
-.tpc-follow-btn.following{background:transparent;border-color:var(--border2);color:var(--dim)}
-.tpc-follow-btn.following:hover{border-color:var(--red);color:var(--red)}
+.tpc-follow-btn{background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text);cursor:pointer;font-weight:700;transition:all .15s;white-space:nowrap}
+.tpc-follow-btn:hover{border-color:rgba(0,255,136,.45);color:var(--green)}
+.tpc-follow-btn.following{border-color:var(--green);background:rgba(0,255,136,.1);font-size:0}
+.tpc-follow-btn.following::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
+.tpc-follow-btn.following:hover{border-color:#ff4444;background:rgba(255,68,68,.1)}
+.tpc-follow-btn.following:hover::before{content:'Unfollow';color:#ff4444}
 .tpc-sol-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 11px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap}
 .tpc-sol-btn:hover{border-color:var(--green);background:rgba(0,255,136,.07)}
 .tpc-copy-btn{background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:#f59e0b;cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -878,10 +884,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* action buttons: column stack, pill, fixed width */
 .tvp-actions{display:flex;flex-direction:column;gap:7px;flex-shrink:0;padding-top:2px;min-width:140px}
 .tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn{width:140px;border-radius:24px;padding:8px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;text-align:center;display:block;box-sizing:border-box;border:1px solid transparent}
-.tpc-follow-btn{background:var(--blue);color:#fff}
-.tpc-follow-btn:hover{opacity:.85}
-.tpc-follow-btn.following{background:transparent;border-color:var(--border2);color:var(--dim)}
-.tpc-follow-btn.following:hover{border-color:var(--red);color:var(--red)}
+.tpc-follow-btn{background:transparent;border-color:rgba(255,255,255,.2);color:var(--text)}
+.tpc-follow-btn:hover{border-color:rgba(0,255,136,.45);color:var(--green)}
+.tpc-follow-btn.following{border-color:var(--green);background:rgba(0,255,136,.1);font-size:0}
+.tpc-follow-btn.following::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
+.tpc-follow-btn.following:hover{border-color:#ff4444;background:rgba(255,68,68,.1)}
+.tpc-follow-btn.following:hover::before{content:'Unfollow';color:#ff4444}
 .tpc-copy-btn{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.45);color:#f59e0b}
 .tpc-copy-btn:hover{background:rgba(245,158,11,.26);border-color:#f59e0b}
 .tpc-stop-copy-btn{background:rgba(255,68,68,.14);border-color:rgba(255,68,68,.45);color:var(--red)}
@@ -4540,15 +4548,22 @@ function _tvAvatarHtml(e){
   return `<div class="tv-avatar" style="background:${bg}">${ini}</div>`;
 }
 
-function _tvFollowToggle(btn, key){
-  if(_tvFollowed.has(key)){
+async function _tvFollowToggle(btn, key, userId, username){
+  const wasFollowing=_tvFollowed.has(key);
+  if(wasFollowing){
     _tvFollowed.delete(key);
     btn.classList.remove('followed');
-    btn.textContent='Follow';
   } else {
     _tvFollowed.add(key);
     btn.classList.add('followed');
-    btn.textContent='Following';
+  }
+  if(username) showLfToast(wasFollowing?'👋':'👥', wasFollowing?`Unfollowed ${username}`:`Now following ${username}`, wasFollowing?'neg':'pos');
+  if(userId){
+    const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
+    if(r?.ok){
+      if(r.following){_tvFollowed.add(key);btn.classList.add('followed');}
+      else{_tvFollowed.delete(key);btn.classList.remove('followed');}
+    }
   }
 }
 
@@ -4564,7 +4579,6 @@ function renderTradersFeed(items){
     const key=esc(e.username+'|'+e.wallet);
     const isFollowed=_tvFollowed.has(e.username+'|'+e.wallet);
     const followCls='tv-follow-btn'+(isFollowed?' followed':'');
-    const followTxt=isFollowed?'Following':'Follow';
     const avatarHtml=_tvAvatarHtml(e);
     const uid=e.user_id||0;
 
@@ -4601,7 +4615,7 @@ function renderTradersFeed(items){
       <div class="tv-signal">${signalHtml}</div>
       <div class="tv-right" onclick="event.stopPropagation()">
         <span class="tv-time">${esc(timeStr)}</span>
-        <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}')">${followTxt}</button>
+        <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')">Follow</button>
       </div>
     </div>`;
   }).join('');
@@ -4845,14 +4859,15 @@ async function _tpcToggleFollow(userId, followKey){
   const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
   btn.disabled=false;
   if(!r?.ok) return;
+  const username=followKey.split('|')[0];
   if(r.following){
     _tvFollowed.add(followKey);
     btn.className='tpc-follow-btn following';
-    btn.textContent='Following';
+    showLfToast('👥',`Now following ${username}`,'pos');
   } else {
     _tvFollowed.delete(followKey);
     btn.className='tpc-follow-btn';
-    btn.textContent='Follow';
+    showLfToast('👋',`Unfollowed ${username}`,'neg');
   }
   const fc=document.getElementById('tpc-follower-count');
   if(fc) fc.textContent=r.follower_count;
@@ -5091,6 +5106,9 @@ function renderLeaderboard(entries){
     const uid=e.user_id||0;
     const earnedBadges=(e.badges||[]);
     const badgeHtml=earnedBadges.length ? `<div class="badges-row" style="margin-top:3px;gap:3px">${earnedBadges.slice(0,3).map(b=>_badgePillHtml(b,true,true)).join('')}</div>` : '';
+    const lbFollowKey=esc(e.username+'|'+(e.wallet_address||''));
+    const lbFollowed=uid&&!isMe&&_tvFollowed.has(e.username+'|'+(e.wallet_address||''));
+    const lbFollowBtn=uid&&!isMe?`<button class="tv-follow-btn${lbFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${lbFollowKey}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')">Follow</button>`:'';
     return `<div class="lb-row${isMe?' lb-me':''}" style="cursor:pointer" onclick="openProfileCard(${uid})">
       ${_lbRankHtml(e.rank)}
       ${_lbAvatarHtml(e,uid)}
@@ -5100,6 +5118,7 @@ function renderLeaderboard(entries){
         ${badgeHtml}
       </div>
       <div class="lb-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
+      ${lbFollowBtn}
     </div>`;
   }).join('');
 }
