@@ -2893,7 +2893,7 @@ function renderPumpScanner(tokens){
   const count=document.getElementById('ps-count');
   if(!panel||!grid) return;
   if(!phantomKey||!tokens.length){ panel.style.display='none'; return; }
-  panel.style.display='';
+  panel.style.display='block';
   if(count) count.textContent=tokens.length+' pumping';
   const fmtChg=v=>(v>=0?'+':'')+((v??0).toFixed(1))+'%';
   const chgCls=v=>(v??0)>=0?'up':'dn';
