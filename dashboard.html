@@ -4880,6 +4880,7 @@ function closeTraderProfile(){
   _tpcCurrentFullWallet = '';
   document.getElementById('tv-profile-view').style.display = 'none';
   document.getElementById('tv-layout').style.display = '';
+  _updateTvMeCard();
 }
 
 function _tvpTradesHtml(trades){
@@ -4934,6 +4935,8 @@ async function openProfileCard(userId){
   _tvProfileOpen = true;
   const view = document.getElementById('tv-profile-view');
   document.getElementById('tv-layout').style.display = 'none';
+  const meCard = document.getElementById('tv-me-card');
+  if(meCard) meCard.style.display = 'none';
   view.style.display = '';
   view.innerHTML = '<div class="tvp-loading">Loading profile…</div>';
 
@@ -4953,9 +4956,11 @@ async function openProfileCard(userId){
   const followKey = p.username+'|'+p.wallet;
   const isFollowing = _tvFollowed.has(followKey);
   const followCls = 'tpc-follow-btn'+(isFollowing?' following':'');
-  const followTxt = isFollowing?'Following':'Follow';
   const _isSelf = phantomKey && _tpcCurrentFullWallet === phantomKey;
   const isCopyingThis = !_isSelf && copyStatus?.ok && copyStatus.copying && copyStatus.target_wallet === _tpcCurrentFullWallet;
+  const followBtnHtml = _isSelf
+    ? `<button class="tpc-follow-btn" style="border-color:rgba(0,255,136,.4);color:var(--green);background:rgba(0,255,136,.06)" onclick="closeTraderProfile();openSettings()">✏ Edit Profile</button>`
+    : `<button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">Follow</button>`;
   const copyBtnHtml = (!_isSelf && phantomKey)
     ? (isCopyingThis
         ? `<button class="tpc-stop-copy-btn" id="tpc-copy-btn" onclick="_tpcStopCopy()">Stop Copying</button>`
@@ -4994,9 +4999,7 @@ async function openProfileCard(userId){
           </div>
         </div>
         <div class="tvp-actions">
-          <button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">
-            ${followTxt}
-          </button>
+          ${followBtnHtml}
           ${copyBtnHtml}
           <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
         </div>
