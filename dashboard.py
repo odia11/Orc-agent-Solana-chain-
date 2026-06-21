@@ -115,8 +115,8 @@ _APP_START     = time.time()
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
-    'EASY':   {'tp': 0.09, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
-    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
+    'EASY':   {'tp': 0.09, 'sl': 0.05, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
+    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min':  8, 'm5_max': None},
     'HARD':   {'tp': 0.35, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
 }
 
@@ -131,6 +131,7 @@ OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
+print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPITER_PROXY) > 40 else (JUPITER_PROXY or "(not set — using api.jup.ag directly)")}', flush=True)
 # Optional shared secret the frontend echoes back on every mutating request.
 # Defense-in-depth against scripted bots that POST straight to the API without ever
 # loading the page (and therefore never seeing this value). Skipped entirely when unset,
@@ -1884,7 +1885,7 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         _ext_hit('jupiter')
         result = subprocess.run(
             [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), action, mint, amount_str],
-            env=env, capture_output=True, text=True, timeout=30
+            env=env, capture_output=True, text=True, timeout=120
         )
         env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
         if result.stdout:
@@ -2148,8 +2149,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                     for _t in not_held:
                         _tsym = _t.get('symbol', '') or _t['mint'][:8]
                         _dex  = _t.get('dexId', '') or ''
-                        if 'pump' in _dex:
-                            _skip_log.append(f'[skip] {_tsym}: pumpswap — filtered out')
+                        if 'pump' in _dex and difficulty == 'HARD':
+                            _skip_log.append(f'[skip] {_tsym}: pumpswap — filtered (HARD mode only)')
                             continue
                         _sc   = _t.get('score', 0)
                         _m5   = _t.get('change5m', 0)
@@ -2214,15 +2215,19 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
-                            pos['amount']          = spend / best['price']
-                            pos['buy_price']       = best['price']
-                            pos['spend']           = spend
-                            pos['symbol']          = label
-                            pos['opened_at']       = time.time()
-                            pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
-                            open_pos += 1
-                            _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
+                                _buy_ok = _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
+                            if _buy_ok:
+                                pos['amount']          = spend / best['price']
+                                pos['buy_price']       = best['price']
+                                pos['spend']           = spend
+                                pos['symbol']          = label
+                                pos['opened_at']       = time.time()
+                                pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
+                                open_pos += 1
+                                _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
+                            else:
+                                add_user_log(wallet, '[' + short + '] ✗ BUY failed — ' + label + ' position NOT recorded')
+                                positions.pop(bmint, None)
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 30))
