@@ -8,7 +8,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@solana/web3.js@1.95.4/lib/index.iife.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -5444,21 +5444,18 @@ function openDepositModal() {
   document.getElementById('dep-copy-msg').textContent = '';
   document.getElementById('dep-copy-btn').textContent = '📋';
   const qrEl = document.getElementById('dep-qr');
-  if (_depQrWallet !== phantomKey) {
-    qrEl.innerHTML = '';
-    try {
-      new QRCode(qrEl, {
-        text: phantomKey,
-        width: 168,
-        height: 168,
-        colorDark: '#eef6ff',
-        colorLight: '#0d1828',
-        correctLevel: QRCode.CorrectLevel.M
-      });
-      _depQrWallet = phantomKey;
-    } catch(e) {
-      qrEl.innerHTML = '<div style="width:168px;height:168px;border:2px dashed var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px;letter-spacing:.06em">QR unavailable</div>';
-    }
+  qrEl.innerHTML = '';
+  try {
+    new QRCode(qrEl, {
+      text: phantomKey,
+      width: 180,
+      height: 180,
+      colorDark: '#000000',
+      colorLight: '#ffffff',
+      correctLevel: QRCode.CorrectLevel.M
+    });
+  } catch(e) {
+    qrEl.innerHTML = '<div style="width:180px;height:180px;border:2px dashed var(--border2);border-radius:8px;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:10px;letter-spacing:.06em">QR unavailable</div>';
   }
 }
 
@@ -5499,7 +5496,7 @@ function copyDepositAddr() {
     <button class="s-close" onclick="closeDepositModal()">✕</button>
     <div class="s-title" style="margin-bottom:4px">⬇ Deposit SOL</div>
     <div class="s-sub">SCAN QR OR COPY ADDRESS</div>
-    <div id="dep-qr" style="display:flex;align-items:center;justify-content:center;margin:16px 0 14px"></div>
+    <div id="dep-qr" style="display:flex;align-items:center;justify-content:center;margin:16px 0 14px;background:#fff;border-radius:10px;padding:8px;width:fit-content;margin-left:auto;margin-right:auto"></div>
     <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--blue);word-break:break-all;display:flex;align-items:center;gap:8px;justify-content:space-between;text-align:left;margin-bottom:6px">
       <span id="dep-addr-text" style="flex:1;word-break:break-all"></span>
       <button onclick="copyDepositAddr()" id="dep-copy-btn" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;flex-shrink:0;padding:0;line-height:1;transition:color .15s" title="Copy address">📋</button>
