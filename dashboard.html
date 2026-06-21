@@ -2968,7 +2968,7 @@ function renderPumpScanner(tokens){
   if(count) count.textContent=tokens.length+' pumping';
   const fmtChg=v=>(v>=0?'+':'')+((v??0).toFixed(1))+'%';
   const chgCls=v=>(v??0)>=0?'up':'dn';
-  grid.innerHTML=tokens.map(t=>{
+  const _psCards=tokens.map(t=>{
     const sym=esc(t.symbol||'???');
     const name=esc(t.name||t.symbol||'Unknown');
     const mint=safeMint(t.mint);
@@ -2989,7 +2989,9 @@ function renderPumpScanner(tokens){
     <button class="ps-sell-btn" onclick="manualSell('${mint}','${sym}',this)"${hasSell?'':' style="display:none"'}>SELL</button>
   </div>
 </div>`;
-  }).join('');
+  });
+  console.log('[PS] first card HTML:', _psCards[0]);
+  grid.innerHTML=_psCards.join('');
 }
 
 async function manualBuy(mint,symbol,btn){
