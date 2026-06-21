@@ -766,6 +766,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN referred_by TEXT",
         "ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN badges TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN copy_source TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -2262,12 +2263,82 @@ def user_trader_loop(stop_event, config, wallet: str):
                             pos['opened_at']       = time.time()
                             pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
                             open_pos += 1
+                            _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
             except Exception as e:
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 30))
     finally:
         add_user_log(wallet, '[' + short + '] Trader stopped')
         us['trader_running'] = False
+
+
+# ── COPY TRADING ──────────────────────────────────────
+def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, liquidity: float):
+    """Fire-and-forget: buy `mint` for every user whose copy_source = buyer_wallet."""
+    def _run():
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            try:
+                rows = conn.execute(
+                    'SELECT wallet_address, encrypted_private_key, min_trade_size FROM users '
+                    'WHERE copy_source=? AND encrypted_private_key != "" AND encrypted_private_key IS NOT NULL',
+                    (buyer_wallet,)
+                ).fetchall()
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f'[copy-trade] DB error: {e}', flush=True)
+            return
+
+        for c_wallet, c_enc, c_min_usdc in rows:
+            try:
+                c_short = c_wallet[:6] + '...' + c_wallet[-4:]
+                c_us    = get_user_state(c_wallet)
+                open_pos = sum(1 for p in c_us['positions'].values() if p.get('amount', 0) > 0)
+                if open_pos >= 5:
+                    add_user_log(c_wallet, f'[copy] Skip {symbol}: max positions reached')
+                    continue
+                if c_us['positions'].get(mint, {}).get('amount', 0) > 0:
+                    continue  # already holding
+
+                # Decrypt key to get trading wallet address for balance check
+                try:
+                    from solders.keypair import Keypair as _KP_ct
+                    with _use_key(c_enc, c_wallet) as _pk:
+                        trading_wallet = str(_KP_ct.from_base58_string(_pk).pubkey())
+                except Exception:
+                    add_user_log(c_wallet, f'[copy] Skip {symbol}: cannot decrypt key')
+                    continue
+
+                c_sol = _get_user_sol(trading_wallet)
+                if c_sol < 0.01:
+                    add_user_log(c_wallet, f'[copy] Skip {symbol}: insufficient SOL ({c_sol})')
+                    continue
+
+                min_spend_sol = (float(c_min_usdc or 1.0) / _sol_price_usd) if _sol_price_usd > 0 else 0.02
+                spend = round(min(min_spend_sol, c_sol * 0.5), 4)
+                if spend < 0.001:
+                    continue
+
+                with _use_key(c_enc, c_wallet) as _pk:
+                    ok = _execute_user_swap(c_wallet, _pk, 'buy', mint, str(spend))
+                if not ok:
+                    add_user_log(c_wallet, f'[copy] {symbol} buy tx failed')
+                    continue
+
+                pos = c_us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
+                pos['amount']          = pos.get('amount', 0.0) + spend / price
+                pos['buy_price']       = price
+                pos['spend']           = pos.get('spend', 0.0) + spend
+                pos['symbol']          = symbol
+                pos['opened_at']       = time.time()
+                pos['entry_liquidity'] = liquidity
+                c_us['positions'][mint] = pos
+                add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
+            except Exception as e:
+                print(f'[copy-trade] error for {c_wallet[:6]}: {e}', flush=True)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 # ══════════════════════════════════════════════════════
@@ -2563,6 +2634,58 @@ def api_badges(wallet_addr):
         return jsonify({'ok': True, 'badges': badges})
     except Exception as e:
         return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/copy-trade', methods=['POST'])
+@rate_limit(20, 60)
+def api_copy_trade_start():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    target = str((request.json or {}).get('target_wallet', '')).strip()
+    if not is_valid_solana_address(target):
+        return jsonify({'ok': False, 'msg': 'Invalid target wallet'}), 400
+    if target == wallet:
+        return jsonify({'ok': False, 'msg': 'Cannot copy yourself'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET copy_source=? WHERE wallet_address=?', (target, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/copy-trade/stop', methods=['POST'])
+@rate_limit(20, 60)
+def api_copy_trade_stop():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET copy_source=NULL WHERE wallet_address=?', (wallet,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+
+@app.route('/api/copy-trade/status', methods=['GET'])
+@rate_limit(60, 60)
+def api_copy_trade_status():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT copy_source FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': True, 'copying': False, 'target_wallet': None})
+    target = row[0]
+    return jsonify({'ok': True, 'copying': bool(target), 'target_wallet': target})
 
 
 @app.route('/card/<wallet_addr>')
@@ -3802,6 +3925,7 @@ def api_pump_scanner_buy():
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
+    _trigger_copy_buy(wallet, mint, token_data['price'], pos['symbol'], float(token_data.get('liquidity', 0) or 0))
     note = '' if us.get('trader_running') else ' — start the trader for automatic TP/SL on this position'
     return jsonify({'ok': True, 'msg': 'Bought ' + pos['symbol'] + note, 'symbol': pos['symbol'], 'spend': spend})
 
@@ -3876,6 +4000,7 @@ def api_manual_buy():
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] MANUAL BUY: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
+    _trigger_copy_buy(wallet, mint, token_data['price'], pos['symbol'], float(token_data.get('liquidity', 0) or 0))
     note = '' if us.get('trader_running') else ' — start the bot for automatic TP/SL'
     return jsonify({'ok': True, 'msg': 'Bought ' + pos['symbol'] + note,
                     'symbol': pos['symbol'], 'spend': spend})
