@@ -1747,8 +1747,18 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                 tx_sig   = None
                 err_msg  = None
                 try:
-                    tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
-                    print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
+                    # FIX 1: check balance before attempting transfer (mirrors recovery-path guard)
+                    from solders.keypair import Keypair as _KP_fee
+                    signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
+                    signer_sol  = _get_user_sol(signer_pub)
+                    NET_FEE     = 0.000005  # ~5000 lamports for a simple SOL transfer tx
+                    if signer_sol < fee + NET_FEE:
+                        err_msg = (f'insufficient balance: {signer_sol:.6f} SOL '
+                                   f'(need {fee:.6f} + {NET_FEE} network fee)')
+                        print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
+                    else:
+                        tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
+                        print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
                 except Exception as e:
                     err_msg = _redact_keys(str(e))
                     print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err_msg}', flush=True)
@@ -1762,10 +1772,17 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                         'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status) VALUES (?,?,?,?,?,?)',
                         (wlt, sym, gross, fee, fee_tx, status))
                     if tx_sig:
-                        # Mark trade as fee paid using timestamp to identify it
-                        conn2.execute(
-                            'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
-                            (uid, trade_ts))
+                        # FIX 2: mark fee_paid by row ID, not timestamp (timestamp is second-level
+                        # precision and could match two trades from the same user in the same second)
+                        row = conn2.execute(
+                            'SELECT id FROM trades WHERE user_id=? AND timestamp=? AND fee_paid=0 '
+                            'ORDER BY rowid LIMIT 1', (uid, trade_ts)).fetchone()
+                        if row:
+                            conn2.execute('UPDATE trades SET fee_paid=1 WHERE id=?', (row[0],))
+                        else:
+                            conn2.execute(
+                                'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
+                                (uid, trade_ts))
                     conn2.commit()
                     conn2.close()
                     print(f'[fee] recorded in fees table: status={status} fee_tx={fee_tx[:30]}', flush=True)
