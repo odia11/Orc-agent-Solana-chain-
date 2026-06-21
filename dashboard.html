@@ -81,15 +81,36 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative}
-.tv-me-card{background:rgba(13,20,33,.92);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.07);border-left:3px solid var(--green);border-radius:8px;padding:12px 20px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
-.tv-me-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(0,255,136,.4)}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative;transition:border-color .15s}
+.wallet-pill:hover{border-color:rgba(0,255,136,.45)}
+.wallet-pill:hover #wallet-short{text-decoration:underline;text-underline-offset:2px}
+.wallet-pill-hint{font-size:9px;color:var(--green);opacity:0;transition:opacity .15s;white-space:nowrap;letter-spacing:.04em}
+.wallet-pill:hover .wallet-pill-hint{opacity:1}
+/* ── DASHBOARD PROFILE BAR ── */
+#dash-profile-bar{display:none;align-items:center;gap:14px;background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(0,255,136,.18);border-left:3px solid var(--green);border-radius:8px;padding:10px 18px;margin-bottom:16px;cursor:pointer;transition:background .15s}
+#dash-profile-bar:hover{background:rgba(0,255,136,.04)}
+.dpb-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(0,255,136,.35)}
+.dpb-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.dpb-info{flex:1;min-width:0}
+.dpb-name{font-size:14px;font-weight:700;color:var(--text);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dpb-chips{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+.dpb-chip{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;white-space:nowrap}
+.dpb-chip strong{color:var(--text);font-family:'Orbitron',monospace;font-size:11px;font-weight:700}
+.dpb-view-btn{background:transparent;border:1px solid rgba(0,255,136,.4);border-radius:6px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.dpb-view-btn:hover{background:rgba(0,255,136,.08)}
+/* ── TRADERS FEED PROFILE CARD ── */
+.tv-me-card{background:rgba(13,20,33,.92);backdrop-filter:blur(10px);border:1px solid rgba(0,255,136,.2);border-left:4px solid var(--green);box-shadow:-2px 0 14px rgba(0,255,136,.1),0 2px 16px rgba(0,0,0,.4);border-radius:8px;padding:14px 20px;margin-bottom:10px;display:flex;flex-direction:column;gap:8px}
+.tv-me-badge{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--green)}
+.tv-me-row{display:flex;align-items:center;gap:14px}
+.tv-me-avatar{width:56px;height:56px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(0,255,136,.45);box-shadow:0 0 12px rgba(0,255,136,.15)}
 .tv-me-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .tv-me-info{flex:1;min-width:0}
-.tv-me-name{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-me-name{font-size:18px;font-weight:700;color:var(--text);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tv-me-chips{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
 .tv-me-chip{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;white-space:nowrap}
 .tv-me-chip strong{color:var(--text);font-family:'Orbitron',monospace;font-size:12px;font-weight:700}
+.tv-me-profile-btn{background:transparent;border:1px solid rgba(0,255,136,.4);border-radius:6px;padding:7px 16px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
+.tv-me-profile-btn:hover{background:rgba(0,255,136,.08)}
 .nav-av-msg{font-size:9px;text-align:center;min-height:12px}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
@@ -893,6 +914,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .tvp-stat5:nth-child(1),.tvp-stat5:nth-child(2),.tvp-stat5:nth-child(3),.tvp-stat5:nth-child(4){border-bottom:1px solid rgba(255,255,255,.07)}
   .tvp-stat5:nth-child(5){grid-column:1/-1;border-right:none}
   .tv-me-chips{gap:8px}
+  .tv-me-row{flex-wrap:wrap}
+  .tv-me-profile-btn{width:100%}
+  #dash-profile-bar{flex-wrap:wrap}
+  .dpb-view-btn{width:100%}
 }
 
 /* ── DAILY LEADERBOARD ── */
@@ -1637,7 +1662,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
           <img id="nav-avatar-img" style="display:none;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';document.getElementById('nav-avatar-ini').style.display='block'">
           <span id="nav-avatar-ini"></span>
         </div>
-        <div class="dot-green"></div><span id="wallet-short"></span>
+        <div class="dot-green"></div><span id="wallet-short"></span><span class="wallet-pill-hint">↗ Profile</span>
       </div>
       <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
         <span class="health-dot" id="health-dot"></span>HEALTH
@@ -1730,6 +1755,16 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main">
+
+  <!-- MY PROFILE BAR -->
+  <div id="dash-profile-bar" style="display:none" onclick="if(_myProfileId)openProfileCard(_myProfileId)">
+    <div class="dpb-avatar" id="dpb-avatar"></div>
+    <div class="dpb-info">
+      <div class="dpb-name" id="dpb-name"></div>
+      <div class="dpb-chips" id="dpb-chips"></div>
+    </div>
+    <button class="dpb-view-btn" onclick="event.stopPropagation();if(_myProfileId)openProfileCard(_myProfileId)">↗ View Profile</button>
+  </div>
 
   <!-- WELCOME BANNER -->
   <div id="welcome-banner" class="welcome-banner hide">
@@ -3080,6 +3115,7 @@ async function fetchMyProfile(){
     _myProfileData=r;
     _updateMyProfileBtn();
     _updateTvMeCard();
+    _updateDashProfileBar();
   }catch(e){}
 }
 
@@ -3099,22 +3135,55 @@ function _updateTvMeCard(){
   const pnlColor=todayPos?'var(--green)':'var(--red)';
   const pnlStr=(todayPos?'+':'')+todayPnl.toFixed(4)+' SOL';
   card.innerHTML=`
-    ${avHtml}
-    <div class="tv-me-info">
-      <div class="tv-me-name">${esc(p.username||p.wallet)}</div>
-      <div class="tv-me-chips">
-        <span class="tv-me-chip"><strong>${p.follower_count??0}</strong> Followers</span>
-        <span class="tv-me-chip"><strong>${p.following_count??0}</strong> Following</span>
-        <span class="tv-me-chip" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong> today</span>
+    <div class="tv-me-badge">Your Profile</div>
+    <div class="tv-me-row">
+      ${avHtml}
+      <div class="tv-me-info">
+        <div class="tv-me-name">${esc(p.username||p.wallet)}</div>
+        <div class="tv-me-chips">
+          <span class="tv-me-chip"><strong>${p.follower_count??0}</strong> Followers</span>
+          <span class="tv-me-chip"><strong>${p.following_count??0}</strong> Following</span>
+          <span class="tv-me-chip" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong> today</span>
+        </div>
       </div>
+      <button class="tv-me-profile-btn" onclick="if(_myProfileId)openProfileCard(_myProfileId)">View Full Profile</button>
     </div>`;
   card.style.display='flex';
+}
+
+function _updateDashProfileBar(){
+  const bar=document.getElementById('dash-profile-bar');
+  if(!bar||!_myProfileData||!phantomKey){ if(bar) bar.style.display='none'; return; }
+  const p=_myProfileData;
+  const bg=_tvAvatarColor(p.username||'?');
+  const ini=esc((p.username||'?')[0].toUpperCase());
+  const avDiv=document.getElementById('dpb-avatar');
+  const nameEl=document.getElementById('dpb-name');
+  const chipsEl=document.getElementById('dpb-chips');
+  if(avDiv){
+    avDiv.style.background=bg;
+    avDiv.innerHTML=p.avatar_url
+      ?`<img src="${p.avatar_url}" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none'"><span style="position:relative;z-index:1">${ini}</span>`
+      :ini;
+  }
+  if(nameEl) nameEl.textContent=p.username||p.wallet;
+  const todayPnl=p.today_pnl??0;
+  const todayPos=todayPnl>=0;
+  const pnlColor=todayPos?'var(--green)':'var(--red)';
+  const pnlStr=(todayPos?'+':'')+todayPnl.toFixed(4)+' SOL';
+  if(chipsEl) chipsEl.innerHTML=`
+    <span class="dpb-chip"><strong>${p.follower_count??0}</strong> Followers</span>
+    <span class="dpb-chip"><strong>${p.following_count??0}</strong> Following</span>
+    <span class="dpb-chip" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong> today</span>`;
+  bar.style.display='flex';
 }
 
 function _resetMyProfile(){
   _myProfileId=null; _myProfileData=null;
   const card=document.getElementById('tv-me-card');
   if(card){ card.innerHTML=''; card.style.display='none'; }
+  const bar=document.getElementById('dash-profile-bar');
+  if(bar) bar.style.display='none';
 }
 
 // ── COPY TRADING ──
