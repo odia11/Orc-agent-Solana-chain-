@@ -1652,6 +1652,82 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- ── TRADERS VIEW ── -->
+  <div id="dash-traders" style="display:none">
+
+    <!-- Your Profile strip — above everything -->
+    <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
+
+    <!-- Header bar: 56px, full-width -->
+    <div class="tv-hdr">
+      <div class="tv-hdr-left">
+        <span class="tv-hdr-title">👥 TRADERS FEED</span>
+        <div class="tv-live-pill">
+          <span class="tv-live-dot"></span>
+          <span class="tv-live-label">LIVE</span>
+          <span class="tv-countdown" id="tv-countdown"></span>
+        </div>
+      </div>
+      <div class="tv-hdr-right">
+        <span class="tv-active-badge" id="tv-active-badge" style="display:none"></span>
+        <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
+      </div>
+    </div>
+
+    <!-- Profile full-page view (shown instead of tv-layout) -->
+    <div id="tv-profile-view" style="display:none"></div>
+
+    <!-- Two-column body -->
+    <div class="tv-layout" id="tv-layout">
+
+      <!-- Left 65%: Activity Feed -->
+      <div class="tv-main">
+        <div class="tv-panel">
+          <div class="tv-section-hdr">⚡ Recent Activity</div>
+          <div class="tv-feed-tabs">
+            <button class="tv-feed-tab active" id="tv-tab-all" onclick="setTvFeedFilter('all')">All Traders</button>
+            <button class="tv-feed-tab" id="tv-tab-following" onclick="setTvFeedFilter('following')">Following</button>
+          </div>
+          <div id="tv-list" class="tv-list">
+            <div class="tv-empty">Loading trader activity…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right 35%: Sidebar -->
+      <div class="tv-sidebar">
+
+        <!-- TODAY'S TOP leaderboard -->
+        <div class="tv-sb-section">
+          <div class="tv-sb-title">🏆 TODAY'S TOP</div>
+          <div id="tv-top-traders"><div class="tv-empty" style="padding:12px 0;font-size:10px">—</div></div>
+        </div>
+
+        <!-- Platform Stats -->
+        <div class="tv-sb-section">
+          <div class="tv-sb-title">PLATFORM STATS</div>
+          <div class="tv-sb-stats">
+            <div class="tv-sb-stat">
+              <div class="tv-sb-stat-val" id="tv-pstat-trades">—</div>
+              <div class="tv-sb-stat-lbl">Trades Today</div>
+            </div>
+            <div class="tv-sb-stat">
+              <div class="tv-sb-stat-val" id="tv-pstat-pnl">—</div>
+              <div class="tv-sb-stat-lbl">Net PnL (SOL)</div>
+            </div>
+            <div class="tv-sb-stat">
+              <div class="tv-sb-stat-val" id="tv-pstat-active">—</div>
+              <div class="tv-sb-stat-lbl">Active Traders</div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /tv-sidebar -->
+
+    </div><!-- /tv-layout -->
+
+  </div><!-- /dash-traders -->
+
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main">
 
@@ -2032,82 +2108,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div>
 
   </div><!-- /dash-main -->
-
-  <!-- ── TRADERS VIEW ── -->
-  <div id="dash-traders" style="display:none">
-
-    <!-- Your Profile strip — above everything -->
-    <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
-
-    <!-- Header bar: 56px, full-width -->
-    <div class="tv-hdr">
-      <div class="tv-hdr-left">
-        <span class="tv-hdr-title">👥 TRADERS FEED</span>
-        <div class="tv-live-pill">
-          <span class="tv-live-dot"></span>
-          <span class="tv-live-label">LIVE</span>
-          <span class="tv-countdown" id="tv-countdown"></span>
-        </div>
-      </div>
-      <div class="tv-hdr-right">
-        <span class="tv-active-badge" id="tv-active-badge" style="display:none"></span>
-        <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
-      </div>
-    </div>
-
-    <!-- Profile full-page view (shown instead of tv-layout) -->
-    <div id="tv-profile-view" style="display:none"></div>
-
-    <!-- Two-column body -->
-    <div class="tv-layout" id="tv-layout">
-
-      <!-- Left 65%: Activity Feed -->
-      <div class="tv-main">
-        <div class="tv-panel">
-          <div class="tv-section-hdr">⚡ Recent Activity</div>
-          <div class="tv-feed-tabs">
-            <button class="tv-feed-tab active" id="tv-tab-all" onclick="setTvFeedFilter('all')">All Traders</button>
-            <button class="tv-feed-tab" id="tv-tab-following" onclick="setTvFeedFilter('following')">Following</button>
-          </div>
-          <div id="tv-list" class="tv-list">
-            <div class="tv-empty">Loading trader activity…</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right 35%: Sidebar -->
-      <div class="tv-sidebar">
-
-        <!-- TODAY'S TOP leaderboard -->
-        <div class="tv-sb-section">
-          <div class="tv-sb-title">🏆 TODAY'S TOP</div>
-          <div id="tv-top-traders"><div class="tv-empty" style="padding:12px 0;font-size:10px">—</div></div>
-        </div>
-
-        <!-- Platform Stats -->
-        <div class="tv-sb-section">
-          <div class="tv-sb-title">PLATFORM STATS</div>
-          <div class="tv-sb-stats">
-            <div class="tv-sb-stat">
-              <div class="tv-sb-stat-val" id="tv-pstat-trades">—</div>
-              <div class="tv-sb-stat-lbl">Trades Today</div>
-            </div>
-            <div class="tv-sb-stat">
-              <div class="tv-sb-stat-val" id="tv-pstat-pnl">—</div>
-              <div class="tv-sb-stat-lbl">Net PnL (SOL)</div>
-            </div>
-            <div class="tv-sb-stat">
-              <div class="tv-sb-stat-val" id="tv-pstat-active">—</div>
-              <div class="tv-sb-stat-lbl">Active Traders</div>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /tv-sidebar -->
-
-    </div><!-- /tv-layout -->
-
-  </div><!-- /dash-traders -->
 
   <!-- TRADER PROFILE CARD OVERLAY -->
   <div id="tv-profile-overlay" class="hidden" onclick="if(event.target===this)closeProfileCard()">
