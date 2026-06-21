@@ -800,22 +800,19 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 }
 
 /* ── FOLLOW LIST MODAL ── */
-#fl-modal{position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:600;display:none;align-items:center;justify-content:center;padding:16px;backdrop-filter:blur(3px)}
-#fl-modal.open{display:flex}
-.fl-card{background:var(--bg2);border:1px solid var(--border2);border-radius:14px;width:100%;max-width:400px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 12px 60px rgba(0,0,0,.85),0 0 0 1px rgba(0,255,136,.06)}
-.fl-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
-.fl-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text);letter-spacing:.04em}
-.fl-close{background:transparent;border:none;color:var(--muted);font-size:16px;cursor:pointer;line-height:1;padding:4px 8px;border-radius:4px;transition:color .15s}
-.fl-close:hover{color:var(--text)}
-.fl-list{overflow-y:auto;flex:1;padding:8px 0}
-.fl-row{display:flex;align-items:center;gap:10px;padding:9px 18px;transition:background .12s}
-.fl-row:hover{background:rgba(255,255,255,.03)}
-.fl-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;overflow:hidden;position:relative;border:1px solid var(--border2);cursor:pointer}
-.fl-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
-.fl-info{flex:1;min-width:0;cursor:pointer}
-.fl-name{font-size:12px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fl-wallet{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;white-space:nowrap}
-.fl-empty{text-align:center;padding:32px 16px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+/* ── FOLLOW FULL-PAGE VIEW ── */
+#tv-follow-view{padding:0 0 40px}
+.tvfl-title{font-size:18px;font-weight:700;color:var(--text);margin-bottom:14px;letter-spacing:-.01em}
+.tvfl-list{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:4px 0}
+.tvfl-empty,.tvfl-loading{text-align:center;padding:32px 16px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.tvfl-row{display:flex;align-items:center;gap:12px;padding:10px 16px;cursor:pointer;transition:background .12s}
+.tvfl-row:hover{background:rgba(255,255,255,.03)}
+.tvfl-avatar{width:48px;height:48px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.12)}
+.tvfl-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tvfl-info{flex:1;min-width:0}
+.tvfl-name{font-size:13px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tvfl-wallet{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-top:2px;white-space:nowrap}
+.tvfl-pnl{font-size:11px;font-weight:700;font-family:'Orbitron',monospace;white-space:nowrap;flex-shrink:0;min-width:80px;text-align:right}
 .tvp-social-item.clickable{cursor:pointer;transition:color .15s}
 .tvp-social-item.clickable:hover{color:var(--green)}
 .tvp-social-item.clickable:hover strong{color:var(--green)}
@@ -1748,6 +1745,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <!-- Profile full-page view (shown instead of tv-layout) -->
     <div id="tv-profile-view" style="display:none"></div>
 
+    <!-- Follow list full-page view (shown instead of tv-layout / tv-profile-view) -->
+    <div id="tv-follow-view" style="display:none"></div>
+
     <!-- Two-column body -->
     <div class="tv-layout" id="tv-layout">
 
@@ -2091,19 +2091,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- TOAST CONTAINER -->
   <div id="lf-toast-wrap"></div>
-
-  <!-- FOLLOW LIST MODAL -->
-  <div id="fl-modal" onclick="if(event.target===this)closeFollowListModal()">
-    <div class="fl-card">
-      <div class="fl-hdr">
-        <span class="fl-title" id="fl-title">Followers</span>
-        <button class="fl-close" onclick="closeFollowListModal()">✕</button>
-      </div>
-      <div class="fl-list" id="fl-list">
-        <div class="fl-empty">Loading…</div>
-      </div>
-    </div>
-  </div>
 
   <!-- TRADE MODE -->
   <div class="modes">
@@ -4934,44 +4921,75 @@ function closeTraderProfile(){
   _tvpCurrentProfileUsername = '';
   _tvpPrevProfile = null;
   document.getElementById('tv-profile-view').style.display = 'none';
+  document.getElementById('tv-follow-view').style.display = 'none';
   document.getElementById('tv-layout').style.display = '';
   _updateTvMeCard();
 }
 
-// ── FOLLOW LIST MODAL ──
-function closeFollowListModal(){
-  document.getElementById('fl-modal').classList.remove('open');
+// ── FOLLOW FULL-PAGE VIEW ──
+let _tvFollowViewUserId = 0;
+let _tvFollowViewUsername = '';
+let _tvFollowViewType = 'followers';
+
+function closeFollowView(){
+  document.getElementById('tv-follow-view').style.display = 'none';
+  if(_tvpCurrentProfileId){
+    document.getElementById('tv-profile-view').style.display = '';
+  } else {
+    document.getElementById('tv-layout').style.display = '';
+    _updateTvMeCard();
+  }
 }
 
-async function openFollowListModal(userId, type){
-  const modal=document.getElementById('fl-modal');
-  const titleEl=document.getElementById('fl-title');
-  const listEl=document.getElementById('fl-list');
-  titleEl.textContent=type==='followers'?'Followers':'Following';
-  listEl.innerHTML='<div class="fl-empty">Loading…</div>';
-  modal.classList.add('open');
-  const r=await fetch(`/api/profile/${userId}/${type}`).then(r=>r.json()).catch(()=>null);
-  if(!r?.ok||!r.users?.length){
-    listEl.innerHTML=`<div class="fl-empty">No ${type} yet.</div>`;
+async function openFollowView(userId, username, type){
+  if(!userId) return;
+  _tvFollowViewUserId = userId;
+  _tvFollowViewUsername = username || '';
+  _tvFollowViewType = type;
+  const view = document.getElementById('tv-follow-view');
+  document.getElementById('tv-profile-view').style.display = 'none';
+  document.getElementById('tv-layout').style.display = 'none';
+  const meCard = document.getElementById('tv-me-card');
+  if(meCard) meCard.style.display = 'none';
+  view.style.display = '';
+  const title = type === 'followers'
+    ? `${esc(username)}'s Followers`
+    : `${esc(username)} is Following`;
+  view.innerHTML = `
+    <div class="tvp-back-bar">
+      <button class="tvp-back-btn" onclick="closeFollowView()">← Back</button>
+      <span style="color:var(--muted);font-size:11px">${esc(username)}</span>
+    </div>
+    <div class="tvfl-title">${title}</div>
+    <div class="tvfl-list" id="tvfl-list"><div class="tvfl-loading">Loading…</div></div>`;
+  const r = await fetch(`/api/profile/${userId}/${type}`).then(r=>r.json()).catch(()=>null);
+  const listEl = document.getElementById('tvfl-list');
+  if(!listEl) return;
+  if(!r?.ok || !r.users?.length){
+    listEl.innerHTML = `<div class="tvfl-empty">No ${type} yet.</div>`;
     return;
   }
-  listEl.innerHTML=r.users.map(u=>{
-    const bg=_tvAvatarColor(u.username||'?');
-    const ini=esc((u.username||'?')[0].toUpperCase());
-    const avHtml=u.avatar_url
-      ?`<div class="fl-avatar" style="background:${bg}" onclick="closeFollowListModal();openProfileCard(${u.user_id})"><img src="${u.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`
-      :`<div class="fl-avatar" style="background:${bg}" onclick="closeFollowListModal();openProfileCard(${u.user_id})">${ini}</div>`;
-    const isFollowed=_tvFollowed.has(u.username+'|'+(u.wallet_address||''));
-    const followKey=esc(u.username+'|'+(u.wallet_address||''));
-    const fBtnHtml=(u.user_id&&phantomKey&&u.wallet_address!==phantomKey)
-      ?`<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="_tvFollowToggle(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
-      :'';
-    return `<div class="fl-row">
-      ${avHtml}
-      <div class="fl-info" onclick="closeFollowListModal();openProfileCard(${u.user_id})">
-        <div class="fl-name">${esc(u.username||u.wallet)}</div>
-        <div class="fl-wallet">${esc(u.wallet)}</div>
+  listEl.innerHTML = r.users.map(u=>{
+    const bg = _tvAvatarColor(u.username||'?');
+    const ini = esc((u.username||'?')[0].toUpperCase());
+    const avImg = u.avatar_url ? `<img src="${u.avatar_url}" alt="" onerror="this.style.display='none'">` : '';
+    const pnl = u.pnl_today ?? 0;
+    const pnlPos = pnl >= 0;
+    const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
+    const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
+    const rawKey = u.username+'|'+(u.wallet_address||'');
+    const followKey = esc(rawKey);
+    const isFollowed = _tvFollowed.has(rawKey);
+    const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
+      ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
+      : '';
+    return `<div class="tvfl-row" onclick="openProfileCard(${u.user_id||0})">
+      <div class="tvfl-avatar" style="background:${bg}">${avImg}${ini}</div>
+      <div class="tvfl-info">
+        <div class="tvfl-name">${esc(u.username||u.wallet)}</div>
+        <div class="tvfl-wallet">${esc(u.wallet)}</div>
       </div>
+      <div class="tvfl-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
       ${fBtnHtml}
     </div>`;
   }).join('');
@@ -5101,6 +5119,7 @@ async function openProfileCard(userId){
   _tvpCurrentProfileId = userId;
   const view = document.getElementById('tv-profile-view');
   document.getElementById('tv-layout').style.display = 'none';
+  document.getElementById('tv-follow-view').style.display = 'none';
   const meCard = document.getElementById('tv-me-card');
   if(meCard) meCard.style.display = 'none';
   view.style.display = '';
@@ -5163,8 +5182,8 @@ async function openProfileCard(userId){
           ${p.bio?`<div class="tpc-bio" style="margin-bottom:8px">${esc(p.bio)}</div>`:''}
           ${(p.badges&&p.badges.length)?`<div class="badges-row" style="margin-bottom:8px">${p.badges.map(b=>_badgePillHtml(b,true)).join('')}</div>`:''}
           <div class="tvp-social-row">
-            <span class="tvp-social-item clickable" onclick="openFollowListModal(${userId},'followers')" title="View followers"><span class="tvp-social-icon">👥</span><strong id="tpc-follower-count">${p.follower_count}</strong>&nbsp;Followers</span>
-            <span class="tvp-social-item clickable" onclick="openFollowListModal(${userId},'following')" title="View following"><span class="tvp-social-icon">➜</span><strong>${p.following_count}</strong>&nbsp;Following</span>
+            <span class="tvp-social-item clickable" onclick="openFollowView(${userId},_tvpCurrentProfileUsername,'followers')" title="View followers"><span class="tvp-social-icon">👥</span><strong id="tpc-follower-count">${p.follower_count}</strong>&nbsp;Followers</span>
+            <span class="tvp-social-item clickable" onclick="openFollowView(${userId},_tvpCurrentProfileUsername,'following')" title="View following"><span class="tvp-social-icon">➜</span><strong>${p.following_count}</strong>&nbsp;Following</span>
             ${p.avg_hold_seconds?`<span class="tvp-social-item"><span class="tvp-social-icon">⏱</span>&nbsp;${esc(_tvFormatHold(p.avg_hold_seconds))}</span>`:''}
             <span class="tvp-social-item"><span class="tvp-social-icon">📅</span>&nbsp;${esc(_tvFormatJoined(p.joined_at))}</span>
           </div>
