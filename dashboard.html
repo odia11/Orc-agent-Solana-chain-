@@ -82,8 +82,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative}
-.tv-me-card{background:rgba(13,20,33,.92);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.07);border-left:3px solid var(--green);border-radius:8px;padding:12px 20px;margin-bottom:10px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:background .15s}
-.tv-me-card:hover{background:rgba(0,255,136,.04)}
+.tv-me-card{background:rgba(13,20,33,.92);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.07);border-left:3px solid var(--green);border-radius:8px;padding:12px 20px;margin-bottom:10px;display:flex;align-items:center;gap:14px}
 .tv-me-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(0,255,136,.4)}
 .tv-me-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .tv-me-info{flex:1;min-width:0}
@@ -1715,6 +1714,40 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
+  <!-- LIVE ACTIVITY FEED -->
+  <div class="live-feed-panel" id="live-feed-panel">
+    <div class="lf-header">
+      <div class="lf-header-left">
+        <div class="panel-hdr" style="margin-bottom:0">Live Activity &nbsp;<span id="lf-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
+      </div>
+      <div class="lf-header-right">
+        <span class="lf-live-dot"></span>
+        <span class="lf-live-label">LIVE</span>
+        <span class="lf-countdown" id="lf-countdown"></span>
+      </div>
+    </div>
+    <div id="lf-list" class="lf-list">
+      <div class="lf-empty">No recent trades yet</div>
+    </div>
+  </div>
+
+  <!-- DAILY LEADERBOARD -->
+  <div class="lb-panel" id="lb-panel">
+    <div class="lb-header">
+      <div class="lf-header-left">
+        <div class="panel-hdr" style="margin-bottom:0">🏆 DAILY LEADERBOARD</div>
+      </div>
+      <div class="lf-header-right">
+        <span class="lf-live-dot"></span>
+        <span class="lf-live-label">LIVE</span>
+        <span class="lf-countdown" id="lb-countdown"></span>
+      </div>
+    </div>
+    <div id="lb-list" class="lb-list">
+      <div class="lb-empty">No trades today yet — be the first!</div>
+    </div>
+  </div>
+
   <!-- MY PERFORMANCE -->
   <div class="perf-panel" id="perf-panel-main">
     <div class="panel-hdr" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
@@ -1752,40 +1785,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="perf-chart-wrap">
       <svg id="pnl-chart" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none" style="display:block"></svg>
-    </div>
-  </div>
-
-  <!-- LIVE ACTIVITY FEED -->
-  <div class="live-feed-panel" id="live-feed-panel">
-    <div class="lf-header">
-      <div class="lf-header-left">
-        <div class="panel-hdr" style="margin-bottom:0">Live Activity &nbsp;<span id="lf-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
-      </div>
-      <div class="lf-header-right">
-        <span class="lf-live-dot"></span>
-        <span class="lf-live-label">LIVE</span>
-        <span class="lf-countdown" id="lf-countdown"></span>
-      </div>
-    </div>
-    <div id="lf-list" class="lf-list">
-      <div class="lf-empty">No recent trades yet</div>
-    </div>
-  </div>
-
-  <!-- DAILY LEADERBOARD -->
-  <div class="lb-panel" id="lb-panel">
-    <div class="lb-header">
-      <div class="lf-header-left">
-        <div class="panel-hdr" style="margin-bottom:0">🏆 DAILY LEADERBOARD</div>
-      </div>
-      <div class="lf-header-right">
-        <span class="lf-live-dot"></span>
-        <span class="lf-live-label">LIVE</span>
-        <span class="lf-countdown" id="lb-countdown"></span>
-      </div>
-    </div>
-    <div id="lb-list" class="lb-list">
-      <div class="lb-empty">No trades today yet — be the first!</div>
     </div>
   </div>
 
@@ -3109,7 +3108,6 @@ function _updateTvMeCard(){
         <span class="tv-me-chip" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong> today</span>
       </div>
     </div>`;
-  card.onclick=()=>{ if(_myProfileId) openProfileCard(_myProfileId); };
   card.style.display='flex';
 }
 
