@@ -169,6 +169,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .claim-sol-btn:disabled{opacity:.45;cursor:default}
 .deposit-sol-btn{display:block;margin:4px auto 0;padding:3px 10px;font-size:10px;background:rgba(106,163,255,.08);border:1px solid rgba(106,163,255,.22);border-radius:4px;color:var(--blue);cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:background .15s}
 .deposit-sol-btn:hover{background:rgba(106,163,255,.18)}
+.withdraw-sol-btn{display:block;margin:4px auto 0;padding:3px 10px;font-size:10px;background:rgba(255,193,58,.07);border:1px solid rgba(255,193,58,.22);border-radius:4px;color:var(--yellow);cursor:pointer;font-family:inherit;letter-spacing:.03em;transition:background .15s}
+.withdraw-sol-btn:hover{background:rgba(255,193,58,.17)}
 /* ── DEPOSIT MODAL QR ── */
 #dep-qr canvas,#dep-qr img{border-radius:8px;display:block}
 .claim-msg{margin:0 0 8px;padding:8px 12px;border-radius:7px;font-size:11px;line-height:1.5}
@@ -252,6 +254,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── TODAY'S PERFORMANCE ── */
 .perf-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.perf-share-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.04em}
+.perf-share-btn:hover{border-color:var(--green);color:var(--green)}
+.perf-copy-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.04em}
+.perf-copy-btn:hover{border-color:var(--blue);color:var(--blue)}
 .perf-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:14px}
 .perf-stat{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px}
 .perf-stat-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
@@ -578,6 +584,41 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .inc-loading{text-align:center;padding:32px 0;color:var(--muted);font-size:11px;letter-spacing:.06em}
 .inc-empty{text-align:center;padding:28px 0;color:var(--muted);font-size:11px;line-height:1.75}
 .inc-empty b{color:var(--green)}
+
+/* ── PUMP SCANNER ── */
+.ps-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem;display:none}
+.ps-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.ps-card{background:var(--bg3);border:1px solid rgba(0,237,170,.2);border-radius:9px;padding:12px;border-top:2px solid var(--green)}
+.ps-card-top{display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:6px}
+.ps-sym{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--text)}
+.ps-name{font-size:9px;color:var(--muted);margin-top:2px;max-width:110px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ps-price{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);text-align:right}
+.ps-chg-row{display:flex;gap:5px;margin-bottom:10px;flex-wrap:wrap}
+.ps-chg{font-size:9px;font-family:'Share Tech Mono',monospace;padding:2px 7px;border-radius:4px}
+.ps-chg.up{background:rgba(0,237,170,.1);color:var(--green);border:1px solid rgba(0,237,170,.25)}
+.ps-chg.dn{background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.25)}
+.ps-btns{display:flex;gap:6px}
+.ps-buy-btn{flex:1;background:rgba(0,237,170,.13);border:1px solid rgba(0,237,170,.38);border-radius:6px;padding:7px 0;font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--green);cursor:pointer;letter-spacing:.08em;transition:all .15s}
+.ps-buy-btn:hover:not(:disabled){background:rgba(0,237,170,.24);border-color:var(--green)}
+.ps-buy-btn:disabled{opacity:.4;cursor:not-allowed}
+.ps-sell-btn{flex:1;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.32);border-radius:6px;padding:7px 0;font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--red);cursor:pointer;letter-spacing:.08em;transition:all .15s}
+.ps-sell-btn:hover:not(:disabled){background:rgba(255,77,106,.2);border-color:var(--red)}
+.ps-sell-btn:disabled{opacity:.4;cursor:not-allowed}
+.ps-empty{color:var(--muted);font-size:11px;text-align:center;padding:24px 0;letter-spacing:.08em;grid-column:1/-1}
+
+/* ── REFERRAL CARD ── */
+.ref-card{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem;display:none}
+.ref-link-row{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;margin-bottom:12px}
+.ref-link-text{flex:1;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.ref-copy-btn{background:rgba(106,163,255,.12);border:1px solid rgba(106,163,255,.35);border-radius:6px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--blue);cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
+.ref-copy-btn:hover{background:rgba(106,163,255,.22);border-color:var(--blue)}
+.ref-stats-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
+.ref-stat{flex:1;min-width:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.ref-stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
+.ref-stat-val{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--text)}
+.ref-discount-on{background:rgba(0,237,170,.08);border:1px solid rgba(0,237,170,.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);display:none}
+.ref-discount-off{background:rgba(110,143,175,.07);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--muted);display:none}
+.ref-copy-msg{font-size:9px;color:var(--green);min-height:14px;text-align:right;letter-spacing:.06em}
 
 /* ── LIVE ACTIVITY FEED ── */
 .live-feed-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -1274,6 +1315,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-sub" id="s-sol-usdc" style="display:block;color:var(--muted);margin-top:3px"></div>
       <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">🔥 Burn &amp; Claim</button>
       <button id="deposit-sol-btn" class="deposit-sol-btn" onclick="openDepositModal()" style="display:none" title="Show deposit address">⬇ Deposit SOL</button>
+      <button id="withdraw-sol-btn" class="withdraw-sol-btn" onclick="openWithdrawModal()" style="display:none" title="Withdraw SOL to another wallet">⬆ Withdraw SOL</button>
     </div>
     <div class="stat">
       <div class="stat-lbl">Open Positions</div>
@@ -1314,7 +1356,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- MY PERFORMANCE -->
   <div class="perf-panel" id="perf-panel-main">
-    <div class="panel-hdr">My Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span><span id="perf-tz" style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;margin-left:6px;letter-spacing:.06em"></span></div>
+    <div class="panel-hdr" style="justify-content:space-between;flex-wrap:wrap;gap:6px">
+      <span>My Performance &nbsp;<span id="perf-date" style="color:var(--muted);font-family:'Share Tech Mono',monospace"></span><span id="perf-tz" style="color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:9px;margin-left:6px;letter-spacing:.06em"></span></span>
+      <span id="perf-share-btns" style="display:none;gap:5px;align-items:center">
+        <button class="perf-share-btn" onclick="openPnlCard()" title="View shareable PnL card">📊 Share PnL</button>
+        <button class="perf-copy-btn" id="perf-copy-link-btn" onclick="copyPnlCardLink()" title="Copy link to PnL card">🔗 Copy link</button>
+      </span>
+    </div>
     <div class="perf-stats">
       <div class="perf-stat">
         <div class="perf-stat-lbl">Gross P&amp;L</div>
@@ -1344,6 +1392,28 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="perf-chart-wrap">
       <svg id="pnl-chart" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none" style="display:block"></svg>
     </div>
+  </div>
+
+  <!-- REFERRAL CARD -->
+  <div class="ref-card" id="ref-card" style="display:none">
+    <div class="panel-hdr">🔗 Referral Program</div>
+    <div class="ref-link-row">
+      <span class="ref-link-text" id="ref-link-text">—</span>
+      <button class="ref-copy-btn" onclick="copyRefLink()">Copy link</button>
+    </div>
+    <div class="ref-copy-msg" id="ref-copy-msg"></div>
+    <div class="ref-stats-row">
+      <div class="ref-stat">
+        <div class="ref-stat-lbl">Users Referred</div>
+        <div class="ref-stat-val" id="ref-count">0</div>
+      </div>
+      <div class="ref-stat">
+        <div class="ref-stat-lbl">Your Code</div>
+        <div class="ref-stat-val" id="ref-code" style="font-size:12px;letter-spacing:.12em">—</div>
+      </div>
+    </div>
+    <div class="ref-discount-on" id="ref-discount-on">✅ 10% fee discount active — you were referred by a friend</div>
+    <div class="ref-discount-off" id="ref-discount-off">Share your link to earn a 10% fee discount for friends — and get one yourself when you're referred</div>
   </div>
 
   <!-- LIVE ACTIVITY FEED -->
@@ -1420,7 +1490,26 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
           <button class="iadmin-action-btn ia-danger" id="ia-btn-closeall" disabled onclick="iadminForce('close-all')">✕ Close All Positions</button>
         </div>
       </div>
-      <!-- Card 5: Database Backups (full-width) -->
+      <!-- Card 5: Rate Limits (full-width) -->
+      <div class="iadmin-card" style="grid-column:1/-1">
+        <div class="iadmin-card-hdr" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Rate Limits &amp; API Calls</span>
+          <button class="iadmin-action-btn" style="padding:3px 10px;font-size:9px;margin:0" onclick="iadminFetchRateStats()">↺ Refresh</button>
+        </div>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:10px">
+          <div class="iadmin-stat"><span class="iadmin-stat-lbl">API Calls Today</span><span class="iadmin-stat-val" id="ia-rl-api">—</span></div>
+          <div class="iadmin-stat"><span class="iadmin-stat-lbl">Jupiter Swaps Today</span><span class="iadmin-stat-val" id="ia-rl-jup">—</span></div>
+          <div class="iadmin-stat"><span class="iadmin-stat-lbl">DexScreener Calls Today</span><span class="iadmin-stat-val" id="ia-rl-dex">—</span></div>
+        </div>
+        <div class="iadmin-table-wrap" style="max-height:160px">
+          <table class="iadmin-table" id="ia-rl-table">
+            <thead><tr><th>Endpoint</th><th style="text-align:right">Req / 1h</th><th style="text-align:right">Blocked / 1h</th></tr></thead>
+            <tbody id="ia-rl-tbody"><tr><td colspan="3" style="text-align:center;padding:10px;color:var(--muted)">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Card 6: Database Backups (full-width) -->
       <div class="iadmin-card" style="grid-column:1/-1">
         <div class="iadmin-card-hdr" style="display:flex;align-items:center;justify-content:space-between">
           <span>Database Backups</span>
@@ -1537,6 +1626,18 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="market-grid" id="market-grid">
         <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
       </div>
+    </div>
+  </div>
+
+  <!-- PUMP SCANNER -->
+  <div class="ps-panel" id="ps-panel">
+    <div class="panel-hdr" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      🚀 Pump Scanner
+      <span id="ps-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span>
+      <span style="margin-left:auto;font-size:9px;color:var(--muted);letter-spacing:.06em">≥15% gain · 5m or 1h · min trade size</span>
+    </div>
+    <div id="ps-grid" class="ps-grid">
+      <div class="ps-empty">Scanning for pumping tokens…</div>
     </div>
   </div>
 
@@ -1847,6 +1948,9 @@ function doLogout(){
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-pill').style.display='none';
   document.getElementById('deposit-sol-btn').style.display='none';
+  document.getElementById('withdraw-sol-btn').style.display='none';
+  document.getElementById('perf-share-btns').style.display='none';
+  _resetRefCard();
   document.getElementById('app').style.display='none';
   document.getElementById('onboard').classList.remove('hide');
   document.getElementById('s-sol').innerHTML='<span class="stat-placeholder">——</span>';
@@ -1954,6 +2058,8 @@ async function launchApp(){
     document.getElementById('wallet-pill').style.display='flex';
     document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('deposit-sol-btn').style.display='block';
+    document.getElementById('withdraw-sol-btn').style.display='block';
+    document.getElementById('perf-share-btns').style.display='flex';
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
     fetch('/api/username').then(r=>r.json()).then(r=>{
       _displayName=r?.ok&&r.username?r.username:null;
@@ -1982,6 +2088,8 @@ async function launchApp(){
   fetchTrades();
   fetchPnlChart();
   fetchLeaderboard();
+  fetchReferral();
+  fetchPumpScanner();
 }
 
 // ── LAUNCH WITH 5s TIMEOUT (prevents button getting stuck) ─────────────────
@@ -2286,7 +2394,38 @@ function _iadminSetVisible(show){
 }
 
 async function iadminRefresh(){
-  await Promise.all([iadminFetchStats(),iadminFetchFeeStats(),iadminFetchUsers(),iadminFetchBackups()]);
+  await Promise.all([iadminFetchStats(),iadminFetchFeeStats(),iadminFetchUsers(),iadminFetchBackups(),iadminFetchRateStats()]);
+}
+
+async function iadminFetchRateStats(){
+  const r=await fetch('/api/admin/rate-stats').then(r=>r.json()).catch(()=>null);
+  const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  if(!r?.ok){
+    s('ia-rl-api','—'); s('ia-rl-jup','—'); s('ia-rl-dex','—');
+    const tb=document.getElementById('ia-rl-tbody');
+    if(tb) tb.innerHTML='<tr><td colspan="3" style="text-align:center;padding:10px;color:var(--red)">Failed to load</td></tr>';
+    return;
+  }
+  s('ia-rl-api', r.api_calls_today??'—');
+  s('ia-rl-jup', r.jupiter_calls_today??'—');
+  s('ia-rl-dex', r.dexscreener_calls_today??'—');
+  const eps=r.endpoints||[];
+  const tb=document.getElementById('ia-rl-tbody');
+  if(!tb) return;
+  if(!eps.length){
+    tb.innerHTML='<tr><td colspan="3" style="text-align:center;padding:10px;color:var(--muted)">No rate-limit activity yet</td></tr>';
+    return;
+  }
+  tb.innerHTML=eps.map(e=>{
+    const blocked=e.blocked_1h>0;
+    const rowStyle=blocked?'background:rgba(255,77,106,.06)':'';
+    const blockedStyle=blocked?'color:var(--red);font-weight:700':'color:var(--muted)';
+    return `<tr style="${rowStyle}">
+      <td style="font-family:'Share Tech Mono',monospace;color:var(--dim)">${esc(e.endpoint)}</td>
+      <td style="text-align:right">${e.requests_1h}</td>
+      <td style="text-align:right;${blockedStyle}">${blocked?'⚠ '+e.blocked_1h:e.blocked_1h}</td>
+    </tr>`;
+  }).join('');
 }
 
 function _fmtBytes(b){
@@ -2402,8 +2541,155 @@ async function iadminForce(action){
 
 // ── TOKEN OF THE DAY + LIVE CHART ──
 let _marketTokens=[];  // used by renderMarket for grid fallback
+let _openMints=new Set(); // mints with open positions — drives SELL button visibility
 
 
+
+// ── PUMP SCANNER ──
+async function fetchPumpScanner(){
+  if(!phantomKey){ document.getElementById('ps-panel').style.display='none'; return; }
+  const r=await fetch('/api/pump-scanner').then(r=>r.json()).catch(()=>null);
+  if(r?.ok) renderPumpScanner(r.tokens||[]);
+}
+
+function renderPumpScanner(tokens){
+  const panel=document.getElementById('ps-panel');
+  const grid=document.getElementById('ps-grid');
+  const count=document.getElementById('ps-count');
+  if(!panel||!grid) return;
+  if(!phantomKey||!tokens.length){ panel.style.display='none'; return; }
+  panel.style.display='';
+  if(count) count.textContent=tokens.length+' pumping';
+  const fmtChg=v=>(v>=0?'+':'')+((v??0).toFixed(1))+'%';
+  const chgCls=v=>(v??0)>=0?'up':'dn';
+  grid.innerHTML=tokens.map(t=>{
+    const sym=esc(t.symbol||'???');
+    const name=esc(t.name||t.symbol||'Unknown');
+    const mint=safeMint(t.mint);
+    if(!mint) return '';
+    const m5=t.change5m??0,h1=t.change1h??0;
+    const hasSell=_openMints.has(mint);
+    return `<div class="ps-card">
+  <div class="ps-card-top">
+    <div><div class="ps-sym">${sym}</div><div class="ps-name">${name}</div></div>
+    <div class="ps-price">${fmtPrice(t.price)}</div>
+  </div>
+  <div class="ps-chg-row">
+    <span class="ps-chg ${chgCls(m5)}">5M ${fmtChg(m5)}</span>
+    <span class="ps-chg ${chgCls(h1)}">1H ${fmtChg(h1)}</span>
+  </div>
+  <div class="ps-btns">
+    <button class="ps-buy-btn" onclick="manualBuy('${mint}','${sym}',this)">BUY</button>
+    <button class="ps-sell-btn" onclick="manualSell('${mint}','${sym}',this)"${hasSell?'':' style="display:none"'}>SELL</button>
+  </div>
+</div>`;
+  }).join('');
+}
+
+async function manualBuy(mint,symbol,btn){
+  if(!btn) return;
+  btn.disabled=true; btn.textContent='Buying…';
+  try{
+    const r=await fetch('/api/manual_buy',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mint_address:mint,symbol})
+    }).then(r=>r.json()).catch(()=>null);
+    if(r?.ok){
+      showLfToast('🟢',r.msg||'Bought '+symbol,'pos');
+      btn.textContent='✓ BOUGHT';
+      setTimeout(()=>{if(btn){btn.disabled=false;btn.textContent='BUY';}},3000);
+      await fetchState();
+      fetchPumpScanner();
+    } else {
+      showLfToast('🔴',r?.msg||'Buy failed','neg');
+      btn.disabled=false; btn.textContent='BUY';
+    }
+  }catch(e){
+    showLfToast('🔴','Network error','neg');
+    btn.disabled=false; btn.textContent='BUY';
+  }
+}
+
+async function manualSell(mint,symbol,btn){
+  if(!btn) return;
+  btn.disabled=true; btn.textContent='Selling…';
+  try{
+    const r=await fetch('/api/manual_sell',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({mint_address:mint})
+    }).then(r=>r.json()).catch(()=>null);
+    if(r?.ok){
+      showLfToast('🔴',(r.symbol||symbol)+' sold','pos');
+      if(btn) btn.style.display='none';
+      await fetchState();
+      fetchPumpScanner();
+    } else {
+      showLfToast('🔴',r?.msg||'Sell failed','neg');
+      btn.disabled=false; btn.textContent='SELL';
+    }
+  }catch(e){
+    showLfToast('🔴','Network error','neg');
+    btn.disabled=false; btn.textContent='SELL';
+  }
+}
+
+// ── REFERRAL CARD ──
+async function fetchReferral(){
+  console.log('[referral] fetchReferral called, phantomKey=', phantomKey);
+  if(!phantomKey){ _resetRefCard(); return; }
+  const r=await fetch('/api/referral').then(r=>r.json()).catch(e=>{console.error('[referral] fetch error',e);return null;});
+  console.log('[referral] API response:', r);
+  if(!r||!r.ok){ _resetRefCard(); return; }
+  const card=document.getElementById('ref-card');
+  console.log('[referral] card element:', card);
+  if(card) card.style.display='block';
+  const linkEl=document.getElementById('ref-link-text');
+  if(linkEl) linkEl.textContent=r.referral_link||'';
+  const codeEl=document.getElementById('ref-code');
+  if(codeEl) codeEl.textContent=r.code||'—';
+  const countEl=document.getElementById('ref-count');
+  if(countEl) countEl.textContent=r.referral_count??0;
+  const don=document.getElementById('ref-discount-on');
+  const doff=document.getElementById('ref-discount-off');
+  if(r.has_discount){
+    if(don)  don.style.display='block';
+    if(doff) doff.style.display='none';
+  } else {
+    if(don)  don.style.display='none';
+    if(doff) doff.style.display='block';
+  }
+}
+
+function _resetRefCard(){
+  const card=document.getElementById('ref-card');
+  if(card) card.style.display='none';
+}
+
+function copyRefLink(){
+  const txt=(document.getElementById('ref-link-text')?.textContent||'').trim();
+  if(!txt||txt==='—') return;
+  const msg=document.getElementById('ref-copy-msg');
+  const done=()=>{
+    if(msg){ msg.textContent='✓ Copied!'; setTimeout(()=>{ msg.textContent=''; },2000); }
+  };
+  const fallback=()=>{
+    const ta=document.createElement('textarea');
+    ta.value=txt;
+    ta.style.cssText='position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();
+    try{ document.execCommand('copy'); }catch(_){}
+    document.body.removeChild(ta);
+    done();
+  };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(txt).then(done).catch(fallback);
+  } else {
+    fallback();
+  }
+}
 
 // ── PERFORMANCE PANEL ──
 async function fetchTrades(){
@@ -2826,6 +3112,7 @@ function renderPnlChart(curve){
 
 function renderPositions(detail){
   const panel=document.getElementById('positions-panel');
+  _openMints=new Set((detail||[]).map(p=>p.mint).filter(Boolean));
   if(!detail||!detail.length){panel.style.display='none';return;}
   panel.style.display='block';
   document.getElementById('pos-count').textContent=detail.length+'/5';
@@ -4367,6 +4654,7 @@ setInterval(fetchTrades,30000);
 setInterval(fetchPnlChart,30000);
 setInterval(fetchLeaderboard,30000);
 setInterval(fetchTradersFeed,15000);
+setInterval(fetchPumpScanner,30000);
 
 // ── VERSION POLLING ──
 let _pageVersion=null;
@@ -4671,6 +4959,123 @@ async function triggerAudit(){
 // refreshes, tab switches, and browser restarts. The only way to clear the saved
 // session is an explicit "Disconnect" button click, which calls doLogout().
 
+// ── PNL SHARE CARD ─────────────────────────────────────────────────────────
+function openPnlCard() {
+  if (!phantomKey) return;
+  window.open('/card/' + phantomKey, '_blank', 'noopener,noreferrer');
+}
+
+function copyPnlCardLink() {
+  if (!phantomKey) return;
+  const url = 'https://orcagent.fun/card/' + phantomKey;
+  const btn = document.getElementById('perf-copy-link-btn');
+  const origText = btn ? btn.textContent : '';
+  const done = () => {
+    if (btn) { btn.textContent = '✓ Copied!'; setTimeout(() => { btn.textContent = origText; }, 2000); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(url).then(done).catch(() => { _clipFallback(url); done(); });
+  } else {
+    _clipFallback(url); done();
+  }
+}
+
+function _clipFallback(text) {
+  const ta = document.createElement('textarea');
+  ta.value = text;
+  ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+  document.body.appendChild(ta);
+  ta.select();
+  try { document.execCommand('copy'); } catch(_) {}
+  document.body.removeChild(ta);
+}
+
+// ── WITHDRAW SOL MODAL ─────────────────────────────────────────────────────
+let _wdCurrentBalance = 0;
+
+function openWithdrawModal() {
+  if (!phantomKey) return;
+  const modal = document.getElementById('withdraw-modal');
+  document.getElementById('wd-to-addr').value = '';
+  document.getElementById('wd-amount').value = '';
+  document.getElementById('wd-addr-err').style.display = 'none';
+  document.getElementById('wd-amt-err').style.display = 'none';
+  document.getElementById('wd-result').style.display = 'none';
+  const btn = document.getElementById('wd-confirm-btn');
+  btn.disabled = false; btn.textContent = 'CONFIRM WITHDRAW';
+  // Populate balance hint from cached state
+  const solEl = document.getElementById('s-sol');
+  const solText = solEl ? solEl.innerText.replace(/[^\d.]/g, '') : '';
+  _wdCurrentBalance = parseFloat(solText) || 0;
+  const available = Math.max(0, _wdCurrentBalance - 0.001);
+  document.getElementById('wd-balance-hint').textContent =
+    'Balance: ' + _wdCurrentBalance.toFixed(4) + ' SOL · Max sendable: ' + available.toFixed(6) + ' SOL';
+  modal.classList.add('open');
+}
+
+function closeWithdrawModal() {
+  document.getElementById('withdraw-modal').classList.remove('open');
+}
+
+function setMaxWithdraw() {
+  const available = Math.max(0, _wdCurrentBalance - 0.001);
+  if (available <= 0) return;
+  document.getElementById('wd-amount').value = available.toFixed(6);
+  document.getElementById('wd-amt-err').style.display = 'none';
+}
+
+async function confirmWithdraw() {
+  const toAddr   = (document.getElementById('wd-to-addr').value || '').trim();
+  const amountRaw = (document.getElementById('wd-amount').value || '').trim();
+  const amount   = parseFloat(amountRaw);
+
+  let hasErr = false;
+  if (!toAddr || toAddr.length < 32) {
+    const el = document.getElementById('wd-addr-err');
+    el.textContent = 'Enter a valid Solana address'; el.style.display = 'block';
+    hasErr = true;
+  }
+  if (!amountRaw || isNaN(amount) || amount <= 0) {
+    const el = document.getElementById('wd-amt-err');
+    el.textContent = 'Enter a valid amount'; el.style.display = 'block';
+    hasErr = true;
+  }
+  if (hasErr) return;
+
+  const btn = document.getElementById('wd-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Sending…';
+  document.getElementById('wd-result').style.display = 'none';
+
+  try {
+    const resp = await fetch('/api/withdraw', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({to_address: toAddr, amount_sol: amount})
+    });
+    const data = await resp.json();
+    const resultEl = document.getElementById('wd-result');
+    if (data.ok) {
+      const sig = data.signature || '';
+      const explorer = sig ? `https://solscan.io/tx/${sig}` : '';
+      resultEl.style.cssText = 'display:block;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:11px;line-height:1.7;word-break:break-all;background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.28);color:var(--green)';
+      resultEl.innerHTML = `✓ Sent ${amount} SOL successfully!` +
+        (explorer ? `<br><a href="${explorer}" target="_blank" rel="noopener noreferrer" style="color:var(--blue);font-size:10px;text-decoration:underline">View on Solscan ↗</a>` : '') +
+        (sig ? `<br><span style="color:var(--muted);font-size:9px;word-break:break-all">TX: ${esc(sig)}</span>` : '');
+      btn.style.display = 'none';
+      fetchBalance();
+    } else {
+      resultEl.style.cssText = 'display:block;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:11px;line-height:1.6;background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.28);color:var(--red)';
+      resultEl.textContent = '✗ ' + (data.error || 'Withdrawal failed');
+      btn.disabled = false; btn.textContent = 'CONFIRM WITHDRAW';
+    }
+  } catch(e) {
+    const resultEl = document.getElementById('wd-result');
+    resultEl.style.cssText = 'display:block;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:11px;line-height:1.6;background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.28);color:var(--red)';
+    resultEl.textContent = '✗ Network error — please try again';
+    btn.disabled = false; btn.textContent = 'CONFIRM WITHDRAW';
+  }
+}
+
 // ── DEPOSIT SOL MODAL ──────────────────────────────────────────────────────
 let _depQrWallet = null;
 
@@ -4747,6 +5152,49 @@ function copyDepositAddr() {
       Sending other assets or using a different network will result in permanent loss of funds.
     </div>
     <button onclick="closeDepositModal()" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s" onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">Close</button>
+  </div>
+</div>
+
+<!-- ── WITHDRAW SOL MODAL ── -->
+<div id="withdraw-modal" class="s-modal" onclick="if(event.target===this)closeWithdrawModal()">
+  <div class="s-card" style="max-width:400px">
+    <button class="s-close" onclick="closeWithdrawModal()">✕</button>
+    <div class="s-title" style="margin-bottom:3px">⬆ Withdraw SOL</div>
+    <div class="s-sub">SEND SOL FROM YOUR TRADING WALLET</div>
+
+    <div style="margin-bottom:12px">
+      <label style="font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:5px">Destination Address</label>
+      <input id="wd-to-addr" type="text" placeholder="Solana wallet address (Base58)"
+        style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text);outline:none;transition:border-color .15s"
+        onfocus="this.style.borderColor='var(--border2)'" oninput="document.getElementById('wd-addr-err').style.display='none'">
+      <div id="wd-addr-err" style="display:none;font-size:9px;color:var(--red);margin-top:4px;letter-spacing:.04em"></div>
+    </div>
+
+    <div style="margin-bottom:14px">
+      <label style="font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:5px">Amount (SOL)</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="wd-amount" type="number" min="0.000001" step="0.001" placeholder="0.000"
+          style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text);outline:none;transition:border-color .15s"
+          onfocus="this.style.borderColor='var(--border2)'" oninput="document.getElementById('wd-amt-err').style.display='none'">
+        <button onclick="setMaxWithdraw()" style="background:rgba(106,163,255,.1);border:1px solid rgba(106,163,255,.3);border-radius:7px;padding:8px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--blue);cursor:pointer;white-space:nowrap;transition:background .15s" onmouseover="this.style.background='rgba(106,163,255,.2)'" onmouseout="this.style.background='rgba(106,163,255,.1)'">Max</button>
+      </div>
+      <div id="wd-amt-err" style="display:none;font-size:9px;color:var(--red);margin-top:4px;letter-spacing:.04em"></div>
+      <div id="wd-balance-hint" style="font-size:9px;color:var(--muted);margin-top:5px;letter-spacing:.04em"></div>
+    </div>
+
+    <div style="background:rgba(255,77,106,.06);border:1px solid rgba(255,77,106,.25);border-radius:8px;padding:10px 14px;font-size:10px;color:#ff9a9a;line-height:1.65;margin-bottom:16px">
+      ⚠ <strong>Double-check the address — transactions are irreversible.</strong><br>
+      Only send to Solana wallets. 0.001 SOL is reserved to cover the network fee.
+    </div>
+
+    <div id="wd-result" style="display:none;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:11px;line-height:1.6;word-break:break-all"></div>
+
+    <button id="wd-confirm-btn" onclick="confirmWithdraw()"
+      style="width:100%;padding:12px;background:rgba(255,193,58,.12);border:1px solid rgba(255,193,58,.4);border-radius:8px;font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:var(--yellow);cursor:pointer;letter-spacing:.08em;transition:all .15s"
+      onmouseover="this.style.background='rgba(255,193,58,.22)'" onmouseout="this.style.background='rgba(255,193,58,.12)'">
+      CONFIRM WITHDRAW
+    </button>
+    <button onclick="closeWithdrawModal()" style="width:100%;margin-top:8px;padding:10px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Cancel</button>
   </div>
 </div>
 

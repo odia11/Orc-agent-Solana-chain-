@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=600,initial-scale=1.0">
+<meta property="og:title" content="OrcAgent Trading PnL Card">
+<meta property="og:description" content="Check out my Solana trading stats on OrcAgent">
+<meta property="og:image" content="https://orcagent.fun/static/og-card.png">
+<title>OrcAgent — PnL Card</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0d1828;--bg2:#162236;--bg3:#1c2e48;
+  --green:#00edaa;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
+  --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
+  {% if stats and stats.total_pnl >= 0 %}
+  --accent:var(--green);--accent-bg:rgba(0,237,170,.07);--accent-border:rgba(0,237,170,.3);
+  {% else %}
+  --accent:var(--red);--accent-bg:rgba(255,77,106,.06);--accent-border:rgba(255,77,106,.28);
+  {% endif %}
+}
+html,body{
+  width:600px;min-height:300px;
+  background:var(--bg);
+  background-image:radial-gradient(ellipse at 15% 0%,rgba(90,150,255,.08) 0%,transparent 50%),
+                   radial-gradient(ellipse at 85% 100%,rgba(0,232,154,.06) 0%,transparent 50%);
+  font-family:'Share Tech Mono',monospace;color:var(--text);
+  -webkit-font-smoothing:antialiased;overflow:hidden
+}
+
+/* ── CARD WRAPPER ── */
+.card{width:600px;min-height:300px;display:flex;flex-direction:column;position:relative}
+.card-accent{height:3px;background:linear-gradient(90deg,var(--accent),transparent 70%);flex-shrink:0}
+
+/* ── HEADER ── */
+.card-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
+.logo-row{display:flex;align-items:center;gap:8px}
+.brand{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:var(--green);letter-spacing:.05em;line-height:1}
+.brand-sub{font-size:7px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
+.hdr-badge{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--border2);border-radius:4px;padding:3px 8px}
+
+/* ── BODY ── */
+.card-body{flex:1;display:flex;gap:0;padding:18px 20px 14px;min-height:0}
+
+/* left column */
+.card-left{flex:1;display:flex;flex-direction:column;justify-content:center;padding-right:20px}
+.wallet-label{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+.wallet-addr{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--dim);letter-spacing:.08em;margin-bottom:14px}
+.pnl-label{font-size:8px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
+.pnl-value{font-family:'Orbitron',monospace;font-size:36px;font-weight:900;line-height:1;letter-spacing:-.01em;color:var(--accent);margin-bottom:4px}
+.pnl-sub{font-size:9px;color:var(--muted);letter-spacing:.08em}
+
+/* divider */
+.card-divider{width:1px;background:var(--border);flex-shrink:0;margin:0 20px}
+
+/* right column */
+.card-right{width:196px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;justify-content:center}
+.stat-cell{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px}
+.stat-lbl{font-size:8px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
+.stat-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--text)}
+.stat-val.pos{color:var(--green)}.stat-val.neg{color:var(--red)}
+
+/* ── FOOTER ── */
+.card-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);flex-shrink:0;gap:10px}
+.footer-url{font-size:9px;color:var(--muted);letter-spacing:.06em;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.footer-url span{color:var(--dim)}
+.footer-btns{display:flex;gap:6px;flex-shrink:0}
+.footer-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:5px 12px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
+.footer-btn:hover{border-color:var(--green);color:var(--green)}
+.footer-btn.primary{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
+.footer-btn.primary:hover{background:var(--accent-border)}
+.copy-msg{font-size:9px;color:var(--green);letter-spacing:.04em;min-width:56px;text-align:right}
+
+/* ── EMPTY STATE ── */
+.card-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);font-size:12px;letter-spacing:.1em;line-height:2;text-align:center;padding:30px}
+.card-empty-icon{font-size:28px;margin-bottom:10px;opacity:.4}
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-accent"></div>
+
+  <!-- HEADER -->
+  <div class="card-hdr">
+    <div class="logo-row">
+      <svg width="24" height="24" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00d68f" stroke-width="5"/>
+        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00d68f" stroke-width="4"/>
+        <circle cx="62" cy="52" r="9" fill="#00d68f"/><circle cx="98" cy="52" r="9" fill="#00d68f"/>
+        <circle cx="64" cy="50" r="3" fill="black"/><circle cx="100" cy="50" r="3" fill="black"/>
+      </svg>
+      <div>
+        <div class="brand">ORCAGENT</div>
+        <div class="brand-sub">Solana Smart Scalper v4</div>
+      </div>
+    </div>
+    <div class="hdr-badge">📊 Trading PnL Card</div>
+  </div>
+
+  {% if stats %}
+  <!-- BODY -->
+  <div class="card-body">
+    <!-- Left: wallet + PnL -->
+    <div class="card-left">
+      <div class="wallet-label">Wallet</div>
+      <div class="wallet-addr">{{ stats.wallet }}</div>
+      <div class="pnl-label">All-Time Total P&L</div>
+      <div class="pnl-value">{{ '+' if stats.total_pnl >= 0 else '' }}{{ '%.4f' | format(stats.total_pnl) }} SOL</div>
+      <div class="pnl-sub">from {{ stats.trade_count }} trade{{ 's' if stats.trade_count != 1 else '' }}</div>
+    </div>
+
+    <div class="card-divider"></div>
+
+    <!-- Right: stats grid -->
+    <div class="card-right">
+      <div class="stat-cell">
+        <div class="stat-lbl">Win Rate</div>
+        <div class="stat-val {{ 'pos' if stats.win_rate >= 50 else 'neg' }}">{{ '%.1f' | format(stats.win_rate) }}%</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-lbl">Best Trade</div>
+        <div class="stat-val pos">{{ '+' if stats.best_trade >= 0 else '' }}{{ '%.4f' | format(stats.best_trade) }}</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-lbl">Total Trades</div>
+        <div class="stat-val">{{ stats.trade_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  {% else %}
+  <!-- EMPTY STATE -->
+  <div class="card-empty">
+    <div class="card-empty-icon">📊</div>
+    No trades recorded yet for this wallet.<br>
+    Start the bot and your stats will appear here.
+  </div>
+  {% endif %}
+
+  <!-- FOOTER -->
+  <div class="card-footer">
+    <div class="footer-url">orcagent.fun · <span id="footer-url-text">{{ card_url }}</span></div>
+    <div class="footer-btns">
+      <span class="copy-msg" id="copy-msg"></span>
+      <button class="footer-btn primary" onclick="copyCardLink()">📋 Copy Link</button>
+      <a href="/" class="footer-btn">⬡ Dashboard</a>
+    </div>
+  </div>
+</div>
+
+<script>
+const CARD_URL = {{ card_url | tojson }};
+function copyCardLink() {
+  const done = () => {
+    const msg = document.getElementById('copy-msg');
+    msg.textContent = '✓ Copied!';
+    setTimeout(() => { msg.textContent = ''; }, 2000);
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(CARD_URL).then(done).catch(fallback);
+  } else {
+    fallback();
+  }
+  function fallback() {
+    const ta = document.createElement('textarea');
+    ta.value = CARD_URL;
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch(_) {}
+    document.body.removeChild(ta);
+    done();
+  }
+}
+</script>
+</body>
+</html>

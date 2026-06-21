@@ -49,6 +49,7 @@ def _security_gate():
                                 f'request body on {request.path} from {ip}')
     if not _rate_ok('global:' + ip, 60, 60):
         return jsonify({'error': 'Too many requests'}), 429
+    _ext_hit('api')
     return None
 
 @app.before_request
@@ -322,9 +323,23 @@ _SUSPICIOUS_INPUT_RE = re.compile(
 # ── RATE LIMITING ──
 _rl_lock: threading.Lock = threading.Lock()
 _rl_hits: dict           = {}
+_rl_blocked: dict        = {}  # key → list of block timestamps (for rate-stats dashboard)
 # threading.Lock is a factory function, not a class — capture the actual type once
 # so isinstance() checks in _run_security_checks() work correctly.
 _THREADING_LOCK_TYPE = type(_rl_lock)
+
+# ── EXTERNAL API CALL COUNTERS ──
+_ext_lock  = threading.Lock()
+# Timestamp lists; filtered to last 24 h for "today" stats, last 1 h for rate-stats.
+_ext_calls: dict = {'api': [], 'dexscreener': [], 'jupiter': []}
+
+def _ext_hit(category: str) -> None:
+    """Record one external or internal API call for admin observability."""
+    now = time.time()
+    with _ext_lock:
+        lst = _ext_calls.get(category)
+        if lst is not None:
+            lst.append(now)
 
 def _rate_ok(key: str, limit: int, window: int) -> bool:
     now = time.time()
@@ -336,6 +351,14 @@ def _rate_ok(key: str, limit: int, window: int) -> bool:
         hits.append(now)
         _rl_hits[key] = hits
         return True
+
+def _record_block(key: str) -> None:
+    """Record that a rate-limit block occurred for this key (for admin observability)."""
+    now = time.time()
+    with _rl_lock:
+        hits = [t for t in _rl_blocked.get(key, []) if now - t < 3600]
+        hits.append(now)
+        _rl_blocked[key] = hits
 
 def rate_limit(limit: int, window: int = 60, ban: bool = False):
     """Sliding-window rate limiter.  When ban=True, repeated overages trigger the
@@ -354,6 +377,7 @@ def rate_limit(limit: int, window: int = 60, ban: bool = False):
                 return jsonify({'ok': False, 'msg': 'Too many requests — slow down'}), 429
             key = f.__name__ + ':' + ip
             if not _rate_ok(key, limit, window):
+                _record_block(key)
                 if ban:
                     # Only ban for extreme volume — 100+ req/min on this endpoint
                     _now = time.time()
@@ -374,11 +398,19 @@ def _cleanup_loop():
     while True:
         time.sleep(300)
         now = time.time()
-        # Evict expired rate-limit buckets
+        # Evict expired rate-limit buckets and block records
         with _rl_lock:
             stale = [k for k, hits in _rl_hits.items() if not any(now - t < 120 for t in hits)]
             for k in stale:
                 del _rl_hits[k]
+            stale_b = [k for k, hits in _rl_blocked.items() if not any(now - t < 3600 for t in hits)]
+            for k in stale_b:
+                del _rl_blocked[k]
+        # Trim external-call lists to last 25 h (keeps "today" window fresh)
+        _cutoff_ext = now - 90000
+        with _ext_lock:
+            for cat in list(_ext_calls.keys()):
+                _ext_calls[cat] = [t for t in _ext_calls[cat] if t > _cutoff_ext]
         # Evict expired IP bans and stale warn records
         for ip in list(_ip_ban.keys()):
             if now >= _ip_ban[ip]:
@@ -1159,6 +1191,7 @@ def _dex_get(url: str, timeout: int = 10):
         if time.time() < _dex_429_until:
             return None
     try:
+        _ext_hit('dexscreener')
         r = requests.get(url, headers=_DEX_HEADERS, timeout=timeout)
         if r.status_code == 429:
             with _dex_lock:
@@ -1790,6 +1823,7 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
         env['WALLET_PRIVATE_KEY'] = private_key
+        _ext_hit('jupiter')
         result = subprocess.run(
             [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), action, mint, amount_str],
             env=env, capture_output=True, text=True, timeout=30
@@ -2364,6 +2398,94 @@ def referral_redirect(code):
     if code and _REF_CODE_RE.match(code):
         session['pending_referral'] = code.upper()
     return redirect('/')
+
+
+def _pnl_card_stats(wallet_addr: str) -> dict | None:
+    """Return all-time trade stats for a wallet, or None if no trades exist."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute('''
+            SELECT
+                ROUND(SUM(t.pnl), 4)                                                  AS total_pnl,
+                ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
+                      * 100.0 / COUNT(*), 1)                                          AS win_rate,
+                COUNT(*)                                                               AS trade_count,
+                ROUND(MAX(t.pnl), 4)                                                  AS best_trade,
+                ROUND(MIN(t.pnl), 4)                                                  AS worst_trade
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE u.wallet_address = ?
+        ''', (wallet_addr,))
+        row = c.fetchone()
+        conn.close()
+    except Exception as e:
+        print(f'[pnl_card] DB error for {wallet_addr[:8]}: {e}', flush=True)
+        return None
+    if not row or not row[2]:
+        return None
+    total_pnl, win_rate, trade_count, best_trade, worst_trade = row
+    anon = (wallet_addr[:4] + '...' + wallet_addr[-4:]) if len(wallet_addr) >= 8 else wallet_addr
+    return {
+        'wallet':      anon,
+        'total_pnl':   round(float(total_pnl   or 0), 4),
+        'win_rate':    round(float(win_rate     or 0), 1),
+        'trade_count': int  (trade_count        or 0),
+        'best_trade':  round(float(best_trade   or 0), 4),
+        'worst_trade': round(float(worst_trade  or 0), 4),
+    }
+
+
+@app.route('/api/pnl_card/<wallet_addr>')
+@rate_limit(60, 60)
+def api_pnl_card(wallet_addr):
+    """Public — returns all-time stats for a wallet without revealing the full address."""
+    if not is_valid_solana_address(wallet_addr):
+        return jsonify({'ok': False, 'error': 'Invalid wallet address'}), 400
+    stats = _pnl_card_stats(wallet_addr)
+    if stats is None:
+        return jsonify({'ok': False, 'error': 'No trades found for this wallet'}), 404
+    return jsonify({'ok': True, **stats})
+
+
+@app.route('/card/<wallet_addr>')
+def pnl_card_page(wallet_addr):
+    """Public shareable PnL card page — no login required."""
+    if not is_valid_solana_address(wallet_addr):
+        return 'Invalid wallet address', 400
+    stats    = _pnl_card_stats(wallet_addr)
+    card_url = 'https://orcagent.fun/card/' + wallet_addr
+    return render_template('card.html', stats=stats, card_url=card_url)
+
+
+@app.route('/api/referral')
+@rate_limit(30, 60)
+def api_referral():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'error': 'not logged in'}), 401
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute(
+            'SELECT referral_code, referral_count, referred_by FROM users WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+        conn.close()
+    except Exception as e:
+        print(f'[api_referral] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'error': 'db error'}), 500
+    if not row:
+        return jsonify({'ok': False, 'error': 'user not found'}), 404
+    code, referral_count, referred_by = row
+    referral_link = f'https://orcagent.fun/ref/{code}' if code else None
+    return jsonify({
+        'ok':             True,
+        'code':           code or '',
+        'referral_link':  referral_link or '',
+        'referral_count': int(referral_count or 0),
+        'has_discount':   bool(referred_by),
+        'referred_count': int(referral_count or 0),
+    })
 
 
 @app.route('/leaderboard')
@@ -3537,6 +3659,140 @@ def api_pump_scanner_buy():
     note = '' if us.get('trader_running') else ' — start the trader for automatic TP/SL on this position'
     return jsonify({'ok': True, 'msg': 'Bought ' + pos['symbol'] + note, 'symbol': pos['symbol'], 'spend': spend})
 
+@app.route('/api/manual_buy', methods=['POST'])
+@rate_limit(10, 60)
+def api_manual_buy():
+    ip     = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    mint = str((request.json or {}).get('mint_address', '')).strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False,
+                        'msg': 'Trading suspended — contact admin to resume.'}), 503
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    enc_blob       = row[0]
+    min_trade_usdc = float(row[1]) if row[1] is not None else 1.0
+
+    us           = get_user_state(wallet)
+    open_pos     = sum(1 for p in us['positions'].values() if p.get('amount', 0) > 0)
+    already_held = us['positions'].get(mint, {}).get('amount', 0) > 0
+    if open_pos >= 5 and not already_held:
+        return jsonify({'ok': False, 'msg': 'Max 5 positions reached — sell one first'}), 400
+
+    token_data = get_token_data(mint)
+    if not token_data or token_data['price'] <= 0:
+        return jsonify({'ok': False, 'msg': 'Could not fetch a live price for this token'}), 400
+
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            from solders.keypair import Keypair as _KP_mb
+            trading_wallet = str(_KP_mb.from_base58_string(_pk).pubkey())
+    except InvalidToken:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    except Exception as e:
+        print(f'[manual-buy] key error for {wallet[:6]}...{wallet[-4:]}: {type(e).__name__}: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+
+    us_sol = _get_user_sol(trading_wallet)
+    if us_sol < 0.01:
+        return jsonify({'ok': False, 'low_balance': True, 'trading_wallet': trading_wallet,
+                        'msg': '⚠️ Insufficient SOL balance — send SOL to your trading wallet first'}), 400
+    spend = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
+    spend = round(min(spend, us_sol), 4)
+    if spend < 0.001:
+        return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to buy'}), 400
+
+    with _use_key(enc_blob, wallet) as _pk:
+        ok = _execute_user_swap(wallet, _pk, 'buy', mint, str(spend))
+    if not ok:
+        return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
+
+    pos = us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
+    pos['amount']          = pos.get('amount', 0.0) + spend / token_data['price']
+    pos['buy_price']       = token_data['price']
+    pos['spend']           = pos.get('spend', 0.0) + spend
+    pos['symbol']          = token_data['symbol'] or mint[:8]
+    pos['opened_at']       = time.time()
+    pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
+    us['positions'][mint]  = pos
+    short = wallet[:6] + '...' + wallet[-4:]
+    add_user_log(wallet, '[' + short + '] MANUAL BUY: ' + pos['symbol'] +
+                 ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
+    note = '' if us.get('trader_running') else ' — start the bot for automatic TP/SL'
+    return jsonify({'ok': True, 'msg': 'Bought ' + pos['symbol'] + note,
+                    'symbol': pos['symbol'], 'spend': spend})
+
+
+@app.route('/api/manual_sell', methods=['POST'])
+@rate_limit(10, 60)
+def api_manual_sell():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    mint = str((request.json or {}).get('mint_address', '')).strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False,
+                        'msg': 'Trading suspended — contact admin to resume.'}), 503
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    user_id, enc_blob = row
+    us  = get_user_state(wallet)
+    pos = us.get('positions', {}).get(mint)
+    if not pos or pos.get('amount', 0) <= 0:
+        return jsonify({'ok': False, 'msg': 'No open position for this token'}), 400
+    amount = pos['amount']
+    symbol = pos.get('symbol', mint[:8])
+    entry  = pos.get('buy_price', 0.0)
+    spend  = pos.get('spend', 0.0)
+    short  = wallet[:6] + '...' + wallet[-4:]
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(amount))
+    except InvalidToken:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    except Exception as e:
+        print(f'[manual-sell] key error for {short}: {type(e).__name__}: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    live_map  = {t['mint']: t for t in state.get('tokens', [])}
+    cur_price = live_map.get(mint, {}).get('price', entry)
+    if sell_ok:
+        with _use_key(enc_blob, wallet) as _pk:
+            _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
+                               wallet=wallet, private_key=_pk, mint=mint,
+                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0))
+        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
+    else:
+        _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
+                           mint=mint, exit_reason='MANUAL SELL',
+                           opened_at=pos.get('opened_at', 0.0))
+        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position cleared')
+    us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+    if not sell_ok:
+        return jsonify({'ok': False, 'msg': 'Sell transaction failed — check logs for details'}), 500
+    return jsonify({'ok': True, 'msg': 'Sold ' + symbol, 'symbol': symbol})
+
+
 # ── TRADER START/STOP ──
 @app.route('/api/trader/start', methods=['POST'])
 @rate_limit(5, 60)
@@ -3640,6 +3896,78 @@ def manual_sell():
     if not sell_ok:
         return jsonify({'ok': False, 'msg': 'Sell transaction failed — check logs for details'}), 500
     return jsonify({'ok': True, 'symbol': symbol})
+
+# ── WITHDRAW ──
+@app.route('/api/withdraw', methods=['POST'])
+@rate_limit(10, 60)
+def api_withdraw():
+    ip     = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'error': 'Connect a wallet first'}), 401
+
+    # Per-wallet rate limit: 3 withdrawals per hour
+    if not _rate_ok('withdraw_wallet:' + wallet, 3, 3600):
+        return jsonify({'ok': False, 'error': 'Max 3 withdrawals per hour'}), 429
+
+    body       = request.json or {}
+    to_address = str(body.get('to_address', '')).strip()
+    try:
+        amount_sol = float(body.get('amount_sol', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Invalid amount'}), 400
+
+    if not is_valid_solana_address(to_address):
+        return jsonify({'ok': False, 'error': 'Invalid destination address'}), 400
+    if amount_sol <= 0:
+        return jsonify({'ok': False, 'error': 'Amount must be greater than 0'}), 400
+    if amount_sol < 0.000001:
+        return jsonify({'ok': False, 'error': 'Minimum withdrawal is 0.000001 SOL'}), 400
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'error': 'No trading key saved — add it in Settings first'}), 400
+    enc_blob = row[0]
+
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            from solders.keypair import Keypair as _KP_wd
+            trading_wallet = str(_KP_wd.from_base58_string(_pk).pubkey())
+    except InvalidToken:
+        return jsonify({'ok': False, 'error': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    except Exception as e:
+        short = wallet[:6] + '...' + wallet[-4:]
+        print(f'[withdraw] key error for {short}: {type(e).__name__}: {e}', flush=True)
+        return jsonify({'ok': False, 'error': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+
+    FEE_RESERVE = 0.001  # keep to cover network fee
+    balance = _get_user_sol(trading_wallet)
+    if balance < amount_sol + FEE_RESERVE:
+        available = max(0.0, round(balance - FEE_RESERVE, 6))
+        return jsonify({'ok': False,
+                        'error': f'Insufficient balance. Available: {available} SOL (0.001 reserved for fees)'}), 400
+
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            sig = send_sol_fee(_pk, to_address, amount_sol)
+    except Exception as e:
+        err = _redact_keys(str(e))
+        short = wallet[:6] + '...' + wallet[-4:]
+        print(f'[withdraw] TX failed for {short}: {err}', flush=True)
+        return jsonify({'ok': False, 'error': 'Transaction failed: ' + err}), 500
+
+    short = wallet[:6] + '...' + wallet[-4:]
+    add_user_log(wallet, f'[{short}] WITHDRAW: {amount_sol} SOL → {to_address[:8]}...{to_address[-4:]}  TX:{sig[:16]}...')
+    print(f'[withdraw] {short} sent {amount_sol} SOL to {to_address[:8]}...  TX:{sig[:20]}...', flush=True)
+    return jsonify({'ok': True, 'signature': sig})
+
 
 # ── BALANCE ──
 @app.route('/api/balance')
@@ -4638,6 +4966,54 @@ def admin_force_close_all():
             failed += 1
     print(f'[admin] force-close-all {target[:8]}… closed={closed} failed={failed}', flush=True)
     return jsonify({'ok': True, 'msg': f'Closed {closed} position(s)' + (f', {failed} failed' if failed else '')})
+
+@app.route('/api/admin/rate-stats')
+@rate_limit(20, 60)
+def admin_rate_stats():
+    caller = _current_wallet()
+    if not caller or not _is_owner(caller):
+        return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+
+    now        = time.time()
+    hour_ago   = now - 3600
+    # UTC midnight: floor to 86400 s boundary
+    today_start = now - (now % 86400)
+
+    with _ext_lock:
+        api_today = sum(1 for t in _ext_calls['api']         if t >= today_start)
+        jup_today = sum(1 for t in _ext_calls['jupiter']     if t >= today_start)
+        dex_today = sum(1 for t in _ext_calls['dexscreener'] if t >= today_start)
+
+    # Aggregate per-endpoint request and block counts for the last hour.
+    # Keys in _rl_hits/blocked are "function_name:ip" or special forms like
+    # "global:ip" and "withdraw_wallet:wallet" — split on the FIRST colon.
+    ep_hits    = {}
+    ep_blocked = {}
+    with _rl_lock:
+        for key, hits in _rl_hits.items():
+            ep = key.split(':', 1)[0]
+            ep_hits[ep] = ep_hits.get(ep, 0) + sum(1 for t in hits if t >= hour_ago)
+        for key, hits in _rl_blocked.items():
+            ep = key.split(':', 1)[0]
+            ep_blocked[ep] = ep_blocked.get(ep, 0) + sum(1 for t in hits if t >= hour_ago)
+
+    all_eps = set(ep_hits) | set(ep_blocked)
+    endpoints = sorted(
+        [{'endpoint': ep,
+          'requests_1h': ep_hits.get(ep, 0),
+          'blocked_1h':  ep_blocked.get(ep, 0)}
+         for ep in all_eps if ep_hits.get(ep, 0) or ep_blocked.get(ep, 0)],
+        key=lambda x: (-x['blocked_1h'], -x['requests_1h']),
+    )
+
+    return jsonify({
+        'ok':                    True,
+        'api_calls_today':       api_today,
+        'jupiter_calls_today':   jup_today,
+        'dexscreener_calls_today': dex_today,
+        'endpoints':             endpoints,
+    })
+
 
 @app.route('/api/admin/backups')
 @rate_limit(20, 60)
