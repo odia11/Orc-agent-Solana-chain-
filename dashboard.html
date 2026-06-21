@@ -5514,7 +5514,7 @@ function openDepositModal() {
   document.getElementById('dep-copy-msg').textContent = '';
   document.getElementById('dep-copy-btn').textContent = '📋';
   const qrEl = document.getElementById('dep-qr');
-  qrEl.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(phantomKey) + '" style="width:180px;height:180px;border-radius:4px" alt="QR code">';
+  qrEl.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(phantomKey) + '" style="width:180px;height:180px;border-radius:4px" alt="QR code" onerror="this.parentElement.innerHTML=\'<p style=\\\'color:var(--muted);font-size:10px\\\'>QR unavailable</p>\'">';
 }
 
 function closeDepositModal() {
