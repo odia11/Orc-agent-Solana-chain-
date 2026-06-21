@@ -759,6 +759,20 @@ def init_db():
     conn.commit()
     conn.close()
 
+def run_migrations():
+    con = sqlite3.connect(DB_FILE)
+    for sql in [
+        "ALTER TABLE users ADD COLUMN referral_code TEXT",
+        "ALTER TABLE users ADD COLUMN referred_by TEXT",
+        "ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0",
+    ]:
+        try:
+            con.execute(sql)
+            con.commit()
+        except Exception:
+            pass
+    con.close()
+
 # ── SECURITY HELPERS ──
 # Matches base58 strings 87-88 chars long — Solana private key length.
 # Also matches TX signatures; actively block only on key-sensitive API paths.
@@ -5603,6 +5617,7 @@ if not OWNER_WALLET:
     print('         is_admin will never be true for any user.')
     print('         Set OWNER_WALLET in Railway Variables and redeploy.')
 init_db()
+run_migrations()
 _load_banned_ips()
 def _heartbeat_loop():
     while True:
