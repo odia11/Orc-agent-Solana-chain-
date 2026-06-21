@@ -603,12 +603,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .ps-chg.up{background:rgba(0,255,136,.1);color:var(--green);border:1px solid rgba(0,255,136,.25)}
 .ps-chg.dn{background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.25)}
 .ps-btns{display:flex;gap:6px}
-.ps-buy-btn{flex:1;background:rgba(0,255,136,.13);border:1px solid rgba(0,255,136,.38);border-radius:6px;padding:7px 0;font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--green);cursor:pointer;letter-spacing:.08em;transition:all .15s}
-.ps-buy-btn:hover:not(:disabled){background:rgba(0,255,136,.24);border-color:var(--green)}
-.ps-buy-btn:disabled{opacity:.4;cursor:not-allowed}
-.ps-sell-btn{flex:1;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.32);border-radius:6px;padding:7px 0;font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--red);cursor:pointer;letter-spacing:.08em;transition:all .15s}
-.ps-sell-btn:hover:not(:disabled){background:rgba(255,77,106,.2);border-color:var(--red)}
-.ps-sell-btn:disabled{opacity:.4;cursor:not-allowed}
+.ps-buy-btn{flex:1;background:#00ff88;border:1px solid #00ff88;border-radius:6px;padding:7px 0;font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:#060d08;cursor:pointer;letter-spacing:.08em;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;position:relative}
+.ps-buy-btn:hover:not(:disabled){background:#00e87a;border-color:#00e87a;box-shadow:0 0 14px rgba(0,255,136,.4)}
+.ps-buy-btn:disabled{opacity:.55;cursor:not-allowed}
+.ps-sell-btn{flex:1;background:#ff4444;border:1px solid #ff4444;border-radius:6px;padding:7px 0;font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:#fff;cursor:pointer;letter-spacing:.08em;transition:all .15s;display:inline-flex;align-items:center;justify-content:center;gap:5px;position:relative}
+.ps-sell-btn:hover:not(:disabled){background:#e03030;border-color:#e03030;box-shadow:0 0 14px rgba(255,68,68,.4)}
+.ps-sell-btn:disabled{opacity:.55;cursor:not-allowed}
+@keyframes ps-spin{to{transform:rotate(360deg)}}
+.ps-btn-loading::after{content:'';display:inline-block;width:8px;height:8px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:ps-spin .65s linear infinite;flex-shrink:0}
 .ps-empty{color:var(--muted);font-size:11px;text-align:center;padding:24px 0;letter-spacing:.08em;grid-column:1/-1}
 
 /* ── REFERRAL CARD ── */
@@ -1223,10 +1225,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 /* trade launch button glow */
 .trade-btn:hover:not(:disabled){
   box-shadow:0 0 16px rgba(106,163,255,.3);
-}
-/* buy button scanner glow */
-.ps-buy-btn:hover:not(:disabled){
-  box-shadow:0 0 12px rgba(0,255,136,.22);
 }
 
 /* ── PANEL HEADERS ── */
@@ -2925,13 +2923,14 @@ function renderPumpScanner(tokens){
 
 async function manualBuy(mint,symbol,btn){
   if(!btn) return;
-  btn.disabled=true; btn.textContent='Buying…';
+  btn.disabled=true; btn.textContent='BUYING'; btn.classList.add('ps-btn-loading');
   try{
     const r=await fetch('/api/manual_buy',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({mint_address:mint,symbol})
     }).then(r=>r.json()).catch(()=>null);
+    btn.classList.remove('ps-btn-loading');
     if(r?.ok){
       showLfToast('🟢',r.msg||'Bought '+symbol,'pos');
       btn.textContent='✓ BOUGHT';
@@ -2943,6 +2942,7 @@ async function manualBuy(mint,symbol,btn){
       btn.disabled=false; btn.textContent='BUY';
     }
   }catch(e){
+    btn.classList.remove('ps-btn-loading');
     showLfToast('🔴','Network error','neg');
     btn.disabled=false; btn.textContent='BUY';
   }
@@ -2950,15 +2950,16 @@ async function manualBuy(mint,symbol,btn){
 
 async function manualSell(mint,symbol,btn){
   if(!btn) return;
-  btn.disabled=true; btn.textContent='Selling…';
+  btn.disabled=true; btn.textContent='SELLING'; btn.classList.add('ps-btn-loading');
   try{
     const r=await fetch('/api/manual_sell',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({mint_address:mint})
     }).then(r=>r.json()).catch(()=>null);
+    btn.classList.remove('ps-btn-loading');
     if(r?.ok){
-      showLfToast('🔴',(r.symbol||symbol)+' sold','pos');
+      showLfToast('🟢',(r.symbol||symbol)+' sold','pos');
       if(btn) btn.style.display='none';
       await fetchState();
       fetchPumpScanner();
@@ -2967,6 +2968,7 @@ async function manualSell(mint,symbol,btn){
       btn.disabled=false; btn.textContent='SELL';
     }
   }catch(e){
+    btn.classList.remove('ps-btn-loading');
     showLfToast('🔴','Network error','neg');
     btn.disabled=false; btn.textContent='SELL';
   }
