@@ -87,6 +87,24 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .nav-av-popup-circle img{width:100%;height:100%;object-fit:cover}
 .nav-av-chg-btn{width:100%;padding:7px 0;background:var(--bg3);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;transition:border-color .15s}
 .nav-av-chg-btn:hover{border-color:var(--blue)}
+.my-profile-btn{display:inline-flex;align-items:center;gap:7px;background:transparent;border:1px solid var(--border);border-radius:20px;padding:4px 10px 4px 4px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--dim);cursor:pointer;transition:all .15s;white-space:nowrap}
+.my-profile-btn:hover{border-color:var(--green);color:var(--text)}
+.my-profile-av{width:22px;height:22px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;overflow:hidden;position:relative}
+.my-profile-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tv-me-card{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.tv-me-avatar{width:48px;height:48px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(255,255,255,.1)}
+.tv-me-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tv-me-meta{flex:1;min-width:0}
+.tv-me-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tv-me-wallet{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:6px}
+.tv-me-stats{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+.tv-me-stat{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:3px}
+.tv-me-stat strong{color:var(--text);font-family:'Orbitron',monospace;font-size:11px}
+.tv-me-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
+.tv-me-view-btn{background:transparent;border:1px solid rgba(106,163,255,.4);border-radius:6px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--blue);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-me-view-btn:hover{background:rgba(106,163,255,.08);border-color:var(--blue)}
+.tv-me-edit-btn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-me-edit-btn:hover{border-color:var(--green);color:var(--green)}
 .nav-av-msg{font-size:9px;text-align:center;min-height:12px}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
@@ -889,6 +907,10 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .tvp-stat5:nth-child(4){border-right:none}
   .tvp-stat5:nth-child(1),.tvp-stat5:nth-child(2),.tvp-stat5:nth-child(3),.tvp-stat5:nth-child(4){border-bottom:1px solid rgba(255,255,255,.07)}
   .tvp-stat5:nth-child(5){grid-column:1/-1;border-right:none}
+  .tv-me-card{flex-wrap:wrap}
+  .tv-me-actions{flex-direction:row;width:100%}
+  .tv-me-view-btn,.tv-me-edit-btn{flex:1}
+  .my-profile-btn{display:none!important}
 }
 
 /* ── DAILY LEADERBOARD ── */
@@ -1645,6 +1667,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
           <div class="nav-av-msg" id="nav-avatar-msg"></div>
         </div>
       </div>
+      <button class="my-profile-btn" id="my-profile-btn" style="display:none" onclick="if(_myProfileId)openProfileCard(_myProfileId)" title="My Profile">
+        <div class="my-profile-av" id="my-profile-av" style="background:#1a3050">
+          <img id="my-profile-av-img" style="display:none;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none';document.getElementById('my-profile-av-ini').style.display=''">
+          <span id="my-profile-av-ini"></span>
+        </div>
+        <span id="my-profile-name">Profile</span>
+      </button>
       <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
         <span class="health-dot" id="health-dot"></span>HEALTH
       </button>
@@ -2066,6 +2095,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
       <!-- Left 65%: Activity Feed -->
       <div class="tv-main">
+        <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
         <div class="tv-panel">
           <div class="tv-section-hdr">⚡ Recent Activity</div>
           <div class="tv-feed-tabs">
@@ -2335,6 +2365,7 @@ function doLogout(){
   document.getElementById('withdraw-sol-btn').style.display='none';
   document.getElementById('perf-share-btns').style.display='none';
   _resetBadges();
+  _resetMyProfile();
   _copySource=null; _updateCopyPill();
   document.getElementById('app').style.display='none';
   document.getElementById('onboard').classList.remove('hide');
@@ -2475,6 +2506,7 @@ async function launchApp(){
   fetchLeaderboard();
   fetchBadges();
   fetchCopyStatus();
+  fetchMyProfile();
   fetchPumpScanner();
 }
 
@@ -3065,6 +3097,83 @@ async function fetchBadges(){
 function _resetBadges(){
   const row = document.getElementById('badges-row');
   if(row){ row.innerHTML=''; row.style.display='none'; }
+}
+
+// ── MY PROFILE ──
+let _myProfileId=null, _myProfileData=null;
+
+async function fetchMyProfile(){
+  if(!phantomKey) return;
+  try{
+    const r=await fetch('/api/profile/me').then(r=>r.json()).catch(()=>null);
+    if(!r?.ok) return;
+    _myProfileId=r.user_id;
+    _myProfileData=r;
+    _updateMyProfileBtn();
+    _updateTvMeCard();
+  }catch(e){}
+}
+
+function _updateMyProfileBtn(){
+  const btn=document.getElementById('my-profile-btn');
+  if(!btn||!_myProfileData) return;
+  const p=_myProfileData;
+  const bg=_tvAvatarColor(p.username||'?');
+  const ini=(p.username||'?')[0].toUpperCase();
+  const avDiv=document.getElementById('my-profile-av');
+  const avImg=document.getElementById('my-profile-av-img');
+  const avIni=document.getElementById('my-profile-av-ini');
+  if(avDiv) avDiv.style.background=bg;
+  if(p.avatar_url&&avImg){
+    avImg.src=p.avatar_url; avImg.style.display='block';
+    if(avIni) avIni.style.display='none';
+  } else {
+    if(avImg) avImg.style.display='none';
+    if(avIni){ avIni.textContent=ini; avIni.style.display=''; }
+  }
+  const nameEl=document.getElementById('my-profile-name');
+  if(nameEl) nameEl.textContent=p.username||p.wallet;
+  btn.style.display='';
+}
+
+function _updateTvMeCard(){
+  const card=document.getElementById('tv-me-card');
+  if(!card||!_myProfileData||!phantomKey){ if(card) card.style.display='none'; return; }
+  const p=_myProfileData;
+  const bg=_tvAvatarColor(p.username||'?');
+  const ini=esc((p.username||'?')[0].toUpperCase());
+  const avHtml=p.avatar_url
+    ?`<div class="tv-me-avatar" style="background:${bg}"><img src="${p.avatar_url}" alt="" onerror="this.style.display='none'"><span style="position:relative;z-index:1">${ini}</span></div>`
+    :`<div class="tv-me-avatar" style="background:${bg}">${ini}</div>`;
+  const todayPnl=p.today_pnl??0;
+  const todayPos=todayPnl>=0;
+  const pnlColor=todayPos?'var(--green)':'var(--red)';
+  const pnlStr=(todayPos?'+':'')+todayPnl.toFixed(4)+' SOL';
+  card.innerHTML=`
+    ${avHtml}
+    <div class="tv-me-meta">
+      <div class="tv-me-name">${esc(p.username||p.wallet)}</div>
+      <div class="tv-me-wallet">${esc(p.wallet)}</div>
+      <div class="tv-me-stats">
+        <span class="tv-me-stat"><strong>${p.follower_count??0}</strong>&nbsp;Followers</span>
+        <span class="tv-me-stat"><strong>${p.following_count??0}</strong>&nbsp;Following</span>
+        <span class="tv-me-stat"><strong>${p.today_trades??0}</strong>&nbsp;Trades today</span>
+        <span class="tv-me-stat" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong>&nbsp;PnL today</span>
+      </div>
+    </div>
+    <div class="tv-me-actions">
+      <button class="tv-me-view-btn" onclick="if(_myProfileId)openProfileCard(_myProfileId)">View Profile</button>
+      <button class="tv-me-edit-btn" onclick="openSettings()">Edit Profile</button>
+    </div>`;
+  card.style.display='flex';
+}
+
+function _resetMyProfile(){
+  _myProfileId=null; _myProfileData=null;
+  const btn=document.getElementById('my-profile-btn');
+  if(btn) btn.style.display='none';
+  const card=document.getElementById('tv-me-card');
+  if(card){ card.innerHTML=''; card.style.display='none'; }
 }
 
 // ── COPY TRADING ──
@@ -4654,6 +4763,7 @@ function openTradersView(){
   document.getElementById('dash-traders').style.display='';
   const btn=document.getElementById('traders-btn');
   if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(0,255,136,.08)';}
+  if(_myProfileData) _updateTvMeCard();
   fetchTradersFeed();
 }
 
@@ -4675,6 +4785,8 @@ function closeTradersView(){
   const el=document.getElementById('tv-countdown'); if(el) el.textContent='';
   const btn=document.getElementById('traders-btn');
   if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
+  const meCard=document.getElementById('tv-me-card');
+  if(meCard) meCard.style.display='none';
 }
 
 // ── TRADER PROFILE CARD ──

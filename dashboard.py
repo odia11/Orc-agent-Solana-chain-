@@ -3364,6 +3364,44 @@ def social_feed():
     return jsonify(feed[:50])
 
 # ── PROFILE ──
+@app.route('/api/profile/me', methods=['GET'])
+@rate_limit(60, 60)
+def api_profile_me():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT id, username, avatar_url FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        uid, username, avatar_url = row
+        follower_count  = (conn.execute('SELECT COUNT(*) FROM follows WHERE following_id=?', (uid,)).fetchone() or [0])[0]
+        following_count = (conn.execute('SELECT COUNT(*) FROM follows WHERE follower_id=?',  (uid,)).fetchone() or [0])[0]
+        today_row = conn.execute(
+            'SELECT COUNT(*), COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND date(timestamp)=?',
+            (uid, today)
+        ).fetchone()
+    finally:
+        conn.close()
+    short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    display = username if username else short
+    return jsonify({
+        'ok':             True,
+        'user_id':        uid,
+        'username':       display,
+        'avatar_url':     avatar_url or '',
+        'wallet':         short,
+        'follower_count': int(follower_count),
+        'following_count':int(following_count),
+        'today_trades':   int(today_row[0] or 0) if today_row else 0,
+        'today_pnl':      round(float(today_row[1] or 0), 6) if today_row else 0.0,
+    })
+
+
 @app.route('/api/profile/<int:user_id>', methods=['GET'])
 @rate_limit(60, 60)
 def get_profile(user_id: int):
