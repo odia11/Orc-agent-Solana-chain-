@@ -317,7 +317,15 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .pnlc-btn:hover{border-color:#00ff88;color:#00ff88}
 .pnlc-btn.active{border-color:#00ff88;color:#00ff88;background:rgba(0,255,136,.08)}
 #pnlc-container{height:200px;position:relative;background:#0a0e1a;border-radius:6px;overflow:hidden}
-#pnlc-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.1em;pointer-events:none}
+#pnlc-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:none}
+@keyframes pnlce-scan{from{transform:translateX(-80px)}to{transform:translateX(2000px)}}
+@keyframes pnlce-pulse{from{opacity:.4;text-shadow:0 0 6px rgba(0,255,136,.3)}to{opacity:1;text-shadow:0 0 18px rgba(0,255,136,.7)}}
+.pnlce-grid{position:absolute;inset:0;background-image:linear-gradient(rgba(0,255,136,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.035) 1px,transparent 1px);background-size:40px 40px}
+.pnlce-scan{position:absolute;top:0;bottom:0;left:0;width:80px;background:linear-gradient(90deg,transparent,rgba(0,255,136,.18),transparent);animation:pnlce-scan 2s linear infinite}
+.pnlce-body{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:0 16px}
+.pnlce-icon{filter:drop-shadow(0 0 10px rgba(0,255,136,.55))}
+.pnlce-title{color:#00ff88;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:3px;animation:pnlce-pulse 1.5s ease-in-out infinite alternate}
+.pnlce-stats{display:flex;gap:24px;font-size:10px;color:var(--muted);letter-spacing:.12em;font-family:'Share Tech Mono',monospace;margin-top:2px}
 /* Admin panel */
 .admin-panel{background:var(--bg2);border:2px solid rgba(255,77,106,.5);border-radius:10px;padding:16px;margin-bottom:1.25rem;box-shadow:0 0 0 1px rgba(255,77,106,.1),0 4px 28px rgba(255,77,106,.1)}
 .admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.25);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
@@ -1928,7 +1936,25 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
     </div>
     <div id="pnlc-container">
-      <div id="pnlc-empty">NO TRADES YET</div>
+      <div id="pnlc-empty">
+        <div class="pnlce-grid"></div>
+        <div class="pnlce-scan"></div>
+        <div class="pnlce-body">
+          <svg class="pnlce-icon" width="44" height="44" viewBox="0 0 160 160" fill="none">
+            <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00ff88" stroke-width="5"/>
+            <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00ff88" stroke-width="4"/>
+            <circle cx="62" cy="52" r="9" fill="#00ff88"/>
+            <circle cx="98" cy="52" r="9" fill="#00ff88"/>
+            <circle cx="64" cy="50" r="3" fill="black"/>
+            <circle cx="100" cy="50" r="3" fill="black"/>
+          </svg>
+          <div class="pnlce-title">START TRADING TO SEE YOUR PnL</div>
+          <div class="pnlce-stats">
+            <span>TRADES: --</span>
+            <span>WIN RATE: --</span>
+          </div>
+        </div>
+      </div>
     </div>
   </div>
 
