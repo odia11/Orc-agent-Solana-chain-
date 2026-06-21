@@ -1245,6 +1245,28 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   box-shadow:0 0 16px rgba(106,163,255,.3);
 }
 
+/* ── BADGES ── */
+.badges-row{display:flex;flex-wrap:wrap;gap:5px}
+.badge-pill{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:3px 9px;border-radius:20px;
+  font-size:11px;font-weight:500;letter-spacing:.01em;
+  background:#1a2035;border:1px solid rgba(255,255,255,.12);
+  white-space:nowrap;cursor:default;
+  font-family:'Inter',sans-serif;
+  position:relative;transition:opacity .15s;
+}
+.badge-pill.earned{color:var(--text);border-color:var(--bp-color,rgba(0,255,136,.35))}
+.badge-pill.locked{color:var(--muted);opacity:.38;filter:grayscale(1);border-color:rgba(255,255,255,.07)}
+.badge-pill[title]:hover::after{
+  content:attr(title);
+  position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
+  background:#0d1421;border:1px solid rgba(255,255,255,.13);
+  border-radius:6px;padding:5px 10px;font-size:10px;color:var(--dim);
+  white-space:nowrap;z-index:200;pointer-events:none;letter-spacing:.03em;
+  box-shadow:0 4px 16px rgba(0,0,0,.5);
+}
+
 /* ── PANEL HEADERS ── */
 .panel-hdr{
   font-family:'Inter',sans-serif;
@@ -1641,6 +1663,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-sub">max 5 concurrent</div>
     </div>
   </div>
+  <div id="badges-row" class="badges-row" style="display:none;margin-bottom:.75rem"></div>
   <div id="claim-msg" class="claim-msg" style="display:none"></div>
 
   <!-- SOL WARNING -->
@@ -2304,6 +2327,7 @@ function doLogout(){
   document.getElementById('withdraw-sol-btn').style.display='none';
   document.getElementById('perf-share-btns').style.display='none';
   _resetRefCard();
+  _resetBadges();
   document.getElementById('app').style.display='none';
   document.getElementById('onboard').classList.remove('hide');
   document.getElementById('s-sol').innerHTML='<span class="stat-placeholder">——</span>';
@@ -2442,6 +2466,7 @@ async function launchApp(){
   fetchPnlChart();
   fetchLeaderboard();
   fetchReferral();
+  fetchBadges();
   fetchPumpScanner();
 }
 
@@ -2990,6 +3015,48 @@ async function manualSell(mint,symbol,btn){
     showLfToast('🔴','Network error','neg');
     btn.disabled=false; btn.textContent='SELL';
   }
+}
+
+// ── BADGE SYSTEM ──
+const BADGE_META = {
+  '🔥 Hot Streak':    { desc:'5+ consecutive winning trades',      color:'rgba(255,107,53,.45)' },
+  '💎 Diamond Hands': { desc:'Held a position for 30+ minutes',    color:'rgba(185,242,255,.38)' },
+  '🐋 Whale':         { desc:'Single trade volume over 1 SOL',     color:'rgba(106,163,255,.45)' },
+  '⚡ Speed Trader':  { desc:'10+ trades in a single day',         color:'rgba(255,215,0,.42)' },
+  '🎯 Sharp Shooter': { desc:'Win rate over 70% with 20+ trades',  color:'rgba(0,255,136,.42)' },
+  '🏆 Top Earner':    { desc:'All-time PnL over 5 SOL',            color:'rgba(255,193,58,.45)' },
+};
+const ALL_BADGES = Object.keys(BADGE_META);
+
+function _badgePillHtml(name, earned, compact=false){
+  const meta = BADGE_META[name];
+  if(!meta) return '';
+  const sz = compact ? 'style="font-size:9px;padding:2px 7px"' : '';
+  if(earned){
+    return `<span class="badge-pill earned" style="--bp-color:${meta.color}" title="${meta.desc}" ${sz}>${name}</span>`;
+  }
+  const label = name.replace(/^\S+\s/,'');
+  return `<span class="badge-pill locked" title="${meta.desc}" ${sz}>🔒 ${label}</span>`;
+}
+
+function _badgeRowHtml(earnedList, showLocked=true, compact=false){
+  const earned = new Set(earnedList);
+  return ALL_BADGES.map(b => (earned.has(b)||showLocked) ? _badgePillHtml(b, earned.has(b), compact) : '').join('');
+}
+
+async function fetchBadges(){
+  if(!phantomKey){ _resetBadges(); return; }
+  const r = await fetch('/api/badges/'+phantomKey).then(r=>r.json()).catch(()=>null);
+  if(!r?.ok){ _resetBadges(); return; }
+  const row = document.getElementById('badges-row');
+  if(!row) return;
+  row.innerHTML = _badgeRowHtml(r.badges||[], true);
+  row.style.display = 'flex';
+}
+
+function _resetBadges(){
+  const row = document.getElementById('badges-row');
+  if(row){ row.innerHTML=''; row.style.display='none'; }
 }
 
 // ── REFERRAL CARD ──
@@ -4810,6 +4877,7 @@ async function openProfileCard(userId){
           <div class="tvp-username">${esc(p.username)}</div>
           <div class="tvp-wallet">${esc(p.wallet)}</div>
           ${p.bio?`<div class="tpc-bio">${esc(p.bio)}</div>`:''}
+          ${(p.badges&&p.badges.length)?`<div class="badges-row" style="margin-top:8px">${p.badges.map(b=>_badgePillHtml(b,true)).join('')}</div>`:''}
           <div class="tvp-social-row">
             <span><strong id="tpc-follower-count">${p.follower_count}</strong> Followers</span>
             <span><strong>${p.following_count}</strong> Following</span>
@@ -4922,12 +4990,15 @@ function renderLeaderboard(entries){
     const pnlStr=(pnlPos?'+':'')+e.total_pnl.toFixed(4)+' SOL';
     const bestStr=(e.best_trade>=0?'+':'')+e.best_trade.toFixed(4);
     const uid=e.user_id||0;
+    const earnedBadges=(e.badges||[]);
+    const badgeHtml=earnedBadges.length ? `<div class="badges-row" style="margin-top:3px;gap:3px">${earnedBadges.slice(0,3).map(b=>_badgePillHtml(b,true,true)).join('')}</div>` : '';
     return `<div class="lb-row${isMe?' lb-me':''}" style="cursor:pointer" onclick="openProfileCard(${uid})">
       ${_lbRankHtml(e.rank)}
       ${_lbAvatarHtml(e,uid)}
       <div class="lb-info">
         <div class="lb-name">${esc(e.username)}</div>
         <div class="lb-meta">(${e.trade_count} trade${e.trade_count===1?'':'s'}) &nbsp;·&nbsp; best: ${esc(bestStr)}</div>
+        ${badgeHtml}
       </div>
       <div class="lb-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
     </div>`;

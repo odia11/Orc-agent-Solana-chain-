@@ -2619,7 +2619,8 @@ def leaderboard():
                 ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
                       * 100.0 / COUNT(*), 1)                                            AS win_rate,
                 COUNT(*)                                                                 AS trade_count,
-                ROUND(MAX(t.pnl), 4)                                                    AS best_trade
+                ROUND(MAX(t.pnl), 4)                                                    AS best_trade,
+                u.badges                                                                 AS badges
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
@@ -2632,7 +2633,7 @@ def leaderboard():
     except Exception as e:
         print(f'[leaderboard] DB error: {e}', flush=True)
         rows = []
-    for rank, (wallet, total_pnl, win_rate, trade_count, best_trade) in enumerate(rows, 1):
+    for rank, (wallet, total_pnl, win_rate, trade_count, best_trade, badges_str) in enumerate(rows, 1):
         wallet = wallet or ''
         is_me  = bool(session_wallet and wallet == session_wallet)
         anon   = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else (wallet or '???')
@@ -2644,6 +2645,7 @@ def leaderboard():
             'trade_count': int  (trade_count        or 0),
             'best_trade':  round(float(best_trade   or 0), 4),
             'is_me':       is_me,
+            'badges':      [b.strip() for b in (badges_str or '').split(',') if b.strip()],
         })
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
@@ -3002,7 +3004,8 @@ def get_leaderboard():
                    u.avatar_url,
                    SUM(t.pnl)  AS total_pnl,
                    COUNT(*)    AS trade_count,
-                   MAX(t.pnl)  AS best_trade
+                   MAX(t.pnl)  AS best_trade,
+                   u.badges    AS badges
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE date(t.timestamp) = date('now')
@@ -3015,7 +3018,7 @@ def get_leaderboard():
         conn.close()
     result = []
     for rank, row in enumerate(rows, 1):
-        user_id, username, wallet, avatar_url, total_pnl, trade_count, best_trade = row
+        user_id, username, wallet, avatar_url, total_pnl, trade_count, best_trade, badges_str = row
         if not username:
             username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
         result.append({
@@ -3027,6 +3030,7 @@ def get_leaderboard():
             'total_pnl':      round(float(total_pnl or 0), 6),
             'trade_count':    int(trade_count or 0),
             'best_trade':     round(float(best_trade or 0), 6),
+            'badges':         [b.strip() for b in (badges_str or '').split(',') if b.strip()],
         })
     return jsonify(result)
 
@@ -3331,7 +3335,8 @@ def get_profile(user_id: int):
                    COUNT(t.id) AS trade_count,
                    AVG(CASE WHEN t.opened_at IS NOT NULL AND t.opened_at > 0
                             THEN CAST(strftime('%s', t.timestamp) AS REAL) - t.opened_at
-                            ELSE NULL END) AS avg_hold_seconds
+                            ELSE NULL END) AS avg_hold_seconds,
+                   u.badges
             FROM users u
             LEFT JOIN trades t ON t.user_id = u.id
             WHERE u.id = ?
@@ -3341,7 +3346,7 @@ def get_profile(user_id: int):
         if not row:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
 
-        uid, username, avatar_url, bio, wallet, created_at, trade_count, avg_hold = row
+        uid, username, avatar_url, bio, wallet, created_at, trade_count, avg_hold, badges_str = row
 
         c.execute('SELECT COUNT(*) FROM follows WHERE following_id = ?', (user_id,))
         follower_count = (c.fetchone() or [0])[0]
@@ -3392,6 +3397,7 @@ def get_profile(user_id: int):
         'open_trades':     open_count,
         'closed_trades':   int(trade_count or 0),
         'total_pnl':       total_pnl,
+        'badges':          [b.strip() for b in (badges_str or '').split(',') if b.strip()],
     })
 
 # ── PROFILE TRADES ──

@@ -145,6 +145,18 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
 ::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
 *{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
 
+/* ── BADGES ── */
+.badges-row{display:flex;flex-wrap:wrap;gap:4px}
+.badge-pill{
+  display:inline-flex;align-items:center;gap:3px;
+  padding:3px 8px;border-radius:20px;
+  font-size:10px;font-weight:500;letter-spacing:.01em;
+  background:#1a2035;border:1px solid rgba(255,255,255,.12);
+  white-space:nowrap;cursor:default;font-family:'Inter',sans-serif;
+  position:relative;
+}
+.badge-pill.earned{color:#eef6ff;border-color:var(--bp-color,rgba(0,255,136,.35))}
+
 @media(max-width:768px){
   .page-title{font-size:17px}
   a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
@@ -220,6 +232,13 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
         {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f' | format(e.total_pnl) }} SOL
       </div>
       <div class="podium-meta">{{ '%.1f' | format(e.win_rate) }}% WR · {{ e.trade_count }} trades</div>
+      {% if e.badges %}
+      <div class="badges-row" style="justify-content:center;margin-top:10px">
+        {% for b in e.badges %}
+        <span class="badge-pill earned">{{ b }}</span>
+        {% endfor %}
+      </div>
+      {% endif %}
     </div>
     {% endfor %}
   </div>
@@ -260,6 +279,13 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
           <td>
             <span class="td-wallet {{ 'is-me' if e.is_me else '' }}">{{ e.wallet }}</span>
             {% if e.is_me %}<span class="me-badge">YOU</span>{% endif %}
+            {% if e.badges %}
+            <div class="badges-row" style="margin-top:5px;gap:3px">
+              {% for b in e.badges %}
+              <span class="badge-pill earned" style="font-size:9px;padding:2px 6px">{{ b }}</span>
+              {% endfor %}
+            </div>
+            {% endif %}
           </td>
           <td class="{{ 'td-pnl-pos' if e.total_pnl >= 0 else 'td-pnl-neg' }}">
             {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f' | format(e.total_pnl) }}
