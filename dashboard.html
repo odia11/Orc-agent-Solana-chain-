@@ -82,19 +82,21 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative}
-.tv-me-card{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;box-shadow:0 4px 20px rgba(0,0,0,.3)}
-.tv-me-avatar{width:48px;height:48px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(255,255,255,.1)}
+.tv-me-card{background:rgba(13,20,33,.92);backdrop-filter:blur(10px);border:1px solid rgba(0,255,136,.22);border-top:2px solid var(--green);border-radius:12px;padding:18px 20px 20px;margin-bottom:18px;display:flex;flex-direction:column;gap:12px;box-shadow:0 0 0 1px rgba(0,255,136,.06),0 6px 32px rgba(0,0,0,.45)}
+.tv-me-label{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--green);opacity:.8}
+.tv-me-inner{display:flex;align-items:center;gap:18px}
+.tv-me-avatar{width:64px;height:64px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;overflow:hidden;position:relative;border:2px solid rgba(0,255,136,.5);box-shadow:0 0 16px rgba(0,255,136,.18)}
 .tv-me-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .tv-me-meta{flex:1;min-width:0}
-.tv-me-name{font-size:15px;font-weight:700;color:var(--text);margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tv-me-wallet{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:6px}
-.tv-me-stats{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
-.tv-me-stat{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:3px}
-.tv-me-stat strong{color:var(--text);font-family:'Orbitron',monospace;font-size:11px}
-.tv-me-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0}
-.tv-me-view-btn{background:transparent;border:1px solid rgba(106,163,255,.4);border-radius:6px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--blue);cursor:pointer;transition:all .15s;white-space:nowrap}
-.tv-me-view-btn:hover{background:rgba(106,163,255,.08);border-color:var(--blue)}
-.tv-me-edit-btn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-me-name{font-size:20px;font-weight:800;color:var(--text);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
+.tv-me-wallet{font-size:10px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:8px}
+.tv-me-stats{display:flex;gap:18px;flex-wrap:wrap;align-items:baseline}
+.tv-me-stat{font-size:11px;color:var(--muted);display:flex;align-items:baseline;gap:4px}
+.tv-me-stat strong{color:var(--text);font-family:'Orbitron',monospace;font-size:16px;font-weight:700}
+.tv-me-actions{display:flex;flex-direction:column;gap:7px;flex-shrink:0}
+.tv-me-view-btn{background:transparent;border:1px solid rgba(0,255,136,.4);border-radius:6px;padding:8px 18px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tv-me-view-btn:hover{background:rgba(0,255,136,.08);border-color:var(--green)}
+.tv-me-edit-btn{background:transparent;border:1px solid var(--border2);border-radius:6px;padding:8px 18px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
 .tv-me-edit-btn:hover{border-color:var(--green);color:var(--green)}
 .nav-av-msg{font-size:9px;text-align:center;min-height:12px}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
@@ -898,7 +900,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .tvp-stat5:nth-child(4){border-right:none}
   .tvp-stat5:nth-child(1),.tvp-stat5:nth-child(2),.tvp-stat5:nth-child(3),.tvp-stat5:nth-child(4){border-bottom:1px solid rgba(255,255,255,.07)}
   .tvp-stat5:nth-child(5){grid-column:1/-1;border-right:none}
-  .tv-me-card{flex-wrap:wrap}
+  .tv-me-inner{flex-direction:column;align-items:flex-start}
   .tv-me-actions{flex-direction:row;width:100%}
   .tv-me-view-btn,.tv-me-edit-btn{flex:1}
 }
@@ -2063,12 +2065,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <!-- Profile full-page view (shown instead of tv-layout) -->
     <div id="tv-profile-view" style="display:none"></div>
 
+    <!-- Your Profile card — full width above the two-column grid -->
+    <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
+
     <!-- Two-column body -->
     <div class="tv-layout" id="tv-layout">
 
       <!-- Left 65%: Activity Feed -->
       <div class="tv-main">
-        <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
         <div class="tv-panel">
           <div class="tv-section-hdr">⚡ Recent Activity</div>
           <div class="tv-feed-tabs">
@@ -3105,20 +3109,23 @@ function _updateTvMeCard(){
   const pnlColor=todayPos?'var(--green)':'var(--red)';
   const pnlStr=(todayPos?'+':'')+todayPnl.toFixed(4)+' SOL';
   card.innerHTML=`
-    ${avHtml}
-    <div class="tv-me-meta">
-      <div class="tv-me-name">${esc(p.username||p.wallet)}</div>
-      <div class="tv-me-wallet">${esc(p.wallet)}</div>
-      <div class="tv-me-stats">
-        <span class="tv-me-stat"><strong>${p.follower_count??0}</strong>&nbsp;Followers</span>
-        <span class="tv-me-stat"><strong>${p.following_count??0}</strong>&nbsp;Following</span>
-        <span class="tv-me-stat"><strong>${p.today_trades??0}</strong>&nbsp;Trades today</span>
-        <span class="tv-me-stat" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong>&nbsp;PnL today</span>
+    <div class="tv-me-label">Your Profile</div>
+    <div class="tv-me-inner">
+      ${avHtml}
+      <div class="tv-me-meta">
+        <div class="tv-me-name">${esc(p.username||p.wallet)}</div>
+        <div class="tv-me-wallet">${esc(p.wallet)}</div>
+        <div class="tv-me-stats">
+          <span class="tv-me-stat"><strong>${p.follower_count??0}</strong>&nbsp;Followers</span>
+          <span class="tv-me-stat"><strong>${p.following_count??0}</strong>&nbsp;Following</span>
+          <span class="tv-me-stat"><strong>${p.today_trades??0}</strong>&nbsp;Trades today</span>
+          <span class="tv-me-stat" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong>&nbsp;PnL today</span>
+        </div>
       </div>
-    </div>
-    <div class="tv-me-actions">
-      <button class="tv-me-view-btn" onclick="if(_myProfileId)openProfileCard(_myProfileId)">View Profile</button>
-      <button class="tv-me-edit-btn" onclick="openSettings()">Edit Profile</button>
+      <div class="tv-me-actions">
+        <button class="tv-me-view-btn" onclick="if(_myProfileId)openProfileCard(_myProfileId)">View Profile</button>
+        <button class="tv-me-edit-btn" onclick="openSettings()">Edit Profile</button>
+      </div>
     </div>`;
   card.style.display='flex';
 }
