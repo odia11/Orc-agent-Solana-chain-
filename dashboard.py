@@ -774,6 +774,7 @@ _BASE64_BLOB_RE  = re.compile(r'^[A-Za-z0-9+/=]{200,}$')
 _SKIP_IMAGE_FIELDS = frozenset({
     'avatar', 'avatar_url', 'avatar_data',
     'profile_image', 'image', 'photo', 'picture',
+    'tx', 'signature', 'sig',
 })
 # Endpoints where any 87-88 char base58 string in the response triggers a hard block.
 # Admin endpoints that return TX hashes are excluded — TX sigs are the same length.
@@ -6025,6 +6026,15 @@ threading.Thread(target=_audit_loop,           daemon=True).start()
 threading.Thread(target=_security_check_loop,  daemon=True).start()
 _security_selftest()
 add_log('OrcAgent started')
+try:
+    _conn = sqlite3.connect(DB_FILE)
+    _n_traders = _conn.execute(
+        "SELECT COUNT(*) FROM users WHERE encrypted_private_key != '' AND encrypted_private_key IS NOT NULL"
+    ).fetchone()[0]
+    _conn.close()
+    print(f'[startup] Active traders: 0  ({_n_traders} user{"s" if _n_traders != 1 else ""} with trading key configured — start via dashboard)', flush=True)
+except Exception as _e:
+    print(f'[startup] Active traders: unknown ({_e})', flush=True)
 
 def _startup_fee_recovery():
     """One-time recovery run 30 s after boot — collects any fees missed before fee_paid tracking."""
