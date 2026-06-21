@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=1200,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta property="og:title" content="OrcAgent Trading PnL Card">
 <meta property="og:description" content="Check out my Solana trading stats on OrcAgent">
 <meta property="og:image" content="https://orcagent.fun/static/og-card.png">
@@ -280,6 +280,51 @@ html,body{
 }
 .footer-btn.primary:hover{background:rgba(var(--accent-rgb),.12)}
 .copy-msg{font-size:10px;color:var(--green);letter-spacing:.04em;min-width:60px;text-align:right;line-height:1}
+
+@media(max-width:768px){
+  /* Allow the card to reflow instead of being fixed-size */
+  html,body{
+    width:100%;
+    height:auto;
+    overflow:auto;
+    background-size:40px 40px,40px 40px,100% 100%,100% 100%,100% 100%;
+  }
+  .card{width:100%;height:auto;min-height:100vh}
+
+  /* Header */
+  .card-hdr{padding:14px 16px 12px}
+  .brand{font-size:12px}
+  .brand-sub{font-size:7px}
+  .hdr-badge{font-size:8px;padding:4px 10px;letter-spacing:.1em}
+
+  /* Body: left-align, smaller padding */
+  .card-body{padding:20px 16px 12px;justify-content:flex-start;align-items:flex-start}
+  .card-body::before{width:260px;height:180px}
+  .wallet-section{text-align:left;margin-bottom:16px}
+  .wallet-addr{font-size:10px;letter-spacing:.06em;word-break:break-all;white-space:normal}
+  .pnl-section{text-align:left;margin-bottom:12px}
+  .pnl-label{margin-bottom:6px}
+  .pnl-value{font-size:42px;letter-spacing:-.02em}
+  .pnl-sub{font-size:11px;margin-top:6px}
+
+  /* Stats: single column vertical stack */
+  .stats-row{
+    grid-template-columns:1fr;
+    padding:0 16px;
+    gap:8px;
+    margin-bottom:0;
+  }
+  .stat-tile{padding:12px 14px}
+  .stat-tile-val{font-size:20px}
+  .stat-tile-lbl{font-size:8px}
+
+  /* Footer */
+  .card-footer{padding:10px 16px;flex-wrap:wrap;gap:8px}
+  .footer-url{font-size:9px;min-width:0;width:100%;white-space:normal}
+  .footer-btns{width:100%;justify-content:flex-end}
+  .footer-btn{font-size:9px;padding:6px 12px}
+  .copy-msg{min-width:auto}
+}
 
 /* ── EMPTY STATE ── */
 .card-empty{

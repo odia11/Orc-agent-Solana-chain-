@@ -145,11 +145,23 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
 ::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
 *{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
 
-@media(max-width:600px){
-  .podium{gap:8px}.podium-card{min-width:140px;max-width:none;padding:18px 12px}
-  .podium-medal{font-size:30px}.podium-pnl{font-size:17px}
-  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
+@media(max-width:768px){
   .page-title{font-size:17px}
+  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
+
+  /* Podium: stack vertically, full width */
+  .podium{flex-direction:column;align-items:stretch;gap:10px}
+  .podium-card{min-width:unset;max-width:none;width:100%;padding:20px 16px;flex:none}
+  .podium-medal{font-size:30px}
+  .podium-pnl{font-size:18px}
+
+  /* Table: ensure min-width for horizontal scroll */
+  .table-wrap{border-radius:10px}
+  .lb-table{min-width:600px}
+
+  /* Hide Best Trade column (6th) */
+  .lb-table th:nth-child(6),
+  .lb-table td:nth-child(6){display:none}
 }
 </style>
 </head>

@@ -117,11 +117,22 @@ a.hdr-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,
 ::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
 *{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
 
-@media(max-width:600px){
-  .filter-bar{gap:8px}.filter-input{min-width:100%;width:100%}
+@media(max-width:768px){
   .page-title{font-size:16px}
   a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
+
+  /* Filter bar: vertical stack, full-width inputs */
+  .filter-bar{flex-direction:column;gap:8px;padding:12px}
+  .filter-group{width:100%}
+  .filter-input,.filter-select,.filter-date{width:100%;min-width:unset;box-sizing:border-box}
+  .filter-clear{margin-left:0;width:100%;text-align:center}
+
+  /* Summary bar: 2×2 grid */
   .summary-bar{grid-template-columns:repeat(2,1fr)}
+
+  /* Table: scrollable, reduced border-radius */
+  .table-wrap{border-radius:10px}
+  .hist-table{min-width:650px}
 }
 </style>
 </head>

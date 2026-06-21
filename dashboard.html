@@ -949,30 +949,39 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   margin-top:4px;
   flex:1;
 }
-.iadmin-table{width:100%;border-collapse:collapse;font-size:10px}
+.iadmin-table{
+  width:100%;
+  table-layout:fixed;
+  border-collapse:collapse;
+  font-size:10px;
+}
 .iadmin-table th{
-  padding:6px 10px;
+  padding:8px 12px;
   text-align:left;
-  color:rgba(240,185,11,.8);
+  color:rgba(240,185,11,.9);
   font-family:'Inter',sans-serif;
-  font-size:8px;
+  font-size:9px;
   font-weight:700;
   letter-spacing:.1em;
   text-transform:uppercase;
-  border-bottom:1px solid rgba(255,193,58,.12);
-  background:rgba(255,193,58,.04);
-  position:sticky;top:0;
+  border-bottom:2px solid rgba(255,193,58,.18);
+  background:rgba(255,193,58,.05);
+  position:sticky;top:0;z-index:1;
+  overflow:hidden;
   white-space:nowrap;
+  text-overflow:ellipsis;
 }
 .iadmin-table td{
-  padding:6px 10px;
+  padding:8px 12px;
   border-bottom:1px solid rgba(255,193,58,.05);
   color:var(--dim);
   cursor:pointer;
-  white-space:nowrap;
   font-size:10px;
   font-family:'Share Tech Mono',monospace;
   transition:background .1s;
+  overflow:hidden;
+  white-space:nowrap;
+  text-overflow:ellipsis;
 }
 .iadmin-table tbody tr:last-child td{border-bottom:none}
 .iadmin-table tbody tr:hover td{background:rgba(255,193,58,.05);color:var(--text)}
@@ -1013,50 +1022,114 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── MOBILE LAYOUT ── */
 @media(max-width:768px){
-  /* Navbar */
-  .brand-sub{display:none}
-  .hdr-btn,.hdr-btn-red{padding:5px 8px;font-size:9px}
-  .header-right{gap:5px}
-  .wallet-pill{padding:4px 9px;font-size:9px}
 
-  /* Open positions table: hide Invested column, compact text */
+  /* ── NAVBAR ── */
+  .brand-sub{display:none}
+  .brand{font-size:13px}
+  .hdr-btn,.hdr-btn-red{padding:5px 8px;font-size:9px;border-radius:6px}
+  .header-right{gap:5px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+  .header-right::-webkit-scrollbar{display:none}
+  .wallet-pill{padding:4px 9px;font-size:9px;flex-shrink:0}
+
+  /* ── LAYOUT: all cards full width ── */
+  .wrap{padding:0.75rem 0.75rem env(safe-area-inset-bottom,3rem)}
+  .stats{grid-template-columns:repeat(2,1fr);gap:8px}
+  .panels{grid-template-columns:1fr}
+  .stat,.market-panel,.perf-panel,.pos-panel,.pnlc-panel,
+  .live-feed-panel,.panel,.ref-card,.ps-panel,.lb-panel,
+  .iadmin-panel,.modes .mode{
+    padding:16px;
+    width:100%;
+  }
+
+  /* ── BALANCE STAT TILES ── */
+  .stat-val{font-size:22px}
+
+  /* ── TRADE MODE CARD ── */
+  .mode{flex-direction:column;align-items:flex-start}
+  .mode-right{width:100%}
+  .mode-btn{width:100%;text-align:center}
+
+  /* ── OPEN POSITIONS TABLE ── */
   #positions-panel .trade-table th:nth-child(5),
   #positions-panel .trade-table td:nth-child(5){display:none}
-  .pos-panel{padding:12px}
-  .trade-table{font-size:9px}
+  .pos-panel{padding:16px}
+  .trade-table-wrap{overflow-x:auto}
+  .trade-table{font-size:9px;min-width:480px}
   .trade-table th{font-size:7px;padding:5px 8px}
   .trade-table td{padding:5px 8px}
   .pos-act-wrap{flex-wrap:wrap;gap:3px}
+  .pos-sell-btn,.pos-chart-btn{font-size:9px;padding:2px 6px}
 
-  /* Live activity feed */
-  .live-feed-panel{padding:12px}
+  /* ── PNL CHART ── */
+  #pnlc-container{height:160px}
+  .slide-chart-wrap{height:160px}
+
+  /* ── PUMP SCANNER ── */
+  .ps-grid{grid-template-columns:1fr}
+
+  /* ── LIVE ACTIVITY FEED ── */
+  .live-feed-panel{padding:16px}
   .lf-amt{display:none}
 
-  /* Leaderboard compact rows */
-  .lb-panel{padding:12px}
+  /* ── LEADERBOARD WIDGET ── */
+  .lb-panel{padding:16px}
   .lb-row{padding:6px 8px;gap:7px}
   .lb-avatar{width:28px;height:28px;font-size:11px}
   .lb-name{font-size:10px}
 
-  /* Bottom padding for mobile browser chrome */
-  .wrap{padding-bottom:env(safe-area-inset-bottom,3rem)}
+  /* ── ADMIN PANEL ── */
+  .iadmin-grid{grid-template-columns:1fr}
+  .iadmin-card{padding:14px}
+
+  /* Admin user table: scrollable, fixed min-width */
+  .iadmin-card .iadmin-table-wrap{overflow-x:auto}
+  .iadmin-card .iadmin-table{min-width:600px}
+
+  /* Force action buttons: full width */
+  .iadmin-action-btns{gap:10px}
+  .iadmin-action-btn{width:100%;justify-content:flex-start}
+
+  /* Rate limit counter tiles: single column */
+  .iadmin-grid>[style*="grid-template-columns:repeat(3"]{
+    grid-template-columns:1fr!important;
+  }
+
+  /* ── BUTTONS ── */
+  .hdr-btn,.hdr-btn-red,.bot-btn{min-width:0}
+  .bottom{flex-direction:column}
+  .bot-btn{width:100%;min-width:unset}
+
+  /* ── WITHDRAW / DEPOSIT BUTTONS ── */
+  .deposit-sol-btn,.withdraw-sol-btn,.claim-sol-btn{width:auto;display:inline-block}
+
+  /* ── REFERRAL CARD ── */
+  .ref-stats-row{flex-direction:column;gap:8px}
+  .ref-stat{min-width:unset;width:100%}
 }
 
 @media(max-width:480px){
-  /* Stats: single column */
+  /* ── STATS: single column on very small screens ── */
   .stats{grid-template-columns:1fr}
-  .stat-val{font-size:15px}
+  .stat-val{font-size:18px}
   .brand{font-size:12px}
 
-  /* Positions table: also hide Opened column on very small screens */
+  /* ── POSITIONS TABLE: hide Opened column too ── */
   #positions-panel .trade-table th:nth-child(2),
   #positions-panel .trade-table td:nth-child(2){display:none}
 
-  /* Leaderboard: hide meta subtitle */
+  /* ── LEADERBOARD: hide meta subtitle ── */
   .lb-meta{display:none}
 
-  /* Header: reduce wallet pill text */
+  /* ── NAVBAR: hide wallet address text, keep dot ── */
   #wallet-short{display:none}
+
+  /* ── PNL CHART: even smaller ── */
+  #pnlc-container{height:130px}
+  .slide-chart-wrap{height:130px}
+
+  /* ── STAT TILES IN PERFORMANCE PANEL ── */
+  .perf-stats{grid-template-columns:repeat(2,1fr)}
 }
 
 /* ── LOW SOL BALANCE MODAL ── */
@@ -1704,7 +1777,24 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="iadmin-card-hdr">Users — click to select</div>
         <div class="iadmin-table-wrap">
           <table class="iadmin-table">
-            <thead><tr><th>Wallet</th><th>Bot</th><th>Pos</th><th>Trades</th><th>PnL</th><th>Last Seen</th></tr></thead>
+            <colgroup>
+              <col style="width:120px">
+              <col style="width:60px">
+              <col style="width:60px">
+              <col style="width:70px">
+              <col style="width:90px">
+              <col style="width:140px">
+            </colgroup>
+            <thead>
+              <tr>
+                <th>Wallet</th>
+                <th>Bot</th>
+                <th>Pos</th>
+                <th>Trades</th>
+                <th>PnL</th>
+                <th>Last Seen</th>
+              </tr>
+            </thead>
             <tbody id="ia-users-tbody"><tr><td colspan="6" style="text-align:center;padding:12px;color:var(--muted)">Loading…</td></tr></tbody>
           </table>
         </div>

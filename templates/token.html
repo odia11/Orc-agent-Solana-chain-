@@ -144,12 +144,29 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green
 ::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
 *{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
 
-@media(max-width:600px){
+@media(max-width:768px){
+  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
+
+  /* Token header: stack price section and links vertically */
+  .tok-hdr-top{flex-direction:column;gap:12px}
+  .tok-links{width:100%;flex-wrap:wrap}
+  .tok-ext-link{flex:1;text-align:center;min-width:80px}
+  .tok-price-row{flex-direction:column;align-items:flex-start;gap:8px}
   .tok-price{font-size:24px}
   .tok-symbol{font-size:20px}
-  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
-  #tok-chart{height:220px}
+
+  /* Stats strip: 2×2 grid */
+  .tok-stats{grid-template-columns:repeat(2,1fr)}
+
+  /* Chart: 160px */
+  #tok-chart{height:160px}
+
+  /* Summary bar: 2×2 grid */
   .summary-bar{grid-template-columns:repeat(2,1fr)}
+
+  /* Trade table: scrollable */
+  .table-wrap{border-radius:10px}
+  .hist-table{min-width:600px}
 }
 </style>
 </head>
