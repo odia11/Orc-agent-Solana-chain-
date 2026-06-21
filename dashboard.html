@@ -81,11 +81,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative;transition:border-color .15s}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim);position:relative;transition:border-color .15s;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .wallet-pill:hover{border-color:rgba(0,255,136,.45)}
 .wallet-pill:hover #wallet-short{text-decoration:underline;text-underline-offset:2px}
 .wallet-pill-hint{font-size:9px;color:var(--green);opacity:0;transition:opacity .15s;white-space:nowrap;letter-spacing:.04em}
 .wallet-pill:hover .wallet-pill-hint{opacity:1}
+#nav-avatar-img{pointer-events:none;-webkit-touch-callout:none;-webkit-user-drag:none}
 /* ── DASHBOARD PROFILE BAR ── */
 #dash-profile-bar{display:none;align-items:center;gap:14px;background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(0,255,136,.18);border-left:3px solid var(--green);border-radius:8px;padding:10px 18px;margin-bottom:16px;cursor:pointer;transition:background .15s}
 #dash-profile-bar:hover{background:rgba(0,255,136,.04)}
@@ -111,7 +112,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tv-me-chip strong{color:var(--text);font-family:'Orbitron',monospace;font-size:12px;font-weight:700}
 .tv-me-profile-btn{background:transparent;border:1px solid rgba(0,255,136,.4);border-radius:6px;padding:7px 16px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap;flex-shrink:0}
 .tv-me-profile-btn:hover{background:rgba(0,255,136,.08)}
-.nav-av-msg{font-size:9px;text-align:center;min-height:12px}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 .hdr-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
@@ -1748,7 +1748,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="header-right">
       <div class="wallet-pill" id="wallet-pill" style="display:none;cursor:pointer" onclick="if(_myProfileId)openProfileCard(_myProfileId)" title="View my profile">
         <div id="nav-avatar-wrap" style="width:24px;height:24px;border-radius:50%;overflow:hidden;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#1a3050;font-size:8px;font-weight:700;color:var(--blue)">
-          <img id="nav-avatar-img" style="display:none;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';document.getElementById('nav-avatar-ini').style.display='block'">
+          <img id="nav-avatar-img" draggable="false" style="display:none;width:100%;height:100%;object-fit:cover" onerror="this.style.display='none';document.getElementById('nav-avatar-ini').style.display='block'">
           <span id="nav-avatar-ini"></span>
         </div>
         <div class="dot-green"></div><span id="wallet-short"></span><span class="wallet-pill-hint">↗ Profile</span>
@@ -2584,7 +2584,6 @@ async function launchApp(){
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
-    document.getElementById('wallet-pill').title=phantomKey;
     document.getElementById('deposit-sol-btn').style.display='block';
     document.getElementById('withdraw-sol-btn').style.display='block';
     document.getElementById('perf-share-btns').style.display='flex';
