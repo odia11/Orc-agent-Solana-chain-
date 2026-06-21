@@ -4,100 +4,153 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Leaderboard — OrcAgent</title>
-<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0d1828;--bg2:#162236;--bg3:#1c2e48;--bg4:#213555;
-  --green:#00edaa;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
+  --bg:#080c14;--bg2:#0d1421;--bg3:#131d30;--bg4:#1a2840;
+  --green:#00ff88;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
   --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
-  --gold:#ffd700;--silver:#c0c0c0;--bronze:#cd7f32;
+  --gold:#ffd700;--silver:#c8c8d4;--bronze:#cd8c52;
+  --shadow-card:0 4px 24px rgba(0,0,0,.5);
 }
-html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 20% 0%,rgba(90,150,255,.07) 0%,transparent 55%),radial-gradient(ellipse at 80% 100%,rgba(0,232,154,.05) 0%,transparent 55%);font-family:'Share Tech Mono',monospace;color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
-.page-wrap{max-width:900px;margin:0 auto;padding:1.25rem 1rem 3rem}
+html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 50% -10%,#0a1020 0%,#04060d 100%),radial-gradient(ellipse at 15% 20%,rgba(90,150,255,.06) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(0,255,136,.04) 0%,transparent 50%);font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+.page-wrap{max-width:920px;margin:0 auto;padding:1.25rem 1rem 3rem}
 
 /* ── NAVBAR ── */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:.875rem;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border);box-shadow:0 1px 0 0 rgba(0,255,136,.12);flex-wrap:wrap;gap:8px}
 .logo-row{display:flex;align-items:center;gap:10px;text-decoration:none}
 .brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
-a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green)}
+a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
+a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 10px rgba(0,255,136,.15)}
 a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(255,193,58,.06)}
 
 /* ── PAGE TITLE ── */
 .page-title{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--text);letter-spacing:.06em;margin-bottom:4px;display:flex;align-items:center;gap:10px}
-.page-sub{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1.25rem}
+.page-sub{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1.5rem}
 
-/* ── PODIUM STRIP (top 3 hero cards) ── */
-.podium{display:flex;gap:10px;margin-bottom:1.25rem;justify-content:center;flex-wrap:wrap}
-.podium-card{flex:1;min-width:170px;max-width:240px;border-radius:12px;padding:18px 14px;text-align:center;position:relative;overflow:hidden}
-.podium-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-.podium-card.gold  {background:rgba(255,215,0,.07);border:1px solid rgba(255,215,0,.35)}
-.podium-card.gold::before{background:var(--gold)}
-.podium-card.silver{background:rgba(192,192,192,.07);border:1px solid rgba(192,192,192,.25)}
-.podium-card.silver::before{background:var(--silver)}
-.podium-card.bronze{background:rgba(205,127,50,.07);border:1px solid rgba(205,127,50,.25)}
-.podium-card.bronze::before{background:var(--bronze)}
-.podium-medal{font-size:28px;margin-bottom:8px;display:block;line-height:1}
-.podium-wallet{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:6px;letter-spacing:.05em}
+/* ── PODIUM ── */
+.podium{display:flex;gap:14px;margin-bottom:1.75rem;justify-content:center;flex-wrap:wrap}
+.podium-card{
+  flex:1;min-width:200px;max-width:270px;
+  border-radius:18px;padding:28px 20px;text-align:center;
+  position:relative;overflow:hidden;
+  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
+  transition:transform .2s,box-shadow .2s;
+}
+.podium-card:hover{transform:translateY(-4px)}
+.podium-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;z-index:1}
+
+.podium-card.gold{
+  background:rgba(255,215,0,.07);
+  border:1px solid rgba(255,215,0,.55);
+  box-shadow:0 0 40px rgba(255,215,0,.15),0 0 0 1px rgba(255,215,0,.08),var(--shadow-card);
+}
+.podium-card.gold::before{background:linear-gradient(90deg,transparent 0%,var(--gold) 50%,transparent 100%)}
+.podium-card.gold:hover{box-shadow:0 0 56px rgba(255,215,0,.25),0 0 0 1px rgba(255,215,0,.15),0 8px 40px rgba(0,0,0,.5)}
+
+.podium-card.silver{
+  background:rgba(200,200,212,.05);
+  border:1px solid rgba(200,200,212,.38);
+  box-shadow:0 0 28px rgba(200,200,212,.08),0 0 0 1px rgba(200,200,212,.05),var(--shadow-card);
+}
+.podium-card.silver::before{background:linear-gradient(90deg,transparent 0%,var(--silver) 50%,transparent 100%)}
+.podium-card.silver:hover{box-shadow:0 0 40px rgba(200,200,212,.15),0 8px 40px rgba(0,0,0,.5)}
+
+.podium-card.bronze{
+  background:rgba(205,140,82,.05);
+  border:1px solid rgba(205,140,82,.38);
+  box-shadow:0 0 28px rgba(205,140,82,.08),0 0 0 1px rgba(205,140,82,.05),var(--shadow-card);
+}
+.podium-card.bronze::before{background:linear-gradient(90deg,transparent 0%,var(--bronze) 50%,transparent 100%)}
+.podium-card.bronze:hover{box-shadow:0 0 40px rgba(205,140,82,.15),0 8px 40px rgba(0,0,0,.5)}
+
+.podium-medal{font-size:40px;margin-bottom:6px;display:block;line-height:1;filter:drop-shadow(0 2px 10px rgba(0,0,0,.5))}
+.podium-rank-lbl{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:10px}
+.podium-card.gold   .podium-rank-lbl{color:var(--gold)}
+.podium-card.silver .podium-rank-lbl{color:var(--silver)}
+.podium-card.bronze .podium-rank-lbl{color:var(--bronze)}
+.podium-wallet{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:12px;letter-spacing:.05em}
 .podium-wallet.is-me{color:var(--green);font-weight:700}
-.podium-pnl{font-family:'Orbitron',monospace;font-size:16px;font-weight:900;margin-bottom:4px}
-.podium-pnl.pos{color:var(--green)}.podium-pnl.neg{color:var(--red)}
-.podium-meta{font-size:9px;color:var(--muted);letter-spacing:.06em}
-.podium-me-badge{display:inline-block;background:rgba(0,237,170,.14);border:1px solid rgba(0,237,170,.4);border-radius:10px;padding:1px 7px;font-size:8px;color:var(--green);font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.08em;margin-top:5px}
+.podium-pnl{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;margin-bottom:5px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.podium-card.gold   .podium-pnl.pos{color:var(--gold);text-shadow:0 0 20px rgba(255,215,0,.45)}
+.podium-card.silver .podium-pnl.pos{color:var(--silver);text-shadow:0 0 12px rgba(200,200,212,.3)}
+.podium-card.bronze .podium-pnl.pos{color:var(--bronze);text-shadow:0 0 12px rgba(205,140,82,.3)}
+.podium-pnl.pos{color:var(--green)}
+.podium-pnl.neg{color:var(--red)}
+.podium-meta{font-size:9px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.podium-me-badge{display:inline-block;background:rgba(0,255,136,.14);border:1px solid rgba(0,255,136,.4);border-radius:10px;padding:2px 10px;font-size:8px;color:var(--green);font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.1em;margin-top:8px}
 
 /* ── TABLE ── */
-.table-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:12px}
+.table-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.06);border-radius:14px;box-shadow:var(--shadow-card);background:rgba(13,20,33,.9);backdrop-filter:blur(10px)}
 .lb-table{width:100%;border-collapse:collapse;min-width:560px}
-.lb-table th{padding:9px 14px;text-align:left;color:var(--muted);font-size:8px;letter-spacing:.12em;text-transform:uppercase;border-bottom:1px solid var(--border2);background:var(--bg3);font-weight:400;white-space:nowrap}
-.lb-table th:first-child{text-align:center;width:52px}
-.lb-table td{padding:10px 14px;border-bottom:1px solid rgba(42,64,96,.35);color:var(--dim);font-size:11px;white-space:nowrap;vertical-align:middle}
+.lb-table th{padding:11px 16px;text-align:left;color:var(--muted);font-family:'Inter',sans-serif;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.018);white-space:nowrap}
+.lb-table th:first-child{text-align:center;width:60px}
+.lb-table td{padding:12px 16px;border-bottom:1px solid rgba(42,64,96,.22);color:var(--dim);font-size:11px;white-space:nowrap;vertical-align:middle;transition:background .12s;border-left:3px solid transparent}
 .lb-table tbody tr:last-child td{border-bottom:none}
-.lb-table tbody tr:hover td{background:rgba(255,255,255,.022);transition:background .12s}
 
-/* rank cell */
-.rank-cell{text-align:center;font-family:'Orbitron',monospace;font-size:11px;font-weight:700;color:var(--muted)}
+/* hover: green left border slide-in */
+.lb-table tbody tr{transition:all .15s}
+.lb-table tbody tr:hover td{background:rgba(255,255,255,.022)}
+.lb-table tbody tr:hover td:first-child{border-left-color:rgba(0,255,136,.6)!important}
+
+/* rank cells */
+.rank-cell{text-align:center;font-family:'Orbitron',monospace;font-weight:700;color:var(--muted);font-size:12px;transition:all .15s}
+.rank-cell.r1{font-size:22px;color:var(--gold);text-shadow:0 0 16px rgba(255,215,0,.5)}
+.rank-cell.r2{font-size:18px;color:var(--silver);text-shadow:0 0 12px rgba(200,200,212,.3)}
+.rank-cell.r3{font-size:15px;color:var(--bronze);text-shadow:0 0 12px rgba(205,140,82,.3)}
 
 /* row colour overlays */
-.row-gold  td{background:rgba(255,215,0,.045)}
-.row-gold  td:first-child{border-left:3px solid var(--gold)}
-.row-silver td{background:rgba(192,192,192,.04)}
-.row-silver td:first-child{border-left:3px solid var(--silver)}
-.row-bronze td{background:rgba(205,127,50,.04)}
-.row-bronze td:first-child{border-left:3px solid var(--bronze)}
-.row-me td{background:rgba(0,237,170,.05)}
-.row-me td:first-child{border-left:3px solid var(--green)}
+.row-gold td{background:rgba(255,215,0,.035);border-left-color:rgba(255,215,0,.65)!important}
+.row-silver td{background:rgba(192,192,192,.025);border-left-color:rgba(192,192,192,.45)!important}
+.row-bronze td{background:rgba(205,140,82,.025);border-left-color:rgba(205,140,82,.45)!important}
+.row-me td{background:rgba(0,255,136,.035);border-left-color:var(--green)!important}
+
+/* gold #1 shimmer */
+@keyframes rowShimmer{
+  0%{background-position:-600px 0}
+  60%,100%{background-position:600px 0}
+}
+.row-gold td{
+  background-color:rgba(255,215,0,.035);
+  background-image:linear-gradient(105deg,transparent 35%,rgba(255,215,0,.055) 50%,transparent 65%);
+  background-size:600px 100%;
+  animation:rowShimmer 4.5s ease-in-out infinite;
+}
 
 .td-wallet{font-family:'Share Tech Mono',monospace;color:var(--text);letter-spacing:.06em}
 .td-wallet.is-me{color:var(--green);font-weight:700}
-.me-badge{display:inline-block;background:rgba(0,237,170,.14);border:1px solid rgba(0,237,170,.4);border-radius:10px;padding:1px 7px;font-size:8px;color:var(--green);font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.08em;margin-left:6px;vertical-align:middle}
-.td-pnl-pos{color:var(--green);font-family:'Orbitron',monospace;font-size:11px;font-weight:700}
-.td-pnl-neg{color:var(--red);font-family:'Orbitron',monospace;font-size:11px;font-weight:700}
+.me-badge{display:inline-block;background:rgba(0,255,136,.14);border:1px solid rgba(0,255,136,.4);border-radius:10px;padding:1px 8px;font-size:8px;color:var(--green);font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.08em;margin-left:6px;vertical-align:middle}
+.td-pnl-pos{color:var(--green);font-family:'Orbitron',monospace;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+.td-pnl-neg{color:var(--red);font-family:'Orbitron',monospace;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
 .td-wr-pos{color:var(--green)}.td-wr-neg{color:var(--red)}
-.td-best{color:var(--green);font-size:11px}
+.td-best{color:var(--green);font-size:11px;font-variant-numeric:tabular-nums}
 
 /* ── EMPTY STATE ── */
-.empty-state{text-align:center;padding:72px 24px;color:var(--muted);font-size:13px;letter-spacing:.08em;border:1px solid var(--border2);border-radius:12px;background:var(--bg2);line-height:1.9}
+.empty-state{text-align:center;padding:72px 24px;color:var(--muted);font-size:13px;letter-spacing:.08em;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(13,20,33,.9);backdrop-filter:blur(10px);line-height:1.9;box-shadow:var(--shadow-card)}
 .empty-state svg{display:block;margin:0 auto 18px;opacity:.2}
 
-/* ── MY RANK CALLOUT (shown when session user is in list) ── */
-.my-rank-bar{background:rgba(0,237,170,.07);border:1px solid rgba(0,237,170,.28);border-radius:9px;padding:10px 16px;margin-bottom:1rem;font-size:11px;color:var(--green);display:flex;align-items:center;gap:8px}
+/* ── MY RANK CALLOUT ── */
+.my-rank-bar{background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.22);border-radius:10px;padding:11px 18px;margin-bottom:1.1rem;font-size:11px;color:var(--green);display:flex;align-items:center;gap:8px}
 .my-rank-bar svg{flex-shrink:0;opacity:.7}
 
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(0,255,136,.3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
+*{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
+
 @media(max-width:600px){
-  .podium{gap:6px}.podium-card{min-width:130px;padding:14px 10px}
-  .podium-medal{font-size:22px}.podium-pnl{font-size:13px}
+  .podium{gap:8px}.podium-card{min-width:140px;max-width:none;padding:18px 12px}
+  .podium-medal{font-size:30px}.podium-pnl{font-size:17px}
   a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
   .page-title{font-size:17px}
 }
-::-webkit-scrollbar{width:4px}
-::-webkit-scrollbar-track{background:var(--bg2)}
-::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
 </style>
 </head>
 <body>
@@ -107,9 +160,9 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
   <div class="header">
     <a class="logo-row" href="/">
       <svg width="28" height="28" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00d68f" stroke-width="5"/>
-        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00d68f" stroke-width="4"/>
-        <circle cx="62" cy="52" r="9" fill="#00d68f"/><circle cx="98" cy="52" r="9" fill="#00d68f"/>
+        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00ff88" stroke-width="5"/>
+        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00ff88" stroke-width="4"/>
+        <circle cx="62" cy="52" r="9" fill="#00ff88"/><circle cx="98" cy="52" r="9" fill="#00ff88"/>
         <circle cx="64" cy="50" r="3" fill="black"/><circle cx="100" cy="50" r="3" fill="black"/>
       </svg>
       <div><div class="brand">ORCAGENT</div><div class="brand-sub">Solana Smart Scalper v4</div></div>
@@ -143,11 +196,12 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
   {% set top3 = entries[:3] %}
   {% if top3 | length >= 1 %}
   <div class="podium">
-    {%- set medals = [('🥇','gold'),('🥈','silver'),('🥉','bronze')] -%}
+    {%- set medals = [('🥇','gold','1ST'),('🥈','silver','2ND'),('🥉','bronze','3RD')] -%}
     {% for e in top3 %}
-    {% set medal, cls = medals[loop.index0] %}
+    {% set medal, cls, lbl = medals[loop.index0] %}
     <div class="podium-card {{ cls }}">
       <span class="podium-medal">{{ medal }}</span>
+      <div class="podium-rank-lbl">{{ lbl }} PLACE</div>
       <div class="podium-wallet {{ 'is-me' if e.is_me else '' }}">{{ e.wallet }}</div>
       {% if e.is_me %}<div class="podium-me-badge">YOU</div>{% endif %}
       <div class="podium-pnl {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
@@ -185,7 +239,7 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
         {% else %}
         <tr>
         {% endif %}
-          <td class="rank-cell">
+          <td class="rank-cell{% if e.rank == 1 %} r1{% elif e.rank == 2 %} r2{% elif e.rank == 3 %} r3{% endif %}">
             {% if e.rank == 1 %}🥇
             {% elif e.rank == 2 %}🥈
             {% elif e.rank == 3 %}🥉

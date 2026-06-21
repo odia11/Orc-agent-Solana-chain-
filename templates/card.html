@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=600,initial-scale=1.0">
+<meta name="viewport" content="width=1200,initial-scale=1.0">
 <meta property="og:title" content="OrcAgent Trading PnL Card">
 <meta property="og:description" content="Check out my Solana trading stats on OrcAgent">
 <meta property="og:image" content="https://orcagent.fun/static/og-card.png">
@@ -11,70 +11,290 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0d1828;--bg2:#162236;--bg3:#1c2e48;
-  --green:#00edaa;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
-  --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
+  --bg:#060a11;
+  --bg2:#0c1524;
+  --bg3:#111e33;
+  --green:#00ff88;
+  --red:#ff4d6a;
+  --yellow:#ffc13a;
+  --blue:#6aa3ff;
+  --text:#eef6ff;
+  --muted:#6e8faf;
+  --dim:#a0bcd4;
+  --border:#1e3050;
   {% if stats and stats.total_pnl >= 0 %}
-  --accent:var(--green);--accent-bg:rgba(0,237,170,.07);--accent-border:rgba(0,237,170,.3);
+  --accent:#00ff88;
+  --accent-rgb:0,255,136;
+  --accent-bg:rgba(0,255,136,.06);
+  --accent-mid:rgba(0,255,136,.18);
+  --accent-glow:0 0 60px rgba(0,255,136,.45),0 0 120px rgba(0,255,136,.2);
   {% else %}
-  --accent:var(--red);--accent-bg:rgba(255,77,106,.06);--accent-border:rgba(255,77,106,.28);
+  --accent:#ff4d6a;
+  --accent-rgb:255,77,106;
+  --accent-bg:rgba(255,77,106,.05);
+  --accent-mid:rgba(255,77,106,.15);
+  --accent-glow:0 0 60px rgba(255,77,106,.4),0 0 120px rgba(255,77,106,.18);
   {% endif %}
 }
+
 html,body{
-  width:600px;min-height:300px;
+  width:1200px;
+  height:630px;
+  overflow:hidden;
   background:var(--bg);
-  background-image:radial-gradient(ellipse at 15% 0%,rgba(90,150,255,.08) 0%,transparent 50%),
-                   radial-gradient(ellipse at 85% 100%,rgba(0,232,154,.06) 0%,transparent 50%);
-  font-family:'Share Tech Mono',monospace;color:var(--text);
-  -webkit-font-smoothing:antialiased;overflow:hidden
+  /* layered: grid lines + radial accents + base gradient */
+  background-image:
+    linear-gradient(rgba(106,163,255,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(106,163,255,.025) 1px,transparent 1px),
+    radial-gradient(ellipse at 20% 0%,rgba(106,163,255,.07) 0%,transparent 50%),
+    radial-gradient(ellipse at 80% 100%,rgba(var(--accent-rgb),.06) 0%,transparent 50%),
+    linear-gradient(160deg,#0a1020 0%,#04060d 100%);
+  background-size:60px 60px,60px 60px,100% 100%,100% 100%,100% 100%;
+  font-family:'Share Tech Mono',monospace;
+  color:var(--text);
+  -webkit-font-smoothing:antialiased;
+  -moz-osx-font-smoothing:grayscale;
+  text-rendering:optimizeLegibility;
 }
 
-/* ── CARD WRAPPER ── */
-.card{width:600px;min-height:300px;display:flex;flex-direction:column;position:relative}
-.card-accent{height:3px;background:linear-gradient(90deg,var(--accent),transparent 70%);flex-shrink:0}
+/* ── CARD ── */
+.card{
+  width:1200px;
+  height:630px;
+  display:flex;
+  flex-direction:column;
+  position:relative;
+}
+
+/* top accent line */
+.card-accent{
+  height:4px;
+  flex-shrink:0;
+  background:linear-gradient(90deg,var(--accent) 0%,rgba(var(--accent-rgb),.4) 40%,transparent 75%);
+}
 
 /* ── HEADER ── */
-.card-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 20px 10px;border-bottom:1px solid var(--border);flex-shrink:0}
-.logo-row{display:flex;align-items:center;gap:8px}
-.brand{font-family:'Orbitron',monospace;font-size:13px;font-weight:900;color:var(--green);letter-spacing:.05em;line-height:1}
-.brand-sub{font-size:7px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-top:2px}
-.hdr-badge{font-family:'Orbitron',monospace;font-size:8px;font-weight:700;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;border:1px solid var(--border2);border-radius:4px;padding:3px 8px}
+.card-hdr{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:20px 36px 16px;
+  border-bottom:1px solid rgba(255,255,255,.05);
+  flex-shrink:0;
+}
+.logo-row{display:flex;align-items:center;gap:12px}
+.brand-block{}
+.brand{
+  font-family:'Orbitron',monospace;
+  font-size:16px;
+  font-weight:900;
+  color:var(--green);
+  letter-spacing:.08em;
+  line-height:1;
+}
+.brand-sub{
+  font-size:9px;
+  color:var(--muted);
+  letter-spacing:.18em;
+  text-transform:uppercase;
+  margin-top:3px;
+  opacity:.7;
+}
+.hdr-badge{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  font-family:'Orbitron',monospace;
+  font-size:10px;
+  font-weight:700;
+  color:var(--muted);
+  letter-spacing:.16em;
+  text-transform:uppercase;
+  border:1px solid rgba(255,255,255,.1);
+  border-radius:6px;
+  padding:6px 14px;
+  background:rgba(255,255,255,.025);
+}
 
-/* ── BODY ── */
-.card-body{flex:1;display:flex;gap:0;padding:18px 20px 14px;min-height:0}
+/* ── MAIN BODY ── */
+.card-body{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  padding:0 60px;
+  position:relative;
+  min-height:0;
+}
 
-/* left column */
-.card-left{flex:1;display:flex;flex-direction:column;justify-content:center;padding-right:20px}
-.wallet-label{font-size:10px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
-.wallet-addr{font-family:'Share Tech Mono',monospace;font-size:13px;color:var(--dim);letter-spacing:.08em;margin-bottom:14px}
-.pnl-label{font-size:8px;color:var(--muted);letter-spacing:.14em;text-transform:uppercase;margin-bottom:4px}
-.pnl-value{font-family:'Orbitron',monospace;font-size:36px;font-weight:900;line-height:1;letter-spacing:-.01em;color:var(--accent);margin-bottom:4px}
-.pnl-sub{font-size:9px;color:var(--muted);letter-spacing:.08em}
+/* accent orb behind PnL */
+.card-body::before{
+  content:'';
+  position:absolute;
+  width:500px;
+  height:320px;
+  border-radius:50%;
+  background:radial-gradient(ellipse,rgba(var(--accent-rgb),.06) 0%,transparent 70%);
+  pointer-events:none;
+}
 
-/* divider */
-.card-divider{width:1px;background:var(--border);flex-shrink:0;margin:0 20px}
+.wallet-section{
+  text-align:center;
+  margin-bottom:24px;
+}
+.wallet-label{
+  font-size:10px;
+  color:var(--muted);
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  margin-bottom:7px;
+}
+.wallet-addr{
+  font-family:'Share Tech Mono',monospace;
+  font-size:15px;
+  color:var(--dim);
+  letter-spacing:.1em;
+}
 
-/* right column */
-.card-right{width:196px;flex-shrink:0;display:flex;flex-direction:column;gap:8px;justify-content:center}
-.stat-cell{background:var(--bg2);border:1px solid var(--border2);border-radius:8px;padding:10px 14px}
-.stat-lbl{font-size:8px;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
-.stat-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--text)}
-.stat-val.pos{color:var(--green)}.stat-val.neg{color:var(--red)}
+.pnl-section{
+  text-align:center;
+  margin-bottom:10px;
+}
+.pnl-label{
+  font-size:10px;
+  color:var(--muted);
+  letter-spacing:.22em;
+  text-transform:uppercase;
+  margin-bottom:10px;
+}
+.pnl-value{
+  font-family:'Orbitron',monospace;
+  font-size:88px;
+  font-weight:900;
+  line-height:1;
+  letter-spacing:-.03em;
+  color:var(--accent);
+  text-shadow:var(--accent-glow);
+  font-variant-numeric:tabular-nums;
+}
+.pnl-sub{
+  font-size:13px;
+  color:var(--muted);
+  letter-spacing:.1em;
+  margin-top:10px;
+  opacity:.8;
+}
+
+/* ── STATS ROW ── */
+.stats-row{
+  width:100%;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:14px;
+  padding:0 36px;
+  flex-shrink:0;
+  margin-bottom:0;
+}
+.stat-tile{
+  background:rgba(255,255,255,.03);
+  border:1px solid rgba(255,255,255,.07);
+  border-radius:12px;
+  padding:16px 20px;
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  position:relative;
+  overflow:hidden;
+}
+.stat-tile::before{
+  content:'';
+  position:absolute;
+  bottom:0;left:0;right:0;
+  height:2px;
+  background:linear-gradient(90deg,rgba(var(--accent-rgb),.5),transparent 60%);
+}
+.stat-tile-lbl{
+  font-size:9px;
+  color:var(--muted);
+  letter-spacing:.18em;
+  text-transform:uppercase;
+}
+.stat-tile-val{
+  font-family:'Orbitron',monospace;
+  font-size:26px;
+  font-weight:900;
+  color:var(--text);
+  letter-spacing:-.01em;
+  font-variant-numeric:tabular-nums;
+  line-height:1;
+}
+.stat-tile-val.pos{color:var(--green)}
+.stat-tile-val.neg{color:var(--red)}
 
 /* ── FOOTER ── */
-.card-footer{display:flex;align-items:center;justify-content:space-between;padding:10px 20px;border-top:1px solid var(--border);flex-shrink:0;gap:10px}
-.footer-url{font-size:9px;color:var(--muted);letter-spacing:.06em;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.footer-url span{color:var(--dim)}
-.footer-btns{display:flex;gap:6px;flex-shrink:0}
-.footer-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:5px 12px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px;white-space:nowrap}
-.footer-btn:hover{border-color:var(--green);color:var(--green)}
-.footer-btn.primary{border-color:var(--accent);color:var(--accent);background:var(--accent-bg)}
-.footer-btn.primary:hover{background:var(--accent-border)}
-.copy-msg{font-size:9px;color:var(--green);letter-spacing:.04em;min-width:56px;text-align:right}
+.card-footer{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding:12px 36px;
+  border-top:1px solid rgba(255,255,255,.05);
+  flex-shrink:0;
+  gap:12px;
+  background:rgba(0,0,0,.15);
+}
+.footer-url{
+  font-size:11px;
+  color:var(--muted);
+  letter-spacing:.06em;
+  flex:1;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  opacity:.7;
+}
+.footer-url strong{color:var(--dim);opacity:1}
+.footer-btns{display:flex;gap:8px;flex-shrink:0}
+.footer-btn{
+  background:transparent;
+  border:1px solid rgba(255,255,255,.12);
+  border-radius:8px;
+  padding:7px 16px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:10px;
+  color:var(--muted);
+  cursor:pointer;
+  transition:all .15s;
+  text-decoration:none;
+  display:inline-flex;
+  align-items:center;
+  gap:5px;
+  white-space:nowrap;
+  letter-spacing:.04em;
+}
+.footer-btn:hover{border-color:rgba(var(--accent-rgb),.5);color:var(--text)}
+.footer-btn.primary{
+  border-color:rgba(var(--accent-rgb),.45);
+  color:var(--accent);
+  background:rgba(var(--accent-rgb),.06);
+}
+.footer-btn.primary:hover{background:rgba(var(--accent-rgb),.12)}
+.copy-msg{font-size:10px;color:var(--green);letter-spacing:.04em;min-width:60px;text-align:right;line-height:1}
 
 /* ── EMPTY STATE ── */
-.card-empty{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);font-size:12px;letter-spacing:.1em;line-height:2;text-align:center;padding:30px}
-.card-empty-icon{font-size:28px;margin-bottom:10px;opacity:.4}
+.card-empty{
+  flex:1;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  color:var(--muted);
+  font-size:14px;
+  letter-spacing:.1em;
+  line-height:2.2;
+  text-align:center;
+}
+.card-empty-icon{font-size:40px;margin-bottom:16px;opacity:.35}
 </style>
 </head>
 <body>
@@ -84,63 +304,68 @@ html,body{
   <!-- HEADER -->
   <div class="card-hdr">
     <div class="logo-row">
-      <svg width="24" height="24" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00d68f" stroke-width="5"/>
-        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00d68f" stroke-width="4"/>
-        <circle cx="62" cy="52" r="9" fill="#00d68f"/><circle cx="98" cy="52" r="9" fill="#00d68f"/>
+      <svg width="34" height="34" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00ff88" stroke-width="5"/>
+        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00ff88" stroke-width="4"/>
+        <circle cx="62" cy="52" r="9" fill="#00ff88"/><circle cx="98" cy="52" r="9" fill="#00ff88"/>
         <circle cx="64" cy="50" r="3" fill="black"/><circle cx="100" cy="50" r="3" fill="black"/>
       </svg>
-      <div>
+      <div class="brand-block">
         <div class="brand">ORCAGENT</div>
         <div class="brand-sub">Solana Smart Scalper v4</div>
       </div>
     </div>
-    <div class="hdr-badge">📊 Trading PnL Card</div>
+    <div class="hdr-badge">
+      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Trading PnL Card
+    </div>
   </div>
 
   {% if stats %}
-  <!-- BODY -->
+
+  <!-- MAIN BODY -->
   <div class="card-body">
-    <!-- Left: wallet + PnL -->
-    <div class="card-left">
+    <div class="wallet-section">
       <div class="wallet-label">Wallet</div>
       <div class="wallet-addr">{{ stats.wallet }}</div>
-      <div class="pnl-label">All-Time Total P&L</div>
-      <div class="pnl-value">{{ '+' if stats.total_pnl >= 0 else '' }}{{ '%.4f' | format(stats.total_pnl) }} SOL</div>
-      <div class="pnl-sub">from {{ stats.trade_count }} trade{{ 's' if stats.trade_count != 1 else '' }}</div>
     </div>
+    <div class="pnl-section">
+      <div class="pnl-label">All-Time Total P&amp;L</div>
+      <div class="pnl-value">{{ '+' if stats.total_pnl >= 0 else '' }}{{ '%.4f' | format(stats.total_pnl) }} SOL</div>
+      <div class="pnl-sub">across {{ stats.trade_count }} trade{{ 's' if stats.trade_count != 1 else '' }}</div>
+    </div>
+  </div>
 
-    <div class="card-divider"></div>
-
-    <!-- Right: stats grid -->
-    <div class="card-right">
-      <div class="stat-cell">
-        <div class="stat-lbl">Win Rate</div>
-        <div class="stat-val {{ 'pos' if stats.win_rate >= 50 else 'neg' }}">{{ '%.1f' | format(stats.win_rate) }}%</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-lbl">Best Trade</div>
-        <div class="stat-val pos">{{ '+' if stats.best_trade >= 0 else '' }}{{ '%.4f' | format(stats.best_trade) }}</div>
-      </div>
-      <div class="stat-cell">
-        <div class="stat-lbl">Total Trades</div>
-        <div class="stat-val">{{ stats.trade_count }}</div>
-      </div>
+  <!-- STATS ROW -->
+  <div class="stats-row">
+    <div class="stat-tile">
+      <div class="stat-tile-lbl">Win Rate</div>
+      <div class="stat-tile-val {{ 'pos' if stats.win_rate >= 50 else 'neg' }}">{{ '%.1f' | format(stats.win_rate) }}%</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-lbl">Total Trades</div>
+      <div class="stat-tile-val">{{ stats.trade_count }}</div>
+    </div>
+    <div class="stat-tile">
+      <div class="stat-tile-lbl">Best Trade</div>
+      <div class="stat-tile-val pos">{{ '+' if stats.best_trade >= 0 else '' }}{{ '%.4f' | format(stats.best_trade) }} SOL</div>
     </div>
   </div>
 
   {% else %}
+
   <!-- EMPTY STATE -->
   <div class="card-empty">
     <div class="card-empty-icon">📊</div>
     No trades recorded yet for this wallet.<br>
     Start the bot and your stats will appear here.
   </div>
+
   {% endif %}
 
   <!-- FOOTER -->
   <div class="card-footer">
-    <div class="footer-url">orcagent.fun · <span id="footer-url-text">{{ card_url }}</span></div>
+    <div class="footer-url"><strong>orcagent.fun</strong> · {{ card_url }}</div>
     <div class="footer-btns">
       <span class="copy-msg" id="copy-msg"></span>
       <button class="footer-btn primary" onclick="copyCardLink()">📋 Copy Link</button>
@@ -155,14 +380,9 @@ function copyCardLink() {
   const done = () => {
     const msg = document.getElementById('copy-msg');
     msg.textContent = '✓ Copied!';
-    setTimeout(() => { msg.textContent = ''; }, 2000);
+    setTimeout(() => { msg.textContent = ''; }, 2200);
   };
-  if (navigator.clipboard && navigator.clipboard.writeText) {
-    navigator.clipboard.writeText(CARD_URL).then(done).catch(fallback);
-  } else {
-    fallback();
-  }
-  function fallback() {
+  const fallback = () => {
     const ta = document.createElement('textarea');
     ta.value = CARD_URL;
     ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
@@ -171,6 +391,11 @@ function copyCardLink() {
     try { document.execCommand('copy'); } catch(_) {}
     document.body.removeChild(ta);
     done();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(CARD_URL).then(done).catch(fallback);
+  } else {
+    fallback();
   }
 }
 </script>
