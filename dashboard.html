@@ -631,20 +631,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .ps-btn-loading::after{content:'';display:inline-block;width:8px;height:8px;border:1.5px solid currentColor;border-top-color:transparent;border-radius:50%;animation:ps-spin .65s linear infinite;flex-shrink:0}
 .ps-empty{color:var(--muted);font-size:11px;text-align:center;padding:24px 0;letter-spacing:.08em;grid-column:1/-1}
 
-/* ── REFERRAL CARD ── */
-.ref-card{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem;display:none}
-.ref-link-row{display:flex;align-items:center;gap:8px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;margin-bottom:12px}
-.ref-link-text{flex:1;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.ref-copy-btn{background:rgba(106,163,255,.12);border:1px solid rgba(106,163,255,.35);border-radius:6px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--blue);cursor:pointer;white-space:nowrap;transition:all .15s;flex-shrink:0}
-.ref-copy-btn:hover{background:rgba(106,163,255,.22);border-color:var(--blue)}
-.ref-stats-row{display:flex;gap:16px;flex-wrap:wrap;margin-bottom:12px}
-.ref-stat{flex:1;min-width:90px;background:var(--bg3);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
-.ref-stat-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px}
-.ref-stat-val{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--text)}
-.ref-discount-on{background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.3);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--green);display:none}
-.ref-discount-off{background:rgba(110,143,175,.07);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:11px;color:var(--muted);display:none}
-.ref-copy-msg{font-size:9px;color:var(--green);min-height:14px;text-align:right;letter-spacing:.06em}
-
 /* ── LIVE ACTIVITY FEED ── */
 .live-feed-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 .lf-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px}
@@ -1098,7 +1084,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .stats{grid-template-columns:repeat(2,1fr);gap:8px}
   .panels{grid-template-columns:1fr}
   .stat,.market-panel,.perf-panel,.pos-panel,.pnlc-panel,
-  .live-feed-panel,.panel,.ref-card,.ps-panel,.lb-panel,
+  .live-feed-panel,.panel,.ps-panel,.lb-panel,
   .iadmin-panel,.modes .mode{
     padding:16px;
     width:100%;
@@ -1165,9 +1151,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   /* ── WITHDRAW / DEPOSIT BUTTONS ── */
   .deposit-sol-btn,.withdraw-sol-btn,.claim-sol-btn{width:auto;display:inline-block}
 
-  /* ── REFERRAL CARD ── */
-  .ref-stats-row{flex-direction:column;gap:8px}
-  .ref-stat{min-width:unset;width:100%}
 }
 
 @media(max-width:480px){
@@ -1220,7 +1203,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── GLASS CARD EFFECT on all major panels ── */
 .stat,.market-panel,.perf-panel,.pos-panel,.pnlc-panel,
-.live-feed-panel,.panel,.ref-card,.ps-panel,
+.live-feed-panel,.panel,.ps-panel,
 .lb-panel,.adash-wrap,.admin-panel,.modes .mode,
 .ob-box,.swiz-card,.s-card,.audit-card,.inact-card{
   backdrop-filter:blur(10px);
@@ -1229,7 +1212,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 }
 /* card border upgrade */
 .stat,.market-panel,.perf-panel,.pnlc-panel,
-.live-feed-panel,.ref-card,.ps-panel,.lb-panel{
+.live-feed-panel,.ps-panel,.lb-panel{
   border-color:var(--glass-border);
   background:rgba(13,20,33,.88);
 }
@@ -1239,7 +1222,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   background:rgba(13,20,33,.88);
 }
 /* inner bg cells */
-.stat-cell,.perf-stat,.hiw-card,.ref-stat,.ps-card,
+.stat-cell,.perf-stat,.hiw-card,.ps-card,
 .adash-stat-card,.admin-section,.panel .log-body,
 .audit-row,.lf-item{
   background:rgba(255,255,255,.025);
@@ -1322,7 +1305,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── BODY TEXT FALLBACK: Share Tech Mono where needed ── */
 .log-body,.lt,.lf-time,.trade-table td,
-.s-input,.swiz-addr-box,.ref-link-text,
+.s-input,.swiz-addr-box,
 .wallet-pill,.mkt-name,.mkt-stat-lbl,
 .adash-health-val,.inc-token-mint{
   font-family:'Share Tech Mono',monospace;
@@ -1775,28 +1758,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <div class="perf-chart-wrap">
       <svg id="pnl-chart" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none" style="display:block"></svg>
     </div>
-  </div>
-
-  <!-- REFERRAL CARD -->
-  <div class="ref-card" id="ref-card" style="display:none">
-    <div class="panel-hdr">🔗 Referral Program</div>
-    <div class="ref-link-row">
-      <span class="ref-link-text" id="ref-link-text">—</span>
-      <button class="ref-copy-btn" onclick="copyRefLink()">Copy link</button>
-    </div>
-    <div class="ref-copy-msg" id="ref-copy-msg"></div>
-    <div class="ref-stats-row">
-      <div class="ref-stat">
-        <div class="ref-stat-lbl">Users Referred</div>
-        <div class="ref-stat-val" id="ref-count">0</div>
-      </div>
-      <div class="ref-stat">
-        <div class="ref-stat-lbl">Your Code</div>
-        <div class="ref-stat-val" id="ref-code" style="font-size:12px;letter-spacing:.12em">—</div>
-      </div>
-    </div>
-    <div class="ref-discount-on" id="ref-discount-on">✅ 10% fee discount active — you were referred by a friend</div>
-    <div class="ref-discount-off" id="ref-discount-off">Share your link to earn a 10% fee discount for friends — and get one yourself when you're referred</div>
   </div>
 
   <!-- LIVE ACTIVITY FEED -->
@@ -2373,7 +2334,6 @@ function doLogout(){
   document.getElementById('deposit-sol-btn').style.display='none';
   document.getElementById('withdraw-sol-btn').style.display='none';
   document.getElementById('perf-share-btns').style.display='none';
-  _resetRefCard();
   _resetBadges();
   _copySource=null; _updateCopyPill();
   document.getElementById('app').style.display='none';
@@ -2513,7 +2473,6 @@ async function launchApp(){
   fetchTrades();
   fetchPnlChart();
   fetchLeaderboard();
-  fetchReferral();
   fetchBadges();
   fetchCopyStatus();
   fetchPumpScanner();
@@ -3160,62 +3119,6 @@ async function _tpcStopCopy(){
     const username=document.querySelector('.tvp-username')?.textContent||'trader';
     if(btn){ btn.className='tpc-copy-btn'; btn.textContent='Copy Trader'; btn.onclick=()=>_tpcStartCopy(prevWallet,username); }
     showLfToast('🟢','Stopped copying','pos');
-  }
-}
-
-// ── REFERRAL CARD ──
-async function fetchReferral(){
-  console.log('[referral] fetchReferral called, phantomKey=', phantomKey);
-  if(!phantomKey){ _resetRefCard(); return; }
-  const r=await fetch('/api/referral').then(r=>r.json()).catch(e=>{console.error('[referral] fetch error',e);return null;});
-  console.log('[referral] API response:', r);
-  if(!r||!r.ok){ _resetRefCard(); return; }
-  const card=document.getElementById('ref-card');
-  console.log('[referral] card element:', card);
-  if(card) card.style.display='block';
-  const linkEl=document.getElementById('ref-link-text');
-  if(linkEl) linkEl.textContent=r.referral_link||'';
-  const codeEl=document.getElementById('ref-code');
-  if(codeEl) codeEl.textContent=r.code||'—';
-  const countEl=document.getElementById('ref-count');
-  if(countEl) countEl.textContent=r.referral_count??0;
-  const don=document.getElementById('ref-discount-on');
-  const doff=document.getElementById('ref-discount-off');
-  if(r.has_discount){
-    if(don)  don.style.display='block';
-    if(doff) doff.style.display='none';
-  } else {
-    if(don)  don.style.display='none';
-    if(doff) doff.style.display='block';
-  }
-}
-
-function _resetRefCard(){
-  const card=document.getElementById('ref-card');
-  if(card) card.style.display='none';
-}
-
-function copyRefLink(){
-  const txt=(document.getElementById('ref-link-text')?.textContent||'').trim();
-  if(!txt||txt==='—') return;
-  const msg=document.getElementById('ref-copy-msg');
-  const done=()=>{
-    if(msg){ msg.textContent='✓ Copied!'; setTimeout(()=>{ msg.textContent=''; },2000); }
-  };
-  const fallback=()=>{
-    const ta=document.createElement('textarea');
-    ta.value=txt;
-    ta.style.cssText='position:fixed;opacity:0;pointer-events:none';
-    document.body.appendChild(ta);
-    ta.select();
-    try{ document.execCommand('copy'); }catch(_){}
-    document.body.removeChild(ta);
-    done();
-  };
-  if(navigator.clipboard&&navigator.clipboard.writeText){
-    navigator.clipboard.writeText(txt).then(done).catch(fallback);
-  } else {
-    fallback();
   }
 }
 
