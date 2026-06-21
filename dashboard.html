@@ -923,6 +923,23 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tvp-stat5:last-child{border-right:none}
 .tvp-stat5-val{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;font-family:'Orbitron',monospace;letter-spacing:.01em;line-height:1.1}
 .tvp-stat5-lbl{font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+/* ── FOLLOWERS / FOLLOWING PANEL ── */
+.tvp-follow-panel{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;margin-bottom:14px;overflow:hidden}
+.tvp-fp-tabs{display:flex;gap:8px;padding:12px 14px 11px;border-bottom:1px solid rgba(255,255,255,.07)}
+.tvp-fp-tab{background:transparent;border:1px solid rgba(255,255,255,.15);border-radius:20px;padding:5px 16px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;white-space:nowrap}
+.tvp-fp-tab.active{border-color:var(--green);background:rgba(0,255,136,.1);color:var(--green)}
+.tvp-fp-tab:hover:not(.active){border-color:rgba(255,255,255,.3);color:var(--text)}
+.tvp-fp-list{max-height:300px;overflow-y:auto;padding:4px 0}
+.tvp-fp-row{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;transition:background .12s}
+.tvp-fp-row:hover{background:rgba(255,255,255,.03)}
+.tvp-fp-avatar{width:32px;height:32px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;overflow:hidden;position:relative;border:1px solid rgba(255,255,255,.1)}
+.tvp-fp-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tvp-fp-info{flex:1;min-width:0}
+.tvp-fp-name{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tvp-fp-wallet{font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;white-space:nowrap;margin-top:1px}
+.tvp-fp-pnl{font-size:10px;font-weight:700;font-family:'Orbitron',monospace;white-space:nowrap;flex-shrink:0;min-width:72px;text-align:right}
+.tvp-fp-empty{text-align:center;padding:28px 16px;font-size:11px;color:var(--muted);letter-spacing:.06em}
+.tvp-fp-loading{text-align:center;padding:20px;font-size:10px;color:var(--muted);letter-spacing:.06em}
 /* sections below */
 .tvp-section{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px;margin-bottom:14px}
 .tvp-section-hdr{font-size:9px;font-family:'Orbitron',monospace;font-weight:700;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
@@ -4956,6 +4973,61 @@ async function openFollowListModal(userId, type){
   }).join('');
 }
 
+// ── FOLLOWERS / FOLLOWING PANEL (inline in profile view) ──
+let _tvpFollowPanelWallet = '';
+let _tvpFollowPanelTab = 'followers';
+
+async function _loadFollowPanel(wallet, tab){
+  if(!wallet) return;
+  _tvpFollowPanelWallet = wallet;
+  _tvpFollowPanelTab = tab;
+  const listEl = document.getElementById('tvp-fp-list');
+  if(!listEl) return;
+  listEl.innerHTML = '<div class="tvp-fp-loading">Loading…</div>';
+  const r = await fetch(`/api/profile/${encodeURIComponent(wallet)}/${tab}`).then(r=>r.json()).catch(()=>null);
+  if(!listEl.isConnected) return; // profile was navigated away
+  if(!r?.ok || !r.users?.length){
+    const empty = tab==='followers' ? 'No followers yet' : 'Not following anyone';
+    listEl.innerHTML = `<div class="tvp-fp-empty">${empty}</div>`;
+    return;
+  }
+  listEl.innerHTML = r.users.map(u=>{
+    const bg = _tvAvatarColor(u.username||'?');
+    const ini = esc((u.username||'?')[0].toUpperCase());
+    const avImg = u.avatar_url ? `<img src="${u.avatar_url}" alt="" onerror="this.style.display='none'">` : '';
+    const pnl = u.pnl_today ?? 0;
+    const pnlPos = pnl >= 0;
+    const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
+    const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
+    const followKey = esc(u.username+'|'+(u.wallet_address||''));
+    const isFollowed = _tvFollowed.has(u.username+'|'+(u.wallet_address||''));
+    const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
+      ? `<div onclick="event.stopPropagation()"><button class="tv-follow-btn${isFollowed?' followed':''}" onclick="_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button></div>`
+      : '';
+    return `<div class="tvp-fp-row" onclick="openProfileCard(${u.user_id})">
+      <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
+      <div class="tvp-fp-info">
+        <div class="tvp-fp-name">${esc(u.username||u.wallet)}</div>
+        <div class="tvp-fp-wallet">${esc(u.wallet)}</div>
+      </div>
+      <div class="tvp-fp-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
+      ${fBtnHtml}
+    </div>`;
+  }).join('');
+}
+
+function _switchFollowTab(tab){
+  _tvpFollowPanelTab = tab;
+  document.getElementById('tvp-tab-followers')?.classList.toggle('active', tab==='followers');
+  document.getElementById('tvp-tab-following')?.classList.toggle('active', tab==='following');
+  _loadFollowPanel(_tvpFollowPanelWallet, tab);
+}
+
+async function _tvpFollowAndRefresh(btn, key, userId, username){
+  await _tvFollowToggle(btn, key, userId, username);
+  _loadFollowPanel(_tvpFollowPanelWallet, _tvpFollowPanelTab);
+}
+
 function _tvpTradesHtml(trades){
   if(!trades?.length) return '<div class="tvp-empty">No trades today</div>';
   return `<table class="tvp-table">
@@ -5117,6 +5189,14 @@ async function openProfileCard(userId){
       </div>
     </div>
 
+    <div class="tvp-follow-panel">
+      <div class="tvp-fp-tabs">
+        <button class="tvp-fp-tab active" id="tvp-tab-followers" onclick="_switchFollowTab('followers')">👥 Followers</button>
+        <button class="tvp-fp-tab" id="tvp-tab-following" onclick="_switchFollowTab('following')">➜ Following</button>
+      </div>
+      <div class="tvp-fp-list" id="tvp-fp-list"><div class="tvp-fp-loading">Loading…</div></div>
+    </div>
+
     ${posHtml?`<div class="tvp-section"><div class="tvp-section-hdr">Open Positions</div>${posHtml}</div>`:''}
 
     <div class="tvp-section">
@@ -5124,6 +5204,7 @@ async function openProfileCard(userId){
       ${tradesHtml}
     </div>
   `;
+  _loadFollowPanel(_tpcCurrentFullWallet, 'followers');
 }
 
 // ── DAILY LEADERBOARD ──
