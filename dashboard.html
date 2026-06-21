@@ -5011,7 +5011,7 @@ async function _loadFollowPanel(wallet, tab){
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
       ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
       : '';
-    return `<div class="tvp-fp-row" onclick="_openFromFollowPanel(${u.user_id||0})">
+    return `<div class="tvp-fp-row" onclick="openProfileCard(${u.user_id||0})">
       <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvp-fp-info">
         <div class="tvp-fp-name">${esc(u.username||u.wallet)}</div>
@@ -5039,18 +5039,6 @@ async function _tvpFollowAndRefresh(btn, key, userId, username){
 let _tvpCurrentProfileId = 0;
 let _tvpCurrentProfileUsername = '';
 let _tvpPrevProfile = null; // {userId, wallet, tab, username}
-
-function _openFromFollowPanel(userId){
-  console.log('[followNav] row clicked — userId:', userId, '| from profile:', _tvpCurrentProfileId, _tvpCurrentProfileUsername, '| tab:', _tvpFollowPanelTab);
-  if(!userId){ console.warn('[followNav] no userId, aborting'); return; }
-  _tvpPrevProfile = {
-    userId: _tvpCurrentProfileId,
-    wallet: _tvpFollowPanelWallet,
-    tab: _tvpFollowPanelTab,
-    username: _tvpCurrentProfileUsername,
-  };
-  openProfileCard(userId);
-}
 
 async function _tvpGoBack(){
   const prev = _tvpPrevProfile;
