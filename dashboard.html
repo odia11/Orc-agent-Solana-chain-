@@ -472,6 +472,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .how-to-item::before{content:'–';position:absolute;left:0;color:var(--muted)}
 .welcome-banner{background:rgba(106,163,255,.07);border:1px solid rgba(106,163,255,.3);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:flex-start;gap:12px;font-size:11px;color:var(--blue);line-height:1.65}
 .welcome-banner.hide{display:none}
+.bot-idle-banner{background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.28);border-radius:10px;padding:12px 16px;margin-bottom:14px;display:flex;align-items:center;gap:12px;font-size:12px;color:var(--green)}
+.bot-idle-banner.hide{display:none}
+.bot-idle-banner .bib-icon{font-size:18px;flex-shrink:0}
+.bot-idle-banner .bib-text{flex:1;line-height:1.5}
+.bot-idle-banner .bib-btn{background:var(--green);color:#000;border:none;border-radius:7px;padding:8px 18px;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;letter-spacing:.04em;cursor:pointer;white-space:nowrap;transition:filter .15s}
+.bot-idle-banner .bib-btn:hover{filter:brightness(1.12)}
 /* ── setup wizard ── */
 #setup-wizard{position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:500;display:flex;align-items:center;justify-content:center;padding:1rem}
 #setup-wizard.hide{display:none}
@@ -1866,6 +1872,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       1) Open <strong>Settings</strong> &nbsp;·&nbsp; 2) Add your trading wallet private key &nbsp;·&nbsp; 3) Make sure you have SOL in your trading wallet &nbsp;·&nbsp; 4) Click <strong>Start Trading</strong>
       <br><button class="wb-dismiss" onclick="dismissWelcome()">Got it</button>
     </div>
+  </div>
+
+  <!-- BOT IDLE BANNER -->
+  <div id="bot-idle-banner" class="bot-idle-banner hide">
+    <span class="bib-icon">⚡</span>
+    <div class="bib-text">Your bot is not running — click <strong>Start</strong> to begin trading</div>
+    <button class="bib-btn" onclick="toggleTrader()">Start Bot</button>
   </div>
 
   <!-- STATS -->
@@ -4197,6 +4210,15 @@ function updateBtns(){
     tc.className='mode';
   }
   _refreshTradeBtnState();
+  _updateBotIdleBanner();
+}
+
+function _updateBotIdleBanner(){
+  const b=document.getElementById('bot-idle-banner');
+  if(!b) return;
+  // Show only when: wallet connected, key saved, not already running
+  const show = !!(phantomKey && settingsHasKey && !traderOn);
+  b.classList.toggle('hide', !show);
 }
 
 async function toggleTrader(){
@@ -4450,6 +4472,7 @@ function _updateKeyStatus(){
   if(inp) inp.placeholder=settingsHasKey?'Enter new key to replace existing':'Paste private key (base58)';
   if(hint) hint.textContent='';
   _checkWelcomeBanner();
+  _updateBotIdleBanner();
 }
 async function removeKey(){
   if(!confirm('Remove your saved trading key?')) return;
