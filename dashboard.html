@@ -4988,7 +4988,8 @@ async function _loadFollowPanel(wallet, tab){
   if(!listEl) return;
   listEl.innerHTML = '<div class="tvp-fp-loading">Loading…</div>';
   const r = await fetch(`/api/profile/${encodeURIComponent(wallet)}/${tab}`).then(r=>r.json()).catch(()=>null);
-  if(!listEl.isConnected) return; // profile was navigated away
+  console.log('[followPanel] tab:', tab, 'response:', r);
+  if(!listEl.isConnected) return;
   if(!r?.ok || !r.users?.length){
     const empty = tab==='followers' ? 'No followers yet' : 'Not following anyone';
     listEl.innerHTML = `<div class="tvp-fp-empty">${empty}</div>`;
@@ -5002,12 +5003,15 @@ async function _loadFollowPanel(wallet, tab){
     const pnlPos = pnl >= 0;
     const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
     const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
-    const followKey = esc(u.username+'|'+(u.wallet_address||''));
-    const isFollowed = _tvFollowed.has(u.username+'|'+(u.wallet_address||''));
+    const rawKey = u.username+'|'+(u.wallet_address||'');
+    const followKey = esc(rawKey);
+    const isFollowed = _tvFollowed.has(rawKey);
+    // stopPropagation is on the button directly — not a wrapper div — so clicking
+    // elsewhere on the row still fires the row onclick
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<div onclick="event.stopPropagation()"><button class="tv-follow-btn${isFollowed?' followed':''}" onclick="_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button></div>`
+      ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
       : '';
-    return `<div class="tvp-fp-row" onclick="_openFromFollowPanel(${u.user_id})">
+    return `<div class="tvp-fp-row" onclick="_openFromFollowPanel(${u.user_id||0})">
       <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvp-fp-info">
         <div class="tvp-fp-name">${esc(u.username||u.wallet)}</div>
@@ -5037,6 +5041,8 @@ let _tvpCurrentProfileUsername = '';
 let _tvpPrevProfile = null; // {userId, wallet, tab, username}
 
 function _openFromFollowPanel(userId){
+  console.log('[followNav] row clicked — userId:', userId, '| from profile:', _tvpCurrentProfileId, _tvpCurrentProfileUsername, '| tab:', _tvpFollowPanelTab);
+  if(!userId){ console.warn('[followNav] no userId, aborting'); return; }
   _tvpPrevProfile = {
     userId: _tvpCurrentProfileId,
     wallet: _tvpFollowPanelWallet,
