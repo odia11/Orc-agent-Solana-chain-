@@ -8,7 +8,6 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/@solana/web3.js@1.95.4/lib/index.iife.min.js"></script>
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -5444,12 +5443,7 @@ function openDepositModal() {
   document.getElementById('dep-copy-msg').textContent = '';
   document.getElementById('dep-copy-btn').textContent = '📋';
   const qrEl = document.getElementById('dep-qr');
-  const canvas = document.createElement('canvas');
-  qrEl.innerHTML = '';
-  qrEl.appendChild(canvas);
-  QRCode.toCanvas(canvas, phantomKey, { width: 180, margin: 2 }, function(err) {
-    if (err) qrEl.innerHTML = '<p style="color:var(--muted);font-size:10px;letter-spacing:.06em">QR unavailable</p>';
-  });
+  qrEl.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(phantomKey) + '" style="width:180px;height:180px;border-radius:4px" alt="QR code">';
 }
 
 function closeDepositModal() {
