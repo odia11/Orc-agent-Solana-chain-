@@ -116,8 +116,8 @@ print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", 
 
 DIFFICULTY_PRESETS = {
     'EASY':   {'tp': 0.09, 'sl': 0.05, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
-    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min':  8, 'm5_max': None},
-    'HARD':   {'tp': 0.35, 'sl': 0.05, 'crash': 0.15, 'm5_min': 15, 'm5_max': None},
+    'MEDIUM': {'tp': 0.15, 'sl': 0.05, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
+    'HARD':   {'tp': 0.35, 'sl': 0.05, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
 }
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
@@ -2225,6 +2225,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
                                  str(total_live) + ' qualify (' + _m5_desc + ' m5 + vol rising + not reversing)')
+                    print(f'[scan] entry threshold: {m5_min}% m5 — {len(qualifying)}/{len(not_held)} qualify', flush=True)
                     if not qualifying and _skip_log:
                         print(f'[qualify] {short} 0/{len(not_held)} — skip reasons:', flush=True)
                         for _sl in _skip_log:
