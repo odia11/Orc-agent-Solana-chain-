@@ -1140,30 +1140,61 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .iadmin-action-btn.ia-danger{border-color:rgba(255,77,106,.22);color:rgba(255,77,106,.55)}
 .iadmin-action-btn.ia-danger:hover:not(:disabled){border-color:var(--red);color:var(--red);background:rgba(255,77,106,.06)}
 
+/* ── BOTTOM NAV (hidden on desktop, shown on mobile) ── */
+#mob-bottom-nav{display:none}
+
 /* ── MOBILE LAYOUT ── */
 @media(max-width:768px){
+
+  /* ── PREVENT HORIZONTAL OVERFLOW ── */
+  body{max-width:100vw;overflow-x:hidden}
 
   /* ── NAVBAR ── */
   .brand-sub{display:none}
   .brand{font-size:13px}
   .hdr-btn,.hdr-btn-red{padding:5px 8px;font-size:9px;border-radius:6px}
-  .header-right{gap:5px;overflow-x:auto;flex-wrap:nowrap;-webkit-overflow-scrolling:touch;padding-bottom:2px}
-  .header-right::-webkit-scrollbar{display:none}
+  .header-right{gap:5px;flex-wrap:nowrap}
   .wallet-pill{padding:4px 9px;font-size:9px;flex-shrink:0}
+  .nav-mobile-hide{display:none!important}
 
   /* ── LAYOUT: all cards full width ── */
-  .wrap{padding:0.75rem 0.75rem env(safe-area-inset-bottom,3rem)}
+  .wrap{
+    padding:0.75rem 0.75rem calc(60px + env(safe-area-inset-bottom,0px));
+    max-width:100vw;
+    overflow-x:hidden;
+  }
   .stats{grid-template-columns:repeat(2,1fr);gap:8px}
   .panels{grid-template-columns:1fr}
   .stat,.market-panel,.perf-panel,.pos-panel,.pnlc-panel,
   .live-feed-panel,.panel,.ps-panel,.lb-panel,
   .iadmin-panel,.modes .mode{
-    padding:16px;
+    padding:14px;
     width:100%;
+    box-sizing:border-box;
   }
 
   /* ── BALANCE STAT TILES ── */
   .stat-val{font-size:22px}
+  .stat-lbl{font-size:11px}
+
+  /* ── YOUR PROFILE BAR ── */
+  #dash-profile-bar{padding:8px 12px;gap:10px;flex-wrap:wrap}
+  .dpb-view-btn{width:100%;padding:7px 12px}
+  .dpb-name{font-size:13px}
+  .dpb-chip{font-size:10px}
+
+  /* ── SOL BALANCE BUTTONS (row of 3) ── */
+  #sol-btns-wrap{display:flex;gap:4px;margin-top:6px}
+  #sol-btns-wrap .claim-sol-btn,
+  #sol-btns-wrap .deposit-sol-btn,
+  #sol-btns-wrap .withdraw-sol-btn{
+    flex:1;min-width:0;width:auto;
+    padding:8px 4px;font-size:11px;
+    margin-top:0;display:block;
+  }
+
+  /* ── BADGES ── */
+  .badge-pill{font-size:10px;padding:2px 6px}
 
   /* ── TRADE MODE CARD ── */
   .mode{flex-direction:column;align-items:flex-start}
@@ -1173,7 +1204,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   /* ── OPEN POSITIONS TABLE ── */
   #positions-panel .trade-table th:nth-child(5),
   #positions-panel .trade-table td:nth-child(5){display:none}
-  .pos-panel{padding:16px}
+  .pos-panel{padding:14px}
   .trade-table-wrap{overflow-x:auto}
   .trade-table{font-size:9px;min-width:480px}
   .trade-table th{font-size:7px;padding:5px 8px}
@@ -1189,11 +1220,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   .ps-grid{grid-template-columns:1fr}
 
   /* ── LIVE ACTIVITY FEED ── */
-  .live-feed-panel{padding:16px}
+  .live-feed-panel{padding:14px}
   .lf-amt{display:none}
 
   /* ── LEADERBOARD WIDGET ── */
-  .lb-panel{padding:16px}
+  .lb-panel{padding:14px}
   .lb-row{padding:6px 8px;gap:7px}
   .lb-avatar{width:28px;height:28px;font-size:11px}
   .lb-name{font-size:10px}
@@ -1201,27 +1232,42 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   /* ── ADMIN PANEL ── */
   .iadmin-grid{grid-template-columns:1fr}
   .iadmin-card{padding:14px}
-
-  /* Admin user table: scrollable, fixed min-width */
   .iadmin-card .iadmin-table-wrap{overflow-x:auto}
   .iadmin-card .iadmin-table{min-width:600px}
-
-  /* Force action buttons: full width */
   .iadmin-action-btns{gap:10px}
   .iadmin-action-btn{width:100%;justify-content:flex-start}
-
-  /* Rate limit counter tiles: single column */
   .iadmin-grid>[style*="grid-template-columns:repeat(3"]{
     grid-template-columns:1fr!important;
   }
 
-  /* ── BUTTONS ── */
+  /* ── GENERIC BUTTONS ── */
   .hdr-btn,.hdr-btn-red,.bot-btn{min-width:0}
   .bottom{flex-direction:column}
   .bot-btn{width:100%;min-width:unset}
 
-  /* ── WITHDRAW / DEPOSIT BUTTONS ── */
-  .deposit-sol-btn,.withdraw-sol-btn,.claim-sol-btn{width:auto;display:inline-block}
+  /* ── MOBILE BOTTOM NAV ── */
+  #mob-bottom-nav{
+    display:flex;
+    position:fixed;bottom:0;left:0;right:0;
+    background:rgba(8,12,20,.97);
+    backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
+    border-top:1px solid rgba(255,255,255,.09);
+    z-index:8900;
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  .mob-nav-item{
+    flex:1;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    gap:3px;padding:8px 4px;
+    background:none;border:none;color:var(--muted);
+    text-decoration:none;cursor:pointer;
+    font-family:'Inter',sans-serif;
+    transition:color .15s;
+    -webkit-tap-highlight-color:transparent;
+  }
+  .mob-nav-item:hover,.mob-nav-item:active{color:var(--green)}
+  .mob-nav-icon{font-size:18px;line-height:1;display:block}
+  .mob-nav-lbl{font-size:9px;letter-spacing:.06em;text-transform:uppercase;font-family:'Share Tech Mono',monospace;line-height:1}
 
 }
 
@@ -1711,9 +1757,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <span class="health-dot" id="health-dot"></span>HEALTH
       </button>
       <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:rgba(255,193,58,.4);color:#f0b90b" title="Owner admin dashboard">👑 Admin</button>
-      <a href="/history" class="hdr-btn" title="View trade history">📋 History</a>
-      <a href="/leaderboard" class="hdr-btn" title="Public leaderboard">🏆 Leaderboard</a>
-      <button class="hdr-btn" id="traders-btn" onclick="openTradersView()" title="Live trader activity feed">👥 Traders</button>
+      <a href="/history" class="hdr-btn nav-mobile-hide" title="View trade history">📋 History</a>
+      <a href="/leaderboard" class="hdr-btn nav-mobile-hide" title="Public leaderboard">🏆 Leaderboard</a>
+      <button class="hdr-btn nav-mobile-hide" id="traders-btn" onclick="openTradersView()" title="Live trader activity feed">👥 Traders</button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
@@ -1829,9 +1875,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub" style="display:block">available to trade</div>
       <div class="stat-sub" id="s-sol-usdc" style="display:block;color:var(--muted);margin-top:3px"></div>
-      <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">Burn &amp; Claim</button>
-      <button id="deposit-sol-btn" class="deposit-sol-btn" onclick="openDepositModal()" style="display:none" title="Show deposit address">Deposit SOL</button>
-      <button id="withdraw-sol-btn" class="withdraw-sol-btn" onclick="openWithdrawModal()" style="display:none" title="Withdraw SOL to another wallet">Withdraw SOL</button>
+      <div id="sol-btns-wrap">
+        <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">Burn &amp; Claim</button>
+        <button id="deposit-sol-btn" class="deposit-sol-btn" onclick="openDepositModal()" style="display:none" title="Show deposit address">Deposit SOL</button>
+        <button id="withdraw-sol-btn" class="withdraw-sol-btn" onclick="openWithdrawModal()" style="display:none" title="Withdraw SOL to another wallet">Withdraw SOL</button>
+      </div>
     </div>
     <div class="stat">
       <div class="stat-lbl">Open Positions</div>
@@ -2310,6 +2358,22 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   </div><!-- /dash-admin -->
 
 </div><!-- /wrap -->
+
+<!-- ── MOBILE BOTTOM NAV ── -->
+<nav id="mob-bottom-nav" aria-label="Mobile navigation">
+  <a class="mob-nav-item" href="/history">
+    <span class="mob-nav-icon">📋</span>
+    <span class="mob-nav-lbl">History</span>
+  </a>
+  <button class="mob-nav-item" onclick="openTradersView()">
+    <span class="mob-nav-icon">👥</span>
+    <span class="mob-nav-lbl">Traders</span>
+  </button>
+  <a class="mob-nav-item" href="/leaderboard">
+    <span class="mob-nav-icon">🏆</span>
+    <span class="mob-nav-lbl">Leaderboard</span>
+  </a>
+</nav>
 
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false, _copySource=null;
