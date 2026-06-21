@@ -884,7 +884,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
 /* ── TRADER PROFILE FULL PAGE VIEW ── */
 #tv-profile-view{padding:0 0 40px}
-.tvp-back-bar{padding:12px 0 14px}
+.tvp-back-bar{padding:12px 0 14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .tvp-back-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s}
 .tvp-back-btn:hover{border-color:var(--text);color:var(--text)}
 /* avatar */
@@ -4929,6 +4929,9 @@ let _tvProfileOpen = false;
 function closeTraderProfile(){
   _tvProfileOpen = false;
   _tpcCurrentFullWallet = '';
+  _tvpCurrentProfileId = 0;
+  _tvpCurrentProfileUsername = '';
+  _tvpPrevProfile = null;
   document.getElementById('tv-profile-view').style.display = 'none';
   document.getElementById('tv-layout').style.display = '';
   _updateTvMeCard();
@@ -5004,7 +5007,7 @@ async function _loadFollowPanel(wallet, tab){
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
       ? `<div onclick="event.stopPropagation()"><button class="tv-follow-btn${isFollowed?' followed':''}" onclick="_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button></div>`
       : '';
-    return `<div class="tvp-fp-row" onclick="openProfileCard(${u.user_id})">
+    return `<div class="tvp-fp-row" onclick="_openFromFollowPanel(${u.user_id})">
       <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvp-fp-info">
         <div class="tvp-fp-name">${esc(u.username||u.wallet)}</div>
@@ -5026,6 +5029,28 @@ function _switchFollowTab(tab){
 async function _tvpFollowAndRefresh(btn, key, userId, username){
   await _tvFollowToggle(btn, key, userId, username);
   _loadFollowPanel(_tvpFollowPanelWallet, _tvpFollowPanelTab);
+}
+
+// ── PROFILE NAVIGATION HISTORY ──
+let _tvpCurrentProfileId = 0;
+let _tvpCurrentProfileUsername = '';
+let _tvpPrevProfile = null; // {userId, wallet, tab, username}
+
+function _openFromFollowPanel(userId){
+  _tvpPrevProfile = {
+    userId: _tvpCurrentProfileId,
+    wallet: _tvpFollowPanelWallet,
+    tab: _tvpFollowPanelTab,
+    username: _tvpCurrentProfileUsername,
+  };
+  openProfileCard(userId);
+}
+
+async function _tvpGoBack(){
+  const prev = _tvpPrevProfile;
+  _tvpPrevProfile = null;
+  await openProfileCard(prev.userId);
+  if(prev.tab !== 'followers') _switchFollowTab(prev.tab);
 }
 
 function _tvpTradesHtml(trades){
@@ -5078,6 +5103,7 @@ async function openProfileCard(userId){
   if(!userId) return;
   if(!_tradersView) openTradersView();
   _tvProfileOpen = true;
+  _tvpCurrentProfileId = userId;
   const view = document.getElementById('tv-profile-view');
   document.getElementById('tv-layout').style.display = 'none';
   const meCard = document.getElementById('tv-me-card');
@@ -5097,6 +5123,7 @@ async function openProfileCard(userId){
   }
 
   _tpcCurrentFullWallet = p.wallet_address || '';
+  _tvpCurrentProfileUsername = p.username || '';
   console.log('wallet set:', _tpcCurrentFullWallet);
   const followKey = p.username+'|'+p.wallet;
   const isFollowing = _tvFollowed.has(followKey);
@@ -5122,10 +5149,14 @@ async function openProfileCard(userId){
   const allPnlPos = allPnl>=0;
   const allPnlStr = (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
   const winRateColor = winRate>=50?'var(--green)':'var(--muted)';
+  const prevBackBtn = _tvpPrevProfile
+    ? `<button class="tvp-back-btn" onclick="_tvpGoBack()">← ${esc(_tvpPrevProfile.username)}'s ${_tvpPrevProfile.tab}</button>`
+    : '';
 
   view.innerHTML = `
     <div class="tvp-back-bar">
       <button class="tvp-back-btn" onclick="closeTraderProfile()">← Traders Feed</button>
+      ${prevBackBtn}
     </div>
 
     <div class="tvp-card">
