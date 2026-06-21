@@ -2556,6 +2556,12 @@ async function launchApp(){
   fetchCopyStatus();
   fetchMyProfile();
   fetchPumpScanner();
+  const _pendingProfile = sessionStorage.getItem('openProfile');
+  if(_pendingProfile){
+    sessionStorage.removeItem('openProfile');
+    const _pid = parseInt(_pendingProfile, 10);
+    if(_pid) setTimeout(() => openProfileCard(_pid), 400);
+  }
 }
 
 // ── LAUNCH WITH 5s TIMEOUT (prevents button getting stuck) ─────────────────

@@ -2516,6 +2516,69 @@ def api_token_candles(mint):
     return jsonify({'ok': True, 'candles': candles})
 
 
+@app.route('/api/token/<mint>/co-traders', methods=['GET'])
+@rate_limit(30, 60)
+def api_token_co_traders(mint):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'users': []}), 401
+    if not _MINT_RE.match(mint or ''):
+        return jsonify({'ok': False, 'users': []}), 400
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address = ?', (wallet,))
+        me_row = c.fetchone()
+        if not me_row:
+            conn.close()
+            return jsonify({'ok': True, 'users': []})
+        me_id = me_row[0]
+        # Users the session wallet follows
+        c.execute('''
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            FROM follows f JOIN users u ON u.id = f.following_id
+            WHERE f.follower_id = ?
+        ''', (me_id,))
+        followed = c.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f'[co-traders] DB error: {e}', flush=True)
+        return jsonify({'ok': True, 'users': []})
+
+    # Current price from shared token state (best-effort)
+    cur_price = next(
+        (float(t['price']) for t in state.get('tokens', [])
+         if t.get('mint') == mint and t.get('price')),
+        None
+    )
+
+    result = []
+    for uid, username, avatar_url, w_addr in followed:
+        if not w_addr:
+            continue
+        us = user_states.get(w_addr)
+        if not us:
+            continue
+        pos = us.get('positions', {}).get(mint)
+        if not pos or not pos.get('amount'):
+            continue
+        entry = float(pos.get('buy_price') or 0)
+        amount = float(pos.get('amount') or 0)
+        pnl = None
+        if cur_price is not None and entry > 0 and amount > 0:
+            pnl = round(amount * (cur_price - entry), 6)
+        short = (w_addr[:4] + '...' + w_addr[-4:]) if len(w_addr) >= 8 else w_addr
+        result.append({
+            'user_id':     uid,
+            'username':    username or short,
+            'avatar_url':  avatar_url or '',
+            'wallet':      short,
+            'entry_price': round(entry, 8),
+            'pnl_current': pnl,
+        })
+    return jsonify({'ok': True, 'users': result})
+
+
 def _pnl_card_stats(wallet_addr: str) -> dict | None:
     """Return all-time trade stats for a wallet, or None if no trades exist."""
     try:
