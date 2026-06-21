@@ -3502,16 +3502,24 @@ def get_profile(user_id: int):
 
         c.execute('SELECT COALESCE(SUM(pnl), 0) FROM trades WHERE user_id=?', (user_id,))
         total_pnl_row = c.fetchone()
+        c.execute(
+            'SELECT ROUND(COUNT(CASE WHEN pnl > 0 THEN 1 END) * 100.0 / NULLIF(COUNT(*), 0), 1) '
+            'FROM trades WHERE user_id=?',
+            (user_id,)
+        )
+        win_rate_row = c.fetchone()
     finally:
         conn.close()
 
     short_wallet = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
     display_name = username if username else short_wallet
     total_pnl    = round(float(total_pnl_row[0] or 0), 6) if total_pnl_row else 0.0
+    win_rate     = round(float(win_rate_row[0] or 0), 1) if (win_rate_row and win_rate_row[0] is not None) else 0.0
 
     # Live open position count from in-memory state
     us = user_states.get(wallet or '', {})
-    open_count = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+    open_count  = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+    bot_active  = bool(us.get('trader_running', False))
 
     # SOL balance — best-effort, non-blocking
     sol_balance = 0.0
@@ -3543,6 +3551,8 @@ def get_profile(user_id: int):
         'open_trades':     open_count,
         'closed_trades':   int(trade_count or 0),
         'total_pnl':       total_pnl,
+        'win_rate':        win_rate,
+        'bot_active':      bot_active,
         'badges':          [b.strip() for b in (badges_str or '').split(',') if b.strip()],
     })
 

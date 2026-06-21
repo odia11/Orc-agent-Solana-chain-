@@ -850,15 +850,42 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tvp-back-bar{padding:12px 0 14px}
 .tvp-back-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:11px;padding:5px 12px;border-radius:6px;cursor:pointer;transition:all .15s}
 .tvp-back-btn:hover{border-color:var(--text);color:var(--text)}
-.tvp-card{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:20px;margin-bottom:14px}
-.tvp-top{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap}
+/* avatar */
+.tvp-avatar{width:64px;height:64px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:24px;font-weight:700;overflow:hidden;background:var(--bg4);border:2px solid rgba(255,255,255,.1);position:relative}
+.tvp-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.tvp-avatar-active{border-color:var(--green);box-shadow:0 0 0 3px rgba(0,255,136,.2),0 0 14px rgba(0,255,136,.15)}
+/* header card */
+.tvp-card{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:22px 22px 18px;margin-bottom:14px;box-shadow:0 4px 32px rgba(0,0,0,.35)}
+.tvp-top{display:flex;align-items:flex-start;gap:18px}
 .tvp-meta{flex:1;min-width:0}
-.tvp-username{font-size:20px;font-weight:700;color:var(--text);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tvp-wallet{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:6px}
-.tvp-social-row{display:flex;gap:18px;font-size:12px;color:var(--muted);margin-top:6px}
-.tvp-social-row strong{color:var(--text);font-family:'Orbitron',monospace;font-size:13px;margin-right:4px}
-.tvp-actions{display:flex;flex-direction:column;gap:6px;flex-shrink:0;padding-top:2px}
-.tvp-section{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:14px}
+.tvp-username{font-size:22px;font-weight:800;color:var(--text);margin-bottom:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:-.01em}
+.tvp-wallet{font-size:11px;color:var(--muted);font-family:'Share Tech Mono',monospace;margin-bottom:8px;letter-spacing:.04em}
+.tvp-social-row{display:flex;flex-wrap:wrap;gap:0;font-size:11px;color:var(--muted);margin-top:8px;align-items:center}
+.tvp-social-item{display:inline-flex;align-items:center;gap:4px;padding-right:12px;margin-right:12px;border-right:1px solid rgba(255,255,255,.08);line-height:1.4}
+.tvp-social-item:last-child{border-right:none;padding-right:0;margin-right:0}
+.tvp-social-item strong{color:var(--text);font-family:'Orbitron',monospace;font-size:12px;font-weight:700;margin-right:2px}
+.tvp-social-icon{font-size:10px;opacity:.55}
+/* action buttons: column stack, pill, fixed width */
+.tvp-actions{display:flex;flex-direction:column;gap:7px;flex-shrink:0;padding-top:2px;min-width:140px}
+.tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn{width:140px;border-radius:24px;padding:8px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;text-align:center;display:block;box-sizing:border-box;border:1px solid transparent}
+.tpc-follow-btn{background:var(--blue);color:#fff}
+.tpc-follow-btn:hover{opacity:.85}
+.tpc-follow-btn.following{background:transparent;border-color:var(--border2);color:var(--dim)}
+.tpc-follow-btn.following:hover{border-color:var(--red);color:var(--red)}
+.tpc-copy-btn{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.45);color:#f59e0b}
+.tpc-copy-btn:hover{background:rgba(245,158,11,.26);border-color:#f59e0b}
+.tpc-stop-copy-btn{background:rgba(255,68,68,.14);border-color:rgba(255,68,68,.45);color:var(--red)}
+.tpc-stop-copy-btn:hover{background:rgba(255,68,68,.26);border-color:var(--red)}
+.tpc-sol-btn{background:transparent;border-color:var(--border2);color:var(--green)}
+.tpc-sol-btn:hover{border-color:var(--green);background:rgba(0,255,136,.07)}
+/* 5-tile stats bar */
+.tvp-stats5{display:grid;grid-template-columns:repeat(5,1fr);background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,.3)}
+.tvp-stat5{text-align:center;padding:16px 8px;border-right:1px solid rgba(255,255,255,.07)}
+.tvp-stat5:last-child{border-right:none}
+.tvp-stat5-val{font-size:16px;font-weight:700;color:var(--text);margin-bottom:4px;font-family:'Orbitron',monospace;letter-spacing:.01em;line-height:1.1}
+.tvp-stat5-lbl{font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+/* sections below */
+.tvp-section{background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;padding:16px;margin-bottom:14px}
 .tvp-section-hdr{font-size:9px;font-family:'Orbitron',monospace;font-weight:700;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:12px}
 .tvp-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:11px}
 .tvp-table th{text-align:left;font-size:8px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;padding:0 6px 8px;font-weight:400;white-space:nowrap}
@@ -866,12 +893,17 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tvp-table tr:first-child td{border-top:none}
 .tvp-empty{font-size:11px;color:var(--muted);padding:14px 0;text-align:center;letter-spacing:.08em}
 .tvp-loading{text-align:center;padding:48px 0;font-size:11px;color:var(--muted);letter-spacing:.08em}
-.tvp-stats4{display:grid;grid-template-columns:repeat(4,1fr);background:var(--bg2);border:1px solid var(--border2);border-radius:10px;overflow:hidden;margin-bottom:14px}
-.tvp-stat4{text-align:center;padding:12px 6px;border-right:1px solid rgba(255,255,255,.06)}
-.tvp-stat4:last-child{border-right:none}
-.tvp-stat4-val{font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px;font-family:'Orbitron',monospace;letter-spacing:.02em}
-.tvp-stat4-lbl{font-size:8px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
-@media(max-width:600px){.tvp-stats4{grid-template-columns:repeat(2,1fr)}.tvp-stat4:nth-child(2){border-right:none}.tvp-stat4:nth-child(1),.tvp-stat4:nth-child(2){border-bottom:1px solid rgba(255,255,255,.06)}}
+/* mobile */
+@media(max-width:768px){
+  .tvp-top{flex-wrap:wrap}
+  .tvp-actions{flex-direction:row;flex-wrap:wrap;min-width:unset;width:100%;padding-top:0}
+  .tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn{flex:1;min-width:calc(50% - 4px);width:auto}
+  .tvp-stats5{grid-template-columns:repeat(2,1fr)}
+  .tvp-stat5:nth-child(2){border-right:none}
+  .tvp-stat5:nth-child(4){border-right:none}
+  .tvp-stat5:nth-child(1),.tvp-stat5:nth-child(2),.tvp-stat5:nth-child(3),.tvp-stat5:nth-child(4){border-bottom:1px solid rgba(255,255,255,.07)}
+  .tvp-stat5:nth-child(5){grid-column:1/-1;border-right:none}
+}
 
 /* ── DAILY LEADERBOARD ── */
 .lb-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -4762,14 +4794,15 @@ function closeProfileCard(){
   _tpcCurrentFullWallet='';
 }
 
-function _tpcAvatarHtml(p){
+function _tpcAvatarHtml(p, botActive=false){
   const name=p.username||'?';
   const ini=esc(name[0].toUpperCase());
   const bg=_tvAvatarColor(name);
+  const cls='tvp-avatar'+(botActive?' tvp-avatar-active':'');
   if(p.avatar_url){
-    return `<div class="tpc-avatar" style="background:${bg}"><img src="${p.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
+    return `<div class="${cls}" style="background:${bg}"><img src="${p.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
   }
-  return `<div class="tpc-avatar" style="background:${bg}">${ini}</div>`;
+  return `<div class="${cls}" style="background:${bg}">${ini}</div>`;
 }
 
 function _tpcRecentHtml(userId){
@@ -4958,12 +4991,14 @@ async function openProfileCard(userId){
   const tradesHtml = _tvpTradesHtml(td?.trades);
   const posHtml = _tvpPositionsHtml(td?.positions);
 
-  const solBal   = p.sol_balance??td?.sol_balance??0;
-  const openCnt  = p.open_trades??td?.open_count??0;
-  const closedCnt= p.closed_trades??td?.total_closed??p.trade_count??0;
-  const allPnl   = p.total_pnl??td?.total_pnl??0;
-  const allPnlPos= allPnl>=0;
-  const allPnlStr= (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
+  const solBal    = p.sol_balance??td?.sol_balance??0;
+  const openCnt   = p.open_trades??td?.open_count??0;
+  const closedCnt = p.closed_trades??td?.total_closed??p.trade_count??0;
+  const allPnl    = p.total_pnl??td?.total_pnl??0;
+  const winRate   = p.win_rate??0;
+  const allPnlPos = allPnl>=0;
+  const allPnlStr = (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
+  const winRateColor = winRate>=50?'var(--green)':'var(--muted)';
 
   view.innerHTML = `
     <div class="tvp-back-bar">
@@ -4972,16 +5007,17 @@ async function openProfileCard(userId){
 
     <div class="tvp-card">
       <div class="tvp-top">
-        ${_tpcAvatarHtml(p)}
+        ${_tpcAvatarHtml(p, p.bot_active)}
         <div class="tvp-meta">
           <div class="tvp-username">${esc(p.username)}</div>
           <div class="tvp-wallet">${esc(p.wallet)}</div>
-          ${p.bio?`<div class="tpc-bio">${esc(p.bio)}</div>`:''}
-          ${(p.badges&&p.badges.length)?`<div class="badges-row" style="margin-top:8px">${p.badges.map(b=>_badgePillHtml(b,true)).join('')}</div>`:''}
+          ${p.bio?`<div class="tpc-bio" style="margin-bottom:8px">${esc(p.bio)}</div>`:''}
+          ${(p.badges&&p.badges.length)?`<div class="badges-row" style="margin-bottom:8px">${p.badges.map(b=>_badgePillHtml(b,true)).join('')}</div>`:''}
           <div class="tvp-social-row">
-            <span><strong id="tpc-follower-count">${p.follower_count}</strong> Followers</span>
-            <span><strong>${p.following_count}</strong> Following</span>
-            <span style="margin-left:4px">· Avg hold ${esc(_tvFormatHold(p.avg_hold_seconds))} · Joined ${esc(_tvFormatJoined(p.joined_at))}</span>
+            <span class="tvp-social-item"><span class="tvp-social-icon">👥</span><strong id="tpc-follower-count">${p.follower_count}</strong>&nbsp;Followers</span>
+            <span class="tvp-social-item"><span class="tvp-social-icon">➜</span><strong>${p.following_count}</strong>&nbsp;Following</span>
+            ${p.avg_hold_seconds?`<span class="tvp-social-item"><span class="tvp-social-icon">⏱</span>&nbsp;${esc(_tvFormatHold(p.avg_hold_seconds))}</span>`:''}
+            <span class="tvp-social-item"><span class="tvp-social-icon">📅</span>&nbsp;${esc(_tvFormatJoined(p.joined_at))}</span>
           </div>
         </div>
         <div class="tvp-actions">
@@ -5009,22 +5045,26 @@ async function openProfileCard(userId){
       </div>
     </div>
 
-    <div class="tvp-stats4">
-      <div class="tvp-stat4">
-        <div class="tvp-stat4-val">◎ ${solBal.toFixed(4)}</div>
-        <div class="tvp-stat4-lbl">SOL Balance</div>
+    <div class="tvp-stats5">
+      <div class="tvp-stat5">
+        <div class="tvp-stat5-val">◎ ${solBal.toFixed(4)}</div>
+        <div class="tvp-stat5-lbl">SOL Balance</div>
       </div>
-      <div class="tvp-stat4">
-        <div class="tvp-stat4-val">${openCnt}</div>
-        <div class="tvp-stat4-lbl">Open Trades</div>
+      <div class="tvp-stat5">
+        <div class="tvp-stat5-val">${openCnt}</div>
+        <div class="tvp-stat5-lbl">Open Trades</div>
       </div>
-      <div class="tvp-stat4">
-        <div class="tvp-stat4-val">${closedCnt}</div>
-        <div class="tvp-stat4-lbl">Closed Trades</div>
+      <div class="tvp-stat5">
+        <div class="tvp-stat5-val">${closedCnt}</div>
+        <div class="tvp-stat5-lbl">Closed Trades</div>
       </div>
-      <div class="tvp-stat4">
-        <div class="tvp-stat4-val" style="color:${allPnlPos?'var(--green)':'var(--red)'}">${esc(allPnlStr)}</div>
-        <div class="tvp-stat4-lbl">All-time PnL</div>
+      <div class="tvp-stat5">
+        <div class="tvp-stat5-val" style="color:${winRateColor}">${winRate.toFixed(1)}%</div>
+        <div class="tvp-stat5-lbl">Win Rate</div>
+      </div>
+      <div class="tvp-stat5">
+        <div class="tvp-stat5-val" style="color:${allPnlPos?'var(--green)':'var(--red)'}">${esc(allPnlStr)}</div>
+        <div class="tvp-stat5-lbl">All-Time PnL</div>
       </div>
     </div>
 
