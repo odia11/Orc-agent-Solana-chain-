@@ -765,6 +765,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN referral_code TEXT",
         "ALTER TABLE users ADD COLUMN referred_by TEXT",
         "ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN badges TEXT DEFAULT ''",
     ]:
         try:
             con.execute(sql)
@@ -1828,6 +1829,89 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             conn.close()
     except Exception as e:
         print(f'[trade_record] DB write failed: {e}', flush=True)
+    if wallet:
+        _recalculate_badges(wallet)
+
+# ── BADGE SYSTEM ──
+def _calculate_badges(wallet: str) -> list:
+    badges = []
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if not row:
+            conn.close()
+            return []
+        user_id = row[0]
+        trades = conn.execute(
+            'SELECT pnl, amount, timestamp, opened_at FROM trades WHERE user_id=? ORDER BY timestamp ASC',
+            (user_id,)
+        ).fetchall()
+        conn.close()
+        if not trades:
+            return []
+
+        pnls       = [t[0] or 0.0 for t in trades]
+        amounts    = [t[1] or 0.0 for t in trades]
+        timestamps = [t[2] or ''  for t in trades]
+        opened_ats = [t[3]        for t in trades]
+        total      = len(trades)
+        wins       = sum(1 for p in pnls if p > 0)
+
+        # 🔥 Hot Streak — 5+ consecutive wins
+        streak = max_streak = 0
+        for p in pnls:
+            streak = streak + 1 if p > 0 else 0
+            max_streak = max(max_streak, streak)
+        if max_streak >= 5:
+            badges.append('🔥 Hot Streak')
+
+        # 💎 Diamond Hands — any position held 30+ minutes
+        for ts_str, opened_at in zip(timestamps, opened_ats):
+            if opened_at and ts_str:
+                try:
+                    close_dt = datetime.datetime.fromisoformat(ts_str.replace('Z', '+00:00'))
+                    open_dt  = datetime.datetime.fromtimestamp(opened_at, tz=datetime.timezone.utc)
+                    if (close_dt - open_dt).total_seconds() >= 1800:
+                        badges.append('💎 Diamond Hands')
+                        break
+                except Exception:
+                    pass
+
+        # 🐋 Whale — single trade volume > 1 SOL
+        if any(a > 1.0 for a in amounts):
+            badges.append('🐋 Whale')
+
+        # ⚡ Speed Trader — 10+ trades in one calendar day
+        day_counts: dict = {}
+        for ts in timestamps:
+            day = ts[:10]
+            day_counts[day] = day_counts.get(day, 0) + 1
+        if any(v >= 10 for v in day_counts.values()):
+            badges.append('⚡ Speed Trader')
+
+        # 🎯 Sharp Shooter — win rate > 70% with 20+ trades
+        if total >= 20 and (wins / total) > 0.70:
+            badges.append('🎯 Sharp Shooter')
+
+        # 🏆 Top Earner — total PnL > 5 SOL
+        if sum(pnls) > 5.0:
+            badges.append('🏆 Top Earner')
+
+    except Exception as e:
+        print(f'[badges] calculate error for {wallet}: {e}', flush=True)
+    return badges
+
+
+def _recalculate_badges(wallet: str) -> None:
+    badges = _calculate_badges(wallet)
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute('UPDATE users SET badges=? WHERE wallet_address=?',
+                     (','.join(badges), wallet))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'[badges] save error for {wallet}: {e}', flush=True)
 
 # ── SWAP EXECUTION ──
 def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
@@ -2460,6 +2544,25 @@ def api_pnl_card(wallet_addr):
     if stats is None:
         return jsonify({'ok': False, 'error': 'No trades found for this wallet'}), 404
     return jsonify({'ok': True, **stats})
+
+
+@app.route('/api/badges/<wallet_addr>')
+@rate_limit(60, 60)
+def api_badges(wallet_addr):
+    """Public — returns the earned badges list for a wallet."""
+    if not is_valid_solana_address(wallet_addr):
+        return jsonify({'ok': False, 'error': 'Invalid wallet address'}), 400
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row  = conn.execute('SELECT badges FROM users WHERE wallet_address=?',
+                            (wallet_addr,)).fetchone()
+        conn.close()
+        if not row:
+            return jsonify({'ok': True, 'badges': []})
+        badges = [b.strip() for b in (row[0] or '').split(',') if b.strip()]
+        return jsonify({'ok': True, 'badges': badges})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
 
 
 @app.route('/card/<wallet_addr>')
