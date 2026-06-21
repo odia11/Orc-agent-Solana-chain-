@@ -307,7 +307,8 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .perf-stat{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px}
 .perf-stat-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
 .perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
-.perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center}
+.perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+#perf-chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;overflow:hidden}
 .pos-panel{background:var(--bg2);border:1px solid rgba(0,255,136,.4);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 /* ── PNL PERFORMANCE CHART ── */
 .pnlc-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -2028,6 +2029,21 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
       </div>
     </div>
     <div class="perf-chart-wrap">
+      <div id="perf-chart-empty">
+        <div class="pnlce-grid"></div>
+        <div class="pnlce-scan"></div>
+        <div class="pnlce-body">
+          <svg class="pnlce-icon" width="36" height="36" viewBox="0 0 160 160" fill="none">
+            <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00ff88" stroke-width="5"/>
+            <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00ff88" stroke-width="4"/>
+            <circle cx="62" cy="52" r="9" fill="#00ff88"/>
+            <circle cx="98" cy="52" r="9" fill="#00ff88"/>
+            <circle cx="64" cy="50" r="3" fill="black"/>
+            <circle cx="100" cy="50" r="3" fill="black"/>
+          </svg>
+          <div class="pnlce-stats"><span>No trades today yet — bot is scanning...</span></div>
+        </div>
+      </div>
       <svg id="pnl-chart" width="100%" height="120" viewBox="0 0 600 120" preserveAspectRatio="none" style="display:block"></svg>
     </div>
   </div>
@@ -3771,11 +3787,14 @@ function renderPerfPanel(r){
 
 function renderPnlChart(curve){
   const svg=document.getElementById('pnl-chart');
+  const emptyEl=document.getElementById('perf-chart-empty');
   const W=600,H=120,PAD=14,XPAD=36,BPAD=18;
   if(!curve.length){
-    svg.innerHTML=`<text x="${W/2}" y="${H/2}" text-anchor="middle" dominant-baseline="middle" fill="#4a7095" font-size="11" font-family="Share Tech Mono,monospace" letter-spacing="0.08em">NO TRADES TODAY YET</text>`;
+    svg.innerHTML='';
+    if(emptyEl) emptyEl.style.display='flex';
     return;
   }
+  if(emptyEl) emptyEl.style.display='none';
   const pts=[{t:'00:00',v:0},...curve];
   const vals=pts.map(p=>p.v);
   const minV=Math.min(0,...vals), maxV=Math.max(0,...vals);
