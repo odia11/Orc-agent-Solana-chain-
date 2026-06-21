@@ -1577,7 +1577,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         </div>
         <div class="sg-item">
           <div class="sg-num">4</div>
-          <div><span class="sg-label">Start Trading</span>Hit the START TRADING button. The bot scans every 30s and exits based on your chosen difficulty: EASY (+9%/-5%), MEDIUM (+15%/-5%), or HARD (+35%/-5%).</div>
+          <div><span class="sg-label">Start Trading</span>Hit the START TRADING button. The bot scans every 30s for ≥5% momentum and exits based on your chosen difficulty: EASY (TP +25%/SL -15%), MEDIUM (TP +40%/SL -20%), or HARD (TP +60%/SL -25%).</div>
         </div>
       </div>
       <div class="sg-warn">⚠ Only paste the private key of a dedicated trading wallet — never your main wallet's key.</div>
@@ -1610,11 +1610,11 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div class="how-to-item">A small extra SOL buffer (~0.01 SOL) is kept for transaction fees automatically</div>
         <div class="how-to-item">Your trading wallet private key saved below</div>
         <div class="how-to-section">⚡ How the Bot Trades</div>
-        <div class="how-to-item">Scans Solana tokens every 90 seconds</div>
-        <div class="how-to-item">Buys when: 5–20% price rise in last 5 min with accelerating volume</div>
+        <div class="how-to-item">Scans Solana tokens every 30 seconds</div>
+        <div class="how-to-item">Buys when: ≥5% price rise in last 5 min with accelerating volume</div>
         <div class="how-to-item">Skips tokens already up 50%+ in the hour (momentum played out)</div>
         <div class="how-to-item">Maximum 5 open positions at once</div>
-        <div class="how-to-item">Auto sells based on your chosen difficulty — EASY (+9%/-5%), MEDIUM (+15%/-5%), or HARD (+35%/-5%) — 100% of position</div>
+        <div class="how-to-item">Auto sells based on your chosen difficulty — EASY (TP +25%/SL -15%), MEDIUM (TP +40%/SL -20%), or HARD (TP +60%/SL -25%) — 100% of position</div>
 
       </div>
     </div>
@@ -4248,9 +4248,9 @@ function _lfStartCountdown(){
 }
 
 const DIFFICULTY_TEXT={
-  EASY:'EASY mode — Entry: token must be up ≥10% over 2 min and still rising (not reversing). Take profit: +9%. Stop loss: −5%. Crash exit: −15%. Full 100% position close on every exit.',
-  MEDIUM:'MEDIUM mode — Entry: token must be up ≥10% over 2 min and still rising (not reversing). Take profit: +15%. Stop loss: −5%. Crash exit: −15%. Full 100% position close on every exit.',
-  HARD:'HARD mode — Entry: token must be up ≥10% over 1 min and still rising (stricter, not reversing). Take profit: +35%. Stop loss: −5%. Crash exit: −15%. Full 100% position close on every exit.'
+  EASY:'EASY mode — Entry: ≥5% momentum in 5m, still rising (not reversing). Take profit: +25%. Stop loss: −15%. Crash exit: −15%. Full 100% position close on every exit.',
+  MEDIUM:'MEDIUM mode — Entry: ≥5% momentum in 5m, still rising (not reversing). Take profit: +40%. Stop loss: −20%. Crash exit: −15%. Full 100% position close on every exit.',
+  HARD:'HARD mode — Entry: ≥5% momentum in 5m, still rising (not reversing). Take profit: +60%. Stop loss: −25%. Crash exit: −15%. Full 100% position close on every exit.'
 };
 const DIFFICULTY_DEFAULT_DESC='AI-powered momentum scalper. Select a difficulty below to set the entry filter and take-profit/stop-loss targets.';
 let currentDifficulty=null;   // never pre-selected — user must click EASY/MEDIUM/HARD each session
