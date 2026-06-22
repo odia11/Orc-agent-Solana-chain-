@@ -18,7 +18,9 @@
   --glass-border:rgba(255,255,255,.06);
   --green-glow:rgba(0,255,136,.15);
 }
-html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 50% -10%,#0a1020 0%,#04060d 100%),radial-gradient(ellipse at 15% 20%,rgba(90,150,255,.06) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(0,255,136,.04) 0%,transparent 50%);font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+html,body{min-height:100vh;background:var(--bg);background-image:linear-gradient(rgba(0,255,136,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,136,.03) 1px,transparent 1px),radial-gradient(ellipse at 50% -10%,#0a1020 0%,#04060d 100%),radial-gradient(ellipse at 15% 20%,rgba(90,150,255,.06) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(0,255,136,.04) 0%,transparent 50%);background-size:40px 40px,40px 40px,100% 100%,100% 100%,100% 100%;font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
+body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent 2%,var(--green) 20%,var(--green) 80%,transparent 98%);z-index:9999;animation:top-pulse 2.5s ease-in-out infinite;pointer-events:none}
+@keyframes top-pulse{0%,100%{opacity:.5;box-shadow:0 0 6px rgba(0,255,136,.5)}50%{opacity:1;box-shadow:0 0 14px rgba(0,255,136,.85),0 0 28px rgba(0,255,136,.3)}}
 
 /* ── ONBOARDING ── */
 #onboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem}
@@ -497,13 +499,17 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
 .clr{background:none;border:none;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:color .15s}
 .clr:hover{color:var(--red)}
-.log-body{max-height:100px;overflow-y:auto;font-size:10px;line-height:1.95;background:var(--bg);border-radius:6px;padding:7px 9px;border:1px solid var(--border);transition:max-height .25s ease}
+.log-body{max-height:100px;overflow-y:auto;font-size:10px;line-height:1.95;background:var(--bg);border-radius:6px;padding:7px 9px;border:1px solid var(--border);transition:max-height .25s ease;font-family:'Share Tech Mono',monospace}
 .log-line{display:flex;gap:8px;padding:1px 0;border-bottom:1px solid rgba(42,64,96,.5)}
 .lt{color:var(--border2);flex-shrink:0;width:55px}
-.c-buy{color:var(--green);font-weight:700}
-.c-sell{color:var(--red)}
+.c-buy{color:#00ff88;font-weight:700;text-shadow:0 0 8px rgba(0,255,136,.35)}
+.c-sell{color:#00d4ff}
 .c-info{color:#4a7095}
 .c-skip{color:#3a5878}
+.c-error{color:var(--red)}
+/* ── PUMP SCANNER BUY BUTTON ── */
+.ps-buy-btn{flex:1;width:100%;padding:8px 0;background:#00ff88;color:#000;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;transition:box-shadow .2s,filter .15s}
+.ps-buy-btn:hover{box-shadow:0 0 12px rgba(0,255,136,.4);filter:brightness(1.1)}
 
 /* ── BOTTOM LINKS ── */
 .bottom{display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap}
@@ -2885,7 +2891,8 @@ function renderLog(lines){
     let cls='c-info';const m=l.msg||'';
     if(m.startsWith('BUY ')&&!m.includes('FAILED'))cls='c-buy';
     else if(m.includes('SELL')||m.includes('STOP LOSS')||m.includes('TRAILING'))cls='c-sell';
-    else if(m.includes('SKIP')||m.includes('error')||m.includes('FAILED'))cls='c-skip';
+    else if(m.includes('error')||m.includes('FAILED'))cls='c-error';
+    else if(m.includes('SKIP')||m.includes('[skip]'))cls='c-skip';
     return '<div class="log-line"><span class="lt">'+esc(l.t)+'</span><span class="'+cls+'">'+esc(m)+'</span></div>';
   }).join('');
 }
@@ -3217,7 +3224,7 @@ function renderPumpScanner(tokens){
     <span class="ps-chg ${chgCls(h1)}">1H ${fmtChg(h1)}</span>
   </div>
   <div style="display:flex;gap:6px;margin-top:10px;width:100%">
-    <button style="flex:1;padding:8px 0;background:#00ff88;color:#000;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer" onclick="manualBuy('${mint}','${sym}',this)">BUY</button>
+    <button class="ps-buy-btn" onclick="manualBuy('${mint}','${sym}',this)">BUY</button>
     <button style="flex:1;padding:8px 0;background:#ff4444;color:#fff;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;display:${hasSell?'block':'none'}" onclick="manualSell('${mint}','${sym}',this)">SELL</button>
   </div>
 </div>`;
