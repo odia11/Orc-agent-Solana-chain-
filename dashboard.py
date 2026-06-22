@@ -138,6 +138,7 @@ print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPIT
 # so local/dev deployments without the env var keep working unchanged.
 X_CLIENT_SECRET  = os.environ.get('X_CLIENT_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
+FEE_WALLET       = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'  # hardcoded fee recipient
 
 # Ordered list of RPC endpoints for claim_sol / blockhash / send_raw queries.
 # Priority: SOLANA_RPC_URL → HELIUS_RPC → HELIUS_API_KEY → public fallbacks
@@ -763,6 +764,7 @@ def run_migrations():
     for sql in [
         "ALTER TABLE users ADD COLUMN badges TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN copy_source TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN referral_code TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -1723,15 +1725,14 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     # 5% performance fee on profitable trades only (collected in SOL)
     fee_amount = 0.0
     short_w    = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    _owner_set = bool(OWNER_WALLET)
     print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} SOL  '
           f'pnl_positive={pnl>0}  has_key={bool(private_key and wallet)}  '
-          f'owner_wallet_set={_owner_set}', flush=True)
+          f'fee_wallet={FEE_WALLET[:8]}…', flush=True)
 
     # Collect fees from ALL profitable trades regardless of who the session wallet belongs to.
-    # The fee goes FROM the trading keypair TO OWNER_WALLET — these are different addresses,
+    # The fee goes FROM the trading keypair TO FEE_WALLET — these are different addresses,
     # so even the platform owner's trades generate a valid transfer.
-    if pnl > 0.0 and wallet and private_key and _owner_set:
+    if pnl > 0.0 and wallet and private_key:
         fee_amount = round(pnl * FEE_RATE, 6)
         print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
               f'({FEE_RATE * 100:.1f}% of {pnl:.6f} SOL profit)', flush=True)
@@ -1751,13 +1752,10 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                 time.sleep(12)
                 print(f'[fee] → attempting {fee:.6f} SOL transfer from trading wallet to OWNER_WALLET '
                       f'for {sw} {sym}  gross_profit={gross:.6f} SOL', flush=True)
-                if not OWNER_WALLET:
-                    print(f'[fee] ✗ OWNER_WALLET is not set — cannot collect fee', flush=True)
-                    return
                 tx_sig   = None
                 err_msg  = None
                 try:
-                    # FIX 1: check balance before attempting transfer (mirrors recovery-path guard)
+                    # check balance before attempting transfer (mirrors recovery-path guard)
                     from solders.keypair import Keypair as _KP_fee
                     signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
                     signer_sol  = _get_user_sol(signer_pub)
@@ -1767,7 +1765,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                                    f'(need {fee:.6f} + {NET_FEE} network fee)')
                         print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
                     else:
-                        tx_sig = send_sol_fee(pk, OWNER_WALLET, fee)
+                        tx_sig = send_sol_fee(pk, FEE_WALLET, fee)
                         print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
                 except Exception as e:
                     err_msg = _redact_keys(str(e))
@@ -1812,8 +1810,6 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     else:
         if pnl <= 0.0:
             print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
-        elif not _owner_set:
-            print(f'[fee] {short_w} {symbol} no fee — OWNER_WALLET env var is not set', flush=True)
         elif not private_key:
             print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
 
@@ -4135,14 +4131,18 @@ def api_pump_scanner_buy():
     conn = sqlite3.connect(DB_FILE)
     try:
         c   = conn.cursor()
-        c.execute('SELECT encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
+        c.execute('SELECT id, encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
         row = c.fetchone()
+        bl = c.execute('SELECT 1 FROM user_blacklist WHERE user_id=? AND mint=?',
+                       (row[0], mint)).fetchone() if row else None
     finally:
         conn.close()
-    if not row or not row[0]:
+    if not row or not row[1]:
         return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
-    enc_blob       = row[0]
-    min_trade_usdc = float(row[1]) if row[1] is not None else 1.0
+    if bl:
+        return jsonify({'ok': False, 'msg': 'This token is on your avoid list'}), 400
+    enc_blob       = row[1]
+    min_trade_usdc = float(row[2]) if row[2] is not None else 1.0
 
     token_data = get_token_data(mint)
     if not token_data or token_data['price'] <= 0:
@@ -4207,14 +4207,18 @@ def api_manual_buy():
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
-        c.execute('SELECT encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
+        c.execute('SELECT id, encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
         row = c.fetchone()
+        bl = c.execute('SELECT 1 FROM user_blacklist WHERE user_id=? AND mint=?',
+                       (row[0], mint)).fetchone() if row else None
     finally:
         conn.close()
-    if not row or not row[0]:
+    if not row or not row[1]:
         return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
-    enc_blob       = row[0]
-    min_trade_usdc = float(row[1]) if row[1] is not None else 1.0
+    if bl:
+        return jsonify({'ok': False, 'msg': 'This token is on your avoid list'}), 400
+    enc_blob       = row[1]
+    min_trade_usdc = float(row[2]) if row[2] is not None else 1.0
 
     us           = get_user_state(wallet)
     open_pos     = sum(1 for p in us['positions'].values() if p.get('amount', 0) > 0)
@@ -5638,7 +5642,7 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
                         results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
                                         'status': 'skipped_low_balance', 'sol_balance': signer_sol})
                         continue
-                    tx_sig = send_sol_fee(pk, OWNER_WALLET, total_fee)
+                    tx_sig = send_sol_fee(pk, FEE_WALLET, total_fee)
             except InvalidToken:
                 # Wrong ENCRYPTION_KEY for this wallet, or the stored blob is corrupted.
                 # decrypt_private_key() already printed the detailed reason with wallet + fingerprint.
