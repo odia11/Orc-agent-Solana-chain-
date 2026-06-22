@@ -5611,8 +5611,9 @@ async function fetchPnlChart(){
   if(!appVisible()) return;
   try{
     const r=await fetch('/api/pnl_chart?range='+_pnlcRange).then(r=>r.json());
+    console.log('[pnl_chart] range='+_pnlcRange+' response:', JSON.stringify(r));
     _renderPnlcChart(r.data||[]);
-  }catch(e){}
+  }catch(e){console.error('[pnl_chart] fetch error:',e);}
 }
 
 function _renderPnlcChart(pts){

@@ -5146,7 +5146,9 @@ def api_pnl_chart():
 
     range_param = request.args.get('range', '1d').lower()
     days = {'1d': 1, '7d': 7, '30d': 30}.get(range_param, 7)
-    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime('%Y-%m-%d %H:%M:%S')
+    # Timestamps are stored as ISO-8601 with T separator and Z suffix (e.g. '2026-06-22T14:30:00Z').
+    # Cutoff must use the same format so the string comparison in SQLite is correct.
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=days)).strftime('%Y-%m-%dT%H:%M:%SZ')
 
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -5155,15 +5157,23 @@ def api_pnl_chart():
             c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
             if not row:
+                print(f'[pnl_chart] wallet={wallet[:8]}… not found in users table', flush=True)
                 return jsonify({'ok': True, 'data': []})
             user_id = row[0]
             c.execute(
                 '''SELECT timestamp, pnl FROM trades
                    WHERE user_id=? AND timestamp >= ?
+                     AND pnl IS NOT NULL AND pnl != 0
                    ORDER BY timestamp ASC''',
                 (user_id, cutoff)
             )
             rows = c.fetchall()
+            # Debug: also count total trades for this user so we can see how many are filtered
+            c.execute('SELECT COUNT(*), SUM(CASE WHEN pnl IS NOT NULL AND pnl != 0 THEN 1 ELSE 0 END) FROM trades WHERE user_id=?', (user_id,))
+            dbg = c.fetchone()
+            print(f'[pnl_chart] wallet={wallet[:8]}… user_id={user_id} range={range_param} '
+                  f'cutoff={cutoff} total_trades={dbg[0]} non_zero_pnl={dbg[1]} '
+                  f'in_range={len(rows)}', flush=True)
         finally:
             conn.close()
     except Exception as e:
@@ -5178,8 +5188,10 @@ def api_pnl_chart():
     for ts_str, pnl in rows:
         running = round(running + (pnl or 0.0), 6)
         try:
-            dt = datetime.datetime.strptime(ts_str[:19], '%Y-%m-%d %H:%M:%S')
-        except Exception:
+            # Stored as ISO-8601: '2026-06-22T14:30:00Z' — replace T with space and strip Z
+            dt = datetime.datetime.strptime(ts_str[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+        except Exception as parse_err:
+            print(f'[pnl_chart] timestamp parse failed: {ts_str!r} → {parse_err}', flush=True)
             continue
         if days == 1:
             # Unix timestamp (seconds) so LightweightCharts shows intraday time axis
