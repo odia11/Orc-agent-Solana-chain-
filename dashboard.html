@@ -5742,7 +5742,7 @@ function _incRenderRow(t, i){
   const solLabel=t.can_close?solRent:'No key';
 
   return `<label class="${rowCls}">
-    <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-sol="${t.sol_rent||0.00203928}" ${preChecked?'checked':''} ${disAttr} onchange="_incUpdateSummary()">
+    <input type="checkbox" class="inc-checkbox" data-idx="${i}" data-account="${t.pubkey||''}" data-sol="${t.sol_rent||0.00203928}" ${preChecked?'checked':''} ${disAttr} onchange="_incUpdateSummary()">
     <div class="inc-token-info">
       <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap">
         <a class="inc-token-mint" href="${solscanUrl}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="${t.mint||''}">${esc(label)}</a>
@@ -5839,30 +5839,40 @@ function closeIncinerator(){
 async function burnSelected(){
   const cbs=document.querySelectorAll('.inc-checkbox:checked');
   if(!cbs.length) return;
-  const pubkeys=Array.from(cbs).map(cb=>_incTokens[parseInt(cb.dataset.idx)]?.pubkey).filter(Boolean);
+  // Read account address from data-account (on-chain token account, not mint)
+  const accounts=Array.from(cbs).map(cb=>cb.dataset.account).filter(Boolean);
+  if(!accounts.length){
+    const st=document.getElementById('inc-status');
+    st.textContent='✗ No valid account addresses found — try rescanning.';
+    st.className='s-msg err'; st.style.display='block';
+    return;
+  }
   const btn=document.getElementById('inc-burn-btn');
   const st=document.getElementById('inc-status');
   btn.disabled=true; btn.textContent='Burning…';
   st.style.display='none';
   try{
-    const r=await fetch('/api/claim_sol',{
+    const r=await fetch('/api/burn-tokens',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({pubkeys})
-    }).then(r=>r.json()).catch(()=>null);
+      body:JSON.stringify({accounts})
+    }).then(res=>res.json()).catch(()=>null);
     st.style.display='block';
-    if(r?.ok){
-      st.textContent='✓ '+(r.msg||'Done! SOL recovered.');
+    if(r?.success){
+      const sol=typeof r.recovered_sol==='number'?r.recovered_sol.toFixed(6):'?';
+      st.textContent='✓ Claimed '+sol+' SOL'+(r.closed?' ('+r.closed+' account'+(r.closed!==1?'s':'')+' closed)':'');
       st.className='s-msg ok';
-      setTimeout(fetchBalance,2000);
-      setTimeout(closeIncinerator,3500);
+      setTimeout(fetchBalance,1500);
+      btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';
+      setTimeout(closeIncinerator,4000);
     } else {
-      st.textContent='✗ '+(r?.msg||'Transaction failed. Try again.');
+      const errMsg=r?.error||r?.msg||'Transaction failed — check logs.';
+      st.textContent='✗ '+errMsg;
       st.className='s-msg err';
       btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';
     }
   } catch(e){
-    st.textContent='Error: '+e.message;
+    st.textContent='✗ Network error: '+e.message;
     st.className='s-msg err'; st.style.display='block';
     btn.disabled=false; btn.textContent='🔥 Burn & Claim SOL';
   }
