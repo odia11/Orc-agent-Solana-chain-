@@ -115,9 +115,9 @@ _APP_START     = time.time()
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 DIFFICULTY_PRESETS = {
-    'EASY':   {'tp': 0.25, 'sl': 0.15, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
-    'MEDIUM': {'tp': 0.40, 'sl': 0.20, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
-    'HARD':   {'tp': 0.60, 'sl': 0.25, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
+    'EASY':   {'tp': 0.25, 'sl': 0.06, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
+    'MEDIUM': {'tp': 0.40, 'sl': 0.06, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
+    'HARD':   {'tp': 0.60, 'sl': 0.06, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
 }
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
