@@ -118,6 +118,25 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .hdr-btn:hover{border-color:var(--green);color:var(--green)}
 .hdr-btn-red{background:transparent;border:1px solid rgba(241,52,75,.3);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--red);cursor:pointer;transition:all .15s}
 .hdr-btn-red:hover{background:rgba(241,52,75,.08)}
+/* ── NAV MENU DROPDOWN ── */
+.nav-menu-wrap{position:relative;display:inline-flex}
+.nav-menu-dropdown{display:none;position:absolute;top:calc(100% + 6px);right:0;background:var(--bg2);border:1px solid var(--border2);border-radius:9px;padding:6px;min-width:170px;z-index:300;box-shadow:0 8px 32px rgba(0,0,0,.55);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px)}
+.nav-menu-dropdown.open{display:block}
+.nav-menu-item{display:flex;align-items:center;gap:8px;padding:8px 12px;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;border-radius:6px;text-decoration:none;transition:background .15s,color .15s;white-space:nowrap;background:transparent;border:none;width:100%;text-align:left;box-sizing:border-box}
+.nav-menu-item:hover{background:rgba(255,255,255,.07);color:var(--text)}
+.nav-menu-sep{height:1px;background:var(--border);margin:4px 0}
+/* ── SOL ACTION ICON BUTTONS ── */
+.sol-action-row{display:flex;gap:6px;margin-top:10px}
+.sol-action-btn{flex:1;padding:6px 4px;font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap}
+.sol-action-btn:hover:not(:disabled){border-color:var(--green);color:var(--green)}
+.sol-action-btn:disabled{opacity:.35;cursor:default}
+/* ── COMPACT POSITIONS IN TOP CARD ── */
+#positions-panel .trade-table th:nth-child(2),
+#positions-panel .trade-table td:nth-child(2),
+#positions-panel .trade-table th:nth-child(3),
+#positions-panel .trade-table td:nth-child(3),
+#positions-panel .trade-table th:nth-child(4),
+#positions-panel .trade-table td:nth-child(4){display:none}
 
 /* ── STATS ── */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem}
@@ -1812,13 +1831,19 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <span class="health-dot" id="health-dot"></span>HEALTH
       </button>
       <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:rgba(255,193,58,.4);color:#f0b90b" title="Owner admin dashboard">👑 Admin</button>
-      <a href="/history" class="hdr-btn nav-mobile-hide" title="View trade history">📋 History</a>
-      <a href="/leaderboard" class="hdr-btn nav-mobile-hide" title="Public leaderboard">🏆 Leaderboard</a>
-      <button class="hdr-btn nav-mobile-hide" id="traders-btn" onclick="openTradersView()" title="Live trader activity feed">👥 Traders</button>
-      <button class="hdr-btn" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal()" title="Tips &amp; Help">? Help</button>
       <button class="hdr-btn" id="settings-btn" onclick="openSettings()">⚙ Settings</button>
       <button class="hdr-btn" id="connect-btn" style="display:none;border-color:var(--green);color:var(--green)" onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0)">⬡ Connect Wallet</button>
       <button class="hdr-btn-red" id="logout-btn" style="display:none" onclick="doLogout()">⏻ Disconnect</button>
+      <div class="nav-menu-wrap">
+        <button class="hdr-btn" id="nav-menu-btn" onclick="_toggleNavMenu()" title="Navigation menu">☰ Menu</button>
+        <div class="nav-menu-dropdown" id="nav-menu-dropdown">
+          <a href="/history" class="nav-menu-item">📋 History</a>
+          <a href="/leaderboard" class="nav-menu-item">🏆 Leaderboard</a>
+          <button class="nav-menu-item" id="traders-btn" onclick="openTradersView();_closeNavMenu()">👥 Traders</button>
+          <div class="nav-menu-sep"></div>
+          <button class="nav-menu-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal();_closeNavMenu()">? Help &amp; Tips</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -1931,23 +1956,54 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     <button class="bib-btn" onclick="toggleTrader()">Start Bot</button>
   </div>
 
-  <!-- STATS -->
+  <!-- TOP GRID: Balance · Positions · Bot -->
   <div class="stats">
+    <!-- Col 1: SOL Balance -->
     <div class="stat">
       <div class="stat-lbl">SOL Balance</div>
       <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
-      <div class="stat-sub" style="display:block">available to trade</div>
-      <div class="stat-sub" id="s-sol-usdc" style="display:block;color:var(--muted);margin-top:3px"></div>
-      <div id="sol-btns-wrap">
-        <button id="claim-sol-btn" class="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts and recover SOL rent">Burn &amp; Claim</button>
-        <button id="deposit-sol-btn" class="deposit-sol-btn" onclick="openDepositModal()" style="display:none" title="Show deposit address">Deposit SOL</button>
-        <button id="withdraw-sol-btn" class="withdraw-sol-btn" onclick="openWithdrawModal()" style="display:none" title="Withdraw SOL to another wallet">Withdraw SOL</button>
+      <div class="stat-sub">available to trade</div>
+      <div class="stat-sub" id="s-sol-usdc" style="color:var(--muted);margin-top:2px"></div>
+      <div class="sol-action-row">
+        <button class="sol-action-btn" id="deposit-sol-btn" onclick="openDepositModal()" title="Show deposit address">↓ Deposit</button>
+        <button class="sol-action-btn" id="withdraw-sol-btn" onclick="openWithdrawModal()" title="Withdraw SOL">↑ Withdraw</button>
+        <button class="sol-action-btn" id="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts">🔥 Burn</button>
       </div>
     </div>
-    <div class="stat">
-      <div class="stat-lbl">Open Positions</div>
-      <div class="stat-val y" id="s-pos"><span class="stat-placeholder">——</span></div>
+    <!-- Col 2: Open Positions -->
+    <div class="stat" id="positions-panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <div class="stat-lbl" style="margin-bottom:0">Open Positions</div>
+        <span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span>
+      </div>
+      <div class="stat-val b" id="s-pos"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub">max 5 concurrent</div>
+      <div style="margin-top:10px;max-height:155px;overflow-y:auto">
+        <div id="top-pos-empty" style="font-size:10px;color:var(--muted);text-align:center;padding:10px 0">No open positions</div>
+        <div class="trade-table-wrap" id="top-pos-table" style="display:none">
+          <table class="trade-table">
+            <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Invested</th><th>P&amp;L</th><th></th></tr></thead>
+            <tbody id="positions-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <!-- Col 3: Bot Status -->
+    <div class="stat" id="trade-card">
+      <div class="stat-lbl">Bot Status</div>
+      <div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px">
+        <div class="badge badge-idle" id="trade-badge">IDLE</div>
+        <div class="copy-source-pill" id="copy-source-pill" style="display:none" onclick="_stopCopyingConfirm()" title="Click to stop copying">📋 <span id="copy-source-label"></span></div>
+      </div>
+      <div class="mode-desc" style="max-width:none;margin-bottom:10px">AI-powered momentum scalper. Select a difficulty below to set TP/SL targets.</div>
+      <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45;width:100%" title="Connect a wallet to enable trading">▶ START TRADING</button>
+      <div class="diff-row" id="diff-row">
+        <span class="diff-label">DIFFICULTY</span>
+        <button class="diff-btn" data-diff="EASY" onclick="setDifficulty('EASY')">EASY</button>
+        <button class="diff-btn" data-diff="MEDIUM" onclick="setDifficulty('MEDIUM')">MEDIUM</button>
+        <button class="diff-btn" data-diff="HARD" onclick="setDifficulty('HARD')">HARD</button>
+      </div>
+      <div class="trade-warn" id="trade-warn"></div>
     </div>
   </div>
   <div id="badges-row" class="badges-row" style="display:none;margin-bottom:.75rem"></div>
@@ -1955,17 +2011,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 
   <!-- SOL WARNING -->
   <div class="usdc-warn" id="usdc-warn">⚠ Low SOL balance — send SOL to your trading wallet to start trading.</div>
-
-  <!-- OPEN POSITIONS -->
-  <div class="pos-panel" id="positions-panel" style="display:none">
-    <div class="panel-hdr">Open Positions &nbsp;<span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
-    <div class="trade-table-wrap">
-      <table class="trade-table">
-        <thead><tr><th>Token</th><th>Opened</th><th>Entry</th><th>Current</th><th>Invested</th><th>P&amp;L</th><th></th></tr></thead>
-        <tbody id="positions-tbody"></tbody>
-      </table>
-    </div>
-  </div>
 
   <!-- PNL PERFORMANCE CHART -->
   <div class="pnlc-panel" id="pnlc-panel">
@@ -2000,37 +2045,37 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- LIVE ACTIVITY FEED -->
-  <div class="live-feed-panel" id="live-feed-panel">
-    <div class="lf-header">
-      <div class="lf-header-left">
-        <div class="panel-hdr" style="margin-bottom:0">Live Activity &nbsp;<span id="lf-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
+  <!-- LIVE ACTIVITY + DAILY LEADERBOARD -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.25rem">
+    <div class="live-feed-panel" id="live-feed-panel" style="margin-bottom:0">
+      <div class="lf-header">
+        <div class="lf-header-left">
+          <div class="panel-hdr" style="margin-bottom:0">Live Activity &nbsp;<span id="lf-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
+        </div>
+        <div class="lf-header-right">
+          <span class="lf-live-dot"></span>
+          <span class="lf-live-label">LIVE</span>
+          <span class="lf-countdown" id="lf-countdown"></span>
+        </div>
       </div>
-      <div class="lf-header-right">
-        <span class="lf-live-dot"></span>
-        <span class="lf-live-label">LIVE</span>
-        <span class="lf-countdown" id="lf-countdown"></span>
-      </div>
-    </div>
-    <div id="lf-list" class="lf-list">
-      <div class="lf-empty">No recent trades yet</div>
-    </div>
-  </div>
-
-  <!-- DAILY LEADERBOARD -->
-  <div class="lb-panel" id="lb-panel">
-    <div class="lb-header">
-      <div class="lf-header-left">
-        <div class="panel-hdr" style="margin-bottom:0">🏆 DAILY LEADERBOARD</div>
-      </div>
-      <div class="lf-header-right">
-        <span class="lf-live-dot"></span>
-        <span class="lf-live-label">LIVE</span>
-        <span class="lf-countdown" id="lb-countdown"></span>
+      <div id="lf-list" class="lf-list">
+        <div class="lf-empty">No recent trades yet</div>
       </div>
     </div>
-    <div id="lb-list" class="lb-list">
-      <div class="lb-empty">No trades today yet — be the first!</div>
+    <div class="lb-panel" id="lb-panel" style="margin-bottom:0">
+      <div class="lb-header">
+        <div class="lf-header-left">
+          <div class="panel-hdr" style="margin-bottom:0">🏆 DAILY LEADERBOARD</div>
+        </div>
+        <div class="lf-header-right">
+          <span class="lf-live-dot"></span>
+          <span class="lf-live-label">LIVE</span>
+          <span class="lf-countdown" id="lb-countdown"></span>
+        </div>
+      </div>
+      <div id="lb-list" class="lb-list">
+        <div class="lb-empty">No trades today yet — be the first!</div>
+      </div>
     </div>
   </div>
 
@@ -2236,30 +2281,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <!-- TOAST CONTAINER -->
   <div id="lf-toast-wrap"></div>
 
-  <!-- TRADE MODE -->
-  <div class="modes">
-    <div class="mode" id="trade-card">
-      <div class="mode-left">
-        <div class="mode-icon">📈</div>
-        <div class="mode-info">
-          <div class="mode-title">TRADE MODE</div>
-          <div class="mode-desc">AI-powered momentum scalper. Select a difficulty below to set the entry filter and take-profit/stop-loss targets.</div>
-        </div>
-      </div>
-      <div class="mode-right">
-        <div class="badge badge-idle" id="trade-badge">IDLE</div>
-        <div class="copy-source-pill" id="copy-source-pill" style="display:none" onclick="_stopCopyingConfirm()" title="Click to stop copying">📋 <span id="copy-source-label"></span></div>
-        <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45" title="Connect a wallet to enable trading">▶ START TRADING</button>
-      </div>
-      <div class="diff-row" id="diff-row">
-        <span class="diff-label">DIFFICULTY</span>
-        <button class="diff-btn" data-diff="EASY" onclick="setDifficulty('EASY')">EASY</button>
-        <button class="diff-btn" data-diff="MEDIUM" onclick="setDifficulty('MEDIUM')">MEDIUM</button>
-        <button class="diff-btn" data-diff="HARD" onclick="setDifficulty('HARD')">HARD</button>
-      </div>
-    </div>
-    <div class="trade-warn" id="trade-warn"></div>
-  </div>
 
     <!-- HOW IT WORKS -->
     <div class="hiw-section">
@@ -2717,8 +2738,8 @@ async function launchApp(){
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
-    document.getElementById('deposit-sol-btn').style.display='block';
-    document.getElementById('withdraw-sol-btn').style.display='block';
+    document.getElementById('deposit-sol-btn').style.display='';
+    document.getElementById('withdraw-sol-btn').style.display='';
     document.getElementById('perf-share-btns').style.display='flex';
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
     fetch('/api/username').then(r=>r.json()).then(r=>{
@@ -3914,10 +3935,16 @@ function renderPnlChart(curve){
 }
 
 function renderPositions(detail){
-  const panel=document.getElementById('positions-panel');
   _openMints=new Set((detail||[]).map(p=>p.mint).filter(Boolean));
-  if(!detail||!detail.length){panel.style.display='none';return;}
-  panel.style.display='block';
+  const emptyEl=document.getElementById('top-pos-empty');
+  const tableEl=document.getElementById('top-pos-table');
+  if(!detail||!detail.length){
+    if(emptyEl) emptyEl.style.display='block';
+    if(tableEl) tableEl.style.display='none';
+    return;
+  }
+  if(emptyEl) emptyEl.style.display='none';
+  if(tableEl) tableEl.style.display='block';
   document.getElementById('pos-count').textContent=detail.length+'/5';
   document.getElementById('positions-tbody').innerHTML=detail.map(p=>{
     const isPos=p.pnl>=0;
@@ -4653,6 +4680,22 @@ function _renderBlacklist(tokens){
       <button class="bl-remove-btn" onclick="removeBlacklistToken('${esc(t.mint)}')">✕ Remove</button>
     </div>`).join('')+'</div>';
 }
+
+// ── NAV MENU ──
+function _toggleNavMenu(){
+  const d=document.getElementById('nav-menu-dropdown');
+  if(d) d.classList.toggle('open');
+}
+function _closeNavMenu(){
+  const d=document.getElementById('nav-menu-dropdown');
+  if(d) d.classList.remove('open');
+}
+document.addEventListener('click',function(e){
+  const btn=document.getElementById('nav-menu-btn');
+  const dd=document.getElementById('nav-menu-dropdown');
+  if(dd&&dd.classList.contains('open')&&!dd.contains(e.target)&&(!btn||!btn.contains(e.target)))
+    dd.classList.remove('open');
+});
 
 async function openSettings(){
   const modal=document.getElementById('settings-modal');
