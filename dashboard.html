@@ -1002,6 +1002,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .tvp-fp-name{font-size:11px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tvp-fp-wallet{font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;white-space:nowrap;margin-top:1px}
 .tvp-fp-pnl{font-size:10px;font-weight:700;font-family:'Orbitron',monospace;white-space:nowrap;flex-shrink:0;min-width:72px;text-align:right}
+/* ── FOLLOW STATE INDICATORS ── */
+.tvp-fp-row.is-following{background:rgba(0,255,136,.04);border-left:3px solid #00ff88;padding-left:11px}
+.tvfl-row.is-following{background:rgba(0,255,136,.04);border-left:3px solid #00ff88;padding-left:13px}
+.fstate-follows-you{display:inline-block;font-size:8px;font-family:'Share Tech Mono',monospace;background:rgba(0,255,136,.08);border:1px solid rgba(0,255,136,.25);border-radius:4px;color:rgba(0,255,136,.65);padding:1px 5px;margin-left:5px;letter-spacing:.04em;white-space:nowrap;vertical-align:middle}
+.fstate-mutual{display:inline-block;font-size:8px;font-family:'Share Tech Mono',monospace;background:rgba(0,255,136,.18);border:1px solid rgba(0,255,136,.5);border-radius:4px;color:var(--green);padding:1px 5px;margin-left:5px;letter-spacing:.04em;white-space:nowrap;vertical-align:middle;font-weight:700}
+.fstate-following-pill{display:inline-block;font-size:8px;font-family:'Share Tech Mono',monospace;background:rgba(0,255,136,.12);border:1px solid rgba(0,255,136,.3);border-radius:4px;color:var(--green);padding:1px 6px;margin-left:6px;letter-spacing:.04em;white-space:nowrap;vertical-align:middle}
 .tvp-fp-empty{text-align:center;padding:28px 16px;font-size:11px;color:var(--muted);letter-spacing:.06em}
 .tvp-fp-loading{text-align:center;padding:20px;font-size:10px;color:var(--muted);letter-spacing:.06em}
 /* sections below */
@@ -4953,7 +4959,7 @@ function renderTradersFeed(items){
     return `<div class="tv-card" onclick="openProfileCard(${uid})">
       ${avatarHtml}
       <div class="tv-identity">
-        <span class="tv-name">${esc(e.username)}</span>
+        <span class="tv-name">${esc(e.username)}${isFollowed?'<span class="fstate-following-pill">Following</span>':''}</span>
         <span class="tv-wallet">${esc(e.wallet)}</span>
       </div>
       <div class="tv-signal">${signalHtml}</div>
@@ -5289,10 +5295,14 @@ async function openFollowView(userId, username, type){
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
       ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
       : '';
-    return `<div class="tvfl-row" onclick="openProfileCard(${u.user_id||0})">
+    const rowCls = (type==='following' && isFollowed) ? 'tvfl-row is-following' : 'tvfl-row';
+    const nameBadge = type==='followers'
+      ? (isFollowed ? '<span class="fstate-mutual">Mutual</span>' : '<span class="fstate-follows-you">Follows you</span>')
+      : '';
+    return `<div class="${rowCls}" onclick="openProfileCard(${u.user_id||0})">
       <div class="tvfl-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvfl-info">
-        <div class="tvfl-name">${esc(u.username||u.wallet)}</div>
+        <div class="tvfl-name">${esc(u.username||u.wallet)}${nameBadge}</div>
         <div class="tvfl-wallet">${esc(u.wallet)}</div>
       </div>
       <div class="tvfl-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
@@ -5336,10 +5346,14 @@ async function _loadFollowPanel(wallet, tab){
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
       ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
       : '';
-    return `<div class="tvp-fp-row" onclick="openProfileCard(${u.user_id||0})">
+    const rowCls = (tab==='following' && isFollowed) ? 'tvp-fp-row is-following' : 'tvp-fp-row';
+    const nameBadge = tab==='followers'
+      ? (isFollowed ? '<span class="fstate-mutual">Mutual</span>' : '<span class="fstate-follows-you">Follows you</span>')
+      : '';
+    return `<div class="${rowCls}" onclick="openProfileCard(${u.user_id||0})">
       <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvp-fp-info">
-        <div class="tvp-fp-name">${esc(u.username||u.wallet)}</div>
+        <div class="tvp-fp-name">${esc(u.username||u.wallet)}${nameBadge}</div>
         <div class="tvp-fp-wallet">${esc(u.wallet)}</div>
       </div>
       <div class="tvp-fp-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
