@@ -132,6 +132,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .sol-action-btn{flex:1;padding:6px 4px;font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap}
 .sol-action-btn:hover:not(:disabled){border-color:var(--green);color:var(--green)}
 .sol-action-btn:disabled{opacity:.35;cursor:default}
+@keyframes dep-btn-pulse{
+  0%,100%{box-shadow:none;opacity:1}
+  50%{box-shadow:0 0 14px rgba(255,193,7,.7),0 0 28px rgba(255,193,7,.35);opacity:.8}
+}
+.dep-btn-pulse{animation:dep-btn-pulse .5s ease-in-out 4;border-color:rgba(255,193,7,.6)!important;color:#ffc107!important}
 /* ── COMPACT POSITIONS IN TOP CARD ── */
 #positions-panel .trade-table th:nth-child(2),
 #positions-panel .trade-table td:nth-child(2),
@@ -3241,6 +3246,13 @@ function renderPumpScanner(tokens){
 
 async function manualBuy(mint,symbol,btn){
   if(!btn) return;
+  const solBal=parseFloat(document.getElementById('s-sol').textContent)||0;
+  if(solBal<0.01){
+    showLfToast('⚠️','Insufficient SOL balance — deposit SOL to trade','warn');
+    const depBtn=document.getElementById('deposit-sol-btn');
+    if(depBtn){depBtn.classList.add('dep-btn-pulse');setTimeout(()=>depBtn.classList.remove('dep-btn-pulse'),2000);}
+    return;
+  }
   btn.disabled=true; btn.textContent='BUYING'; btn.classList.add('ps-btn-loading');
   try{
     const r=await fetch('/api/manual_buy',{
@@ -4205,7 +4217,12 @@ function showLfToast(icon,msg,type){
   if(!wrap) return;
   const toast=document.createElement('div');
   toast.className='lf-toast';
-  toast.style.borderLeft='3px solid '+(type==='pos'?'var(--green)':'var(--red)');
+  if(type==='warn'){
+    toast.style.borderLeft='3px solid #ffc107';
+    toast.style.background='rgba(255,193,7,0.08)';
+  } else {
+    toast.style.borderLeft='3px solid '+(type==='pos'?'var(--green)':'var(--red)');
+  }
   const iconSpan=document.createElement('span');
   iconSpan.className='lf-toast-icon';
   iconSpan.textContent=icon;
@@ -4217,7 +4234,7 @@ function showLfToast(icon,msg,type){
   setTimeout(()=>{
     toast.classList.add('lf-toast-removing');
     toast.addEventListener('animationend',()=>toast.remove(),{once:true});
-  },4500);
+  },type==='warn'?4000:4500);
 }
 
 function _lfStartCountdown(){

@@ -4247,7 +4247,7 @@ def api_manual_buy():
     spend = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
     spend = round(min(spend, us_sol), 4)
     if spend < 0.001:
-        return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to buy'}), 400
+        return jsonify({'ok': False, 'msg': 'Insufficient SOL balance'}), 400
 
     with _use_key(enc_blob, wallet) as _pk:
         ok = _execute_user_swap(wallet, _pk, 'buy', mint, str(spend))
