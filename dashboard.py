@@ -5036,6 +5036,191 @@ def api_claim_sol():
     return jsonify({'ok': True, 'msg': msg, 'reclaimed': round(reclaimed, 6),
                     'closed': closed, 'txs': tx_sigs})
 
+
+@app.route('/api/burn-tokens', methods=['POST'])
+@rate_limit(3, 60)
+def api_burn_tokens():
+    """Close a caller-supplied list of empty/dust SPL token accounts and reclaim rent.
+    Body: {"accounts": ["<token_account_address>", ...]}  (max 25)
+    Returns: {"success": bool, "recovered_sol": float, "failed": ["<addr>", ...], "txs": [...]}
+    """
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'success': False, 'error': 'Not authenticated'}), 401
+
+    data     = request.get_json(silent=True) or {}
+    raw_list = data.get('accounts', [])
+    if not isinstance(raw_list, list) or not raw_list:
+        return jsonify({'success': False, 'error': 'accounts must be a non-empty list'}), 400
+    if len(raw_list) > 25:
+        return jsonify({'success': False, 'error': 'Max 25 accounts per request'}), 400
+    account_addresses = []
+    for addr in raw_list:
+        addr = str(addr).strip()
+        if not is_valid_solana_address(addr):
+            return jsonify({'success': False, 'error': f'Invalid account address: {addr}'}), 400
+        account_addresses.append(addr)
+
+    conn = sqlite3.connect(DB_FILE)
+    row  = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    conn.close()
+    if not row or not row[0]:
+        return jsonify({'success': False, 'error': 'No trading key — configure in Settings first'}), 400
+
+    from solders.keypair     import Keypair     as _KP_bt
+    from solders.pubkey      import Pubkey      as _PBK_bt
+    from solders.instruction import Instruction as _IX_bt, AccountMeta as _AM_bt
+    from solders.transaction import Transaction as _TX_bt
+    from solders.hash        import Hash        as _SH_bt
+
+    try:
+        with _use_key(row[0], wallet) as pk_str:
+            kp     = _KP_bt.from_base58_string(pk_str)
+            signer = kp.pubkey()
+    except Exception as e:
+        print(f'[burn-tokens] key decrypt error: {_redact_keys(str(e))}', flush=True)
+        return jsonify({'success': False, 'error': 'Cannot decrypt trading key — please re-save in Settings'}), 500
+
+    working_rpc = CLAIM_SOL_RPCS[-1]
+    headers     = {'Content-Type': 'application/json'}
+
+    # ── Fetch account info for each requested address ──────────────────────────
+    closeable     = []   # {pubkey, lamports, raw_amt, mint, owner, program_id}
+    failed_fetch  = []   # pubkeys we couldn't resolve
+    skip_no_auth  = []   # pubkeys owned by a different key
+
+    for addr in account_addresses:
+        resolved = False
+        for rpc in CLAIM_SOL_RPCS:
+            try:
+                r = requests.post(rpc, json={
+                    'jsonrpc': '2.0', 'id': 1,
+                    'method': 'getAccountInfo',
+                    'params': [addr, {'encoding': 'jsonParsed'}],
+                }, headers=headers, timeout=15)
+                if r.status_code != 200:
+                    continue
+                resp   = r.json()
+                if 'error' in resp:
+                    continue
+                value  = resp.get('result', {}).get('value')
+                if value is None:
+                    failed_fetch.append(addr)
+                    resolved = True
+                    break
+
+                parsed_data = value.get('data', {})
+                if not isinstance(parsed_data, dict) or parsed_data.get('program') not in ('spl-token', 'spl-token-2022'):
+                    failed_fetch.append(addr)
+                    resolved = True
+                    break
+
+                info        = parsed_data.get('parsed', {}).get('info', {})
+                tok         = info.get('tokenAmount', {})
+                raw_str     = tok.get('amount', '0') or '0'
+                raw_amt     = int(raw_str) if raw_str.isdigit() else 0
+                lamports    = int(value.get('lamports', 0))
+                mint_str    = info.get('mint', '')
+                authority   = info.get('owner', '')   # wallet that controls this token account
+                prog_id     = value.get('owner', _SPL_PROG_STR)  # token program that owns the account
+
+                working_rpc = rpc
+                if authority != str(signer):
+                    skip_no_auth.append(addr)
+                else:
+                    closeable.append({
+                        'pubkey':     addr,
+                        'lamports':   lamports,
+                        'raw_amt':    raw_amt,
+                        'mint':       mint_str,
+                        'owner':      authority,
+                        'program_id': prog_id,
+                    })
+                resolved = True
+                break
+            except Exception as ex:
+                print(f'[burn-tokens] getAccountInfo {addr} rpc={rpc.split("?")[0]} exc={ex}', flush=True)
+
+        if not resolved:
+            failed_fetch.append(addr)
+
+    failed = skip_no_auth + failed_fetch
+
+    if not closeable:
+        return jsonify({
+            'success':       False,
+            'error':         'No closeable accounts found (wrong authority or fetch error)',
+            'recovered_sol': 0.0,
+            'failed':        failed,
+        })
+
+    # ── Build and send CloseAccount (+ Burn for dust) transactions ─────────────
+    tx_sigs      = []
+    close_failed = []
+
+    for i in range(0, len(closeable), 5):
+        batch = closeable[i:i+5]
+        try:
+            ixs = []
+            for a in batch:
+                acc_prog = _PBK_bt.from_string(a['program_id'])
+                if a['raw_amt'] > 0:
+                    # Burn dust first — CloseAccount requires zero balance
+                    ixs.append(_IX_bt(
+                        program_id=acc_prog,
+                        accounts=[
+                            _AM_bt(_PBK_bt.from_string(a['pubkey']), is_signer=False, is_writable=True),
+                            _AM_bt(_PBK_bt.from_string(a['mint']),   is_signer=False, is_writable=True),
+                            _AM_bt(signer,                            is_signer=True,  is_writable=False),
+                        ],
+                        data=bytes([8]) + struct.pack('<Q', a['raw_amt']),
+                    ))
+                ixs.append(_IX_bt(
+                    program_id=acc_prog,
+                    accounts=[
+                        _AM_bt(_PBK_bt.from_string(a['pubkey']), is_signer=False, is_writable=True),
+                        _AM_bt(signer,                            is_signer=False, is_writable=True),
+                        _AM_bt(signer,                            is_signer=True,  is_writable=False),
+                    ],
+                    data=bytes([9]),
+                ))
+
+            bh_resp = requests.post(working_rpc, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+            }, timeout=10).json()
+            bh  = bh_resp['result']['value']['blockhash']
+            tx  = _TX_bt.new_signed_with_payer(ixs, signer, [kp], _SH_bt.from_string(bh))
+            res = requests.post(working_rpc, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+                'params': [base64.b64encode(bytes(tx)).decode(),
+                           {'encoding': 'base64', 'skipPreflight': False}],
+            }, timeout=30).json()
+            print(f'[burn-tokens] sendTransaction response: {res}', flush=True)
+            if 'error' in res:
+                close_failed.extend(a['pubkey'] for a in batch)
+            else:
+                tx_sigs.append(str(res.get('result', '')))
+        except Exception as e:
+            print(f'[burn-tokens] batch exception: {_redact_keys(str(e))}', flush=True)
+            close_failed.extend(a['pubkey'] for a in batch)
+
+    closed_set    = set(close_failed)
+    closed_accs   = [a for a in closeable if a['pubkey'] not in closed_set]
+    recovered_sol = sum(a['lamports'] for a in closed_accs) / 1e9
+    all_failed    = failed + close_failed
+
+    add_user_log(wallet, f'[burn-tokens] closed={len(closed_accs)} failed={len(all_failed)} '
+                         f'recovered={recovered_sol:.6f} SOL')
+    threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
+    return jsonify({
+        'success':       len(close_failed) == 0 and not failed_fetch,
+        'recovered_sol': round(recovered_sol, 6),
+        'closed':        len(closed_accs),
+        'failed':        all_failed,
+        'txs':           tx_sigs,
+    })
+
+
 # ── MARKET / TOTD / TRADES ──
 @app.route('/api/market')
 @rate_limit(30, 60)
