@@ -3630,6 +3630,15 @@ def get_profile(user_id: int):
         c.execute('SELECT COUNT(*) FROM follows WHERE follower_id = ?', (user_id,))
         following_count = (c.fetchone() or [0])[0]
 
+        viewer_wallet = _current_wallet()
+        is_following = False
+        if viewer_wallet:
+            c.execute('SELECT id FROM users WHERE wallet_address=?', (viewer_wallet,))
+            vrow = c.fetchone()
+            if vrow:
+                c.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (vrow[0], user_id))
+                is_following = c.fetchone() is not None
+
         c.execute('SELECT COALESCE(SUM(pnl), 0) FROM trades WHERE user_id=?', (user_id,))
         total_pnl_row = c.fetchone()
         c.execute(
@@ -3684,6 +3693,7 @@ def get_profile(user_id: int):
         'win_rate':        win_rate,
         'bot_active':      bot_active,
         'badges':          [b.strip() for b in (badges_str or '').split(',') if b.strip()],
+        'is_following':    is_following,
     })
 
 # ── PROFILE TRADES ──

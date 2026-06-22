@@ -5179,18 +5179,50 @@ async function _tpcSendSol(amountSol, recipientFullWallet) {
 async function _tpcToggleFollow(userId, followKey){
   const btn=document.getElementById('tpc-follow-btn');
   if(!btn||btn.disabled) return;
-  btn.disabled=true;
-  const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
-  btn.disabled=false;
-  if(!r?.ok) return;
+
+  const wasFollowing=_tvFollowed.has(followKey);
   const username=followKey.split('|')[0];
+
+  // Optimistic update — apply immediately before the API round-trip
+  if(wasFollowing){
+    _tvFollowed.delete(followKey);
+    btn.className='tpc-follow-btn btn-follow';
+    btn.textContent='Follow';
+  } else {
+    _tvFollowed.add(followKey);
+    btn.className='tpc-follow-btn btn-follow following is-following';
+    btn.textContent='Following';
+  }
+
+  btn.disabled=true;
+  const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(res=>res.json()).catch(()=>null);
+  btn.disabled=false;
+
+  if(!r?.ok){
+    // Revert optimistic update on failure
+    if(wasFollowing){
+      _tvFollowed.add(followKey);
+      btn.className='tpc-follow-btn btn-follow following is-following';
+      btn.textContent='Following';
+    } else {
+      _tvFollowed.delete(followKey);
+      btn.className='tpc-follow-btn btn-follow';
+      btn.textContent='Follow';
+    }
+    showLfToast('🔴','Could not update follow status — try again','neg');
+    return;
+  }
+
+  // Sync to authoritative server state (handles any edge cases)
   if(r.following){
     _tvFollowed.add(followKey);
     btn.className='tpc-follow-btn btn-follow following is-following';
+    btn.textContent='Following';
     showLfToast('👥',`Now following ${username}`,'pos');
   } else {
     _tvFollowed.delete(followKey);
     btn.className='tpc-follow-btn btn-follow';
+    btn.textContent='Follow';
     showLfToast('👋',`Unfollowed ${username}`,'neg');
   }
   const fc=document.getElementById('tpc-follower-count');
@@ -5433,6 +5465,10 @@ async function openProfileCard(userId){
   _tvpCurrentProfileUsername = p.username || '';
   console.log('wallet set:', _tpcCurrentFullWallet);
   const followKey = p.username+'|'+p.wallet;
+  // Seed _tvFollowed from server's authoritative response so the button is
+  // correct on first load even if this trader was followed in a previous session.
+  if(p.is_following){ _tvFollowed.add(followKey); }
+  else               { _tvFollowed.delete(followKey); }
   const isFollowing = _tvFollowed.has(followKey);
   const followCls = 'tpc-follow-btn btn-follow'+(isFollowing?' following is-following':'');
   const _isSelf = phantomKey && _tpcCurrentFullWallet === phantomKey;
