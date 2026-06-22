@@ -5117,6 +5117,107 @@ def api_chart(mint):
         print(f'[chart] unhandled error: {e}', flush=True)
         return jsonify({'candles': [], 'error': 'Chart data unavailable'})
 
+def _trades_from_db(wallet: str, today: str) -> tuple:
+    """Reconstruct daily stats + trade history from the SQLite trades table.
+    Used as a fallback when in-memory trades_history is empty (server restart / new session).
+    Returns (daily_dict, history_list, recent_list) — empty tuple values on error."""
+    import calendar as _cal
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            uid_row = conn.execute(
+                'SELECT id FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+            if not uid_row:
+                print(f'[trades_from_db] wallet={wallet[:8]}… not in users table', flush=True)
+                return {}, [], []
+            uid = uid_row[0]
+            # Timestamps stored as 'YYYY-MM-DDTHH:MM:SSZ'
+            today_rows = conn.execute(
+                '''SELECT token, entry_price, exit_price, amount, pnl, timestamp, mint_address
+                   FROM trades
+                   WHERE user_id=? AND timestamp >= ? AND timestamp <= ?
+                     AND pnl IS NOT NULL
+                   ORDER BY timestamp ASC''',
+                (uid, today + 'T00:00:00Z', today + 'T23:59:59Z')
+            ).fetchall()
+            recent_rows = conn.execute(
+                '''SELECT token, entry_price, exit_price, amount, pnl, timestamp, mint_address
+                   FROM trades
+                   WHERE user_id=? AND pnl IS NOT NULL
+                   ORDER BY timestamp DESC LIMIT 20''',
+                (uid,)
+            ).fetchall()
+            total_count = conn.execute(
+                'SELECT COUNT(*) FROM trades WHERE user_id=?', (uid,)
+            ).fetchone()[0]
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[trades_from_db] DB error: {e}', flush=True)
+        return {}, [], []
+
+    def _row_to_trade(r):
+        token, entry, exit_p, amount, pnl, ts_str, mint = r
+        pnl    = pnl    or 0.0
+        entry  = entry  or 0.0
+        exit_p = exit_p or 0.0
+        amount = amount or 0.0
+        pnl_pct  = round((exit_p - entry) / entry * 100, 2) if entry > 0 else 0.0
+        spend    = round(amount * entry, 6)
+        ts_unix  = 0
+        time_str = ''
+        try:
+            dt = datetime.datetime.strptime(ts_str[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+            ts_unix  = int(_cal.timegm(dt.timetuple()))
+            time_str = dt.strftime('%H:%M')
+        except Exception as pe:
+            print(f'[trades_from_db] parse error ts={ts_str!r}: {pe}', flush=True)
+        return {
+            'symbol':      token or '???',
+            'entry':       entry,
+            'exit':        exit_p,
+            'pnl':         round(pnl, 4),
+            'pnl_pct':     pnl_pct,
+            'ts':          ts_unix,
+            'time':        time_str,
+            'date':        today,
+            'mint':        mint or '',
+            'spend':       spend,
+            'exit_reason': '',
+        }
+
+    history = [_row_to_trade(r) for r in today_rows]
+    recent  = [_row_to_trade(r) for r in recent_rows]
+
+    total_pnl   = round(sum(t['pnl']   for t in history), 4)
+    total_spend = sum(t['spend'] for t in history)
+    wins        = sum(1 for t in history if t['pnl'] > 0)
+    n           = len(history)
+    pnl_pcts    = [t['pnl_pct'] for t in history]
+
+    curve   = []
+    running = 0.0
+    for t in history:
+        running = round(running + t['pnl'], 4)
+        curve.append({'t': t['time'], 'v': running})
+
+    daily = {
+        'date':          today,
+        'total_pnl':     total_pnl,
+        'total_pnl_pct': round(total_pnl / total_spend * 100, 2) if total_spend else 0.0,
+        'trades':        n,
+        'wins':          wins,
+        'best':          max(pnl_pcts) if pnl_pcts else None,
+        'worst':         min(pnl_pcts) if pnl_pcts else None,
+        'curve':         curve,
+    }
+    print(f'[trades_from_db] wallet={wallet[:8]}… today={today} '
+          f'today_trades={n} total_pnl={total_pnl:.4f} '
+          f'total_db_trades={total_count} recent={len(recent)}', flush=True)
+    return daily, history[-10:], recent
+
+
 @app.route('/api/trades')
 @rate_limit(30, 60)
 def api_trades():
@@ -5129,6 +5230,13 @@ def api_trades():
         today        = us['daily_stats']['date']
         today_trades = [t for t in us.get('trades_history', []) if t.get('date') == today]
         recent       = us.get('trades_history', [])[-20:]
+        print(f'[api_trades] wallet={wallet[:8]}… today={today} '
+              f'in_mem_today={len(today_trades)} in_mem_recent={len(recent)}', flush=True)
+        # Fall back to DB when in-memory history is empty (server restart / new deploy)
+        if not today_trades:
+            db_daily, db_history, db_recent = _trades_from_db(wallet, today)
+            if db_daily:
+                return jsonify({'daily': db_daily, 'history': db_history, 'recent': db_recent})
         return jsonify({'daily': _strip_daily(us['daily_stats']), 'history': [_strip(t) for t in today_trades[-10:]], 'recent': [_strip(t) for t in recent]})
     check_daily_reset()
     today        = state['daily_stats']['date']

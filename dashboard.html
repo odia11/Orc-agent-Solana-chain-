@@ -3476,6 +3476,7 @@ async function _tpcStopCopy(){
 async function fetchTrades(){
   if(!appVisible()) return;
   const r=await fetch('/api/trades').then(r=>r.json()).catch(()=>null);
+  console.log('[api_trades] response:', JSON.stringify(r));
   if(!r) return;
   renderPerfPanel(r);
   if(r.recent){
