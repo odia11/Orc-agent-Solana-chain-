@@ -479,7 +479,7 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .panel{background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:14px}
 .clr{background:none;border:none;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:color .15s}
 .clr:hover{color:var(--red)}
-.log-body{height:190px;overflow-y:auto;font-size:10px;line-height:1.95;background:var(--bg);border-radius:6px;padding:7px 9px;border:1px solid var(--border)}
+.log-body{max-height:100px;overflow-y:auto;font-size:10px;line-height:1.95;background:var(--bg);border-radius:6px;padding:7px 9px;border:1px solid var(--border);transition:max-height .25s ease}
 .log-line{display:flex;gap:8px;padding:1px 0;border-bottom:1px solid rgba(42,64,96,.5)}
 .lt{color:var(--border2);flex-shrink:0;width:55px}
 .c-buy{color:var(--green);font-weight:700}
@@ -2051,39 +2051,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- LIVE ACTIVITY + DAILY LEADERBOARD -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:1.25rem">
-    <div class="live-feed-panel" id="live-feed-panel" style="margin-bottom:0">
-      <div class="lf-header">
-        <div class="lf-header-left">
-          <div class="panel-hdr" style="margin-bottom:0">Live Activity &nbsp;<span id="lf-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span></div>
-        </div>
-        <div class="lf-header-right">
-          <span class="lf-live-dot"></span>
-          <span class="lf-live-label">LIVE</span>
-          <span class="lf-countdown" id="lf-countdown"></span>
-        </div>
-      </div>
-      <div id="lf-list" class="lf-list">
-        <div class="lf-empty">No recent trades yet</div>
-      </div>
-    </div>
-    <div class="lb-panel" id="lb-panel" style="margin-bottom:0">
-      <div class="lb-header">
-        <div class="lf-header-left">
-          <div class="panel-hdr" style="margin-bottom:0">🏆 DAILY LEADERBOARD</div>
-        </div>
-        <div class="lf-header-right">
-          <span class="lf-live-dot"></span>
-          <span class="lf-live-label">LIVE</span>
-          <span class="lf-countdown" id="lb-countdown"></span>
-        </div>
-      </div>
-      <div id="lb-list" class="lb-list">
-        <div class="lb-empty">No trades today yet — be the first!</div>
-      </div>
-    </div>
-  </div>
 
   <!-- MY PERFORMANCE -->
   <div class="perf-panel" id="perf-panel-main">
@@ -2288,64 +2255,6 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
   <div id="lf-toast-wrap"></div>
 
 
-    <!-- HOW IT WORKS -->
-    <div class="hiw-section">
-      <div class="hiw-title">Tips</div>
-      <div class="hiw-cards">
-        <div class="hiw-card hiw-card--ways">
-          <div class="hiw-card-icon">🔄</div>
-          <div class="hiw-card-name">TWO WAYS TO TRADE</div>
-          <div class="hiw-card-body">
-            <div>🤖 Auto Mode — bot scans and trades automatically 24/7</div>
-            <div>🖐️ Manual Mode — pick tokens from Live Market and buy/sell yourself</div>
-            <div class="hiw-no-bullet" style="color:var(--green);margin-top:2px">Or use both at the same time!</div>
-          </div>
-        </div>
-        <div class="hiw-card hiw-card--execute">
-          <div class="hiw-card-icon">🤖</div>
-          <div class="hiw-card-name">AUTO TRADING</div>
-          <div class="hiw-card-body">
-            <div>Bot scans 75+ tokens every 30 seconds</div>
-            <div>Buys on momentum + volume + liquidity signals</div>
-            <div>Sells at Take Profit or Stop Loss automatically</div>
-          </div>
-        </div>
-        <div class="hiw-card hiw-card--scan">
-          <div class="hiw-card-icon">🖐️</div>
-          <div class="hiw-card-name">MANUAL TRADING</div>
-          <div class="hiw-card-body">
-            <div>Go to Live Solana Market on dashboard</div>
-            <div>Press BUY on any token to instantly buy</div>
-            <div>Press SELL to exit your position</div>
-          </div>
-        </div>
-        <div class="hiw-card hiw-card--score">
-          <div class="hiw-card-icon">⚙️</div>
-          <div class="hiw-card-name">DIFFICULTY (AUTO MODE)</div>
-          <div class="hiw-card-body">
-            <div><span style="color:var(--green)">EASY</span> &nbsp;— TP +25% / SL -15%</div>
-            <div><span style="color:var(--blue)">MEDIUM</span> — TP +40% / SL -20%</div>
-            <div><span style="color:var(--red)">HARD</span> &nbsp;— TP +60% / SL -25%</div>
-          </div>
-        </div>
-        <div class="hiw-card hiw-card--deposit">
-          <div class="hiw-card-icon">💰</div>
-          <div class="hiw-card-name">DEPOSIT SOL</div>
-          <div class="hiw-card-body">
-            <div>Minimum 0.05 SOL to trade</div>
-            <div>Max 5 concurrent positions</div>
-          </div>
-        </div>
-        <div class="hiw-card hiw-card--safe">
-          <div class="hiw-card-icon">🔒</div>
-          <div class="hiw-card-name">STAY SAFE</div>
-          <div class="hiw-card-body">
-            <div>Never share your private key</div>
-            <div>Start with small trade sizes</div>
-          </div>
-        </div>
-      </div>
-    </div>
     <div class="trade-table-wrap">
       <table class="trade-table">
         <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th></th></tr></thead>
@@ -2356,9 +2265,12 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
   </div>
 
-  <!-- LIVE MARKET -->
+  <!-- LIVE MARKET + PUMP SCANNER -->
   <div class="market-panel">
-    <div class="panel-hdr">Live Solana Market &nbsp;<span id="token-count" style="color:var(--green);font-family:'Orbitron',monospace"></span></div>
+    <div class="panel-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span>Live Solana Market &nbsp;<span id="token-count" style="color:var(--green);font-family:'Orbitron',monospace"></span></span>
+      <span id="ps-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span>
+    </div>
     <div class="ticker-wrap"><div class="ticker-track" id="ticker-track"></div></div>
     <div class="swipe-hint">← swipe →</div>
     <div id="market-grid-outer">
@@ -2366,25 +2278,23 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
       </div>
     </div>
-  </div>
-
-  <!-- PUMP SCANNER -->
-  <div class="ps-panel" id="ps-panel">
-    <div class="panel-hdr" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-      🚀 Pump Scanner
-      <span id="ps-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span>
-      <span style="margin-left:auto;font-size:9px;color:var(--muted);letter-spacing:.06em">≥15% gain · 5m or 1h · min trade size</span>
-    </div>
-    <div id="ps-grid" class="ps-grid">
-      <div class="ps-empty">Scanning for pumping tokens…</div>
+    <div id="ps-panel" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
+      <div style="font-size:9px;color:var(--muted);letter-spacing:.08em;margin-bottom:10px;font-family:'Orbitron',monospace;font-weight:700">🚀 PUMPING &nbsp;<span style="color:var(--dim);font-weight:400;letter-spacing:.04em">≥5% gain · bot buy candidates</span></div>
+      <div id="ps-grid" class="ps-grid"></div>
     </div>
   </div>
 
   <!-- ACTIVITY LOG -->
   <div class="panels" style="grid-template-columns:1fr">
     <div class="panel">
-      <div class="panel-hdr">Activity Log &nbsp;<button class="clr" onclick="document.getElementById('log-body').innerHTML=''">CLEAR</button></div>
-      <div class="log-body" id="log-body"></div>
+      <div class="panel-hdr" style="display:flex;align-items:center;justify-content:space-between">
+        <span>Activity Log</span>
+        <span style="display:flex;align-items:center;gap:8px">
+          <button class="clr" id="log-toggle-btn" onclick="_toggleLog()">▼ Expand</button>
+          <button class="clr" onclick="document.getElementById('log-body').innerHTML=''">CLEAR</button>
+        </span>
+      </div>
+      <div class="log-body" id="log-body" style="height:auto;max-height:100px"></div>
     </div>
   </div>
 
@@ -4688,6 +4598,15 @@ function _renderBlacklist(tokens){
 }
 
 // ── NAV MENU ──
+let _logExpanded=false;
+function _toggleLog(){
+  _logExpanded=!_logExpanded;
+  const el=document.getElementById('log-body');
+  const btn=document.getElementById('log-toggle-btn');
+  if(el) el.style.maxHeight=_logExpanded?'400px':'100px';
+  if(btn) btn.textContent=_logExpanded?'▲ Collapse':'▼ Expand';
+}
+
 function _toggleNavMenu(){
   const d=document.getElementById('nav-menu-dropdown');
   if(d) d.classList.toggle('open');
