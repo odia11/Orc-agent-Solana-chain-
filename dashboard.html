@@ -510,6 +510,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 /* ── PUMP SCANNER BUY BUTTON ── */
 .ps-buy-btn{flex:1;width:100%;padding:8px 0;background:#00ff88;color:#000;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;transition:box-shadow .2s,filter .15s}
 .ps-buy-btn:hover{box-shadow:0 0 12px rgba(0,255,136,.4);filter:brightness(1.1)}
+.ps-sell-btn{flex:1;width:100%;padding:8px 0;background:#ff4444;color:#fff;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;transition:box-shadow .2s,filter .15s}
+.ps-sell-btn:hover{box-shadow:0 0 12px rgba(255,68,68,.4);filter:brightness(1.1)}
 
 /* ── BOTTOM LINKS ── */
 .bottom{display:flex;gap:8px;margin-bottom:1.5rem;flex-wrap:wrap}
@@ -1281,13 +1283,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   .dpb-chip{font-size:10px}
 
   /* ── SOL BALANCE BUTTONS (row of 3) ── */
-  #sol-btns-wrap{display:flex;gap:4px;margin-top:6px}
-  #sol-btns-wrap .claim-sol-btn,
-  #sol-btns-wrap .deposit-sol-btn,
-  #sol-btns-wrap .withdraw-sol-btn{
-    flex:1;min-width:0;width:auto;
-    padding:8px 4px;font-size:11px;
-    margin-top:0;display:block;
+  .sol-action-row .sol-action-btn{
+    flex:1;min-width:0;padding:7px 4px;font-size:10px;
   }
 
   /* ── BADGES ── */
@@ -1390,6 +1387,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
   /* ── STAT TILES IN PERFORMANCE PANEL ── */
   .perf-stats{grid-template-columns:repeat(2,1fr)}
+
+  /* ── PUMP SCANNER + MARKET GRID: single column ── */
+  .ps-grid{grid-template-columns:1fr}
+  .market-grid{grid-template-columns:1fr!important}
+
+  /* ── ALL PANELS: single column ── */
+  .panels{grid-template-columns:1fr}
+
+  /* ── TIGHTER PADDING ── */
+  .wrap{padding:0.5rem 0.5rem calc(60px + env(safe-area-inset-bottom,0px))}
 }
 
 /* ── LOW SOL BALANCE MODAL ── */
@@ -3225,11 +3232,10 @@ function renderPumpScanner(tokens){
   </div>
   <div style="display:flex;gap:6px;margin-top:10px;width:100%">
     <button class="ps-buy-btn" onclick="manualBuy('${mint}','${sym}',this)">BUY</button>
-    <button style="flex:1;padding:8px 0;background:#ff4444;color:#fff;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;display:${hasSell?'block':'none'}" onclick="manualSell('${mint}','${sym}',this)">SELL</button>
+    <button class="ps-sell-btn" style="display:${hasSell?'block':'none'}" onclick="manualSell('${mint}','${sym}',this)">SELL</button>
   </div>
 </div>`;
   });
-  console.log('[PS] first card HTML:', _psCards[0]);
   grid.innerHTML=_psCards.join('');
 }
 
