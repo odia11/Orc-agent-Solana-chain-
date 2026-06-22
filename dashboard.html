@@ -1006,6 +1006,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .tpc-follow-btn.following::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
 .tpc-follow-btn.following:hover{border-color:#ff4444;background:rgba(255,68,68,.1)}
 .tpc-follow-btn.following:hover::before{content:'Unfollow';color:#ff4444}
+.btn-follow{background:transparent;color:#fff;border:1px solid #444;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;transition:all .2s ease}
+.btn-follow.is-following{background:#00ff88;color:#000;border:none;box-shadow:0 0 12px rgba(0,255,136,.4)}
+.btn-follow.is-following::before{content:"✓ "}
 .tpc-copy-btn{background:rgba(245,158,11,.14);border-color:rgba(245,158,11,.45);color:#f59e0b}
 .tpc-copy-btn:hover{background:rgba(245,158,11,.26);border-color:#f59e0b}
 .tpc-stop-copy-btn{background:rgba(255,68,68,.14);border-color:rgba(255,68,68,.45);color:var(--red)}
@@ -5183,11 +5186,11 @@ async function _tpcToggleFollow(userId, followKey){
   const username=followKey.split('|')[0];
   if(r.following){
     _tvFollowed.add(followKey);
-    btn.className='tpc-follow-btn following';
+    btn.className='tpc-follow-btn btn-follow following is-following';
     showLfToast('👥',`Now following ${username}`,'pos');
   } else {
     _tvFollowed.delete(followKey);
-    btn.className='tpc-follow-btn';
+    btn.className='tpc-follow-btn btn-follow';
     showLfToast('👋',`Unfollowed ${username}`,'neg');
   }
   const fc=document.getElementById('tpc-follower-count');
@@ -5431,7 +5434,7 @@ async function openProfileCard(userId){
   console.log('wallet set:', _tpcCurrentFullWallet);
   const followKey = p.username+'|'+p.wallet;
   const isFollowing = _tvFollowed.has(followKey);
-  const followCls = 'tpc-follow-btn'+(isFollowing?' following':'');
+  const followCls = 'tpc-follow-btn btn-follow'+(isFollowing?' following is-following':'');
   const _isSelf = phantomKey && _tpcCurrentFullWallet === phantomKey;
   const isCopyingThis = !_isSelf && copyStatus?.ok && copyStatus.copying && copyStatus.target_wallet === _tpcCurrentFullWallet;
   const followBtnHtml = _isSelf
