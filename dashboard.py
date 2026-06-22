@@ -745,6 +745,16 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_follows_follower  ON follows(follower_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS user_blacklist (
+        id        INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id   INTEGER NOT NULL,
+        mint      TEXT NOT NULL,
+        symbol    TEXT DEFAULT '',
+        added_at  TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, mint),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_blacklist_user ON user_blacklist(user_id)')
     conn.commit()
     conn.close()
 
@@ -2196,12 +2206,25 @@ def user_trader_loop(stop_event, config, wallet: str):
 
                 # ── Pass 2: pick the single best entry ──
                 if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01 and not _pc_locked:
+                    # Re-fetch blacklist each scan so additions take effect immediately
+                    try:
+                        _bl_conn = sqlite3.connect(DB_FILE)
+                        _blacklisted = frozenset(
+                            r[0] for r in _bl_conn.execute(
+                                'SELECT mint FROM user_blacklist WHERE user_id=?',
+                                (user_id,)).fetchall())
+                        _bl_conn.close()
+                    except Exception:
+                        _blacklisted = frozenset()
                     not_held = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = []
                     _skip_log  = []
                     _now_cd    = time.time()
                     for _t in not_held:
                         _tsym = _t.get('symbol', '') or _t['mint'][:8]
+                        if _t['mint'] in _blacklisted:
+                            _skip_log.append(f'[skip] {_tsym}: blacklisted by user')
+                            continue
                         _dex  = _t.get('dexId', '') or ''
                         if 'pump' in _dex and difficulty == 'HARD':
                             _skip_log.append(f'[skip] {_tsym}: pumpswap — filtered (HARD mode only)')
@@ -3063,6 +3086,58 @@ def save_settings():
     return jsonify({'ok': True, 'has_trading_key': final_has_key})
 
 # ── USERNAME ──
+@app.route('/api/blacklist', methods=['GET'])
+@rate_limit(30, 60)
+def api_blacklist_get():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'error': 'not logged in'}), 401
+    user_id = get_or_create_user(wallet)
+    conn = sqlite3.connect(DB_FILE)
+    rows = conn.execute(
+        'SELECT mint, symbol, added_at FROM user_blacklist WHERE user_id=? ORDER BY added_at DESC',
+        (user_id,)).fetchall()
+    conn.close()
+    return jsonify({'ok': True, 'tokens': [{'mint': r[0], 'symbol': r[1], 'added_at': r[2]} for r in rows]})
+
+@app.route('/api/blacklist/add', methods=['POST'])
+@rate_limit(10, 60)
+def api_blacklist_add():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'error': 'not logged in'}), 401
+    data   = request.get_json(silent=True) or {}
+    mint   = (data.get('mint') or '').strip()
+    symbol = (data.get('symbol') or '').strip()[:20]
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'error': 'invalid mint'}), 400
+    user_id = get_or_create_user(wallet)
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute(
+        'INSERT OR IGNORE INTO user_blacklist (user_id, mint, symbol) VALUES (?,?,?)',
+        (user_id, mint, symbol))
+    conn.commit()
+    conn.close()
+    add_user_log(wallet, f'[blacklist] {symbol or mint[:8]} avoided — bot will skip this token')
+    return jsonify({'ok': True})
+
+@app.route('/api/blacklist/remove', methods=['POST'])
+@rate_limit(10, 60)
+def api_blacklist_remove():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'error': 'not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    mint = (data.get('mint') or '').strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'error': 'invalid mint'}), 400
+    user_id = get_or_create_user(wallet)
+    conn = sqlite3.connect(DB_FILE)
+    conn.execute('DELETE FROM user_blacklist WHERE user_id=? AND mint=?', (user_id, mint))
+    conn.commit()
+    conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/api/username', methods=['GET'])
 @rate_limit(30, 60)
 def get_username():

@@ -500,6 +500,14 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
 .s-key-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,255,136,.09);border:1px solid rgba(0,255,136,.35);border-radius:8px;padding:11px 14px;margin-bottom:16px}
 .s-remove-key-btn{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;color:var(--red);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
 .s-remove-key-btn:hover{background:rgba(255,77,106,.2)}
+.avoid-btn{background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.25);border-radius:5px;color:var(--red);font-size:9px;padding:3px 8px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s;line-height:1.4}
+.avoid-btn:hover{background:rgba(255,77,106,.2)}
+.bl-list{margin-top:6px;display:flex;flex-direction:column;gap:6px}
+.bl-item{display:flex;align-items:center;gap:8px;background:rgba(255,77,106,.05);border:1px solid rgba(255,77,106,.18);border-radius:7px;padding:8px 12px}
+.bl-item-sym{flex:0 0 auto;font-size:11px;font-weight:700;color:var(--text);font-family:'Share Tech Mono',monospace}
+.bl-item-mint{flex:1;font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Share Tech Mono',monospace}
+.bl-remove-btn{flex:0 0 auto;background:transparent;border:1px solid rgba(255,77,106,.3);border-radius:5px;color:var(--red);font-size:9px;padding:3px 8px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
+.bl-remove-btn:hover{background:rgba(255,77,106,.15)}
 .s-card{max-height:90vh;overflow-y:auto}
 .how-to-box{background:var(--bg3);border:1px solid var(--border);border-radius:9px;margin-bottom:18px;overflow:hidden}
 .how-to-toggle{width:100%;background:none;border:none;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:10px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;letter-spacing:.05em;transition:color .15s}
@@ -1674,6 +1682,13 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
         </div>
       </div>
     </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:18px">
+      <div class="s-label">🚫 Avoided Tokens <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(bot skips these when scanning)</span></div>
+      <div id="bl-list-wrap" style="margin-top:6px">
+        <div style="font-size:10px;color:var(--muted);padding:6px 0">No avoided tokens — use 🚫 Avoid on any token</div>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -2306,9 +2321,9 @@ html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient
     </div>
     <div class="trade-table-wrap">
       <table class="trade-table">
-        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>P&amp;L</th></tr></thead>
+        <thead><tr><th>Time</th><th>Token</th><th>Entry</th><th>Exit</th><th>P&amp;L</th><th></th></tr></thead>
         <tbody id="trade-tbody">
-          <tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
+          <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>
         </tbody>
       </table>
     </div>
@@ -3831,19 +3846,21 @@ function renderPerfPanel(r){
   const tbody=document.getElementById('trade-tbody');
   const hist=(r.history||[]).slice().reverse();
   if(!hist.length){
-    tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
+    tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No trades today</td></tr>';
     return;
   }
   tbody.innerHTML=hist.map(t=>{
     const p=t.pnl??0, pp=t.pnl_pct??0;
     const cls=p>=0?'td-pos':'td-neg';
     const sign=p>=0?'+':'';
+    const avoidBtn=t.mint?`<button class="avoid-btn" onclick="avoidToken('${esc(t.mint)}','${esc(t.symbol||'???')}')" title="Avoid — bot will skip this token">🚫</button>`:'';
     return `<tr>
       <td>${t.ts?new Date(t.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(t.time||'—')}</td>
       <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
       <td>${fmtPrice(t.exit||0)}</td>
       <td class="${cls}">${sign}${fmtSolToUsdc(Math.abs(p))} <span style="opacity:.6;font-size:9px">(${sign}${pp.toFixed(1)}%)</span></td>
+      <td>${avoidBtn}</td>
     </tr>`;
   }).join('');
 }
@@ -3934,6 +3951,7 @@ function renderPositions(detail){
       <td><div class="pos-act-wrap" id="pos-act-${esc(p.mint||'')}">
         <button class="pos-chart-btn" onclick="openPosChart('${esc(p.mint||'')}','${esc(p.symbol||'???')}',${p.current||0})">📈 Chart</button>
         <button class="pos-sell-btn" onclick="_posStartSell('${esc(p.mint||'')}','${esc(p.symbol||'???')}')">✕ Sell</button>
+        ${p.mint?`<button class="avoid-btn" onclick="avoidToken('${esc(p.mint)}','${esc(p.symbol||'???')}')" title="Avoid — bot will skip this token">🚫 Avoid</button>`:''}
       </div></td>
     </tr>`;
   }).join('');
@@ -4592,6 +4610,50 @@ async function removeKey(){
     if(msgEl){ msgEl.className='s-msg ok'; msgEl.textContent='✓ Trading key removed.'; }
   }
 }
+// ── TOKEN BLACKLIST ──
+async function avoidToken(mint, symbol){
+  if(!mint) return;
+  try{
+    const r=await fetch('/api/blacklist/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mint,symbol})});
+    const j=await r.json();
+    if(j.ok){
+      showLfToast('🚫','Token avoided — bot will skip '+(symbol||mint.slice(0,8)),'pos');
+      const sModal=document.getElementById('settings-modal');
+      if(sModal&&sModal.classList.contains('open')) loadBlacklist();
+    }
+  }catch(e){}
+}
+
+async function removeBlacklistToken(mint){
+  try{
+    await fetch('/api/blacklist/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mint})});
+    loadBlacklist();
+  }catch(e){}
+}
+
+async function loadBlacklist(){
+  try{
+    const r=await fetch('/api/blacklist');
+    const j=await r.json();
+    _renderBlacklist(j.tokens||[]);
+  }catch(e){}
+}
+
+function _renderBlacklist(tokens){
+  const wrap=document.getElementById('bl-list-wrap');
+  if(!wrap) return;
+  if(!tokens.length){
+    wrap.innerHTML='<div style="font-size:10px;color:var(--muted);padding:6px 0">No avoided tokens — use 🚫 Avoid on any token</div>';
+    return;
+  }
+  wrap.innerHTML='<div class="bl-list">'+tokens.map(t=>`
+    <div class="bl-item">
+      <span class="bl-item-sym">🚫 ${esc(t.symbol||t.mint.slice(0,8))}</span>
+      <span class="bl-item-mint">${esc(t.mint)}</span>
+      <button class="bl-remove-btn" onclick="removeBlacklistToken('${esc(t.mint)}')">✕ Remove</button>
+    </div>`).join('')+'</div>';
+}
+
 async function openSettings(){
   const modal=document.getElementById('settings-modal');
   modal.classList.add('open');
@@ -4617,6 +4679,7 @@ async function openSettings(){
     const unMsg=document.getElementById('s-username-msg');
     unMsg.className='s-msg'; unMsg.textContent='';
     _syncSettingsAvatar();
+    loadBlacklist();
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
     saveBtn.disabled=true; saveBtn.style.opacity='.45';
