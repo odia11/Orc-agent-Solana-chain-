@@ -438,7 +438,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .pnlce-title{color:#22c55e;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:3px;animation:pnlce-pulse 1.5s ease-in-out infinite alternate}
 .pnlce-stats{display:flex;gap:24px;font-size:10px;color:var(--muted);letter-spacing:.12em;font-family:'Share Tech Mono',monospace;margin-top:2px}
 /* ── COMMUNITY CHAT ── */
-#dash-community{display:none;flex:1;min-width:0;height:calc(100vh - 48px);overflow:hidden;flex-direction:column}
+#dash-community{display:none;flex:1;min-width:0;height:calc(100vh - 48px);overflow:hidden;flex-direction:column;position:relative}
 .gc-topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;border-bottom:1px solid #2a2a2a;flex-shrink:0;background:#141414}
 .gc-title{font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:.12em}
 .gc-online{font-size:11px;color:#888888}
@@ -468,6 +468,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .gc-send-btn:hover:not(:disabled){filter:brightness(1.1)}
 .gc-send-btn:disabled{opacity:.4;cursor:not-allowed}
 .gc-empty{flex:1;display:flex;align-items:center;justify-content:center;color:#444444;font-size:13px;text-align:center;padding:40px}
+#gc-new-btn{position:absolute;bottom:68px;left:50%;transform:translateX(-50%);background:#22c55e;color:#000;border:none;border-radius:20px;padding:6px 16px;font-size:12px;font-weight:700;cursor:pointer;display:none;box-shadow:0 2px 10px rgba(0,0,0,.6);z-index:10;white-space:nowrap}
+.gc-img-preview{display:none;padding:8px 16px 0;flex-shrink:0;background:#0e0e0e}
+.gc-img-preview-inner{display:flex;align-items:center;gap:10px;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:8px 10px}
+.gc-img-preview-thumb{width:48px;height:48px;object-fit:cover;border-radius:6px}
+.gc-img-preview-name{flex:1;font-size:12px;color:#888;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gc-img-preview-cancel{background:transparent;border:none;color:#888;cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px;line-height:1;transition:color .15s}
+.gc-img-preview-cancel:hover{color:#ef4444}
+.gc-msg.mine .gc-body{background:rgba(34,197,94,.06);border-left:2px solid rgba(34,197,94,.3);border-radius:6px;padding:6px 10px}
 /* Admin panel */
 .admin-panel{background:var(--bg2);border:2px solid rgba(255,77,106,.5);border-radius:10px;padding:16px;margin-bottom:1.25rem;box-shadow:0 0 0 1px rgba(255,77,106,.1),0 4px 28px rgba(255,77,106,.1)}
 .admin-panel .panel-hdr{border-bottom:1px solid rgba(255,77,106,.25);padding-bottom:8px;margin-bottom:12px;color:#ff9a6c}
@@ -3346,10 +3354,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <span class="gc-online"><span class="gc-online-dot"></span><span id="gc-online-count">—</span> online</span>
     </div>
     <div class="gc-messages" id="gc-messages">
-      <div class="gc-empty" id="gc-empty">No messages yet — say something!</div>
+      <div class="gc-empty" id="gc-empty">Be the first to share your OrcAgent experience! 🚀</div>
+    </div>
+    <button id="gc-new-btn" onclick="gcScrollToBottom()">↓ New messages</button>
+    <div class="gc-img-preview" id="gc-img-preview">
+      <div class="gc-img-preview-inner">
+        <img class="gc-img-preview-thumb" id="gc-img-preview-thumb" src="" alt="">
+        <span class="gc-img-preview-name" id="gc-img-preview-name"></span>
+        <button class="gc-img-preview-cancel" onclick="gcCancelPreview()" title="Cancel">✕</button>
+      </div>
     </div>
     <div class="gc-input-row">
-      <input type="file" id="gc-img-input" accept="image/*" style="display:none" onchange="gcSendImage(this.files[0])">
+      <input type="file" id="gc-img-input" accept="image/*" style="display:none" onchange="gcSendImagePicked(this.files[0])">
       <button class="gc-img-btn" id="gc-img-btn" onclick="gcPickImage()" title="Send image">📷</button>
       <textarea class="gc-input" id="gc-input" placeholder="Message the community…" rows="1" maxlength="500"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();gcSend()}"></textarea>
@@ -7341,7 +7357,7 @@ function _hideAllViews(){
 }
 
 /* ── COMMUNITY CHAT ── */
-let _gcOpen=false, _gcTimer=null, _gcMyId=null, _gcMyWallet=null, _gcLastId=0;
+let _gcOpen=false,_gcTimer=null,_gcMyId=null,_gcLastId=0,_gcPendingFile=null,_gcSendCooldown=false;
 
 function openCommunityView(){
   if(_gcOpen) return;
@@ -7360,6 +7376,7 @@ function closeCommunityView(){
   if(!_gcOpen) return;
   _gcOpen=false;
   clearInterval(_gcTimer); _gcTimer=null;
+  gcCancelPreview();
   document.getElementById('dash-community').style.display='none';
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='';
@@ -7369,13 +7386,34 @@ function closeCommunityView(){
   _sbSetActive('sbn-dashboard');
 }
 
+function _gcRelTime(ts){
+  if(!ts) return '';
+  const d=new Date(ts.includes('T')?ts:ts+'Z');
+  const diff=Math.round((Date.now()-d.getTime())/1000);
+  if(diff<30) return 'just now';
+  if(diff<3600) return Math.floor(diff/60)+'m ago';
+  if(diff<86400) return Math.floor(diff/3600)+'h ago';
+  return Math.floor(diff/86400)+'d ago';
+}
+
+function _gcUserColor(userId){
+  const h=(userId*37)%360;
+  return 'hsl('+h+',70%,60%)';
+}
+
+function _gcInitials(name){
+  if(!name) return '?';
+  return name.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';
+}
+
 async function gcFetch(reset){
   try{
     const r=await fetch('/api/chat').then(x=>x.json());
     if(!r.ok) return;
     const msgs=r.messages||[];
-    if(msgs.length && _gcMyId==null && msgs.find(m=>m.is_mine)){
-      _gcMyId=msgs.find(m=>m.is_mine).user_id;
+    if(msgs.length&&_gcMyId==null){
+      const mine=msgs.find(m=>m.is_mine);
+      if(mine) _gcMyId=mine.user_id;
     }
     const container=document.getElementById('gc-messages');
     const empty=document.getElementById('gc-empty');
@@ -7384,45 +7422,42 @@ async function gcFetch(reset){
       return;
     }
     if(empty) empty.style.display='none';
-    const lastId=msgs.length?msgs[msgs.length-1].id:0;
-    if(!reset && lastId===_gcLastId) return;
-    // Only do a full re-render when section first opens; after that append new
-    if(reset || _gcLastId===0){
+    const lastId=msgs[msgs.length-1].id;
+    if(!reset&&lastId===_gcLastId) return;
+    let newMsgs=[];
+    if(reset||_gcLastId===0){
       container.innerHTML='';
       msgs.forEach(m=>container.appendChild(_gcBuildMsg(m)));
     } else {
-      const newMsgs=msgs.filter(m=>m.id>_gcLastId);
+      newMsgs=msgs.filter(m=>m.id>_gcLastId);
       newMsgs.forEach(m=>container.appendChild(_gcBuildMsg(m)));
     }
     _gcLastId=lastId;
-    // Update online count (unique users in last 50)
     const unique=new Set(msgs.map(m=>m.user_id)).size;
     const oc=document.getElementById('gc-online-count');
     if(oc) oc.textContent=unique;
-    // Auto-scroll if near bottom
     const atBottom=container.scrollHeight-container.scrollTop-container.clientHeight<120;
-    if(atBottom||reset) container.scrollTop=container.scrollHeight;
+    const newBtn=document.getElementById('gc-new-btn');
+    if(atBottom||reset){
+      container.scrollTop=container.scrollHeight;
+      if(newBtn) newBtn.style.display='none';
+    } else if(newMsgs.length>0){
+      if(newBtn) newBtn.style.display='';
+    }
   }catch(e){}
-}
-
-function _gcInitials(name){
-  if(!name) return '?';
-  return name.trim().split(/\s+/).map(w=>w[0]).join('').toUpperCase().slice(0,2)||'?';
 }
 
 function _gcBuildMsg(m){
   const mine=!!m.is_mine;
   const wrap=document.createElement('div');
-  wrap.className='gc-msg';
+  wrap.className='gc-msg'+(mine?' mine':'');
   wrap.dataset.id=m.id;
 
-  // Avatar
   const av=document.createElement('div');
   av.className='gc-avatar';
   if(m.avatar_url){
     const img=document.createElement('img');
-    img.src=m.avatar_url;
-    img.alt='';
+    img.src=m.avatar_url; img.alt='';
     img.onerror=()=>{ img.style.display='none'; };
     av.appendChild(img);
   } else {
@@ -7430,27 +7465,25 @@ function _gcBuildMsg(m){
   }
   wrap.appendChild(av);
 
-  // Body
   const body=document.createElement('div');
   body.className='gc-body';
 
   const meta=document.createElement('div');
   meta.className='gc-meta';
   const uname=document.createElement('span');
-  uname.className='gc-username'+(mine?' mine':'');
+  uname.className='gc-username';
   uname.textContent=m.username||(m.wallet_address?m.wallet_address.slice(0,8)+'…':'Unknown');
+  uname.style.color=_gcUserColor(m.user_id);
   const ts=document.createElement('span');
   ts.className='gc-time';
-  ts.textContent=_dmRelTime(m.created_at);
+  ts.textContent=_gcRelTime(m.created_at);
   meta.appendChild(uname);
   meta.appendChild(ts);
   body.appendChild(meta);
 
-  if(m.message_type==='image' && m.image_url && m.image_url.startsWith('/static/chat_images/')){
+  if(m.message_type==='image'&&m.image_url&&m.image_url.startsWith('/static/chat_images/')){
     const img=document.createElement('img');
-    img.className='gc-img';
-    img.src=m.image_url;
-    img.alt='image';
+    img.className='gc-img'; img.src=m.image_url; img.alt='image';
     img.onclick=()=>window.open(m.image_url,'_blank');
     body.appendChild(img);
   } else if(m.message){
@@ -7463,21 +7496,29 @@ function _gcBuildMsg(m){
 
   if(mine){
     const del=document.createElement('button');
-    del.className='gc-del-btn';
-    del.title='Delete';
-    del.textContent='🗑';
-    del.onclick=()=>gcDelete(m.id, wrap);
+    del.className='gc-del-btn'; del.title='Delete'; del.textContent='🗑';
+    del.onclick=()=>gcDelete(m.id,wrap);
     wrap.appendChild(del);
   }
   return wrap;
 }
 
+function gcScrollToBottom(){
+  const container=document.getElementById('gc-messages');
+  if(container) container.scrollTop=container.scrollHeight;
+  const newBtn=document.getElementById('gc-new-btn');
+  if(newBtn) newBtn.style.display='none';
+}
+
 async function gcSend(){
+  if(_gcSendCooldown) return;
+  if(_gcPendingFile){ await _gcUploadAndSendImage(); return; }
   const inp=document.getElementById('gc-input');
   const text=(inp&&inp.value.trim())||'';
   if(!text) return;
   const btn=document.getElementById('gc-send-btn');
   if(btn) btn.disabled=true;
+  _gcSendCooldown=true;
   try{
     const r=await fetch('/api/chat',{
       method:'POST',
@@ -7485,32 +7526,29 @@ async function gcSend(){
       body:JSON.stringify({message:text})
     }).then(x=>x.json());
     if(r.ok){
-      inp.value='';
-      inp.style.height='';
+      inp.value=''; inp.style.height='';
       if(_gcMyId==null) _gcMyId=r.user_id;
       const container=document.getElementById('gc-messages');
       const empty=document.getElementById('gc-empty');
       if(empty) empty.style.display='none';
       container.appendChild(_gcBuildMsg(r));
       _gcLastId=r.id;
-      container.scrollTop=container.scrollHeight;
+      gcScrollToBottom();
     } else {
       showTradeWarn('⚠️ '+(r.msg||'Send failed'));
     }
   }catch(e){ showTradeWarn('⚠️ Send failed'); }
-  if(btn) btn.disabled=false;
-  if(inp) inp.focus();
+  setTimeout(()=>{ _gcSendCooldown=false; if(btn) btn.disabled=false; if(inp) inp.focus(); },2000);
 }
 
-function gcPickImage(){
-  const inp=document.getElementById('gc-img-input');
-  if(inp){ inp.value=''; inp.click(); }
-}
-
-async function gcSendImage(file){
+async function _gcUploadAndSendImage(){
+  const file=_gcPendingFile;
   if(!file) return;
-  const btn=document.getElementById('gc-img-btn');
-  if(btn){ btn.innerHTML='<span class="dm-img-spinner"></span>'; btn.classList.add('loading'); }
+  const btn=document.getElementById('gc-send-btn');
+  const imgBtn=document.getElementById('gc-img-btn');
+  if(btn) btn.disabled=true;
+  if(imgBtn){ imgBtn.innerHTML='<span class="dm-img-spinner"></span>'; imgBtn.classList.add('loading'); }
+  _gcSendCooldown=true;
   try{
     const fd=new FormData();
     fd.append('image',file);
@@ -7528,25 +7566,57 @@ async function gcSendImage(file){
       if(empty) empty.style.display='none';
       container.appendChild(_gcBuildMsg(r));
       _gcLastId=r.id;
-      container.scrollTop=container.scrollHeight;
+      gcScrollToBottom();
     } else {
       showTradeWarn('⚠️ '+(r.msg||'Failed to send image'));
     }
   }catch(e){ showTradeWarn('⚠️ Image send failed'); }
   finally{
-    if(btn){ btn.innerHTML='📷'; btn.classList.remove('loading'); }
-    const inp=document.getElementById('gc-img-input');
-    if(inp) inp.value='';
+    gcCancelPreview();
+    if(imgBtn){ imgBtn.innerHTML='📷'; imgBtn.classList.remove('loading'); }
+    setTimeout(()=>{ _gcSendCooldown=false; if(btn) btn.disabled=false; },2000);
   }
 }
 
-async function gcDelete(msgId, el){
+function gcPickImage(){
+  const inp=document.getElementById('gc-img-input');
+  if(inp){ inp.value=''; inp.click(); }
+}
+
+function gcSendImagePicked(file){
+  if(!file) return;
+  _gcPendingFile=file;
+  const preview=document.getElementById('gc-img-preview');
+  const thumb=document.getElementById('gc-img-preview-thumb');
+  const name=document.getElementById('gc-img-preview-name');
+  if(preview&&thumb&&name){
+    thumb.src=URL.createObjectURL(file);
+    name.textContent=file.name||'Image';
+    preview.style.display='';
+  }
+  const inp=document.getElementById('gc-input');
+  if(inp){ inp.disabled=true; inp.placeholder='Click SEND to send image…'; }
+}
+
+function gcCancelPreview(){
+  _gcPendingFile=null;
+  const preview=document.getElementById('gc-img-preview');
+  if(preview) preview.style.display='none';
+  const thumb=document.getElementById('gc-img-preview-thumb');
+  if(thumb) thumb.src='';
+  const inp=document.getElementById('gc-input');
+  if(inp){ inp.disabled=false; inp.placeholder='Message the community…'; }
+  const fileInp=document.getElementById('gc-img-input');
+  if(fileInp) fileInp.value='';
+}
+
+async function gcDelete(msgId,el){
   try{
     const r=await fetch('/api/chat/'+msgId,{method:'DELETE'}).then(x=>x.json());
     if(r.ok){
       el.remove();
       const container=document.getElementById('gc-messages');
-      if(container && !container.querySelector('.gc-msg')){
+      if(container&&!container.querySelector('.gc-msg')){
         const empty=document.getElementById('gc-empty');
         if(empty) empty.style.display='flex';
       }
