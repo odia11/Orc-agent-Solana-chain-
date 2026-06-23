@@ -16,7 +16,7 @@ img{max-width:100%;height:auto}
 :root{
   --bg:#080b10;--bg2:#0f1318;--bg3:#131d30;--bg4:#1a2840;
   --green:#00ff88;--green2:#00cc77;--red:#ff4466;--yellow:#ffc13a;--blue:#6aa3ff;--purple:#b07aff;
-  --text:#eef6ff;--muted:#555e6e;--dim:#a0bcd4;--border:#1e2530;--border2:#1e2530;
+  --text:#eef6ff;--muted:#555e6e;--dim:#aab2c0;--border:#1e2530;--border2:#1e2530;
   --shadow-card:0 2px 12px rgba(0,0,0,.4);
   --card-radius:12px;
   --glass-border:rgba(255,255,255,.06);
@@ -81,7 +81,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 }
 
 /* ── HEADER ── */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:1rem;border-bottom:1px solid var(--border);box-shadow:0 1px 0 0 var(--green-glow);flex-wrap:wrap;gap:8px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;padding-bottom:1rem;background:var(--bg);border-bottom:1px solid var(--border);min-height:56px;flex-wrap:wrap;gap:8px}
 .logo-row{display:flex;align-items:center;gap:10px}
 .brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
 .brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
@@ -119,9 +119,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .tv-me-profile-btn:hover{background:rgba(0,255,136,.08)}
 .dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
-.hdr-btn:hover{border-color:var(--green);color:var(--green)}
-.hdr-btn-red{background:transparent;border:1px solid rgba(241,52,75,.3);border-radius:6px;padding:6px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--red);cursor:pointer;transition:all .15s}
+.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:20px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s}
+.hdr-btn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 10px rgba(0,255,136,.18)}
+.hdr-btn-red{background:transparent;border:1px solid rgba(241,52,75,.3);border-radius:20px;padding:6px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--red);cursor:pointer;transition:all .15s}
 .hdr-btn-red:hover{background:rgba(241,52,75,.08)}
 /* ── NAV MENU DROPDOWN ── */
 .nav-menu-wrap{position:relative;display:inline-flex}
@@ -174,7 +174,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .pos-mini-card:hover{border-color:rgba(255,255,255,.14)}
 .pos-mini-sym{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:var(--text)}
 .pos-mini-pnl{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;white-space:nowrap}
-.stat-lbl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.12em;margin-bottom:7px}
+.stat-lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-bottom:7px}
 .stat-val{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;min-height:26px;display:flex;align-items:center}
 .stat-sub{font-size:11px;color:var(--dim);margin-top:4px;display:block}
 .stat-placeholder{font-size:12px;color:var(--border2);font-family:'Share Tech Mono',monospace;font-weight:400}
@@ -199,7 +199,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
 /* ── MARKET PANEL ── */
 .market-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--card-radius);box-shadow:var(--shadow-card);padding:16px;margin-bottom:1.25rem}
-.panel-hdr{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+.panel-hdr{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
 .panel-hdr::before{content:'';width:2px;height:11px;background:var(--green);border-radius:2px}
 
 /* ── TICKER ── */
@@ -1780,7 +1780,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   /* ── NAVBAR ── */
   .brand-sub{display:none}
   .brand{font-size:13px}
-  .hdr-btn,.hdr-btn-red{padding:5px 8px;font-size:9px;border-radius:6px}
+  .hdr-btn,.hdr-btn-red{padding:5px 10px;font-size:9px;border-radius:20px}
   .header-right{gap:5px;flex-wrap:nowrap}
   .wallet-pill{padding:4px 9px;font-size:9px;flex-shrink:0}
   .nav-mobile-hide{display:none!important}
@@ -2025,8 +2025,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
 /* ── STAT NUMBERS — bigger, bolder, tabular ── */
 .stat-val{
-  font-size:30px;
-  font-weight:700;
+  font-size:32px;
+  font-weight:800;
   font-feature-settings:'tnum' 1,'kern' 1;
   font-variant-numeric:tabular-nums;
   letter-spacing:-0.02em;
@@ -2091,7 +2091,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   font-family:'Inter',sans-serif;
   font-weight:600;
   font-size:11px;
-  letter-spacing:.1em;
+  color:#888;
+  letter-spacing:2px;
 }
 
 /* ── BRAND: keep Orbitron ── */
