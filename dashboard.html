@@ -558,6 +558,19 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .bl-item-mint{flex:1;font-size:9px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:'Share Tech Mono',monospace}
 .bl-remove-btn{flex:0 0 auto;background:transparent;border:1px solid rgba(255,77,106,.3);border-radius:5px;color:var(--red);font-size:9px;padding:3px 8px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
 .bl-remove-btn:hover{background:rgba(255,77,106,.15)}
+/* ── BLACKLIST MANAGER MODAL ── */
+.bl-mgr-table{width:100%;border-collapse:collapse;font-family:'Share Tech Mono',monospace;font-size:10px;margin-top:14px}
+.bl-mgr-table th{text-align:left;padding:7px 10px;color:var(--muted);border-bottom:1px solid var(--border);font-size:9px;letter-spacing:.1em;text-transform:uppercase;font-weight:700}
+.bl-mgr-table td{padding:10px 10px;border-bottom:1px solid rgba(255,255,255,.04);vertical-align:middle;color:var(--dim)}
+.bl-mgr-table tr:last-child td{border-bottom:none}
+.bl-mgr-table tr:hover td{background:rgba(255,255,255,.025)}
+.bl-mgr-sym{font-weight:700;color:var(--text)!important;font-size:11px}
+.bl-status-label{display:inline-flex;align-items:center;gap:4px;background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:5px;color:var(--red);font-size:9px;padding:3px 8px;white-space:nowrap}
+.bl-unban-btn{background:rgba(0,255,136,.07);border:1px solid rgba(0,255,136,.25);border-radius:5px;color:var(--green);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s,opacity .15s}
+.bl-unban-btn:hover:not(:disabled){background:rgba(0,255,136,.18)}
+.bl-unban-btn:disabled{opacity:.45;cursor:not-allowed}
+.bl-mgr-empty{text-align:center;padding:36px 0;color:var(--muted);font-family:'Share Tech Mono',monospace;font-size:11px;line-height:2.2}
+.bl-mgr-empty-icon{font-size:24px;margin-bottom:6px}
 .s-card{max-height:90vh;overflow-y:auto}
 .how-to-box{background:var(--bg3);border:1px solid var(--border);border-radius:9px;margin-bottom:18px;overflow:hidden}
 .how-to-toggle{width:100%;background:none;border:none;color:var(--dim);font-family:'Share Tech Mono',monospace;font-size:10px;padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;letter-spacing:.05em;transition:color .15s}
@@ -1809,6 +1822,36 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   </div>
 </div>
 
+<!-- BLACKLIST MANAGER MODAL -->
+<div class="s-modal" id="blacklist-modal" onclick="if(event.target===this)closeBlacklistModal()">
+  <div class="s-card" style="max-width:600px">
+    <button class="s-close" onclick="closeBlacklistModal()">✕</button>
+    <div class="s-title">🚫 BLACKLIST MANAGER</div>
+    <div class="s-sub">Tokens the bot will skip when scanning. Unban any token to allow it again.</div>
+    <div id="bl-mgr-status" class="s-msg" style="display:none;margin-top:10px"></div>
+    <div id="bl-mgr-loading" style="font-size:11px;color:var(--muted);padding:20px 0;text-align:center">Loading…</div>
+    <div id="bl-mgr-body" style="display:none;overflow-x:auto">
+      <table class="bl-mgr-table">
+        <thead>
+          <tr>
+            <th>Token</th>
+            <th>Address</th>
+            <th>Blacklisted At</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody id="bl-mgr-tbody"></tbody>
+      </table>
+    </div>
+    <div id="bl-mgr-empty" class="bl-mgr-empty" style="display:none">
+      <div class="bl-mgr-empty-icon">✅</div>
+      <strong>No blacklisted tokens</strong><br>
+      Use 🚫 Avoid on any token to add it here.
+    </div>
+  </div>
+</div>
+
 <!-- INACTIVITY WARNING POPUP -->
 <div class="inact-overlay" id="inact-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="inact-title" onclick="stayConnected()">
   <div class="inact-card" onclick="event.stopPropagation()">
@@ -1885,6 +1928,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
           <a href="/history" class="nav-menu-item">📋 History</a>
           <a href="/leaderboard" class="nav-menu-item">🏆 Leaderboard</a>
           <button class="nav-menu-item" id="traders-btn" onclick="openTradersView();_closeNavMenu()">👥 Traders</button>
+          <button class="nav-menu-item" onclick="openBlacklistModal();_closeNavMenu()">🚫 Blacklist</button>
           <div class="nav-menu-sep"></div>
           <button class="nav-menu-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal();_closeNavMenu()">? Help &amp; Tips</button>
         </div>
@@ -4875,17 +4919,17 @@ async function _tvFollowToggle(btn, key, userId, username){
   const wasFollowing=_tvFollowed.has(key);
   if(wasFollowing){
     _tvFollowed.delete(key);
-    btn.classList.remove('followed');
+    btn.classList.remove('followed','is-following');
   } else {
     _tvFollowed.add(key);
-    btn.classList.add('followed');
+    btn.classList.add('followed','is-following');
   }
   if(username) showLfToast(wasFollowing?'👋':'👥', wasFollowing?`Unfollowed ${username}`:`Now following ${username}`, wasFollowing?'neg':'pos');
   if(userId){
     const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
     if(r?.ok){
-      if(r.following){_tvFollowed.add(key);btn.classList.add('followed');}
-      else{_tvFollowed.delete(key);btn.classList.remove('followed');}
+      if(r.following){_tvFollowed.add(key);btn.classList.add('followed','is-following');}
+      else{_tvFollowed.delete(key);btn.classList.remove('followed','is-following');}
     }
   }
 }
@@ -5296,9 +5340,11 @@ async function openFollowView(userId, username, type){
     const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
     const rawKey = u.username+'|'+(u.wallet_address||'');
     const followKey = esc(rawKey);
+    // Seed _tvFollowed from server's authoritative is_following field
+    if(u.is_following) _tvFollowed.add(rawKey); else _tvFollowed.delete(rawKey);
     const isFollowed = _tvFollowed.has(rawKey);
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
+      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
       : '';
     const rowCls = (type==='following' && isFollowed) ? 'tvfl-row is-following' : 'tvfl-row';
     const nameBadge = type==='followers'
@@ -5345,11 +5391,13 @@ async function _loadFollowPanel(wallet, tab){
     const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
     const rawKey = u.username+'|'+(u.wallet_address||'');
     const followKey = esc(rawKey);
+    // Seed _tvFollowed from server's authoritative is_following field
+    if(u.is_following) _tvFollowed.add(rawKey); else _tvFollowed.delete(rawKey);
     const isFollowed = _tvFollowed.has(rawKey);
     // stopPropagation is on the button directly — not a wrapper div — so clicking
     // elsewhere on the row still fires the row onclick
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<button class="tv-follow-btn${isFollowed?' followed':''}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
+      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
       : '';
     const rowCls = (tab==='following' && isFollowed) ? 'tvp-fp-row is-following' : 'tvp-fp-row';
     const nameBadge = tab==='followers'

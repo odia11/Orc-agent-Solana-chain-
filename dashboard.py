@@ -3829,9 +3829,24 @@ def toggle_follow(target_id: int):
     return jsonify({'ok': True, 'following': following, 'follower_count': int(follower_count)})
 
 # ── FOLLOWERS / FOLLOWING LISTS ──
+def _viewer_follows_set(c, viewer_wallet, uid_list):
+    """Return the set of user IDs (from uid_list) that the current viewer follows.
+    Single query so callers don't need N round-trips."""
+    if not viewer_wallet or not uid_list:
+        return set()
+    c.execute('SELECT id FROM users WHERE wallet_address=?', (viewer_wallet,))
+    vrow = c.fetchone()
+    if not vrow:
+        return set()
+    placeholders = ','.join('?' * len(uid_list))
+    c.execute(f'SELECT following_id FROM follows WHERE follower_id=? AND following_id IN ({placeholders})',
+              [vrow[0]] + list(uid_list))
+    return {r[0] for r in c.fetchall()}
+
 @app.route('/api/profile/<int:user_id>/followers', methods=['GET'])
 @rate_limit(30, 60)
 def get_followers(user_id: int):
+    viewer_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
@@ -3844,17 +3859,20 @@ def get_followers(user_id: int):
             LIMIT 200
         ''', (user_id,))
         rows = c.fetchall()
+        viewer_follows = _viewer_follows_set(c, viewer_wallet, [r[0] for r in rows])
     finally:
         conn.close()
     users = []
     for uid, username, avatar_url, wallet in rows:
         short = (wallet[:6] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
-        users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '', 'wallet': short, 'wallet_address': wallet or ''})
+        users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '',
+                      'wallet': short, 'wallet_address': wallet or '', 'is_following': uid in viewer_follows})
     return jsonify({'ok': True, 'users': users})
 
 @app.route('/api/profile/<int:user_id>/following', methods=['GET'])
 @rate_limit(30, 60)
 def get_following(user_id: int):
+    viewer_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
@@ -3867,33 +3885,37 @@ def get_following(user_id: int):
             LIMIT 200
         ''', (user_id,))
         rows = c.fetchall()
+        viewer_follows = _viewer_follows_set(c, viewer_wallet, [r[0] for r in rows])
     finally:
         conn.close()
     users = []
     for uid, username, avatar_url, wallet in rows:
         short = (wallet[:6] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
-        users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '', 'wallet': short, 'wallet_address': wallet or ''})
+        users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '',
+                      'wallet': short, 'wallet_address': wallet or '', 'is_following': uid in viewer_follows})
     return jsonify({'ok': True, 'users': users})
 
-def _follow_list_rows(rows, today):
-    """Shared helper: enrich (uid, username, avatar_url, wallet) rows with pnl_today."""
+def _follow_list_rows(rows, today, viewer_wallet=None):
+    """Shared helper: enrich (uid, username, avatar_url, wallet) rows with pnl_today and is_following."""
     if not rows:
         return []
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
+        viewer_follows = _viewer_follows_set(c, viewer_wallet, [r[0] for r in rows])
         users = []
         for uid, username, avatar_url, wallet in rows:
             short = (wallet[:4] + '...' + wallet[-4:]) if wallet and len(wallet) >= 8 else (wallet or '')
             c.execute('SELECT COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND date(timestamp)=?', (uid, today))
             pnl_today = round(float((c.fetchone() or (0,))[0]), 4)
             users.append({
-                'user_id':      uid,
-                'username':     username or short,
-                'avatar_url':   avatar_url or '',
-                'wallet':       short,
+                'user_id':        uid,
+                'username':       username or short,
+                'avatar_url':     avatar_url or '',
+                'wallet':         short,
                 'wallet_address': wallet or '',
-                'pnl_today':    pnl_today,
+                'pnl_today':      pnl_today,
+                'is_following':   uid in viewer_follows,
             })
     finally:
         conn.close()
@@ -3903,6 +3925,7 @@ def _follow_list_rows(rows, today):
 @rate_limit(30, 60)
 def get_followers_by_wallet(wallet: str):
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    viewer_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
@@ -3920,12 +3943,13 @@ def get_followers_by_wallet(wallet: str):
         rows = c.fetchall()
     finally:
         conn.close()
-    return jsonify({'ok': True, 'users': _follow_list_rows(rows, today)})
+    return jsonify({'ok': True, 'users': _follow_list_rows(rows, today, viewer_wallet)})
 
 @app.route('/api/profile/<wallet>/following', methods=['GET'])
 @rate_limit(30, 60)
 def get_following_by_wallet(wallet: str):
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    viewer_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
@@ -3943,7 +3967,7 @@ def get_following_by_wallet(wallet: str):
         rows = c.fetchall()
     finally:
         conn.close()
-    return jsonify({'ok': True, 'users': _follow_list_rows(rows, today)})
+    return jsonify({'ok': True, 'users': _follow_list_rows(rows, today, viewer_wallet)})
 
 # ── BIO ──
 @app.route('/api/bio', methods=['POST'])
