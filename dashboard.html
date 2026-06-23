@@ -996,7 +996,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .tvp-social-icon{font-size:10px;opacity:.55}
 /* action buttons: column stack, pill, fixed width */
 .tvp-actions{display:flex;flex-direction:column;gap:7px;flex-shrink:0;padding-top:2px;min-width:140px}
-.tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn{width:140px;border-radius:24px;padding:8px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;text-align:center;display:block;box-sizing:border-box;border:1px solid transparent}
+.tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn,.tpc-msg-btn{width:140px;border-radius:24px;padding:8px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;text-align:center;display:block;box-sizing:border-box;border:1px solid transparent}
 .tpc-follow-btn{background:transparent;border-color:rgba(255,255,255,.2);color:var(--text)}
 .tpc-follow-btn:hover{border-color:rgba(0,255,136,.45);color:var(--green)}
 .tpc-follow-btn.following{border-color:var(--green);background:rgba(0,255,136,.1);font-size:0}
@@ -1012,6 +1012,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .tpc-stop-copy-btn:hover{background:rgba(255,68,68,.26);border-color:var(--red)}
 .tpc-sol-btn{background:transparent;border-color:var(--border2);color:var(--green)}
 .tpc-sol-btn:hover{border-color:var(--green);background:rgba(0,255,136,.07)}
+.tpc-msg-btn{background:rgba(106,163,255,.08);border-color:rgba(106,163,255,.4);color:var(--blue)}
+.tpc-msg-btn:hover{background:rgba(106,163,255,.18);border-color:var(--blue)}
 /* 5-tile stats bar */
 .tvp-stats5{display:grid;grid-template-columns:repeat(5,1fr);background:rgba(13,20,33,.88);backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.08);border-radius:12px;overflow:hidden;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,.3)}
 .tvp-stat5{text-align:center;padding:16px 8px;border-right:1px solid rgba(255,255,255,.07)}
@@ -1054,7 +1056,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 @media(max-width:768px){
   .tvp-top{flex-wrap:wrap}
   .tvp-actions{flex-direction:row;flex-wrap:wrap;min-width:unset;width:100%;padding-top:0}
-  .tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn{flex:1;min-width:calc(50% - 4px);width:auto}
+  .tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn,.tpc-msg-btn{flex:1;min-width:calc(50% - 4px);width:auto}
   .tvp-stats5{grid-template-columns:repeat(2,1fr)}
   .tvp-stat5:nth-child(2){border-right:none}
   .tvp-stat5:nth-child(4){border-right:none}
@@ -5620,6 +5622,9 @@ async function openProfileCard(userId){
         ? `<button class="tpc-stop-copy-btn" id="tpc-copy-btn" onclick="_tpcStopCopy()">Stop Copying</button>`
         : `<button class="tpc-copy-btn" id="tpc-copy-btn" onclick="_tpcStartCopy('${_tpcCurrentFullWallet.replace(/'/g,"\\'")}','${esc(p.username).replace(/'/g,"\\'")}')">Copy Trader</button>`)
     : '';
+  const msgBtnHtml = (!_isSelf && phantomKey)
+    ? `<button class="tpc-msg-btn" onclick="openDMWith(${userId},'${_tpcCurrentFullWallet.replace(/'/g,"\\'")}','${(p.username||'').replace(/'/g,"\\'")}')">💬 Message</button>`
+    : '';
   const tradesHtml = _tvpTradesHtml(td?.trades);
   const posHtml = _tvpPositionsHtml(td?.positions);
 
@@ -5659,6 +5664,7 @@ async function openProfileCard(userId){
         <div class="tvp-actions">
           ${followBtnHtml}
           ${copyBtnHtml}
+          ${msgBtnHtml}
           <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
         </div>
       </div>
@@ -6432,11 +6438,18 @@ function _dmAvatarEl(container, wallet, username){
   container.textContent=ini;
 }
 
+function openDMWith(peerId, peerWallet, peerUsername){
+  if(!phantomKey){showLfToast('🔴','Connect wallet to use messages','neg');return;}
+  closeTraderProfile();
+  openMessagesView();
+  dmOpenConvo(peerId, peerWallet, peerUsername||_dmShort(peerWallet));
+}
+
 function openMessagesView(){
   if(_dmOpen) return;
   _dmOpen=true;
   _hideAllViews();
-  document.getElementById('dash-messages').style.display='';
+  document.getElementById('dash-messages').style.display='block';
   document.getElementById('messages-btn').style.borderColor='var(--green)';
   document.getElementById('messages-btn').style.color='var(--green)';
   document.getElementById('messages-btn').style.background='rgba(0,255,136,.08)';
@@ -6478,9 +6491,20 @@ async function dmLoadConversations(){
 
 function _dmRenderConvoList(){
   const list=document.getElementById('dm-convo-list');
-  const empty=document.getElementById('dm-convo-empty');
-  if(!_dmConvos.length){empty.style.display='';list.innerHTML='';list.appendChild(empty);return;}
-  empty.style.display='none';
+  let empty=document.getElementById('dm-convo-empty');
+  if(!empty){
+    empty=document.createElement('div');
+    empty.id='dm-convo-empty';
+    empty.className='dm-empty-convo';
+    empty.innerHTML='No conversations yet.<br>Message someone from their trader profile.';
+  }
+  if(!_dmConvos.length){
+    list.innerHTML='';
+    list.appendChild(empty);
+    return;
+  }
+  // Detach empty before clearing innerHTML so getElementById finds it next time
+  if(empty.parentNode) empty.parentNode.removeChild(empty);
   list.innerHTML='';
   _dmConvos.forEach(c=>{
     const div=document.createElement('div');
@@ -6526,16 +6550,24 @@ async function dmOpenConvo(peerId, peerWallet, peerUsername){
 
 async function _dmFetchMessages(){
   if(!_dmPeerId) return;
+  const container=document.getElementById('dm-messages');
   try{
-    const r=await fetch('/api/messages/'+_dmPeerId).then(x=>x.json());
-    if(!r.ok) return;
+    const resp=await fetch('/api/messages/'+_dmPeerId);
+    const r=await resp.json();
+    if(!r.ok){
+      container.innerHTML=resp.status===403
+        ?'<div class="dm-chat-empty"><div style="font-size:24px">🔒</div><div>Mutual follow required to send messages</div></div>'
+        :'<div class="dm-chat-empty">Could not load messages</div>';
+      return;
+    }
     _dmRenderMessages(r.messages||[]);
-    // Remove unread badge on this convo in sidebar
     const convo=_dmConvos.find(c=>c.peer_id===_dmPeerId);
     if(convo) convo.unread=0;
     _dmRenderConvoList();
     _dmUpdateUnreadBadge();
-  }catch(e){}
+  }catch(e){
+    container.innerHTML='<div class="dm-chat-empty">Could not load messages</div>';
+  }
 }
 
 function _dmRenderMessages(msgs){
