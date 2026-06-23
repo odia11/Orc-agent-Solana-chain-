@@ -6923,15 +6923,21 @@ async function dmOpenConvo(peerId, peerWallet, peerUsername){
 async function _dmFetchMessages(){
   if(!_dmPeerId) return;
   const container=document.getElementById('dm-messages');
+  let resp, rawText='';
   try{
-    const resp=await fetch('/api/messages/'+_dmPeerId);
-    const r=await resp.json();
+    resp=await fetch('/api/messages/'+_dmPeerId);
+    rawText=await resp.text();
+    console.log('GET /api/messages/'+_dmPeerId+' status:',resp.status,'body:',rawText);
+    let r;
+    try{ r=JSON.parse(rawText); }
+    catch(parseErr){
+      console.error('JSON parse error:',parseErr,'raw:',rawText);
+      container.innerHTML=`<div class="dm-chat-empty">Server error (${resp.status}) — check console</div>`;
+      return;
+    }
     if(!r.ok){
-      console.error('GET /api/messages/'+_dmPeerId+' failed — status:',resp.status,'body:',r);
-      const msg=_esc(r.msg||(resp.status===403?'Follow required to message':'Could not load messages'));
-      container.innerHTML=resp.status===403
-        ?`<div class="dm-chat-empty"><div style="font-size:24px">🔒</div><div>${msg}</div></div>`
-        :`<div class="dm-chat-empty">${msg}</div>`;
+      console.error('GET /api/messages/'+_dmPeerId+' not ok — status:',resp.status,'body:',r);
+      container.innerHTML=`<div class="dm-chat-empty">${_esc(r.msg||'Could not load messages ('+resp.status+')')}</div>`;
       return;
     }
     _dmRenderMessages(r.messages||[]);
@@ -6940,8 +6946,8 @@ async function _dmFetchMessages(){
     _dmRenderConvoList();
     _dmUpdateUnreadBadge();
   }catch(e){
-    console.error('_dmFetchMessages exception:',e);
-    container.innerHTML='<div class="dm-chat-empty">Could not load messages</div>';
+    console.error('_dmFetchMessages exception:',e,'status:',(resp&&resp.status),'raw:',rawText);
+    container.innerHTML=`<div class="dm-chat-empty">Could not load messages — ${_esc(String(e))}</div>`;
   }
 }
 

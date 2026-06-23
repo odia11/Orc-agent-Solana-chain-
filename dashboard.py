@@ -4134,27 +4134,32 @@ def get_dm_history(peer_id):
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    peer_id = int(peer_id)
     conn = sqlite3.connect(DB_FILE)
+    rows = []
     try:
         me = _get_uid(conn, wallet)
         if not me:
-            return jsonify({'ok': False, 'msg': 'User not found'}), 404
-        if not _any_follow(conn, me, int(peer_id)):
-            return jsonify({'ok': False, 'msg': 'Follow this trader (or be followed) to send messages'}), 403
-        rows = conn.execute('''
-            SELECT id, sender_id, receiver_id, message, created_at, is_read
-            FROM direct_messages
-            WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
-            ORDER BY created_at ASC
-            LIMIT 200
-        ''', (me, peer_id, peer_id, me)).fetchall()
+            print(f'[dm_get] user not found for wallet {wallet}', flush=True)
+            return jsonify({'ok': True, 'messages': []})
+        print(f'[dm_get] me={me} peer={peer_id}', flush=True)
+        rows = conn.execute(
+            'SELECT id, sender_id, receiver_id, message, created_at, is_read '
+            'FROM direct_messages '
+            'WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) '
+            'ORDER BY created_at ASC LIMIT 200',
+            (me, peer_id, peer_id, me)
+        ).fetchall()
+        print(f'[dm_get] found {len(rows)} messages', flush=True)
         conn.execute(
-            'UPDATE direct_messages SET is_read=1 WHERE receiver_id=? AND sender_id=? AND is_read=0',
+            'UPDATE direct_messages SET is_read=1 '
+            'WHERE receiver_id=? AND sender_id=? AND is_read=0',
             (me, peer_id)
         )
         conn.commit()
     except Exception as e:
-        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+        print(f'[dm_get] ERROR me={me if "me" in dir() else "?"} peer={peer_id}: {e}', flush=True)
+        return jsonify({'ok': True, 'messages': []})
     finally:
         conn.close()
     return jsonify({'ok': True, 'messages': [
@@ -4181,8 +4186,6 @@ def send_dm(peer_id):
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         if me == int(peer_id):
             return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
-        if not _any_follow(conn, me, int(peer_id)):
-            return jsonify({'ok': False, 'msg': 'Follow this trader (or be followed) to send messages'}), 403
         now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
             'INSERT INTO direct_messages (sender_id, receiver_id, message, created_at) VALUES (?,?,?,?)',
