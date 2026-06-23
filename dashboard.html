@@ -1244,6 +1244,28 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .iadmin-action-btn.ia-danger{border-color:rgba(255,77,106,.22);color:rgba(255,77,106,.55)}
 .iadmin-action-btn.ia-danger:hover:not(:disabled){border-color:var(--red);color:var(--red);background:rgba(255,77,106,.06)}
 
+/* ── PROFILE COMMENTS ── */
+.tvp-comments{margin-top:16px}
+.tvp-comments-hdr{font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;font-family:'Orbitron',monospace;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.tvp-comment-input-row{display:flex;gap:8px;margin-bottom:12px}
+.tvp-comment-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 12px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--text);outline:none;resize:none;max-height:80px;line-height:1.4}
+.tvp-comment-input:focus{border-color:rgba(0,255,136,.4)}
+.tvp-comment-post-btn{background:var(--green);color:#000;border:none;border-radius:8px;padding:8px 14px;font-family:'Orbitron',monospace;font-weight:700;font-size:9px;cursor:pointer;flex-shrink:0;transition:filter .15s;align-self:flex-end}
+.tvp-comment-post-btn:hover{filter:brightness(1.1)}
+.tvp-comment-post-btn:disabled{opacity:.4;cursor:not-allowed}
+.tvp-comments-list{display:flex;flex-direction:column;gap:8px}
+.tvp-comment-card{background:var(--bg3);border:1px solid rgba(255,255,255,.06);border-radius:8px;padding:10px 12px;display:flex;gap:10px;align-items:flex-start}
+.tvp-comment-av{width:28px;height:28px;border-radius:50%;background:var(--bg);border:1px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--blue)}
+.tvp-comment-body{flex:1;min-width:0}
+.tvp-comment-meta{display:flex;align-items:center;gap:6px;margin-bottom:3px;flex-wrap:wrap}
+.tvp-comment-author{font-size:10px;font-weight:700;color:var(--text)}
+.tvp-comment-time{font-size:9px;color:var(--muted)}
+.tvp-comment-text{font-size:11px;color:var(--dim);line-height:1.5;word-break:break-word}
+.tvp-comment-del{background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 0 0 4px;transition:color .12s;flex-shrink:0;line-height:1}
+.tvp-comment-del:hover{color:var(--red)}
+.tvp-comments-empty{font-size:11px;color:var(--muted);text-align:center;padding:16px 0;opacity:.6}
+.tvp-comment-err{font-size:10px;color:var(--red);margin-top:4px}
+
 /* ── MESSAGES ── */
 #dash-messages{display:none}
 .dm-layout{display:flex;gap:0;height:calc(100vh - 120px);min-height:400px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;overflow:hidden}
@@ -5680,8 +5702,10 @@ async function openProfileCard(userId){
       <div class="tvp-section-hdr">Today's Trades</div>
       ${tradesHtml}
     </div>
+    <div id="tvp-comments-section" class="tvp-comments"></div>
   `;
   _loadFollowPanel(_tpcCurrentFullWallet, 'followers');
+  _tvcLoadComments(userId, isFollowing, _isSelf);
 }
 
 // ── DAILY LEADERBOARD ──
@@ -6571,14 +6595,109 @@ function _dmUpdateUnreadBadge(){
   _dmSetUnreadBadge(total);
 }
 
-// Auto-detect my user_id from conversations (sender whose messages we know)
-function _dmDetectMyId(msgs){
-  if(_dmMyId||!msgs.length) return;
-  // Not reliable without a /api/me endpoint — skip, relies on my messages being sender_id
-}
-
 // Poll unread count on every page, even outside messages view
 setInterval(dmFetchUnread, 15000);
+
+// ── PROFILE COMMENTS ──
+let _tvcCurrentUserId=null, _tvcCanComment=false, _tvcIsSelf=false;
+
+async function _tvcLoadComments(profileUserId, canComment, isSelf){
+  _tvcCurrentUserId=profileUserId;
+  _tvcCanComment=!!canComment;
+  _tvcIsSelf=!!isSelf;
+  const sec=document.getElementById('tvp-comments-section');
+  if(!sec) return;
+  sec.innerHTML='<div class="tvp-comments-hdr">💬 Comments</div><div class="tvp-comments-empty">Loading…</div>';
+  try{
+    const r=await fetch('/api/comments/'+profileUserId).then(x=>x.json());
+    if(!r.ok) throw new Error(r.msg||'failed');
+    _tvcRender(r.comments||[], profileUserId, canComment, isSelf);
+  }catch(e){
+    sec.innerHTML='<div class="tvp-comments-hdr">💬 Comments</div><div class="tvp-comments-empty">Could not load comments.</div>';
+  }
+}
+
+function _tvcRender(comments, profileUserId, canComment, isSelf){
+  const sec=document.getElementById('tvp-comments-section');
+  if(!sec) return;
+  const myId=_myProfileId;
+  const countStr=comments.length?'('+comments.length+')':'';
+  let h=`<div class="tvp-comments-hdr">💬 Comments <span style="font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-weight:400">${countStr}</span></div>`;
+  if(canComment){
+    h+=`<div class="tvp-comment-input-row">
+      <textarea class="tvp-comment-input" id="tvp-comment-input" placeholder="Write a comment… (max 280 chars)" rows="2" maxlength="280"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_tvcPost(${profileUserId})}"></textarea>
+      <button class="tvp-comment-post-btn" id="tvp-comment-post-btn" onclick="_tvcPost(${profileUserId})">POST</button>
+    </div>`;
+  }
+  h+='<div class="tvp-comments-list">';
+  if(!comments.length){
+    h+='<div class="tvp-comments-empty">No comments yet'+(canComment?' — be the first!':'')+'</div>';
+  } else {
+    comments.forEach(c=>{
+      const name=c.author_username||_dmShort(c.author_wallet||'');
+      const ini=_dmInitials(name);
+      const canDel=myId&&(c.author_id===myId||isSelf);
+      const delBtn=canDel?`<button class="tvp-comment-del" onclick="_tvcDelete(${c.id})" title="Delete">🗑</button>`:'';
+      h+=`<div class="tvp-comment-card" id="tvpc-${c.id}">
+        <div class="tvp-comment-av">${esc(ini)}</div>
+        <div class="tvp-comment-body">
+          <div class="tvp-comment-meta">
+            <span class="tvp-comment-author">${esc(name)}</span>
+            <span class="tvp-comment-time">${_dmRelTime(c.created_at)}</span>
+            ${delBtn}
+          </div>
+          <div class="tvp-comment-text">${esc(c.message)}</div>
+        </div>
+      </div>`;
+    });
+  }
+  h+='</div>';
+  sec.innerHTML=h;
+}
+
+async function _tvcPost(profileUserId){
+  const input=document.getElementById('tvp-comment-input');
+  const btn=document.getElementById('tvp-comment-post-btn');
+  if(!input) return;
+  const text=input.value.trim();
+  if(!text) return;
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/comments/'+profileUserId,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text})
+    }).then(x=>x.json());
+    if(r.ok){
+      input.value='';
+      await _tvcLoadComments(profileUserId, _tvcCanComment, _tvcIsSelf);
+    } else {
+      let errEl=document.getElementById('tvp-comment-err');
+      if(!errEl){errEl=document.createElement('div');errEl.id='tvp-comment-err';errEl.className='tvp-comment-err';input.parentNode.after(errEl);}
+      errEl.textContent=r.msg||'Failed to post';
+      setTimeout(()=>errEl.remove(),3000);
+    }
+  }catch(e){}
+  if(btn) btn.disabled=false;
+}
+
+async function _tvcDelete(commentId){
+  const card=document.getElementById('tvpc-'+commentId);
+  if(card) card.style.opacity='.35';
+  try{
+    const r=await fetch('/api/comments/'+commentId,{method:'DELETE'}).then(x=>x.json());
+    if(r.ok){
+      if(card) card.remove();
+      const list=document.querySelector('#tvp-comments-section .tvp-comments-list');
+      if(list&&!list.querySelector('.tvp-comment-card')){
+        list.innerHTML='<div class="tvp-comments-empty">No comments yet'+(phantomKey?' — be the first!':'')+'</div>';
+      }
+    } else {
+      if(card) card.style.opacity='';
+    }
+  }catch(e){ if(card) card.style.opacity=''; }
+}
 </script>
 
 <!-- ── DEPOSIT SOL MODAL ── -->
