@@ -1746,6 +1746,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-send-btn:hover:not(:disabled){filter:brightness(1.12)}
 .dm-send-btn:active:not(:disabled){transform:scale(.96)}
 .dm-send-btn:disabled{opacity:.35;cursor:not-allowed}
+.dm-img-btn{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:6px;padding:6px 10px;color:#888888;cursor:pointer;font-size:16px;flex-shrink:0;align-self:flex-end;height:42px;display:flex;align-items:center;justify-content:center;transition:color .15s,border-color .15s;line-height:1}
+.dm-img-btn:hover{color:#ffffff;border-color:#444444}
+.dm-img-btn.loading{pointer-events:none;opacity:.6}
+.dm-img-spinner{display:inline-block;width:14px;height:14px;border:2px solid #444444;border-top-color:#888888;border-radius:50%;animation:dmSpin .6s linear infinite}
+@keyframes dmSpin{to{transform:rotate(360deg)}}
+.dm-bubble-img{background:transparent!important;padding:0!important;border:none!important;box-shadow:none!important}
+.dm-bubble-img img{max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;display:block}
 .dm-hdr-back{
   display:none;
   background:transparent;
@@ -2805,6 +2812,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           </div>
           <div class="dm-messages" id="dm-messages"></div>
           <div class="dm-input-row">
+            <input type="file" id="dm-img-input" accept="image/*" style="display:none" onchange="dmSendImage(this.files[0])">
+            <button class="dm-img-btn" id="dm-img-btn" onclick="dmPickImage()" title="Send image">📷</button>
             <textarea class="dm-input" id="dm-input" placeholder="Message…" rows="1" maxlength="500"
               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();dmSend()}"></textarea>
             <button class="dm-send-btn" id="dm-send-btn" onclick="dmSend()">SEND</button>
@@ -7424,6 +7433,20 @@ function _dmBuildMessageEl(m, myId){
         <div class="dm-copy-err" id="${errId}" style="display:none"></div>
       </div>
       <div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
+  } else if(m.message_type==='image' && m.message && m.message.startsWith('/static/dm_images/')){
+    div.className='dm-msg '+(mine?'mine':'theirs');
+    const img=document.createElement('img');
+    img.src=m.message;
+    img.alt='Image';
+    img.onclick=()=>window.open(m.message,'_blank');
+    const bubble=document.createElement('div');
+    bubble.className='dm-bubble dm-bubble-img';
+    bubble.appendChild(img);
+    const timeEl=document.createElement('div');
+    timeEl.className='dm-msg-time';
+    timeEl.textContent=_dmRelTime(m.created_at);
+    div.appendChild(bubble);
+    div.appendChild(timeEl);
   } else {
     div.className='dm-msg '+(mine?'mine':'theirs');
     div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
@@ -7524,6 +7547,48 @@ async function dmSend(){
   }
   btn.disabled=false;
   input.focus();
+}
+
+function dmPickImage(){
+  if(!_dmPeerId) return;
+  const inp=document.getElementById('dm-img-input');
+  if(inp){ inp.value=''; inp.click(); }
+}
+
+async function dmSendImage(file){
+  if(!file||!_dmPeerId) return;
+  const btn=document.getElementById('dm-img-btn');
+  if(btn){ btn.innerHTML='<span class="dm-img-spinner"></span>'; btn.classList.add('loading'); }
+  try{
+    const fd=new FormData();
+    fd.append('image', file);
+    const upResp=await fetch('/api/messages/upload-image',{method:'POST',body:fd});
+    const upData=await upResp.json();
+    if(!upData.ok){
+      showTradeWarn('⚠️ '+(upData.msg||'Upload failed'));
+      return;
+    }
+    const url=upData.url;
+    const sendResp=await fetch('/api/messages/'+_dmPeerId,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:url, message_type:'image'})
+    });
+    const r=await sendResp.json();
+    if(r.ok){
+      _dmAppendMessage({sender_id:_dmMyId, message:url, message_type:'image',
+                        id:r.message_id, created_at:r.created_at||new Date().toISOString()});
+      _dmFetchMessages();
+    } else {
+      showTradeWarn('⚠️ '+(r.msg||'Failed to send image'));
+    }
+  }catch(e){
+    showTradeWarn('⚠️ Image send failed');
+  }finally{
+    if(btn){ btn.innerHTML='📷'; btn.classList.remove('loading'); }
+    const inp=document.getElementById('dm-img-input');
+    if(inp) inp.value='';
+  }
 }
 
 function _dmBackToList(){
