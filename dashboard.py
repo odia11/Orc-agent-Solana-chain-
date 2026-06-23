@@ -114,11 +114,10 @@ HEARTBEAT_FILE = os.path.join(_DATA_DIR, 'heartbeat.txt')
 _APP_START     = time.time()
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
-DIFFICULTY_PRESETS = {
-    'EASY':   {'tp': 0.25, 'sl': 0.06, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
-    'MEDIUM': {'tp': 0.40, 'sl': 0.06, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
-    'HARD':   {'tp': 0.60, 'sl': 0.06, 'crash': 0.15, 'm5_min':  5, 'm5_max': None},
-}
+TAKE_PROFIT     = 0.12   # 12% — universal take profit
+STOP_LOSS       = 0.03   # 3%  — universal stop loss
+EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
+CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -1965,7 +1964,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, difficulty, min_trade_size, max_trade_size FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -1981,15 +1980,13 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     user_id          = row[0]
     daily_loss_limit = abs(float(row[2] if row[2] is not None else 50.0))
-    difficulty       = row[3] if (len(row) > 3 and row[3] in DIFFICULTY_PRESETS) else 'MEDIUM'
-    min_trade_usdc   = float(row[4]) if (len(row) > 4 and row[4] is not None) else 1.0
-    max_trade_usdc   = float(row[5]) if (len(row) > 5 and row[5] is not None) else 10.0
-    preset           = DIFFICULTY_PRESETS[difficulty]
-    take_profit      = preset['tp']
-    stop_loss        = preset['sl']
-    crash_exit       = preset['crash']
-    m5_min           = preset['m5_min']
-    m5_max           = preset['m5_max']
+    min_trade_usdc   = float(row[3]) if (len(row) > 3 and row[3] is not None) else 1.0
+    max_trade_usdc   = float(row[4]) if (len(row) > 4 and row[4] is not None) else 10.0
+    take_profit      = TAKE_PROFIT
+    stop_loss        = STOP_LOSS
+    crash_exit       = CRASH_EXIT
+    m5_min           = 5
+    m5_max           = None
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -2008,9 +2005,9 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     _m5_desc = ('≥' + str(m5_min) + '%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
-    print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}... difficulty={difficulty}', flush=True)
-    add_user_log(wallet, '[' + short + '] Trader started [' + difficulty + '] — TP:+' + str(round(take_profit*100)) +
-                 '% SL:-' + str(round(stop_loss*100)) + '% crash:-' + str(round(crash_exit*100)) +
+    print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
+    add_user_log(wallet, '[' + short + '] Trader started — TP:+' + str(round(take_profit*100)) +
+                 '% SL:-' + str(round(stop_loss*100)) +
                  '% | momentum ' + _m5_desc + ' in 5m + not reversing | max 5 pos | scan 30s')
     positions = us['positions']
 
@@ -2155,10 +2152,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         open_pos -= 1
                         continue  # skip normal TP/SL — crash exit already handled
                     exit_reason = None
-                    if chg >= take_profit:
-                        exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
-                    elif chg <= -stop_loss:
+                    if chg <= -stop_loss:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
+                    elif chg >= take_profit:
+                        exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
@@ -2222,9 +2219,6 @@ def user_trader_loop(stop_event, config, wallet: str):
                             _skip_log.append(f'[skip] {_tsym}: blacklisted by user')
                             continue
                         _dex  = _t.get('dexId', '') or ''
-                        if 'pump' in _dex and difficulty == 'HARD':
-                            _skip_log.append(f'[skip] {_tsym}: pumpswap — filtered (HARD mode only)')
-                            continue
                         _sc   = _t.get('score', 0)
                         _m5   = _t.get('change5m', 0)
                         _v5m  = _t.get('volume5m', 0)
@@ -3987,47 +3981,17 @@ def save_bio():
         conn.close()
     return jsonify({'ok': True, 'bio': bio})
 
-# ── DIFFICULTY ──
+# ── DIFFICULTY (deprecated — universal strategy, no difficulty modes) ──
 @app.route('/api/difficulty', methods=['GET'])
 @rate_limit(30, 60)
 def get_difficulty():
-    wallet = _current_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'No wallet connected'})
-    conn = sqlite3.connect(DB_FILE)
-    c    = conn.cursor()
-    c.execute('SELECT difficulty FROM users WHERE wallet_address=?', (wallet,))
-    row  = c.fetchone()
-    conn.close()
-    difficulty = (row[0] if row and row[0] else 'MEDIUM')
-    if difficulty not in DIFFICULTY_PRESETS:
-        difficulty = 'MEDIUM'
-    return jsonify({'ok': True, 'difficulty': difficulty})
+    return jsonify({'ok': True, 'difficulty': 'UNIVERSAL',
+                    'tp': TAKE_PROFIT, 'sl': STOP_LOSS})
 
 @app.route('/api/difficulty', methods=['POST'])
 @rate_limit(10, 60)
 def save_difficulty():
-    wallet = _current_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'No wallet connected'})
-    data       = request.json or {}
-    difficulty = str(data.get('difficulty', '')).strip().upper()
-    if difficulty not in DIFFICULTY_PRESETS:
-        return jsonify({'ok': False, 'msg': 'Invalid difficulty'})
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        c   = conn.cursor()
-        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
-        row = c.fetchone()
-        if row:
-            c.execute('UPDATE users SET difficulty=? WHERE wallet_address=?', (difficulty, wallet))
-        else:
-            c.execute('INSERT INTO users (wallet_address, difficulty, trade_size_unit_migrated) VALUES (?,?,1)', (wallet, difficulty))
-        conn.commit()
-    finally:
-        conn.close()
-    add_user_log(wallet, 'Difficulty set to ' + difficulty + ' for ' + wallet[:6] + '...' + wallet[-4:])
-    return jsonify({'ok': True, 'difficulty': difficulty})
+    return jsonify({'ok': True, 'difficulty': 'UNIVERSAL'})
 
 @app.route('/api/settings/key', methods=['DELETE'])
 @rate_limit(5, 60)

@@ -9,8 +9,8 @@ WALLET_ADDRESS = os.getenv('WALLET_ADDRESS', '')
 PRIVATE_KEY    = os.getenv('WALLET_PRIVATE_KEY', '')
 MAX_SOL        = float(os.getenv('MAX_SOL', 0.5))
 MIN_SOL        = float(os.getenv('MIN_SOL', 0.005))
-STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.05))
-TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.20))
+STOP_LOSS      = float(os.getenv('STOP_LOSS', 0.03))
+TAKE_PROFIT    = float(os.getenv('TAKE_PROFIT', 0.12))
 INTERVAL       = int(os.getenv('INTERVAL', 30))
 
 SOLANA_RPC    = 'https://api.mainnet-beta.solana.com'
@@ -473,13 +473,13 @@ def run():
                         chg = (data['price'] - pos['buy_price']) / pos['buy_price']
                         _dec = pos.get('decimals', 6)
                         _raw = int(pos['amount'] * (10 ** _dec))
-                        if chg >= TAKE_PROFIT:
-                            sig = execute_swap(mint, SOL_MINT, _raw)
-                            print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
-                            pos['amount'] = pos['buy_price'] = 0.0
-                        elif chg <= -STOP_LOSS:
+                        if chg <= -STOP_LOSS:
                             sig = execute_swap(mint, SOL_MINT, _raw)
                             print(f'STOP LOSS {label} {round(chg*100,1)}% TX:{sig}', flush=True)
+                            pos['amount'] = pos['buy_price'] = 0.0
+                        elif chg >= TAKE_PROFIT:
+                            sig = execute_swap(mint, SOL_MINT, _raw)
+                            print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = 0.0
                         continue
 
