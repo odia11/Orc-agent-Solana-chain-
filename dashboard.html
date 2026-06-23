@@ -7066,6 +7066,10 @@ async function _dmFetchMessages(){
   }
 }
 
+function _esc(str){
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 function _dmBuildMessageEl(m, myId){
   const mine=myId!=null&&m.sender_id===myId;
   const isTradeShare=m.message_type==='trade_share'||
