@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
@@ -163,7 +163,8 @@ def _rpc_label(url: str) -> str:
     if 'helius' in url: return 'Helius'
     if 'alchemy' in url: return 'Alchemy'
     if 'mainnet-beta' in url: return 'mainnet-beta'
-    return url[:40]
+    # Strip query string before truncating — query params may contain API keys
+    return url.split('?')[0][:40]
 print(f'[rpc] CLAIM_SOL_RPCS ({len(CLAIM_SOL_RPCS)} endpoints): '
       + ', '.join(_rpc_label(u) for u in CLAIM_SOL_RPCS), flush=True)
 
@@ -2424,7 +2425,13 @@ def _security_headers(resp):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
-        "connect-src 'self' https://api.binance.com https://api.mainnet-beta.solana.com https://quote-api.jup.ag wss: ws:; "
+        "connect-src 'self' "
+            "https://api.binance.com "
+            "https://api.mainnet-beta.solana.com "
+            "https://mainnet.helius-rpc.com "
+            "https://api.jup.ag "
+            "https://quote-api.jup.ag "
+            "https://api.dexscreener.com; "
         "frame-src https://dexscreener.com; "
         "object-src 'none'; "
         "base-uri 'self'; "
@@ -4029,9 +4036,32 @@ def save_difficulty():
 
 # ── DIRECT MESSAGES & PROFILE COMMENTS ──
 
+# Regex for upload-generated filenames: uuid4().hex (32 hex chars) + allowed extension.
+# Any stored image URL that does NOT match this pattern is rejected.
+_UPLOAD_FILENAME_RE = re.compile(r'^[0-9a-f]{32}\.(jpg|jpeg|png|gif|webp)$')
+
+def _verify_image_magic(data: bytes) -> bool:
+    """Return True only if the first bytes match a known image format signature.
+    Content-type and extension can be spoofed; magic bytes cannot."""
+    if len(data) < 12:
+        return False
+    if data[:3] == b'\xff\xd8\xff':
+        return True                          # JPEG
+    if data[:8] == b'\x89PNG\r\n\x1a\n':
+        return True                          # PNG
+    if data[:6] in (b'GIF87a', b'GIF89a'):
+        return True                          # GIF
+    if data[:4] == b'RIFF' and data[8:12] == b'WEBP':
+        return True                          # WebP
+    return False
+
 def _sanitize(text: str) -> str:
-    """Strip HTML tags to prevent XSS in user-generated content."""
-    return re.sub(r'<[^>]+>', '', text).strip()
+    """Strip HTML tags to prevent XSS in user-generated content.
+    Two-pass approach: first strip raw tags, then decode HTML entities and
+    strip again — catches payloads like &lt;script&gt; that survive a single pass."""
+    stripped = re.sub(r'<[^>]+>', '', text)
+    decoded  = _html_lib.unescape(stripped)
+    return re.sub(r'<[^>]+>', '', decoded).strip()
 
 def _get_uid(conn, wallet: str):
     row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
@@ -4203,6 +4233,8 @@ def upload_dm_image():
     data = f.read()
     if len(data) > MAX_BYTES:
         return jsonify({'ok': False, 'msg': 'Image too large (max 5 MB)'}), 400
+    if not _verify_image_magic(data):
+        return jsonify({'ok': False, 'msg': 'File content does not match a valid image format'}), 400
     raw_ext = secure_filename(f.filename or '').rsplit('.', 1)
     ext = raw_ext[-1].lower() if len(raw_ext) == 2 else ''
     if ext not in ALLOWED_EXT:
@@ -4223,8 +4255,11 @@ def send_dm(peer_id):
     message_type = body.get('message_type', 'text')
     if message_type == 'image':
         text = str(body.get('message', ''))
-        if not text.startswith('/static/dm_images/'):
+        _dm_prefix = '/static/dm_images/'
+        if not text.startswith(_dm_prefix):
             return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
+        if not _UPLOAD_FILENAME_RE.match(text[len(_dm_prefix):]):
+            return jsonify({'ok': False, 'msg': 'Invalid image filename'}), 400
     else:
         message_type = 'text'
         text = _sanitize(str(body.get('message', '')))
@@ -4326,8 +4361,11 @@ def post_group_chat():
     message_type = body.get('message_type', 'text')
     if message_type == 'image':
         image_url = str(body.get('image_url', ''))
-        if not image_url.startswith('/static/chat_images/'):
+        _chat_prefix = '/static/chat_images/'
+        if not image_url.startswith(_chat_prefix):
             return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
+        if not _UPLOAD_FILENAME_RE.match(image_url[len(_chat_prefix):]):
+            return jsonify({'ok': False, 'msg': 'Invalid image filename'}), 400
         message = None
     else:
         message_type = 'text'
@@ -4407,6 +4445,8 @@ def upload_chat_image():
     data = f.read()
     if len(data) > MAX_BYTES:
         return jsonify({'ok': False, 'msg': 'Image too large (max 5 MB)'}), 400
+    if not _verify_image_magic(data):
+        return jsonify({'ok': False, 'msg': 'File content does not match a valid image format'}), 400
     raw_ext = secure_filename(f.filename or '').rsplit('.', 1)
     ext = raw_ext[-1].lower() if len(raw_ext) == 2 else ''
     if ext not in ALLOWED_EXT:
