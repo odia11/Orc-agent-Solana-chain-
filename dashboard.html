@@ -1351,19 +1351,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .tvp-comment-err{font-size:10px;color:var(--red);margin-top:4px}
 
 /* ── MESSAGES ── */
-#dash-messages{display:none}
+/* #dash-messages is a flex sibling of .wrap inside .app-body */
+#dash-messages{display:none;flex:1;min-width:0;height:calc(100vh - 48px);overflow:hidden}
 .dm-layout{
   display:flex;
-  height:calc(100vh - 120px);
-  min-height:480px;
-  border-radius:14px;
+  height:100%;
   overflow:hidden;
-  border:1px solid #1a1a1a;
-  box-shadow:0 8px 48px rgba(0,0,0,.7);
 }
 /* ─ Sidebar ─ */
 .dm-sidebar{
-  width:320px;
+  width:300px;
   flex-shrink:0;
   background:#0e0e0e;
   border-right:1px solid #2a2a2a;
@@ -1778,15 +1775,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   display:none;
 }
 @media(max-width:768px){
-  /* ─ Full-bleed: escape .wrap horizontal padding ─ */
-  #dash-messages{margin:0 -0.75rem}
+  /* ─ Messages full-page on mobile ─ */
+  #dash-messages{height:calc(100vh - 48px)}
   /* ─ Layout: single column, no side-by-side ─ */
   .dm-layout{
-    height:calc(100vh - 128px);
+    height:100%;
     min-height:0;
-    border-radius:0;
-    border-left:none;
-    border-right:none;
     flex-direction:column;
   }
   /* ─ Sidebar: full width, full height by default ─ */
@@ -2771,59 +2765,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div><!-- /dash-traders -->
 
   <!-- ── MESSAGES VIEW ── -->
-  <div id="dash-messages" style="display:none">
-    <div class="dm-layout" id="dm-layout">
-
-      <!-- ── Sidebar ── -->
-      <div class="dm-sidebar" id="dm-sidebar">
-        <div class="dm-sidebar-hdr">
-          <span class="dm-sidebar-hdr-title">💬 Messages</span>
-          <button class="dm-sidebar-close" onclick="closeMessagesView()" title="Close">✕</button>
-        </div>
-        <div class="dm-search-wrap" id="dm-search-wrap">
-          <input class="dm-search-input" id="dm-search-input" type="text"
-            placeholder="Search users…" autocomplete="off"
-            oninput="_dmSearch(this.value)">
-          <div class="dm-search-results" id="dm-search-results" style="display:none"></div>
-        </div>
-        <div class="dm-convo-list" id="dm-convo-list">
-          <div class="dm-empty-convo" id="dm-convo-empty">No conversations yet.<br>Message someone from their trader profile.</div>
-        </div>
-      </div>
-
-      <!-- ── Chat area ── -->
-      <div class="dm-chat" id="dm-chat">
-
-        <!-- Placeholder (no convo selected) -->
-        <div class="dm-chat-placeholder" id="dm-chat-placeholder">
-          <div class="dm-chat-placeholder-icon">💬</div>
-          <div class="dm-chat-placeholder-text">Select a conversation to start messaging</div>
-        </div>
-
-        <!-- Active conversation -->
-        <div id="dm-chat-active" style="display:none">
-          <div class="dm-chat-hdr" id="dm-chat-hdr">
-            <button class="dm-hdr-back" onclick="_dmBackToList()" title="Back">←</button>
-            <div class="dm-chat-hdr-av" id="dm-hdr-av"></div>
-            <div class="dm-chat-hdr-info">
-              <div class="dm-chat-hdr-name" id="dm-hdr-name"></div>
-              <div class="dm-chat-hdr-wallet" id="dm-hdr-wallet"></div>
-            </div>
-          </div>
-          <div class="dm-messages" id="dm-messages"></div>
-          <div class="dm-input-row">
-            <input type="file" id="dm-img-input" accept="image/*" style="display:none" onchange="dmSendImage(this.files[0])">
-            <button class="dm-img-btn" id="dm-img-btn" onclick="dmPickImage()" title="Send image">📷</button>
-            <textarea class="dm-input" id="dm-input" placeholder="Message…" rows="1" maxlength="500"
-              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();dmSend()}"></textarea>
-            <button class="dm-send-btn" id="dm-send-btn" onclick="dmSend()">SEND</button>
-          </div>
-        </div>
-
-      </div><!-- /dm-chat -->
-    </div><!-- /dm-layout -->
-  </div><!-- /dash-messages -->
-
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main">
 
@@ -3312,6 +3253,57 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div><!-- /dash-admin -->
 
     </div><!-- /main-content -->
+
+  <!-- ── MESSAGES (full-page sibling of .wrap) ── -->
+  <div id="dash-messages" style="display:none">
+    <div class="dm-layout" id="dm-layout">
+
+      <!-- Conversations sidebar -->
+      <div class="dm-sidebar" id="dm-sidebar">
+        <div class="dm-sidebar-hdr">
+          <span class="dm-sidebar-hdr-title">💬 Messages</span>
+          <button class="dm-sidebar-close" onclick="closeMessagesView()" title="Close">✕</button>
+        </div>
+        <div class="dm-search-wrap" id="dm-search-wrap">
+          <input class="dm-search-input" id="dm-search-input" type="text"
+            placeholder="Search users…" autocomplete="off"
+            oninput="_dmSearch(this.value)">
+          <div class="dm-search-results" id="dm-search-results" style="display:none"></div>
+        </div>
+        <div class="dm-convo-list" id="dm-convo-list">
+          <div class="dm-empty-convo" id="dm-convo-empty">No conversations yet.<br>Message someone from their trader profile.</div>
+        </div>
+      </div>
+
+      <!-- Chat area -->
+      <div class="dm-chat" id="dm-chat">
+        <div class="dm-chat-placeholder" id="dm-chat-placeholder">
+          <div class="dm-chat-placeholder-icon">💬</div>
+          <div class="dm-chat-placeholder-text">Select a conversation to start messaging</div>
+        </div>
+        <div id="dm-chat-active" style="display:none">
+          <div class="dm-chat-hdr" id="dm-chat-hdr">
+            <button class="dm-hdr-back" onclick="_dmBackToList()" title="Back">←</button>
+            <div class="dm-chat-hdr-av" id="dm-hdr-av"></div>
+            <div class="dm-chat-hdr-info">
+              <div class="dm-chat-hdr-name" id="dm-hdr-name"></div>
+              <div class="dm-chat-hdr-wallet" id="dm-hdr-wallet"></div>
+            </div>
+          </div>
+          <div class="dm-messages" id="dm-messages"></div>
+          <div class="dm-input-row">
+            <input type="file" id="dm-img-input" accept="image/*" style="display:none" onchange="dmSendImage(this.files[0])">
+            <button class="dm-img-btn" id="dm-img-btn" onclick="dmPickImage()" title="Send image">📷</button>
+            <textarea class="dm-input" id="dm-input" placeholder="Message…" rows="1" maxlength="500"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();dmSend()}"></textarea>
+            <button class="dm-send-btn" id="dm-send-btn" onclick="dmSend()">SEND</button>
+          </div>
+        </div>
+      </div><!-- /dm-chat -->
+
+    </div><!-- /dm-layout -->
+  </div><!-- /dash-messages -->
+
   </div><!-- /app-body -->
 </div><!-- #app -->
 
@@ -7246,12 +7238,15 @@ function openDMWith(peerId, peerWallet, peerUsername){
 function openMessagesView(){
   if(_dmOpen) return;
   _dmOpen=true;
-  _hideAllViews();
-  document.getElementById('dash-messages').style.display='block';
+  // Close any sub-view that may be active inside .wrap
+  if(_tradersView) closeTradersView();
+  // Hide .wrap entirely; messages lives outside it as a sibling
+  const wrap=document.getElementById('main-content');
+  if(wrap) wrap.style.display='none';
+  document.getElementById('dash-messages').style.display='flex';
   _sbSetActive('sbn-messages');
-  document.getElementById('messages-btn').style.borderColor='var(--green)';
-  document.getElementById('messages-btn').style.color='var(--green)';
-  document.getElementById('messages-btn').style.background='rgba(34,197,94,.08)';
+  const btn=document.getElementById('messages-btn');
+  if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.08)';}
   _dmSetUnreadBadge(0);
   dmLoadConversations();
   _dmRefreshTimer=setInterval(_dmAutoRefresh,5000);
@@ -7262,12 +7257,16 @@ function closeMessagesView(){
   _dmOpen=false;
   _dmPeerId=null;
   clearInterval(_dmRefreshTimer); _dmRefreshTimer=null;
-  // Reset chat panel so next open shows placeholder
   document.getElementById('dm-chat-placeholder').style.display='';
   document.getElementById('dm-chat-active').style.display='none';
   document.getElementById('dm-layout').classList.remove('convo-open');
   document.getElementById('dash-messages').style.display='none';
+  // Restore .wrap and ensure only dash-main is visible
+  const wrap=document.getElementById('main-content');
+  if(wrap) wrap.style.display='';
   document.getElementById('dash-main').style.display='';
+  document.getElementById('dash-traders').style.display='none';
+  document.getElementById('dash-admin').style.display='none';
   _sbSetActive('sbn-dashboard');
   const btn=document.getElementById('messages-btn');
   if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
@@ -7281,7 +7280,6 @@ function _hideAllViews(){
   document.getElementById('dash-main').style.display='none';
   document.getElementById('dash-traders').style.display='none';
   document.getElementById('dash-admin').style.display='none';
-  document.getElementById('dash-messages').style.display='none';
 }
 
 async function dmLoadConversations(){
