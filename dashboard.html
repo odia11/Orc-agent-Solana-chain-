@@ -1244,6 +1244,59 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .iadmin-action-btn.ia-danger{border-color:rgba(255,77,106,.22);color:rgba(255,77,106,.55)}
 .iadmin-action-btn.ia-danger:hover:not(:disabled){border-color:var(--red);color:var(--red);background:rgba(255,77,106,.06)}
 
+/* ── MESSAGES ── */
+#dash-messages{display:none}
+.dm-layout{display:flex;gap:0;height:calc(100vh - 120px);min-height:400px;background:var(--bg2);border:1px solid var(--border2);border-radius:10px;overflow:hidden}
+.dm-sidebar{width:260px;flex-shrink:0;border-right:1px solid var(--border2);display:flex;flex-direction:column;background:var(--bg2)}
+.dm-sidebar-hdr{padding:14px 16px 10px;border-bottom:1px solid var(--border2);font-size:11px;color:var(--dim);letter-spacing:.12em;text-transform:uppercase;font-family:'Orbitron',monospace;flex-shrink:0}
+.dm-convo-list{flex:1;overflow-y:auto}
+.dm-convo{display:flex;align-items:center;gap:10px;padding:10px 14px;cursor:pointer;border-bottom:1px solid rgba(255,255,255,.04);transition:background .12s;position:relative}
+.dm-convo:hover{background:rgba(255,255,255,.05)}
+.dm-convo.active{background:rgba(0,255,136,.07);border-left:2px solid var(--green)}
+.dm-convo-av{width:34px;height:34px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--blue);overflow:hidden;position:relative}
+.dm-convo-av img{width:100%;height:100%;object-fit:cover}
+.dm-convo-info{flex:1;min-width:0}
+.dm-convo-name{font-size:11px;color:var(--text);font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}
+.dm-convo-preview{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-convo-meta{display:flex;flex-direction:column;align-items:flex-end;gap:4px;flex-shrink:0}
+.dm-convo-time{font-size:9px;color:var(--muted)}
+.dm-unread-dot{background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center;line-height:1.4}
+.dm-empty-convo{padding:32px 16px;text-align:center;color:var(--muted);font-size:11px;line-height:1.8}
+.dm-chat{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.dm-chat-hdr{padding:12px 18px;border-bottom:1px solid var(--border2);display:flex;align-items:center;gap:10px;flex-shrink:0;background:var(--bg2)}
+.dm-chat-hdr-av{width:30px;height:30px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--blue);overflow:hidden;flex-shrink:0}
+.dm-chat-hdr-av img{width:100%;height:100%;object-fit:cover}
+.dm-chat-hdr-name{font-size:12px;font-weight:700;color:var(--text)}
+.dm-chat-hdr-wallet{font-size:9px;color:var(--muted);margin-top:1px;font-family:'Share Tech Mono',monospace}
+.dm-messages{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:8px}
+.dm-msg{display:flex;flex-direction:column;max-width:70%}
+.dm-msg.mine{align-self:flex-end;align-items:flex-end}
+.dm-msg.theirs{align-self:flex-start;align-items:flex-start}
+.dm-bubble{padding:8px 12px;border-radius:12px;font-size:12px;line-height:1.5;word-break:break-word}
+.dm-msg.mine .dm-bubble{background:rgba(0,255,136,.18);color:var(--text);border-bottom-right-radius:3px}
+.dm-msg.theirs .dm-bubble{background:var(--bg3);color:var(--text);border:1px solid var(--border2);border-bottom-left-radius:3px}
+.dm-msg-time{font-size:9px;color:var(--muted);margin-top:2px}
+.dm-chat-empty{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--muted);font-size:12px;gap:8px;opacity:.6}
+.dm-chat-placeholder{flex:1;display:flex;align-items:center;justify-content:center;flex-direction:column;color:var(--muted);font-size:12px;gap:8px;opacity:.5}
+.dm-input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid var(--border2);flex-shrink:0;background:var(--bg2)}
+.dm-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:9px 12px;font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--text);outline:none;resize:none;line-height:1.4;max-height:100px}
+.dm-input:focus{border-color:rgba(0,255,136,.4)}
+.dm-send-btn{background:var(--green);color:#000;border:none;border-radius:8px;padding:9px 16px;font-family:'Orbitron',monospace;font-weight:700;font-size:10px;cursor:pointer;flex-shrink:0;transition:filter .15s;align-self:flex-end}
+.dm-send-btn:hover{filter:brightness(1.1)}
+.dm-send-btn:disabled{opacity:.4;cursor:not-allowed}
+.dm-hdr-back{display:none;background:transparent;border:none;color:var(--green);font-size:14px;cursor:pointer;padding:0 8px 0 0;flex-shrink:0}
+/* unread badge on nav item */
+.nav-msg-badge{background:var(--red);color:#fff;font-size:8px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center;line-height:1.5;display:none}
+@media(max-width:768px){
+  .dm-layout{height:calc(100vh - 140px);border-radius:8px}
+  .dm-sidebar{width:100%;border-right:none;border-bottom:1px solid var(--border2)}
+  .dm-layout.convo-open .dm-sidebar{display:none}
+  .dm-layout.convo-open .dm-chat{display:flex}
+  .dm-layout:not(.convo-open) .dm-chat{display:none}
+  .dm-hdr-back{display:block}
+  .dm-msg{max-width:85%}
+}
+
 /* ── BOTTOM NAV (hidden on desktop, shown on mobile) ── */
 #mob-bottom-nav{display:none}
 
@@ -1942,6 +1995,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
           <a href="/history" class="nav-menu-item">📋 History</a>
           <a href="/leaderboard" class="nav-menu-item">🏆 Leaderboard</a>
           <button class="nav-menu-item" id="traders-btn" onclick="openTradersView();_closeNavMenu()">👥 Traders</button>
+          <button class="nav-menu-item" id="messages-btn" onclick="openMessagesView();_closeNavMenu()">💬 Messages <span class="nav-msg-badge" id="nav-msg-badge"></span></button>
           <button class="nav-menu-item" onclick="openBlacklistModal();_closeNavMenu()">🚫 Blacklist</button>
           <div class="nav-menu-sep"></div>
           <button class="nav-menu-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal();_closeNavMenu()">? Help &amp; Tips</button>
@@ -2028,6 +2082,46 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
     </div><!-- /tv-layout -->
 
   </div><!-- /dash-traders -->
+
+  <!-- ── MESSAGES VIEW ── -->
+  <div id="dash-messages" style="display:none">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
+      <button onclick="closeMessagesView()" style="background:transparent;border:none;color:var(--muted);cursor:pointer;font-size:18px;padding:0;line-height:1" title="Back">←</button>
+      <div style="font-size:13px;font-family:'Orbitron',monospace;font-weight:700;color:var(--text);letter-spacing:.06em">💬 MESSAGES</div>
+    </div>
+    <div class="dm-layout" id="dm-layout">
+      <!-- Sidebar -->
+      <div class="dm-sidebar" id="dm-sidebar">
+        <div class="dm-sidebar-hdr">Conversations</div>
+        <div class="dm-convo-list" id="dm-convo-list">
+          <div class="dm-empty-convo" id="dm-convo-empty">No conversations yet.<br>Message someone from their trader profile.</div>
+        </div>
+      </div>
+      <!-- Chat panel -->
+      <div class="dm-chat" id="dm-chat">
+        <div class="dm-chat-placeholder" id="dm-chat-placeholder">
+          <div style="font-size:32px">💬</div>
+          <div>Select a conversation</div>
+        </div>
+        <div id="dm-chat-active" style="display:none;flex:1;display:flex;flex-direction:column;min-height:0">
+          <div class="dm-chat-hdr" id="dm-chat-hdr">
+            <button class="dm-hdr-back" onclick="_dmBackToList()" title="Back">←</button>
+            <div class="dm-chat-hdr-av" id="dm-hdr-av"></div>
+            <div>
+              <div class="dm-chat-hdr-name" id="dm-hdr-name"></div>
+              <div class="dm-chat-hdr-wallet" id="dm-hdr-wallet"></div>
+            </div>
+          </div>
+          <div class="dm-messages" id="dm-messages"></div>
+          <div class="dm-input-row">
+            <textarea class="dm-input" id="dm-input" placeholder="Type a message… (max 500 chars)" rows="1" maxlength="500"
+              onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();dmSend()}"></textarea>
+            <button class="dm-send-btn" id="dm-send-btn" onclick="dmSend()">SEND</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div><!-- /dash-messages -->
 
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main">
@@ -2526,6 +2620,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
     <span class="mob-nav-icon">👥</span>
     <span class="mob-nav-lbl">Traders</span>
   </button>
+  <button class="mob-nav-item" onclick="openMessagesView()" style="position:relative">
+    <span class="mob-nav-icon">💬</span>
+    <span class="mob-nav-lbl">Messages</span>
+    <span class="nav-msg-badge" id="mob-msg-badge" style="position:absolute;top:4px;right:8px"></span>
+  </button>
   <a class="mob-nav-item" href="/leaderboard">
     <span class="mob-nav-icon">🏆</span>
     <span class="mob-nav-lbl">Leaderboard</span>
@@ -2773,6 +2872,7 @@ async function launchApp(){
   fetchBadges();
   fetchCopyStatus();
   fetchMyProfile();
+  dmFetchUnread();
   fetchPumpScanner();
   const _pendingProfile = sessionStorage.getItem('openProfile');
   if(_pendingProfile){
@@ -3410,6 +3510,7 @@ async function fetchMyProfile(){
     const r=await fetch('/api/profile/me').then(r=>r.json()).catch(()=>null);
     if(!r?.ok) return;
     _myProfileId=r.user_id;
+    _dmMyId=r.user_id;
     _myProfileData=r;
     _updateMyProfileBtn();
     _updateTvMeCard();
@@ -5019,6 +5120,7 @@ async function fetchTradersFeed(){
 }
 
 function _navLogoClick(){
+  if(_dmOpen){ closeMessagesView(); return; }
   if(_tradersView){
     if(_tvProfileOpen){ closeTraderProfile(); return; }
     closeTradersView(); return;
@@ -6271,6 +6373,212 @@ function tipsNext(){
 (function _checkTipsOnLoad(){
   if(!localStorage.getItem('orcagent_tips_seen')) setTimeout(openTipsModal,600);
 }());
+
+// ── DIRECT MESSAGES ──
+let _dmOpen=false, _dmPeerId=null, _dmPeerWallet='', _dmPeerUsername='',
+    _dmRefreshTimer=null, _dmMyId=null, _dmConvos=[];
+
+function _dmShort(w){ return w?w.slice(0,4)+'…'+w.slice(-4):''; }
+function _dmInitials(name){ return name?name.slice(0,2).toUpperCase():'??'; }
+function _dmRelTime(ts){
+  if(!ts) return '';
+  const d=new Date(ts+'Z'), now=Date.now(), diff=Math.round((now-d.getTime())/1000);
+  if(diff<60) return diff+'s';
+  if(diff<3600) return Math.floor(diff/60)+'m';
+  if(diff<86400) return Math.floor(diff/3600)+'h';
+  return Math.floor(diff/86400)+'d';
+}
+
+function _dmAvatarEl(container, wallet, username){
+  const ini=_dmInitials(username||_dmShort(wallet));
+  container.textContent=ini;
+}
+
+function openMessagesView(){
+  if(_dmOpen) return;
+  _dmOpen=true;
+  _hideAllViews();
+  document.getElementById('dash-messages').style.display='';
+  document.getElementById('messages-btn').style.borderColor='var(--green)';
+  document.getElementById('messages-btn').style.color='var(--green)';
+  document.getElementById('messages-btn').style.background='rgba(0,255,136,.08)';
+  dmLoadConversations();
+  _dmRefreshTimer=setInterval(_dmAutoRefresh,5000);
+}
+
+function closeMessagesView(){
+  if(!_dmOpen) return;
+  _dmOpen=false;
+  _dmPeerId=null;
+  clearInterval(_dmRefreshTimer); _dmRefreshTimer=null;
+  document.getElementById('dash-messages').style.display='none';
+  document.getElementById('dash-main').style.display='';
+  const btn=document.getElementById('messages-btn');
+  if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
+}
+
+function _hideAllViews(){
+  document.getElementById('dash-main').style.display='none';
+  document.getElementById('dash-traders').style.display='none';
+  document.getElementById('dash-admin').style.display='none';
+  document.getElementById('dash-messages').style.display='none';
+}
+
+async function dmLoadConversations(){
+  try{
+    const r=await fetch('/api/messages').then(x=>x.json());
+    if(!r.ok) return;
+    _dmConvos=r.conversations||[];
+    _dmRenderConvoList();
+  }catch(e){}
+}
+
+function _dmRenderConvoList(){
+  const list=document.getElementById('dm-convo-list');
+  const empty=document.getElementById('dm-convo-empty');
+  if(!_dmConvos.length){empty.style.display='';list.innerHTML='';list.appendChild(empty);return;}
+  empty.style.display='none';
+  list.innerHTML='';
+  _dmConvos.forEach(c=>{
+    const div=document.createElement('div');
+    div.className='dm-convo'+(c.peer_id===_dmPeerId?' active':'');
+    div.dataset.peerId=c.peer_id;
+    const name=c.peer_username||_dmShort(c.peer_wallet||'');
+    div.innerHTML=`
+      <div class="dm-convo-av" id="dm-cav-${c.peer_id}">${_dmInitials(name)}</div>
+      <div class="dm-convo-info">
+        <div class="dm-convo-name">${_esc(name)}</div>
+        <div class="dm-convo-preview">${_esc((c.last_msg||'').slice(0,60))}</div>
+      </div>
+      <div class="dm-convo-meta">
+        <div class="dm-convo-time">${_dmRelTime(c.last_ts)}</div>
+        ${c.unread>0?`<div class="dm-unread-dot">${c.unread}</div>`:''}
+      </div>`;
+    div.onclick=()=>dmOpenConvo(c.peer_id, c.peer_wallet||'', c.peer_username||'');
+    list.appendChild(div);
+  });
+}
+
+async function dmOpenConvo(peerId, peerWallet, peerUsername){
+  _dmPeerId=peerId;
+  _dmPeerWallet=peerWallet;
+  _dmPeerUsername=peerUsername||_dmShort(peerWallet);
+  // Update active state on sidebar
+  document.querySelectorAll('.dm-convo').forEach(el=>{
+    el.classList.toggle('active', parseInt(el.dataset.peerId)===peerId);
+  });
+  // Show chat panel, hide placeholder
+  document.getElementById('dm-chat-placeholder').style.display='none';
+  const active=document.getElementById('dm-chat-active');
+  active.style.display='flex';
+  // Set header
+  document.getElementById('dm-hdr-name').textContent=_dmPeerUsername;
+  document.getElementById('dm-hdr-wallet').textContent=peerWallet;
+  _dmAvatarEl(document.getElementById('dm-hdr-av'), peerWallet, _dmPeerUsername);
+  // Mobile: show chat, hide sidebar
+  document.getElementById('dm-layout').classList.add('convo-open');
+  // Load messages
+  await _dmFetchMessages();
+}
+
+async function _dmFetchMessages(){
+  if(!_dmPeerId) return;
+  try{
+    const r=await fetch('/api/messages/'+_dmPeerId).then(x=>x.json());
+    if(!r.ok) return;
+    _dmRenderMessages(r.messages||[]);
+    // Remove unread badge on this convo in sidebar
+    const convo=_dmConvos.find(c=>c.peer_id===_dmPeerId);
+    if(convo) convo.unread=0;
+    _dmRenderConvoList();
+    _dmUpdateUnreadBadge();
+  }catch(e){}
+}
+
+function _dmRenderMessages(msgs){
+  const container=document.getElementById('dm-messages');
+  if(!msgs.length){
+    container.innerHTML='<div class="dm-chat-empty"><div style="font-size:28px">💬</div><div>No messages yet — say hello!</div></div>';
+    return;
+  }
+  const myId=_dmMyId;
+  container.innerHTML='';
+  msgs.forEach(m=>{
+    const mine=myId&&m.sender_id===myId;
+    const div=document.createElement('div');
+    div.className='dm-msg '+(mine?'mine':'theirs');
+    div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
+    container.appendChild(div);
+  });
+  container.scrollTop=container.scrollHeight;
+}
+
+async function dmSend(){
+  const input=document.getElementById('dm-input');
+  const text=input.value.trim();
+  if(!text||!_dmPeerId) return;
+  const btn=document.getElementById('dm-send-btn');
+  btn.disabled=true;
+  try{
+    const r=await fetch('/api/messages/'+_dmPeerId,{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({message:text})
+    }).then(x=>x.json());
+    if(r.ok){
+      input.value='';
+      input.style.height='';
+      await _dmFetchMessages();
+    } else {
+      showTradeWarn('⚠️ '+(r.msg||'Failed to send'));
+    }
+  }catch(e){ showTradeWarn('⚠️ Send failed'); }
+  btn.disabled=false;
+  input.focus();
+}
+
+function _dmBackToList(){
+  document.getElementById('dm-layout').classList.remove('convo-open');
+}
+
+async function _dmAutoRefresh(){
+  if(!_dmOpen) return;
+  // Refresh unread count always
+  await dmFetchUnread();
+  // Refresh active conversation messages
+  if(_dmPeerId) await _dmFetchMessages();
+  else await dmLoadConversations();
+}
+
+async function dmFetchUnread(){
+  try{
+    const r=await fetch('/api/messages/unread').then(x=>x.json());
+    if(r.ok) _dmSetUnreadBadge(r.unread||0);
+  }catch(e){}
+}
+
+function _dmSetUnreadBadge(n){
+  [document.getElementById('nav-msg-badge'),
+   document.getElementById('mob-msg-badge')].forEach(el=>{
+    if(!el) return;
+    el.textContent=n>99?'99+':n||'';
+    el.style.display=n>0?'':'none';
+  });
+}
+
+function _dmUpdateUnreadBadge(){
+  const total=_dmConvos.reduce((s,c)=>s+(c.unread||0),0);
+  _dmSetUnreadBadge(total);
+}
+
+// Auto-detect my user_id from conversations (sender whose messages we know)
+function _dmDetectMyId(msgs){
+  if(_dmMyId||!msgs.length) return;
+  // Not reliable without a /api/me endpoint — skip, relies on my messages being sender_id
+}
+
+// Poll unread count on every page, even outside messages view
+setInterval(dmFetchUnread, 15000);
 </script>
 
 <!-- ── DEPOSIT SOL MODAL ── -->
