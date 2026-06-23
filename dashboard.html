@@ -1514,9 +1514,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .dm-messages::-webkit-scrollbar{width:4px}
 .dm-messages::-webkit-scrollbar-track{background:transparent}
 .dm-messages::-webkit-scrollbar-thumb{background:#151828;border-radius:2px}
-.dm-msg{display:flex;flex-direction:column;max-width:68%}
+.dm-msg{display:flex;flex-direction:column;max-width:68%;position:relative}
 .dm-msg.mine{align-self:flex-end;align-items:flex-end}
 .dm-msg.theirs{align-self:flex-start;align-items:flex-start}
+.dm-del-btn{display:none;position:absolute;top:3px;right:3px;background:none;border:none;cursor:pointer;color:#475569;font-size:12px;line-height:1;padding:3px 4px;border-radius:4px;transition:color .15s;z-index:2}
+.dm-del-btn:hover{color:#f87171}
+.dm-msg.mine:hover .dm-del-btn{display:block}
 .dm-bubble{
   padding:10px 15px;
   border-radius:16px;
@@ -7152,7 +7155,23 @@ function _dmBuildMessageEl(m, myId){
     div.className='dm-msg '+(mine?'mine':'theirs');
     div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
   }
+  if(mine && m.id){
+    const delBtn=document.createElement('button');
+    delBtn.className='dm-del-btn';
+    delBtn.title='Delete message';
+    delBtn.textContent='🗑';
+    delBtn.onclick=()=>_dmDeleteMsg(m.id, div);
+    div.appendChild(delBtn);
+  }
   return div;
+}
+
+async function _dmDeleteMsg(msgId, msgEl){
+  try{
+    const resp=await fetch('/api/messages/'+msgId,{method:'DELETE'});
+    const r=await resp.json();
+    if(r.ok) msgEl.remove();
+  }catch(_){}
 }
 
 async function _dmCopyTrade(btn, btnId, errId, tokenAddr, entryPrice, amtSol){
