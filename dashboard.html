@@ -150,7 +150,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
 /* ── STATS ── */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem}
-.stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--card-radius);box-shadow:var(--shadow-card);padding:14px 16px;position:relative;overflow:hidden;transition:transform .2s ease,box-shadow .2s ease}
+.stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--card-radius);box-shadow:var(--shadow-card);padding:14px 16px;position:relative;overflow:hidden;text-align:center;transition:transform .2s ease,box-shadow .2s ease}
 .stat:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.35)}
 .stat::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--green),transparent 60%)}
 .stat:nth-child(2)::after{background:linear-gradient(90deg,var(--blue),transparent 60%)}
@@ -255,8 +255,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .mkt-card{
   background:var(--bg3);
   border:1px solid var(--border2);
-  border-radius:10px;
-  padding:14px;
+  border-radius:var(--card-radius);
+  padding:20px;
   cursor:pointer;
   transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease;
   position:relative;
@@ -275,7 +275,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .mkt-card.cold:hover{border-color:rgba(255,77,106,.45);box-shadow:0 12px 32px rgba(255,77,106,.09)}
 
 /* card header */
-.mkt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:10px;min-width:0}
+.mkt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:12px;min-width:0}
 .mkt-id{min-width:0;flex:1;overflow:hidden}
 .mkt-id .mkt-sym{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.04em;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mkt-id .mkt-name{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
@@ -502,7 +502,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 /* ── PUMP SCANNER BUY BUTTON ── */
 .ps-buy-btn{flex:1;width:100%;padding:8px 0;background:#00ff88;color:#000;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;transition:box-shadow .2s,filter .15s}
 .ps-buy-btn:hover{box-shadow:0 0 12px rgba(0,255,136,.4);filter:brightness(1.1)}
-.ps-sell-btn{flex:1;width:100%;padding:8px 0;background:#ff4444;color:#fff;font-weight:700;font-size:12px;border:none;border-radius:6px;cursor:pointer;transition:box-shadow .2s,filter .15s}
+.ps-sell-btn{flex:1;width:100%;padding:8px 0;background:#ff4466;color:#fff;font-weight:600;font-size:12px;border:none;border-radius:8px;cursor:pointer;transition:all .2s}
 .ps-sell-btn:hover{box-shadow:0 0 12px rgba(255,68,68,.4);filter:brightness(1.1)}
 
 /* ── BOTTOM LINKS ── */
@@ -2025,11 +2025,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
 /* ── STAT NUMBERS — bigger, bolder, tabular ── */
 .stat-val{
-  font-size:32px;
+  font-size:24px;
   font-weight:800;
   font-feature-settings:'tnum' 1,'kern' 1;
   font-variant-numeric:tabular-nums;
   letter-spacing:-0.02em;
+  justify-content:center;
 }
 .adash-stat-val{
   font-size:22px;
@@ -2044,20 +2045,48 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 @media(max-width:720px){.stat-val{font-size:22px}}
 
 /* ── BUTTON STYLE UPGRADE ── */
+/* base: radius 8px, weight 600, smooth transition */
 .ob-btn,.mode-btn,.s-save,.swiz-next-btn,
-.hdr-btn,.hdr-btn-red,.bot-btn,.inc-burn-btn,
-.adash-back-btn,
-.audit-run-btn,.inact-btn{
-  border-radius:10px;
+.bot-btn,.inc-burn-btn,.adash-back-btn,.audit-run-btn,.inact-btn,
+.ps-buy-btn,.ps-sell-btn,
+.tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn,.tpc-msg-btn,
+.dpb-view-btn,.tv-me-profile-btn,.btn-follow,
+.dm-copy-btn,.dm-send-btn{
+  border-radius:8px;
+  font-weight:600;
+  transition:all .2s;
 }
-/* green primary buttons: glow on hover */
+/* primary: solid green, black text */
+.s-save,.inact-btn,.ps-buy-btn,.dm-send-btn,.tpc-follow-btn,.btn-follow{
+  background:#00ff88;color:#000;border:none;
+}
+/* secondary: solid red, white text */
+.ps-sell-btn,.hdr-btn-red{
+  background:#ff4466;color:#fff;border:none;
+}
+/* outline: ghost buttons */
+.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn,.tpc-msg-btn,
+.dpb-view-btn,.tv-me-profile-btn,.bot-btn,.adash-back-btn,.audit-run-btn{
+  background:transparent;border:1px solid var(--border);color:var(--text);
+}
+/* primary hover glow */
 .s-save:hover:not(:disabled),.inact-btn:hover,
-.btn-phantom:hover,.btn-solflare:hover{
-  box-shadow:0 0 18px rgba(0,255,136,.25);
+.ps-buy-btn:hover,.tpc-follow-btn:hover,.btn-follow:hover,
+.dm-send-btn:hover:not(:disabled){
+  box-shadow:0 0 16px rgba(0,255,136,.3);filter:brightness(1.08);
 }
-/* generic hdr-btn hover glow */
+/* secondary hover */
+.ps-sell-btn:hover,.hdr-btn-red:hover{
+  box-shadow:0 0 12px rgba(255,68,102,.3);filter:brightness(1.08);
+}
+/* outline hover */
+.tpc-copy-btn:hover,.tpc-stop-copy-btn:hover,.tpc-sol-btn:hover,.tpc-msg-btn:hover,
+.dpb-view-btn:hover,.tv-me-profile-btn:hover,.bot-btn:hover{
+  border-color:var(--green);color:var(--green);
+}
+/* hdr-btn hover glow */
 .hdr-btn:hover{
-  box-shadow:0 0 12px rgba(0,255,136,.18);
+  box-shadow:0 0 10px rgba(0,255,136,.18);
 }
 /* trade launch button glow */
 .trade-btn:hover:not(:disabled){
