@@ -4027,6 +4027,13 @@ def _mutual_follow(conn, a: int, b: int) -> bool:
         bool(conn.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (b, a)).fetchone())
     )
 
+def _any_follow(conn, a: int, b: int) -> bool:
+    """True if a follows b OR b follows a."""
+    return bool(conn.execute(
+        'SELECT 1 FROM follows WHERE (follower_id=? AND following_id=?) OR (follower_id=? AND following_id=?)',
+        (a, b, b, a)
+    ).fetchone())
+
 def _is_following_ids(conn, follower: int, following: int) -> bool:
     return bool(conn.execute(
         'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (follower, following)
@@ -4102,8 +4109,8 @@ def get_dm_history(peer_id):
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
-        if not _mutual_follow(conn, me, peer_id):
-            return jsonify({'ok': False, 'msg': 'Mutual follow required to read messages'}), 403
+        if not _any_follow(conn, me, int(peer_id)):
+            return jsonify({'ok': False, 'msg': 'Follow this trader (or be followed) to send messages'}), 403
         rows = conn.execute('''
             SELECT id, sender_id, receiver_id, message, created_at, is_read
             FROM direct_messages
@@ -4116,6 +4123,8 @@ def get_dm_history(peer_id):
             (me, peer_id)
         )
         conn.commit()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
     finally:
         conn.close()
     return jsonify({'ok': True, 'messages': [
@@ -4140,18 +4149,23 @@ def send_dm(peer_id):
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
-        if me == peer_id:
+        if me == int(peer_id):
             return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
-        if not _mutual_follow(conn, me, peer_id):
-            return jsonify({'ok': False, 'msg': 'Mutual follow required to send messages'}), 403
+        if not _any_follow(conn, me, int(peer_id)):
+            return jsonify({'ok': False, 'msg': 'Follow this trader (or be followed) to send messages'}), 403
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
-            'INSERT INTO direct_messages (sender_id, receiver_id, message) VALUES (?,?,?)',
-            (me, peer_id, text)
+            'INSERT INTO direct_messages (sender_id, receiver_id, message, created_at) VALUES (?,?,?,?)',
+            (me, peer_id, text, now)
         )
         conn.commit()
+        message_id = cur.lastrowid
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
     finally:
         conn.close()
-    return jsonify({'ok': True, 'id': cur.lastrowid, 'message': text})
+    return jsonify({'ok': True, 'success': True, 'message_id': message_id,
+                    'created_at': now, 'message': text})
 
 @app.route('/api/comments/<int:profile_uid>', methods=['GET'])
 @rate_limit(30, 60)
