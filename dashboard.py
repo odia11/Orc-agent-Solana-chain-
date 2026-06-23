@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
@@ -8,6 +8,7 @@ except ImportError:
 from contextlib import contextmanager
 from flask import Flask, jsonify, request, session, render_template, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
 load_dotenv()
@@ -105,6 +106,8 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 BASE         = os.path.dirname(os.path.abspath(__file__))
+DM_IMAGES_DIR = os.path.join(BASE, 'static', 'dm_images')
+os.makedirs(DM_IMAGES_DIR, exist_ok=True)
 # Use Railway persistent volume when available so the DB and logs survive redeploys.
 _DATA_DIR    = '/data' if os.path.exists('/data') else BASE
 LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
@@ -4171,17 +4174,52 @@ def get_dm_history(peer_id):
         for r in rows
     ]})
 
+@app.route('/api/messages/upload-image', methods=['POST'])
+@rate_limit(10, 60)
+def upload_dm_image():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    f = request.files.get('image')
+    if not f:
+        return jsonify({'ok': False, 'msg': 'No image provided'}), 400
+    ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    ALLOWED_EXT  = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+    MAX_BYTES    = 5 * 1024 * 1024
+    if f.content_type not in ALLOWED_MIME:
+        return jsonify({'ok': False, 'msg': 'Only jpg/png/gif/webp allowed'}), 400
+    data = f.read()
+    if len(data) > MAX_BYTES:
+        return jsonify({'ok': False, 'msg': 'Image too large (max 5 MB)'}), 400
+    raw_ext = secure_filename(f.filename or '').rsplit('.', 1)
+    ext = raw_ext[-1].lower() if len(raw_ext) == 2 else ''
+    if ext not in ALLOWED_EXT:
+        ext = f.content_type.split('/')[-1].replace('jpeg', 'jpg')
+    filename  = f'{uuid.uuid4().hex}.{ext}'
+    save_path = os.path.join(DM_IMAGES_DIR, filename)
+    with open(save_path, 'wb') as out:
+        out.write(data)
+    return jsonify({'ok': True, 'success': True, 'url': f'/static/dm_images/{filename}'})
+
 @app.route('/api/messages/<int:peer_id>', methods=['POST'])
 @rate_limit(20, 60)
 def send_dm(peer_id):
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
-    text = _sanitize(str((request.json or {}).get('message', '')))
-    if not text:
-        return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
-    if len(text) > 500:
-        return jsonify({'ok': False, 'msg': 'Message too long (max 500 characters)'}), 400
+    body = request.json or {}
+    message_type = body.get('message_type', 'text')
+    if message_type == 'image':
+        text = str(body.get('message', ''))
+        if not text.startswith('/static/dm_images/'):
+            return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
+    else:
+        message_type = 'text'
+        text = _sanitize(str(body.get('message', '')))
+        if not text:
+            return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+        if len(text) > 500:
+            return jsonify({'ok': False, 'msg': 'Message too long (max 500 characters)'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         me = _get_uid(conn, wallet)
@@ -4191,8 +4229,8 @@ def send_dm(peer_id):
             return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
         now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
-            'INSERT INTO direct_messages (sender_id, receiver_id, message, created_at) VALUES (?,?,?,?)',
-            (me, peer_id, text, now)
+            'INSERT INTO direct_messages (sender_id, receiver_id, message, message_type, created_at) VALUES (?,?,?,?,?)',
+            (me, peer_id, text, message_type, now)
         )
         conn.commit()
         message_id = cur.lastrowid
@@ -4201,7 +4239,7 @@ def send_dm(peer_id):
     finally:
         conn.close()
     return jsonify({'ok': True, 'success': True, 'message_id': message_id,
-                    'created_at': now, 'message': text})
+                    'created_at': now, 'message': text, 'message_type': message_type})
 
 @app.route('/api/messages/<int:message_id>', methods=['DELETE'])
 @rate_limit(30, 60)
