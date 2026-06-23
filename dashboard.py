@@ -2408,7 +2408,7 @@ def _security_headers(resp):
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
-        "connect-src 'self' https://api.binance.com; "
+        "connect-src 'self' https://api.binance.com https://api.mainnet-beta.solana.com https://quote-api.jup.ag wss: ws:; "
         "frame-src https://dexscreener.com; "
         "object-src 'none'; "
         "base-uri 'self'; "
