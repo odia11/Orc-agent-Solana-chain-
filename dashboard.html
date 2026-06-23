@@ -73,7 +73,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 @media(max-width:768px){
   .wrap{padding:1rem;margin:0 auto}
   .stats{grid-template-columns:repeat(2,1fr)}
-  .diff-row{flex-wrap:wrap;gap:6px}
   .mode-desc{max-width:100%}
   .panel-hdr{font-size:10px}
 }
@@ -194,22 +193,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .trade-btn{background:var(--blue);color:#fff}
 .trade-btn:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px)}
 .trade-btn:disabled{cursor:not-allowed}
-.diff-row{display:flex;align-items:center;gap:8px;width:100%;margin-top:4px;padding-top:10px;border-top:1px solid var(--border2)}
-.diff-label{font-size:9px;color:var(--dim);letter-spacing:.1em;font-family:'Orbitron',monospace;margin-right:2px}
-.diff-btn{font-size:9px;padding:5px 13px;border-radius:6px;border:1px solid var(--border2);background:transparent;color:var(--muted);cursor:pointer;font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.05em;transition:all .15s}
-.diff-btn:hover{border-color:var(--blue);color:#fff}
-.diff-btn.active[data-diff="EASY"]{background:var(--green);border-color:var(--green);color:#06140d}
-.diff-btn.active[data-diff="MEDIUM"]{background:var(--blue);border-color:var(--blue);color:#fff}
-.diff-btn.active[data-diff="HARD"]{background:var(--red);border-color:var(--red);color:#fff}
-.diff-modal-msg{font-size:12px;color:var(--dim);margin-bottom:20px;line-height:1.6;text-align:center}
-.diff-modal-row{display:flex;gap:10px;justify-content:center}
-.diff-modal-btn{flex:1;padding:16px 10px;border-radius:9px;background:var(--bg3);color:var(--muted);cursor:pointer;font-family:'Orbitron',monospace;font-weight:900;font-size:11px;letter-spacing:.06em;transition:all .15s}
-.diff-modal-btn[data-diff="EASY"]{border:1px solid rgba(0,255,136,.35)}
-.diff-modal-btn[data-diff="EASY"]:hover{background:var(--green);border-color:var(--green);color:#06140d}
-.diff-modal-btn[data-diff="MEDIUM"]{border:1px solid rgba(106,163,255,.35)}
-.diff-modal-btn[data-diff="MEDIUM"]:hover{background:var(--blue);border-color:var(--blue);color:#fff}
-.diff-modal-btn[data-diff="HARD"]{border:1px solid rgba(255,77,106,.35)}
-.diff-modal-btn[data-diff="HARD"]:hover{background:var(--red);border-color:var(--red);color:#fff}
 
 /* ── MARKET PANEL ── */
 .market-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -1647,7 +1630,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
     <div class="ob-progress"><div class="ob-dot active"></div><div class="ob-dot"></div></div>
     <div class="ob-step active" id="step-0">
       <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL balance and start trading. You'll also need to choose a difficulty level (EASY/MEDIUM/HARD) before you can start.</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL balance and start trading.</div>
       <div id="wallet-connected" style="display:none" class="ob-connected">
         <div class="ob-check">✓</div>
         <div class="ob-conn-text">
@@ -1699,7 +1682,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
         </div>
         <div class="sg-item">
           <div class="sg-num">4</div>
-          <div><span class="sg-label">Start Trading</span>Hit the START TRADING button. The bot scans every 30s for ≥5% momentum and exits based on your chosen difficulty: EASY (TP +25%/SL -6%), MEDIUM (TP +40%/SL -6%), or HARD (TP +60%/SL -6%).</div>
+          <div><span class="sg-label">Start Trading</span>Hit the START TRADING button. The bot scans every 30s for ≥5% momentum and exits at TP +12% or SL -3% — 100% of position every time.</div>
         </div>
       </div>
       <div class="sg-warn">⚠ Only paste the private key of a dedicated trading wallet — never your main wallet's key.</div>
@@ -1736,7 +1719,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
         <div class="how-to-item">Buys when: ≥5% price rise in last 5 min with accelerating volume</div>
         <div class="how-to-item">Skips tokens already up 50%+ in the hour (momentum played out)</div>
         <div class="how-to-item">Maximum 5 open positions at once</div>
-        <div class="how-to-item">Auto sells based on your chosen difficulty — EASY (TP +25%/SL -6%), MEDIUM (TP +40%/SL -6%), or HARD (TP +60%/SL -6%) — 100% of position</div>
+        <div class="how-to-item">Auto sells at TP +12% or SL -3% — 100% of position every time (Auto Strategy)</div>
 
       </div>
     </div>
@@ -1813,19 +1796,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   </div>
 </div>
 
-<!-- DIFFICULTY MODAL -->
-<div class="s-modal" id="diff-modal" onclick="if(event.target===this)closeDifficultyModal()">
-  <div class="s-card" style="max-width:340px;text-align:center">
-    <button class="s-close" onclick="closeDifficultyModal()">✕</button>
-    <div class="s-title">⚡ DIFFICULTY REQUIRED</div>
-    <div class="diff-modal-msg">Please select a difficulty level first</div>
-    <div class="diff-modal-row">
-      <button class="diff-modal-btn" data-diff="EASY" onclick="selectDifficultyFromModal('EASY')">EASY</button>
-      <button class="diff-modal-btn" data-diff="MEDIUM" onclick="selectDifficultyFromModal('MEDIUM')">MEDIUM</button>
-      <button class="diff-modal-btn" data-diff="HARD" onclick="selectDifficultyFromModal('HARD')">HARD</button>
-    </div>
-  </div>
-</div>
 
 <!-- INCINERATOR MODAL -->
 <div class="s-modal" id="incinerator-modal" onclick="if(event.target===this)closeIncinerator()">
@@ -2124,14 +2094,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
         <span id="bot-scan-text" style="display:none;font-size:9px;color:var(--green);font-family:'Share Tech Mono',monospace;letter-spacing:.04em;animation:scan-blink 1.4s step-start infinite">SCANNING…</span>
         <div class="copy-source-pill" id="copy-source-pill" style="display:none" onclick="_stopCopyingConfirm()" title="Click to stop copying">📋 <span id="copy-source-label"></span></div>
       </div>
-      <div class="mode-desc" style="max-width:none;margin-bottom:10px">AI-powered momentum scalper. Select a difficulty below to set TP/SL targets.</div>
+      <div class="mode-desc" style="max-width:none;margin-bottom:10px">Auto Strategy — TP +12% / SL -3% — 100% exit on both</div>
       <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45;width:100%" title="Connect a wallet to enable trading">▶ START TRADING</button>
-      <div class="diff-row" id="diff-row">
-        <span class="diff-label">DIFFICULTY</span>
-        <button class="diff-btn" data-diff="EASY" onclick="setDifficulty('EASY')">EASY</button>
-        <button class="diff-btn" data-diff="MEDIUM" onclick="setDifficulty('MEDIUM')">MEDIUM</button>
-        <button class="diff-btn" data-diff="HARD" onclick="setDifficulty('HARD')">HARD</button>
-      </div>
       <div class="trade-warn" id="trade-warn"></div>
     </div>
   </div>
@@ -2797,9 +2761,6 @@ async function launchApp(){
         if(r.avatar_url){ _avatarUrl=r.avatar_url||null; _updateNavPill(); }
       }
     }).catch(()=>{});
-    loadDifficulty();
-  } else {
-    setDifficultyUI(null);
   }
   updateAuthBtns();
   checkOwnerPanel();
@@ -4343,44 +4304,6 @@ function _lfStartCountdown(){
   },1000);
 }
 
-const DIFFICULTY_TEXT={
-  EASY:'EASY mode — Entry: ≥5% momentum in 5m, still rising (not reversing). Take profit: +25%. Stop loss: −6%. Crash exit: −15%. Full 100% position close on every exit.',
-  MEDIUM:'MEDIUM mode — Entry: ≥5% momentum in 5m, still rising (not reversing). Take profit: +40%. Stop loss: −6%. Crash exit: −15%. Full 100% position close on every exit.',
-  HARD:'HARD mode — Entry: ≥5% momentum in 5m, still rising (not reversing). Take profit: +60%. Stop loss: −6%. Crash exit: −15%. Full 100% position close on every exit.'
-};
-const DIFFICULTY_DEFAULT_DESC='AI-powered momentum scalper. Select a difficulty below to set the entry filter and take-profit/stop-loss targets.';
-let currentDifficulty=null;   // never pre-selected — user must click EASY/MEDIUM/HARD each session
-
-function setDifficultyUI(diff){
-  currentDifficulty=diff||null;
-  document.querySelectorAll('.diff-btn').forEach(b=>{
-    b.classList.toggle('active', !!diff && b.dataset.diff===diff);
-  });
-  const desc=document.querySelector('#trade-card .mode-desc');
-  if(desc) desc.textContent=currentDifficulty?DIFFICULTY_TEXT[currentDifficulty]:DIFFICULTY_DEFAULT_DESC;
-  _refreshTradeBtnState();
-}
-
-async function loadDifficulty(){
-  // Intentionally does not pre-select a difficulty on load — the START TRADING
-  // button stays disabled until the user explicitly clicks EASY/MEDIUM/HARD.
-  setDifficultyUI(null);
-}
-
-async function setDifficulty(diff){
-  if(diff===currentDifficulty) return;
-  if(typeof traderOn!=='undefined' && traderOn){
-    showTradeWarn('⚠️ Stop trading before changing difficulty — it applies on next start');
-    return;
-  }
-  const prev=currentDifficulty;
-  setDifficultyUI(diff);
-  try{
-    const res=await fetch('/api/difficulty',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({difficulty:diff})});
-    const rj=await res.json().catch(()=>null);
-    if(!rj||!rj.ok) setDifficultyUI(prev);
-  }catch(e){ setDifficultyUI(prev); }
-}
 
 function _refreshTradeBtnState(){
   const tb=document.getElementById('trade-btn');
@@ -4389,23 +4312,10 @@ function _refreshTradeBtnState(){
   if(!phantomKey){
     tb.disabled=true; tb.title='Connect a wallet to enable trading'; tb.style.opacity='.45';
   } else {
-    // Stays clickable even with no difficulty selected — clicking opens the
-    // difficulty modal instead of being a dead button (see toggleTrader()).
-    tb.disabled=false; tb.title=currentDifficulty?'':'Select a difficulty first'; tb.style.opacity='';
+    tb.disabled=false; tb.title=''; tb.style.opacity='';
   }
 }
 
-function openDifficultyModal(){
-  document.getElementById('diff-modal').classList.add('open');
-}
-function closeDifficultyModal(){
-  document.getElementById('diff-modal').classList.remove('open');
-}
-async function selectDifficultyFromModal(diff){
-  await setDifficulty(diff);
-  closeDifficultyModal();
-  toggleTrader();
-}
 
 function updateBtns(){
   const tb=document.getElementById('trade-btn');
@@ -4436,10 +4346,6 @@ function _updateBotIdleBanner(){
 }
 
 async function toggleTrader(){
-  if(!traderOn && !currentDifficulty){
-    openDifficultyModal();
-    return;
-  }
   if(!traderOn && !settingsHasKey){
     showTradeWarn('⚠️ Add your trading wallet private key in Settings first');
     openSettings();
@@ -6316,10 +6222,10 @@ const _TIPS_DATA=[
    items:['Go to Live Solana Market on dashboard',
           'Press BUY on any token to instantly buy',
           'Press SELL to exit your position']},
-  {icon:'⚙️',color:'#f0b90b',title:'Difficulty Settings (Auto)',
-   items:['<span style="color:#00ff88">EASY</span>  — TP +25% / SL -6%',
-          '<span style="color:#6aa3ff">MEDIUM</span> — TP +40% / SL -6%',
-          '<span style="color:#ff4d6a">HARD</span>  — TP +60% / SL -6%']},
+  {icon:'⚙️',color:'#f0b90b',title:'Bot Strategy (Auto)',
+   items:['Bot strategy: TP +12% / SL -3% — 100% exit on both',
+          'No configuration needed — strategy is fixed',
+          'SL check runs before TP for capital preservation']},
   {icon:'💰',color:'#00d2b4',title:'Deposit SOL',
    items:['Minimum 0.05 SOL to trade',
           'Max 5 concurrent positions']},
