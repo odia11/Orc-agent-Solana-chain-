@@ -3068,9 +3068,8 @@ function renderMarket(tokens){
     const sym=esc(t.symbol||'???');
     const name=esc(t.name||t.symbol||'Unknown');
     const mint=safeMint(t.mint);
-    const hasSell=mint&&_openMints.has(mint);
-    const clickAttr=mint?`onclick="location.href='/token/${mint}'" style="cursor:pointer"`:'';
-    return `<div class="${baseCls}" ${clickAttr}>
+    const clickAttr=mint?`onclick="location.href='/token/${mint}'"`:'';
+    return `<div class="${baseCls}" style="display:flex;flex-direction:column${mint?';cursor:pointer':''}" ${clickAttr}>
   <div class="mkt-top">
     <div class="mkt-id">
       <div class="mkt-sym">${sym}</div>
@@ -3102,13 +3101,12 @@ function renderMarket(tokens){
     <div class="mkt-score-track"><div class="mkt-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
     <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
-  ${mint?`<div style="display:flex;gap:8px;margin-top:8px">
+  ${mint?`<div style="display:flex;gap:6px;margin-top:auto;padding-top:8px;width:100%">
     <button style="flex:1;padding:8px;background:#00ff88;color:#000;font-weight:bold;border:none;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:11px" onclick="event.stopPropagation();manualBuy('${mint}','${sym}',this)">BUY</button>
-    <button style="flex:1;padding:8px;background:#ff3333;color:#fff;font-weight:bold;border:none;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:11px;display:${hasSell?'block':'none'}" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
+    <button style="flex:1;padding:8px;background:#ff3333;color:#fff;font-weight:bold;border:none;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:11px" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
   </div>`:''}
 </div>`;
   };
-
   grid.innerHTML=tokens.map(makeCard).join('')||
     '<div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">NO TRENDING TOKENS RIGHT NOW</div>';
   if(typeof window._swipeReset==='function') window._swipeReset();
