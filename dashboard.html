@@ -1388,6 +1388,24 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   .mob-nav-icon{font-size:18px;line-height:1;display:block}
   .mob-nav-lbl{font-size:9px;letter-spacing:.06em;text-transform:uppercase;font-family:'Share Tech Mono',monospace;line-height:1}
 
+  /* ── ACTIVITY FEED ITEMS: stack vertically ── */
+  .lf-item{flex-wrap:wrap;padding:8px 10px;gap:8px}
+  .lf-right{width:100%;flex-direction:row;justify-content:space-between;align-items:center;min-width:0;padding-left:42px}
+  .lf-time,.lf-tx{margin-top:0}
+
+  /* ── INCINERATOR MODAL: reduce padding, buttons full width ── */
+  .inc-card{padding:14px}
+  .inc-ctrl-btn{width:100%;text-align:center}
+
+  /* ── ONBOARDING BOX: full width, 16px padding ── */
+  .ob-box{max-width:100%;padding:1rem}
+  #step-1 .ob-btn{width:calc(50% - 5px);display:inline-flex;align-items:center;justify-content:center;margin-bottom:10px}
+  #step-1 .ob-btn.btn-skip{margin-left:10px}
+
+  /* ── BLACKLIST MODAL: full width, table horizontally scrollable ── */
+  #blacklist-modal .s-card{max-width:100%}
+  .bl-mgr-table{min-width:460px}
+
 }
 
 @media(max-width:480px){
