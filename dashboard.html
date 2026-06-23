@@ -320,10 +320,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .claim-msg.err{background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.2);color:var(--red)}
 
 .mkt-card{
-  background:var(--bg3);
-  border:1px solid var(--border2);
-  border-radius:var(--card-radius);
-  padding:20px;
+  background:#1a1a1a;
+  border:1px solid #2a2a2a;
+  border-radius:8px;
+  padding:14px;
   cursor:pointer;
   transition:transform .15s ease,border-color .15s ease,box-shadow .15s ease;
   position:relative;
@@ -344,7 +344,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* card header */
 .mkt-top{display:flex;align-items:flex-start;justify-content:space-between;gap:6px;margin-bottom:12px;min-width:0}
 .mkt-id{min-width:0;flex:1;overflow:hidden}
-.mkt-id .mkt-sym{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--text);letter-spacing:.04em;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mkt-id .mkt-sym{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:#ffffff;letter-spacing:.04em;margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mkt-id .mkt-name{font-size:9px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;width:100%}
 
 /* signal badge */
@@ -364,16 +364,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .grid-sep-lbl{font-size:7px;color:var(--border2);text-transform:uppercase;letter-spacing:.14em;white-space:nowrap;font-family:'Orbitron',monospace}
 
 /* price */
-.mkt-price{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;color:var(--text);display:block;margin-bottom:6px;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
+.mkt-price{font-family:'Orbitron',monospace;font-size:18px;font-weight:700;color:#ffffff;display:block;margin-bottom:6px;letter-spacing:.01em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 
 /* ── 4-PERIOD CHANGE GRID (5M / 1H / 6H / 24H) ── */
-.chg-grid{display:grid;grid-template-columns:repeat(4,1fr);margin:0 0 8px;background:var(--bg);border-radius:6px;overflow:hidden;border:1px solid var(--border)}
-.chg-cell{display:flex;flex-direction:column;align-items:center;padding:6px 2px;border-right:1px solid var(--border)}
-.chg-cell:last-child{border-right:none}
-.chg-period{font-size:6px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:3px;font-family:'Share Tech Mono',monospace}
+.chg-grid{display:flex;gap:4px;margin:0 0 8px;flex-wrap:nowrap}
+.chg-cell{display:flex;flex-direction:column;align-items:center;padding:4px 6px;background:#111111;border-radius:4px;flex:1;min-width:0}
+.chg-period{font-size:7px;color:#888888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px;font-family:'Share Tech Mono',monospace}
 .chg-pct{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;white-space:nowrap}
-.chg-pct.up{color:var(--green)}
-.chg-pct.dn{color:var(--red)}
+.chg-pct.up{color:#22c55e}
+.chg-pct.dn{color:#ef4444}
 
 /* ── META DATA ROWS (txns / makers / vol / liq / mcap) ── */
 .mkt-meta-row{display:flex;gap:0;margin-bottom:3px}
@@ -409,13 +408,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #perf-chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;overflow:hidden}
 .pos-panel{background:var(--bg2);border:1px solid rgba(34,197,94,.4);border-radius:10px;padding:16px;margin-bottom:1.25rem}
 /* ── PNL PERFORMANCE CHART ── */
-.pnlc-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:16px;margin-bottom:1.25rem}
+.pnlc-panel{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:16px;margin-bottom:1.25rem}
 .pnlc-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .pnlc-toggles{display:flex;gap:4px}
-.pnlc-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:3px 10px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.06em}
+.pnlc-btn{background:transparent;border:1px solid #2a2a2a;border-radius:5px;padding:3px 10px;font-size:10px;color:#888888;cursor:pointer;transition:all .15s;letter-spacing:.06em}
 .pnlc-btn:hover{border-color:#22c55e;color:#22c55e}
-.pnlc-btn.active{border-color:#22c55e;color:#22c55e;background:rgba(34,197,94,.08)}
-#pnlc-container{height:200px;position:relative;background:#0a0e1a;border-radius:6px;overflow:hidden}
+.pnlc-btn.active{background:#22c55e;color:#000;border-color:#22c55e;font-weight:700}
+#pnlc-container{height:200px;position:relative;background:#111111;border-radius:6px;overflow:hidden}
 #pnlc-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:none}
 @keyframes pnlce-scan{from{transform:translateX(-80px)}to{transform:translateX(2000px)}}
 @keyframes pnlce-pulse{from{opacity:.4;text-shadow:0 0 6px rgba(34,197,94,.3)}to{opacity:1;text-shadow:0 0 18px rgba(34,197,94,.7)}}
@@ -2855,7 +2854,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- PNL PERFORMANCE CHART -->
   <div class="pnlc-panel" id="pnlc-panel">
     <div class="pnlc-hdr">
-      <div class="panel-hdr" style="margin-bottom:0">PnL Performance &nbsp;<span id="pnlc-val" style="font-family:'Orbitron',monospace;font-size:12px;font-weight:700"></span></div>
+      <div style="font-size:10px;color:#888888;text-transform:uppercase;letter-spacing:.08em;font-weight:600">PNL PERFORMANCE &nbsp;<span id="pnlc-val" style="font-size:12px;font-weight:700;color:#ffffff"></span></div>
       <div class="pnlc-toggles">
         <button class="pnlc-btn active" onclick="_pnlSetRange('1d',this)">1D</button>
         <button class="pnlc-btn" onclick="_pnlSetRange('7d',this)">7D</button>
@@ -3818,9 +3817,9 @@ function renderMarket(tokens){
     <div class="mkt-score-track"><div class="mkt-score-fill" style="width:${barPct}%;background:${barColor}"></div></div>
     <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
-  ${mint?`<div style="display:flex;gap:6px;margin-top:auto;padding-top:8px;width:100%">
-    <button style="flex:1;padding:8px;background:#22c55e;color:#000;font-weight:bold;border:none;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:11px" onclick="event.stopPropagation();manualBuy('${mint}','${sym}',this)">BUY</button>
-    <button style="flex:1;padding:8px;background:#ff3333;color:#fff;font-weight:bold;border:none;border-radius:4px;cursor:pointer;font-family:'Share Tech Mono',monospace;font-size:11px" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
+  ${mint?`<div style="display:flex;gap:6px;margin-top:auto;padding-top:10px;width:100%">
+    <button style="flex:1;padding:6px;background:#22c55e;color:#000;font-weight:700;border:none;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.03em" onclick="event.stopPropagation();manualBuy('${mint}','${sym}',this)">BUY</button>
+    <button style="flex:1;padding:6px;background:#ef4444;color:#fff;font-weight:700;border:none;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.03em" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
   </div>`:''}
 </div>`;
   };
