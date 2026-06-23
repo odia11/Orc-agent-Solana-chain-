@@ -6426,6 +6426,7 @@ function openMessagesView(){
   document.getElementById('messages-btn').style.borderColor='var(--green)';
   document.getElementById('messages-btn').style.color='var(--green)';
   document.getElementById('messages-btn').style.background='rgba(0,255,136,.08)';
+  _dmSetUnreadBadge(0);
   dmLoadConversations();
   _dmRefreshTimer=setInterval(_dmAutoRefresh,5000);
 }
@@ -6596,7 +6597,7 @@ function _dmUpdateUnreadBadge(){
 }
 
 // Poll unread count on every page, even outside messages view
-setInterval(dmFetchUnread, 15000);
+setInterval(dmFetchUnread, 10000);
 
 // ── PROFILE COMMENTS ──
 let _tvcCurrentUserId=null, _tvcCanComment=false, _tvcIsSelf=false;
