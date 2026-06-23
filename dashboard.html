@@ -72,13 +72,41 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 @keyframes coinFly{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(-120px) rotate(720deg)}}
 
 /* ── LAYOUT ── */
-.wrap{max-width:1280px;margin:0 auto;padding:1rem 1.25rem}
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+.app-body{display:flex;flex:1;overflow:hidden;min-height:0}
+.wrap{flex:1;min-width:0;padding:1rem 1.25rem;overflow-y:auto;max-width:none;margin:0}
 @media(max-width:768px){
-  .wrap{padding:1rem;margin:0 auto}
+  #app{height:auto;overflow:visible}
+  .app-body{overflow:visible}
+  .wrap{padding:.75rem;overflow-y:visible}
   .stats{grid-template-columns:repeat(2,1fr)}
   .mode-desc{max-width:100%}
   .panel-hdr{font-size:10px}
 }
+
+/* ── SIDEBAR ── */
+#sidebar{width:220px;min-width:220px;background:#141414;border-right:1px solid #2a2a2a;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+.sb-user{padding:16px;border-bottom:1px solid #2a2a2a;flex-shrink:0}
+.sb-user-row{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+.sb-avatar{width:32px;height:32px;border-radius:50%;background:#222222;border:1px solid #2a2a2a;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#888888;flex-shrink:0;overflow:hidden;position:relative}
+.sb-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.sb-user-name{font-size:13px;font-weight:600;color:#ffffff;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-online-dot{width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0;animation:blink 2s infinite}
+.sb-sol{font-size:13px;font-weight:700;color:#ffffff;margin-bottom:3px}
+.sb-pnl{font-size:11px}
+.sb-pnl.pos{color:#22c55e}.sb-pnl.neg{color:#ef4444}.sb-pnl.neu{color:#888888}
+.sb-nav{flex:1;padding:8px 0}
+.sb-nav-item{display:flex;align-items:center;gap:10px;padding:8px 16px;font-size:13px;color:#888888;cursor:pointer;transition:background .1s,color .1s;text-decoration:none;border:none;background:transparent;width:100%;text-align:left;border-left:2px solid transparent;box-sizing:border-box;position:relative;font-family:'Inter',system-ui,sans-serif}
+.sb-nav-item:hover{background:#1a1a1a;color:#ffffff}
+.sb-nav-item.active{background:#1a1a1a;color:#ffffff;border-left-color:#22c55e}
+.sb-nav-icon{font-size:14px;flex-shrink:0;width:18px;display:flex;align-items:center;justify-content:center}
+.sb-nav-badge{position:absolute;right:12px;top:50%;transform:translateY(-50%);background:#ef4444;color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:1px 5px;min-width:16px;text-align:center}
+.sb-bottom{padding:8px 0;border-top:1px solid #2a2a2a;flex-shrink:0}
+.sb-bot-status{display:flex;align-items:center;gap:7px;padding:8px 16px;font-size:11px;color:#888888}
+.sb-bot-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.sb-bot-dot.idle{background:#444444}
+.sb-bot-dot.running{background:#22c55e;animation:blink 2s infinite}
+@media(max-width:768px){#sidebar{display:none}}
 
 /* ── HEADER ── */
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;background:#0e0e0e;border-bottom:1px solid #2a2a2a;height:48px;gap:12px;flex-shrink:0}
@@ -2474,7 +2502,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 </div>
 
 <!-- MAIN APP -->
-<div class="wrap" id="app" style="display:none">
+<div id="app" style="display:none">
 
   <!-- HEADER -->
   <div class="header">
@@ -2533,7 +2561,66 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         </div>
       </div>
     </div>
-  </div>
+  </div><!-- /header -->
+  <div class="app-body">
+    <!-- SIDEBAR -->
+    <aside id="sidebar">
+      <div class="sb-user">
+        <div class="sb-user-row">
+          <div class="sb-avatar" id="sb-avatar">
+            <img id="sb-avatar-img" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none'">
+            <span id="sb-avatar-ini"></span>
+          </div>
+          <div class="sb-user-name" id="sb-user-name">—</div>
+          <div class="sb-online-dot" id="sb-online-dot" style="display:none"></div>
+        </div>
+        <div class="sb-sol" id="sb-sol">——</div>
+        <div class="sb-pnl neu" id="sb-pnl">—</div>
+      </div>
+      <nav class="sb-nav">
+        <button class="sb-nav-item active" id="sbn-dashboard" onclick="_sbNav('dashboard')">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+          Dashboard
+        </button>
+        <button class="sb-nav-item" id="sbn-market" onclick="_sbNav('market')">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+          Live Market
+        </button>
+        <a class="sb-nav-item" id="sbn-history" href="/history">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg></span>
+          History
+        </a>
+        <a class="sb-nav-item" id="sbn-leaderboard" href="/leaderboard">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/></svg></span>
+          Leaderboard
+        </a>
+        <button class="sb-nav-item" id="sbn-traders" onclick="_sbNav('traders')">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+          Traders
+        </button>
+        <button class="sb-nav-item" id="sbn-messages" onclick="_sbNav('messages')">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+          Messages
+          <span class="sb-nav-badge" id="sb-msg-badge" style="display:none"></span>
+        </button>
+        <button class="sb-nav-item" id="sbn-blacklist" onclick="openBlacklistModal()">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
+          Blacklist
+        </button>
+      </nav>
+      <div class="sb-bottom">
+        <button class="sb-nav-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal()">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
+          Help &amp; Tips
+        </button>
+        <div class="sb-bot-status">
+          <div class="sb-bot-dot idle" id="sb-bot-dot"></div>
+          <span id="sb-bot-text">Bot: IDLE</span>
+        </div>
+      </div>
+    </aside>
+    <!-- MAIN CONTENT -->
+    <div class="wrap" id="main-content">
 
   <!-- ── TRADERS VIEW ── -->
   <div id="dash-traders" style="display:none">
@@ -3151,7 +3238,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
   </div><!-- /dash-admin -->
 
-</div><!-- /wrap -->
+    </div><!-- /main-content -->
+  </div><!-- /app-body -->
+</div><!-- #app -->
 
 <!-- ── MOBILE BOTTOM NAV ── -->
 <nav id="mob-bottom-nav" aria-label="Mobile navigation">
@@ -3552,6 +3641,8 @@ async function fetchState(){
       const _sv=+r.sol;
       if(!_solCounterDone) _animateSolCounter(_sv);
       else document.getElementById('s-sol').textContent=_sv.toFixed(4);
+      const sbSol=document.getElementById('sb-sol');
+      if(sbSol) sbSol.textContent=_sv.toFixed(4)+' SOL';
       _updateSolUsdc(_sv);
       const uw=document.getElementById('usdc-warn');
       if(uw) uw.style.display=(+r.sol<0.02)?'block':'none';
@@ -4057,6 +4148,7 @@ async function fetchMyProfile(){
     _updateMyProfileBtn();
     _updateTvMeCard();
     _updateDashProfileBar();
+    _sbUpdateUser(r);
   }catch(e){}
 }
 
@@ -4978,6 +5070,10 @@ function updateBtns(){
   }
   _refreshTradeBtnState();
   _updateBotIdleBanner();
+  const sbDot=document.getElementById('sb-bot-dot');
+  const sbText=document.getElementById('sb-bot-text');
+  if(sbDot){ sbDot.className='sb-bot-dot '+(traderOn?'running':'idle'); }
+  if(sbText){ sbText.textContent='Bot: '+(traderOn?'RUNNING':'IDLE'); }
 }
 
 function _updateBotIdleBanner(){
@@ -5316,6 +5412,48 @@ function _toggleAvatarMenu(){
 function _closeAvatarMenu(){
   const m=document.getElementById('hdr-avatar-menu');
   if(m) m.classList.remove('open');
+}
+function _sbSetActive(id){
+  document.querySelectorAll('#sidebar .sb-nav-item').forEach(el=>el.classList.remove('active'));
+  const el=document.getElementById(id);
+  if(el) el.classList.add('active');
+}
+function _sbNav(section){
+  if(section==='dashboard'){
+    if(_dmOpen) closeMessagesView(); else if(_tradersView) closeTradersView();
+    _sbSetActive('sbn-dashboard');
+  } else if(section==='market'){
+    if(_dmOpen) closeMessagesView();
+    if(_tradersView) closeTradersView();
+    _sbSetActive('sbn-market');
+    const mp=document.getElementById('market-panel');
+    if(mp) setTimeout(()=>mp.scrollIntoView({behavior:'smooth',block:'start'}),50);
+  } else if(section==='traders'){
+    openTradersView();
+  } else if(section==='messages'){
+    openMessagesView();
+  }
+}
+function _sbUpdateUser(profileData){
+  const nameEl=document.getElementById('sb-user-name');
+  const dotEl=document.getElementById('sb-online-dot');
+  const iniEl=document.getElementById('sb-avatar-ini');
+  const imgEl=document.getElementById('sb-avatar-img');
+  if(!profileData){ if(nameEl) nameEl.textContent='—'; return; }
+  if(nameEl) nameEl.textContent=profileData.username||profileData.display_name||'—';
+  if(dotEl) dotEl.style.display='';
+  if(profileData.avatar_url && imgEl){
+    imgEl.src=profileData.avatar_url;
+    imgEl.style.display='';
+  } else if(iniEl){
+    iniEl.textContent=((profileData.username||'?')[0]||'?').toUpperCase();
+  }
+  const pnlEl=document.getElementById('sb-pnl');
+  if(pnlEl && profileData.today_pnl!=null){
+    const v=profileData.today_pnl;
+    pnlEl.textContent=(v>=0?'+':'')+v.toFixed(4)+' SOL today';
+    pnlEl.className='sb-pnl '+(v>0?'pos':v<0?'neg':'neu');
+  }
 }
 document.addEventListener('click',function(e){
   const btn=document.getElementById('nav-menu-btn');
@@ -5701,6 +5839,7 @@ function openTradersView(){
     document.getElementById('dash-admin').style.display='none';
   }
   document.getElementById('dash-traders').style.display='';
+  _sbSetActive('sbn-traders');
   const btn=document.getElementById('traders-btn');
   if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.08)';}
   if(_myProfileData) _updateTvMeCard();
@@ -5721,6 +5860,7 @@ function closeTradersView(){
   }
   document.getElementById('dash-traders').style.display='none';
   document.getElementById('dash-main').style.display='';
+  _sbSetActive('sbn-dashboard');
   if(_tvCountdownTimer){clearInterval(_tvCountdownTimer);_tvCountdownTimer=null;}
   const el=document.getElementById('tv-countdown'); if(el) el.textContent='';
   const btn=document.getElementById('traders-btn');
@@ -7005,6 +7145,7 @@ function openMessagesView(){
   _dmOpen=true;
   _hideAllViews();
   document.getElementById('dash-messages').style.display='block';
+  _sbSetActive('sbn-messages');
   document.getElementById('messages-btn').style.borderColor='var(--green)';
   document.getElementById('messages-btn').style.color='var(--green)';
   document.getElementById('messages-btn').style.background='rgba(34,197,94,.08)';
@@ -7024,6 +7165,7 @@ function closeMessagesView(){
   document.getElementById('dm-layout').classList.remove('convo-open');
   document.getElementById('dash-messages').style.display='none';
   document.getElementById('dash-main').style.display='';
+  _sbSetActive('sbn-dashboard');
   const btn=document.getElementById('messages-btn');
   if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
   const si=document.getElementById('dm-search-input');
@@ -7315,7 +7457,8 @@ async function dmFetchUnread(){
 
 function _dmSetUnreadBadge(n){
   [document.getElementById('nav-msg-badge'),
-   document.getElementById('mob-msg-badge')].forEach(el=>{
+   document.getElementById('mob-msg-badge'),
+   document.getElementById('sb-msg-badge')].forEach(el=>{
     if(!el) return;
     el.textContent=n>99?'99+':n||'';
     el.style.display=n>0?'inline-block':'none';
