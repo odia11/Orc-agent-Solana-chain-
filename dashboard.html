@@ -1328,8 +1328,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   .pos-sell-btn,.pos-chart-btn{font-size:9px;padding:2px 6px}
 
   /* ── PNL CHART ── */
-  #pnlc-container{height:160px}
+  #pnlc-container{height:160px;width:100%}
   .slide-chart-wrap{height:160px}
+
+  /* ── TRADER PROFILE TRADES TABLE ── */
+  .tvp-section{overflow-x:auto}
+  .tvp-table{min-width:500px}
 
   /* ── PUMP SCANNER ── */
   .ps-grid{grid-template-columns:1fr}
@@ -1418,6 +1422,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
   /* ── TIGHTER PADDING ── */
   .wrap{padding:0.5rem 0.5rem calc(60px + env(safe-area-inset-bottom,0px))}
+
+  /* ── TRADER PROFILE STAT TILES ── */
+  .tvp-stat5-val{font-size:13px}
+
+  /* ── FOLLOW LIST PNL COLUMN ── */
+  .tvfl-pnl{min-width:60px}
+  .tvp-fp-pnl{min-width:55px}
 }
 
 /* ── LOW SOL BALANCE MODAL ── */
