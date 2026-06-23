@@ -1535,6 +1535,62 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   border-bottom-left-radius:4px;
 }
 .dm-msg-time{font-size:10px;color:#3a4a60;margin-top:4px}
+.dm-msg.trade-share{max-width:80%}
+.dm-trade-card{
+  background:#1a2030;
+  border:1px solid #00ff88;
+  border-radius:12px;
+  padding:16px;
+  min-width:220px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+}
+.dm-trade-card.closed{
+  border-color:#2a3a50;
+  opacity:.6;
+}
+.dm-trade-card-header{display:flex;align-items:center;justify-content:space-between;gap:8px}
+.dm-trade-card-symbol{
+  font-size:15px;
+  font-weight:700;
+  color:#00ff88;
+  letter-spacing:.04em;
+}
+.dm-trade-card-closed-badge{
+  font-size:10px;
+  color:#5a7090;
+  background:#111b28;
+  border:1px solid #2a3a50;
+  border-radius:6px;
+  padding:2px 8px;
+  letter-spacing:.06em;
+  text-transform:uppercase;
+}
+.dm-trade-card-rows{display:flex;flex-direction:column;gap:5px}
+.dm-trade-card-row{display:flex;justify-content:space-between;gap:16px;font-size:12px}
+.dm-trade-card-lbl{color:#4a6080;letter-spacing:.03em}
+.dm-trade-card-val{color:#c0d8f0;font-variant-numeric:tabular-nums}
+.dm-trade-card-val.pos{color:#00ff88}
+.dm-trade-card-val.neg{color:#ff4d6a}
+.dm-copy-btn{
+  width:100%;
+  padding:10px 0;
+  background:rgba(0,255,136,.15);
+  border:1px solid rgba(0,255,136,.4);
+  border-radius:8px;
+  color:#00ff88;
+  font-size:12px;
+  font-weight:700;
+  letter-spacing:.06em;
+  cursor:pointer;
+  transition:background .15s;
+  text-align:center;
+}
+.dm-copy-btn:hover:not(:disabled){background:rgba(0,255,136,.25)}
+.dm-copy-btn:disabled{opacity:.5;cursor:default}
+.dm-copy-btn.success{background:rgba(0,255,136,.1);color:#00ff88;border-color:rgba(0,255,136,.3)}
+.dm-copy-err{font-size:11px;color:#ff4d6a;text-align:center;margin-top:-4px}
 #dm-chat-active{flex:1;flex-direction:column;min-height:0}
 .dm-chat-empty{
   flex:1;
@@ -7010,6 +7066,86 @@ async function _dmFetchMessages(){
   }
 }
 
+function _dmBuildMessageEl(m, myId){
+  const mine=myId!=null&&m.sender_id===myId;
+  const isTradeShare=m.message_type==='trade_share'||
+    (m.message&&m.message.startsWith('{"type":"trade_share"'));
+  const div=document.createElement('div');
+  if(isTradeShare){
+    div.className='dm-msg '+(mine?'mine':'theirs')+' trade-share';
+    let td={};
+    try{ td=JSON.parse(m.message); }catch(_){}
+    const sym=_esc(td.token_symbol||'???');
+    const addr=td.token_address||'';
+    const entry=td.entry_price!=null?('$'+Number(td.entry_price).toFixed(8)):'—';
+    const amtSol=td.amount_sol!=null?(Number(td.amount_sol).toFixed(4)+' SOL'):'—';
+    const pnl=td.pnl_pct!=null?td.pnl_pct:null;
+    const closed=!!(td.exit_reason);
+    const pnlHtml=pnl!=null
+      ?`<span class="dm-trade-card-val ${pnl>=0?'pos':'neg'}">${pnl>=0?'+':''}${pnl.toFixed(2)}%</span>`
+      :`<span class="dm-trade-card-val">—</span>`;
+    const btnId='cp-btn-'+m.id+'_'+Date.now();
+    const errId='cp-err-'+m.id+'_'+Date.now();
+    div.innerHTML=`
+      <div class="dm-trade-card${closed?' closed':''}">
+        <div class="dm-trade-card-header">
+          <span class="dm-trade-card-symbol">🟢 ${sym}</span>
+          ${closed?'<span class="dm-trade-card-closed-badge">Trade Closed</span>':''}
+        </div>
+        <div class="dm-trade-card-rows">
+          <div class="dm-trade-card-row">
+            <span class="dm-trade-card-lbl">Entry</span>
+            <span class="dm-trade-card-val">${entry}</span>
+          </div>
+          <div class="dm-trade-card-row">
+            <span class="dm-trade-card-lbl">PnL</span>
+            ${pnlHtml}
+          </div>
+          <div class="dm-trade-card-row">
+            <span class="dm-trade-card-lbl">Size</span>
+            <span class="dm-trade-card-val">${amtSol}</span>
+          </div>
+        </div>
+        <button class="dm-copy-btn" id="${btnId}" ${closed||mine?'disabled':''} onclick="_dmCopyTrade(this,'${btnId}','${errId}',${JSON.stringify(addr)},${JSON.stringify(td.entry_price||0)},${JSON.stringify(td.amount_sol||0)})">
+          ${closed?'Trade Closed':mine?'Your Trade':'⚡ Copy Trade'}
+        </button>
+        <div class="dm-copy-err" id="${errId}" style="display:none"></div>
+      </div>
+      <div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
+  } else {
+    div.className='dm-msg '+(mine?'mine':'theirs');
+    div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
+  }
+  return div;
+}
+
+async function _dmCopyTrade(btn, btnId, errId, tokenAddr, entryPrice, amtSol){
+  const errEl=document.getElementById(errId);
+  btn.disabled=true;
+  btn.textContent='Entering trade...';
+  if(errEl){ errEl.style.display='none'; errEl.textContent=''; }
+  try{
+    const resp=await fetch('/api/trades/copy-from-message',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({token_address:tokenAddr,entry_price:entryPrice,amount_sol:amtSol})
+    });
+    const r=await resp.json();
+    if(r.ok){
+      btn.textContent='✓ In Trade!';
+      btn.classList.add('success');
+    } else {
+      btn.textContent='⚡ Copy Trade';
+      btn.disabled=false;
+      if(errEl){ errEl.textContent=r.msg||'Copy failed'; errEl.style.display='block'; }
+    }
+  }catch(e){
+    btn.textContent='⚡ Copy Trade';
+    btn.disabled=false;
+    if(errEl){ errEl.textContent='Request failed — try again'; errEl.style.display='block'; }
+  }
+}
+
 function _dmRenderMessages(msgs){
   const container=document.getElementById('dm-messages');
   if(!msgs.length){
@@ -7018,13 +7154,7 @@ function _dmRenderMessages(msgs){
   }
   const myId=_dmMyId;
   container.innerHTML='';
-  msgs.forEach(m=>{
-    const mine=myId&&m.sender_id===myId;
-    const div=document.createElement('div');
-    div.className='dm-msg '+(mine?'mine':'theirs');
-    div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
-    container.appendChild(div);
-  });
+  msgs.forEach(m=>container.appendChild(_dmBuildMessageEl(m, myId)));
   container.scrollTop=container.scrollHeight;
 }
 
@@ -7032,11 +7162,7 @@ function _dmAppendMessage(m){
   const container=document.getElementById('dm-messages');
   const empty=container.querySelector('.dm-chat-empty');
   if(empty) container.removeChild(empty);
-  const mine=_dmMyId!=null&&m.sender_id===_dmMyId;
-  const div=document.createElement('div');
-  div.className='dm-msg '+(mine?'mine':'theirs');
-  div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
-  container.appendChild(div);
+  container.appendChild(_dmBuildMessageEl(m, _dmMyId));
   container.scrollTop=container.scrollHeight;
 }
 

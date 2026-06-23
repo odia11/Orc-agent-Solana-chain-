@@ -782,6 +782,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN badges TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN copy_source TEXT DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN referral_code TEXT DEFAULT NULL",
+        "ALTER TABLE direct_messages ADD COLUMN message_type TEXT DEFAULT 'text'",
     ]:
         try:
             con.execute(sql)
@@ -4144,7 +4145,8 @@ def get_dm_history(peer_id):
             return jsonify({'ok': True, 'messages': []})
         print(f'[dm_get] me={me} peer={peer_id}', flush=True)
         rows = conn.execute(
-            'SELECT id, sender_id, receiver_id, message, created_at, is_read '
+            'SELECT id, sender_id, receiver_id, message, created_at, is_read, '
+            'COALESCE(message_type, "text") '
             'FROM direct_messages '
             'WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) '
             'ORDER BY created_at ASC LIMIT 200',
@@ -4164,7 +4166,8 @@ def get_dm_history(peer_id):
         conn.close()
     return jsonify({'ok': True, 'messages': [
         {'id': r[0], 'sender_id': r[1], 'receiver_id': r[2],
-         'message': r[3], 'created_at': r[4], 'is_read': bool(r[5])}
+         'message': r[3], 'created_at': r[4], 'is_read': bool(r[5]),
+         'message_type': r[6]}
         for r in rows
     ]})
 
@@ -4199,6 +4202,158 @@ def send_dm(peer_id):
         conn.close()
     return jsonify({'ok': True, 'success': True, 'message_id': message_id,
                     'created_at': now, 'message': text})
+
+@app.route('/api/trades/open', methods=['GET'])
+@rate_limit(20, 60)
+def api_open_trades():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    us = get_user_state(wallet)
+    result = []
+    for mint, pos in list(us.get('positions', {}).items()):
+        if pos.get('amount', 0) <= 0:
+            continue
+        entry = float(pos.get('buy_price', 0) or 0)
+        current_price = None
+        pnl_pct = None
+        try:
+            td = get_token_data(mint)
+            if td and td.get('price', 0) > 0:
+                current_price = td['price']
+                if entry > 0:
+                    pnl_pct = round((current_price - entry) / entry * 100, 2)
+        except Exception:
+            pass
+        result.append({
+            'trade_id': None,
+            'token_symbol': pos.get('symbol', mint[:8]),
+            'token_address': mint,
+            'entry_price': entry,
+            'current_price': current_price,
+            'pnl_pct': pnl_pct,
+            'amount_sol': float(pos.get('spend', 0) or 0),
+        })
+    return jsonify({'ok': True, 'trades': result})
+
+
+@app.route('/api/messages/<int:peer_id>/share-trade', methods=['POST'])
+@rate_limit(10, 60)
+def share_trade_dm(peer_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    token_address = str((request.json or {}).get('token_address', '')).strip()
+    if not is_valid_solana_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    us = get_user_state(wallet)
+    pos = us.get('positions', {}).get(token_address)
+    if not pos or pos.get('amount', 0) <= 0:
+        return jsonify({'ok': False, 'msg': 'No open position for this token'}), 400
+    trade_payload = json.dumps({
+        'type': 'trade_share',
+        'token_address': token_address,
+        'token_symbol': pos.get('symbol', token_address[:8]),
+        'entry_price': float(pos.get('buy_price', 0) or 0),
+        'amount_sol': float(pos.get('spend', 0) or 0),
+    })
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if me == int(peer_id):
+            return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        cur = conn.execute(
+            'INSERT INTO direct_messages (sender_id, receiver_id, message, message_type, created_at) VALUES (?,?,?,?,?)',
+            (me, peer_id, trade_payload, 'trade_share', now)
+        )
+        conn.commit()
+        message_id = cur.lastrowid
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'message_id': message_id, 'created_at': now})
+
+
+@app.route('/api/trades/copy-from-message', methods=['POST'])
+@rate_limit(5, 60)
+def copy_trade_from_message():
+    ip = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    body = request.json or {}
+    token_address = str(body.get('token_address', '')).strip()
+    amount_sol    = float(body.get('amount_sol', 0) or 0)
+    if not is_valid_solana_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    if amount_sol <= 0:
+        return jsonify({'ok': False, 'msg': 'amount_sol must be greater than 0'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False, 'msg': 'Trading suspended — contact admin to resume.'}), 503
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT id, encrypted_private_key, min_trade_size FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+        bl = c.execute('SELECT 1 FROM user_blacklist WHERE user_id=? AND mint=?',
+                       (row[0], token_address)).fetchone() if row else None
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    if bl:
+        return jsonify({'ok': False, 'msg': 'This token is on your avoid list'}), 400
+    enc_blob = row[1]
+    us = get_user_state(wallet)
+    open_pos     = sum(1 for p in us['positions'].values() if p.get('amount', 0) > 0)
+    already_held = us['positions'].get(token_address, {}).get('amount', 0) > 0
+    if open_pos >= 5 and not already_held:
+        return jsonify({'ok': False, 'msg': 'Max 5 positions reached — sell one first'}), 400
+    token_data = get_token_data(token_address)
+    if not token_data or token_data['price'] <= 0:
+        return jsonify({'ok': False, 'msg': 'Could not fetch a live price for this token'}), 400
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            from solders.keypair import Keypair as _KP_ct
+            trading_wallet = str(_KP_ct.from_base58_string(_pk).pubkey())
+    except InvalidToken:
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    except Exception as e:
+        print(f'[copy-trade] key error for {wallet[:6]}...{wallet[-4:]}: {type(e).__name__}: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
+    us_sol = _get_user_sol(trading_wallet)
+    if us_sol < 0.01:
+        return jsonify({'ok': False, 'low_balance': True, 'trading_wallet': trading_wallet,
+                        'msg': '⚠️ Insufficient SOL balance — send SOL to your trading wallet first'}), 400
+    spend = round(min(amount_sol, us_sol), 4)
+    if spend < 0.001:
+        return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to copy this trade'}), 400
+    with _use_key(enc_blob, wallet) as _pk:
+        ok = _execute_user_swap(wallet, _pk, 'buy', token_address, str(spend))
+    if not ok:
+        return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
+    pos = us['positions'].get(token_address, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
+    pos['amount']          = pos.get('amount', 0.0) + spend / token_data['price']
+    pos['buy_price']       = token_data['price']
+    pos['spend']           = pos.get('spend', 0.0) + spend
+    pos['symbol']          = token_data['symbol'] or token_address[:8]
+    pos['opened_at']       = time.time()
+    pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
+    us['positions'][token_address] = pos
+    short = wallet[:6] + '...' + wallet[-4:]
+    add_user_log(wallet, '[' + short + '] COPY TRADE: ' + pos['symbol'] +
+                 ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
+    _trigger_copy_buy(wallet, token_address, token_data['price'], pos['symbol'],
+                      float(token_data.get('liquidity', 0) or 0))
+    note = '' if us.get('trader_running') else ' — start the bot for automatic TP/SL'
+    return jsonify({'ok': True, 'success': True, 'trade_id': None, 'symbol': pos['symbol'],
+                    'spend': spend, 'msg': 'Copied ' + pos['symbol'] + note})
+
 
 @app.route('/api/comments/<int:profile_uid>', methods=['GET'])
 @rate_limit(30, 60)
