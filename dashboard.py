@@ -755,6 +755,24 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_blacklist_user ON user_blacklist(user_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS direct_messages (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_id   INTEGER NOT NULL,
+        receiver_id INTEGER NOT NULL,
+        message     TEXT NOT NULL,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_read     INTEGER DEFAULT 0
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_dm_receiver ON direct_messages(receiver_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_dm_sender ON direct_messages(sender_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS profile_comments (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        profile_user_id INTEGER NOT NULL,
+        author_id       INTEGER NOT NULL,
+        message         TEXT NOT NULL,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_pcomments_profile ON profile_comments(profile_user_id)')
     conn.commit()
     conn.close()
 
