@@ -6820,9 +6820,11 @@ async function _dmFetchMessages(){
     const resp=await fetch('/api/messages/'+_dmPeerId);
     const r=await resp.json();
     if(!r.ok){
+      console.error('GET /api/messages/'+_dmPeerId+' failed — status:',resp.status,'body:',r);
+      const msg=_esc(r.msg||(resp.status===403?'Follow required to message':'Could not load messages'));
       container.innerHTML=resp.status===403
-        ?'<div class="dm-chat-empty"><div style="font-size:24px">🔒</div><div>Mutual follow required to send messages</div></div>'
-        :'<div class="dm-chat-empty">Could not load messages</div>';
+        ?`<div class="dm-chat-empty"><div style="font-size:24px">🔒</div><div>${msg}</div></div>`
+        :`<div class="dm-chat-empty">${msg}</div>`;
       return;
     }
     _dmRenderMessages(r.messages||[]);
@@ -6831,6 +6833,7 @@ async function _dmFetchMessages(){
     _dmRenderConvoList();
     _dmUpdateUnreadBadge();
   }catch(e){
+    console.error('_dmFetchMessages exception:',e);
     container.innerHTML='<div class="dm-chat-empty">Could not load messages</div>';
   }
 }
@@ -6853,6 +6856,18 @@ function _dmRenderMessages(msgs){
   container.scrollTop=container.scrollHeight;
 }
 
+function _dmAppendMessage(m){
+  const container=document.getElementById('dm-messages');
+  const empty=container.querySelector('.dm-chat-empty');
+  if(empty) container.removeChild(empty);
+  const mine=_dmMyId!=null&&m.sender_id===_dmMyId;
+  const div=document.createElement('div');
+  div.className='dm-msg '+(mine?'mine':'theirs');
+  div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
+  container.appendChild(div);
+  container.scrollTop=container.scrollHeight;
+}
+
 async function dmSend(){
   const input=document.getElementById('dm-input');
   const text=input.value.trim();
@@ -6860,19 +6875,27 @@ async function dmSend(){
   const btn=document.getElementById('dm-send-btn');
   btn.disabled=true;
   try{
-    const r=await fetch('/api/messages/'+_dmPeerId,{
+    const resp=await fetch('/api/messages/'+_dmPeerId,{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({message:text})
-    }).then(x=>x.json());
+    });
+    const r=await resp.json();
     if(r.ok){
       input.value='';
       input.style.height='';
-      await _dmFetchMessages();
+      // Instant append so the UI feels immediate
+      _dmAppendMessage({sender_id:_dmMyId, message:text, created_at:r.created_at||new Date().toISOString()});
+      // Background sync to pick up any concurrent incoming messages
+      _dmFetchMessages();
     } else {
+      console.error('POST /api/messages/'+_dmPeerId+' failed — status:',resp.status,'body:',r);
       showTradeWarn('⚠️ '+(r.msg||'Failed to send'));
     }
-  }catch(e){ showTradeWarn('⚠️ Send failed'); }
+  }catch(e){
+    console.error('dmSend exception:',e);
+    showTradeWarn('⚠️ Send failed');
+  }
   btn.disabled=false;
   input.focus();
 }
