@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
+img{max-width:100%;height:auto}
 :root{
   --bg:#080c14;--bg2:#0d1421;--bg3:#131d30;--bg4:#1a2840;
   --green:#00ff88;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
@@ -161,11 +162,12 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
   .page-title{font-size:17px}
   a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
 
-  /* Podium: stack vertically, full width */
+  /* Podium: stack vertically, full width, truncate names */
   .podium{flex-direction:column;align-items:stretch;gap:10px}
   .podium-card{min-width:unset;max-width:none;width:100%;padding:20px 16px;flex:none}
   .podium-medal{font-size:30px}
   .podium-pnl{font-size:18px}
+  .podium-wallet{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
 
   /* Table: ensure min-width for horizontal scroll */
   .table-wrap{border-radius:10px}
