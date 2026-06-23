@@ -132,7 +132,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .nav-menu-sep{height:1px;background:var(--border);margin:4px 0}
 /* ── SOL ACTION ICON BUTTONS ── */
 .sol-action-row{display:flex;gap:6px;margin-top:10px}
-.sol-action-btn{flex:1;padding:6px 4px;font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:6px;cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap}
+.sol-action-btn{flex:1;padding:6px 4px;font-size:9px;font-family:'Share Tech Mono',monospace;color:var(--dim);background:transparent;border:1px solid #1a1f35;border-radius:8px;cursor:pointer;transition:all .15s;text-align:center;white-space:nowrap}
 .sol-action-btn:hover:not(:disabled){border-color:var(--green);color:var(--green)}
 .sol-action-btn:disabled{opacity:.35;cursor:default}
 @keyframes dep-btn-pulse{
@@ -150,7 +150,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 
 /* ── STATS ── */
 .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:1.25rem}
-.stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--card-radius);box-shadow:var(--shadow-card);padding:14px 16px;position:relative;overflow:hidden;text-align:center;transition:transform .2s ease,box-shadow .2s ease}
+.stat{background:var(--bg2);border:1px solid var(--border2);border-radius:var(--card-radius);box-shadow:var(--shadow-card);padding:24px;position:relative;overflow:hidden;text-align:center;transition:transform .2s ease,box-shadow .2s ease}
 .stat:hover{transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.35)}
 .stat::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;background:linear-gradient(90deg,var(--green),transparent 60%)}
 .stat:nth-child(2)::after{background:linear-gradient(90deg,var(--blue),transparent 60%)}
@@ -159,7 +159,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .stat:nth-child(2){border-left:2px solid rgba(106,163,255,.5)}
 .stat:nth-child(3){border-left:2px solid rgba(255,193,58,.5)}
 /* ── SOL BALANCE GLOW ── */
-#s-sol{font-size:32px;text-shadow:0 0 18px rgba(168,85,247,.3),0 0 40px rgba(168,85,247,.12)}
+#s-sol{font-size:36px;font-weight:800;text-shadow:0 0 18px rgba(168,85,247,.3),0 0 40px rgba(168,85,247,.12)}
+#s-pos{font-size:40px;font-weight:800;color:var(--green)}
 /* ── PULSING LIVE DOT ── */
 .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s ease-in-out infinite;margin-right:5px;vertical-align:middle;flex-shrink:0}
 @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(168,85,247,.55)}60%{opacity:.55;box-shadow:0 0 0 6px rgba(168,85,247,0)}}
@@ -175,7 +176,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .pos-mini-sym{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;color:var(--text)}
 .pos-mini-pnl{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;white-space:nowrap}
 .stat-lbl{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:2px;margin-bottom:7px}
-.stat-val{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;min-height:26px;display:flex;align-items:center}
+.stat-val{font-family:'Orbitron',monospace;font-size:26px;font-weight:900;min-height:26px;display:flex;align-items:center;justify-content:center}
 .stat-sub{font-size:11px;color:var(--dim);margin-top:4px;display:block}
 .stat-placeholder{font-size:12px;color:var(--border2);font-family:'Share Tech Mono',monospace;font-weight:400}
 .g{color:var(--green)}.r{color:var(--red)}.y{color:var(--yellow)}.b{color:var(--blue)}
@@ -187,13 +188,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 .mode-left{display:flex;align-items:center;gap:12px}
 .mode-icon{width:40px;height:40px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:20px;background:rgba(106,163,255,.1);border:1px solid rgba(106,163,255,.22);flex-shrink:0}
 .mode-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--blue);margin-bottom:3px}
-.mode-desc{font-size:9px;color:var(--muted);line-height:1.65;max-width:540px}
+.mode-desc{font-size:9px;color:#94a3b8;line-height:1.65;max-width:540px}
 .mode-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .badge{font-size:8px;padding:3px 9px;border-radius:20px;font-weight:700;letter-spacing:.1em;font-family:'Orbitron',monospace}
-.badge-idle{background:rgba(106,143,175,.12);color:var(--dim);border:1px solid var(--border2)}
+.badge-idle{background:#1a1f35;color:#94a3b8;border:1px solid #1a1f35}
 .badge-trade{background:rgba(106,163,255,.16);color:var(--blue);border:1px solid rgba(106,163,255,.35)}
 .mode-btn{padding:9px 18px;font-size:10px;font-weight:700;border-radius:7px;border:none;cursor:pointer;letter-spacing:.07em;transition:all .2s;font-family:'Orbitron',monospace;white-space:nowrap}
-.trade-btn{background:var(--blue);color:#fff}
+.trade-btn{background:#a855f7;color:#fff;font-weight:700;border-radius:8px}
 .trade-btn:hover:not(:disabled){filter:brightness(1.1);transform:translateY(-1px)}
 .trade-btn:disabled{cursor:not-allowed}
 
@@ -2689,7 +2690,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
       <div class="stat-val b" id="s-pos"><span class="stat-placeholder">——</span></div>
       <div class="stat-sub">max 5 concurrent</div>
       <div style="margin-top:10px;max-height:155px;overflow-y:auto">
-        <div id="top-pos-empty" style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0;line-height:1.7">No open positions<br><span style="font-size:9px;opacity:.6">bot is scanning…</span></div>
+        <div id="top-pos-empty" style="font-size:10px;color:#94a3b8;text-align:center;padding:12px 0;line-height:1.7">No open positions<br><span style="font-size:9px;opacity:.6">bot is scanning…</span></div>
         <div id="top-pos-list" style="display:none"></div>
       </div>
     </div>
