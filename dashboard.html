@@ -106,7 +106,19 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-bot-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 .sb-bot-dot.idle{background:#444444}
 .sb-bot-dot.running{background:#22c55e;animation:blink 2s infinite}
-@media(max-width:768px){#sidebar{display:none}}
+/* Hamburger button — desktop hidden, mobile visible */
+.hamburger-btn{display:none;align-items:center;justify-content:center;background:transparent;border:none;color:#ffffff;font-size:22px;line-height:1;cursor:pointer;padding:6px 8px;flex-shrink:0;-webkit-tap-highlight-color:transparent}
+/* Sidebar backdrop */
+#sidebar-overlay{display:none;position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.55);backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+@media(max-width:768px){
+  .hamburger-btn{display:flex}
+  #sidebar{
+    position:fixed;top:0;left:-220px;height:100vh;z-index:100;
+    transition:left .25s ease;flex-shrink:0;
+  }
+  #sidebar.open{left:0;box-shadow:4px 0 24px rgba(0,0,0,.6)}
+  #sidebar-overlay.visible{display:block}
+}
 
 /* ── HEADER ── */
 .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.25rem;background:#0e0e0e;border-bottom:1px solid #2a2a2a;height:48px;gap:12px;flex-shrink:0}
@@ -1997,6 +2009,31 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .inact-icon{font-size:30px}
   .tips-slide-icon{font-size:24px}
 
+  /* ── HEADER: hamburger | logo center | avatar ── */
+  .header{padding:0 8px;gap:4px}
+  .hamburger-btn{order:-1;flex-shrink:0}
+  .hdr-search-wrap{display:none!important}
+  .logo-row{flex:1;justify-content:center}
+  .header-right{flex-shrink:0}
+  .nav-menu-wrap{display:none!important}
+
+  /* ── STATS BAR: 2×2 grid ── */
+  .statsbar{display:grid!important;grid-template-columns:repeat(2,1fr)}
+
+  /* ── BOT BAR: stack vertically ── */
+  .botbar{flex-direction:column;align-items:stretch;gap:8px;padding:12px 14px}
+  .botbar-left{flex-wrap:wrap}
+  .botbar-center{justify-content:center}
+  .botbar-right{display:flex}
+  .botbar-btn{width:100%;text-align:center}
+
+  /* ── MARKET GRID: single column, no carousel ── */
+  .market-grid{display:grid!important;grid-template-columns:1fr!important;flex-wrap:unset!important}
+  .mkt-card{flex:unset!important;max-width:100%!important}
+
+  /* ── PNL CHART: full width, 200px tall ── */
+  #pnlc-container{height:200px!important;width:100%}
+
 }
 
 @media(max-width:480px){
@@ -2526,6 +2563,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   <!-- HEADER -->
   <div class="header">
+    <button class="hamburger-btn" id="sidebar-toggle" onclick="_toggleSidebar()" aria-label="Toggle menu">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    </button>
     <div class="logo-row" onclick="_navLogoClick()" style="cursor:pointer" title="Back to dashboard">
       <svg width="26" height="26" viewBox="0 0 160 160">
         <ellipse cx="80" cy="105" rx="42" ry="47" fill="#1a3a2a"/>
@@ -2639,6 +2679,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         </div>
       </div>
     </aside>
+    <div id="sidebar-overlay" onclick="_closeSidebar()"></div>
     <!-- MAIN CONTENT -->
     <div class="wrap" id="main-content">
 
@@ -5445,10 +5486,30 @@ function _closeAvatarMenu(){
   const m=document.getElementById('hdr-avatar-menu');
   if(m) m.classList.remove('open');
 }
+function _toggleSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('sidebar-overlay');
+  if(!sb) return;
+  const isOpen=sb.classList.contains('open');
+  if(isOpen){
+    sb.classList.remove('open');
+    if(ov) ov.classList.remove('visible');
+  } else {
+    sb.classList.add('open');
+    if(ov) ov.classList.add('visible');
+  }
+}
+function _closeSidebar(){
+  const sb=document.getElementById('sidebar');
+  const ov=document.getElementById('sidebar-overlay');
+  if(sb) sb.classList.remove('open');
+  if(ov) ov.classList.remove('visible');
+}
 function _sbSetActive(id){
   document.querySelectorAll('#sidebar .sb-nav-item').forEach(el=>el.classList.remove('active'));
   const el=document.getElementById(id);
   if(el) el.classList.add('active');
+  if(window.innerWidth<=768) _closeSidebar();
 }
 function _sbNav(section){
   if(section==='dashboard'){
