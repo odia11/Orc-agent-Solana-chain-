@@ -3068,7 +3068,7 @@ function renderMarket(tokens){
     const sym=esc(t.symbol||'???');
     const name=esc(t.name||t.symbol||'Unknown');
     const mint=safeMint(t.mint);
-    const clickAttr=mint?`onclick="window.open('https://dexscreener.com/solana/${mint}')"`:'';
+    const clickAttr=mint?`onclick="location.href='/token/${mint}'" style="cursor:pointer"`:'';
     return `<div class="${baseCls}" ${clickAttr}>
   <div class="mkt-top">
     <div class="mkt-id">
@@ -3317,7 +3317,7 @@ function renderPumpScanner(tokens){
     if(!mint) return '';
     const m5=t.change5m??0,h1=t.change1h??0;
     const hasSell=_openMints.has(mint);
-    return `<div class="ps-card">
+    return `<div class="ps-card" onclick="location.href='/token/${mint}'" style="cursor:pointer">
   <div class="ps-card-top">
     <div><div class="ps-sym">${sym}</div><div class="ps-name">${name}</div></div>
     <div class="ps-price">${fmtPrice(t.price)}</div>
@@ -3327,8 +3327,8 @@ function renderPumpScanner(tokens){
     <span class="ps-chg ${chgCls(h1)}">1H ${fmtChg(h1)}</span>
   </div>
   <div style="display:flex;gap:6px;margin-top:10px;width:100%">
-    <button class="ps-buy-btn" onclick="manualBuy('${mint}','${sym}',this)">BUY</button>
-    <button class="ps-sell-btn" style="display:${hasSell?'block':'none'}" onclick="manualSell('${mint}','${sym}',this)">SELL</button>
+    <button class="ps-buy-btn" onclick="event.stopPropagation();manualBuy('${mint}','${sym}',this)">BUY</button>
+    <button class="ps-sell-btn" style="display:${hasSell?'block':'none'}" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
   </div>
 </div>`;
   });
