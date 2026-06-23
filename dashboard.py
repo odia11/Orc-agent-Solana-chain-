@@ -106,8 +106,10 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 BASE         = os.path.dirname(os.path.abspath(__file__))
-DM_IMAGES_DIR = os.path.join(BASE, 'static', 'dm_images')
-os.makedirs(DM_IMAGES_DIR, exist_ok=True)
+DM_IMAGES_DIR   = os.path.join(BASE, 'static', 'dm_images')
+CHAT_IMAGES_DIR = os.path.join(BASE, 'static', 'chat_images')
+os.makedirs(DM_IMAGES_DIR,   exist_ok=True)
+os.makedirs(CHAT_IMAGES_DIR, exist_ok=True)
 # Use Railway persistent volume when available so the DB and logs survive redeploys.
 _DATA_DIR    = '/data' if os.path.exists('/data') else BASE
 LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
@@ -776,6 +778,16 @@ def init_db():
         created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_pcomments_profile ON profile_comments(profile_user_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS group_chat (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL,
+        message      TEXT,
+        message_type TEXT DEFAULT 'text',
+        image_url    TEXT,
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_group_chat_created ON group_chat(created_at)')
     conn.commit()
     conn.close()
 
@@ -4266,6 +4278,144 @@ def delete_dm(message_id):
     finally:
         conn.close()
     return jsonify({'ok': True})
+
+@app.route('/api/chat', methods=['GET'])
+@rate_limit(30, 60)
+def get_group_chat():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            '''SELECT gc.id, gc.user_id, gc.message, gc.message_type, gc.image_url, gc.created_at,
+                      COALESCE(u.username, '') AS username,
+                      COALESCE(u.avatar_url, '') AS avatar_url,
+                      u.wallet_address
+               FROM group_chat gc
+               JOIN users u ON u.id = gc.user_id
+               ORDER BY gc.created_at DESC
+               LIMIT 50''',
+        ).fetchall()
+    finally:
+        conn.close()
+    me_id = None
+    conn2 = sqlite3.connect(DB_FILE)
+    try:
+        me_id = _get_uid(conn2, wallet)
+    finally:
+        conn2.close()
+    messages = [
+        {
+            'id': r[0], 'user_id': r[1], 'message': r[2],
+            'message_type': r[3] or 'text', 'image_url': r[4],
+            'created_at': r[5], 'username': r[6], 'avatar_url': r[7],
+            'wallet_address': r[8], 'is_mine': r[1] == me_id,
+        }
+        for r in reversed(rows)
+    ]
+    return jsonify({'ok': True, 'messages': messages})
+
+@app.route('/api/chat', methods=['POST'])
+@rate_limit(15, 60)
+def post_group_chat():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    body = request.json or {}
+    message_type = body.get('message_type', 'text')
+    if message_type == 'image':
+        image_url = str(body.get('image_url', ''))
+        if not image_url.startswith('/static/chat_images/'):
+            return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
+        message = None
+    else:
+        message_type = 'text'
+        message = _sanitize(str(body.get('message', '')))
+        if not message:
+            return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+        if len(message) > 500:
+            return jsonify({'ok': False, 'msg': 'Message too long (max 500 characters)'}), 400
+        image_url = None
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        cur = conn.execute(
+            'INSERT INTO group_chat (user_id, message, message_type, image_url, created_at) VALUES (?,?,?,?,?)',
+            (me, message, message_type, image_url, now)
+        )
+        conn.commit()
+        msg_id = cur.lastrowid
+        row = conn.execute(
+            'SELECT COALESCE(username,""), COALESCE(avatar_url,""), wallet_address FROM users WHERE id=?', (me,)
+        ).fetchone()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({
+        'ok': True, 'id': msg_id, 'user_id': me,
+        'message': message, 'message_type': message_type, 'image_url': image_url,
+        'created_at': now, 'username': row[0] if row else '',
+        'avatar_url': row[1] if row else '', 'wallet_address': row[2] if row else '',
+        'is_mine': True,
+    })
+
+@app.route('/api/chat/<int:message_id>', methods=['DELETE'])
+@rate_limit(20, 60)
+def delete_group_chat(message_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT user_id FROM group_chat WHERE id=?', (message_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Message not found'}), 404
+        if row[0] != me:
+            return jsonify({'ok': False, 'msg': 'Not your message'}), 403
+        conn.execute('DELETE FROM group_chat WHERE id=?', (message_id,))
+        conn.commit()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+@app.route('/api/chat/upload-image', methods=['POST'])
+@rate_limit(10, 60)
+def upload_chat_image():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    f = request.files.get('image')
+    if not f:
+        return jsonify({'ok': False, 'msg': 'No image provided'}), 400
+    ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    ALLOWED_EXT  = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+    MAX_BYTES    = 5 * 1024 * 1024
+    if f.content_type not in ALLOWED_MIME:
+        return jsonify({'ok': False, 'msg': 'Only jpg/png/gif/webp allowed'}), 400
+    data = f.read()
+    if len(data) > MAX_BYTES:
+        return jsonify({'ok': False, 'msg': 'Image too large (max 5 MB)'}), 400
+    raw_ext = secure_filename(f.filename or '').rsplit('.', 1)
+    ext = raw_ext[-1].lower() if len(raw_ext) == 2 else ''
+    if ext not in ALLOWED_EXT:
+        ext = f.content_type.split('/')[-1].replace('jpeg', 'jpg')
+    filename  = f'{uuid.uuid4().hex}.{ext}'
+    save_path = os.path.join(CHAT_IMAGES_DIR, filename)
+    with open(save_path, 'wb') as out:
+        out.write(data)
+    return jsonify({'ok': True, 'success': True, 'url': f'/static/chat_images/{filename}'})
 
 @app.route('/api/trades/open', methods=['GET'])
 @rate_limit(20, 60)
