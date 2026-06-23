@@ -7035,6 +7035,10 @@ async function dmOpenConvo(peerId, peerWallet, peerUsername){
   await _dmFetchMessages();
 }
 
+function _esc(str){
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
 async function _dmFetchMessages(){
   if(!_dmPeerId) return;
   const container=document.getElementById('dm-messages');
@@ -7064,10 +7068,6 @@ async function _dmFetchMessages(){
     console.error('_dmFetchMessages exception:',e,'status:',(resp&&resp.status),'raw:',rawText);
     container.innerHTML=`<div class="dm-chat-empty">Could not load messages — ${_esc(String(e))}</div>`;
   }
-}
-
-function _esc(str){
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function _dmBuildMessageEl(m, myId){
