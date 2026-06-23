@@ -4011,6 +4011,221 @@ def get_difficulty():
 def save_difficulty():
     return jsonify({'ok': True, 'difficulty': 'UNIVERSAL'})
 
+# ── DIRECT MESSAGES & PROFILE COMMENTS ──
+
+def _sanitize(text: str) -> str:
+    """Strip HTML tags to prevent XSS in user-generated content."""
+    return re.sub(r'<[^>]+>', '', text).strip()
+
+def _get_uid(conn, wallet: str):
+    row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    return row[0] if row else None
+
+def _mutual_follow(conn, a: int, b: int) -> bool:
+    return (
+        bool(conn.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (a, b)).fetchone()) and
+        bool(conn.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (b, a)).fetchone())
+    )
+
+def _is_following_ids(conn, follower: int, following: int) -> bool:
+    return bool(conn.execute(
+        'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (follower, following)
+    ).fetchone())
+
+@app.route('/api/messages/unread', methods=['GET'])
+@rate_limit(60, 60)
+def messages_unread():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': True, 'unread': 0})
+        count = conn.execute(
+            'SELECT COUNT(*) FROM direct_messages WHERE receiver_id=? AND is_read=0', (me,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'unread': count})
+
+@app.route('/api/messages', methods=['GET'])
+@rate_limit(30, 60)
+def list_conversations():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': True, 'conversations': []})
+        rows = conn.execute('''
+            SELECT peer_id,
+                   (SELECT wallet_address FROM users WHERE id=peer_id) AS peer_wallet,
+                   (SELECT username     FROM users WHERE id=peer_id) AS peer_username,
+                   last_msg, last_ts,
+                   (SELECT COUNT(*) FROM direct_messages
+                    WHERE receiver_id=? AND sender_id=peer_id AND is_read=0) AS unread
+            FROM (
+                SELECT
+                    CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END AS peer_id,
+                    message AS last_msg,
+                    created_at AS last_ts,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END
+                        ORDER BY created_at DESC
+                    ) AS rn
+                FROM direct_messages
+                WHERE sender_id=? OR receiver_id=?
+            ) WHERE rn=1
+            ORDER BY last_ts DESC
+            LIMIT 100
+        ''', (me, me, me, me, me)).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'conversations': [
+        {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
+         'last_msg': r[3], 'last_ts': r[4], 'unread': r[5]}
+        for r in rows
+    ]})
+
+@app.route('/api/messages/<int:peer_id>', methods=['GET'])
+@rate_limit(30, 60)
+def get_dm_history(peer_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if not _mutual_follow(conn, me, peer_id):
+            return jsonify({'ok': False, 'msg': 'Mutual follow required to read messages'}), 403
+        rows = conn.execute('''
+            SELECT id, sender_id, receiver_id, message, created_at, is_read
+            FROM direct_messages
+            WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?)
+            ORDER BY created_at ASC
+            LIMIT 200
+        ''', (me, peer_id, peer_id, me)).fetchall()
+        conn.execute(
+            'UPDATE direct_messages SET is_read=1 WHERE receiver_id=? AND sender_id=? AND is_read=0',
+            (me, peer_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'messages': [
+        {'id': r[0], 'sender_id': r[1], 'receiver_id': r[2],
+         'message': r[3], 'created_at': r[4], 'is_read': bool(r[5])}
+        for r in rows
+    ]})
+
+@app.route('/api/messages/<int:peer_id>', methods=['POST'])
+@rate_limit(20, 60)
+def send_dm(peer_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    text = _sanitize(str((request.json or {}).get('message', '')))
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+    if len(text) > 500:
+        return jsonify({'ok': False, 'msg': 'Message too long (max 500 characters)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if me == peer_id:
+            return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
+        if not _mutual_follow(conn, me, peer_id):
+            return jsonify({'ok': False, 'msg': 'Mutual follow required to send messages'}), 403
+        cur = conn.execute(
+            'INSERT INTO direct_messages (sender_id, receiver_id, message) VALUES (?,?,?)',
+            (me, peer_id, text)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'id': cur.lastrowid, 'message': text})
+
+@app.route('/api/comments/<int:profile_uid>', methods=['GET'])
+@rate_limit(30, 60)
+def get_profile_comments(profile_uid):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute('''
+            SELECT pc.id, pc.author_id, u.wallet_address, u.username, pc.message, pc.created_at
+            FROM profile_comments pc
+            JOIN users u ON u.id = pc.author_id
+            WHERE pc.profile_user_id=?
+            ORDER BY pc.created_at DESC
+            LIMIT 100
+        ''', (profile_uid,)).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'comments': [
+        {'id': r[0], 'author_id': r[1], 'author_wallet': r[2],
+         'author_username': r[3], 'message': r[4], 'created_at': r[5]}
+        for r in rows
+    ]})
+
+@app.route('/api/comments/<int:profile_uid>', methods=['POST'])
+@rate_limit(10, 60)
+def post_profile_comment(profile_uid):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    text = _sanitize(str((request.json or {}).get('message', '')))
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Comment cannot be empty'}), 400
+    if len(text) > 280:
+        return jsonify({'ok': False, 'msg': 'Comment too long (max 280 characters)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if not _is_following_ids(conn, me, profile_uid):
+            return jsonify({'ok': False, 'msg': 'You must follow this trader to comment'}), 403
+        cur = conn.execute(
+            'INSERT INTO profile_comments (profile_user_id, author_id, message) VALUES (?,?,?)',
+            (profile_uid, me, text)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'id': cur.lastrowid, 'message': text})
+
+@app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
+@rate_limit(20, 60)
+def delete_profile_comment(comment_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT author_id, profile_user_id FROM profile_comments WHERE id=?', (comment_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Comment not found'}), 404
+        author_id, profile_uid = row
+        if me != author_id and me != profile_uid:
+            return jsonify({'ok': False, 'msg': 'Not authorized to delete this comment'}), 403
+        conn.execute('DELETE FROM profile_comments WHERE id=?', (comment_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/api/settings/key', methods=['DELETE'])
 @rate_limit(5, 60)
 def delete_trading_key():
