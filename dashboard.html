@@ -203,9 +203,30 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .stat:nth-child(1){border-left:2px solid rgba(34,197,94,.5)}
 .stat:nth-child(2){border-left:2px solid rgba(136,136,136,.5)}
 .stat:nth-child(3){border-left:2px solid rgba(255,193,58,.5)}
-/* ── SOL BALANCE GLOW ── */
-#s-sol{font-size:36px;font-weight:800;text-shadow:0 0 18px rgba(34,197,94,.3),0 0 40px rgba(34,197,94,.12)}
-#s-pos{font-size:40px;font-weight:800;color:var(--green)}
+/* ── STATS BAR ── */
+.statsbar{display:flex;gap:8px;margin-bottom:10px}
+.statsbar-pill{flex:1;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:8px 16px;min-width:0}
+.statsbar-lbl{font-size:10px;color:#888888;text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px}
+.statsbar-val{font-size:16px;font-weight:700;color:#ffffff;font-family:'Inter',system-ui,sans-serif;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.statsbar-val.pos{color:#22c55e}.statsbar-val.neg{color:#ef4444}
+.statsbar-sub{font-size:10px;color:#444444;margin-top:2px}
+/* ── BOT CONTROL BAR ── */
+.botbar{display:flex;align-items:center;justify-content:space-between;background:#1a1a1a;border:1px solid #2a2a2a;border-radius:8px;padding:12px 20px;margin-bottom:12px;gap:12px}
+.botbar-running{border-color:rgba(34,197,94,.4)}
+.botbar-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.botbar-strategy{font-size:12px;color:#888888;font-family:'Share Tech Mono',monospace;white-space:nowrap}
+.botbar-center{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.botbar-right{flex-shrink:0}
+.botbar-btn{padding:8px 20px;font-size:12px;font-weight:700;border-radius:6px;border:none;cursor:pointer;font-family:'Inter',system-ui,sans-serif;transition:filter .15s;white-space:nowrap}
+.botbar-btn:disabled{opacity:.4;cursor:not-allowed}
+.botbar-btn-start{background:#22c55e;color:#000}
+.botbar-btn-start:hover:not(:disabled){filter:brightness(1.1)}
+.botbar-btn-stop{background:#ef4444;color:#fff}
+.botbar-btn-stop:hover:not(:disabled){filter:brightness(1.1)}
+@media(max-width:600px){.statsbar{flex-wrap:wrap}.statsbar-pill{flex:1 1 calc(50% - 4px)}.botbar{flex-wrap:wrap}}
+/* ── SOL / POS overrides for pill context ── */
+#s-sol{font-size:16px!important;font-weight:700;text-shadow:none;color:#ffffff}
+#s-pos{font-size:16px!important;font-weight:700;color:#22c55e}
 /* ── PULSING LIVE DOT ── */
 .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--green);animation:pulse-dot 2s ease-in-out infinite;margin-right:5px;vertical-align:middle;flex-shrink:0}
 @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(34,197,94,.55)}60%{opacity:.55;box-shadow:0 0 0 6px rgba(34,197,94,0)}}
@@ -2783,46 +2804,48 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <button class="bib-btn" onclick="toggleTrader()">Start Bot</button>
   </div>
 
-  <!-- TOP GRID: Balance · Positions · Bot -->
-  <div class="stats">
-    <!-- Col 1: SOL Balance -->
-    <div class="stat">
-      <div class="stat-lbl">SOL Balance</div>
-      <div class="stat-val g" id="s-sol"><span class="stat-placeholder">——</span></div>
-      <div class="stat-sub"><span class="pulse-dot"></span>available to trade</div>
-      <div class="stat-sub" id="s-sol-usdc" style="color:var(--muted);margin-top:2px"></div>
-      <div class="sol-action-row">
-        <button class="sol-action-btn" id="deposit-sol-btn" onclick="openDepositModal()" title="Show deposit address">↓ Deposit</button>
-        <button class="sol-action-btn" id="withdraw-sol-btn" onclick="openWithdrawModal()" title="Withdraw SOL">↑ Withdraw</button>
-        <button class="sol-action-btn" id="claim-sol-btn" onclick="openIncinerator()" title="Burn empty token accounts">🔥 Burn</button>
-      </div>
+  <!-- STATS BAR -->
+  <div class="statsbar">
+    <div class="statsbar-pill">
+      <div class="statsbar-lbl">SOL Balance</div>
+      <div class="statsbar-val" id="s-sol"><span class="stat-placeholder">——</span></div>
+      <div class="statsbar-sub" id="s-sol-usdc"></div>
+      <button id="deposit-sol-btn" style="display:none" onclick="openDepositModal()"></button>
+      <button id="withdraw-sol-btn" style="display:none" onclick="openWithdrawModal()"></button>
+      <button id="claim-sol-btn" style="display:none" onclick="openIncinerator()"></button>
     </div>
-    <!-- Col 2: Open Positions -->
-    <div class="stat" id="positions-panel">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
-        <div class="stat-lbl" style="margin-bottom:0">Open Positions</div>
-        <span id="pos-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span>
-      </div>
-      <div class="stat-val b" id="s-pos"><span class="stat-placeholder">——</span></div>
-      <div class="stat-sub">max 5 concurrent</div>
-      <div style="margin-top:10px;max-height:155px;overflow-y:auto">
-        <div id="top-pos-empty" style="font-size:10px;color:#888888;text-align:center;padding:12px 0;line-height:1.7">No open positions<br><span style="font-size:9px;opacity:.6">bot is scanning…</span></div>
-        <div id="top-pos-list" style="display:none"></div>
-      </div>
+    <div class="statsbar-pill" id="positions-panel">
+      <div class="statsbar-lbl">Open Positions</div>
+      <div class="statsbar-val" id="s-pos"><span class="stat-placeholder">——</span></div>
+      <div class="statsbar-sub">max 5 concurrent <span id="pos-count"></span></div>
+      <div style="display:none"><div id="top-pos-empty"></div><div id="top-pos-list"></div></div>
     </div>
-    <!-- Col 3: Bot Status -->
-    <div class="stat" id="trade-card">
-      <div class="stat-lbl">Bot Status</div>
-      <div style="display:flex;align-items:center;gap:8px;margin:4px 0 10px;flex-wrap:wrap">
-        <div class="badge badge-idle" id="trade-badge">IDLE</div>
-        <span id="bot-scan-text" style="display:none;font-size:9px;color:var(--green);font-family:'Share Tech Mono',monospace;letter-spacing:.04em;animation:scan-blink 1.4s step-start infinite">SCANNING…</span>
-        <div class="copy-source-pill" id="copy-source-pill" style="display:none" onclick="_stopCopyingConfirm()" title="Click to stop copying">📋 <span id="copy-source-label"></span></div>
-      </div>
-      <div class="mode-desc" style="max-width:none;margin-bottom:10px">Auto Strategy — TP +12% / SL -3% — 100% exit on both</div>
-      <button class="mode-btn trade-btn" id="trade-btn" onclick="toggleTrader()" disabled style="opacity:.45;width:100%" title="Connect a wallet to enable trading">▶ START TRADING</button>
-      <div class="trade-warn" id="trade-warn"></div>
+    <div class="statsbar-pill">
+      <div class="statsbar-lbl">Win Rate</div>
+      <div class="statsbar-val" id="sb-wr">—</div>
+      <div class="statsbar-sub">all trades</div>
+    </div>
+    <div class="statsbar-pill">
+      <div class="statsbar-lbl">All-time PnL</div>
+      <div class="statsbar-val" id="sb-allpnl">—</div>
+      <div class="statsbar-sub">total profit</div>
     </div>
   </div>
+  <!-- BOT CONTROL BAR -->
+  <div class="botbar" id="trade-card">
+    <div class="botbar-left">
+      <span class="botbar-strategy">TP +12% / SL -3%</span>
+      <span id="bot-scan-text" style="display:none;font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace;letter-spacing:.04em;animation:scan-blink 1.4s step-start infinite">SCANNING…</span>
+      <div class="copy-source-pill" id="copy-source-pill" style="display:none" onclick="_stopCopyingConfirm()" title="Click to stop copying">📋 <span id="copy-source-label"></span></div>
+    </div>
+    <div class="botbar-center">
+      <div class="badge badge-idle" id="trade-badge">IDLE</div>
+    </div>
+    <div class="botbar-right">
+      <button class="botbar-btn botbar-btn-start" id="trade-btn" onclick="toggleTrader()" disabled title="Connect a wallet to enable trading">▶ START</button>
+    </div>
+  </div>
+  <div class="trade-warn" id="trade-warn"></div>
   <div id="badges-row" class="badges-row" style="display:none;margin-bottom:.75rem"></div>
   <div id="claim-msg" class="claim-msg" style="display:none"></div>
 
@@ -4619,7 +4642,15 @@ function renderPerfPanel(r){
   pctEl.className='perf-stat-val '+(pct>=0?'td-pos':'td-neg');
 
   document.getElementById('p-trades').textContent=trades;
-  document.getElementById('p-wr').textContent=trades>0?Math.round(wins/trades*100)+'%':'—';
+  const wrStr=trades>0?Math.round(wins/trades*100)+'%':'—';
+  document.getElementById('p-wr').textContent=wrStr;
+  const sbWr=document.getElementById('sb-wr');
+  if(sbWr) sbWr.textContent=wrStr;
+  const sbPnl=document.getElementById('sb-allpnl');
+  if(sbPnl){
+    sbPnl.textContent=(pnl>=0?'+':'')+pnl.toFixed(4)+' SOL';
+    sbPnl.className='statsbar-val '+(pnl>=0?'pos':'neg');
+  }
   document.getElementById('p-best').textContent=d.best!=null?'+'+d.best.toFixed(1)+'%':'—';
   document.getElementById('p-worst').textContent=d.worst!=null?d.worst.toFixed(1)+'%':'—';
   const _now=new Date();
@@ -5058,14 +5089,16 @@ function updateBtns(){
   const tc=document.getElementById('trade-card');
   const scanText=document.getElementById('bot-scan-text');
   if(traderOn){
-    tb.textContent='■ STOP TRADING';
+    tb.textContent='■ STOP';
+    tb.className='botbar-btn botbar-btn-stop';
     tbadge.textContent='RUNNING';tbadge.className='badge badge-run';
-    tc.className='stat stat-running';
+    tc.className='botbar botbar-running';
     if(scanText) scanText.style.display='';
   } else {
-    tb.textContent='▶ START TRADING';
+    tb.textContent='▶ START';
+    tb.className='botbar-btn botbar-btn-start';
     tbadge.textContent='IDLE';tbadge.className='badge badge-idle';
-    tc.className='stat';
+    tc.className='botbar';
     if(scanText) scanText.style.display='none';
   }
   _refreshTradeBtnState();
