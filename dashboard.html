@@ -1310,13 +1310,26 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
 /* unread badge on nav item */
 .nav-msg-badge{background:var(--red);color:#fff;font-size:8px;font-weight:700;border-radius:8px;padding:1px 4px;min-width:14px;text-align:center;line-height:1.5;display:none}
 @media(max-width:768px){
-  .dm-layout{height:calc(100vh - 140px);border-radius:8px}
-  .dm-sidebar{width:100%;border-right:none;border-bottom:1px solid var(--border2)}
+  /* DM layout: full-screen swap between sidebar and chat */
+  .dm-layout{height:calc(100vh - 140px);border-radius:8px;flex-direction:column}
+  .dm-sidebar{width:100%;border-right:none;flex-shrink:0}
   .dm-layout.convo-open .dm-sidebar{display:none}
   .dm-layout.convo-open .dm-chat{display:flex}
   .dm-layout:not(.convo-open) .dm-chat{display:none}
+  .dm-sidebar-hdr{padding:10px 14px 8px}
+  .dm-convo{padding:8px 12px}
   .dm-hdr-back{display:block}
-  .dm-msg{max-width:85%}
+  .dm-msg{max-width:88%}
+  /* Input row: fill width, keep side-by-side but snug */
+  .dm-input-row{padding:10px 12px;gap:6px}
+  .dm-input{font-size:13px;padding:9px 10px}
+  .dm-send-btn{padding:9px 12px;font-size:9px;letter-spacing:.02em}
+  /* Comments: stack input + button vertically, full width */
+  .tvp-comment-input-row{flex-direction:column;gap:6px}
+  .tvp-comment-post-btn{width:100%;padding:10px;font-size:10px}
+  .tvp-comment-card{padding:8px 10px}
+  /* Badge: correct alignment inside nav dropdown button text */
+  .nav-msg-badge{vertical-align:middle;margin-left:4px}
 }
 
 /* ── BOTTOM NAV (hidden on desktop, shown on mobile) ── */
@@ -6587,7 +6600,7 @@ function _dmSetUnreadBadge(n){
    document.getElementById('mob-msg-badge')].forEach(el=>{
     if(!el) return;
     el.textContent=n>99?'99+':n||'';
-    el.style.display=n>0?'':'none';
+    el.style.display=n>0?'inline-block':'none';
   });
 }
 
