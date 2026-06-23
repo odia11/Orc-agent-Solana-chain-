@@ -1318,7 +1318,65 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
   transition:color .15s,background .15s;
 }
 .dm-sidebar-close:hover{color:#aabdd4;background:rgba(255,255,255,.06)}
-.dm-convo-list{flex:1;overflow-y:auto}
+.dm-search-wrap{padding:10px 14px 0;position:relative;flex-shrink:0}
+.dm-search-input{
+  width:100%;
+  box-sizing:border-box;
+  background:#1a2030;
+  border:none;
+  border-radius:8px;
+  padding:10px 12px;
+  font-family:'Share Tech Mono',monospace;
+  font-size:12px;
+  color:#eef6ff;
+  outline:none;
+  transition:background .15s;
+}
+.dm-search-input::placeholder{color:#3a4a60}
+.dm-search-input:focus{background:#1e2840}
+.dm-search-results{
+  position:absolute;
+  top:calc(100% + 2px);
+  left:14px;
+  right:14px;
+  background:#0d1117;
+  border:1px solid #1e2f48;
+  border-radius:8px;
+  overflow:hidden;
+  z-index:50;
+  box-shadow:0 8px 24px rgba(0,0,0,.6);
+}
+.dm-search-row{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding:10px 12px;
+  cursor:pointer;
+  border-bottom:1px solid #111926;
+  transition:background .12s;
+}
+.dm-search-row:last-child{border-bottom:none}
+.dm-search-row:hover{background:#131b28}
+.dm-search-av{
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  background:#111e33;
+  border:1px solid #1e3050;
+  flex-shrink:0;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  font-size:11px;
+  font-weight:700;
+  color:#6aa3ff;
+  overflow:hidden;
+}
+.dm-search-av img{width:100%;height:100%;object-fit:cover}
+.dm-search-info{flex:1;min-width:0}
+.dm-search-name{font-size:12px;font-weight:700;color:#eef6ff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-search-wallet{font-size:10px;color:#3a4a60;font-family:'Share Tech Mono',monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dm-convo-list{flex:1;overflow-y:auto;margin-top:10px}
 .dm-convo-list::-webkit-scrollbar{width:4px}
 .dm-convo-list::-webkit-scrollbar-track{background:transparent}
 .dm-convo-list::-webkit-scrollbar-thumb{background:#1e2f48;border-radius:2px}
@@ -2389,6 +2447,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:2px;backgroun
         <div class="dm-sidebar-hdr">
           <span class="dm-sidebar-hdr-title">💬 Messages</span>
           <button class="dm-sidebar-close" onclick="closeMessagesView()" title="Close">✕</button>
+        </div>
+        <div class="dm-search-wrap" id="dm-search-wrap">
+          <input class="dm-search-input" id="dm-search-input" type="text"
+            placeholder="Search users…" autocomplete="off"
+            oninput="_dmSearch(this.value)">
+          <div class="dm-search-results" id="dm-search-results" style="display:none"></div>
         </div>
         <div class="dm-convo-list" id="dm-convo-list">
           <div class="dm-empty-convo" id="dm-convo-empty">No conversations yet.<br>Message someone from their trader profile.</div>
@@ -5075,6 +5139,12 @@ document.addEventListener('click',function(e){
   const dd=document.getElementById('nav-menu-dropdown');
   if(dd&&dd.classList.contains('open')&&!dd.contains(e.target)&&(!btn||!btn.contains(e.target)))
     dd.classList.remove('open');
+  // Close DM search dropdown when clicking outside it
+  const wrap=document.getElementById('dm-search-wrap');
+  const drop=document.getElementById('dm-search-results');
+  if(drop&&drop.style.display!=='none'&&wrap&&!wrap.contains(e.target)){
+    drop.style.display='none';
+  }
 });
 
 async function openSettings(){
@@ -6703,6 +6773,39 @@ function _dmAvatarEl(container, wallet, username){
   container.textContent=ini;
 }
 
+let _dmSearchTimer=null;
+function _dmSearch(q){
+  const drop=document.getElementById('dm-search-results');
+  clearTimeout(_dmSearchTimer);
+  if(!q.trim()){drop.style.display='none';drop.innerHTML='';return;}
+  _dmSearchTimer=setTimeout(async()=>{
+    try{
+      const r=await fetch('/api/users/search?q='+encodeURIComponent(q.trim())).then(x=>x.json());
+      if(!r.ok||!r.users.length){drop.style.display='none';drop.innerHTML='';return;}
+      drop.innerHTML='';
+      r.users.forEach(u=>{
+        const ini=(u.username||u.wallet||'?').slice(0,2).toUpperCase();
+        const short=u.wallet?u.wallet.slice(0,4)+'…'+u.wallet.slice(-4):'';
+        const row=document.createElement('div');
+        row.className='dm-search-row';
+        row.innerHTML=`
+          <div class="dm-search-av">${u.avatar_url?`<img src="${_esc(u.avatar_url)}" onerror="this.style.display='none';this.nextSibling.style.display=''"><span style="display:none">${_esc(ini)}</span>`:`<span>${_esc(ini)}</span>`}</div>
+          <div class="dm-search-info">
+            <div class="dm-search-name">${_esc(u.username||short)}</div>
+            <div class="dm-search-wallet">${_esc(short)}</div>
+          </div>`;
+        row.onclick=()=>{
+          document.getElementById('dm-search-input').value='';
+          drop.style.display='none';drop.innerHTML='';
+          openDMWith(u.user_id, u.wallet, u.username);
+        };
+        drop.appendChild(row);
+      });
+      drop.style.display='block';
+    }catch(e){drop.style.display='none';}
+  },220);
+}
+
 function openDMWith(peerId, peerWallet, peerUsername){
   if(!phantomKey){showLfToast('🔴','Connect wallet to use messages','neg');return;}
   closeTraderProfile();
@@ -6736,6 +6839,10 @@ function closeMessagesView(){
   document.getElementById('dash-main').style.display='';
   const btn=document.getElementById('messages-btn');
   if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
+  const si=document.getElementById('dm-search-input');
+  const sd=document.getElementById('dm-search-results');
+  if(si) si.value='';
+  if(sd){sd.style.display='none';sd.innerHTML='';}
 }
 
 function _hideAllViews(){

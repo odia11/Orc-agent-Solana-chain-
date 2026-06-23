@@ -4039,6 +4039,36 @@ def _is_following_ids(conn, follower: int, following: int) -> bool:
         'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (follower, following)
     ).fetchone())
 
+@app.route('/api/users/search', methods=['GET'])
+@rate_limit(30, 60)
+def search_users():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    q = _sanitize(request.args.get('q', '').strip())
+    if not q:
+        return jsonify({'ok': True, 'users': []})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        rows = conn.execute(
+            '''SELECT id, username, wallet_address, avatar_url
+               FROM users
+               WHERE username LIKE ? AND id != ?
+               ORDER BY username ASC
+               LIMIT 5''',
+            ('%' + q + '%', me or 0)
+        ).fetchall()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'users': [
+        {'user_id': r[0], 'username': r[1] or '',
+         'wallet': r[2] or '', 'avatar_url': r[3] or ''}
+        for r in rows
+    ]})
+
 @app.route('/api/messages/unread', methods=['GET'])
 @rate_limit(60, 60)
 def messages_unread():
