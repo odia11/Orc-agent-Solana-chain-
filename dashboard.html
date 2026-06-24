@@ -440,6 +440,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* ── COMMUNITY CHAT ── */
 #dash-community{display:none;flex:1;min-width:0;height:calc(100vh - 48px);overflow:hidden;flex-direction:column;position:relative}
 .gc-topbar{display:flex;align-items:center;justify-content:space-between;padding:0 20px;height:48px;border-bottom:1px solid #2a2a2a;flex-shrink:0;background:#141414}
+.gc-back-btn{display:none;background:transparent;border:none;color:#ffffff;font-size:18px;cursor:pointer;padding:4px 8px;margin-right:4px;flex-shrink:0;line-height:1;-webkit-tap-highlight-color:transparent}
 .gc-title{font-size:11px;font-weight:700;color:#ffffff;text-transform:uppercase;letter-spacing:.12em}
 .gc-online{font-size:11px;color:#888888}
 .gc-online-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#22c55e;margin-right:5px;animation:blink 2s infinite}
@@ -1809,7 +1810,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 }
 @media(max-width:768px){
   /* ─ Messages full-page on mobile ─ */
-  #dash-messages{height:calc(100vh - 48px)}
+  /* dvh = dynamic viewport height: shrinks when keyboard opens so input stays above keyboard */
+  #dash-messages{height:calc(100vh - 48px);height:calc(100dvh - 48px)}
   /* ─ Layout: single column, no side-by-side ─ */
   .dm-layout{
     height:100%;
@@ -2068,6 +2070,29 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   /* ── PNL CHART: full width, 200px tall ── */
   #pnlc-container{height:200px!important;width:100%}
+
+  /* ── COMMUNITY CHAT: dvh tracks visual viewport, shrinks with keyboard ── */
+  #dash-community{height:calc(100vh - 48px);height:calc(100dvh - 48px)}
+  .gc-back-btn{display:flex;align-items:center;justify-content:center}
+  .gc-topbar{padding-left:8px}
+
+  /* ── MODALS: never wider than viewport ── */
+  .s-card{max-width:calc(100vw - 2rem)}
+  .tips-box{max-width:calc(100vw - 2rem)}
+
+  /* ── LEADERBOARD ROWS: prevent overflow ── */
+  .lb-list{overflow:hidden}
+  .lb-row{overflow:hidden;min-width:0}
+
+  /* ── TRADER PROFILE TABLE ── */
+  .tvp-section{overflow-x:auto}
+  .tvp-table{min-width:460px}
+
+  /* ── ALL TABLE WRAPPERS ── */
+  .trade-table-wrap{overflow-x:auto}
+
+  /* ── INCINERATOR / ADMIN TABLES ── */
+  .iadmin-card .iadmin-table-wrap{overflow-x:auto}
 
 }
 
@@ -2702,13 +2727,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0"/></svg></span>
           Community
         </button>
-        <button class="sb-nav-item" id="sbn-blacklist" onclick="openBlacklistModal()">
+        <button class="sb-nav-item" id="sbn-blacklist" onclick="openBlacklistModal();_closeSidebar()">
           <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
           Blacklist
         </button>
       </nav>
       <div class="sb-bottom">
-        <button class="sb-nav-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal()">
+        <button class="sb-nav-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal();_closeSidebar()">
           <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
           Help &amp; Tips
         </button>
@@ -3344,6 +3369,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- ── COMMUNITY CHAT (full-page sibling of .wrap) ── -->
   <div id="dash-community" style="display:none">
     <div class="gc-topbar">
+      <button class="gc-back-btn" onclick="closeCommunityView()" title="Back">←</button>
       <span class="gc-title">Community Chat</span>
       <span class="gc-online"><span class="gc-online-dot"></span><span id="gc-online-count">—</span> online</span>
     </div>
@@ -7351,6 +7377,8 @@ function openMessagesView(){
   // Hide .wrap entirely; messages lives outside it as a sibling
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='none';
+  const bn=document.getElementById('mob-bottom-nav');
+  if(bn) bn.style.display='none';
   document.getElementById('dash-messages').style.display='flex';
   _sbSetActive('sbn-messages');
   const btn=document.getElementById('messages-btn');
@@ -7369,6 +7397,8 @@ function closeMessagesView(){
   document.getElementById('dm-chat-active').style.display='none';
   document.getElementById('dm-layout').classList.remove('convo-open');
   document.getElementById('dash-messages').style.display='none';
+  const bn=document.getElementById('mob-bottom-nav');
+  if(bn) bn.style.display='';
   // Restore .wrap and ensure only dash-main is visible
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='';
@@ -7400,6 +7430,8 @@ function openCommunityView(){
   if(_tradersView) closeTradersView();
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='none';
+  const bn=document.getElementById('mob-bottom-nav');
+  if(bn) bn.style.display='none';
   document.getElementById('dash-community').style.display='flex';
   _sbSetActive('sbn-community');
   gcFetch(true);
@@ -7412,6 +7444,8 @@ function closeCommunityView(){
   clearInterval(_gcTimer); _gcTimer=null;
   gcCancelPreview();
   document.getElementById('dash-community').style.display='none';
+  const bn=document.getElementById('mob-bottom-nav');
+  if(bn) bn.style.display='';
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='';
   document.getElementById('dash-main').style.display='';
