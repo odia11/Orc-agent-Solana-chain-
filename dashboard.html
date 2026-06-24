@@ -2416,7 +2416,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #tdp-title-text{min-width:0;flex:1}
 #tdp-name{font-size:16px;font-weight:700;color:#ffffff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tdp-symbol{font-size:11px;color:#aaaaaa;margin-top:2px}
-#tdp-body{padding:20px 16px;display:flex;flex-direction:column;gap:20px}
+#tdp-body{padding:20px 16px;display:flex;flex-direction:column;gap:20px;flex:1;overflow-y:auto;min-height:0}
 #tdp-price-row{display:flex;align-items:baseline;gap:10px}
 #tdp-price{font-size:28px;font-weight:700;color:#ffffff;font-variant-numeric:tabular-nums}
 #tdp-changes{display:flex;gap:6px;flex-wrap:wrap}
@@ -2452,6 +2452,31 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #tdp-error{
   padding:60px 16px;text-align:center;color:#ff1744;font-size:13px;
 }
+#tdp-footer{
+  flex-shrink:0;border-top:1px solid #2e2e2e;background:#141414;
+  padding:12px 16px;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+}
+#tdp-trade-error{
+  font-size:12px;color:#ff1744;margin-bottom:8px;
+  display:none;line-height:1.4;
+}
+#tdp-position-info{
+  font-size:11px;color:#aaaaaa;margin-bottom:10px;display:none;
+}
+#tdp-position-info.visible{display:block}
+#tdp-trade-btns{display:flex;gap:8px}
+#tdp-buy-btn{
+  flex:1;height:52px;font-size:16px;font-weight:700;
+  background:#00e676;color:#000;border:none;border-radius:8px;
+  cursor:pointer;transition:opacity .15s;
+}
+#tdp-sell-btn{
+  flex:1;height:52px;font-size:16px;font-weight:700;
+  background:#ff1744;color:#fff;border:none;border-radius:8px;
+  cursor:pointer;transition:opacity .15s;display:none;
+}
+#tdp-buy-btn:disabled,#tdp-sell-btn:disabled{opacity:.6;cursor:not-allowed}
 @media(max-width:768px){
   #token-detail-panel{
     width:100%;height:100%;
@@ -8336,6 +8361,8 @@ async function _tvcDelete(commentId){
   const overlay = document.getElementById('tdp-overlay');
   if(!panel) return;
 
+  let _tdpAddr = '', _tdpSym = '';
+
   function _fmt(n){
     if(n==null||isNaN(n)) return '—';
     if(n>=1e9)  return '$'+(n/1e9).toFixed(2)+'B';
@@ -8358,11 +8385,18 @@ async function _tvcDelete(commentId){
 
   window.openTokenPanel = async function(addr){
     if(!panel) return;
+    _tdpAddr = addr; _tdpSym = '';
     document.getElementById('tdp-name').textContent   = addr.slice(0,8)+'…';
     document.getElementById('tdp-symbol').textContent = addr.slice(0,5)+'…'+addr.slice(-4);
     document.getElementById('tdp-loading').style.display = '';
     document.getElementById('tdp-error').style.display   = 'none';
     document.getElementById('tdp-content').style.display = 'none';
+    // reset footer
+    document.getElementById('tdp-trade-error').style.display = 'none';
+    document.getElementById('tdp-position-info').classList.remove('visible');
+    document.getElementById('tdp-sell-btn').style.display = 'none';
+    const buyBtn = document.getElementById('tdp-buy-btn');
+    buyBtn.disabled = false; buyBtn.textContent = 'BUY';
     const logo = document.getElementById('tdp-logo');
     logo.classList.remove('loaded'); logo.src='';
     document.getElementById('tdp-dex-btn').href = 'https://dexscreener.com/solana/'+addr;
@@ -8375,6 +8409,7 @@ async function _tvcDelete(commentId){
       if(!data.ok) throw new Error(data.msg||'Not found');
       document.getElementById('tdp-name').textContent   = data.name||data.symbol||addr.slice(0,10);
       document.getElementById('tdp-symbol').textContent = data.symbol||'';
+      _tdpSym = data.symbol || '';
       if(data.image_url){
         logo.onload  = ()=>logo.classList.add('loaded');
         logo.onerror = ()=>{ logo.src=''; };
@@ -8394,11 +8429,86 @@ async function _tvcDelete(commentId){
         document.getElementById('tdp-dex-btn').href = data.dexscreener_url;
       document.getElementById('tdp-loading').style.display = 'none';
       document.getElementById('tdp-content').style.display = '';
+      window._tdpRefreshPosition();
     } catch(err){
       document.getElementById('tdp-loading').style.display = 'none';
       const el = document.getElementById('tdp-error');
       el.textContent = 'Failed to load token: '+err.message;
       el.style.display = '';
+    }
+  };
+
+  window._tdpRefreshPosition = async function(){
+    const addr = _tdpAddr;
+    if(!addr) return;
+    const posInfo = document.getElementById('tdp-position-info');
+    const sellBtn = document.getElementById('tdp-sell-btn');
+    try{
+      const res  = await fetch('/api/trade/position/'+encodeURIComponent(addr));
+      const data = await res.json();
+      if(data.ok && data.has_position){
+        const amt  = Number(data.amount||0);
+        const ep   = Number(data.entry_price||0);
+        const pnl  = data.current_pnl!=null ? Number(data.current_pnl) : null;
+        const pct  = (pnl!=null && ep>0 && amt>0) ? (pnl/(ep*amt)*100) : null;
+        const pnlHtml = pct!=null
+          ? ` | PnL: <strong style="color:${pct>=0?'#00e676':'#ff1744'}">${pct>=0?'+':''}${pct.toFixed(2)}%</strong>`
+          : '';
+        posInfo.innerHTML = `Position: <strong style="color:#fff">${amt.toFixed(4)} tokens</strong>`+
+          ` | Entry: <strong style="color:#fff">$${ep<0.01?ep.toFixed(8):ep.toFixed(4)}</strong>`+pnlHtml;
+        posInfo.classList.add('visible');
+        sellBtn.style.display = '';
+      } else {
+        posInfo.innerHTML = '';
+        posInfo.classList.remove('visible');
+        sellBtn.style.display = 'none';
+      }
+    } catch(e){}
+  };
+
+  window._tdpBuy = async function(){
+    const addr = _tdpAddr, sym = _tdpSym;
+    if(!addr) return;
+    const btn   = document.getElementById('tdp-buy-btn');
+    const errEl = document.getElementById('tdp-trade-error');
+    btn.disabled = true; btn.textContent = 'Buying…';
+    errEl.style.display = 'none';
+    try{
+      const res  = await fetch('/api/trade/buy',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token_address:addr,token_symbol:sym})
+      });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.msg||'Buy failed');
+      btn.textContent = '✓ Bought!';
+      await window._tdpRefreshPosition();
+      setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; }, 2500);
+    } catch(e){
+      errEl.textContent = e.message; errEl.style.display = '';
+      btn.disabled = false; btn.textContent = 'BUY';
+    }
+  };
+
+  window._tdpSell = async function(){
+    const addr = _tdpAddr, sym = _tdpSym;
+    if(!addr) return;
+    const btn   = document.getElementById('tdp-sell-btn');
+    const errEl = document.getElementById('tdp-trade-error');
+    btn.disabled = true; btn.textContent = 'Selling…';
+    errEl.style.display = 'none';
+    try{
+      const res  = await fetch('/api/trade/sell',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({token_address:addr,token_symbol:sym})
+      });
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.msg||'Sell failed');
+      btn.textContent = '✓ Sold!';
+      await window._tdpRefreshPosition();
+      setTimeout(()=>{ btn.disabled=false; btn.textContent='SELL'; }, 2500);
+    } catch(e){
+      errEl.textContent = e.message; errEl.style.display = '';
+      btn.disabled = false; btn.textContent = 'SELL';
     }
   };
 
@@ -8526,6 +8636,14 @@ async function _tvcDelete(commentId){
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         View on DexScreener
       </a>
+    </div>
+  </div>
+  <div id="tdp-footer">
+    <div id="tdp-trade-error"></div>
+    <div id="tdp-position-info"></div>
+    <div id="tdp-trade-btns">
+      <button id="tdp-buy-btn" onclick="_tdpBuy()">BUY</button>
+      <button id="tdp-sell-btn" onclick="_tdpSell()">SELL</button>
     </div>
   </div>
 </div>

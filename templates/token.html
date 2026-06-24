@@ -14,20 +14,20 @@
   --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
   --shadow-card:0 4px 24px rgba(0,0,0,.45);
 }
-html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 50% -10%,#0a1020 0%,#04060d 100%),radial-gradient(ellipse at 15% 20%,rgba(90,150,255,.06) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(0,255,136,.04) 0%,transparent 50%);font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
-.page-wrap{max-width:1100px;margin:0 auto;padding:1.25rem 1rem 3rem}
+html,body{min-height:100vh;background:#0f0f0f;font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+.page-wrap{max-width:1100px;margin:0 auto;padding:1.25rem 1rem 90px}
 
 /* ── NAVBAR ── */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border);box-shadow:0 1px 0 0 rgba(0,255,136,.12);flex-wrap:wrap;gap:8px}
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding:0 0 1rem;border-bottom:1px solid #2e2e2e;flex-wrap:wrap;gap:8px;background:#0f0f0f}
 .logo-row{display:flex;align-items:center;gap:10px;text-decoration:none}
-.brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
-.brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
+.brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:#00e676;letter-spacing:.05em}
+.brand-sub{font-size:8px;color:#aaaaaa;margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
 .header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
-.dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:#1c1c1c;border:1px solid #2e2e2e;border-radius:20px;padding:5px 12px;font-size:10px;color:#aaaaaa}
+.dot-green{width:6px;height:6px;border-radius:50%;background:#00e676;animation:blink 2s infinite;flex-shrink:0}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center}
-a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 10px rgba(0,255,136,.15)}
+a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid #2e2e2e;border-radius:8px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:10px;color:#aaaaaa;cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center}
+a.hdr-btn:hover,button.hdr-btn:hover{border-color:#555555;color:#ffffff}
 
 /* ── TOKEN HEADER ── */
 .tok-hdr{
@@ -157,6 +157,31 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green
 ::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
 *{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
 
+/* ── ACTION BAR ── */
+#tok-action-bar{
+  position:fixed;bottom:0;left:0;right:0;
+  background:#141414;border-top:1px solid #2e2e2e;
+  padding:12px 20px;
+  padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+  display:flex;flex-direction:column;gap:8px;
+  z-index:200;
+}
+#tok-pos-info{font-size:11px;color:#aaaaaa;display:none}
+#tok-pos-info.visible{display:block}
+#tok-trade-error{font-size:12px;color:#ff1744;display:none;line-height:1.4}
+#tok-trade-btns{display:flex;gap:8px}
+#tok-buy-btn{
+  flex:1;height:52px;font-size:16px;font-weight:700;
+  background:#00e676;color:#000;border:none;border-radius:8px;
+  cursor:pointer;transition:opacity .15s;font-family:'Inter',sans-serif;
+}
+#tok-sell-btn{
+  flex:1;height:52px;font-size:16px;font-weight:700;
+  background:#ff1744;color:#fff;border:none;border-radius:8px;
+  cursor:pointer;transition:opacity .15s;font-family:'Inter',sans-serif;display:none;
+}
+#tok-buy-btn:disabled,#tok-sell-btn:disabled{opacity:.6;cursor:not-allowed}
+
 @media(max-width:768px){
   a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
 
@@ -171,8 +196,8 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green
   /* Stats strip: 2×2 grid */
   .tok-stats{grid-template-columns:repeat(2,1fr)}
 
-  /* Chart: 160px */
-  #tok-chart{height:160px}
+  /* Chart: 250px */
+  #tok-chart{height:250px}
 
   /* Summary bar: 2×2 grid */
   .summary-bar{grid-template-columns:repeat(2,1fr)}
@@ -180,6 +205,10 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green
   /* Trade table: scrollable */
   .table-wrap{border-radius:10px}
   .hist-table{min-width:600px}
+
+  /* Action bar: stack buttons */
+  #tok-trade-btns{flex-direction:column}
+  #tok-buy-btn,#tok-sell-btn{flex:none;width:100%}
 }
 </style>
 </head>
@@ -367,6 +396,16 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green
 
 </div><!-- /page-wrap -->
 
+<!-- ── BUY / SELL ACTION BAR ── -->
+<div id="tok-action-bar">
+  <div id="tok-trade-error"></div>
+  <div id="tok-pos-info"></div>
+  <div id="tok-trade-btns">
+    <button id="tok-buy-btn" onclick="_tokBuy()">BUY</button>
+    <button id="tok-sell-btn" onclick="_tokSell()">SELL</button>
+  </div>
+</div>
+
 <script>
 const MINT = {{ mint_address | tojson }};
 
@@ -464,6 +503,77 @@ function _chartSetRange(range, btn) {
 
 _initChart();
 _loadChart('1d');
+
+const TOK_SYMBOL = {{ (token_symbol or '') | tojson }};
+
+async function _tokRefreshPosition(){
+  const posInfo = document.getElementById('tok-pos-info');
+  const sellBtn = document.getElementById('tok-sell-btn');
+  try{
+    const res  = await fetch('/api/trade/position/'+encodeURIComponent(MINT));
+    const data = await res.json();
+    if(data.ok && data.has_position){
+      const amt = Number(data.amount||0);
+      const ep  = Number(data.entry_price||0);
+      const pnl = data.current_pnl!=null ? Number(data.current_pnl) : null;
+      const pct = (pnl!=null && ep>0 && amt>0) ? (pnl/(ep*amt)*100) : null;
+      const pnlHtml = pct!=null
+        ? ` | PnL: <strong style="color:${pct>=0?'#00e676':'#ff1744'}">${pct>=0?'+':''}${pct.toFixed(2)}%</strong>`
+        : '';
+      posInfo.innerHTML = `Your position: <strong style="color:#fff">${amt.toFixed(4)} tokens</strong>`+
+        ` | Entry: <strong style="color:#fff">$${ep<0.01?ep.toFixed(8):ep.toFixed(4)}</strong>`+pnlHtml;
+      posInfo.classList.add('visible');
+      sellBtn.style.display = '';
+    } else {
+      posInfo.innerHTML = ''; posInfo.classList.remove('visible');
+      sellBtn.style.display = 'none';
+    }
+  } catch(e){}
+}
+
+async function _tokBuy(){
+  const btn   = document.getElementById('tok-buy-btn');
+  const errEl = document.getElementById('tok-trade-error');
+  btn.disabled = true; btn.textContent = 'Buying…';
+  errEl.style.display = 'none';
+  try{
+    const res  = await fetch('/api/trade/buy',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({token_address:MINT, token_symbol:TOK_SYMBOL})
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.msg||'Buy failed');
+    btn.textContent = '✓ Bought!';
+    await _tokRefreshPosition();
+    setTimeout(()=>{ btn.disabled=false; btn.textContent='BUY'; }, 2500);
+  } catch(e){
+    errEl.textContent = e.message; errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'BUY';
+  }
+}
+
+async function _tokSell(){
+  const btn   = document.getElementById('tok-sell-btn');
+  const errEl = document.getElementById('tok-trade-error');
+  btn.disabled = true; btn.textContent = 'Selling…';
+  errEl.style.display = 'none';
+  try{
+    const res  = await fetch('/api/trade/sell',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({token_address:MINT, token_symbol:TOK_SYMBOL})
+    });
+    const data = await res.json();
+    if(!data.ok) throw new Error(data.msg||'Sell failed');
+    btn.textContent = '✓ Sold!';
+    await _tokRefreshPosition();
+    setTimeout(()=>{ btn.disabled=false; btn.textContent='SELL'; }, 2500);
+  } catch(e){
+    errEl.textContent = e.message; errEl.style.display = '';
+    btn.disabled = false; btn.textContent = 'SELL';
+  }
+}
+
+_tokRefreshPosition();
 
 {% if wallet %}
 (async function _loadCoTraders(){
