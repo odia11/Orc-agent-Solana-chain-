@@ -3637,11 +3637,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <span class="mob-nav-icon">👥</span>
     <span class="mob-nav-lbl">Traders</span>
   </button>
-  <button class="mob-nav-item" onclick="openMessagesView()" style="position:relative">
-    <span class="mob-nav-icon">💬</span>
-    <span class="mob-nav-lbl">Messages</span>
-    <span class="nav-msg-badge" id="mob-msg-badge" style="position:absolute;top:4px;right:8px"></span>
-  </button>
   <a class="mob-nav-item" href="/leaderboard">
     <span class="mob-nav-icon">🏆</span>
     <span class="mob-nav-lbl">Leaderboard</span>
@@ -8361,7 +8356,6 @@ async function dmFetchUnread(){
 
 function _dmSetUnreadBadge(n){
   [document.getElementById('nav-msg-badge'),
-   document.getElementById('mob-msg-badge'),
    document.getElementById('sb-msg-badge')].forEach(el=>{
     if(!el) return;
     el.textContent=n>99?'99+':n||'';
