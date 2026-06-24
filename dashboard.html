@@ -993,10 +993,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .tv-time{font-size:10px;color:var(--muted);white-space:nowrap}
 .tv-follow-btn{background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:4px 12px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text);cursor:pointer;transition:all .15s;white-space:nowrap}
 .tv-follow-btn:hover{border-color:rgba(34,197,94,.45);color:var(--green)}
-.tv-follow-btn.followed{border-color:var(--green);background:rgba(34,197,94,.1);font-size:0}
-.tv-follow-btn.followed::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
-.tv-follow-btn.followed:hover{border-color:#ef4444;background:rgba(255,68,68,.1)}
-.tv-follow-btn.followed:hover::before{content:'Unfollow';color:#ef4444}
+.tv-follow-btn.followed{border-color:var(--green);background:rgba(34,197,94,.1);color:var(--green)}
+.tv-follow-btn.followed:hover{border-color:#ef4444;background:rgba(255,68,68,.1);color:#ef4444}
 .lb-row .tv-follow-btn{padding:3px 10px;flex-shrink:0}
 @media(max-width:720px){
   .tv-layout{grid-template-columns:1fr}
@@ -1049,10 +1047,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .tpc-actions{display:flex;gap:6px;flex-shrink:0;padding-top:2px}
 .tpc-follow-btn{background:transparent;border:1px solid rgba(255,255,255,.2);border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--text);cursor:pointer;font-weight:700;transition:all .15s;white-space:nowrap}
 .tpc-follow-btn:hover{border-color:rgba(34,197,94,.45);color:var(--green)}
-.tpc-follow-btn.following{border-color:var(--green);background:rgba(34,197,94,.1);font-size:0}
-.tpc-follow-btn.following::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
-.tpc-follow-btn.following:hover{border-color:#ef4444;background:rgba(255,68,68,.1)}
-.tpc-follow-btn.following:hover::before{content:'Unfollow';color:#ef4444}
+.tpc-follow-btn.following{border-color:var(--green);background:rgba(34,197,94,.1);color:var(--green)}
+.tpc-follow-btn.following:hover{border-color:#ef4444;background:rgba(255,68,68,.1);color:#ef4444}
 .tpc-sol-btn{background:transparent;border:1px solid var(--border2);border-radius:7px;padding:7px 11px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:var(--green);cursor:pointer;transition:all .15s;white-space:nowrap}
 .tpc-sol-btn:hover{border-color:var(--green);background:rgba(34,197,94,.07)}
 .tpc-copy-btn{background:rgba(245,158,11,.14);border:1px solid rgba(245,158,11,.45);border-radius:7px;padding:7px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;color:#f59e0b;cursor:pointer;transition:all .15s;white-space:nowrap}
@@ -1120,10 +1116,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .tpc-follow-btn,.tpc-copy-btn,.tpc-stop-copy-btn,.tpc-sol-btn,.tpc-msg-btn{width:140px;border-radius:24px;padding:8px 14px;font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:700;cursor:pointer;transition:all .15s;white-space:nowrap;text-align:center;display:block;box-sizing:border-box;border:1px solid transparent}
 .tpc-follow-btn{background:transparent;border-color:rgba(255,255,255,.2);color:var(--text)}
 .tpc-follow-btn:hover{border-color:rgba(34,197,94,.45);color:var(--green)}
-.tpc-follow-btn.following{border-color:var(--green);background:rgba(34,197,94,.1);font-size:0}
-.tpc-follow-btn.following::before{content:'✓ Following';font-size:10px;color:var(--green);font-family:'Share Tech Mono',monospace}
-.tpc-follow-btn.following:hover{border-color:#ef4444;background:rgba(255,68,68,.1)}
-.tpc-follow-btn.following:hover::before{content:'Unfollow';color:#ef4444}
+.tpc-follow-btn.following{border-color:var(--green);background:rgba(34,197,94,.1);color:var(--green)}
+.tpc-follow-btn.following:hover{border-color:#ef4444;background:rgba(255,68,68,.1);color:#ef4444}
 .btn-follow{background:transparent;color:#fff;border:1px solid #444;padding:8px 20px;border-radius:6px;font-weight:bold;cursor:pointer;transition:all .2s ease}
 .btn-follow.is-following{background:#22c55e;color:#000;border:none;box-shadow:0 0 12px rgba(34,197,94,.4)}
 .btn-follow.is-following::before{content:"✓ "}
@@ -5508,6 +5502,44 @@ async function removeBlacklistToken(mint){
   }catch(e){}
 }
 
+function openBlacklistModal(){
+  document.getElementById('blacklist-modal').style.display='flex';
+  _blMgrFetch();
+}
+function closeBlacklistModal(){
+  document.getElementById('blacklist-modal').style.display='none';
+}
+async function _blMgrFetch(){
+  const loading=document.getElementById('bl-mgr-loading');
+  const body=document.getElementById('bl-mgr-body');
+  const empty=document.getElementById('bl-mgr-empty');
+  const tbody=document.getElementById('bl-mgr-tbody');
+  if(loading){loading.style.display='block';loading.textContent='Loading…';loading.style.color='var(--muted)';}
+  if(body) body.style.display='none';
+  if(empty) empty.style.display='none';
+  try{
+    const r=await fetch('/api/blacklist').then(r=>r.json());
+    const tokens=r.tokens||[];
+    if(loading) loading.style.display='none';
+    if(!tokens.length){if(empty) empty.style.display='block';return;}
+    if(body) body.style.display='block';
+    tbody.innerHTML=tokens.map(t=>`<tr>
+      <td><span class="bl-mgr-sym">${_esc(t.symbol||t.mint.slice(0,8))}</span></td>
+      <td style="font-size:9px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(t.mint)}">${_esc(t.mint)}</td>
+      <td>${_esc(t.blacklisted_at||'—')}</td>
+      <td><span class="bl-status-label">🚫 Blocked</span></td>
+      <td><button class="bl-unban-btn" onclick="event.stopPropagation();_blMgrUnban(this,'${_esc(t.mint)}')">Unban</button></td>
+    </tr>`).join('');
+  }catch(e){
+    if(loading){loading.textContent='Failed to load.';loading.style.color='var(--red)';loading.style.display='block';}
+  }
+}
+async function _blMgrUnban(btn,mint){
+  if(btn) btn.disabled=true;
+  await fetch('/api/blacklist/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mint})}).catch(()=>null);
+  _blMgrFetch();
+}
+
 async function loadBlacklist(){
   try{
     const r=await fetch('/api/blacklist');
@@ -5840,16 +5872,18 @@ async function _tvFollowToggle(btn, key, userId, username){
   if(wasFollowing){
     _tvFollowed.delete(key);
     btn.classList.remove('followed','is-following');
+    btn.textContent='Follow';
   } else {
     _tvFollowed.add(key);
     btn.classList.add('followed','is-following');
+    btn.textContent='✓ Following';
   }
   if(username) showLfToast(wasFollowing?'👋':'👥', wasFollowing?`Unfollowed ${username}`:`Now following ${username}`, wasFollowing?'neg':'pos');
   if(userId){
     const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
     if(r?.ok){
-      if(r.following){_tvFollowed.add(key);btn.classList.add('followed','is-following');}
-      else{_tvFollowed.delete(key);btn.classList.remove('followed','is-following');}
+      if(r.following){_tvFollowed.add(key);btn.classList.add('followed','is-following');btn.textContent='✓ Following';}
+      else{_tvFollowed.delete(key);btn.classList.remove('followed','is-following');btn.textContent='Follow';}
     }
   }
 }
@@ -5902,7 +5936,7 @@ function renderTradersFeed(items){
       <div class="tv-signal">${signalHtml}</div>
       <div class="tv-right" onclick="event.stopPropagation()">
         <span class="tv-time">${esc(timeStr)}</span>
-        <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')">Follow</button>
+        <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')">` + (isFollowed?'✓ Following':'Follow') + `</button>
       </div>
     </div>`;
   }).join('');
@@ -6159,7 +6193,7 @@ async function _tpcToggleFollow(userId, followKey){
   } else {
     _tvFollowed.add(followKey);
     btn.className='tpc-follow-btn btn-follow following is-following';
-    btn.textContent='Following';
+    btn.textContent='✓ Following';
   }
 
   btn.disabled=true;
@@ -6171,7 +6205,7 @@ async function _tpcToggleFollow(userId, followKey){
     if(wasFollowing){
       _tvFollowed.add(followKey);
       btn.className='tpc-follow-btn btn-follow following is-following';
-      btn.textContent='Following';
+      btn.textContent='✓ Following';
     } else {
       _tvFollowed.delete(followKey);
       btn.className='tpc-follow-btn btn-follow';
@@ -6185,7 +6219,7 @@ async function _tpcToggleFollow(userId, followKey){
   if(r.following){
     _tvFollowed.add(followKey);
     btn.className='tpc-follow-btn btn-follow following is-following';
-    btn.textContent='Following';
+    btn.textContent='✓ Following';
     showLfToast('👥',`Now following ${username}`,'pos');
   } else {
     _tvFollowed.delete(followKey);
@@ -6617,7 +6651,7 @@ function renderLeaderboard(entries){
     const badgeHtml=earnedBadges.length ? `<div class="badges-row" style="margin-top:3px;gap:3px">${earnedBadges.slice(0,3).map(b=>_badgePillHtml(b,true,true)).join('')}</div>` : '';
     const lbFollowKey=esc(e.username+'|'+(e.wallet_address||''));
     const lbFollowed=uid&&!isMe&&_tvFollowed.has(e.username+'|'+(e.wallet_address||''));
-    const lbFollowBtn=uid&&!isMe?`<button class="tv-follow-btn${lbFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${lbFollowKey}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')">Follow</button>`:'';
+    const lbFollowBtn=uid&&!isMe?`<button class="tv-follow-btn${lbFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${lbFollowKey}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')"> ${lbFollowed?'✓ Following':'Follow'}</button>`:'';
     return `<div class="lb-row${isMe?' lb-me':''}" style="cursor:pointer" onclick="openProfileCard(${uid})">
       ${_lbRankHtml(e.rank)}
       ${_lbAvatarHtml(e,uid)}
@@ -8072,6 +8106,27 @@ async function _tvcDelete(commentId){
     }
   }catch(e){ if(card) card.style.opacity=''; }
 }
+
+// ── HEADER SEARCH ──
+(function(){
+  const inp=document.getElementById('hdr-search-input');
+  if(!inp) return;
+  inp.addEventListener('keydown',function(e){
+    if(e.key!=='Enter') return;
+    const q=inp.value.trim();
+    if(!q) return;
+    if(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q)){
+      location.href='/token/'+encodeURIComponent(q);
+      return;
+    }
+    const match=_marketTokens.find(t=>(t.symbol||'').toLowerCase()===q.toLowerCase());
+    if(match&&match.mint){
+      location.href='/token/'+encodeURIComponent(match.mint);
+    } else if(_marketTokens.length){
+      showLfToast('🔍','No token found for "'+q+'"','neg');
+    }
+  });
+})();
 </script>
 
 <!-- ── DEPOSIT SOL MODAL ── -->
