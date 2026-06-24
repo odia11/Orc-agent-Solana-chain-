@@ -32,10 +32,11 @@ def _jinja_fmtk(v):
     return f'{v:.0f}'
 
 @app.before_request
-def redirect_to_www():
+def force_www():
     host = request.host
-    if host == 'orcagent.fun' or 'railway.app' in host:
-        return redirect('https://www.orcagent.fun' + request.path, code=301)
+    if 'railway.app' in host or host == 'orcagent.fun':
+        url = 'https://www.orcagent.fun' + request.full_path
+        return redirect(url, code=301)
 
 @app.before_request
 def _security_gate():
