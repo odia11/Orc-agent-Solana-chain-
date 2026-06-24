@@ -8705,7 +8705,7 @@ document.addEventListener('DOMContentLoaded', function(){
         const priceStr=pVal!=null?(pVal<0.01?pVal.toFixed(8):pVal<1?pVal.toFixed(4):pVal.toFixed(2)):'';
         const chg=t.price_change_24h!=null?Number(t.price_change_24h):null;
         const chgHtml=chg!=null?`<span style="color:${chg>=0?'#00e676':'#ff1744'};font-size:10px">${chg>=0?'+':''}${chg.toFixed(1)}%</span>`:'';
-        html+=`<div class="hdr-sd-item" onclick="window.openTokenPanel&&window.openTokenPanel(${JSON.stringify(addr)});if(window._hdrCloseDD)window._hdrCloseDD();" style="cursor:pointer">
+        html+=`<div class="hdr-sd-item" onclick="window.openTokenPanel&&window.openTokenPanel('${addr}');if(window._hdrCloseDD)window._hdrCloseDD();" style="cursor:pointer">
           <div style="min-width:0;flex:1">
             <div class="hdr-sd-name"><strong>${_e(t.symbol||'?')}</strong>${t.name&&t.name!==t.symbol?` <span style="color:#555555;font-size:11px;font-weight:400">${_e(t.name)}</span>`:''}${priceStr?` <span style="color:#00e676;font-size:11px">$${_e(priceStr)}</span>`:''}</div>
             <div class="hdr-sd-sub" style="display:flex;justify-content:space-between;align-items:center">${_e(_short(addr))}${chgHtml}</div>
