@@ -32,6 +32,12 @@ def _jinja_fmtk(v):
     return f'{v:.0f}'
 
 @app.before_request
+def redirect_to_www():
+    host = request.host
+    if host == 'orcagent.fun' or 'railway.app' in host:
+        return redirect('https://www.orcagent.fun' + request.path, code=301)
+
+@app.before_request
 def _security_gate():
     """Runs before every other before_request hook (registration order).
     IP-based blocking/banning has been removed — this only logs scanner/exploit
