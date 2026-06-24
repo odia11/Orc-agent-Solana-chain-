@@ -2438,6 +2438,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   transition:color .15s;
 }
 #tdp-close:hover{color:#ffffff}
+.tdp-close-back{display:none;font-size:14px;font-weight:600;letter-spacing:.02em}
 #tdp-logo{
   width:48px;height:48px;border-radius:50%;
   object-fit:cover;flex-shrink:0;background:#1c1c1c;
@@ -2517,6 +2518,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   }
   #token-detail-panel.open{transform:translateY(0)}
   #tdp-stats{grid-template-columns:1fr 1fr}
+  .tdp-close-x{display:none}
+  .tdp-close-back{display:inline}
+  #tdp-close{font-size:14px}
 }
 
 </style>
@@ -8742,7 +8746,7 @@ async function _tvcDelete(commentId){
 <div id="tdp-overlay" onclick="closeTokenPanel()"></div>
 <div id="token-detail-panel" role="dialog" aria-modal="true">
   <div id="tdp-header">
-    <button id="tdp-close" onclick="closeTokenPanel()" title="Close">✕</button>
+    <button id="tdp-close" onclick="closeTokenPanel()" title="Close"><span class="tdp-close-x">✕</span><span class="tdp-close-back">← Back</span></button>
     <img id="tdp-logo" src="" alt="">
     <div id="tdp-title-text">
       <div id="tdp-name">—</div>
