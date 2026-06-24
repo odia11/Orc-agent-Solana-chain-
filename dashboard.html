@@ -6032,22 +6032,28 @@ function _closeSidebar(){
   if(sb) sb.classList.remove('open');
   if(ov) ov.classList.remove('visible');
 }
+var _wltInterval=null;
 function _loadWalletSection(){
   const wallet=phantomKey||currentWallet||'';
   const addrEl=document.getElementById('wlt-address');
   if(addrEl && wallet) addrEl.textContent=wallet.slice(0,6)+'…'+wallet.slice(-4);
   const list=document.getElementById('wallet-token-list');
-  if(list) list.innerHTML='<div class="wlt-loading">Loading wallet…</div>';
+  // fetch totals for header
+  fetch('/api/wallet/total').then(r=>r.json()).then(function(d){
+    if(!d.ok) return;
+    document.getElementById('wlt-total-usd').textContent='$'+Number(d.total_usd).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('wlt-total-sol').textContent='◎ '+Number(d.total_sol).toFixed(4);
+  }).catch(function(){});
+  // fetch and render token list
+  if(list && !list.querySelector('.wlt-token-row'))
+    list.innerHTML='<div class="wlt-loading">Loading wallet…</div>';
   fetch('/api/wallet/tokens').then(r=>r.json()).then(function(data){
     if(!data.ok) throw new Error(data.msg||'Failed');
-    // update header totals
-    const totalUsd=data.tokens.reduce(function(s,t){return s+(t.value_usd||0);},0);
-    const solRow=data.tokens.find(function(t){return t.symbol==='SOL';});
-    document.getElementById('wlt-total-usd').textContent='$'+totalUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
-    document.getElementById('wlt-total-sol').textContent='◎ '+(solRow?solRow.amount.toFixed(4):'—');
-    // render token rows
     if(!list) return;
-    if(!data.tokens.length){ list.innerHTML='<div class="wlt-loading">No tokens found</div>'; return; }
+    if(!data.tokens.length){
+      list.innerHTML='<div class="wlt-loading">No tokens found in wallet</div>';
+      return;
+    }
     list.innerHTML=data.tokens.map(function(t){
       const chgCls=t.price_change_24h>0?'pos':t.price_change_24h<0?'neg':'';
       const chgStr=t.price_change_24h!=null?(t.price_change_24h>0?'+':'')+Number(t.price_change_24h).toFixed(2)+'%':'';
@@ -6062,6 +6068,13 @@ function _loadWalletSection(){
     if(list) list.innerHTML='<div class="wlt-loading" style="color:var(--red)">'+e.message+'</div>';
   });
 }
+function _startWalletRefresh(){
+  _stopWalletRefresh();
+  _wltInterval=setInterval(_loadWalletSection, 30000);
+}
+function _stopWalletRefresh(){
+  if(_wltInterval){ clearInterval(_wltInterval); _wltInterval=null; }
+}
 function _sbSetActive(id){
   document.querySelectorAll('#sidebar .sb-nav-item').forEach(el=>el.classList.remove('active'));
   const el=document.getElementById(id);
@@ -6069,6 +6082,7 @@ function _sbSetActive(id){
   if(window.innerWidth<=768) _closeSidebar();
 }
 function _sbNav(section){
+  if(section!=='wallet') _stopWalletRefresh();
   if(section==='dashboard'){
     if(_dmOpen) closeMessagesView();
     else if(_tradersView) closeTradersView();
@@ -6099,6 +6113,7 @@ function _sbNav(section){
     if(wlt) wlt.style.display='flex';
     _sbSetActive('sbn-wallet');
     _loadWalletSection();
+    _startWalletRefresh();
   } else if(section==='traders'){
     openTradersView();
   } else if(section==='messages'){
