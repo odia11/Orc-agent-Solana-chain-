@@ -2096,13 +2096,34 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .inact-icon{font-size:30px}
   .tips-slide-icon{font-size:24px}
 
-  /* ── HEADER: hamburger | logo center | avatar ── */
-  .header{padding:0 8px;gap:4px}
+  /* ── HEADER: hamburger | search (flex:1) | avatar ── */
+  .header{padding:0 8px;gap:6px}
   .hamburger-btn{order:-1;flex-shrink:0}
-  .hdr-search-wrap{display:none!important}
-  .logo-row{flex:1;justify-content:center}
+  .logo-row{display:none}
+  .hdr-search-wrap{display:flex!important;flex:1;max-width:none;position:relative}
+  .hdr-search{font-size:15px;padding:10px 14px 10px 36px}
   .header-right{flex-shrink:0}
   .nav-menu-wrap{display:none!important}
+
+  /* ── SEARCH DROPDOWN: fixed overlay, above everything ── */
+  .hdr-search-dropdown{
+    position:fixed!important;
+    top:60px;
+    left:8px;
+    right:8px;
+    width:auto!important;
+    max-height:60vh;
+    border-radius:12px;
+    z-index:9999;
+  }
+
+  /* ── SEARCH RESULT ROWS: 48px touch targets ── */
+  .hdr-sd-item{padding:14px 16px;min-height:48px;align-items:center}
+  .hdr-sd-avatar{width:32px;height:32px;font-size:12px}
+  .hdr-sd-name{font-size:14px}
+  .hdr-sd-sub{font-size:12px}
+  .hdr-sd-label{font-size:10px;letter-spacing:2px;padding:8px 16px 4px}
+  .hdr-sd-empty{font-size:13px;padding:20px 16px}
 
   /* ── STATS BAR: 2×2 grid ── */
   .statsbar{display:grid!important;grid-template-columns:repeat(2,1fr)}
