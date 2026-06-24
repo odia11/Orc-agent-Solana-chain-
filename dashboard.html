@@ -3575,7 +3575,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <div class="dm-chat-placeholder-text">Select a conversation to start messaging</div>
         </div>
         <div id="dm-chat-active" style="display:none">
-          <div class="dm-chat-hdr" id="dm-chat-hdr">
+          <div class="dm-chat-hdr" id="dm-chat-header">
             <button class="dm-hdr-back" onclick="_dmBackToList()" title="Back">←</button>
             <div class="dm-chat-hdr-av" id="dm-hdr-av"></div>
             <div class="dm-chat-hdr-info">
@@ -3583,7 +3583,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
               <div class="dm-chat-hdr-wallet" id="dm-hdr-wallet"></div>
             </div>
           </div>
-          <div class="dm-messages" id="dm-messages"></div>
+          <div class="dm-messages" id="dm-messages-area"></div>
           <div class="dm-input-row">
             <input type="file" id="dm-img-input" accept="image/*" style="display:none" onchange="dmSendImage(this.files[0])">
             <button class="dm-img-btn" id="dm-img-btn" onclick="dmPickImage()" title="Send image">📷</button>
@@ -8108,7 +8108,7 @@ function _esc(str){
 
 async function _dmFetchMessages(){
   if(!_dmPeerId) return;
-  const container=document.getElementById('dm-messages');
+  const container=document.getElementById('dm-messages-area');
   let resp, rawText='';
   try{
     resp=await fetch('/api/messages/'+_dmPeerId);
@@ -8248,7 +8248,7 @@ async function _dmCopyTrade(btn, btnId, errId, tokenAddr, entryPrice, amtSol){
 }
 
 function _dmRenderMessages(msgs){
-  const container=document.getElementById('dm-messages');
+  const container=document.getElementById('dm-messages-area');
   if(!msgs.length){
     container.innerHTML='<div class="dm-chat-empty"><div style="font-size:28px">💬</div><div>No messages yet — say hello!</div></div>';
     return;
@@ -8260,7 +8260,7 @@ function _dmRenderMessages(msgs){
 }
 
 function _dmAppendMessage(m){
-  const container=document.getElementById('dm-messages');
+  const container=document.getElementById('dm-messages-area');
   const empty=container.querySelector('.dm-chat-empty');
   if(empty) container.removeChild(empty);
   container.appendChild(_dmBuildMessageEl(m, _dmMyId));
