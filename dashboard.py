@@ -4207,7 +4207,7 @@ def api_token_info(mint_address):
         pairs = r.json().get('pairs') or []
         if not pairs:
             return jsonify({'ok': False, 'msg': 'Token not found'}), 404
-        # Pick the pair with highest liquidity (most representative)
+        # Pick the Solana pair with highest liquidity (most representative)
         pairs_sol = [p for p in pairs if p.get('chainId') == 'solana'] or pairs
         p    = max(pairs_sol, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
         base = p.get('baseToken') or {}
@@ -4216,40 +4216,72 @@ def api_token_info(mint_address):
         vol  = p.get('volume') or {}
         liq  = p.get('liquidity') or {}
         txns = p.get('txns') or {}
-        h24t = txns.get('h24') or {}
         def _f(v):
             try: return float(v) if v not in (None, '', 'null') else 0.0
             except (TypeError, ValueError): return 0.0
+        def _txn(period, side):
+            return int(_f((txns.get(period) or {}).get(side)))
         pc_5m  = _f(pc.get('m5'))
         pc_1h  = _f(pc.get('h1'))
         pc_6h  = _f(pc.get('h6'))
         pc_24h = _f(pc.get('h24'))
-        txns24 = int(_f(h24t.get('buys')) + _f(h24t.get('sells')))
         mcap   = _f(p.get('marketCap')) or _f(p.get('fdv'))
+        fdv    = _f(p.get('fdv'))
+        liq_usd = _f(liq.get('usd'))
+        # socials
+        socials = info.get('socials') or []
+        twitter = next((s.get('url') for s in socials if (s.get('type') or '').lower() == 'twitter'), None)
+        # price in SOL: DexScreener doesn't expose priceNative directly on all pairs,
+        # but priceNative is the quote-token price (usually SOL for Solana pairs)
+        price_sol = _f(p.get('priceNative'))
         return jsonify({
-            'ok':               True,
-            'symbol':           base.get('symbol', ''),
-            'name':             base.get('name', ''),
-            'address':          base.get('address', mint),
-            'price':            _f(p.get('priceUsd')),
-            'image_url':        info.get('imageUrl'),
-            'logo_url':         info.get('imageUrl'),
-            'banner_url':       info.get('header'),
-            # flat fields (used by token detail panel + market/live)
-            'mcap':             mcap,
-            'market_cap':       mcap,
-            'volume_24h':       _f(vol.get('h24')),
-            'liquidity':        _f(liq.get('usd')),
-            'liquidity_usd':    _f(liq.get('usd')),
-            'txns_24h':         txns24,
-            'traders_24h':      txns24,
-            'price_change_5m':  pc_5m,
-            'price_change_1h':  pc_1h,
-            'price_change_6h':  pc_6h,
-            'price_change_24h': pc_24h,
-            # nested dict kept for backward compat with panel JS
-            'price_change': {'m5': pc_5m, 'h1': pc_1h, 'h6': pc_6h, 'h24': pc_24h},
-            'dexscreener_url':  p.get('url') or f'https://dexscreener.com/solana/{mint}',
+            'ok':                True,
+            # identity
+            'symbol':            base.get('symbol', ''),
+            'name':              base.get('name', ''),
+            'address':           base.get('address', mint),
+            'pair_address':      p.get('pairAddress', ''),
+            'dex_name':          p.get('dexId', ''),
+            'chain':             p.get('chainId', 'solana'),
+            # price
+            'price':             _f(p.get('priceUsd')),
+            'price_usd':         _f(p.get('priceUsd')),
+            'price_sol':         price_sol,
+            # market
+            'fdv':               fdv,
+            'market_cap':        mcap,
+            'mcap':              mcap,
+            'liquidity_usd':     liq_usd,
+            'liquidity':         liq_usd,
+            # volume
+            'volume_5m':         _f(vol.get('m5')),
+            'volume_1h':         _f(vol.get('h1')),
+            'volume_24h':        _f(vol.get('h24')),
+            # price changes
+            'price_change_5m':   pc_5m,
+            'price_change_1h':   pc_1h,
+            'price_change_6h':   pc_6h,
+            'price_change_24h':  pc_24h,
+            'price_change':      {'m5': pc_5m, 'h1': pc_1h, 'h6': pc_6h, 'h24': pc_24h},
+            # transactions
+            'txns_5m_buys':      _txn('m5', 'buys'),
+            'txns_5m_sells':     _txn('m5', 'sells'),
+            'txns_1h_buys':      _txn('h1', 'buys'),
+            'txns_1h_sells':     _txn('h1', 'sells'),
+            'txns_24h':          _txn('h24', 'buys') + _txn('h24', 'sells'),
+            'traders_24h':       _txn('h24', 'buys') + _txn('h24', 'sells'),
+            'buyers_24h':        _txn('h24', 'buys'),
+            'sellers_24h':       _txn('h24', 'sells'),
+            # volume split (DexScreener doesn't break this out; use txn ratio as proxy)
+            'buy_volume_24h':    None,
+            'sell_volume_24h':   None,
+            # images
+            'image_url':         info.get('imageUrl'),
+            'logo_url':          info.get('imageUrl'),
+            'banner_url':        info.get('header'),
+            # socials / links
+            'twitter_url':       twitter,
+            'dexscreener_url':   p.get('url') or f'https://dexscreener.com/solana/{mint}',
         })
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
