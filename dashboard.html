@@ -414,10 +414,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .perf-share-btn:hover{border-color:var(--green);color:var(--green)}
 .perf-copy-btn{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);cursor:pointer;transition:all .15s;letter-spacing:.04em}
 .perf-copy-btn:hover{border-color:var(--blue);color:var(--blue)}
-.perf-stats{display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:8px;margin-bottom:14px}
-.perf-stat{background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px}
-.perf-stat-lbl{font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em;margin-bottom:5px}
-.perf-stat-val{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text)}
+.perf-stats{display:grid;grid-template-columns:repeat(6,1fr);gap:1px;margin-bottom:14px}
+.perf-stat{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:0;padding:16px}
+.perf-stat-lbl{font-size:9px;color:#555555;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px}
+.perf-stat-val{font-size:18px;font-weight:700;color:#ffffff}
 .perf-chart-wrap{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:12px;min-height:80px;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
 #perf-chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;overflow:hidden}
 .pos-panel{background:var(--bg2);border:1px solid rgba(0,0,0,.4);border-radius:10px;padding:16px;margin-bottom:1.25rem}
@@ -425,9 +425,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .pnlc-panel{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:8px;padding:16px;margin-bottom:1.25rem}
 .pnlc-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .pnlc-toggles{display:flex;gap:4px}
-.pnlc-btn{background:transparent;border:1px solid #2e2e2e;border-radius:5px;padding:3px 10px;font-size:10px;color:#aaaaaa;cursor:pointer;transition:all .15s;letter-spacing:.06em}
-.pnlc-btn:hover{border-color:#ffffff;color:#ffffff}
-.pnlc-btn.active{background:#767676;color:#ffffff;border-color:#aaaaaa;font-weight:700}
+.pnlc-btn{background:transparent;border:1px solid #2e2e2e;border-radius:20px;padding:4px 12px;font-size:10px;color:#555555;cursor:pointer;transition:all .15s;letter-spacing:.06em}
+.pnlc-btn:hover{border-color:#aaaaaa;color:#aaaaaa}
+.pnlc-btn.active{background:#00e676;color:#000000;border-color:#00e676;font-weight:700}
 #pnlc-container{height:200px;position:relative;background:#1c1c1c;border-radius:6px;overflow:hidden}
 #pnlc-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;pointer-events:none}
 @keyframes pnlce-scan{from{transform:translateX(-80px)}to{transform:translateX(2000px)}}
@@ -436,7 +436,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .pnlce-scan{position:absolute;top:0;bottom:0;left:0;width:80px;background:linear-gradient(90deg,transparent,rgba(0,0,0,.18),transparent);animation:pnlce-scan 2s linear infinite}
 .pnlce-body{position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center;padding:0 16px}
 .pnlce-icon{filter:drop-shadow(0 0 10px rgba(0,0,0,.55))}
-.pnlce-title{color:#ffffff;font-family:'Orbitron',monospace;font-size:13px;font-weight:700;letter-spacing:3px;animation:pnlce-pulse 1.5s ease-in-out infinite alternate}
+.pnlce-title{color:#555555;font-family:'Inter',sans-serif;font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase}
 .pnlce-stats{display:flex;gap:24px;font-size:10px;color:var(--muted);letter-spacing:.12em;font-family:'Share Tech Mono',monospace;margin-top:2px}
 /* ── COMMUNITY CHAT ── */
 #dash-community{display:none;flex:1;min-width:0;height:calc(100vh - 48px);overflow:hidden;flex-direction:column;position:relative}
@@ -2095,12 +2095,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   /* ── STATS BAR: 2×2 grid ── */
   .statsbar{display:grid!important;grid-template-columns:repeat(2,1fr)}
 
-  /* ── BOT BAR: stack vertically ── */
+  /* ── MY PERFORMANCE: 3×2 grid ── */
+  .perf-stats{grid-template-columns:repeat(3,1fr)!important}
+
+  /* ── BOT BAR: stack vertically, full-width START button ── */
   .botbar{flex-direction:column;align-items:stretch;gap:8px;padding:12px 14px}
   .botbar-left{flex-wrap:wrap}
   .botbar-center{justify-content:center}
   .botbar-right{display:flex}
   .botbar-btn{width:100%;text-align:center}
+  .botbar-btn-start{width:100%}
 
   /* ── MARKET GRID: single column, no carousel ── */
   .market-grid{display:grid!important;grid-template-columns:1fr!important;flex-wrap:unset!important}
@@ -2154,8 +2158,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   #pnlc-container{height:130px}
   .slide-chart-wrap{height:130px}
 
-  /* ── STAT TILES IN PERFORMANCE PANEL ── */
-  .perf-stats{grid-template-columns:repeat(2,1fr)}
+  /* ── STAT TILES IN PERFORMANCE PANEL: 2×3 on smallest screens ── */
+  .perf-stats{grid-template-columns:repeat(2,1fr)!important}
 
   /* ── PUMP SCANNER + MARKET GRID: single column ── */
   .ps-grid{grid-template-columns:1fr}
@@ -2220,7 +2224,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   background:#1c1c1c;
 }
 /* inner bg cells */
-.stat-cell,.perf-stat,.hiw-card,.ps-card,
+.stat-cell,.hiw-card,.ps-card,
 .adash-stat-card,.admin-section,.panel .log-body,
 .audit-row,.lf-item{
   background:rgba(255,255,255,.025);
@@ -2242,7 +2246,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   font-variant-numeric:tabular-nums;
 }
 .perf-stat-val{
-  font-size:15px;
+  font-size:18px;
+  color:#ffffff;
   font-feature-settings:'tnum' 1;
   font-variant-numeric:tabular-nums;
 }
@@ -2950,7 +2955,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- PNL PERFORMANCE CHART -->
   <div class="pnlc-panel" id="pnlc-panel">
     <div class="pnlc-hdr">
-      <div style="font-size:10px;color:#888888;text-transform:uppercase;letter-spacing:.08em;font-weight:600">PNL PERFORMANCE &nbsp;<span id="pnlc-val" style="font-size:12px;font-weight:700;color:#ffffff"></span></div>
+      <div style="font-size:10px;color:#555555;text-transform:uppercase;letter-spacing:2px;font-weight:600">PNL PERFORMANCE &nbsp;<span id="pnlc-val" style="font-size:12px;font-weight:700;color:#ffffff"></span></div>
       <div class="pnlc-toggles">
         <button class="pnlc-btn active" onclick="_pnlSetRange('1d',this)">1D</button>
         <button class="pnlc-btn" onclick="_pnlSetRange('7d',this)">7D</button>
