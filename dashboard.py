@@ -4158,6 +4158,137 @@ def search_tokens():
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
+@app.route('/api/trade/buy', methods=['POST'])
+@rate_limit(10, 60)
+def api_trade_buy():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data         = request.get_json(silent=True) or {}
+    mint         = _sanitize(str(data.get('token_address', '')).strip())
+    symbol       = _sanitize(str(data.get('token_symbol', '')).strip())[:20]
+    amount_sol   = data.get('amount_sol')
+    if not mint or not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT id, encrypted_private_key, min_trade_size, max_trade_size FROM users WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No trading key configured'}), 400
+    user_id, enc_blob = row[0], row[1]
+    min_size = float(row[2]) if row[2] is not None else 1.0
+    max_size = float(row[3]) if row[3] is not None else 10.0
+    if amount_sol is None:
+        amount_sol = max_size
+    try:
+        amount_sol = float(amount_sol)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    amount_sol = max(min_size, min(max_size, amount_sol))
+    td = get_token_data(mint)
+    entry_price = float(td['price']) if td and td.get('price') else 0.0
+    if not symbol and td:
+        symbol = td.get('symbol', mint[:8])
+    buy_ok = False
+    with _use_key(enc_blob, wallet) as pk:
+        buy_ok = _execute_user_swap(wallet, pk, 'buy', mint, str(amount_sol))
+    if not buy_ok:
+        return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
+    us        = get_user_state(wallet)
+    positions = us['positions']
+    pos = positions.get(mint, {})
+    pos['amount']    = pos.get('amount', 0.0) + (amount_sol / entry_price if entry_price > 0 else 0.0)
+    pos['buy_price'] = entry_price
+    pos['spend']     = pos.get('spend', 0.0) + amount_sol
+    pos['symbol']    = symbol
+    pos['opened_at'] = time.time()
+    positions[mint]  = pos
+    return jsonify({'ok': True, 'amount_sol': amount_sol, 'entry_price': entry_price, 'symbol': symbol})
+
+
+@app.route('/api/trade/sell', methods=['POST'])
+@rate_limit(10, 60)
+def api_trade_sell():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data   = request.get_json(silent=True) or {}
+    mint   = _sanitize(str(data.get('token_address', '')).strip())
+    symbol = _sanitize(str(data.get('token_symbol', '')).strip())[:20]
+    if not mint or not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    us  = get_user_state(wallet)
+    pos = us['positions'].get(mint, {})
+    if not pos.get('amount', 0.0) > 0:
+        return jsonify({'ok': False, 'msg': 'No open position for this token'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No trading key configured'}), 400
+    user_id, enc_blob = row[0], row[1]
+    td          = get_token_data(mint)
+    exit_price  = float(td['price']) if td and td.get('price') else 0.0
+    if not symbol:
+        symbol = pos.get('symbol') or (td.get('symbol', mint[:8]) if td else mint[:8])
+    sell_ok = False
+    with _use_key(enc_blob, wallet) as pk:
+        sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, str(pos['amount']))
+    entry     = pos.get('buy_price', 0.0)
+    pnl       = round(pos['amount'] * (exit_price - entry), 4) if entry > 0 else 0.0
+    opened_at = pos.get('opened_at', 0.0)
+    if sell_ok:
+        with _use_key(enc_blob, wallet) as pk:
+            _record_user_trade(user_id, us, symbol, entry, exit_price,
+                               pos['amount'], pos.get('spend', 0.0),
+                               wallet=wallet, private_key=pk, mint=mint,
+                               exit_reason='MANUAL SELL', opened_at=opened_at)
+    else:
+        _record_user_trade(user_id, us, symbol, entry, exit_price,
+                           pos['amount'], pos.get('spend', 0.0),
+                           mint=mint, exit_reason='MANUAL SELL (swap failed)',
+                           opened_at=opened_at)
+    us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+    return jsonify({'ok': True, 'pnl': pnl, 'exit_price': exit_price, 'sell_executed': sell_ok})
+
+
+@app.route('/api/trade/position/<token_address>', methods=['GET'])
+@rate_limit(30, 60)
+def api_trade_position(token_address):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    mint = _sanitize(token_address.strip())
+    if not mint or not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    pos = get_user_state(wallet)['positions'].get(mint, {})
+    amount      = pos.get('amount', 0.0)
+    entry_price = pos.get('buy_price', 0.0)
+    has_position = amount > 0 and entry_price > 0
+    current_pnl  = None
+    if has_position:
+        td = get_token_data(mint)
+        if td and td.get('price'):
+            cur_price   = float(td['price'])
+            current_pnl = round(amount * (cur_price - entry_price), 4)
+    return jsonify({
+        'ok':           True,
+        'has_position': has_position,
+        'amount':       amount if has_position else 0.0,
+        'entry_price':  entry_price if has_position else None,
+        'current_pnl':  current_pnl,
+    })
+
+
 @app.route('/api/messages/unread', methods=['GET'])
 @rate_limit(60, 60)
 def messages_unread():
