@@ -2408,7 +2408,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   position:fixed;right:0;top:0;
   width:380px;height:100vh;
   background:#141414;border-left:1px solid #2e2e2e;
-  z-index:500;overflow-y:auto;
+  z-index:500;overflow:hidden;
   transform:translateX(100%);
   transition:transform .3s ease;
   display:flex;flex-direction:column;
@@ -2419,88 +2419,111 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   z-index:499;display:none;pointer-events:auto;
 }
 #tdp-overlay.open{display:block}
-#tdp-header{
-  display:flex;align-items:center;gap:12px;
-  padding:18px 16px 14px;border-bottom:1px solid #2e2e2e;
-  flex-shrink:0;
+/* ── Hero ── */
+#tdp-hero{position:relative;flex-shrink:0}
+#tdp-banner-bg{
+  width:100%;height:90px;
+  background:#1c1c1c;background-size:cover;background-position:center;
+  position:relative;
+}
+#tdp-banner-bg::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(to bottom,rgba(0,0,0,.15) 0%,rgba(20,20,20,.9) 100%);
 }
 #tdp-close{
-  background:none;border:none;color:#aaaaaa;font-size:18px;
-  cursor:pointer;padding:4px;line-height:1;flex-shrink:0;
-  transition:color .15s;
+  position:absolute;top:10px;right:10px;z-index:3;
+  background:rgba(0,0,0,.55);border:none;color:#fff;
+  width:28px;height:28px;border-radius:50%;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .15s;flex-shrink:0;
 }
-#tdp-close:hover{color:#ffffff}
-.tdp-close-back{display:none;font-size:14px;font-weight:600;letter-spacing:.02em}
+#tdp-close:hover{background:rgba(0,0,0,.85)}
+.tdp-close-x{font-size:13px;line-height:1}
+.tdp-close-back{display:none;font-size:11px;font-weight:600;white-space:nowrap}
+#tdp-hero-info{
+  display:flex;align-items:center;gap:10px;
+  padding:0 14px 12px;margin-top:-18px;
+  position:relative;z-index:2;
+}
+#tdp-logo-wrap{width:44px;height:44px;flex-shrink:0;position:relative}
 #tdp-logo{
-  width:48px;height:48px;border-radius:50%;
-  object-fit:cover;flex-shrink:0;background:#1c1c1c;
-  border:1px solid #2e2e2e;display:none;
+  width:44px;height:44px;border-radius:50%;
+  object-fit:cover;border:2px solid #141414;background:#242424;display:none;
+  position:absolute;top:0;left:0;
 }
 #tdp-logo.loaded{display:block}
 #tdp-logo-fallback{
-  width:48px;height:48px;border-radius:50%;
-  background:#2e2e2e;border:1px solid #444;
+  width:44px;height:44px;border-radius:50%;
+  background:#2e2e2e;border:2px solid #141414;
   display:flex;align-items:center;justify-content:center;
-  font-size:20px;font-weight:700;color:#ffffff;flex-shrink:0;
+  font-size:17px;font-weight:700;color:#fff;
+  position:absolute;top:0;left:0;
 }
 #tdp-logo-fallback.hidden{display:none}
-#tdp-banner{
-  width:100%;height:80px;flex-shrink:0;
-  background-size:cover;background-position:center;background-repeat:no-repeat;
-  background-color:#1c1c1c;display:none;
-}
-#tdp-banner.has-banner{display:block}
 #tdp-title-text{min-width:0;flex:1}
-#tdp-name{font-size:16px;font-weight:700;color:#ffffff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#tdp-symbol{font-size:11px;color:#aaaaaa;margin-top:2px}
-#tdp-body{padding:20px 16px;display:flex;flex-direction:column;gap:20px;flex:1;overflow-y:auto;min-height:0}
-#tdp-price-row{display:flex;align-items:baseline;gap:10px}
-#tdp-price{font-size:28px;font-weight:700;color:#ffffff;font-variant-numeric:tabular-nums}
-#tdp-changes{display:flex;gap:6px;flex-wrap:wrap}
-.tdp-badge{
-  font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;
-  font-variant-numeric:tabular-nums;
+#tdp-name{font-size:15px;font-weight:700;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.25}
+#tdp-meta{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px}
+#tdp-symbol-lbl{font-size:11px;color:#aaa}
+.tdp-meta-badge{font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px}
+#tdp-chain-badge{background:rgba(0,230,118,.15);color:#00e676}
+#tdp-dex-badge{background:#1c1c1c;color:#aaa;border:1px solid #2e2e2e;display:none}
+#tdp-dex-badge.visible{display:inline-block}
+#tdp-twitter-btn{
+  flex-shrink:0;width:30px;height:30px;
+  display:none;align-items:center;justify-content:center;
+  background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;
+  color:#aaa;text-decoration:none;font-size:12px;font-weight:900;
+  transition:border-color .15s,color .15s;
 }
-.tdp-badge-lbl{font-size:9px;color:#555555;font-weight:400;margin-right:2px;text-transform:uppercase}
-.tdp-badge.pos{background:rgba(0,230,118,.12);color:#00e676}
-.tdp-badge.neg{background:rgba(255,23,68,.1);color:#ff1744}
-.tdp-badge.flat{background:#1c1c1c;color:#aaaaaa}
-#tdp-stats{
-  display:grid;grid-template-columns:1fr 1fr;gap:10px;
-}
-.tdp-stat{
-  background:#1c1c1c;border:1px solid #2e2e2e;border-radius:8px;
-  padding:12px 14px;
-}
-.tdp-stat-lbl{font-size:9px;color:#555555;letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
-.tdp-stat-val{font-size:15px;font-weight:700;color:#ffffff;font-variant-numeric:tabular-nums}
+#tdp-twitter-btn.visible{display:flex}
+#tdp-twitter-btn:hover{border-color:#aaa;color:#fff}
+/* ── Body ── */
+#tdp-body{flex:1;overflow-y:auto;min-height:0;display:flex;flex-direction:column}
+#tdp-content{padding:12px 14px;display:flex;flex-direction:column;gap:12px}
+#tdp-loading{display:flex;align-items:center;justify-content:center;padding:60px 16px;color:#555;font-size:13px;flex:1}
+#tdp-error{padding:60px 16px;text-align:center;color:#ff1744;font-size:13px}
+/* Price */
+#tdp-price-section{padding-bottom:12px;border-bottom:1px solid #2e2e2e}
+#tdp-price{font-size:26px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+#tdp-price-sol{font-size:11px;color:#aaa;margin-top:2px;font-variant-numeric:tabular-nums}
+/* Section label */
+.tdp-sec-lbl{font-size:9px;color:#555;letter-spacing:.12em;text-transform:uppercase;margin-bottom:6px}
+/* % changes grid */
+#tdp-changes{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}
+.tdp-chg-cell{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:8px 4px;text-align:center}
+.tdp-chg-lbl{font-size:9px;color:#555;text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px}
+.tdp-chg-val{font-size:12px;font-weight:700;font-variant-numeric:tabular-nums}
+.tdp-chg-val.pos{color:#00e676}
+.tdp-chg-val.neg{color:#ff1744}
+.tdp-chg-val.flat{color:#aaa}
+/* Market stats */
+#tdp-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.tdp-stat{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:9px 10px}
+.tdp-stat-lbl{font-size:9px;color:#555;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+.tdp-stat-val{font-size:12px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+/* Activity grid */
+#tdp-activity{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.tdp-act{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:9px 10px}
+.tdp-act-lbl{font-size:9px;color:#555;letter-spacing:.1em;text-transform:uppercase;margin-bottom:3px}
+.tdp-act-val{font-size:12px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+.tdp-act-val.buy{color:#00e676}
+.tdp-act-val.sell{color:#ff1744}
+/* DexScreener link */
 #tdp-dex-btn{
-  display:flex;align-items:center;justify-content:center;gap:7px;
+  display:flex;align-items:center;justify-content:center;gap:6px;
   background:#1c1c1c;border:1px solid #2e2e2e;border-radius:8px;
-  padding:12px 16px;color:#aaaaaa;font-size:13px;font-weight:600;
+  padding:11px 14px;color:#aaa;font-size:12px;font-weight:600;
   text-decoration:none;transition:border-color .15s,color .15s;
-  margin-top:4px;
 }
-#tdp-dex-btn:hover{border-color:#555555;color:#ffffff}
-#tdp-loading{
-  display:flex;align-items:center;justify-content:center;
-  padding:60px 16px;color:#555555;font-size:13px;
-}
-#tdp-error{
-  padding:60px 16px;text-align:center;color:#ff1744;font-size:13px;
-}
+#tdp-dex-btn:hover{border-color:#555;color:#fff}
+/* Footer */
 #tdp-footer{
   flex-shrink:0;border-top:1px solid #2e2e2e;background:#141414;
-  padding:12px 16px;
+  padding:12px 14px;
   padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
 }
-#tdp-trade-error{
-  font-size:12px;color:#ff1744;margin-bottom:8px;
-  display:none;line-height:1.4;
-}
-#tdp-position-info{
-  font-size:11px;color:#aaaaaa;margin-bottom:10px;display:none;
-}
+#tdp-trade-error{font-size:12px;color:#ff1744;margin-bottom:8px;display:none;line-height:1.4}
+#tdp-position-info{font-size:11px;color:#aaa;margin-bottom:10px;display:none}
 #tdp-position-info.visible{display:block}
 #tdp-trade-btns{display:flex;gap:8px}
 #tdp-buy-btn{
@@ -2518,14 +2541,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   #token-detail-panel{
     width:100%;height:100%;
     top:0;left:0;right:0;bottom:0;
-    border-left:none;border-top:1px solid #2e2e2e;
+    border-left:none;
     transform:translateY(100%);
   }
   #token-detail-panel.open{transform:translateY(0)}
-  #tdp-stats{grid-template-columns:1fr 1fr}
   .tdp-close-x{display:none}
   .tdp-close-back{display:inline}
-  #tdp-close{font-size:14px}
 }
 
 </style>
@@ -8525,60 +8546,97 @@ document.addEventListener('DOMContentLoaded', function(){
   window.openTokenPanel = async function(addr){
     if(!panel) return;
     _tdpAddr = addr; _tdpSym = '';
-    document.getElementById('tdp-name').textContent   = addr.slice(0,8)+'…';
-    document.getElementById('tdp-symbol').textContent = addr.slice(0,5)+'…'+addr.slice(-4);
+    // reset loading state
+    document.getElementById('tdp-name').textContent     = addr.slice(0,8)+'…';
+    document.getElementById('tdp-symbol-lbl').textContent = '';
     document.getElementById('tdp-loading').style.display = '';
     document.getElementById('tdp-error').style.display   = 'none';
     document.getElementById('tdp-content').style.display = 'none';
-    // reset footer
     document.getElementById('tdp-trade-error').style.display = 'none';
     document.getElementById('tdp-position-info').classList.remove('visible');
     document.getElementById('tdp-sell-btn').style.display = 'none';
     const buyBtn = document.getElementById('tdp-buy-btn');
     buyBtn.disabled = false; buyBtn.textContent = 'BUY';
+    // reset hero visuals
+    const bannerBg = document.getElementById('tdp-banner-bg');
+    if(bannerBg) bannerBg.style.backgroundImage = '';
     const logo = document.getElementById('tdp-logo');
-    logo.classList.remove('loaded'); logo.src='';
-    // reset banner + logo fallback
-    const banner = document.getElementById('tdp-banner');
-    if(banner){ banner.style.backgroundImage=''; banner.classList.remove('has-banner'); }
+    logo.classList.remove('loaded'); logo.src = '';
     const logoFb = document.getElementById('tdp-logo-fallback');
     if(logoFb){ logoFb.textContent='?'; logoFb.classList.remove('hidden'); }
+    const twBtn = document.getElementById('tdp-twitter-btn');
+    if(twBtn) twBtn.classList.remove('visible');
+    const dexBadge = document.getElementById('tdp-dex-badge');
+    if(dexBadge){ dexBadge.textContent=''; dexBadge.classList.remove('visible'); }
     document.getElementById('tdp-dex-btn').href = 'https://dexscreener.com/solana/'+addr;
     panel.classList.add('open');
     if(overlay) overlay.classList.add('open');
-    document.body.style.overflow='hidden';
+    document.body.style.overflow = 'hidden';
     try{
       const res  = await fetch('/api/token/info/'+encodeURIComponent(addr));
       const data = await res.json();
       if(!data.ok) throw new Error(data.msg||'Not found');
-      document.getElementById('tdp-name').textContent   = data.name||data.symbol||addr.slice(0,10);
-      document.getElementById('tdp-symbol').textContent = data.symbol||'';
       _tdpSym = data.symbol || '';
-      // banner
-      if(data.banner_url && banner){
-        banner.style.backgroundImage = 'url('+JSON.stringify(data.banner_url)+')';
-        banner.classList.add('has-banner');
+      // hero: name + symbol + chain/dex badges
+      document.getElementById('tdp-name').textContent       = data.name || _tdpSym || addr.slice(0,10);
+      document.getElementById('tdp-symbol-lbl').textContent = _tdpSym;
+      if(data.dex_name && dexBadge){
+        dexBadge.textContent = data.dex_name;
+        dexBadge.classList.add('visible');
       }
-      // logo or fallback letter
+      // banner
+      if(data.banner_url && bannerBg)
+        bannerBg.style.backgroundImage = 'url('+JSON.stringify(data.banner_url)+')';
+      // logo / fallback letter
       const imgUrl = data.logo_url || data.image_url;
       if(imgUrl){
         logo.onload  = ()=>{ logo.classList.add('loaded'); if(logoFb) logoFb.classList.add('hidden'); };
         logo.onerror = ()=>{ logo.src=''; if(logoFb){ logoFb.textContent=(_tdpSym||'?')[0].toUpperCase(); logoFb.classList.remove('hidden'); } };
-        logo.src = imgUrl;
         if(logoFb) logoFb.classList.add('hidden');
+        logo.src = imgUrl;
       } else {
-        if(logoFb){ logoFb.textContent=(_tdpSym||'?')[0].toUpperCase(); logoFb.classList.remove('hidden'); }
+        if(logoFb){ logoFb.textContent=(_tdpSym||'?')[0].toUpperCase(); }
       }
-      document.getElementById('tdp-price').textContent = _price(data.price);
-      const pc = data.price_change||{};
+      // twitter
+      if(data.twitter_url && twBtn){
+        twBtn.href = data.twitter_url;
+        twBtn.classList.add('visible');
+      }
+      // price
+      document.getElementById('tdp-price').textContent = _price(data.price_usd ?? data.price);
+      const pSol = data.price_sol;
+      document.getElementById('tdp-price-sol').textContent =
+        pSol ? '◎ '+Number(pSol).toFixed(pSol<0.0001?8:pSol<0.01?6:4) : '';
+      // % changes
+      const pc = data.price_change || {};
+      const chg = (v,l) => {
+        const n=Number(v??0), cls=n>0?'pos':n<0?'neg':'flat', sign=n>0?'+':'';
+        return `<div class="tdp-chg-cell"><div class="tdp-chg-lbl">${l}</div><div class="tdp-chg-val ${cls}">${sign}${n.toFixed(2)}%</div></div>`;
+      };
       document.getElementById('tdp-changes').innerHTML =
-        _badge(pc.m5??0,'5m') + _badge(pc.h1??0,'1h') +
-        _badge(pc.h6??0,'6h') + _badge(pc.h24??0,'24h');
+        chg(pc.m5,'5M')+chg(pc.h1,'1H')+chg(pc.h6,'6H')+chg(pc.h24,'24H');
+      // market stats
+      const stat = (l,v) => `<div class="tdp-stat"><div class="tdp-stat-lbl">${l}</div><div class="tdp-stat-val">${v}</div></div>`;
       document.getElementById('tdp-stats').innerHTML =
-        `<div class="tdp-stat"><div class="tdp-stat-lbl">Market Cap</div><div class="tdp-stat-val">${_fmt(data.market_cap)}</div></div>`+
-        `<div class="tdp-stat"><div class="tdp-stat-lbl">Volume 24h</div><div class="tdp-stat-val">${_fmt(data.volume_24h)}</div></div>`+
-        `<div class="tdp-stat"><div class="tdp-stat-lbl">Liquidity</div><div class="tdp-stat-val">${_fmt(data.liquidity_usd)}</div></div>`+
-        `<div class="tdp-stat"><div class="tdp-stat-lbl">Txns 24h</div><div class="tdp-stat-val">${data.txns_24h!=null?Number(data.txns_24h).toLocaleString():'—'}</div></div>`;
+        stat('Mkt Cap', _fmt(data.market_cap))+
+        stat('FDV',     _fmt(data.fdv))+
+        stat('Liquidity',_fmt(data.liquidity_usd));
+      // activity
+      const n = v => v!=null?Number(v).toLocaleString():'—';
+      const act = (l,v,cls='') => `<div class="tdp-act"><div class="tdp-act-lbl">${l}</div><div class="tdp-act-val${cls?' '+cls:''}">${v}</div></div>`;
+      const b5=data.txns_5m_buys, s5=data.txns_5m_sells;
+      const b1=data.txns_1h_buys, s1=data.txns_1h_sells;
+      const txns24=data.txns_24h, buyers=data.buyers_24h, sellers=data.sellers_24h;
+      document.getElementById('tdp-activity').innerHTML =
+        act('Txns 24h',  n(txns24))+
+        act('Buys 24h',  n(buyers),'buy')+
+        act('Sells 24h', n(sellers),'sell')+
+        act('Vol 24h',   _fmt(data.volume_24h))+
+        act('Vol 1h',    _fmt(data.volume_1h))+
+        act('Vol 5m',    _fmt(data.volume_5m))+
+        act('Buys 1h',   n(b1),'buy')+
+        act('Sells 1h',  n(s1),'sell')+
+        act('B/S 5m',    b5!=null&&s5!=null?n(b5)+'/'+n(s5):'—');
       if(data.dexscreener_url)
         document.getElementById('tdp-dex-btn').href = data.dexscreener_url;
       document.getElementById('tdp-loading').style.display = 'none';
@@ -8587,7 +8645,7 @@ document.addEventListener('DOMContentLoaded', function(){
     } catch(err){
       document.getElementById('tdp-loading').style.display = 'none';
       const el = document.getElementById('tdp-error');
-      el.textContent = 'Failed to load token: '+err.message;
+      el.textContent = 'Failed to load: '+err.message;
       el.style.display = '';
     }
   };
@@ -8770,27 +8828,50 @@ document.addEventListener('DOMContentLoaded', function(){
 <!-- ── TOKEN DETAIL PANEL ── -->
 <div id="tdp-overlay" onclick="closeTokenPanel()"></div>
 <div id="token-detail-panel" role="dialog" aria-modal="true">
-  <div id="tdp-banner"></div>
-  <div id="tdp-header">
-    <button id="tdp-close" onclick="closeTokenPanel()" title="Close"><span class="tdp-close-x">✕</span><span class="tdp-close-back">← Back</span></button>
-    <img id="tdp-logo" src="" alt="">
-    <div id="tdp-logo-fallback">?</div>
-    <div id="tdp-title-text">
-      <div id="tdp-name">—</div>
-      <div id="tdp-symbol">—</div>
+  <div id="tdp-hero">
+    <div id="tdp-banner-bg"></div>
+    <button id="tdp-close" onclick="closeTokenPanel()" title="Close">
+      <span class="tdp-close-x">✕</span>
+      <span class="tdp-close-back">← Back</span>
+    </button>
+    <div id="tdp-hero-info">
+      <div id="tdp-logo-wrap">
+        <img id="tdp-logo" src="" alt="">
+        <div id="tdp-logo-fallback">?</div>
+      </div>
+      <div id="tdp-title-text">
+        <div id="tdp-name">—</div>
+        <div id="tdp-meta">
+          <span id="tdp-symbol-lbl">—</span>
+          <span class="tdp-meta-badge" id="tdp-chain-badge">Solana</span>
+          <span class="tdp-meta-badge" id="tdp-dex-badge"></span>
+        </div>
+      </div>
+      <a id="tdp-twitter-btn" href="#" target="_blank" rel="noopener" title="Twitter">𝕏</a>
     </div>
   </div>
   <div id="tdp-body">
     <div id="tdp-loading">Loading…</div>
     <div id="tdp-error" style="display:none"></div>
     <div id="tdp-content" style="display:none">
-      <div id="tdp-price-row">
+      <div id="tdp-price-section">
         <div id="tdp-price">—</div>
+        <div id="tdp-price-sol"></div>
       </div>
-      <div id="tdp-changes"></div>
-      <div id="tdp-stats"></div>
+      <div>
+        <div class="tdp-sec-lbl">Price Change</div>
+        <div id="tdp-changes"></div>
+      </div>
+      <div>
+        <div class="tdp-sec-lbl">Market</div>
+        <div id="tdp-stats"></div>
+      </div>
+      <div>
+        <div class="tdp-sec-lbl">Activity</div>
+        <div id="tdp-activity"></div>
+      </div>
       <a id="tdp-dex-btn" href="#" target="_blank" rel="noopener">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
         View on DexScreener
       </a>
     </div>
