@@ -2549,6 +2549,35 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .tdp-close-back{display:inline}
 }
 
+/* ── WALLET SECTION ── */
+#dash-wallet{display:none;flex:1;min-width:0;flex-direction:column;overflow-y:auto;background:var(--bg)}
+.wlt-page{max-width:480px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px;width:100%}
+.wlt-header{text-align:center;padding:24px 16px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:12px}
+#wlt-total-usd{font-size:32px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
+#wlt-total-sol{font-size:14px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
+#wlt-address{font-size:10px;color:var(--muted);margin-top:8px;font-family:'Share Tech Mono',monospace;letter-spacing:.06em;word-break:break-all}
+.wlt-actions{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+.wlt-btn{height:46px;border:1px solid var(--border);border-radius:8px;font-size:12px;font-weight:700;background:var(--bg3);color:var(--text);cursor:pointer;transition:border-color .15s,color .15s;letter-spacing:.04em}
+.wlt-btn:hover{border-color:var(--green);color:var(--green)}
+.wlt-btn-buy{background:var(--green);color:#000;border-color:var(--green)}
+.wlt-btn-buy:hover{opacity:.88}
+#wallet-token-list{display:flex;flex-direction:column;gap:6px}
+.wlt-token-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;cursor:pointer;transition:border-color .15s}
+.wlt-token-row:hover{border-color:#444}
+.wlt-token-logo{width:36px;height:36px;border-radius:50%;object-fit:cover;background:var(--bg3);flex-shrink:0}
+.wlt-token-logo-fb{width:36px;height:36px;border-radius:50%;background:var(--bg3);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0;border:1px solid var(--border)}
+.wlt-token-info{flex:1;min-width:0}
+.wlt-token-sym{font-size:13px;font-weight:700;color:#fff}
+.wlt-token-nm{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wlt-token-right{text-align:right;flex-shrink:0}
+.wlt-token-val{font-size:13px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+.wlt-token-amt{font-size:10px;color:var(--muted);margin-top:2px;font-variant-numeric:tabular-nums}
+.wlt-token-chg{font-size:10px;font-weight:600;margin-top:1px}
+.wlt-token-chg.pos{color:var(--green)}
+.wlt-token-chg.neg{color:var(--red)}
+.wlt-loading{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px}
+@media(max-width:768px){.wlt-page{padding:14px 12px}}
+
 </style>
 </head>
 <body>
@@ -2948,6 +2977,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <button class="sb-nav-item active" id="sbn-dashboard" onclick="_sbNav('dashboard')">
           <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
           Dashboard
+        </button>
+        <button class="sb-nav-item" id="sbn-wallet" onclick="_sbNav('wallet')">
+          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
+          Wallet
         </button>
         <button class="sb-nav-item" id="sbn-market" onclick="_sbNav('market')">
           <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
@@ -3656,6 +3689,25 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <button class="gc-send-btn" id="gc-send-btn" onclick="gcSend()">SEND</button>
     </div>
   </div><!-- /dash-community -->
+
+  <div id="dash-wallet" class="dash-section" style="display:none">
+    <div class="wlt-page">
+      <div class="wlt-header">
+        <div id="wlt-total-usd">$—</div>
+        <div id="wlt-total-sol">◎ —</div>
+        <div id="wlt-address"></div>
+      </div>
+      <div class="wlt-actions">
+        <button class="wlt-btn wlt-btn-buy" onclick="_sbNav('market')">Buy</button>
+        <button class="wlt-btn" onclick="_wltSend()">Send</button>
+        <button class="wlt-btn" onclick="_wltReceive()">Receive</button>
+        <button class="wlt-btn" onclick="_wltSwap()">Swap</button>
+      </div>
+      <div id="wallet-token-list">
+        <div class="wlt-loading">Loading wallet…</div>
+      </div>
+    </div>
+  </div><!-- /dash-wallet -->
 
   </div><!-- /app-body -->
 </div><!-- #app -->
@@ -5980,6 +6032,36 @@ function _closeSidebar(){
   if(sb) sb.classList.remove('open');
   if(ov) ov.classList.remove('visible');
 }
+function _loadWalletSection(){
+  const wallet=phantomKey||currentWallet||'';
+  const addrEl=document.getElementById('wlt-address');
+  if(addrEl && wallet) addrEl.textContent=wallet.slice(0,6)+'…'+wallet.slice(-4);
+  const list=document.getElementById('wallet-token-list');
+  if(list) list.innerHTML='<div class="wlt-loading">Loading wallet…</div>';
+  fetch('/api/wallet/tokens').then(r=>r.json()).then(function(data){
+    if(!data.ok) throw new Error(data.msg||'Failed');
+    // update header totals
+    const totalUsd=data.tokens.reduce(function(s,t){return s+(t.value_usd||0);},0);
+    const solRow=data.tokens.find(function(t){return t.symbol==='SOL';});
+    document.getElementById('wlt-total-usd').textContent='$'+totalUsd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+    document.getElementById('wlt-total-sol').textContent='◎ '+(solRow?solRow.amount.toFixed(4):'—');
+    // render token rows
+    if(!list) return;
+    if(!data.tokens.length){ list.innerHTML='<div class="wlt-loading">No tokens found</div>'; return; }
+    list.innerHTML=data.tokens.map(function(t){
+      const chgCls=t.price_change_24h>0?'pos':t.price_change_24h<0?'neg':'';
+      const chgStr=t.price_change_24h!=null?(t.price_change_24h>0?'+':'')+Number(t.price_change_24h).toFixed(2)+'%':'';
+      const logoHtml=t.logo_url
+        ?`<img class="wlt-token-logo" src="${t.logo_url}" onerror="this.style.display='none';this.nextSibling.style.display='flex'" alt=""><div class="wlt-token-logo-fb" style="display:none">${(t.symbol||'?')[0]}</div>`
+        :`<div class="wlt-token-logo-fb">${(t.symbol||'?')[0]}</div>`;
+      const valStr=t.value_usd>=0.01?'$'+t.value_usd.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'<$0.01';
+      const amtStr=t.amount>=0.0001?Number(t.amount).toLocaleString('en-US',{maximumFractionDigits:4})+' '+t.symbol:'<0.0001 '+t.symbol;
+      return `<div class="wlt-token-row" onclick="window.openTokenPanel&&window.openTokenPanel('${t.mint}')">${logoHtml}<div class="wlt-token-info"><div class="wlt-token-sym">${t.symbol||'?'}</div><div class="wlt-token-nm">${t.name||''}</div></div><div class="wlt-token-right"><div class="wlt-token-val">${valStr}</div><div class="wlt-token-amt">${amtStr}</div>${chgStr?`<div class="wlt-token-chg ${chgCls}">${chgStr}</div>`:''}</div></div>`;
+    }).join('');
+  }).catch(function(e){
+    if(list) list.innerHTML='<div class="wlt-loading" style="color:var(--red)">'+e.message+'</div>';
+  });
+}
 function _sbSetActive(id){
   document.querySelectorAll('#sidebar .sb-nav-item').forEach(el=>el.classList.remove('active'));
   const el=document.getElementById(id);
@@ -6008,6 +6090,15 @@ function _sbNav(section){
     _sbSetActive('sbn-market');
     const mp=document.getElementById('market-panel');
     if(mp) setTimeout(()=>mp.scrollIntoView({behavior:'smooth',block:'start'}),50);
+  } else if(section==='wallet'){
+    if(_dmOpen) closeMessagesView();
+    if(_tradersView) closeTradersView();
+    if(_gcOpen) closeCommunityView();
+    document.querySelectorAll('.dash-section').forEach(function(s){ s.style.display='none'; });
+    const wlt=document.getElementById('dash-wallet');
+    if(wlt) wlt.style.display='flex';
+    _sbSetActive('sbn-wallet');
+    _loadWalletSection();
   } else if(section==='traders'){
     openTradersView();
   } else if(section==='messages'){
@@ -6016,6 +6107,15 @@ function _sbNav(section){
     openCommunityView();
   }
 }
+function _wltSend(){ /* TODO */ }
+function _wltReceive(){
+  const wallet=phantomKey||currentWallet;
+  if(!wallet) return;
+  // show deposit modal if it exists
+  const m=document.getElementById('deposit-modal');
+  if(m) m.style.display='flex';
+}
+function _wltSwap(){ _sbNav('market'); }
 function _sbUpdateUser(profileData){
   const nameEl=document.getElementById('sb-user-name');
   const dotEl=document.getElementById('sb-online-dot');
