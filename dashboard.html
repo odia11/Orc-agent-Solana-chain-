@@ -2378,6 +2378,37 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   font-family:'Share Tech Mono',monospace;
 }
 
+/* ── LIVE MARKET TABLE ── */
+#lm-table-wrap{overflow-x:auto;margin-top:10px}
+.lm-table{width:100%;border-collapse:collapse;font-size:12px}
+.lm-table th{color:var(--muted);font-weight:600;padding:6px 8px;text-align:right;border-bottom:1px solid var(--border);font-size:11px;white-space:nowrap}
+.lm-table th:nth-child(1),.lm-table th:nth-child(2){text-align:left}
+.lm-table td{padding:8px 8px;text-align:right;border-bottom:1px solid var(--border);white-space:nowrap;vertical-align:middle;color:var(--text)}
+.lm-table td:nth-child(1),.lm-table td:nth-child(2){text-align:left}
+.lm-table tbody tr{cursor:pointer;transition:background .12s}
+.lm-table tbody tr:hover{background:var(--bg3)}
+.lm-pct{font-weight:600;font-size:11px}
+.lm-pct.up{color:var(--green)}
+.lm-pct.dn{color:var(--red)}
+.lm-buy-btn{padding:4px 12px;background:#00e676;color:#000;border:none;border-radius:4px;font-size:11px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.lm-buy-btn:hover{opacity:.8}
+/* Mobile cards */
+#lm-cards{display:none}
+.lm-card{display:flex;align-items:center;gap:10px;padding:12px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
+.lm-card:hover{background:var(--bg3)}
+.lm-card-logo{width:32px;height:32px;border-radius:50%;object-fit:cover;background:var(--bg3);flex-shrink:0}
+.lm-card-info{flex:1;min-width:0}
+.lm-card-sym{font-size:13px;font-weight:700;color:var(--text)}
+.lm-card-name{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-card-right{text-align:right;flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;gap:3px}
+.lm-card-price{font-size:13px;font-weight:600;color:var(--text)}
+.lm-card-buy-btn{padding:5px 14px;background:#00e676;color:#000;border:none;border-radius:4px;font-size:12px;font-weight:700;cursor:pointer;margin-top:2px;transition:opacity .15s}
+.lm-card-buy-btn:hover{opacity:.8}
+@media(max-width:768px){
+  #lm-table-wrap{display:none}
+  #lm-cards{display:block}
+}
+
 /* ═══════════════════════════════════════════ */
 
 /* ── TOKEN DETAIL PANEL ── */
@@ -3341,18 +3372,33 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div>
 
   <!-- LIVE MARKET + PUMP SCANNER -->
-  <div class="market-panel">
+  <div class="market-panel" id="market-panel">
     <div class="panel-hdr" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <span>Live Solana Market &nbsp;<span id="token-count" style="color:var(--green);font-family:'Orbitron',monospace"></span></span>
       <span id="ps-count" style="color:var(--green);font-family:'Orbitron',monospace;font-size:10px"></span>
     </div>
     <div class="ticker-wrap"><div class="ticker-track" id="ticker-track"></div></div>
-    <div class="swipe-hint">← swipe →</div>
-    <div id="market-grid-outer">
-      <div class="market-grid" id="market-grid">
-        <div style="color:var(--muted);font-size:11px;grid-column:1/-1;padding:24px 0;text-align:center;letter-spacing:.08em">SCANNING LIVE MARKET...</div>
-      </div>
+    <!-- Desktop table -->
+    <div id="lm-table-wrap">
+      <table class="lm-table">
+        <thead><tr>
+          <th style="width:28px">#</th>
+          <th>Token</th>
+          <th>Price</th>
+          <th>5M</th>
+          <th>1H</th>
+          <th>6H</th>
+          <th>24H</th>
+          <th>Volume</th>
+          <th>Liquidity</th>
+          <th>Txns</th>
+          <th></th>
+        </tr></thead>
+        <tbody id="lm-tbody"><tr><td colspan="11" style="text-align:center;padding:24px 0;color:var(--muted);font-size:11px;letter-spacing:.08em">LOADING LIVE MARKET...</td></tr></tbody>
+      </table>
     </div>
+    <!-- Mobile cards -->
+    <div id="lm-cards"><div style="padding:24px 0;text-align:center;color:var(--muted);font-size:11px;letter-spacing:.08em">LOADING...</div></div>
     <div id="ps-panel" style="display:none;margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
       <div style="font-size:9px;color:var(--muted);letter-spacing:.08em;margin-bottom:10px;font-family:'Orbitron',monospace;font-weight:700">🚀 PUMPING &nbsp;<span style="color:var(--dim);font-weight:400;letter-spacing:.04em">≥5% gain · bot buy candidates</span></div>
       <div id="ps-grid" class="ps-grid"></div>
@@ -4007,11 +4053,90 @@ async function fetchState(){
 
 async function fetchMarketOnly(){
   if(!appVisible()) return;
-  const r=await fetch('/api/market').then(r=>r.json()).catch(()=>null);
-  if(r?.tokens&&r.tokens.length){
-    renderMarket(r.tokens);
+  const r=await fetch('/api/market/live').then(r=>r.json()).catch(()=>null);
+  if(r?.tokens?.length) renderLiveMarket(r.tokens);
+}
 
+function renderLiveMarket(tokens){
+  if(!tokens?.length) return;
+  const count=document.getElementById('token-count');
+  if(count) count.textContent=tokens.length+' live';
+  const fmtChg=v=>{const n=parseFloat(v??0);return (n>=0?'+':'')+n.toFixed(1)+'%';};
+  const chgCls=v=>parseFloat(v??0)>=0?'up':'dn';
+
+  // Update ticker bar
+  const ticker=document.getElementById('ticker-track');
+  if(ticker){
+    const th=tokens.map(t=>{
+      const chg=parseFloat(t.price_change_24h??t.price_change_1h??0);
+      const col=chg>=0?'var(--green)':'var(--red)';
+      return `<span class="tick-item"><span class="tick-sym">${esc(t.symbol||'?')}</span><span>${fmtPrice(t.price)}</span><span style="color:${col}">${chg>=0?'+':''}${chg.toFixed(2)}%</span></span><span class="tick-div">·</span>`;
+    }).join('');
+    ticker.innerHTML=th+th;
   }
+
+  // Desktop table
+  const tbody=document.getElementById('lm-tbody');
+  if(tbody){
+    tbody.innerHTML=tokens.map((t,i)=>{
+      const addr=safeMint(t.address||'');
+      const sym=esc(t.symbol||'?');
+      const nm=esc(t.name||t.symbol||'');
+      const logo=t.image_url
+        ?`<img src="${esc(t.image_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:7px;vertical-align:middle;background:var(--bg3)" onerror="this.style.display='none'">`
+        :`<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--bg3);margin-right:7px;vertical-align:middle"></span>`;
+      const rowClick=addr?`onclick="if(event.target.tagName!=='BUTTON')openTokenPanel('${addr}')"`:' ';
+      return `<tr ${rowClick}>
+        <td style="color:var(--muted)">${i+1}</td>
+        <td style="min-width:140px">${logo}<span style="font-weight:700">${sym}</span><span style="color:var(--muted);margin-left:6px;font-size:11px">${nm}</span></td>
+        <td>${fmtPrice(t.price)}</td>
+        <td><span class="lm-pct ${chgCls(t.price_change_5m)}">${fmtChg(t.price_change_5m)}</span></td>
+        <td><span class="lm-pct ${chgCls(t.price_change_1h)}">${fmtChg(t.price_change_1h)}</span></td>
+        <td><span class="lm-pct ${chgCls(t.price_change_6h)}">${fmtChg(t.price_change_6h)}</span></td>
+        <td><span class="lm-pct ${chgCls(t.price_change_24h)}">${fmtChg(t.price_change_24h)}</span></td>
+        <td>${fmtNum(t.volume_24h)}</td>
+        <td>${fmtNum(t.liquidity)}</td>
+        <td>${fmtInt(t.txns_24h)}</td>
+        <td>${addr?`<button class="lm-buy-btn" onclick="event.stopPropagation();_lmBuy('${addr}','${sym}',this)">BUY</button>`:''}</td>
+      </tr>`;
+    }).join('');
+  }
+
+  // Mobile cards
+  const cards=document.getElementById('lm-cards');
+  if(cards){
+    cards.innerHTML=tokens.map(t=>{
+      const addr=safeMint(t.address||'');
+      const sym=esc(t.symbol||'?');
+      const nm=esc(t.name||t.symbol||'');
+      const chg24=parseFloat(t.price_change_24h??0);
+      const logo=t.image_url
+        ?`<img src="${esc(t.image_url)}" alt="" class="lm-card-logo" onerror="this.style.display='none'">`
+        :`<span class="lm-card-logo"></span>`;
+      return `<div class="lm-card"${addr?` onclick="if(!event.target.closest('button'))openTokenPanel('${addr}')"`:''}>
+        ${logo}
+        <div class="lm-card-info"><div class="lm-card-sym">${sym}</div><div class="lm-card-name">${nm}</div></div>
+        <div class="lm-card-right">
+          <div class="lm-card-price">${fmtPrice(t.price)}</div>
+          <div class="lm-pct ${chgCls(chg24)}" style="font-size:11px">${fmtChg(t.price_change_24h)}</div>
+          ${addr?`<button class="lm-card-buy-btn" onclick="event.stopPropagation();_lmBuy('${addr}','${sym}',this)">BUY</button>`:''}
+        </div>
+      </div>`;
+    }).join('');
+  }
+}
+
+async function _lmBuy(addr,sym,btn){
+  if(!addr) return;
+  const orig=btn.textContent;
+  btn.disabled=true; btn.textContent='…';
+  try{
+    const r=await fetch('/api/trade/buy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token_address:addr,token_symbol:sym})}).then(r=>r.json());
+    btn.textContent=r.ok?'✓':'✗';
+    btn.style.background=r.ok?'#00e676':'#ff1744';
+    btn.style.color=r.ok?'#000':'#fff';
+  }catch(e){ btn.textContent='✗'; btn.style.background='#ff1744'; btn.style.color='#fff'; }
+  setTimeout(()=>{ btn.textContent=orig; btn.disabled=false; btn.style.background=''; btn.style.color=''; },2500);
 }
 
 function checkForTrades(lines){
@@ -4074,6 +4199,7 @@ function fmtInt(n){
 function renderMarket(tokens){
   if(tokens?.length) _marketTokens=tokens;
   const grid=document.getElementById('market-grid');
+  if(!grid) return; // replaced by live market table
   const ticker=document.getElementById('ticker-track');
   const count=document.getElementById('token-count');
 
@@ -6971,7 +7097,7 @@ function _pnlSetRange(range,btn){
 }
 
 setInterval(fetchState,10000);
-setInterval(fetchMarketOnly,30000);
+setInterval(fetchMarketOnly,15000);
 setInterval(fetchTrades,30000);
 setInterval(fetchPnlChart,30000);
 setInterval(fetchLeaderboard,30000);
