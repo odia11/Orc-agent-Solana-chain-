@@ -293,27 +293,23 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .swipe-hint{display:none;font-size:10px;color:var(--muted);text-align:right;margin:-4px 0 6px;letter-spacing:.05em}
 @media(max-width:600px){.swipe-hint{display:block}}
 .usdc-warn{display:none;margin:0 0 10px;padding:10px 14px;background:#fff8f8;border:1px solid #e5e5e5;border-radius:8px;font-size:11px;color:#000000;line-height:1.5}
+.sol-actions{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
 .claim-sol-btn,.deposit-sol-btn,.withdraw-sol-btn{
-  display:block;
-  width:100%;
-  padding:8px 16px;
-  margin-top:7px;
+  background:#ffffff;
+  border:1px solid #000000;
+  color:#000000;
+  padding:6px 12px;
   font-family:inherit;
-  font-size:13px;
+  font-size:11px;
   font-weight:500;
-  letter-spacing:.5px;
-  color:#fff;
-  background:transparent;
-  border:1px solid #e5e5e5;
-  border-radius:6px;
+  letter-spacing:.1em;
+  text-transform:uppercase;
+  border-radius:0;
   cursor:pointer;
-  text-align:center;
-  transition:border-color .15s,color .15s;
+  transition:background .15s;
 }
 .claim-sol-btn:hover,.deposit-sol-btn:hover,.withdraw-sol-btn:hover{
-  border-color:#000000;
-  color:#000000;
-  background:transparent;
+  background:#f0f0f0;
 }
 .claim-sol-btn:disabled,.deposit-sol-btn:disabled,.withdraw-sol-btn:disabled{
   opacity:.4;
@@ -2259,14 +2255,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .badge-pill{
   display:inline-flex;align-items:center;gap:3px;
   padding:4px 12px;border-radius:20px;
-  font-size:11px;font-weight:500;letter-spacing:.01em;
+  font-size:11px;font-weight:500;letter-spacing:.05em;
+  text-transform:uppercase;
   background:#ffffff;border:1px solid #e5e5e5;
   white-space:nowrap;cursor:default;
   font-family:'Inter',sans-serif;
   position:relative;transition:opacity .15s;
 }
-.badge-pill.earned{color:#767676;border-color:var(--bp-color,#767676)}
-.badge-pill.locked{color:#767676;opacity:.38;filter:grayscale(1);border-color:#242424}
+.badge-pill.earned{color:#000000;border:1px solid #000000;background:#ffffff}
+.badge-pill.locked{color:#b5b5b5;border:1px solid #e5e5e5;background:#ffffff;opacity:1;filter:none}
 .badge-pill[title]:hover::after{
   content:attr(title);
   position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);
@@ -2858,9 +2855,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div class="statsbar-lbl">SOL Balance</div>
       <div class="statsbar-val" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="statsbar-sub" id="s-sol-usdc"></div>
-      <button id="deposit-sol-btn" style="display:none" onclick="openDepositModal()"></button>
-      <button id="withdraw-sol-btn" style="display:none" onclick="openWithdrawModal()"></button>
-      <button id="claim-sol-btn" style="display:none" onclick="openIncinerator()"></button>
+      <div class="sol-actions">
+        <button id="deposit-sol-btn" onclick="openDepositModal()">↓ Deposit</button>
+        <button id="withdraw-sol-btn" onclick="openWithdrawModal()">↑ Withdraw</button>
+        <button id="claim-sol-btn" onclick="openIncinerator()">🔥 Burn</button>
+      </div>
     </div>
     <div class="statsbar-pill" id="positions-panel">
       <div class="statsbar-lbl">Open Positions</div>
