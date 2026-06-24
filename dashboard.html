@@ -2962,7 +2962,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="wrap" id="main-content">
 
   <!-- ── TRADERS VIEW ── -->
-  <div id="dash-traders" style="display:none">
+  <div id="dash-traders" class="dash-section" style="display:none">
 
     <!-- Your Profile strip — above everything -->
     <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
@@ -3042,7 +3042,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   <!-- ── MESSAGES VIEW ── -->
   <!-- ── MAIN DASHBOARD ── -->
-  <div id="dash-main">
+  <div id="dash-main" class="dash-section">
 
   <!-- MY PROFILE BAR -->
   <div id="dash-profile-bar" style="display:none" onclick="if(_myProfileId)openProfileCard(_myProfileId)">
@@ -3435,7 +3435,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div>
 
   <!-- ── ADMIN DASHBOARD VIEW (toggled by 👑 Admin button) ── -->
-  <div id="dash-admin" style="display:none">
+  <div id="dash-admin" class="dash-section" style="display:none">
     <div class="adash-wrap">
       <div class="adash-hdr">
         <span class="adash-title">👑 Admin Dashboard</span>
@@ -3548,7 +3548,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div><!-- /main-content -->
 
   <!-- ── MESSAGES (full-page sibling of .wrap) ── -->
-  <div id="dash-messages" style="display:none">
+  <div id="dash-messages" class="dash-section" style="display:none">
     <div class="dm-layout" id="dm-layout">
 
       <!-- Conversations sidebar -->
@@ -3598,7 +3598,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div><!-- /dash-messages -->
 
   <!-- ── COMMUNITY CHAT (full-page sibling of .wrap) ── -->
-  <div id="dash-community" style="display:none">
+  <div id="dash-community" class="dash-section" style="display:none">
     <div class="gc-topbar">
       <button class="gc-back-btn" onclick="closeCommunityView()" title="Back">←</button>
       <span class="gc-title">Community Chat</span>
@@ -5958,10 +5958,19 @@ function _sbNav(section){
     if(_dmOpen) closeMessagesView();
     else if(_tradersView) closeTradersView();
     else if(_gcOpen) closeCommunityView();
+    // always ensure main content is visible (guards against edge-case blanks)
+    const _mc=document.getElementById('main-content');
+    if(_mc) _mc.style.display='';
+    const _dm=document.getElementById('dash-main');
+    if(_dm) _dm.style.display='';
     _sbSetActive('sbn-dashboard');
   } else if(section==='market'){
     if(_dmOpen) closeMessagesView();
     if(_tradersView) closeTradersView();
+    const _mc=document.getElementById('main-content');
+    if(_mc) _mc.style.display='';
+    const _dm=document.getElementById('dash-main');
+    if(_dm) _dm.style.display='';
     _sbSetActive('sbn-market');
     const mp=document.getElementById('market-panel');
     if(mp) setTimeout(()=>mp.scrollIntoView({behavior:'smooth',block:'start'}),50);
@@ -8859,5 +8868,19 @@ async function _tvcDelete(commentId){
     </div>
   </div>
 </div>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  var allSections = document.querySelectorAll('.dash-section, [id^="dash-"]');
+  allSections.forEach(function(s) { s.style.display = 'none'; });
+  var mc = document.getElementById('main-content');
+  if (mc) mc.style.display = '';
+  var main = document.getElementById('dash-main');
+  if (main) { main.style.display = 'block'; }
+  else {
+    var first = document.querySelector('.dash-section');
+    if (first) first.style.display = 'block';
+  }
+});
+</script>
 </body>
 </html>
