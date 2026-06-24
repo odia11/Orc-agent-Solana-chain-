@@ -4076,7 +4076,7 @@ function renderLiveMarket(tokens){
       const logo=t.image_url
         ?`<img src="${esc(t.image_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:7px;vertical-align:middle;background:var(--bg3)" onerror="this.style.display='none'">`
         :`<span style="display:inline-block;width:24px;height:24px;border-radius:50%;background:var(--bg3);margin-right:7px;vertical-align:middle"></span>`;
-      const rowClick=addr?`onclick="if(event.target.tagName!=='BUTTON')openTokenPanel('${addr}')"`:' ';
+      const rowClick=addr?`onclick="if(event.target.tagName!=='BUTTON')window.openTokenPanel&&window.openTokenPanel('${addr}')"`:' ';
       return `<tr ${rowClick}>
         <td style="color:var(--muted)">${i+1}</td>
         <td style="min-width:140px">${logo}<span style="font-weight:700">${sym}</span><span style="color:var(--muted);margin-left:6px;font-size:11px">${nm}</span></td>
@@ -4104,7 +4104,7 @@ function renderLiveMarket(tokens){
       const logo=t.image_url
         ?`<img src="${esc(t.image_url)}" alt="" class="lm-card-logo" onerror="this.style.display='none'">`
         :`<span class="lm-card-logo"></span>`;
-      return `<div class="lm-card"${addr?` onclick="if(!event.target.closest('button'))openTokenPanel('${addr}')"`:''}>
+      return `<div class="lm-card"${addr?` onclick="if(!event.target.closest('button'))window.openTokenPanel&&window.openTokenPanel('${addr}')"`:''}>
         ${logo}
         <div class="lm-card-info"><div class="lm-card-sym">${sym}</div><div class="lm-card-name">${nm}</div></div>
         <div class="lm-card-right">
@@ -8705,7 +8705,7 @@ document.addEventListener('DOMContentLoaded', function(){
         const priceStr=pVal!=null?(pVal<0.01?pVal.toFixed(8):pVal<1?pVal.toFixed(4):pVal.toFixed(2)):'';
         const chg=t.price_change_24h!=null?Number(t.price_change_24h):null;
         const chgHtml=chg!=null?`<span style="color:${chg>=0?'#00e676':'#ff1744'};font-size:10px">${chg>=0?'+':''}${chg.toFixed(1)}%</span>`:'';
-        html+=`<div class="hdr-sd-item" onclick="openTokenPanel(${JSON.stringify(addr)});if(window._hdrCloseDD)window._hdrCloseDD();" style="cursor:pointer">
+        html+=`<div class="hdr-sd-item" onclick="window.openTokenPanel&&window.openTokenPanel(${JSON.stringify(addr)});if(window._hdrCloseDD)window._hdrCloseDD();" style="cursor:pointer">
           <div style="min-width:0;flex:1">
             <div class="hdr-sd-name"><strong>${_e(t.symbol||'?')}</strong>${t.name&&t.name!==t.symbol?` <span style="color:#555555;font-size:11px;font-weight:400">${_e(t.name)}</span>`:''}${priceStr?` <span style="color:#00e676;font-size:11px">$${_e(priceStr)}</span>`:''}</div>
             <div class="hdr-sd-sub" style="display:flex;justify-content:space-between;align-items:center">${_e(_short(addr))}${chgHtml}</div>
