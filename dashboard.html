@@ -2915,12 +2915,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="pnlce-scan"></div>
         <div class="pnlce-body">
           <svg class="pnlce-icon" width="44" height="44" viewBox="0 0 160 160" fill="none">
-            <ellipse cx="80" cy="82" rx="62" ry="58" fill="#f0f0f0" stroke="#000000" stroke-width="5"/>
-            <ellipse cx="80" cy="56" rx="38" ry="32" fill="#f0f0f0" stroke="#000000" stroke-width="4"/>
-            <circle cx="62" cy="52" r="9" fill="#000000"/>
-            <circle cx="98" cy="52" r="9" fill="#000000"/>
-            <circle cx="64" cy="50" r="3" fill="black"/>
-            <circle cx="100" cy="50" r="3" fill="black"/>
+            <ellipse cx="80" cy="82" rx="62" ry="58" fill="#242424" stroke="#2e2e2e" stroke-width="5"/>
+            <ellipse cx="80" cy="56" rx="38" ry="32" fill="#242424" stroke="#2e2e2e" stroke-width="4"/>
+            <circle cx="62" cy="52" r="9" fill="#aaaaaa"/>
+            <circle cx="98" cy="52" r="9" fill="#aaaaaa"/>
+            <circle cx="64" cy="50" r="3" fill="#1c1c1c"/>
+            <circle cx="100" cy="50" r="3" fill="#1c1c1c"/>
           </svg>
           <div class="pnlce-title">START TRADING TO SEE YOUR PnL</div>
           <div class="pnlce-stats">
@@ -2974,12 +2974,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="pnlce-scan"></div>
         <div class="pnlce-body">
           <svg class="pnlce-icon" width="36" height="36" viewBox="0 0 160 160" fill="none">
-            <ellipse cx="80" cy="82" rx="62" ry="58" fill="#f0f0f0" stroke="#000000" stroke-width="5"/>
-            <ellipse cx="80" cy="56" rx="38" ry="32" fill="#f0f0f0" stroke="#000000" stroke-width="4"/>
-            <circle cx="62" cy="52" r="9" fill="#000000"/>
-            <circle cx="98" cy="52" r="9" fill="#000000"/>
-            <circle cx="64" cy="50" r="3" fill="black"/>
-            <circle cx="100" cy="50" r="3" fill="black"/>
+            <ellipse cx="80" cy="82" rx="62" ry="58" fill="#242424" stroke="#2e2e2e" stroke-width="5"/>
+            <ellipse cx="80" cy="56" rx="38" ry="32" fill="#242424" stroke="#2e2e2e" stroke-width="4"/>
+            <circle cx="62" cy="52" r="9" fill="#aaaaaa"/>
+            <circle cx="98" cy="52" r="9" fill="#aaaaaa"/>
+            <circle cx="64" cy="50" r="3" fill="#1c1c1c"/>
+            <circle cx="100" cy="50" r="3" fill="#1c1c1c"/>
           </svg>
           <div class="pnlce-stats"><span>No trades today yet — bot is scanning...</span></div>
         </div>
@@ -5318,7 +5318,8 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
     return;
   }
 
-  // No wallet found — show onboarding screen
+  // No wallet found — launch in view-only mode; Connect Wallet button in header lets user connect
+  await launchApp();
 })();
 
 // ── SETTINGS MODAL ──
