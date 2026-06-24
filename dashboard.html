@@ -5963,6 +5963,7 @@ function _sbNav(section){
     if(_mc) _mc.style.display='';
     const _dm=document.getElementById('dash-main');
     if(_dm) _dm.style.display='';
+    console.log('showing dashboard',_dm,'display:',_dm&&_dm.style.display,'parent:',_dm&&_dm.parentElement&&_dm.parentElement.style.display);
     _sbSetActive('sbn-dashboard');
   } else if(section==='market'){
     if(_dmOpen) closeMessagesView();

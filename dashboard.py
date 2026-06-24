@@ -2552,7 +2552,11 @@ def index():
     with open(os.path.join(BASE, 'dashboard.html'), 'r', encoding='utf-8') as f:
         html = f.read()
     html = html.replace('__X_CLIENT_SECRET__', X_CLIENT_SECRET)
-    return app.response_class(html, mimetype='text/html')
+    resp = app.response_class(html, mimetype='text/html')
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
