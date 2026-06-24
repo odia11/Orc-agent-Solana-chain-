@@ -1640,13 +1640,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   word-break:break-word;
 }
 .dm-msg.mine .dm-bubble{
-  background:#141414;
+  background:#1c1c1c;
   color:#fff;
   border:none;
   border-radius:16px 16px 4px 16px;
 }
 .dm-msg.theirs .dm-bubble{
-  background:#1c1c1c;
+  background:#2e2e2e;
   color:#fff;
   border:none;
   border-radius:16px 16px 16px 4px;
@@ -1874,11 +1874,30 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .dm-chat-hdr-name{font-size:13px}
   .dm-chat-hdr-wallet{font-size:9px}
   /* ─ Messages area ─ */
-  .dm-messages{padding:12px 14px;gap:8px}
-  .dm-msg{max-width:88%}
+  .dm-messages{
+    padding:12px 14px;
+    gap:8px;
+    flex:none;
+    height:calc(100vh - 120px);
+    height:calc(100dvh - 120px);
+    overflow-y:auto;
+    padding-bottom:80px;
+  }
+  .dm-msg{max-width:75%}
   .dm-bubble{font-size:13px;padding:9px 12px}
-  /* ─ Input row: full width, fixed to bottom of chat ─ */
-  .dm-input-row{padding:10px 12px;gap:8px}
+  /* ─ Input row: fixed to bottom of screen ─ */
+  .dm-input-row{
+    position:fixed;
+    bottom:0;
+    left:0;
+    right:0;
+    background:#141414;
+    padding:12px;
+    padding-bottom:calc(12px + env(safe-area-inset-bottom,0px));
+    border-top:1px solid #2e2e2e;
+    gap:8px;
+    z-index:200;
+  }
   .dm-input{font-size:14px;padding:10px 12px}
   .dm-send-btn{padding:0 16px;font-size:10px;letter-spacing:.04em;height:42px;flex-shrink:0}
   /* ─ Comments ─ */
