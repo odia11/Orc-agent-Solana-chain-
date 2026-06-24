@@ -4233,6 +4233,8 @@ def api_token_info(mint_address):
             'address':          base.get('address', mint),
             'price':            _f(p.get('priceUsd')),
             'image_url':        info.get('imageUrl'),
+            'logo_url':         info.get('imageUrl'),
+            'banner_url':       info.get('header'),
             # flat fields (used by token detail panel + market/live)
             'mcap':             mcap,
             'market_cap':       mcap,
