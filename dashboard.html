@@ -125,6 +125,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .hdr-search{width:100%;background:#1c1c1c;border:1px solid #2e2e2e;border-radius:20px;padding:7px 14px 7px 32px;font-size:12px;font-family:'Inter',system-ui,sans-serif;color:#ffffff;outline:none;transition:border-color .15s}
 .hdr-search::placeholder{color:#555555}
 .hdr-search:focus{border-color:#555555}
+.hdr-search-dropdown{position:absolute;top:calc(100% + 6px);left:0;right:0;background:#1c1c1c;border:1px solid #2e2e2e;border-radius:10px;max-height:300px;overflow-y:auto;z-index:500;display:none;box-shadow:0 8px 32px rgba(0,0,0,.6)}
+.hdr-search-dropdown.open{display:block}
+.hdr-sd-section{padding:4px 0}
+.hdr-sd-label{font-size:9px;color:#555555;letter-spacing:.12em;text-transform:uppercase;padding:8px 14px 4px;font-family:'Share Tech Mono',monospace}
+.hdr-sd-item{display:flex;align-items:center;gap:10px;padding:8px 14px;cursor:pointer;transition:background .1s;color:#ffffff;text-decoration:none}
+.hdr-sd-item:hover{background:#242424}
+.hdr-sd-avatar{width:26px;height:26px;border-radius:50%;background:#2e2e2e;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#aaaaaa;flex-shrink:0;overflow:hidden}
+.hdr-sd-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.hdr-sd-name{font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hdr-sd-sub{font-size:10px;color:#555555;font-family:'Share Tech Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.hdr-sd-sep{height:1px;background:#2e2e2e;margin:2px 0}
+.hdr-sd-empty{padding:16px 14px;font-size:11px;color:#555555;text-align:center}
 .wallet-pill{display:flex;align-items:center;gap:6px;background:#1c1c1c;border:1px solid #2e2e2e;border-radius:20px;padding:5px 12px;font-size:10px;color:#aaaaaa;position:relative;transition:border-color .15s;-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
 .wallet-pill:hover{border-color:rgba(255,255,255,.4)}
 .wallet-pill:hover #wallet-short{text-decoration:underline;text-underline-offset:2px}
@@ -2635,7 +2647,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
     <div class="hdr-search-wrap">
       <svg class="hdr-search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="hdr-search" type="text" placeholder="Search tokens..." id="hdr-search-input" autocomplete="off">
+      <input class="hdr-search" type="text" placeholder="Search traders or tokens..." id="hdr-search-input" autocomplete="off">
+      <div class="hdr-search-dropdown" id="hdr-search-dropdown"></div>
     </div>
     <div class="header-right">
       <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
@@ -8159,22 +8172,85 @@ async function _tvcDelete(commentId){
 
 // ── HEADER SEARCH ──
 (function(){
-  const inp=document.getElementById('hdr-search-input');
-  if(!inp) return;
-  inp.addEventListener('keydown',function(e){
-    if(e.key!=='Enter') return;
-    const q=inp.value.trim();
-    if(!q) return;
-    if(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q)){
-      location.href='/token/'+encodeURIComponent(q);
+  const inp = document.getElementById('hdr-search-input');
+  const dd  = document.getElementById('hdr-search-dropdown');
+  if(!inp || !dd) return;
+
+  let _st = null;
+
+  function _e(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+  function _short(a){ return a.length>14 ? a.slice(0,5)+'…'+a.slice(-4) : a; }
+  function _avHtml(u){
+    const ini=_e((u.username||'?')[0].toUpperCase());
+    if(u.avatar_url)
+      return `<div class="hdr-sd-avatar"><img src="${_e(u.avatar_url)}" onerror="this.style.display='none';this.nextSibling.style.cssText='display:flex;width:100%;height:100%;align-items:center;justify-content:center'"><span style="display:none">${ini}</span></div>`;
+    return `<div class="hdr-sd-avatar">${ini}</div>`;
+  }
+  function closeDD(){ dd.classList.remove('open'); dd.innerHTML=''; }
+
+  async function doSearch(q){
+    let traders=[], tokens=[];
+
+    try{
+      const r=await fetch('/api/users/search?q='+encodeURIComponent(q)).then(x=>x.json());
+      if(r?.ok && r.users) traders=r.users.slice(0,5);
+    }catch(e){}
+
+    if(q.length>20 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(q))
+      tokens.push({mint:q, symbol:'CONTRACT', _addr:true});
+    if(_marketTokens && _marketTokens.length){
+      const ql=q.toLowerCase();
+      for(const t of _marketTokens){
+        if(tokens.length>=5) break;
+        if((t.symbol||'').toLowerCase().includes(ql)||(t.name||'').toLowerCase().includes(ql))
+          tokens.push(t);
+      }
+    }
+
+    if(!traders.length && !tokens.length){
+      dd.innerHTML=`<div class="hdr-sd-empty">No results for "${_e(q)}"</div>`;
+      dd.classList.add('open');
       return;
     }
-    const match=_marketTokens.find(t=>(t.symbol||'').toLowerCase()===q.toLowerCase());
-    if(match&&match.mint){
-      location.href='/token/'+encodeURIComponent(match.mint);
-    } else if(_marketTokens.length){
-      showLfToast('🔍','No token found for "'+q+'"','neg');
+
+    let html='';
+    if(traders.length){
+      html+='<div class="hdr-sd-section"><div class="hdr-sd-label">Traders</div>';
+      for(const u of traders)
+        html+=`<a class="hdr-sd-item" href="/trader/${_e(u.id)}">${_avHtml(u)}<div style="min-width:0;flex:1"><div class="hdr-sd-name">${_e(u.username||'Unknown')}</div></div></a>`;
+      html+='</div>';
     }
+    if(traders.length && tokens.length) html+='<div class="hdr-sd-sep"></div>';
+    if(tokens.length){
+      html+='<div class="hdr-sd-section"><div class="hdr-sd-label">Tokens</div>';
+      for(const t of tokens){
+        const addr=t.mint||t.address||'';
+        html+=`<a class="hdr-sd-item" href="/token/${_e(addr)}"><div style="min-width:0;flex:1"><div class="hdr-sd-name">${_e(t.symbol||'?')}</div><div class="hdr-sd-sub">${_e(_short(addr))}</div></div></a>`;
+      }
+      html+='</div>';
+    }
+    dd.innerHTML=html;
+    dd.classList.add('open');
+  }
+
+  inp.addEventListener('keyup', function(e){
+    if(e.key==='Escape'){ closeDD(); inp.blur(); return; }
+    if(e.key==='Enter'){
+      const q=inp.value.trim();
+      if(!q) return;
+      if(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q)){ location.href='/token/'+encodeURIComponent(q); return; }
+      const m=(_marketTokens||[]).find(t=>(t.symbol||'').toLowerCase()===q.toLowerCase());
+      if(m?.mint){ location.href='/token/'+encodeURIComponent(m.mint); return; }
+      return;
+    }
+    const q=inp.value.trim();
+    if(q.length<2){ closeDD(); return; }
+    clearTimeout(_st);
+    _st=setTimeout(()=>doSearch(q), 220);
+  });
+
+  document.addEventListener('click', function(e){
+    if(!inp.closest('.hdr-search-wrap').contains(e.target)) closeDD();
   });
 })();
 </script>
