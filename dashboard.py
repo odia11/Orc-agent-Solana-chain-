@@ -4158,6 +4158,52 @@ def search_tokens():
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
+@app.route('/api/token/info/<mint_address>', methods=['GET'])
+@rate_limit(20, 60)
+def api_token_info(mint_address):
+    mint = _sanitize(mint_address.strip())
+    if not mint or not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid address'}), 400
+    try:
+        url = 'https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(mint, safe='')
+        r = _dex_get(url, timeout=8)
+        if not r or r.status_code != 200:
+            return jsonify({'ok': False, 'msg': 'Token not found'}), 404
+        pairs = r.json().get('pairs') or []
+        if not pairs:
+            return jsonify({'ok': False, 'msg': 'Token not found'}), 404
+        p    = pairs[0]
+        base = p.get('baseToken') or {}
+        info = p.get('info') or {}
+        pc   = p.get('priceChange') or {}
+        vol  = p.get('volume') or {}
+        liq  = p.get('liquidity') or {}
+        txns = p.get('txns') or {}
+        h24  = txns.get('h24') or {}
+        def _f(v): return float(v) if v not in (None, '', 'null') else 0.0
+        return jsonify({
+            'ok':             True,
+            'symbol':         base.get('symbol', ''),
+            'name':           base.get('name', ''),
+            'address':        base.get('address', mint),
+            'price':          _f(p.get('priceUsd')),
+            'image_url':      info.get('imageUrl'),
+            'price_change':   {
+                'm5':  _f(pc.get('m5')),
+                'h1':  _f(pc.get('h1')),
+                'h6':  _f(pc.get('h6')),
+                'h24': _f(pc.get('h24')),
+            },
+            'market_cap':     _f(p.get('marketCap')),
+            'volume_24h':     _f(vol.get('h24')),
+            'liquidity_usd':  _f(liq.get('usd')),
+            'txns_24h':       int(_f(h24.get('buys')) + _f(h24.get('sells'))),
+            'dexscreener_url': p.get('url') or f'https://dexscreener.com/solana/{mint}',
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
 @app.route('/api/trade/buy', methods=['POST'])
 @rate_limit(10, 60)
 def api_trade_buy():

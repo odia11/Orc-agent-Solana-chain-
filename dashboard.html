@@ -2380,6 +2380,89 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
 /* ═══════════════════════════════════════════ */
 
+/* ── TOKEN DETAIL PANEL ── */
+#token-detail-panel{
+  position:fixed;right:0;top:0;
+  width:380px;height:100vh;
+  background:#141414;border-left:1px solid #2e2e2e;
+  z-index:500;overflow-y:auto;
+  transform:translateX(100%);
+  transition:transform .3s ease;
+  display:flex;flex-direction:column;
+}
+#token-detail-panel.open{transform:translateX(0)}
+#tdp-overlay{
+  position:fixed;inset:0;background:rgba(0,0,0,.55);
+  z-index:499;display:none;pointer-events:auto;
+}
+#tdp-overlay.open{display:block}
+#tdp-header{
+  display:flex;align-items:center;gap:12px;
+  padding:18px 16px 14px;border-bottom:1px solid #2e2e2e;
+  flex-shrink:0;
+}
+#tdp-close{
+  background:none;border:none;color:#aaaaaa;font-size:18px;
+  cursor:pointer;padding:4px;line-height:1;flex-shrink:0;
+  transition:color .15s;
+}
+#tdp-close:hover{color:#ffffff}
+#tdp-logo{
+  width:48px;height:48px;border-radius:50%;
+  object-fit:cover;flex-shrink:0;background:#1c1c1c;
+  border:1px solid #2e2e2e;display:none;
+}
+#tdp-logo.loaded{display:block}
+#tdp-title-text{min-width:0;flex:1}
+#tdp-name{font-size:16px;font-weight:700;color:#ffffff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tdp-symbol{font-size:11px;color:#aaaaaa;margin-top:2px}
+#tdp-body{padding:20px 16px;display:flex;flex-direction:column;gap:20px}
+#tdp-price-row{display:flex;align-items:baseline;gap:10px}
+#tdp-price{font-size:28px;font-weight:700;color:#ffffff;font-variant-numeric:tabular-nums}
+#tdp-changes{display:flex;gap:6px;flex-wrap:wrap}
+.tdp-badge{
+  font-size:11px;font-weight:700;padding:4px 9px;border-radius:6px;
+  font-variant-numeric:tabular-nums;
+}
+.tdp-badge-lbl{font-size:9px;color:#555555;font-weight:400;margin-right:2px;text-transform:uppercase}
+.tdp-badge.pos{background:rgba(0,230,118,.12);color:#00e676}
+.tdp-badge.neg{background:rgba(255,23,68,.1);color:#ff1744}
+.tdp-badge.flat{background:#1c1c1c;color:#aaaaaa}
+#tdp-stats{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+}
+.tdp-stat{
+  background:#1c1c1c;border:1px solid #2e2e2e;border-radius:8px;
+  padding:12px 14px;
+}
+.tdp-stat-lbl{font-size:9px;color:#555555;letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
+.tdp-stat-val{font-size:15px;font-weight:700;color:#ffffff;font-variant-numeric:tabular-nums}
+#tdp-dex-btn{
+  display:flex;align-items:center;justify-content:center;gap:7px;
+  background:#1c1c1c;border:1px solid #2e2e2e;border-radius:8px;
+  padding:12px 16px;color:#aaaaaa;font-size:13px;font-weight:600;
+  text-decoration:none;transition:border-color .15s,color .15s;
+  margin-top:4px;
+}
+#tdp-dex-btn:hover{border-color:#555555;color:#ffffff}
+#tdp-loading{
+  display:flex;align-items:center;justify-content:center;
+  padding:60px 16px;color:#555555;font-size:13px;
+}
+#tdp-error{
+  padding:60px 16px;text-align:center;color:#ff1744;font-size:13px;
+}
+@media(max-width:768px){
+  #token-detail-panel{
+    width:100%;height:100%;
+    top:0;left:0;right:0;bottom:0;
+    border-left:none;border-top:1px solid #2e2e2e;
+    transform:translateY(100%);
+  }
+  #token-detail-panel.open{transform:translateY(0)}
+  #tdp-stats{grid-template-columns:1fr 1fr}
+}
+
 </style>
 </head>
 <body>
@@ -8247,6 +8330,90 @@ async function _tvcDelete(commentId){
   }catch(e){ if(card) card.style.opacity=''; }
 }
 
+// ── TOKEN DETAIL PANEL ──
+(function(){
+  const panel   = document.getElementById('token-detail-panel');
+  const overlay = document.getElementById('tdp-overlay');
+  if(!panel) return;
+
+  function _fmt(n){
+    if(n==null||isNaN(n)) return '—';
+    if(n>=1e9)  return '$'+(n/1e9).toFixed(2)+'B';
+    if(n>=1e6)  return '$'+(n/1e6).toFixed(2)+'M';
+    if(n>=1e3)  return '$'+(n/1e3).toFixed(1)+'K';
+    return '$'+n.toFixed(2);
+  }
+  function _price(p){
+    if(p==null||isNaN(p)) return '—';
+    if(p<0.000001) return '$'+p.toExponential(3);
+    if(p<0.01)     return '$'+p.toFixed(8);
+    if(p<1)        return '$'+p.toFixed(4);
+    return '$'+p.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2});
+  }
+  function _badge(val, lbl){
+    const cls = val>0?'pos':val<0?'neg':'flat';
+    const sign = val>0?'+':'';
+    return `<span class="tdp-badge ${cls}"><span class="tdp-badge-lbl">${lbl}</span>${sign}${Number(val).toFixed(2)}%</span>`;
+  }
+
+  window.openTokenPanel = async function(addr){
+    if(!panel) return;
+    document.getElementById('tdp-name').textContent   = addr.slice(0,8)+'…';
+    document.getElementById('tdp-symbol').textContent = addr.slice(0,5)+'…'+addr.slice(-4);
+    document.getElementById('tdp-loading').style.display = '';
+    document.getElementById('tdp-error').style.display   = 'none';
+    document.getElementById('tdp-content').style.display = 'none';
+    const logo = document.getElementById('tdp-logo');
+    logo.classList.remove('loaded'); logo.src='';
+    document.getElementById('tdp-dex-btn').href = 'https://dexscreener.com/solana/'+addr;
+    panel.classList.add('open');
+    if(overlay) overlay.classList.add('open');
+    document.body.style.overflow='hidden';
+    try{
+      const res  = await fetch('/api/token/info/'+encodeURIComponent(addr));
+      const data = await res.json();
+      if(!data.ok) throw new Error(data.msg||'Not found');
+      document.getElementById('tdp-name').textContent   = data.name||data.symbol||addr.slice(0,10);
+      document.getElementById('tdp-symbol').textContent = data.symbol||'';
+      if(data.image_url){
+        logo.onload  = ()=>logo.classList.add('loaded');
+        logo.onerror = ()=>{ logo.src=''; };
+        logo.src = data.image_url;
+      }
+      document.getElementById('tdp-price').textContent = _price(data.price);
+      const pc = data.price_change||{};
+      document.getElementById('tdp-changes').innerHTML =
+        _badge(pc.m5??0,'5m') + _badge(pc.h1??0,'1h') +
+        _badge(pc.h6??0,'6h') + _badge(pc.h24??0,'24h');
+      document.getElementById('tdp-stats').innerHTML =
+        `<div class="tdp-stat"><div class="tdp-stat-lbl">Market Cap</div><div class="tdp-stat-val">${_fmt(data.market_cap)}</div></div>`+
+        `<div class="tdp-stat"><div class="tdp-stat-lbl">Volume 24h</div><div class="tdp-stat-val">${_fmt(data.volume_24h)}</div></div>`+
+        `<div class="tdp-stat"><div class="tdp-stat-lbl">Liquidity</div><div class="tdp-stat-val">${_fmt(data.liquidity_usd)}</div></div>`+
+        `<div class="tdp-stat"><div class="tdp-stat-lbl">Txns 24h</div><div class="tdp-stat-val">${data.txns_24h!=null?Number(data.txns_24h).toLocaleString():'—'}</div></div>`;
+      if(data.dexscreener_url)
+        document.getElementById('tdp-dex-btn').href = data.dexscreener_url;
+      document.getElementById('tdp-loading').style.display = 'none';
+      document.getElementById('tdp-content').style.display = '';
+    } catch(err){
+      document.getElementById('tdp-loading').style.display = 'none';
+      const el = document.getElementById('tdp-error');
+      el.textContent = 'Failed to load token: '+err.message;
+      el.style.display = '';
+    }
+  };
+
+  window.closeTokenPanel = function(){
+    if(!panel) return;
+    panel.classList.remove('open');
+    if(overlay) overlay.classList.remove('open');
+    document.body.style.overflow='';
+  };
+
+  document.addEventListener('keydown', function(e){
+    if(e.key==='Escape' && panel.classList.contains('open')) window.closeTokenPanel();
+  });
+})();
+
 // ── HEADER SEARCH ──
 (function(){
   const inp = document.getElementById('hdr-search-input');
@@ -8301,11 +8468,11 @@ async function _tvcDelete(commentId){
         const priceStr=pVal!=null?(pVal<0.01?pVal.toFixed(8):pVal<1?pVal.toFixed(4):pVal.toFixed(2)):'';
         const chg=t.price_change_24h!=null?Number(t.price_change_24h):null;
         const chgHtml=chg!=null?`<span style="color:${chg>=0?'#00e676':'#ff1744'};font-size:10px">${chg>=0?'+':''}${chg.toFixed(1)}%</span>`:'';
-        html+=`<a class="hdr-sd-item" href="/token/${_e(addr)}">
+        html+=`<div class="hdr-sd-item" onclick="openTokenPanel(${JSON.stringify(addr)});closeDD();" style="cursor:pointer">
           <div style="min-width:0;flex:1">
             <div class="hdr-sd-name"><strong>${_e(t.symbol||'?')}</strong>${t.name&&t.name!==t.symbol?` <span style="color:#555555;font-size:11px;font-weight:400">${_e(t.name)}</span>`:''}${priceStr?` <span style="color:#00e676;font-size:11px">$${_e(priceStr)}</span>`:''}</div>
             <div class="hdr-sd-sub" style="display:flex;justify-content:space-between;align-items:center">${_e(_short(addr))}${chgHtml}</div>
-          </div></a>`;
+          </div></div>`;
       }
       html+='</div>';
     }
@@ -8318,9 +8485,9 @@ async function _tvcDelete(commentId){
     if(e.key==='Enter'){
       const q=inp.value.trim();
       if(!q) return;
-      if(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q)){ location.href='/token/'+encodeURIComponent(q); return; }
+      if(/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q)){ closeDD(); openTokenPanel(q); return; }
       const m=(_marketTokens||[]).find(t=>(t.symbol||'').toLowerCase()===q.toLowerCase());
-      if(m?.mint){ location.href='/token/'+encodeURIComponent(m.mint); return; }
+      if(m?.mint){ closeDD(); openTokenPanel(m.mint); return; }
       return;
     }
     const q=inp.value.trim();
@@ -8334,6 +8501,34 @@ async function _tvcDelete(commentId){
   });
 })();
 </script>
+
+<!-- ── TOKEN DETAIL PANEL ── -->
+<div id="tdp-overlay" onclick="closeTokenPanel()"></div>
+<div id="token-detail-panel" role="dialog" aria-modal="true">
+  <div id="tdp-header">
+    <button id="tdp-close" onclick="closeTokenPanel()" title="Close">✕</button>
+    <img id="tdp-logo" src="" alt="">
+    <div id="tdp-title-text">
+      <div id="tdp-name">—</div>
+      <div id="tdp-symbol">—</div>
+    </div>
+  </div>
+  <div id="tdp-body">
+    <div id="tdp-loading">Loading…</div>
+    <div id="tdp-error" style="display:none"></div>
+    <div id="tdp-content" style="display:none">
+      <div id="tdp-price-row">
+        <div id="tdp-price">—</div>
+      </div>
+      <div id="tdp-changes"></div>
+      <div id="tdp-stats"></div>
+      <a id="tdp-dex-btn" href="#" target="_blank" rel="noopener">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        View on DexScreener
+      </a>
+    </div>
+  </div>
+</div>
 
 <!-- ── DEPOSIT SOL MODAL ── -->
 <div id="deposit-modal" class="s-modal" onclick="if(event.target===this)closeDepositModal()">
