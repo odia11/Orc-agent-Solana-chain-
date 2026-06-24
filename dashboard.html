@@ -4,6 +4,7 @@
 <script>if(typeof globalThis.Buffer==='undefined'){globalThis.Buffer={from:function(a){return new Uint8Array(a)},alloc:function(n){return new Uint8Array(n)}};}</script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="theme-color" content="#0e0e0e">
 <title>OrcAgent — Solana Trading Terminal</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="alternate icon" href="/static/favicon.ico">
@@ -455,7 +456,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .gc-username.mine{color:#22c55e}
 .gc-time{font-size:10px;color:#444444}
 .gc-text{font-size:13px;color:#dddddd;line-height:1.5;word-break:break-word}
-.gc-img{max-width:250px;border-radius:8px;cursor:pointer;display:block;margin-top:4px}
+.gc-img{max-width:min(250px,100%);border-radius:8px;cursor:pointer;display:block;margin-top:4px}
 .gc-del-btn{display:none;position:absolute;right:0;top:0;background:transparent;border:none;color:#475569;font-size:13px;cursor:pointer;padding:2px 5px;line-height:1;border-radius:4px;transition:color .15s}
 .gc-del-btn:hover{color:#f87171}
 .gc-input-row{display:flex;gap:8px;padding:12px 16px;border-top:1px solid #2a2a2a;flex-shrink:0;background:#0e0e0e;align-items:flex-end}
@@ -913,6 +914,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 @keyframes toastIn{0%{opacity:0;transform:translateX(40px)}100%{opacity:1;transform:translateX(0)}}
 .lf-toast.lf-toast-removing{animation:toastOut .3s ease-in forwards}
 @keyframes toastOut{0%{opacity:1;transform:translateX(0)}100%{opacity:0;transform:translateX(40px)}}
+@keyframes sectionFadeIn{from{opacity:0}to{opacity:1}}
+.fade-in{animation:sectionFadeIn .15s ease}
 .lf-toast-icon{font-size:14px;flex-shrink:0;line-height:1.3}
 @media(max-width:600px){
   .lf-item{padding:8px 10px;gap:8px}
@@ -1783,7 +1786,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-img-spinner{display:inline-block;width:14px;height:14px;border:2px solid #444444;border-top-color:#888888;border-radius:50%;animation:dmSpin .6s linear infinite}
 @keyframes dmSpin{to{transform:rotate(360deg)}}
 .dm-bubble-img{background:transparent!important;padding:0!important;border:none!important;box-shadow:none!important}
-.dm-bubble-img img{max-width:200px;max-height:200px;border-radius:8px;cursor:pointer;display:block}
+.dm-bubble-img img{max-width:min(200px,100%);max-height:200px;border-radius:8px;cursor:pointer;display:block}
 .dm-hdr-back{
   display:none;
   background:transparent;
@@ -5458,7 +5461,7 @@ function _wizardSkip(){
 
 function _wizardCopyAddr(){
   if(!phantomKey) return;
-  navigator.clipboard.writeText(phantomKey).then(()=>showLfToast('◎','Address copied!','ok')).catch(()=>{});
+  navigator.clipboard.writeText(phantomKey).then(()=>showLfToast('◎','Address copied!','pos')).catch(()=>{});
 }
 
 function showTradeWarn(msg){
@@ -5525,6 +5528,7 @@ async function removeBlacklistToken(mint){
   try{
     await fetch('/api/blacklist/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mint})});
     loadBlacklist();
+    showLfToast('✓','Token unbanned','pos');
   }catch(e){}
 }
 
@@ -5563,6 +5567,7 @@ async function _blMgrFetch(){
 async function _blMgrUnban(btn,mint){
   if(btn) btn.disabled=true;
   await fetch('/api/blacklist/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({mint})}).catch(()=>null);
+  showLfToast('✓','Token unbanned','pos');
   _blMgrFetch();
 }
 
@@ -6055,6 +6060,13 @@ function _navLogoClick(){
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
+function _fadeIn(el){
+  if(!el) return;
+  el.classList.remove('fade-in');
+  void el.offsetWidth;
+  el.classList.add('fade-in');
+}
+
 function openTradersView(){
   if(_tradersView) return;
   _tradersView=true;
@@ -6067,7 +6079,9 @@ function openTradersView(){
   if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
     document.getElementById('dash-admin').style.display='none';
   }
-  document.getElementById('dash-traders').style.display='';
+  const _dtEl=document.getElementById('dash-traders');
+  _dtEl.style.display='';
+  _fadeIn(_dtEl);
   _sbSetActive('sbn-traders');
   const btn=document.getElementById('traders-btn');
   if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.08)';}
@@ -6088,7 +6102,9 @@ function closeTradersView(){
     if(tl) tl.style.display='';
   }
   document.getElementById('dash-traders').style.display='none';
-  document.getElementById('dash-main').style.display='';
+  const _dmEl=document.getElementById('dash-main');
+  _dmEl.style.display='';
+  _fadeIn(_dmEl);
   _sbSetActive('sbn-dashboard');
   if(_tvCountdownTimer){clearInterval(_tvCountdownTimer);_tvCountdownTimer=null;}
   const el=document.getElementById('tv-countdown'); if(el) el.textContent='';
@@ -7188,6 +7204,7 @@ async function confirmWithdraw() {
         (explorer ? `<br><a href="${explorer}" target="_blank" rel="noopener noreferrer" style="color:var(--blue);font-size:10px;text-decoration:underline">View on Solscan ↗</a>` : '') +
         (sig ? `<br><span style="color:var(--muted);font-size:9px;word-break:break-all">TX: ${esc(sig)}</span>` : '');
       btn.style.display = 'none';
+      showLfToast('◎',`Sent ${amount} SOL`,'pos');
       fetchBalance();
     } else {
       resultEl.style.cssText = 'display:block;margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:11px;line-height:1.6;background:rgba(255,77,106,.07);border:1px solid rgba(255,77,106,.28);color:var(--red)';
@@ -7379,7 +7396,9 @@ function openMessagesView(){
   if(wrap) wrap.style.display='none';
   const bn=document.getElementById('mob-bottom-nav');
   if(bn) bn.style.display='none';
-  document.getElementById('dash-messages').style.display='flex';
+  const _dmMsgEl=document.getElementById('dash-messages');
+  _dmMsgEl.style.display='flex';
+  _fadeIn(_dmMsgEl);
   _sbSetActive('sbn-messages');
   const btn=document.getElementById('messages-btn');
   if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(34,197,94,.08)';}
@@ -7402,7 +7421,9 @@ function closeMessagesView(){
   // Restore .wrap and ensure only dash-main is visible
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='';
-  document.getElementById('dash-main').style.display='';
+  const _cmEl=document.getElementById('dash-main');
+  _cmEl.style.display='';
+  _fadeIn(_cmEl);
   document.getElementById('dash-traders').style.display='none';
   document.getElementById('dash-admin').style.display='none';
   _sbSetActive('sbn-dashboard');
@@ -7432,7 +7453,9 @@ function openCommunityView(){
   if(wrap) wrap.style.display='none';
   const bn=document.getElementById('mob-bottom-nav');
   if(bn) bn.style.display='none';
-  document.getElementById('dash-community').style.display='flex';
+  const _gcCommEl=document.getElementById('dash-community');
+  _gcCommEl.style.display='flex';
+  _fadeIn(_gcCommEl);
   _sbSetActive('sbn-community');
   gcFetch(true);
   _gcTimer=setInterval(gcFetch,3000);
@@ -7448,7 +7471,9 @@ function closeCommunityView(){
   if(bn) bn.style.display='';
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='';
-  document.getElementById('dash-main').style.display='';
+  const _ccMainEl=document.getElementById('dash-main');
+  _ccMainEl.style.display='';
+  _fadeIn(_ccMainEl);
   document.getElementById('dash-traders').style.display='none';
   document.getElementById('dash-admin').style.display='none';
   _sbSetActive('sbn-dashboard');
@@ -7930,7 +7955,7 @@ async function dmSend(){
   const text=input.value.trim();
   if(!text||!_dmPeerId) return;
   const btn=document.getElementById('dm-send-btn');
-  btn.disabled=true;
+  btn.disabled=true; btn.textContent='…';
   try{
     const resp=await fetch('/api/messages/'+_dmPeerId,{
       method:'POST',
@@ -7941,10 +7966,9 @@ async function dmSend(){
     if(r.ok){
       input.value='';
       input.style.height='';
-      // Instant append so the UI feels immediate
       _dmAppendMessage({sender_id:_dmMyId, message:text, created_at:r.created_at||new Date().toISOString()});
-      // Background sync to pick up any concurrent incoming messages
       _dmFetchMessages();
+      showLfToast('💬','Message sent','pos');
     } else {
       console.error('POST /api/messages/'+_dmPeerId+' failed — status:',resp.status,'body:',r);
       showTradeWarn('⚠️ '+(r.msg||'Failed to send'));
@@ -7953,7 +7977,7 @@ async function dmSend(){
     console.error('dmSend exception:',e);
     showTradeWarn('⚠️ Send failed');
   }
-  btn.disabled=false;
+  btn.disabled=false; btn.textContent='SEND';
   input.focus();
 }
 
