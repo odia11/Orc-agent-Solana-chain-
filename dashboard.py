@@ -4418,6 +4418,177 @@ def api_trade_position(token_address):
     })
 
 
+# ── WALLET TOKEN CACHE ──
+_wallet_tokens_cache: dict = {}   # wallet → {'ts': float, 'tokens': list, 'total_usd': float, 'total_sol': float}
+_WALLET_CACHE_TTL = 30            # seconds
+
+TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+
+def _fetch_wallet_tokens(wallet: str) -> dict:
+    """Fetch all SPL tokens + SOL for wallet, price each via DexScreener. Cached 30 s."""
+    cached = _wallet_tokens_cache.get(wallet)
+    if cached and time.time() - cached['ts'] < _WALLET_CACHE_TTL:
+        return cached
+
+    result: list = []
+    total_usd = 0.0
+    sol_price_usd = 0.0
+
+    # ── SOL balance ──
+    sol_balance = 0.0
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+        }, timeout=8)
+        sol_balance = round(r.json()['result']['value'] / 1e9, 6)
+    except Exception:
+        pass
+
+    # ── SOL price from DexScreener ──
+    try:
+        sr = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + SOL_MINT, timeout=6)
+        if sr and sr.status_code == 200:
+            pairs = sr.json().get('pairs') or []
+            pairs_sol = [p for p in pairs if p.get('chainId') == 'solana'] or pairs
+            if pairs_sol:
+                best = max(pairs_sol, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
+                sol_price_usd = float(best.get('priceUsd') or 0)
+                info = best.get('info') or {}
+                sol_logo = info.get('imageUrl') or ''
+                sol_pc24 = float((best.get('priceChange') or {}).get('h24') or 0)
+    except Exception:
+        sol_logo = ''
+        sol_pc24 = 0.0
+
+    sol_value = round(sol_balance * sol_price_usd, 4)
+    total_usd += sol_value
+    result.append({
+        'symbol':           'SOL',
+        'name':             'Solana',
+        'mint':             SOL_MINT,
+        'amount':           sol_balance,
+        'decimals':         9,
+        'price_usd':        sol_price_usd,
+        'value_usd':        sol_value,
+        'price_change_24h': sol_pc24,
+        'logo_url':         sol_logo,
+    })
+
+    # ── SPL token accounts ──
+    mints_needed: list = []
+    raw_accounts: list = []
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'getTokenAccountsByOwner',
+            'params': [
+                wallet,
+                {'programId': TOKEN_PROGRAM_ID},
+                {'encoding': 'jsonParsed'},
+            ]
+        }, timeout=12)
+        accounts = r.json().get('result', {}).get('value') or []
+        for acc in accounts:
+            info = (acc.get('account') or {}).get('data', {}).get('parsed', {}).get('info') or {}
+            mint = info.get('mint', '')
+            ta   = info.get('tokenAmount') or {}
+            decimals = int(ta.get('decimals', 0))
+            amount   = int(ta.get('amount', 0)) / (10 ** decimals) if decimals >= 0 else 0.0
+            if amount <= 0 or not mint or mint == SOL_MINT:
+                continue
+            raw_accounts.append({'mint': mint, 'amount': amount, 'decimals': decimals})
+            mints_needed.append(mint)
+    except Exception:
+        pass
+
+    # ── Batch DexScreener price lookup (max 30 per request) ──
+    price_map: dict = {}
+    BATCH = 30
+    for i in range(0, len(mints_needed), BATCH):
+        batch = mints_needed[i:i + BATCH]
+        try:
+            url = 'https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch)
+            dr = _dex_get(url, timeout=10)
+            if not dr or dr.status_code != 200:
+                continue
+            for p in (dr.json().get('pairs') or []):
+                if p.get('chainId') != 'solana':
+                    continue
+                base_mint = (p.get('baseToken') or {}).get('address', '')
+                if not base_mint or base_mint in price_map:
+                    continue
+                base = p.get('baseToken') or {}
+                info = p.get('info') or {}
+                price_map[base_mint] = {
+                    'symbol':           base.get('symbol', ''),
+                    'name':             base.get('name', ''),
+                    'price_usd':        float(p.get('priceUsd') or 0),
+                    'price_change_24h': float((p.get('priceChange') or {}).get('h24') or 0),
+                    'logo_url':         info.get('imageUrl') or '',
+                }
+        except Exception:
+            continue
+
+    # ── Assemble SPL token rows ──
+    for acc in raw_accounts:
+        mint   = acc['mint']
+        amount = acc['amount']
+        pd     = price_map.get(mint, {})
+        price  = pd.get('price_usd', 0.0)
+        value  = round(amount * price, 4)
+        total_usd += value
+        result.append({
+            'symbol':           pd.get('symbol') or mint[:6],
+            'name':             pd.get('name') or '',
+            'mint':             mint,
+            'amount':           amount,
+            'decimals':         acc['decimals'],
+            'price_usd':        price,
+            'value_usd':        value,
+            'price_change_24h': pd.get('price_change_24h', 0.0),
+            'logo_url':         pd.get('logo_url', ''),
+        })
+
+    # Sort by value descending (SOL already at index 0 from insertion order, but re-sort anyway)
+    result.sort(key=lambda x: x['value_usd'], reverse=True)
+
+    total_sol = round(total_usd / sol_price_usd, 4) if sol_price_usd else 0.0
+    out = {'ts': time.time(), 'tokens': result, 'total_usd': round(total_usd, 4), 'total_sol': total_sol}
+    _wallet_tokens_cache[wallet] = out
+    return out
+
+
+@app.route('/api/wallet/tokens', methods=['GET'])
+@rate_limit(20, 60)
+def api_wallet_tokens():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    try:
+        data = _fetch_wallet_tokens(wallet)
+        return jsonify({'ok': True, 'tokens': data['tokens'], 'cached': False})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@app.route('/api/wallet/total', methods=['GET'])
+@rate_limit(30, 60)
+def api_wallet_total():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    try:
+        data = _fetch_wallet_tokens(wallet)
+        return jsonify({
+            'ok':        True,
+            'total_usd': data['total_usd'],
+            'total_sol': data['total_sol'],
+            'token_count': len(data['tokens']),
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
 @app.route('/api/messages/unread', methods=['GET'])
 @rate_limit(60, 60)
 def messages_unread():
