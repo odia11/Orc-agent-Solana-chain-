@@ -4200,33 +4200,47 @@ def api_token_info(mint_address):
         pairs = r.json().get('pairs') or []
         if not pairs:
             return jsonify({'ok': False, 'msg': 'Token not found'}), 404
-        p    = pairs[0]
+        # Pick the pair with highest liquidity (most representative)
+        pairs_sol = [p for p in pairs if p.get('chainId') == 'solana'] or pairs
+        p    = max(pairs_sol, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
         base = p.get('baseToken') or {}
         info = p.get('info') or {}
         pc   = p.get('priceChange') or {}
         vol  = p.get('volume') or {}
         liq  = p.get('liquidity') or {}
         txns = p.get('txns') or {}
-        h24  = txns.get('h24') or {}
-        def _f(v): return float(v) if v not in (None, '', 'null') else 0.0
+        h24t = txns.get('h24') or {}
+        def _f(v):
+            try: return float(v) if v not in (None, '', 'null') else 0.0
+            except (TypeError, ValueError): return 0.0
+        pc_5m  = _f(pc.get('m5'))
+        pc_1h  = _f(pc.get('h1'))
+        pc_6h  = _f(pc.get('h6'))
+        pc_24h = _f(pc.get('h24'))
+        txns24 = int(_f(h24t.get('buys')) + _f(h24t.get('sells')))
+        mcap   = _f(p.get('marketCap')) or _f(p.get('fdv'))
         return jsonify({
-            'ok':             True,
-            'symbol':         base.get('symbol', ''),
-            'name':           base.get('name', ''),
-            'address':        base.get('address', mint),
-            'price':          _f(p.get('priceUsd')),
-            'image_url':      info.get('imageUrl'),
-            'price_change':   {
-                'm5':  _f(pc.get('m5')),
-                'h1':  _f(pc.get('h1')),
-                'h6':  _f(pc.get('h6')),
-                'h24': _f(pc.get('h24')),
-            },
-            'market_cap':     _f(p.get('marketCap')),
-            'volume_24h':     _f(vol.get('h24')),
-            'liquidity_usd':  _f(liq.get('usd')),
-            'txns_24h':       int(_f(h24.get('buys')) + _f(h24.get('sells'))),
-            'dexscreener_url': p.get('url') or f'https://dexscreener.com/solana/{mint}',
+            'ok':               True,
+            'symbol':           base.get('symbol', ''),
+            'name':             base.get('name', ''),
+            'address':          base.get('address', mint),
+            'price':            _f(p.get('priceUsd')),
+            'image_url':        info.get('imageUrl'),
+            # flat fields (used by token detail panel + market/live)
+            'mcap':             mcap,
+            'market_cap':       mcap,
+            'volume_24h':       _f(vol.get('h24')),
+            'liquidity':        _f(liq.get('usd')),
+            'liquidity_usd':    _f(liq.get('usd')),
+            'txns_24h':         txns24,
+            'traders_24h':      txns24,
+            'price_change_5m':  pc_5m,
+            'price_change_1h':  pc_1h,
+            'price_change_6h':  pc_6h,
+            'price_change_24h': pc_24h,
+            # nested dict kept for backward compat with panel JS
+            'price_change': {'m5': pc_5m, 'h1': pc_1h, 'h6': pc_6h, 'h24': pc_24h},
+            'dexscreener_url':  p.get('url') or f'https://dexscreener.com/solana/{mint}',
         })
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
@@ -6161,6 +6175,132 @@ def api_burn_tokens():
 @rate_limit(60, 60)
 def api_market():
     return jsonify({'tokens': state['tokens']})
+
+
+_market_live_cache: dict = {'ts': 0.0, 'data': []}
+_market_live_lock         = threading.Lock()
+
+@app.route('/api/market/live', methods=['GET'])
+@rate_limit(60, 60)
+def api_market_live():
+    now = time.time()
+    with _market_live_lock:
+        if now - _market_live_cache['ts'] < 15:
+            return jsonify({'ok': True, 'tokens': _market_live_cache['data'], 'cached': True})
+
+    def _f(v):
+        try:
+            return float(v) if v not in (None, '', 'null') else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _extract(p, addr_override=None):
+        base  = p.get('baseToken') or {}
+        addr  = base.get('address', '') or addr_override or ''
+        if not addr:
+            return None
+        info  = p.get('info') or {}
+        pc    = p.get('priceChange') or {}
+        vol   = p.get('volume') or {}
+        liq   = p.get('liquidity') or {}
+        txns  = p.get('txns') or {}
+        h24t  = txns.get('h24') or {}
+        return {
+            'symbol':            base.get('symbol', ''),
+            'name':              base.get('name', ''),
+            'address':           addr,
+            'price':             _f(p.get('priceUsd')),
+            'mcap':              _f(p.get('marketCap')),
+            'volume_24h':        _f(vol.get('h24')),
+            'liquidity':         _f(liq.get('usd')),
+            'txns_24h':          int(_f(h24t.get('buys')) + _f(h24t.get('sells'))),
+            'traders_24h':       int(_f(h24t.get('buys')) + _f(h24t.get('sells'))),
+            'price_change_5m':   _f(pc.get('m5')),
+            'price_change_1h':   _f(pc.get('h1')),
+            'price_change_6h':   _f(pc.get('h6')),
+            'price_change_24h':  _f(pc.get('h24')),
+            'image_url':         info.get('imageUrl'),
+        }
+
+    seen        = set()
+    result      = []
+    boost_addrs = []
+
+    # ── Step 1: boosted token addresses ──────────────────────────────────────
+    r = _dex_get('https://api.dexscreener.com/token-boosts/top/v1')
+    if r and r.status_code == 200:
+        try:
+            for item in (r.json() if isinstance(r.json(), list) else []):
+                if item.get('chainId') == 'solana':
+                    a = item.get('tokenAddress', '')
+                    if a and a not in seen:
+                        seen.add(a)
+                        boost_addrs.append(a)
+        except Exception:
+            pass
+
+    # ── Step 2: batch-fetch pair data for boosted tokens (≤30 per call) ──────
+    best_pair: dict = {}   # addr → best pair dict
+    for i in range(0, min(len(boost_addrs), 30), 30):
+        batch = boost_addrs[i:i + 30]
+        if not batch:
+            break
+        url_b = 'https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch)
+        rb = _dex_get(url_b, timeout=10)
+        if rb and rb.status_code == 200:
+            try:
+                for p in (rb.json().get('pairs') or []):
+                    if p.get('chainId') != 'solana':
+                        continue
+                    a = (p.get('baseToken') or {}).get('address', '')
+                    if not a:
+                        continue
+                    # keep the pair with highest liquidity for this token
+                    existing = best_pair.get(a)
+                    cur_liq  = _f((p.get('liquidity') or {}).get('usd'))
+                    old_liq  = _f((existing.get('liquidity') or {}).get('usd')) if existing else -1
+                    if cur_liq > old_liq:
+                        best_pair[a] = p
+            except Exception:
+                pass
+
+    # ── Step 3: trending search as fallback / top-up ─────────────────────────
+    trending_pairs = []
+    rt = _dex_get('https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6')
+    if rt and rt.status_code == 200:
+        try:
+            d = rt.json()
+            for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
+                if p.get('chainId') == 'solana':
+                    trending_pairs.append(p)
+        except Exception:
+            pass
+
+    # ── Step 4: assemble result — boosted first, then trending ───────────────
+    added = set()
+    for addr in boost_addrs:
+        if len(result) >= 20:
+            break
+        p = best_pair.get(addr)
+        if p:
+            tok = _extract(p)
+            if tok and tok['address'] not in added:
+                result.append(tok)
+                added.add(tok['address'])
+
+    for p in trending_pairs:
+        if len(result) >= 20:
+            break
+        tok = _extract(p)
+        if tok and tok['address'] not in added:
+            result.append(tok)
+            added.add(tok['address'])
+
+    with _market_live_lock:
+        _market_live_cache['ts']   = time.time()
+        _market_live_cache['data'] = result
+
+    return jsonify({'ok': True, 'tokens': result, 'cached': False})
 
 @app.route('/api/totd')
 @rate_limit(60, 60)
