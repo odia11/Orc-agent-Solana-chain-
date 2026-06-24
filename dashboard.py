@@ -2468,6 +2468,7 @@ def _security_headers(resp):
             "https://quote-api.jup.ag "
             "https://api.dexscreener.com "
             "https://dexscreener.com "
+            "https://api.helius.xyz "
             "wss: ws:; "
         "frame-src https://dexscreener.com; "
         "object-src 'none'; "
