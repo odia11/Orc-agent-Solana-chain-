@@ -55,7 +55,7 @@ def _security_gate():
         if body and _SUSPICIOUS_INPUT_RE.search(body):
             _log_security_event('suspicious_input', session.get('wallet', 'anonymous'),
                                 f'request body on {request.path} from {ip}')
-    if not _rate_ok('global:' + ip, 60, 60):
+    if ip not in _OWNER_IPS and not _rate_ok('global:' + ip, 200, 60):
         return jsonify({'error': 'Too many requests'}), 429
     _ext_hit('api')
     return None
@@ -383,8 +383,8 @@ def rate_limit(limit: int, window: int = 60, ban: bool = False):
         @functools.wraps(f)
         def wrapped(*args, **kwargs):
             ip  = request.remote_addr or '0.0.0.0'
-            # Owner wallet is never rate-limited or banned
-            if _is_owner(session.get('wallet', '')):
+            # Owner IP and owner wallet are never rate-limited or banned
+            if ip in _OWNER_IPS or _is_owner(session.get('wallet', '')):
                 return f(*args, **kwargs)
             # Respect existing bans before even counting the request
             if ban and _is_banned(ip):
@@ -1229,13 +1229,32 @@ _dex_429_until  = 0.0  # epoch seconds — 0 means not in backoff
 _dex_lock       = threading.Lock()
 _last_good_mints: list = []  # last non-empty result from discover_tokens()
 
+# Response cache: url → (timestamp, response_text)
+# search?q= entries TTL 10 s; everything else TTL 30 s
+_dex_resp_cache: dict = {}
+
+class _DexCachedResp:
+    """Minimal requests.Response stand-in for cached DexScreener data."""
+    status_code = 200
+    def __init__(self, text: str):
+        self._text = text
+    def json(self):
+        return json.loads(self._text)
+
 def _dex_get(url: str, timeout: int = 10):
-    """GET a DexScreener URL with shared headers and 429 backoff.
-    Returns the Response, or None if in backoff / request failed."""
+    """GET a DexScreener URL with shared headers, 429 backoff, and response cache.
+    Returns the Response (or cached stand-in), or None if unavailable."""
     global _dex_429_until
+    now = time.time()
+    ttl = 10 if 'search?q=' in url else 30
+    # Serve from cache if fresh
+    cached = _dex_resp_cache.get(url)
+    if cached and now - cached[0] < ttl:
+        return _DexCachedResp(cached[1])
     with _dex_lock:
-        if time.time() < _dex_429_until:
-            return None
+        if now < _dex_429_until:
+            # In backoff — return stale cached data if we have any
+            return _DexCachedResp(cached[1]) if cached else None
     try:
         _ext_hit('dexscreener')
         r = requests.get(url, headers=_DEX_HEADERS, timeout=timeout)
@@ -1243,7 +1262,16 @@ def _dex_get(url: str, timeout: int = 10):
             with _dex_lock:
                 _dex_429_until = time.time() + 60
             add_log('DexScreener rate-limited (429) — backing off 60 s, serving cached data')
-            return None
+            return _DexCachedResp(cached[1]) if cached else None
+        if r.status_code == 200:
+            with _dex_lock:
+                _dex_resp_cache[url] = (time.time(), r.text)
+                # Evict entries older than 5 min if cache grows large
+                if len(_dex_resp_cache) > 500:
+                    cutoff = time.time() - 300
+                    stale = [k for k, v in _dex_resp_cache.items() if v[0] < cutoff]
+                    for k in stale:
+                        del _dex_resp_cache[k]
         return r
     except Exception:
         return None
@@ -2638,7 +2666,7 @@ def api_token_candles(mint):
 
 
 @app.route('/api/token/<mint>/co-traders', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_token_co_traders(mint):
     wallet = _current_wallet()
     if not wallet:
@@ -3030,7 +3058,7 @@ def set_wallet():
 
 # ── SETTINGS ──
 @app.route('/api/settings', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_settings():
     wallet = _current_wallet()
     if not wallet:
@@ -3125,7 +3153,7 @@ def save_settings():
 
 # ── USERNAME ──
 @app.route('/api/blacklist', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_blacklist_get():
     wallet = _current_wallet()
     if not wallet:
@@ -3177,7 +3205,7 @@ def api_blacklist_remove():
     return jsonify({'ok': True})
 
 @app.route('/api/username', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_username():
     wallet = _current_wallet()
     if not wallet:
@@ -3245,7 +3273,7 @@ def save_avatar():
 
 # ── LEADERBOARD ──
 @app.route('/api/leaderboard', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_leaderboard():
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -3470,7 +3498,7 @@ def platform_stats():
 
 # ── SOCIAL FEED ──
 @app.route('/api/social/feed', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def social_feed():
     feed_filter = request.args.get('filter', 'all')
 
@@ -3740,7 +3768,7 @@ def get_profile(user_id: int):
 
 # ── PROFILE TRADES ──
 @app.route('/api/profile/<int:user_id>/trades', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def profile_user_trades(user_id: int):
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -3828,7 +3856,7 @@ def profile_user_trades(user_id: int):
 
 # ── FOLLOW / UNFOLLOW ──
 @app.route('/api/follow/<int:target_id>', methods=['POST'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def toggle_follow(target_id: int):
     wallet = _current_wallet()
     if not wallet:
@@ -3886,7 +3914,7 @@ def _viewer_follows_set(c, viewer_wallet, uid_list):
     return {r[0] for r in c.fetchall()}
 
 @app.route('/api/profile/<int:user_id>/followers', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_followers(user_id: int):
     viewer_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
@@ -3912,7 +3940,7 @@ def get_followers(user_id: int):
     return jsonify({'ok': True, 'users': users})
 
 @app.route('/api/profile/<int:user_id>/following', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_following(user_id: int):
     viewer_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
@@ -3964,7 +3992,7 @@ def _follow_list_rows(rows, today, viewer_wallet=None):
     return users
 
 @app.route('/api/profile/<wallet>/followers', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_followers_by_wallet(wallet: str):
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     viewer_wallet = _current_wallet()
@@ -3988,7 +4016,7 @@ def get_followers_by_wallet(wallet: str):
     return jsonify({'ok': True, 'users': _follow_list_rows(rows, today, viewer_wallet)})
 
 @app.route('/api/profile/<wallet>/following', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_following_by_wallet(wallet: str):
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     viewer_wallet = _current_wallet()
@@ -4031,7 +4059,7 @@ def save_bio():
 
 # ── DIFFICULTY (deprecated — universal strategy, no difficulty modes) ──
 @app.route('/api/difficulty', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_difficulty():
     return jsonify({'ok': True, 'difficulty': 'UNIVERSAL',
                     'tp': TAKE_PROFIT, 'sl': STOP_LOSS})
@@ -4093,7 +4121,7 @@ def _is_following_ids(conn, follower: int, following: int) -> bool:
     ).fetchone())
 
 @app.route('/api/users/search', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def search_users():
     wallet = _current_wallet()
     if not wallet:
@@ -4123,7 +4151,7 @@ def search_users():
     ]})
 
 @app.route('/api/tokens/search', methods=['GET'])
-@rate_limit(20, 60)
+@rate_limit(60, 60)
 def search_tokens():
     q = _sanitize(request.args.get('q', '').strip())
     if not q or len(q) < 2:
@@ -4159,7 +4187,7 @@ def search_tokens():
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
 @app.route('/api/token/info/<mint_address>', methods=['GET'])
-@rate_limit(20, 60)
+@rate_limit(60, 60)
 def api_token_info(mint_address):
     mint = _sanitize(mint_address.strip())
     if not mint or not is_valid_solana_address(mint):
@@ -4308,7 +4336,7 @@ def api_trade_sell():
 
 
 @app.route('/api/trade/position/<token_address>', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_trade_position(token_address):
     wallet = _current_wallet()
     if not wallet:
@@ -4354,7 +4382,7 @@ def messages_unread():
     return jsonify({'ok': True, 'unread': count})
 
 @app.route('/api/messages', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def list_conversations():
     wallet = _current_wallet()
     if not wallet:
@@ -4395,7 +4423,7 @@ def list_conversations():
     ]})
 
 @app.route('/api/messages/<int:peer_id>', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_dm_history(peer_id):
     wallet = _current_wallet()
     if not wallet:
@@ -4535,7 +4563,7 @@ def delete_dm(message_id):
     return jsonify({'ok': True})
 
 @app.route('/api/chat', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_group_chat():
     wallet = _current_wallet()
     if not wallet:
@@ -4678,7 +4706,7 @@ def upload_chat_image():
     return jsonify({'ok': True, 'success': True, 'url': f'/static/chat_images/{filename}'})
 
 @app.route('/api/trades/open', methods=['GET'])
-@rate_limit(20, 60)
+@rate_limit(60, 60)
 def api_open_trades():
     wallet = _current_wallet()
     if not wallet:
@@ -4830,7 +4858,7 @@ def copy_trade_from_message():
 
 
 @app.route('/api/comments/<int:profile_uid>', methods=['GET'])
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def get_profile_comments(profile_uid):
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -4996,7 +5024,7 @@ def api_state():
 
 # ── PUMP SCANNER ──
 @app.route('/api/pump-scanner')
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_pump_scanner():
     """Tokens pumping ≥15% in the last 5m or 1h, reusing the already-scanned/filtered
     state['tokens'] snapshot (liquidity≥15000, volume5m≥1000) instead of issuing a
@@ -5414,7 +5442,7 @@ def api_withdraw():
 
 # ── BALANCE ──
 @app.route('/api/balance')
-@rate_limit(10, 60)
+@rate_limit(30, 60)
 def api_balance():
     wallet = _current_wallet()
     if not wallet:
@@ -5471,7 +5499,7 @@ def _get_spl_token_accounts(wallets: list) -> tuple:
 
 
 @app.route('/api/get-tokens')
-@rate_limit(10, 60)
+@rate_limit(30, 60)
 def api_get_tokens():
     wallet = _current_wallet()
     if not wallet:
@@ -6130,19 +6158,19 @@ def api_burn_tokens():
 
 # ── MARKET / TOTD / TRADES ──
 @app.route('/api/market')
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_market():
     return jsonify({'tokens': state['tokens']})
 
 @app.route('/api/totd')
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_totd():
     updated = state.get('totd_updated_at', 0)
     next_in = max(0.0, TOTD_INTERVAL - (time.time() - updated)) if updated else 0.0
     return jsonify({'token': state.get('token_of_the_day'), 'updated_at': updated, 'next_update_in': round(next_in)})
 
 @app.route('/api/carousel')
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_carousel():
     return jsonify({'tokens': state['tokens'][:10]})
 
@@ -6311,7 +6339,7 @@ def _trades_from_db(wallet: str, today: str) -> tuple:
 
 
 @app.route('/api/trades')
-@rate_limit(30, 60)
+@rate_limit(60, 60)
 def api_trades():
     wallet = _current_wallet()
     _strip = lambda t: {k: v for k, v in t.items() if k not in ('fee', 'net_pnl')}
