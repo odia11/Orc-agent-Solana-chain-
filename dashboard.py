@@ -4122,6 +4122,42 @@ def search_users():
         for r in rows
     ]})
 
+@app.route('/api/tokens/search', methods=['GET'])
+@rate_limit(20, 60)
+def search_tokens():
+    q = _sanitize(request.args.get('q', '').strip())
+    if not q or len(q) < 2:
+        return jsonify({'ok': True, 'tokens': []})
+    try:
+        url = 'https://api.dexscreener.com/latest/dex/search?q=' + requests.utils.quote(q, safe='')
+        r = _dex_get(url, timeout=6)
+        if not r or r.status_code != 200:
+            return jsonify({'ok': True, 'tokens': []})
+        pairs = r.json().get('pairs') or []
+        seen, results = set(), []
+        for p in pairs:
+            if (p.get('chainId') or '').lower() != 'solana':
+                continue
+            base  = p.get('baseToken') or {}
+            addr  = base.get('address', '')
+            if not addr or addr in seen:
+                continue
+            seen.add(addr)
+            raw_price  = p.get('priceUsd')
+            raw_change = (p.get('priceChange') or {}).get('h24')
+            results.append({
+                'symbol':           base.get('symbol', ''),
+                'name':             base.get('name', ''),
+                'address':          addr,
+                'price':            float(raw_price)  if raw_price  is not None else None,
+                'price_change_24h': float(raw_change) if raw_change is not None else None,
+            })
+            if len(results) >= 5:
+                break
+        return jsonify({'ok': True, 'tokens': results})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
 @app.route('/api/messages/unread', methods=['GET'])
 @rate_limit(60, 60)
 def messages_unread():

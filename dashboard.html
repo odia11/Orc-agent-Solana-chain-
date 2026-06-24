@@ -8245,23 +8245,18 @@ async function _tvcDelete(commentId){
   function closeDD(){ dd.classList.remove('open'); dd.innerHTML=''; }
 
   async function doSearch(q){
-    let traders=[], tokens=[];
+    // Parallel fetch traders + tokens
+    const [trRes, tkRes] = await Promise.allSettled([
+      fetch('/api/users/search?q='+encodeURIComponent(q)).then(x=>x.json()),
+      fetch('/api/tokens/search?q='+encodeURIComponent(q)).then(x=>x.json()),
+    ]);
 
-    try{
-      const r=await fetch('/api/users/search?q='+encodeURIComponent(q)).then(x=>x.json());
-      if(r?.ok && r.users) traders=r.users.slice(0,5);
-    }catch(e){}
+    let traders = (trRes.status==='fulfilled' && trRes.value?.ok) ? (trRes.value.users||[]).slice(0,5) : [];
+    let tokens  = (tkRes.status==='fulfilled' && tkRes.value?.ok) ? (tkRes.value.tokens||[]).slice(0,5) : [];
 
-    if(q.length>20 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(q))
-      tokens.push({mint:q, symbol:'CONTRACT', _addr:true});
-    if(_marketTokens && _marketTokens.length){
-      const ql=q.toLowerCase();
-      for(const t of _marketTokens){
-        if(tokens.length>=5) break;
-        if((t.symbol||'').toLowerCase().includes(ql)||(t.name||'').toLowerCase().includes(ql))
-          tokens.push(t);
-      }
-    }
+    // Contract address fallback if token search returned nothing
+    if(!tokens.length && q.length>20 && /^[1-9A-HJ-NP-Za-km-z]+$/.test(q))
+      tokens.push({address:q, symbol:'CONTRACT', name:q, price:null});
 
     if(!traders.length && !tokens.length){
       dd.innerHTML=`<div class="hdr-sd-empty">No results for "${_e(q)}"</div>`;
@@ -8273,15 +8268,23 @@ async function _tvcDelete(commentId){
     if(traders.length){
       html+='<div class="hdr-sd-section"><div class="hdr-sd-label">Traders</div>';
       for(const u of traders)
-        html+=`<a class="hdr-sd-item" href="/trader/${_e(u.id)}">${_avHtml(u)}<div style="min-width:0;flex:1"><div class="hdr-sd-name">${_e(u.username||'Unknown')}</div></div></a>`;
+        html+=`<a class="hdr-sd-item" href="/trader/${_e(u.user_id)}">${_avHtml(u)}<div style="min-width:0;flex:1"><div class="hdr-sd-name">${_e(u.username||'Unknown')}</div><div class="hdr-sd-sub">${_e(_short(u.wallet||''))}</div></div></a>`;
       html+='</div>';
     }
     if(traders.length && tokens.length) html+='<div class="hdr-sd-sep"></div>';
     if(tokens.length){
       html+='<div class="hdr-sd-section"><div class="hdr-sd-label">Tokens</div>';
       for(const t of tokens){
-        const addr=t.mint||t.address||'';
-        html+=`<a class="hdr-sd-item" href="/token/${_e(addr)}"><div style="min-width:0;flex:1"><div class="hdr-sd-name">${_e(t.symbol||'?')}</div><div class="hdr-sd-sub">${_e(_short(addr))}</div></div></a>`;
+        const addr=t.address||t.mint||'';
+        const pVal=t.price!=null?Number(t.price):null;
+        const priceStr=pVal!=null?(pVal<0.01?pVal.toFixed(8):pVal<1?pVal.toFixed(4):pVal.toFixed(2)):'';
+        const chg=t.price_change_24h!=null?Number(t.price_change_24h):null;
+        const chgHtml=chg!=null?`<span style="color:${chg>=0?'#00e676':'#ff1744'};font-size:10px">${chg>=0?'+':''}${chg.toFixed(1)}%</span>`:'';
+        html+=`<a class="hdr-sd-item" href="/token/${_e(addr)}">
+          <div style="min-width:0;flex:1">
+            <div class="hdr-sd-name"><strong>${_e(t.symbol||'?')}</strong>${t.name&&t.name!==t.symbol?` <span style="color:#555555;font-size:11px;font-weight:400">${_e(t.name)}</span>`:''}${priceStr?` <span style="color:#00e676;font-size:11px">$${_e(priceStr)}</span>`:''}</div>
+            <div class="hdr-sd-sub" style="display:flex;justify-content:space-between;align-items:center">${_e(_short(addr))}${chgHtml}</div>
+          </div></a>`;
       }
       html+='</div>';
     }
