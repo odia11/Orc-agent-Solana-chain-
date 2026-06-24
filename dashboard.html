@@ -1846,6 +1846,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     flex-direction:column;
     flex:1;
     min-height:0;
+    overflow:hidden;
   }
   /* ─ Sidebar header ─ */
   .dm-sidebar-hdr{padding:14px 16px 12px}
@@ -1873,17 +1874,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .dm-chat-hdr-av{width:32px;height:32px;font-size:10px;flex-shrink:0}
   .dm-chat-hdr-name{font-size:13px}
   .dm-chat-hdr-wallet{font-size:9px}
-  /* ─ Messages area ─ */
+  /* ─ Messages area: flex:1 fills remaining space, no fixed height needed ─ */
   .dm-messages{
-    padding:12px 14px;
-    gap:8px;
-    flex:none;
-    height:calc(100vh - 120px);
-    height:calc(100dvh - 120px);
+    flex:1;
+    min-height:0;
     overflow-y:auto;
+    padding:12px 14px;
     padding-bottom:80px;
+    gap:8px;
   }
   .dm-msg{max-width:75%}
+  .dm-msg.mine{align-self:flex-end;align-items:flex-end}
+  .dm-msg.theirs{align-self:flex-start;align-items:flex-start}
   .dm-bubble{font-size:13px;padding:9px 12px}
   /* ─ Input row: fixed to bottom of screen ─ */
   .dm-input-row{
