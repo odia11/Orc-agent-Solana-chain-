@@ -56,6 +56,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sg-num{flex-shrink:0;width:20px;height:20px;border-radius:50%;background:rgba(0,0,0,.1);border:1px solid rgba(0,0,0,.3);color:var(--green);font-size:10px;font-weight:900;display:flex;align-items:center;justify-content:center;font-family:'Orbitron',monospace}
 .sg-label{font-weight:700;color:var(--text);display:block;margin-bottom:1px}
 .sg-warn{padding:9px 11px;background:rgba(118,118,118,.07);border:1px solid rgba(118,118,118,.22);border-radius:7px;font-size:10px;color:#aaaaaa;text-align:left;line-height:1.55;margin-bottom:1.1rem}
+.ob-btn-outline{background:transparent!important;color:var(--text)!important;border:1px solid var(--border2)!important}
+.ob-btn-outline:hover{border-color:var(--accent)!important;color:var(--accent)!important}
+.ob-manual-section{display:none;text-align:left}
+.ob-manual-section.open{display:block}
+.ob-addr-input{width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);outline:none;transition:border-color .15s;margin-bottom:6px;box-sizing:border-box}
+.ob-addr-input::placeholder{color:var(--muted)}
+.ob-addr-input:focus{border-color:var(--accent)}
+.ob-input-err{font-size:10px;color:var(--red);min-height:14px;margin-bottom:6px}
+#readonly-banner{display:none;background:#f5a623;color:#0a0b0e;font-size:12px;font-weight:600;padding:7px 20px;align-items:center;justify-content:center;gap:12px;flex-shrink:0}
+#readonly-banner button{background:rgba(0,0,0,.18);border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;color:#0a0b0e}
 
 /* ── ORC DANCE ── */
 #orc-overlay{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;background:#1c1c1c;backdrop-filter:blur(10px)}
@@ -2781,40 +2791,48 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="ob-sub">Connect your Phantom or Solflare wallet to start trading Solana meme coins automatically.</div>
     <div class="ob-progress"><div class="ob-dot active"></div><div class="ob-dot"></div></div>
     <div class="ob-step active" id="step-0">
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.5rem">Step 1 — Connect Wallet</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:1rem">Connect Phantom or Solflare to see your live SOL balance and start trading.</div>
+      <!-- Post-connect success row (shown by connectWalletOnboard) -->
       <div id="wallet-connected" style="display:none" class="ob-connected">
-        <div class="ob-check">✓</div>
+        <div class="ob-check" style="background:var(--accent);color:#0a0b0e">✓</div>
         <div class="ob-conn-text">
-          <div class="ob-conn-name" id="wallet-type-label">Phantom wallet</div>
+          <div class="ob-conn-name" id="wallet-type-label">Wallet connected</div>
           <div class="ob-conn-sub" id="wallet-addr" style="font-family:monospace;font-size:10px;word-break:break-all;margin-top:2px"></div>
         </div>
       </div>
+      <!-- Error / install messages (used by existing JS) -->
       <div id="wallet-install-msg" style="display:none;font-size:11px;color:var(--red);background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.2);border-radius:6px;padding:8px 12px;margin-bottom:10px;text-align:left;line-height:1.6"></div>
+      <!-- Hidden compat elements referenced by resetWallet() -->
+      <div id="mobile-deeplink-section" style="display:none"></div>
+      <button id="solflare-ob-btn" style="display:none" onclick="connectWalletOnboard('solflare')"></button>
 
-      <!-- ── MOBILE: no wallet extension detected ── -->
-      <div id="mobile-deeplink-section" style="display:none">
-        <div class="mobile-hint">📱 On mobile? Open this app inside your wallet's built-in browser for full trading access.</div>
-        <button class="ob-btn btn-deeplink-phantom" onclick="window.open('https://phantom.app/ul/browse/https%3A%2F%2Forc-agent-solana-chain-production.up.railway.app','_blank')">
-          🔮 Open in Phantom
-          <span class="deeplink-sub">↗ Opens Phantom app → browse to OrcAgent → connect</span>
-        </button>
-        <button class="ob-btn btn-deeplink-solflare" onclick="window.open('https://solflare.com/ul/v1/browse/https%3A%2F%2Forc-agent-solana-chain-production.up.railway.app','_blank')">
-          🔥 Open in Solflare
-          <span class="deeplink-sub">↗ Opens Solflare app → browse to OrcAgent → connect</span>
-        </button>
-        <div class="mobile-or">— or —</div>
+      <!-- ── OPTION 1: Phantom ── -->
+      <button class="ob-btn" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')" style="background:var(--accent);color:#0a0b0e;display:flex;align-items:center;justify-content:center;gap:8px">
+        <svg width="18" height="18" viewBox="0 0 128 128" fill="none"><path d="M64 0C28.7 0 0 28.7 0 64s28.7 64 64 64 64-28.7 64-64S99.3 0 64 0z" fill="#AB9FF2"/><path d="M108.2 64.8c0 20.5-16.6 37.1-37.1 37.1-9.7 0-18.5-3.7-25.1-9.8l-11.7 9c-1.4 1.1-3.4.1-3.4-1.7V64.8c0-20.5 16.6-37.1 37.1-37.1S108.2 44.3 108.2 64.8z" fill="white"/></svg>
+        Connect Phantom
+      </button>
+      <div id="ob-phantom-note" style="font-size:10px;color:var(--muted);margin:-6px 0 8px;text-align:center"></div>
+
+      <!-- ── OPTION 2: Enter address (read-only) ── -->
+      <button class="ob-btn ob-btn-outline" onclick="_toggleManual()" id="ob-manual-toggle">
+        📋 Enter wallet address
+      </button>
+      <div class="ob-manual-section" id="ob-manual-section">
+        <input class="ob-addr-input" id="ob-manual-addr" type="text" placeholder="Paste your Solana wallet address" autocomplete="off" spellcheck="false"
+          onkeydown="if(event.key==='Enter')connectReadonlyAddress()">
+        <div class="ob-input-err" id="ob-manual-err"></div>
+        <button class="ob-btn" id="ob-manual-connect" onclick="connectReadonlyAddress()" style="background:var(--bg3);color:var(--text);border:1px solid var(--border2);margin-bottom:0">CONNECT (read-only) →</button>
       </div>
 
-      <!-- ── DESKTOP / DAPP BROWSER: direct extension connect ── -->
-      <div id="dapp-connect-section">
-        <button class="ob-btn btn-phantom" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')">🔮 Connect Phantom</button>
-        <button class="ob-btn btn-solflare" id="solflare-ob-btn" onclick="connectWalletOnboard('solflare')">🔥 Connect Solflare</button>
-      </div>
+      <!-- ── OPTION 3: Biometric ── -->
+      <button class="ob-btn ob-btn-outline" onclick="connectBiometric()" id="ob-bio-btn">
+        🔒 Login with Face ID / Fingerprint
+      </button>
+      <div class="ob-input-err" id="ob-bio-err"></div>
 
-      <button class="ob-btn" id="step1-continue-btn" disabled style="background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="gotoSetupGuide()">Continue →</button>
+      <!-- Post-connect: continue to setup guide -->
+      <button class="ob-btn" id="step1-continue-btn" disabled style="display:none;background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="gotoSetupGuide()">Continue →</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
-      <button class="ob-btn btn-skip" onclick="skipToApp()">Skip — browse without connecting →</button>
+      <button class="ob-btn btn-skip" onclick="skipToApp()" style="margin-top:4px">Browse without connecting →</button>
     </div>
 
     <div class="ob-step" id="step-1">
@@ -3052,6 +3070,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
 <!-- MAIN APP -->
 <div id="app" style="display:none">
+
+  <!-- READ-ONLY BANNER -->
+  <div id="readonly-banner">
+    👁 Read-only mode — connect a wallet extension to trade
+    <button onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0);document.getElementById('app').style.display='none'">Connect Wallet</button>
+  </div>
 
   <!-- HEADER -->
   <div class="header">
@@ -3989,6 +4013,79 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false, _copySource=null;
+var _isReadonly = false;
+
+/* ── CONNECT SCREEN HELPERS ── */
+function _toggleManual(){
+  var sec=document.getElementById('ob-manual-section');
+  if(!sec) return;
+  var open=sec.classList.toggle('open');
+  var btn=document.getElementById('ob-manual-toggle');
+  if(btn) btn.textContent=open?'▲ Enter wallet address':'📋 Enter wallet address';
+  if(open) setTimeout(function(){ var inp=document.getElementById('ob-manual-addr'); if(inp) inp.focus(); },100);
+}
+
+async function connectReadonlyAddress(){
+  var inp=document.getElementById('ob-manual-addr');
+  var errEl=document.getElementById('ob-manual-err');
+  var btn=document.getElementById('ob-manual-connect');
+  var addr=inp?inp.value.trim():'';
+  if(errEl) errEl.textContent='';
+  if(!addr){ if(errEl) errEl.textContent='Please paste a Solana wallet address.'; return; }
+  if(btn){ btn.disabled=true; btn.textContent='Connecting…'; }
+  try{
+    var r=await fetch('/api/wallet/connect-readonly',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({address:addr})
+    }).then(function(x){ return x.json(); });
+    if(r.ok){
+      phantomKey=r.wallet; walletType='readonly'; _isReadonly=true;
+      localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'readonly'}));
+      if(r.csrf_token) window._csrfToken=r.csrf_token;
+      launchApp();
+    } else {
+      if(errEl) errEl.textContent=r.msg||'Invalid address.';
+    }
+  }catch(e){ if(errEl) errEl.textContent='Connection failed — please try again.'; }
+  finally{ if(btn){ btn.disabled=false; btn.textContent='CONNECT (read-only) →'; } }
+}
+
+async function connectBiometric(){
+  var errEl=document.getElementById('ob-bio-err');
+  if(errEl) errEl.textContent='';
+  if(!window.PublicKeyCredential){
+    if(errEl) errEl.textContent='WebAuthn not supported on this device.';
+    return;
+  }
+  try{
+    var challenge=new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    var cred=await navigator.credentials.get({
+      publicKey:{challenge:challenge,timeout:60000,userVerification:'preferred'}
+    });
+    if(cred){
+      /* Authenticated — launch as read-only viewer */
+      _isReadonly=true; walletType='biometric';
+      launchApp();
+    }
+  }catch(e){
+    var msg=e.name==='NotAllowedError'?'Authentication cancelled.':
+            e.name==='NotSupportedError'?'No passkey registered. Set one up in device settings first.':
+            'Biometric auth failed: '+(e.message||e.name);
+    if(errEl) errEl.textContent=msg;
+  }
+}
+
+/* Detect Phantom on load and update button note */
+document.addEventListener('DOMContentLoaded',function(){
+  var note=document.getElementById('ob-phantom-note');
+  if(!note) return;
+  if(!window.solana||!window.solana.isPhantom){
+    var btn=document.getElementById('phantom-ob-btn');
+    if(btn){ btn.style.background='var(--bg3)'; btn.style.color='var(--muted)'; btn.style.border='1px solid var(--border2)'; }
+    note.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
+  }
+});
 
 // ── CSRF TOKEN ──
 let _csrfToken = '';
@@ -4221,6 +4318,18 @@ async function launchApp(){
   updateAuthBtns();
   checkOwnerPanel();
   _lastActivity = Date.now();
+  /* apply read-only restrictions */
+  if(_isReadonly){
+    const roBanner=document.getElementById('readonly-banner');
+    if(roBanner) roBanner.style.display='flex';
+    ['feed-trade-btn','sb-start-btn','trade-btn'].forEach(function(id){
+      const el=document.getElementById(id); if(el) el.style.display='none';
+    });
+    const buyBtn=document.getElementById('tdp-buy-btn');
+    const sellBtn=document.getElementById('tdp-sell-btn');
+    if(buyBtn) buyBtn.style.display='none';
+    if(sellBtn) sellBtn.style.display='none';
+  }
   if('Notification' in window) Notification.requestPermission();
   await fetchState();
   fetchTrades();

@@ -67,7 +67,7 @@ def _refresh_session():
 
 # /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
 # cannot require a session-scoped CSRF token. Origin check still protects it.
-_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set'})
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly'})
 
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
@@ -3041,6 +3041,26 @@ def get_csrf_token_endpoint():
     return jsonify({'token': _get_csrf_token()})
 
 # ── WALLET ──
+@app.route('/api/wallet/connect-readonly', methods=['POST'])
+@rate_limit(10, 60)
+def connect_wallet_readonly():
+    address = (request.json or {}).get('address', '').strip()
+    if not address:
+        return jsonify({'ok': False, 'msg': 'Address required'}), 400
+    if not is_valid_solana_address(address):
+        return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
+    session.permanent = True
+    session['wallet'] = address
+    session['readonly'] = True
+    csrf_tok = _get_csrf_token()
+    try:
+        get_or_create_user(address)
+    except Exception:
+        pass
+    add_user_log(address, 'Wallet connected (read-only): ' + address[:6] + '...' + address[-4:])
+    return jsonify({'ok': True, 'wallet': address, 'readonly': True,
+                    'has_trading_key': False, 'csrf_token': csrf_tok})
+
 @app.route('/api/wallet/set', methods=['POST'])
 @rate_limit(10, 60)
 def set_wallet():
