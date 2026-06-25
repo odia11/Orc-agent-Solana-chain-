@@ -2987,6 +2987,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
 
     <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:18px">
+      <div class="s-label">🔐 Mobile Browser Login <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(login on mobile without Phantom)</span></div>
+      <div style="font-size:11px;color:var(--muted);margin:4px 0 10px;line-height:1.5">Set a password to log in from a mobile browser — no wallet extension needed.</div>
+      <div style="display:flex;gap:8px">
+        <input id="s-pwd-input" class="s-input" type="password" placeholder="New password (min 8 chars)" autocomplete="new-password" style="flex:1">
+        <button onclick="_setPassword()" id="s-pwd-btn" style="padding:9px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--text);font-family:'Share Tech Mono',monospace;font-size:10px;cursor:pointer;white-space:nowrap;transition:border-color .15s" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border2)'">Set Password</button>
+      </div>
+      <div class="s-msg" id="s-pwd-msg" style="margin-top:8px;margin-bottom:0"></div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);margin-top:16px;padding-top:18px">
       <div class="s-label">🚫 Avoided Tokens <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(bot skips these when scanning)</span></div>
       <div id="bl-list-wrap" style="margin-top:6px">
         <div style="font-size:10px;color:var(--muted);padding:6px 0">No avoided tokens — use 🚫 Avoid on any token</div>
@@ -4145,7 +4155,7 @@ async function _loginWithPassword(){
     if(r&&r.success){
       if(r.wallet) localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'password'}));
       if(r.csrf_token) _csrfToken=r.csrf_token;
-      location.reload();
+      window.location.href='/dashboard';
     } else {
       if(errEl) errEl.textContent=(r&&r.error)||'Login failed — check your credentials.';
     }
@@ -6914,6 +6924,35 @@ async function openSettings(){
 
 function closeSettings(){
   document.getElementById('settings-modal').classList.remove('open');
+}
+
+async function _setPassword(){
+  var inp=document.getElementById('s-pwd-input');
+  var msg=document.getElementById('s-pwd-msg');
+  var btn=document.getElementById('s-pwd-btn');
+  if(msg){ msg.className='s-msg'; msg.textContent=''; }
+  var password=(inp&&inp.value)||'';
+  if(password.length<8){
+    if(msg){ msg.className='s-msg err'; msg.textContent='Password must be at least 8 characters.'; }
+    return;
+  }
+  if(btn){ btn.disabled=true; btn.textContent='Saving…'; }
+  try{
+    var r=await fetch('/api/set_password',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({password:password})
+    }).then(res=>res.json()).catch(()=>null);
+    if(r&&r.success){
+      if(msg){ msg.className='s-msg ok'; msg.textContent='✓ Password saved — you can now login on mobile without Phantom.'; }
+      if(inp) inp.value='';
+    } else {
+      if(msg){ msg.className='s-msg err'; msg.textContent=(r&&r.error)||'Failed to save password.'; }
+    }
+  }catch(e){
+    if(msg){ msg.className='s-msg err'; msg.textContent='Failed to save password.'; }
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='Set Password'; }
+  }
 }
 
 async function saveUsername(){

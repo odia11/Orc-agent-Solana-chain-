@@ -2591,6 +2591,11 @@ def index():
     resp.headers['Expires'] = '0'
     return resp
 
+@app.route('/dashboard')
+def dashboard_redirect():
+    from flask import redirect
+    return redirect('/', 302)
+
 _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
 @app.route('/token/<mint_address>')
