@@ -323,15 +323,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #center-feed{display:flex;flex-direction:column}
 .fc-loading{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
-.fc-card{padding:18px 22px;border-bottom:1px solid #16191f;cursor:pointer;transition:background .12s}
-.fc-card:hover{background:rgba(255,255,255,.02)}
-.fc-header{display:flex;align-items:flex-start;gap:12px;margin-bottom:10px}
-.fc-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;font-size:15px;font-weight:700;color:#fff}
+.fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s}
+.fc-card:hover{background:#0d0f12}
+.fc-body{flex:1;min-width:0}
+.fc-header{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+.fc-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;align-self:flex-start;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;font-size:16px;font-weight:700;color:#fff}
 .fc-avatar-ini{position:relative;z-index:1;pointer-events:none}
-.fc-identity{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
-.fc-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fc-handle{font-size:12px;color:var(--muted)}
-.fc-time{font-size:12px;color:var(--muted);flex-shrink:0;white-space:nowrap;margin-top:2px}
+.fc-name{font-size:14px;font-weight:700;color:#eef1f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fc-handle{font-size:13px;color:#565d68;white-space:nowrap}
+.fc-sep{font-size:13px;color:#565d68}
+.fc-time{font-size:13px;color:#565d68;white-space:nowrap}
 .fc-trade-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;background:rgba(255,255,255,.03);border:1px solid var(--bg3);border-radius:10px;padding:10px 14px}
 .fc-trade-badge{font-size:10px;font-weight:700;letter-spacing:.05em;padding:3px 8px;border-radius:5px;flex-shrink:0}
 .fc-trade-badge.long{background:rgba(53,212,196,.12);color:var(--accent);border:1px solid rgba(53,212,196,.2)}
@@ -345,14 +346,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-pnl{font-size:16px;font-weight:700;flex-shrink:0;font-family:'JetBrains Mono',monospace}
 .fc-pnl.pos{color:var(--accent)}
 .fc-pnl.neg{color:var(--red)}
-.fc-text{font-size:14px;color:var(--text);line-height:1.5;margin-bottom:12px}
-.fc-actions{display:flex;align-items:center;gap:0;margin-top:4px}
-.fc-action{display:flex;align-items:center;gap:5px;color:var(--muted);font-size:12px;background:transparent;border:none;cursor:pointer;padding:6px 14px 6px 0;font-family:'Geist',system-ui,sans-serif;transition:color .15s}
-.fc-action:hover{color:var(--accent)}
-.fc-action:first-child{padding-left:0}
+.fc-text{font-size:14.5px;color:#c7ccd4;line-height:1.55;margin-bottom:10px}
+.fc-actions{display:flex;align-items:center;gap:24px;margin-top:4px}
+.fc-action{display:flex;align-items:center;gap:5px;color:#565d68;font-size:13px;background:transparent;border:none;cursor:pointer;padding:0;font-family:'Geist',system-ui,sans-serif;transition:color .15s}
+.fc-action:hover{color:#eef1f5}
 .fc-action.liked{color:var(--red)!important}
 .fc-action.liked:hover{color:var(--red)!important}
-.fc-action.copied{color:var(--accent)!important;cursor:default}
+.fc-action.copy{color:#3ad29b!important}
+.fc-action.copied{color:#3ad29b!important;cursor:default}
 .fc-reply-box{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .2s ease,padding .2s ease}
 .fc-reply-box.open{max-height:120px;padding:0 22px 14px}
 .fc-reply-inner{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--bg3)}
@@ -9929,33 +9930,37 @@ function _renderFeedCard(e){
     : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12));
   var cardId = 'fc-card-'+postId;
 
-  /* copy trade button — only for trade/open posts with a token address */
-  var copyHtml = '';
+  var safePostId = postId.replace(/['"\\]/g,'');
+
+  /* copy action — always visible; for trade posts copies the trade */
+  var copyHtml;
   if(isTrade && e.token_address){
     var alreadyMine = window._feedMyMints && window._feedMyMints.has(e.token_address);
     var safeAddr = e.token_address.replace(/['"\\]/g,'');
-    var safePost = postId.replace(/['"\\]/g,'');
     if(alreadyMine){
-      copyHtml = '<button class="fc-action copied" disabled>⚡ Already in trade</button>';
+      copyHtml = '<button class="fc-action copy" disabled>⧉ In trade</button>';
     } else {
-      copyHtml = '<button class="fc-action" id="cpbtn-'+esc(safePost)+'" onclick="_feedCopyTrade(this,\''+safeAddr+'\',' +(e.entry_price||0)+')">⚡ Copy Trade</button>';
+      copyHtml = '<button class="fc-action copy" id="cpbtn-'+esc(safePostId)+'" onclick="_feedCopyTrade(this,\''+safeAddr+'\',' +(e.entry_price||0)+')">⧉ Copy</button>';
     }
+  } else {
+    copyHtml = '<button class="fc-action copy" onclick="event.stopPropagation()">⧉ Copy</button>';
   }
 
-  var safePostId = postId.replace(/['"\\]/g,'');
-
   return '<div class="fc-card" id="'+esc(cardId)+'" onclick="openProfileCard('+uid+')">'
-    +'<div class="fc-header">'
     +'<div class="fc-avatar" style="background:'+bg+'">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span></div>'
-    +'<div class="fc-identity"><span class="fc-name">'+esc(e.username||'Trader')+'</span><span class="fc-handle">'+esc(handle)+'</span></div>'
-    +'<span class="fc-time">'+esc(timeStr)+'</span>'
+    +'<div class="fc-body">'
+    +'<div class="fc-header">'
+    +'<span class="fc-name">'+esc(e.username||'Trader')+'</span>'
+    +'<span class="fc-handle">'+esc(handle)+'</span>'
+    +(timeStr ? '<span class="fc-sep">·</span><span class="fc-time">'+esc(timeStr)+'</span>' : '')
     +'</div>'
     +tradeHtml
     +textBody
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
-    +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">💬 <span class="fc-reply-count">0</span></button>'
+    +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">0</span></button>'
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
+    +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
     +'</div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
@@ -9963,6 +9968,7 @@ function _renderFeedCard(e){
     +'<button class="fc-reply-send" onclick="_feedSubmitReply(document.getElementById(\'rinp-'+esc(safePostId)+'\'),\''+esc(safePostId)+'\')">Reply</button>'
     +'</div>'
     +'<div class="fc-replies-list" id="rlist-'+esc(safePostId)+'"></div>'
+    +'</div>'
     +'</div>'
     +'</div>';
 }
