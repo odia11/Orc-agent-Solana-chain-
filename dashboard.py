@@ -1,4 +1,5 @@
 import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib
+from datetime import timedelta
 import bcrypt as _bcrypt
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
@@ -16,7 +17,7 @@ load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY') or os.urandom(32)
-app.config['PERMANENT_SESSION_LIFETIME'] = datetime.timedelta(minutes=30)
+app.permanent_session_lifetime = timedelta(days=30)
 app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
@@ -3121,6 +3122,7 @@ def login_password():
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
     session.permanent        = True
+    session.modified         = True
     session['user_id']       = user_id
     session['wallet']        = wallet_address
     session['authenticated'] = True
@@ -3128,6 +3130,7 @@ def login_password():
     add_user_log(wallet_address, 'Login via password')
     return jsonify({
         'success':         True,
+        'redirect':        '/dashboard',
         'wallet':          wallet_address,
         'username':        db_username or '',
         'has_trading_key': bool(has_trading_key),
@@ -3267,6 +3270,7 @@ def set_wallet():
         if not is_valid_solana_address(address):
             return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
         session.permanent = True
+        session.modified  = True
         session['wallet'] = address
         # Generate (or retrieve) CSRF token for this session now that the session exists
         csrf_tok = _get_csrf_token()
@@ -3289,7 +3293,8 @@ def set_wallet():
             pass
         us = get_user_state(address)
         us['has_trading_key'] = has_trading_key
-        return jsonify({'ok': True, 'wallet': address, 'has_trading_key': has_trading_key,
+        return jsonify({'ok': True, 'success': True, 'redirect': '/dashboard',
+                        'wallet': address, 'has_trading_key': has_trading_key,
                         'is_admin': _is_owner(address), 'csrf_token': csrf_tok})
     else:
         prev = _current_wallet()
