@@ -2927,7 +2927,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Login faster with Face ID?</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">Next time, just scan your face — no wallet needed.</div>
       <div style="display:flex;gap:8px">
-        <button id="s-faceid-prompt-btn" onclick="_settingsFaceIdSetup()" style="flex:1;padding:10px;background:var(--accent);color:#0a0b0e;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Setup Face ID</button>
+        <button id="s-faceid-prompt-btn" onclick="_setupFaceID()" style="flex:1;padding:10px;background:var(--accent);color:#0a0b0e;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Setup Face ID</button>
         <button onclick="document.getElementById('s-faceid-prompt').style.display='none'" style="padding:10px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--muted);font-size:12px;cursor:pointer">Maybe later</button>
       </div>
       <div id="s-faceid-prompt-msg" style="font-size:11px;margin-top:8px;min-height:14px"></div>
@@ -4106,6 +4106,62 @@ async function _webAuthnLogin(){
     if(errEl) errEl.textContent=em;
   }finally{
     if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; }
+  }
+}
+
+async function _setupFaceID(){
+  var wallet=phantomKey;
+  var btn=document.getElementById('s-faceid-prompt-btn');
+  var msg=document.getElementById('s-faceid-prompt-msg');
+  function _show(text,ok){
+    if(!msg) return;
+    msg.style.color=ok?'var(--green)':'var(--red)';
+    msg.textContent=text;
+  }
+  if(!wallet){ _show('Connect a wallet first.',false); return; }
+  if(!window.PublicKeyCredential){ _show('WebAuthn not supported on this device.',false); return; }
+  if(btn){ btn.disabled=true; btn.textContent='Setting up…'; }
+  if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
+  try{
+    var ch=new Uint8Array(32); crypto.getRandomValues(ch);
+    var uid=new Uint8Array(32);
+    new TextEncoder().encode(wallet).slice(0,32).forEach(function(b,i){ uid[i]=b; });
+    var cred=await navigator.credentials.create({
+      publicKey:{
+        rp:{id:'orcagent.fun',name:'OrcAgent'},
+        user:{id:uid,name:wallet,displayName:wallet},
+        challenge:ch,
+        pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
+        timeout:60000,
+        authenticatorSelection:{
+          authenticatorAttachment:'platform',
+          userVerification:'preferred',
+          residentKey:'preferred'
+        },
+        attestation:'none'
+      }
+    });
+    if(!cred){ _show('Registration failed — please try again.',false); return; }
+    var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+    var attObjB64=btoa(String.fromCharCode(...new Uint8Array(cred.response.attestationObject)));
+    var r=await fetch('/api/auth/webauthn/register',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({credential_id:rawIdB64,public_key:attObjB64})
+    }).then(res=>res.json()).catch(()=>null);
+    if(r&&r.success){
+      localStorage.setItem('orca_credential_id',rawIdB64);
+      _show('✓ Face ID saved!',true);
+      _updateFaceIdStatus();
+      setTimeout(function(){ var p=document.getElementById('s-faceid-prompt'); if(p) p.style.display='none'; },2500);
+    } else {
+      _show('Registration failed: '+((r&&r.msg)||'unknown error'),false);
+    }
+  }catch(e){
+    _show(e.name==='NotAllowedError'?'Setup cancelled.':
+          e.name==='InvalidStateError'?'Passkey already exists — try logging in.':
+          'Setup failed: '+(e.message||e.name), false);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='Setup Face ID'; }
   }
 }
 
