@@ -2924,11 +2924,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
     <!-- Face ID setup prompt — revealed after private key is saved -->
     <div id="s-faceid-prompt" style="display:none;margin-top:14px;padding:14px 16px;background:rgba(53,212,196,.07);border:1px solid rgba(53,212,196,.22);border-radius:10px">
-      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Setup Face ID for faster login?</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">Skip typing your wallet address — login with your face or fingerprint on your next visit.</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Login faster with Face ID?</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">Next time, just scan your face — no wallet needed.</div>
       <div style="display:flex;gap:8px">
         <button id="s-faceid-prompt-btn" onclick="_settingsFaceIdSetup()" style="flex:1;padding:10px;background:var(--accent);color:#0a0b0e;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Setup Face ID</button>
-        <button onclick="document.getElementById('s-faceid-prompt').style.display='none'" style="padding:10px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--muted);font-size:12px;cursor:pointer">Skip</button>
+        <button onclick="document.getElementById('s-faceid-prompt').style.display='none'" style="padding:10px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--muted);font-size:12px;cursor:pointer">Maybe later</button>
       </div>
       <div id="s-faceid-prompt-msg" style="font-size:11px;margin-top:8px;min-height:14px"></div>
     </div>
