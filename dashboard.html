@@ -2933,6 +2933,17 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="s-msg" id="s-msg"></div>
     <button class="s-save" id="s-save-btn" onclick="saveSettings()" disabled>SAVE SETTINGS</button>
 
+    <!-- Face ID setup prompt — revealed after private key is saved -->
+    <div id="s-faceid-prompt" style="display:none;margin-top:14px;padding:14px 16px;background:rgba(53,212,196,.07);border:1px solid rgba(53,212,196,.22);border-radius:10px">
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Setup Face ID for faster login?</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">Skip typing your wallet address — login with your face or fingerprint on your next visit.</div>
+      <div style="display:flex;gap:8px">
+        <button id="s-faceid-prompt-btn" onclick="_settingsFaceIdSetup()" style="flex:1;padding:10px;background:var(--accent);color:#0a0b0e;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Setup Face ID</button>
+        <button onclick="document.getElementById('s-faceid-prompt').style.display='none'" style="padding:10px 16px;background:var(--bg3);border:1px solid var(--border2);border-radius:7px;color:var(--muted);font-size:12px;cursor:pointer">Skip</button>
+      </div>
+      <div id="s-faceid-prompt-msg" style="font-size:11px;margin-top:8px;min-height:14px"></div>
+    </div>
+
     <div style="border-top:1px solid var(--border);margin-top:20px;padding-top:18px">
       <div class="s-label">Username <span style="font-size:9px;color:var(--dim);text-transform:none;letter-spacing:0">(optional · max 20 chars · a–z 0–9 _)</span></div>
       <div style="display:flex;gap:8px">
@@ -4070,9 +4081,21 @@ async function _webAuthnLogin(){
   }
   if(btn){ btn.disabled=true; btn.textContent='Authenticating…'; }
   try{
+    /* Target the specific credential saved on this device */
+    var storedId=localStorage.getItem('orca_credential_id');
+    var allowCreds=[];
+    if(storedId){
+      try{ allowCreds=[{type:'public-key',id:Uint8Array.from(atob(storedId),function(c){return c.charCodeAt(0);})}]; }catch(e){}
+    }
     var ch=new Uint8Array(32); crypto.getRandomValues(ch);
     var cred=await navigator.credentials.get({
-      publicKey:{rpId:'orcagent.fun',challenge:ch,timeout:60000,userVerification:'required'}
+      publicKey:{
+        rpId:'orcagent.fun',
+        challenge:ch,
+        timeout:60000,
+        userVerification:'required',
+        allowCredentials:allowCreds
+      }
     });
     if(!cred){ if(errEl) errEl.textContent='Authentication failed.'; return; }
     var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
@@ -4081,15 +4104,14 @@ async function _webAuthnLogin(){
       body:JSON.stringify({credential_id:rawIdB64})
     }).then(res=>res.json()).catch(()=>null);
     if(r && r.success){
-      phantomKey=r.wallet||null; walletType='webauthn';
-      if(r.csrf_token) _csrfToken=r.csrf_token;
-      if(phantomKey) localStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:'webauthn'}));
-      await launchApp();
+      /* Store wallet for the auto-reconnect path after reload */
+      if(r.wallet) localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'webauthn'}));
+      location.reload();
     } else {
-      if(errEl) errEl.textContent=(r&&r.msg)||'Login failed — credential not recognised.';
+      if(errEl) errEl.textContent=(r&&r.msg)||'Face ID failed — try connecting wallet instead.';
     }
   }catch(e){
-    var em=e.name==='NotAllowedError'?'Authentication cancelled or no passkey found.':
+    var em=e.name==='NotAllowedError'?'Face ID failed — try connecting wallet instead.':
            e.name==='SecurityError'?'Domain mismatch — passkey not valid for this site.':
            'Auth failed: '+(e.message||e.name);
     if(errEl) errEl.textContent=em;
@@ -4166,6 +4188,26 @@ function _updateFaceIdStatus(){
   if(btn) btn.textContent=has?'Update Face ID':'Setup Face ID login';
   if(removeBtn) removeBtn.style.display=has?'':'none';
   if(bioBtn) bioBtn.style.display=has?'':'none';
+}
+
+/* Called by the post-key-save Face ID prompt in Settings */
+async function _settingsFaceIdSetup(){
+  var promptBtn=document.getElementById('s-faceid-prompt-btn');
+  var promptMsg=document.getElementById('s-faceid-prompt-msg');
+  if(promptBtn){ promptBtn.disabled=true; promptBtn.textContent='Setting up…'; }
+  if(promptMsg){ promptMsg.style.color='var(--muted)'; promptMsg.textContent=''; }
+  await _setupFaceId();
+  if(promptBtn){ promptBtn.disabled=false; promptBtn.textContent='Setup Face ID'; }
+  if(localStorage.getItem('orca_credential_id')){
+    if(promptMsg){ promptMsg.style.color='var(--green)'; promptMsg.textContent='✓ Face ID saved! Next time login with just your face.'; }
+    setTimeout(function(){ var p=document.getElementById('s-faceid-prompt'); if(p) p.style.display='none'; },2800);
+  } else {
+    /* _setupFaceId already wrote an error to s-faceid-msg — copy it to the prompt area */
+    var faceMsg=document.getElementById('s-faceid-msg');
+    if(promptMsg && faceMsg && faceMsg.textContent){
+      promptMsg.style.color='var(--red)'; promptMsg.textContent=faceMsg.textContent;
+    }
+  }
 }
 
 /* Detect Phantom on load and update button note; show Face ID button if credential saved */
@@ -6812,6 +6854,13 @@ async function saveSettings(){
     if(pk){
       msgEl.textContent='✓ Settings saved. Private key encrypted and stored securely.';
       document.getElementById('s-privkey').value='';
+      /* Offer Face ID setup if key was just saved */
+      if(r.prompt_faceid && window.PublicKeyCredential){
+        const fp=document.getElementById('s-faceid-prompt');
+        const fpm=document.getElementById('s-faceid-prompt-msg');
+        if(fp){ fp.style.display='block'; }
+        if(fpm) fpm.textContent='';
+      }
     } else {
       msgEl.textContent='✓ Trade settings updated.';
     }
