@@ -66,7 +66,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* ── LAYOUT ── */
 #app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
 .app-body{display:flex;flex:1;overflow:hidden;min-height:0}
-.wrap{flex:1;min-width:0;padding:1rem 1.25rem;overflow-y:auto;height:calc(100vh - 48px);max-width:none;margin:0}
+.wrap{flex:1;min-width:0;padding:20px;overflow-y:auto;height:calc(100vh - 48px);max-width:none;margin:0;box-sizing:border-box}
 @media(max-width:768px){
   html,body{height:auto;overflow:auto}
   #app{height:auto;overflow:visible}
@@ -2580,15 +2580,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 }
 
 /* ── WALLET SECTION ── */
-#dash-wallet{
-  display:none;
-  flex:1;min-width:0;
-  height:calc(100vh - 48px);
-  overflow-y:auto;
-  padding:20px;
-  box-sizing:border-box;
-  background:var(--bg);
-}
+#dash-wallet{display:none;flex:1;min-width:0;height:calc(100vh - 48px);overflow-y:auto;padding:20px;box-sizing:border-box;background:var(--bg)}
 .wlt-page{max-width:480px;width:100%;margin:0 auto;padding:0;display:flex;flex-direction:column;gap:14px}
 .wlt-header{text-align:center;padding:24px 16px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:12px}
 #wlt-total-usd{font-size:32px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
@@ -6157,8 +6149,6 @@ function _sbNav(section){
     const wlt=document.getElementById('dash-wallet');
     if(wlt){
       wlt.style.display='block';
-      wlt.style.paddingTop='20px';
-      if(wlt.firstElementChild) wlt.firstElementChild.style.marginTop='0';
       wlt.scrollTop=0;
     }
     _sbSetActive('sbn-wallet');
