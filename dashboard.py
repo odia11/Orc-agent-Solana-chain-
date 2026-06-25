@@ -3073,7 +3073,7 @@ def connect_wallet_readonly():
 
 @app.route('/api/auth/check-faceid', methods=['GET'])
 def check_faceid():
-    """Public endpoint — returns whether any WebAuthn credentials exist on the server."""
+    """Public — returns whether any WebAuthn credentials exist on the server."""
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT COUNT(*) FROM webauthn_credentials').fetchone()
@@ -3082,43 +3082,44 @@ def check_faceid():
         conn.close()
     return jsonify({'has_users_with_webauthn': has_any})
 
+@app.route('/api/auth/webauthn/has-credential', methods=['GET'])
+@rate_limit(30, 60)
+def webauthn_has_credential():
+    """Public — check whether a specific credential_id is registered on this server.
+    The client passes the stored credential_id as a query parameter or X-Credential-Id header."""
+    credential_id = (
+        request.args.get('credential_id') or
+        request.headers.get('X-Credential-Id') or ''
+    ).strip()
+    if not credential_id:
+        return jsonify({'has_credential': False})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT 1 FROM webauthn_credentials WHERE credential_id=?', (credential_id,)
+        ).fetchone()
+        has_cred = row is not None
+    finally:
+        conn.close()
+    return jsonify({'has_credential': has_cred})
+
 @app.route('/api/auth/webauthn/register', methods=['POST'])
 @rate_limit(10, 60)
 def webauthn_register():
-    body           = request.json or {}
-    credential_id  = str(body.get('credential_id', '')).strip()
-    public_key     = str(body.get('public_key', '')).strip()
-    wallet_address = str(body.get('wallet_address', '')).strip()
+    # Registration requires an active session — user must already be logged in
+    user_id = session.get('user_id')
+    wallet  = session.get('wallet') or ''
+    if not user_id:
+        return jsonify({'success': False, 'msg': 'Login required before setting up Face ID'}), 401
+
+    body          = request.json or {}
+    credential_id = str(body.get('credential_id', '')).strip()
+    public_key    = str(body.get('public_key',    '')).strip()
     if not credential_id or not public_key:
         return jsonify({'success': False, 'msg': 'credential_id and public_key are required'}), 400
-    if wallet_address and not is_valid_solana_address(wallet_address):
-        return jsonify({'success': False, 'msg': 'Invalid wallet address'}), 400
-
-    # Prefer the already-authenticated session user over the posted wallet address
-    session_user_id = session.get('user_id')
-    session_wallet  = session.get('wallet')
 
     conn = sqlite3.connect(DB_FILE)
     try:
-        if session_user_id:
-            user_id = session_user_id
-            if not wallet_address and session_wallet:
-                wallet_address = session_wallet
-        elif wallet_address:
-            user_id = get_or_create_user(wallet_address)
-        else:
-            # No session and no wallet — create a placeholder user keyed to the credential
-            wallet_address = 'webauthn:' + credential_id[:32]
-            conn.execute(
-                'INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet_address,)
-            )
-            conn.commit()
-            row = conn.execute(
-                'SELECT id FROM users WHERE wallet_address=?', (wallet_address,)
-            ).fetchone()
-            user_id = row[0] if row else None
-        if not user_id:
-            return jsonify({'success': False, 'msg': 'Could not resolve user'}), 500
         conn.execute(
             '''INSERT INTO webauthn_credentials (user_id, credential_id, public_key)
                VALUES (?, ?, ?)
@@ -3129,6 +3130,7 @@ def webauthn_register():
         conn.commit()
     finally:
         conn.close()
+    add_user_log(wallet, 'WebAuthn credential registered')
     return jsonify({'success': True})
 
 @app.route('/api/auth/webauthn/login', methods=['POST'])
@@ -3143,7 +3145,8 @@ def webauthn_login():
         row = conn.execute(
             '''SELECT wc.user_id, u.wallet_address, COALESCE(u.username, ''),
                       CASE WHEN u.encrypted_private_key != '' AND u.encrypted_private_key IS NOT NULL
-                           THEN 1 ELSE 0 END
+                           THEN 1 ELSE 0 END,
+                      COALESCE(u.is_admin, 0)
                FROM webauthn_credentials wc
                JOIN users u ON u.id = wc.user_id
                WHERE wc.credential_id = ?''',
@@ -3153,17 +3156,21 @@ def webauthn_login():
         conn.close()
     if not row:
         return jsonify({'success': False, 'msg': 'Credential not found — register first'}), 404
-    user_id, wallet_address, username, has_trading_key = row
-    session.permanent       = True
-    session['user_id']      = user_id
-    session['wallet']       = wallet_address
+    user_id, wallet_address, username, has_trading_key, is_admin = row
+    # Restore full session — identical to what /api/wallet/set establishes
+    session.permanent           = True
+    session['user_id']          = user_id
+    session['wallet']           = wallet_address
+    session['authenticated']    = True
     csrf_tok = _get_csrf_token()
+    add_user_log(wallet_address, 'Login via WebAuthn Face ID')
     return jsonify({
         'success':         True,
         'user_id':         user_id,
         'wallet':          wallet_address,
         'username':        username or '',
         'has_trading_key': bool(has_trading_key),
+        'is_admin':        bool(is_admin),
         'csrf_token':      csrf_tok,
     })
 
