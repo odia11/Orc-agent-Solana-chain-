@@ -2824,7 +2824,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <!-- ── Phantom (shown when no Face ID saved, or via "connect differently") ── -->
       <button class="ob-btn" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')" style="background:var(--accent);color:#0a0b0e;display:flex;align-items:center;justify-content:center;gap:8px">
         <svg width="18" height="18" viewBox="0 0 128 128" fill="none"><path d="M64 0C28.7 0 0 28.7 0 64s28.7 64 64 64 64-28.7 64-64S99.3 0 64 0z" fill="#AB9FF2"/><path d="M108.2 64.8c0 20.5-16.6 37.1-37.1 37.1-9.7 0-18.5-3.7-25.1-9.8l-11.7 9c-1.4 1.1-3.4.1-3.4-1.7V64.8c0-20.5 16.6-37.1 37.1-37.1S108.2 44.3 108.2 64.8z" fill="white"/></svg>
-        Connect Phantom
+        <span id="phantom-ob-label">Connect Phantom</span>
       </button>
       <div id="ob-phantom-note" style="font-size:10px;color:var(--muted);margin:-6px 0 8px;text-align:center"></div>
 
@@ -4123,16 +4123,10 @@ function _showWalletOptions(){
   var phantomBtn=document.getElementById('phantom-ob-btn');
   var phantomNote=document.getElementById('ob-phantom-note');
   var skipBtn=document.getElementById('ob-skip-btn');
-  if(phantomBtn) phantomBtn.style.display='flex';
+  if(phantomBtn){ phantomBtn.style.display='flex'; }
+  if(phantomNote){ phantomNote.style.display=''; }
   if(skipBtn)    skipBtn.style.display='';
-  if(phantomNote){
-    phantomNote.style.display='';
-    if(!window.solana||!window.solana.isPhantom){
-      var pb=document.getElementById('phantom-ob-btn');
-      if(pb){ pb.style.background='var(--bg3)'; pb.style.color='var(--muted)'; pb.style.border='1px solid var(--border2)'; }
-      phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
-    }
-  }
+  _applyPhantomDetection(phantomBtn, phantomNote);
 }
 
 async function _setupFaceID(){
@@ -4281,6 +4275,27 @@ async function _settingsFaceIdSetup(){
   }
 }
 
+/* Mobile deep-link constants — used by Phantom detection below */
+const isMobile=/iPhone|iPad|Android/i.test(navigator.userAgent);
+const phantomDeepLink='https://phantom.app/ul/browse/'+encodeURIComponent('https://www.orcagent.fun');
+
+function _applyPhantomDetection(phantomBtn, phantomNote){
+  if(!phantomBtn||!phantomNote) return;
+  if(window.solana&&window.solana.isPhantom) return; // extension present — nothing to do
+  if(isMobile){
+    /* Mobile: repurpose button as deep link into Phantom's in-app browser */
+    phantomBtn.onclick=function(){ window.location.href=phantomDeepLink; };
+    var lbl=document.getElementById('phantom-ob-label');
+    if(lbl) lbl.textContent='Open in Phantom App';
+    phantomNote.textContent="Tap to open OrcAgent inside Phantom's browser";
+    phantomNote.style.color='var(--muted)';
+  } else {
+    /* Desktop: grey out and show install link */
+    phantomBtn.style.background='var(--bg3)'; phantomBtn.style.color='var(--muted)'; phantomBtn.style.border='1px solid var(--border2)';
+    phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
+  }
+}
+
 /* On load: switch connect screen between Face ID mode and Phantom mode */
 document.addEventListener('DOMContentLoaded',function(){
   var hasFaceId=!!localStorage.getItem('orca_credential_id');
@@ -4303,11 +4318,7 @@ document.addEventListener('DOMContentLoaded',function(){
     if(altLink)    altLink.style.display='none';
     if(phantomBtn) phantomBtn.style.display='flex';
     if(skipBtn)    skipBtn.style.display='';
-    /* Grey out Phantom button if extension not installed */
-    if(phantomNote && (!window.solana||!window.solana.isPhantom)){
-      if(phantomBtn){ phantomBtn.style.background='var(--bg3)'; phantomBtn.style.color='var(--muted)'; phantomBtn.style.border='1px solid var(--border2)'; }
-      phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
-    }
+    _applyPhantomDetection(phantomBtn, phantomNote);
   }
 });
 
@@ -4436,6 +4447,8 @@ async function connectWalletOnboard(type){
   const msgEl=document.getElementById('wallet-install-msg');
 
   if(!check){
+    /* On mobile without the extension, redirect into Phantom's in-app browser */
+    if(isPhantom && isMobile){ window.location.href=phantomDeepLink; return; }
     const other=isPhantom?'Solflare':'Phantom';
     const otherUrl=isPhantom?'https://solflare.com':'https://phantom.app';
     msgEl.innerHTML=name+' wallet not detected. <a href="'+installUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">Install '+name+'</a> or try <a href="'+otherUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">'+other+'</a>.';
