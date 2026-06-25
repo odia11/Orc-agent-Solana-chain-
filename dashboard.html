@@ -4142,12 +4142,12 @@ async function _loginWithPassword(){
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({username:username,password:password})
     }).then(res=>res.json()).catch(()=>null);
-    if(r&&r.ok){
+    if(r&&r.success){
       if(r.wallet) localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'password'}));
       if(r.csrf_token) _csrfToken=r.csrf_token;
       location.reload();
     } else {
-      if(errEl) errEl.textContent=(r&&r.msg)||'Login failed — check your credentials.';
+      if(errEl) errEl.textContent=(r&&r.error)||'Login failed — check your credentials.';
     }
   }catch(e){
     if(errEl) errEl.textContent='Login failed — please try again.';

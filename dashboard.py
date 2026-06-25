@@ -1,4 +1,5 @@
 import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib
+import bcrypt as _bcrypt
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
@@ -3080,7 +3081,7 @@ def login_password():
     username = str(body.get('username', '')).strip()
     password = str(body.get('password', '')).strip()
     if not username or not password:
-        return jsonify({'ok': False, 'msg': 'Username and password required'}), 400
+        return jsonify({'success': False, 'error': 'Username and password required'}), 400
 
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -3099,19 +3100,20 @@ def login_password():
 
     if not row:
         _record_ip_failure(ip)
-        return jsonify({'ok': False, 'msg': 'Account not found'}), 404
+        return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
     user_id, wallet_address, db_username, password_hash, has_trading_key, is_admin = row
 
     if not password_hash:
-        return jsonify({'ok': False, 'msg': 'No password set — use Phantom or Face ID to login'}), 401
+        return jsonify({'success': False, 'error': 'No password set — use Phantom or Face ID to login'}), 401
 
-    expected = hashlib.pbkdf2_hmac(
-        'sha256', password.encode('utf-8'), wallet_address.encode('utf-8'), 200_000
-    ).hex()
-    if not hmac.compare_digest(expected, password_hash):
+    try:
+        valid = _bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    except Exception:
+        valid = False
+    if not valid:
         _record_ip_failure(ip)
-        return jsonify({'ok': False, 'msg': 'Incorrect password'}), 401
+        return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
     session.permanent        = True
     session['user_id']       = user_id
@@ -3120,13 +3122,33 @@ def login_password():
     csrf_tok = _get_csrf_token()
     add_user_log(wallet_address, 'Login via password')
     return jsonify({
-        'ok':              True,
+        'success':         True,
         'wallet':          wallet_address,
         'username':        db_username or '',
         'has_trading_key': bool(has_trading_key),
         'is_admin':        bool(is_admin),
         'csrf_token':      csrf_tok,
     })
+
+@app.route('/api/set_password', methods=['POST'])
+@rate_limit(10, 60)
+def set_password():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'success': False, 'error': 'Login required'}), 401
+    body     = request.json or {}
+    password = str(body.get('password', '')).strip()
+    if len(password) < 8:
+        return jsonify({'success': False, 'error': 'Password must be at least 8 characters'}), 400
+    pw_hash = _bcrypt.hashpw(password.encode('utf-8'), _bcrypt.gensalt(rounds=12)).decode('utf-8')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET password_hash=? WHERE wallet_address=?', (pw_hash, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    add_user_log(wallet, 'Password set/updated')
+    return jsonify({'success': True})
 
 @app.route('/api/auth/check-faceid', methods=['GET'])
 def check_faceid():
