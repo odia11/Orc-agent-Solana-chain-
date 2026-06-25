@@ -3071,6 +3071,17 @@ def connect_wallet_readonly():
     return jsonify({'ok': True, 'wallet': address, 'readonly': True,
                     'has_trading_key': False, 'csrf_token': csrf_tok})
 
+@app.route('/api/auth/check-faceid', methods=['GET'])
+def check_faceid():
+    """Public endpoint — returns whether any WebAuthn credentials exist on the server."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT COUNT(*) FROM webauthn_credentials').fetchone()
+        has_any = bool(row and row[0] > 0)
+    finally:
+        conn.close()
+    return jsonify({'has_users_with_webauthn': has_any})
+
 @app.route('/api/auth/webauthn/register', methods=['POST'])
 @rate_limit(10, 60)
 def webauthn_register():
