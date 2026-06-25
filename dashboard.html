@@ -4053,6 +4053,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false, _copySource=null;
 var _isReadonly = false;
+/* ── Pre-populate navbar from server session (eliminates "not connected" flash) ── */
+(function(){
+  var sw='__SESSION_WALLET__', ss='__SESSION_SHORT__';
+  if(!sw) return;
+  phantomKey=sw;
+  var pill=document.getElementById('wallet-pill');
+  var sh=document.getElementById('wallet-short');
+  var ini=document.getElementById('nav-avatar-ini');
+  if(pill) pill.style.display='flex';
+  if(sh)   sh.textContent=ss;
+  if(ini){ ini.style.display='flex'; ini.textContent=sw.slice(0,2).toUpperCase(); }
+})();
 
 /* ── CONNECT SCREEN HELPERS ── */
 function _toggleManual(){
@@ -6382,6 +6394,10 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── STARTUP: restore session ──
 (async function initApp(){
+  // If Flask session pre-populated phantomKey, go straight to launchApp — no extension
+  // re-detection needed, and avoids a redundant /api/wallet/set round-trip.
+  if(phantomKey){ await launchApp(); return; }
+
   // Check if a wallet extension is already connected (dapp browsers, auto-connect extensions).
   // Session state is server-side; no localStorage wallet key used.
   const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected && window.solana?.publicKey;

@@ -2586,6 +2586,10 @@ def index():
     with open(os.path.join(BASE, 'dashboard.html'), 'r', encoding='utf-8') as f:
         html = f.read()
     html = html.replace('__X_CLIENT_SECRET__', X_CLIENT_SECRET)
+    _sw = session.get('wallet', '')
+    _ss = (_sw[:4] + '...' + _sw[-4:]) if len(_sw) > 8 else _sw
+    html = html.replace('__SESSION_WALLET__', _sw)
+    html = html.replace('__SESSION_SHORT__',  _ss)
     resp = app.response_class(html, mimetype='text/html')
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     resp.headers['Pragma'] = 'no-cache'
