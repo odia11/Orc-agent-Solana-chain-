@@ -333,19 +333,26 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-handle{font-size:13px;color:#565d68;white-space:nowrap}
 .fc-sep{font-size:13px;color:#565d68}
 .fc-time{font-size:13px;color:#565d68;white-space:nowrap}
-.fc-trade-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px;background:rgba(255,255,255,.03);border:1px solid var(--bg3);border-radius:10px;padding:10px 14px}
-.fc-trade-badge{font-size:10px;font-weight:700;letter-spacing:.05em;padding:3px 8px;border-radius:5px;flex-shrink:0}
-.fc-trade-badge.long{background:rgba(53,212,196,.12);color:var(--accent);border:1px solid rgba(53,212,196,.2)}
-.fc-trade-badge.stop-loss{background:rgba(255,77,106,.12);color:var(--red);border:1px solid rgba(255,77,106,.2)}
-.fc-trade-badge.live{background:rgba(245,166,35,.12);color:#f5a623;border:1px solid rgba(245,166,35,.2);animation:badge-live 1.8s ease-in-out infinite}
+.fc-trade-row{margin-top:12px;background:#101216;border:1px solid #21252c;border-radius:15px;padding:14px 15px;display:flex;justify-content:space-between;align-items:center;gap:12px}
+.fc-trade-left{display:flex;flex-direction:column;gap:5px;min-width:0}
+.fc-trade-label{font-size:13px;color:#8a919c}
+.fc-trade-token-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.fc-token-name{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
+.fc-trade-badge{font-size:10px;font-weight:600;border:1px solid #21252c;border-radius:5px;padding:2px 6px;flex-shrink:0}
+.fc-trade-badge.long{color:#3ad29b;border-color:rgba(58,210,155,.3)}
+.fc-trade-badge.stop-loss{color:#f76b62;border-color:rgba(247,107,98,.3)}
+.fc-trade-badge.live{color:#f7b955;border-color:rgba(247,185,85,.3);animation:badge-live 1.8s ease-in-out infinite}
 @keyframes badge-live{0%,100%{opacity:1}50%{opacity:.6}}
-.fc-token-name{font-size:13px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
-.fc-entry-exit{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.fc-sparkline{display:flex;align-items:flex-end;gap:2px;height:20px;flex-shrink:0}
-.fc-spark-bar{width:4px;border-radius:2px 2px 1px 1px;flex-shrink:0}
-.fc-pnl{font-size:16px;font-weight:700;flex-shrink:0;font-family:'JetBrains Mono',monospace}
-.fc-pnl.pos{color:var(--accent)}
-.fc-pnl.neg{color:var(--red)}
+.fc-entry-exit{font-family:'JetBrains Mono',monospace;font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fc-trade-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
+.fc-sparkline{display:none}
+.fc-spark-bar{display:none}
+.fc-pnl{font-family:'JetBrains Mono',monospace;font-size:23px;font-weight:700;line-height:1}
+.fc-pnl.pos{color:#3ad29b}
+.fc-pnl.neg{color:#f76b62}
+.fc-pnl-sub{font-family:'JetBrains Mono',monospace;font-size:12px}
+.fc-pnl-sub.pos{color:#3ad29b}
+.fc-pnl-sub.neg{color:#f76b62}
 .fc-text{font-size:14.5px;color:#c7ccd4;line-height:1.55;margin-bottom:10px}
 .fc-actions{display:flex;align-items:center;gap:24px;margin-top:4px}
 .fc-action{display:flex;align-items:center;gap:5px;color:#565d68;font-size:13px;background:transparent;border:none;cursor:pointer;padding:0;font-family:'Geist',system-ui,sans-serif;transition:color .15s}
@@ -364,7 +371,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-replies-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
 .fc-reply-item{font-size:12px;color:var(--muted);padding:4px 0}
 .fc-reply-item strong{color:var(--text)}
-@media(max-width:600px){.fc-trade-row{gap:7px;padding:8px 10px}.fc-entry-exit{display:none}}
+@media(max-width:600px){.fc-trade-row{padding:10px 12px;gap:8px}}
 /* ── PULSING LIVE DOT ── */
 .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00e676;animation:pulse-dot 2s ease-in-out infinite;margin-right:5px;vertical-align:middle;flex-shrink:0}
 @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,230,118,.55)}60%{opacity:.55;box-shadow:0 0 0 6px rgba(0,230,118,0)}}
@@ -9908,21 +9915,27 @@ function _renderFeedCard(e){
     var isPos = pct == null ? true : pct >= 0;
     var pnlStr = pct == null ? 'Live' : ((pct>=0?'+':'')+pct.toFixed(1)+'%');
     var badgeCls = isOpen ? 'live' : (isPos ? 'long' : 'stop-loss');
-    var badgeLbl = isOpen ? '● LIVE' : (isPos ? 'WIN' : 'STOP-LOSS');
-    var entryExit = isOpen ? ('Entry '+_fmtPrice(entry)) : (_fmtPrice(entry)+' → '+_fmtPrice(exit));
-    var spark = _feedSparkline(entry, exit, isPos);
+    var badgeLbl = isOpen ? 'LONG' : (isPos ? 'LONG' : 'STOP-LOSS');
+    var entryExit = isOpen ? ('Entry '+_fmtPrice(entry)) : ('Entry '+_fmtPrice(entry)+' → Exit '+_fmtPrice(exit));
+    var tokenColor = (typeof _lbAvatarColor==='function') ? _lbAvatarColor(e.token||'?') : '#3ad29b';
+    var pnlSol = e.pnl_sol != null ? ((e.pnl_sol>=0?'+':'')+Number(e.pnl_sol).toFixed(4)+' SOL') : '';
     tradeHtml = '<div class="fc-trade-row">'
+      +'<div class="fc-trade-left">'
+      +'<span class="fc-trade-label">'+(isOpen?'Opened':'Closed')+'</span>'
+      +'<div class="fc-trade-token-row">'
+      +'<span class="fc-token-name" style="color:'+tokenColor+'">$'+esc(e.token||'?')+'</span>'
       +'<span class="fc-trade-badge '+badgeCls+'">'+esc(badgeLbl)+'</span>'
-      +'<span class="fc-token-name">'+esc(e.token||'?')+'</span>'
+      +'</div>'
       +'<span class="fc-entry-exit">'+esc(entryExit)+'</span>'
-      +spark
+      +'</div>'
+      +'<div class="fc-trade-right">'
       +'<span class="fc-pnl '+(isPos?'pos':'neg')+'">'+esc(pnlStr)+'</span>'
+      +(pnlSol ? '<span class="fc-pnl-sub '+(isPos?'pos':'neg')+'">'+esc(pnlSol)+'</span>' : '')
+      +'</div>'
       +'</div>';
   }
 
-  var textBody = isTrade
-    ? '<div class="fc-text">'+(isOpen?'Opened':'Closed')+' position on <strong>'+esc(e.token||'?')+'</strong></div>'
-    : (e.content ? '<div class="fc-text">'+esc(e.content)+'</div>' : '');
+  var textBody = e.content ? '<div class="fc-text">'+esc(e.content)+'</div>' : '';
 
   /* unique post id for likes/replies */
   var postId = e.trade_id ? 't'+e.trade_id
