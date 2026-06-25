@@ -4052,48 +4052,109 @@ async function connectReadonlyAddress(){
 
 async function _webAuthnLogin(){
   var errEl=document.getElementById('ob-bio-err');
-  if(errEl) errEl.textContent='';
-  if(!window.PublicKeyCredential){
-    if(errEl) errEl.textContent='WebAuthn not supported on this device.';
-    return;
-  }
   var btn=document.getElementById('ob-bio-btn');
+  function _msg(text,isErr){
+    if(!errEl) return;
+    errEl.style.color=isErr?'var(--red)':'var(--accent)';
+    errEl.textContent=text;
+  }
+  _msg('',false);
+  if(!window.PublicKeyCredential){
+    _msg('WebAuthn not supported on this device.',true); return;
+  }
   if(btn){ btn.disabled=true; btn.textContent='Authenticating…'; }
+
+  /* ── Step 1: Try existing passkey login ── */
+  var doRegister=false;
   try{
-    var challenge=new Uint8Array(32);
-    crypto.getRandomValues(challenge);
+    var ch=new Uint8Array(32); crypto.getRandomValues(ch);
     var cred=await navigator.credentials.get({
+      publicKey:{rpId:'orcagent.fun',challenge:ch,timeout:60000,userVerification:'required'}
+    });
+    if(cred){
+      var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
+      var r=await fetch('/api/auth/webauthn/login',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({credential_id:rawIdB64})
+      }).then(res=>res.json()).catch(()=>null);
+      if(r && r.success){
+        phantomKey=r.wallet||null; walletType='webauthn';
+        if(r.csrf_token) _csrfToken=r.csrf_token;
+        if(phantomKey) localStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:'webauthn'}));
+        if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; }
+        await launchApp(); return;
+      }
+      /* Credential not in DB — fall through to register */
+      doRegister=true;
+    } else { doRegister=true; }
+  }catch(e){
+    if(e.name==='NotAllowedError'||e.name==='NotSupportedError'){
+      doRegister=true; /* No passkey yet — offer registration */
+    } else if(e.name==='SecurityError'){
+      _msg('Domain mismatch — passkey not valid for this site.',true);
+      if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; } return;
+    } else {
+      _msg('Auth failed: '+(e.message||e.name),true);
+      if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; } return;
+    }
+  }
+  if(!doRegister){ if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; } return; }
+
+  /* ── Step 2: No passkey found — register ── */
+  var wallet=((document.getElementById('ob-manual-addr')||{}).value||'').trim();
+  if(!wallet){
+    _msg('Please enter your wallet address first.',true);
+    /* Auto-open the address input */
+    var sec=document.getElementById('ob-manual-section');
+    if(sec && !sec.classList.contains('open')) _toggleManual();
+    if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; } return;
+  }
+  _msg('No saved login found. Setting up Face ID now…',false);
+  if(btn) btn.textContent='Setting up Face ID…';
+  try{
+    var ch2=new Uint8Array(32); crypto.getRandomValues(ch2);
+    var uid=new Uint8Array(32);
+    var wb=new TextEncoder().encode(wallet); uid.set(wb.slice(0,32));
+    var newCred=await navigator.credentials.create({
       publicKey:{
-        rpId:'orcagent.fun',
-        challenge:challenge,
+        rp:{id:'orcagent.fun',name:'OrcAgent'},
+        user:{id:uid,name:wallet,displayName:wallet},
+        challenge:ch2,
+        pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
         timeout:60000,
-        userVerification:'required'
+        authenticatorSelection:{userVerification:'preferred',residentKey:'preferred'},
+        attestation:'none'
       }
     });
-    if(!cred){ if(errEl) errEl.textContent='No credential returned.'; return; }
-    var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
-    var r=await fetch('/api/auth/webauthn/login',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({credential_id:rawIdB64})
+    if(!newCred){ _msg('Registration failed — please try again.',true);
+      if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; } return; }
+    var regId=btoa(String.fromCharCode(...new Uint8Array(newCred.rawId)));
+    var regPk=btoa(String.fromCharCode(...new Uint8Array(newCred.response.attestationObject)));
+    var regR=await fetch('/api/auth/webauthn/register',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({credential_id:regId,public_key:regPk,wallet_address:wallet})
     }).then(res=>res.json()).catch(()=>null);
-    if(r && r.success){
-      phantomKey=r.wallet||null;
-      walletType='webauthn';
-      if(r.csrf_token) _csrfToken=r.csrf_token;
-      if(phantomKey) localStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:'webauthn'}));
-      await launchApp();
-    } else {
-      var msg=(r&&r.msg)||'Login failed — no matching passkey found.';
-      if(errEl) errEl.textContent=msg;
+    if(!regR||!regR.success){
+      _msg('Registration failed: '+((regR&&regR.msg)||'unknown error'),true);
+      if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; } return;
     }
+    _msg('Face ID saved! You can now login with Face ID next time.',false);
+    /* Auto-login as readonly with the entered wallet */
+    var sr=await fetch('/api/wallet/connect-readonly',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({address:wallet})
+    }).then(res=>res.json()).catch(()=>null);
+    if(sr && sr.csrf_token) _csrfToken=sr.csrf_token;
+    phantomKey=wallet; walletType='webauthn'; _isReadonly=true;
+    localStorage.setItem('orcagent_wallet',JSON.stringify({key:wallet,type:'webauthn'}));
+    if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; }
+    await new Promise(res=>setTimeout(res,1200));
+    await launchApp();
   }catch(e){
-    var msg=e.name==='NotAllowedError'?'Authentication cancelled.':
-            e.name==='SecurityError'?'Domain mismatch — passkey not valid for this site.':
-            e.name==='NotSupportedError'?'No passkey registered on this device.':
-            'Biometric auth failed: '+(e.message||e.name);
-    if(errEl) errEl.textContent=msg;
-  }finally{
+    var em=e.name==='NotAllowedError'?'Face ID setup cancelled.':
+           e.name==='InvalidStateError'?'A passkey already exists for this device.':
+           'Setup failed: '+(e.message||e.name);
+    _msg(em,true);
     if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; }
   }
 }
