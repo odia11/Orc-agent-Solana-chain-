@@ -67,7 +67,7 @@ def _refresh_session():
 
 # /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
 # cannot require a session-scoped CSRF token. Origin check still protects it.
-_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly'})
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password'})
 
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
@@ -834,6 +834,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN referral_code TEXT DEFAULT NULL",
         "ALTER TABLE direct_messages ADD COLUMN message_type TEXT DEFAULT 'text'",
         "ALTER TABLE users ADD COLUMN webauthn_ready INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -3070,6 +3071,62 @@ def connect_wallet_readonly():
     add_user_log(address, 'Wallet connected (read-only): ' + address[:6] + '...' + address[-4:])
     return jsonify({'ok': True, 'wallet': address, 'readonly': True,
                     'has_trading_key': False, 'csrf_token': csrf_tok})
+
+@app.route('/api/login_password', methods=['POST'])
+@rate_limit(10, 60)
+def login_password():
+    ip   = request.remote_addr or '0.0.0.0'
+    body = request.json or {}
+    username = str(body.get('username', '')).strip()
+    password = str(body.get('password', '')).strip()
+    if not username or not password:
+        return jsonify({'ok': False, 'msg': 'Username and password required'}), 400
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            '''SELECT id, wallet_address, COALESCE(username,''), password_hash,
+                      CASE WHEN encrypted_private_key != '' AND encrypted_private_key IS NOT NULL
+                           THEN 1 ELSE 0 END,
+                      COALESCE(is_admin, 0)
+               FROM users
+               WHERE username = ? OR wallet_address = ?
+               LIMIT 1''',
+            (username, username)
+        ).fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Account not found'}), 404
+
+    user_id, wallet_address, db_username, password_hash, has_trading_key, is_admin = row
+
+    if not password_hash:
+        return jsonify({'ok': False, 'msg': 'No password set — use Phantom or Face ID to login'}), 401
+
+    expected = hashlib.pbkdf2_hmac(
+        'sha256', password.encode('utf-8'), wallet_address.encode('utf-8'), 200_000
+    ).hex()
+    if not hmac.compare_digest(expected, password_hash):
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Incorrect password'}), 401
+
+    session.permanent        = True
+    session['user_id']       = user_id
+    session['wallet']        = wallet_address
+    session['authenticated'] = True
+    csrf_tok = _get_csrf_token()
+    add_user_log(wallet_address, 'Login via password')
+    return jsonify({
+        'ok':              True,
+        'wallet':          wallet_address,
+        'username':        db_username or '',
+        'has_trading_key': bool(has_trading_key),
+        'is_admin':        bool(is_admin),
+        'csrf_token':      csrf_tok,
+    })
 
 @app.route('/api/auth/check-faceid', methods=['GET'])
 def check_faceid():
