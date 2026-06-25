@@ -3188,7 +3188,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </nav>
       <!-- START TRADING -->
       <div class="sb-start-wrap">
-        <button class="sb-start-btn" id="sb-start-btn" onclick="_sbNav('market')">▶ Start Trading</button>
+        <button class="sb-start-btn" id="sb-start-btn" onclick="toggleTrader()">▶ Start Trading</button>
       </div>
       <!-- USER CARD -->
       <div class="sb-bottom">
@@ -3839,6 +3839,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
     </div>
   </div><!-- /dash-admin -->
+
+  <!-- NOTIFICATIONS -->
+  <div id="dash-notifications" class="dash-section" style="display:none">
+    <div class="feed-hdr">
+      <div class="feed-hdr-top"><h1 class="feed-hdr-title">Notifications</h1></div>
+    </div>
+    <div id="notif-list" style="padding:40px 22px;text-align:center;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:12px">🔔</div>
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">No new notifications</div>
+      <div style="font-size:13px">Trade alerts and activity will appear here.</div>
+    </div>
+  </div>
 
     </div><!-- /main-content -->
 
@@ -5881,6 +5893,18 @@ function updateBtns(){
   const sbText=document.getElementById('sb-bot-text');
   if(sbDot){ sbDot.className='sb-bot-dot '+(traderOn?'running':'idle'); }
   if(sbText){ sbText.textContent='Bot: '+(traderOn?'RUNNING':'IDLE'); }
+  const sbStartBtn=document.getElementById('sb-start-btn');
+  if(sbStartBtn){
+    if(traderOn){
+      sbStartBtn.textContent='⏹ Stop Trading';
+      sbStartBtn.style.background='var(--red)';
+      sbStartBtn.style.color='#fff';
+    } else {
+      sbStartBtn.textContent='▶ Start Trading';
+      sbStartBtn.style.background='';
+      sbStartBtn.style.color='';
+    }
+  }
 }
 
 function _updateBotIdleBanner(){
@@ -6379,8 +6403,27 @@ function _sbNav(section){
     openMessagesView();
   } else if(section==='community'){
     openCommunityView();
+  } else if(section==='leaderboard'){
+    window.location.href='/leaderboard';
+  } else if(section==='notifications'){
+    if(_dmOpen) closeMessagesView();
+    if(_tradersView) closeTradersView();
+    if(_gcOpen) closeCommunityView();
+    const _mc=document.getElementById('main-content');
+    if(_mc) _mc.style.display='';
+    document.querySelectorAll('.dash-section').forEach(function(s){ s.style.display='none'; });
+    const _notif=document.getElementById('dash-notifications');
+    if(_notif) _notif.style.display='block';
+    _sbSetActive('sbn-notifications');
   }
 }
+
+/* unified nav alias — maps external section names to _sbNav keys */
+function showSection(name){
+  var map={'live-market':'market','home':'dashboard'};
+  _sbNav(map[name]||name);
+}
+
 function _wltSend(){ /* TODO */ }
 function _wltReceive(){
   const wallet=phantomKey||currentWallet;
