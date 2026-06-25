@@ -833,6 +833,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN copy_source TEXT DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN referral_code TEXT DEFAULT NULL",
         "ALTER TABLE direct_messages ADD COLUMN message_type TEXT DEFAULT 'text'",
+        "ALTER TABLE users ADD COLUMN webauthn_ready INTEGER DEFAULT 0",
     ]:
         try:
             con.execute(sql)
@@ -3081,12 +3082,21 @@ def webauthn_register():
         return jsonify({'success': False, 'msg': 'credential_id and public_key are required'}), 400
     if wallet_address and not is_valid_solana_address(wallet_address):
         return jsonify({'success': False, 'msg': 'Invalid wallet address'}), 400
+
+    # Prefer the already-authenticated session user over the posted wallet address
+    session_user_id = session.get('user_id')
+    session_wallet  = session.get('wallet')
+
     conn = sqlite3.connect(DB_FILE)
     try:
-        if wallet_address:
+        if session_user_id:
+            user_id = session_user_id
+            if not wallet_address and session_wallet:
+                wallet_address = session_wallet
+        elif wallet_address:
             user_id = get_or_create_user(wallet_address)
         else:
-            # No wallet supplied — create a placeholder user keyed to the credential
+            # No session and no wallet — create a placeholder user keyed to the credential
             wallet_address = 'webauthn:' + credential_id[:32]
             conn.execute(
                 'INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet_address,)
@@ -3104,6 +3114,7 @@ def webauthn_register():
                ON CONFLICT(credential_id) DO UPDATE SET public_key=excluded.public_key''',
             (user_id, credential_id, public_key)
         )
+        conn.execute('UPDATE users SET webauthn_ready=1 WHERE id=?', (user_id,))
         conn.commit()
     finally:
         conn.close()
@@ -3119,7 +3130,9 @@ def webauthn_login():
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            '''SELECT wc.user_id, u.wallet_address, COALESCE(u.username, '')
+            '''SELECT wc.user_id, u.wallet_address, COALESCE(u.username, ''),
+                      CASE WHEN u.encrypted_private_key != '' AND u.encrypted_private_key IS NOT NULL
+                           THEN 1 ELSE 0 END
                FROM webauthn_credentials wc
                JOIN users u ON u.id = wc.user_id
                WHERE wc.credential_id = ?''',
@@ -3129,14 +3142,19 @@ def webauthn_login():
         conn.close()
     if not row:
         return jsonify({'success': False, 'msg': 'Credential not found — register first'}), 404
-    user_id, wallet_address, username = row
-    session.permanent  = True
-    session['user_id'] = user_id
-    session['wallet']  = wallet_address
+    user_id, wallet_address, username, has_trading_key = row
+    session.permanent       = True
+    session['user_id']      = user_id
+    session['wallet']       = wallet_address
     csrf_tok = _get_csrf_token()
-    return jsonify({'success': True, 'user_id': user_id,
-                    'wallet': wallet_address, 'username': username or '',
-                    'csrf_token': csrf_tok})
+    return jsonify({
+        'success':         True,
+        'user_id':         user_id,
+        'wallet':          wallet_address,
+        'username':        username or '',
+        'has_trading_key': bool(has_trading_key),
+        'csrf_token':      csrf_tok,
+    })
 
 @app.route('/api/wallet/set', methods=['POST'])
 @rate_limit(10, 60)
@@ -3271,7 +3289,11 @@ def save_settings():
     final_has_key = bool(final_enc)
     get_user_state(wallet)['has_trading_key'] = final_has_key
     add_user_log(wallet, 'Settings saved for ' + wallet[:6] + '...' + wallet[-4:])
-    return jsonify({'ok': True, 'has_trading_key': final_has_key})
+    return jsonify({
+        'ok': True,
+        'has_trading_key': final_has_key,
+        'prompt_faceid': bool(private_key_raw and final_has_key),
+    })
 
 # ── USERNAME ──
 @app.route('/api/blacklist', methods=['GET'])
