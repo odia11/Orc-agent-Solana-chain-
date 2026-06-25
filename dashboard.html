@@ -255,9 +255,49 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .botbar-btn-stop{background:#ff1744;color:#fff}
 .botbar-btn-stop:hover:not(:disabled){filter:brightness(1.1)}
 @media(max-width:600px){.statsbar{flex-wrap:wrap}.statsbar-pill{flex:1 1 calc(50% - 4px)}.botbar{flex-wrap:wrap}}
-/* ── SOL / POS overrides for pill context ── */
-#s-sol{font-size:16px!important;font-weight:700;text-shadow:none;color:#ffffff}
-#s-pos{font-size:16px!important;font-weight:700;color:#ffffff}
+/* hide old bot/stats elements — replaced by feed card */
+.statsbar{display:none!important}
+.bot-idle-banner{display:none!important}
+/* ── SOL / POS in feed card ── */
+#s-sol{font-size:13px!important;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--text)!important;text-shadow:none}
+#s-pos{font-size:13px!important;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--text)!important}
+/* ── FEED LAYOUT ── */
+.feed-hdr{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
+.feed-hdr-top{display:flex;align-items:center;gap:10px;padding:16px 20px 12px}
+.feed-hdr-title{font-size:18px;font-weight:700;color:var(--text);flex:1;letter-spacing:-.02em}
+.feed-live-pill{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
+.feed-live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
+.feed-tabs{display:flex;padding:0 20px;gap:0}
+.feed-tab{flex:1;padding:10px 0;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:500;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;letter-spacing:-.01em}
+.feed-tab:hover{color:var(--text)}
+.feed-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+/* ── BOT STATUS CARD ── */
+.feed-bot-card{margin:16px 0 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.feed-bot-left{display:flex;align-items:center;gap:8px;flex:1;min-width:140px}
+.feed-bot-dot{width:8px;height:8px;border-radius:50%;background:#f5a623;flex-shrink:0;transition:background .3s}
+.feed-bot-dot.running{background:var(--accent);animation:blink 1.2s infinite}
+.feed-bot-status-text{font-size:13px;font-weight:500;color:var(--text)}
+.feed-bot-stats{display:flex;align-items:center;gap:18px;flex-shrink:0}
+.feed-bot-stat{display:flex;flex-direction:column;align-items:center;gap:1px}
+.feed-bot-stat-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.feed-bot-stat-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text)}
+.feed-bot-btn{padding:9px 18px;background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s,background .2s;flex-shrink:0}
+.feed-bot-btn:hover:not(:disabled){opacity:.88}
+.feed-bot-btn:disabled{opacity:.4;cursor:not-allowed}
+.feed-bot-btn.stop{background:var(--red);color:#fff}
+/* ── COMPOSER ── */
+.feed-composer{margin:10px 0 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px 18px}
+.feed-composer-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
+.feed-composer-avatar{width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);flex-shrink:0;overflow:hidden;position:relative}
+.feed-composer-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.feed-composer-input{flex:1;background:transparent;border:none;outline:none;font-family:'Geist',system-ui,sans-serif;font-size:15px;color:var(--text);padding:8px 0;cursor:pointer;caret-color:var(--accent)}
+.feed-composer-input::placeholder{color:var(--muted)}
+.feed-composer-actions{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--bg3)}
+.feed-composer-pill{display:flex;align-items:center;gap:5px;padding:6px 14px;background:transparent;border:1px solid var(--bg3);border-radius:20px;font-size:12px;font-weight:500;color:var(--accent);cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,border-color .15s}
+.feed-composer-pill:hover{background:rgba(53,212,196,.08);border-color:var(--accent)}
+.feed-composer-post{margin-left:auto;padding:8px 20px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.feed-composer-post:hover{opacity:.88}
+@media(max-width:600px){.feed-bot-card{gap:10px}.feed-bot-stats{gap:12px}}
 /* ── PULSING LIVE DOT ── */
 .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00e676;animation:pulse-dot 2s ease-in-out infinite;margin-right:5px;vertical-align:middle;flex-shrink:0}
 @keyframes pulse-dot{0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(0,230,118,.55)}60%{opacity:.55;box-shadow:0 0 0 6px rgba(0,230,118,0)}}
@@ -3188,6 +3228,55 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main" class="dash-section" style="display:block !important">
 
+  <!-- FEED STICKY HEADER -->
+  <div class="feed-hdr">
+    <div class="feed-hdr-top">
+      <h1 class="feed-hdr-title">Home</h1>
+      <div class="feed-live-pill"><span class="feed-live-dot"></span>LIVE</div>
+    </div>
+    <div class="feed-tabs">
+      <button class="feed-tab active" onclick="_feedTab(this,'foryou')">For You</button>
+      <button class="feed-tab" onclick="_feedTab(this,'following')">Following</button>
+      <button class="feed-tab" onclick="_feedTab(this,'livetrades')">Live Trades</button>
+    </div>
+  </div>
+
+  <!-- BOT STATUS CARD -->
+  <div class="feed-bot-card" id="feed-bot-card">
+    <div class="feed-bot-left">
+      <span class="feed-bot-dot" id="feed-bot-dot"></span>
+      <span class="feed-bot-status-text" id="feed-bot-status-text">Your bot is idle</span>
+    </div>
+    <div class="feed-bot-stats">
+      <div class="feed-bot-stat">
+        <span class="feed-bot-stat-lbl">SOL</span>
+        <span class="feed-bot-stat-val" id="s-sol"><span class="stat-placeholder">——</span></span>
+      </div>
+      <div class="feed-bot-stat">
+        <span class="feed-bot-stat-lbl">Positions</span>
+        <span class="feed-bot-stat-val" id="s-pos">——</span>
+      </div>
+      <div class="feed-bot-stat">
+        <span class="feed-bot-stat-lbl">Win Rate</span>
+        <span class="feed-bot-stat-val" id="sb-wr">—</span>
+      </div>
+    </div>
+    <button class="feed-bot-btn" id="feed-trade-btn" onclick="toggleTrader()" disabled title="Connect a wallet to enable trading">▶ Start Trading</button>
+  </div>
+
+  <!-- COMPOSER -->
+  <div class="feed-composer" id="feed-composer">
+    <div class="feed-composer-top">
+      <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
+      <input class="feed-composer-input" type="text" placeholder="Share your last trade..." readonly>
+    </div>
+    <div class="feed-composer-actions">
+      <button class="feed-composer-pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
+      <button class="feed-composer-pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
+      <button class="feed-composer-post">POST</button>
+    </div>
+  </div>
+
   <!-- MY PROFILE BAR -->
   <div id="dash-profile-bar" style="display:none" onclick="if(_myProfileId)openProfileCard(_myProfileId)">
     <div class="dpb-avatar" id="dpb-avatar"></div>
@@ -3215,11 +3304,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <button class="bib-btn" onclick="toggleTrader()">Start Bot</button>
   </div>
 
-  <!-- STATS BAR -->
-  <div class="statsbar">
+  <!-- STATS BAR (hidden — data IDs moved to feed-bot-card; functional IDs kept here) -->
+  <div class="statsbar" aria-hidden="true">
     <div class="statsbar-pill">
-      <div class="statsbar-lbl">SOL Balance</div>
-      <div class="statsbar-val" id="s-sol"><span class="stat-placeholder">——</span></div>
       <div class="statsbar-sub" id="s-sol-usdc"></div>
       <div class="sol-actions">
         <button class="deposit-sol-btn" id="deposit-sol-btn" onclick="openDepositModal()">↓ Deposit</button>
@@ -3228,21 +3315,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
     </div>
     <div class="statsbar-pill" id="positions-panel">
-      <div class="statsbar-lbl">Open Positions</div>
-      <div class="statsbar-val" id="s-pos"><span class="stat-placeholder">——</span></div>
-      <div class="statsbar-sub">max 5 concurrent <span id="pos-count"></span></div>
-      <div style="display:none"><div id="top-pos-empty"></div><div id="top-pos-list"></div></div>
+      <div style="display:none"><span id="pos-count"></span><div id="top-pos-empty"></div><div id="top-pos-list"></div></div>
     </div>
-    <div class="statsbar-pill">
-      <div class="statsbar-lbl">Win Rate</div>
-      <div class="statsbar-val" id="sb-wr">—</div>
-      <div class="statsbar-sub">all trades</div>
-    </div>
-    <div class="statsbar-pill">
-      <div class="statsbar-lbl">All-time PnL</div>
-      <div class="statsbar-val" id="sb-allpnl">—</div>
-      <div class="statsbar-sub">total profit</div>
-    </div>
+    <div class="statsbar-pill"><div id="sb-allpnl" style="display:none">—</div></div>
   </div>
   <!-- BOT CONTROL BAR -->
   <div class="botbar" id="trade-card">
@@ -9026,6 +9101,45 @@ document.addEventListener('DOMContentLoaded', function(){
     if(!inp.closest('.hdr-search-wrap').contains(e.target)) closeDD();
   });
 })();
+
+/* ── FEED TAB SWITCHER ── */
+function _feedTab(btn, tab){
+  document.querySelectorAll('.feed-tab').forEach(function(t){ t.classList.remove('active'); });
+  btn.classList.add('active');
+}
+
+/* ── SYNC feed trade button + dot with hidden #trade-btn state ── */
+document.addEventListener('DOMContentLoaded', function(){
+  var _tbSrc = document.getElementById('trade-btn');
+  var _tbDst = document.getElementById('feed-trade-btn');
+  var _dot   = document.getElementById('feed-bot-dot');
+  var _txt   = document.getElementById('feed-bot-status-text');
+  function _syncFeed(){
+    if(!_tbSrc || !_tbDst) return;
+    var running = _tbSrc.textContent.trim() === '■ STOP';
+    _tbDst.disabled = _tbSrc.disabled;
+    _tbDst.textContent = running ? '⏸ Stop Bot' : '▶ Start Trading';
+    _tbDst.classList.toggle('stop', running);
+    if(_dot) _dot.classList.toggle('running', running);
+    if(_txt) _txt.textContent = running ? 'Bot is trading…' : 'Your bot is idle';
+  }
+  if(_tbSrc){
+    new MutationObserver(_syncFeed).observe(_tbSrc, {attributes:true,childList:true,subtree:true,characterData:true});
+    _syncFeed();
+  }
+  /* mirror avatar into composer */
+  var _ca = document.getElementById('feed-composer-avatar');
+  var _sa = document.getElementById('sb-avatar-img');
+  var _si = document.getElementById('sb-avatar-ini');
+  if(_ca && _sa && _sa.src){
+    var img = document.createElement('img');
+    img.src = _sa.src; img.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%';
+    _ca.appendChild(img);
+  } else if(_ca && _si && _si.textContent){
+    _ca.textContent = _si.textContent;
+    _ca.style.cssText += ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted)';
+  }
+});
 </script>
 
 <!-- ── TOKEN DETAIL PANEL ── -->
