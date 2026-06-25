@@ -3727,7 +3727,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
   </div><!-- /dash-community -->
 
-  <div id="dash-wallet" class="dash-section" style="display:none">
+  <div id="dash-wallet" class="dash-section" style="display:none;padding:20px;overflow-y:auto;height:calc(100vh - 48px)">
     <div class="wlt-page">
       <div class="wlt-header">
         <div id="wlt-total-usd">$—</div>
@@ -6154,7 +6154,7 @@ function _sbNav(section){
     if(_mc) _mc.style.display='none';
     document.querySelectorAll('.dash-section').forEach(function(s){ s.style.display='none'; });
     const wlt=document.getElementById('dash-wallet');
-    if(wlt) wlt.style.display='flex';
+    if(wlt){ wlt.style.display='flex'; wlt.scrollTop=0; }
     _sbSetActive('sbn-wallet');
     loadWalletTokens();
     _startWalletRefresh();
