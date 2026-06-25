@@ -4335,8 +4335,8 @@ function _applyPhantomDetection(phantomBtn, phantomNote){
     /* Mobile: repurpose button as deep link into Phantom's in-app browser */
     phantomBtn.onclick=function(){ window.location.href=phantomDeepLink; };
     var lbl=document.getElementById('phantom-ob-label');
-    if(lbl) lbl.textContent='Open in Phantom App';
-    phantomNote.textContent="Tap to open OrcAgent inside Phantom's browser";
+    if(lbl) lbl.textContent='Open in Phantom →';
+    phantomNote.textContent='Opens OrcAgent inside your wallet’s browser';
     phantomNote.style.color='var(--muted)';
   } else {
     /* Desktop: grey out and show install link */
@@ -4351,9 +4351,9 @@ function _applySolflareDetection(solflareBtn, solflareNote){
   if(isMobile){
     solflareBtn.onclick=function(){ window.location.href=solflareDeepLink; };
     var lbl=solflareBtn.querySelector('span')||solflareBtn;
-    if(lbl.tagName==='SPAN') lbl.textContent='Open in Solflare App';
-    else solflareBtn.textContent='Open in Solflare App';
-    solflareNote.textContent="Tap to open OrcAgent inside Solflare's browser";
+    if(lbl.tagName==='SPAN') lbl.textContent='Open in Solflare →';
+    else solflareBtn.textContent='Open in Solflare →';
+    solflareNote.textContent='Opens OrcAgent inside your wallet\'s browser';
     solflareNote.style.color='var(--muted)';
   } else {
     solflareBtn.style.background='var(--bg3)'; solflareBtn.style.color='var(--muted)'; solflareBtn.style.border='1px solid var(--border2)';
