@@ -796,6 +796,24 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_group_chat_created ON group_chat(created_at)')
+    c.execute('''CREATE TABLE IF NOT EXISTS post_likes (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        post_id    TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, post_id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS feed_replies (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        post_id    TEXT NOT NULL,
+        message    TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_feed_replies_post ON feed_replies(post_id)')
     conn.commit()
     conn.close()
 
@@ -3543,8 +3561,8 @@ def social_feed():
 
         # Recent closed trades — no time cap, just newest 50 across ALL users
         c.execute('''
-            SELECT t.user_id, t.token, t.entry_price, t.exit_price, t.pnl, t.timestamp,
-                   u.username, u.avatar_url, u.wallet_address
+            SELECT t.id, t.user_id, t.token, t.entry_price, t.exit_price, t.pnl, t.timestamp,
+                   COALESCE(t.mint_address,''), u.username, u.avatar_url, u.wallet_address
             FROM trades t
             JOIN users u ON u.id = t.user_id
             ORDER BY t.timestamp DESC
@@ -3595,6 +3613,7 @@ def social_feed():
                 'avatar_url':      _info['avatar_url'],
                 'wallet':          _info['wallet'],
                 'token':           _pos.get('symbol') or _mint[:8],
+                'token_address':   _mint,
                 'entry_price':     round(_buy, 8),
                 'current_pnl_pct': _pnl_pct,
                 'current_pnl_sol': _pnl_sol,
@@ -3603,7 +3622,7 @@ def social_feed():
             })
 
     # ── Closed trades (DB) ──
-    for _uid, _token, _entry, _exit, _pnl, _ts_str, _uname, _avatar, _wallet in _trade_rows:
+    for _tid, _uid, _token, _entry, _exit, _pnl, _ts_str, _mint_addr, _uname, _avatar, _wallet in _trade_rows:
         _sw = _short(_wallet or '')
         _display = _uname if _uname else _sw
         try:
@@ -3617,17 +3636,19 @@ def social_feed():
             except Exception:
                 _sort_ts = 0.0
         feed.append({
-            'type':        'trade',
-            'user_id':     _uid,
-            'username':    _display,
-            'avatar_url':  _avatar or '',
-            'wallet':      _sw,
-            'token':       _token or '',
-            'entry_price': round(float(_entry or 0), 8),
-            'exit_price':  round(float(_exit  or 0), 8),
-            'pnl':         round(float(_pnl   or 0), 6),
-            'timestamp':   _ts_str or '',
-            '_sort_ts':    _sort_ts,
+            'type':          'trade',
+            'trade_id':      _tid,
+            'user_id':       _uid,
+            'username':      _display,
+            'avatar_url':    _avatar or '',
+            'wallet':        _sw,
+            'token':         _token or '',
+            'token_address': _mint_addr or '',
+            'entry_price':   round(float(_entry or 0), 8),
+            'exit_price':    round(float(_exit  or 0), 8),
+            'pnl':           round(float(_pnl   or 0), 6),
+            'timestamp':     _ts_str or '',
+            '_sort_ts':      _sort_ts,
         })
 
     if _allowed_ids is not None:
@@ -3637,6 +3658,91 @@ def social_feed():
     for _item in feed:
         _item.pop('_sort_ts', None)
     return jsonify(feed[:50])
+
+# ── FEED INTERACTIONS ──
+@app.route('/api/feed/like/<path:post_id>', methods=['POST'])
+@rate_limit(60, 60)
+def toggle_feed_like(post_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        existing = conn.execute(
+            'SELECT id FROM post_likes WHERE user_id=? AND post_id=?', (me, post_id)
+        ).fetchone()
+        if existing:
+            conn.execute('DELETE FROM post_likes WHERE user_id=? AND post_id=?', (me, post_id))
+            liked = False
+        else:
+            conn.execute('INSERT INTO post_likes (user_id, post_id) VALUES (?,?)', (me, post_id))
+            liked = True
+        count = conn.execute('SELECT COUNT(*) FROM post_likes WHERE post_id=?', (post_id,)).fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'liked': liked, 'count': int(count)})
+
+@app.route('/api/feed/likes/<path:post_id>', methods=['GET'])
+@rate_limit(120, 60)
+def get_feed_likes(post_id):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        count = conn.execute('SELECT COUNT(*) FROM post_likes WHERE post_id=?', (post_id,)).fetchone()[0]
+        wallet = _current_wallet()
+        liked = False
+        if wallet:
+            me = _get_uid(conn, wallet)
+            if me:
+                liked = bool(conn.execute(
+                    'SELECT 1 FROM post_likes WHERE user_id=? AND post_id=?', (me, post_id)
+                ).fetchone())
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'count': int(count), 'liked': liked})
+
+@app.route('/api/feed/reply', methods=['POST'])
+@rate_limit(15, 60)
+def post_feed_reply():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    post_id = str(body.get('post_id', '')).strip()
+    message = _sanitize(str(body.get('message', '')).strip())
+    if not post_id:
+        return jsonify({'ok': False, 'msg': 'post_id required'}), 400
+    if not message:
+        return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+    if len(message) > 500:
+        return jsonify({'ok': False, 'msg': 'Message too long (max 500 chars)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        cur = conn.execute(
+            'INSERT INTO feed_replies (user_id, post_id, message, created_at) VALUES (?,?,?,?)',
+            (me, post_id, message, now)
+        )
+        conn.commit()
+        reply_id = cur.lastrowid
+        row = conn.execute(
+            'SELECT COALESCE(username,""), COALESCE(avatar_url,"") FROM users WHERE id=?', (me,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return jsonify({
+        'ok': True, 'id': reply_id, 'user_id': me,
+        'username': row[0] if row else '',
+        'avatar_url': row[1] if row else '',
+        'message': message,
+        'created_at': now,
+    })
 
 # ── PROFILE ──
 @app.route('/api/profile/me', methods=['GET'])
