@@ -2805,18 +2805,28 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div id="mobile-deeplink-section" style="display:none"></div>
       <button id="solflare-ob-btn" style="display:none" onclick="connectWalletOnboard('solflare')"></button>
 
-      <!-- ── Phantom (shown when no Face ID saved) ── -->
+      <!-- ── Face ID (shown ONLY when credential saved in localStorage) ── -->
+      <button class="ob-btn" onclick="_webAuthnLogin()" id="ob-bio-btn"
+        style="display:none;background:var(--accent);color:#0a0b0e;flex-direction:column;gap:10px;padding:22px 16px;height:auto;border-radius:14px">
+        <svg width="38" height="38" viewBox="0 0 38 38" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 12V6h6"/><path d="M34 12V6h-6"/>
+          <path d="M4 26v6h6"/><path d="M34 26v6h-6"/>
+          <line x1="14" y1="16" x2="14" y2="18.5"/>
+          <line x1="24" y1="16" x2="24" y2="18.5"/>
+          <path d="M19 18.5v3.5"/>
+          <path d="M15 26c1.2 1.8 6.8 1.8 8 0"/>
+        </svg>
+        <span id="ob-bio-label" style="font-size:15px;font-weight:700;letter-spacing:.02em">Login with Face ID</span>
+      </button>
+      <div id="ob-bio-err" style="font-size:11px;color:var(--red);text-align:center;min-height:16px;margin-top:-2px"></div>
+      <button id="ob-alt-link" onclick="_showWalletOptions()" style="display:none;background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:2px 0 6px;text-decoration:underline">or connect differently</button>
+
+      <!-- ── Phantom (shown when no Face ID saved, or via "connect differently") ── -->
       <button class="ob-btn" id="phantom-ob-btn" onclick="connectWalletOnboard('phantom')" style="background:var(--accent);color:#0a0b0e;display:flex;align-items:center;justify-content:center;gap:8px">
         <svg width="18" height="18" viewBox="0 0 128 128" fill="none"><path d="M64 0C28.7 0 0 28.7 0 64s28.7 64 64 64 64-28.7 64-64S99.3 0 64 0z" fill="#AB9FF2"/><path d="M108.2 64.8c0 20.5-16.6 37.1-37.1 37.1-9.7 0-18.5-3.7-25.1-9.8l-11.7 9c-1.4 1.1-3.4.1-3.4-1.7V64.8c0-20.5 16.6-37.1 37.1-37.1S108.2 44.3 108.2 64.8z" fill="white"/></svg>
         Connect Phantom
       </button>
       <div id="ob-phantom-note" style="font-size:10px;color:var(--muted);margin:-6px 0 8px;text-align:center"></div>
-
-      <!-- ── Face ID (shown ONLY when credential saved in localStorage) ── -->
-      <button class="ob-btn" onclick="_webAuthnLogin()" id="ob-bio-btn" style="display:none;background:var(--accent);color:#0a0b0e;gap:8px">
-        🔒 Login with Face ID / Fingerprint
-      </button>
-      <div class="ob-input-err" id="ob-bio-err"></div>
 
       <!-- Post-connect: continue to setup guide -->
       <button class="ob-btn" id="step1-continue-btn" disabled style="display:none;background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5" onclick="gotoSetupGuide()">Continue →</button>
@@ -4063,14 +4073,16 @@ async function connectReadonlyAddress(){
 async function _webAuthnLogin(){
   var errEl=document.getElementById('ob-bio-err');
   var btn=document.getElementById('ob-bio-btn');
+  var label=document.getElementById('ob-bio-label');
   if(errEl) errEl.textContent='';
   if(!window.PublicKeyCredential){
     if(errEl) errEl.textContent='WebAuthn not supported on this device.';
-    return;
+    _showWalletOptions(); return;
   }
-  if(btn){ btn.disabled=true; btn.textContent='Authenticating…'; }
+  if(btn) btn.disabled=true;
+  if(label) label.textContent='Authenticating…';
+  var failed=false;
   try{
-    /* Target the specific credential saved on this device */
     var storedId=localStorage.getItem('orca_credential_id');
     var allowCreds=[];
     if(storedId){
@@ -4078,34 +4090,48 @@ async function _webAuthnLogin(){
     }
     var ch=new Uint8Array(32); crypto.getRandomValues(ch);
     var cred=await navigator.credentials.get({
-      publicKey:{
-        rpId:'orcagent.fun',
-        challenge:ch,
-        timeout:60000,
-        userVerification:'required',
-        allowCredentials:allowCreds
-      }
+      publicKey:{rpId:'orcagent.fun',challenge:ch,timeout:60000,userVerification:'required',allowCredentials:allowCreds}
     });
-    if(!cred){ if(errEl) errEl.textContent='Authentication failed.'; return; }
+    if(!cred){ if(errEl) errEl.textContent='Face ID failed.'; failed=true; return; }
     var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
     var r=await fetch('/api/auth/webauthn/login',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({credential_id:rawIdB64})
     }).then(res=>res.json()).catch(()=>null);
-    if(r && r.success){
-      /* Store wallet for the auto-reconnect path after reload */
+    if(r&&r.success){
       if(r.wallet) localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'webauthn'}));
       location.reload();
     } else {
       if(errEl) errEl.textContent=(r&&r.msg)||'Face ID failed — try connecting wallet instead.';
+      failed=true;
     }
   }catch(e){
     var em=e.name==='NotAllowedError'?'Face ID failed — try connecting wallet instead.':
            e.name==='SecurityError'?'Domain mismatch — passkey not valid for this site.':
            'Auth failed: '+(e.message||e.name);
     if(errEl) errEl.textContent=em;
+    failed=true;
   }finally{
-    if(btn){ btn.disabled=false; btn.textContent='🔒 Login with Face ID / Fingerprint'; }
+    if(btn) btn.disabled=false;
+    if(label) label.textContent='Login with Face ID';
+    if(failed) _showWalletOptions();
+  }
+}
+
+function _showWalletOptions(){
+  /* Reveal Phantom + Browse after Face ID failure or "connect differently" tap */
+  var phantomBtn=document.getElementById('phantom-ob-btn');
+  var phantomNote=document.getElementById('ob-phantom-note');
+  var skipBtn=document.getElementById('ob-skip-btn');
+  if(phantomBtn) phantomBtn.style.display='flex';
+  if(skipBtn)    skipBtn.style.display='';
+  if(phantomNote){
+    phantomNote.style.display='';
+    if(!window.solana||!window.solana.isPhantom){
+      var pb=document.getElementById('phantom-ob-btn');
+      if(pb){ pb.style.background='var(--bg3)'; pb.style.color='var(--muted)'; pb.style.border='1px solid var(--border2)'; }
+      phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
+    }
   }
 }
 
@@ -4258,20 +4284,23 @@ async function _settingsFaceIdSetup(){
 /* On load: switch connect screen between Face ID mode and Phantom mode */
 document.addEventListener('DOMContentLoaded',function(){
   var hasFaceId=!!localStorage.getItem('orca_credential_id');
+  var bioBtn=document.getElementById('ob-bio-btn');
+  var altLink=document.getElementById('ob-alt-link');
   var phantomBtn=document.getElementById('phantom-ob-btn');
   var phantomNote=document.getElementById('ob-phantom-note');
-  var bioBtn=document.getElementById('ob-bio-btn');
   var skipBtn=document.getElementById('ob-skip-btn');
 
   if(hasFaceId){
-    /* Face ID mode: show ONLY the Face ID button */
+    /* Face ID mode: show Face ID button + "or connect differently" link only */
     if(bioBtn)     bioBtn.style.display='flex';
+    if(altLink)    altLink.style.display='';
     if(phantomBtn) phantomBtn.style.display='none';
     if(phantomNote)phantomNote.style.display='none';
     if(skipBtn)    skipBtn.style.display='none';
   } else {
     /* Phantom mode: show Phantom + Browse, hide Face ID */
     if(bioBtn)     bioBtn.style.display='none';
+    if(altLink)    altLink.style.display='none';
     if(phantomBtn) phantomBtn.style.display='flex';
     if(skipBtn)    skipBtn.style.display='';
     /* Grey out Phantom button if extension not installed */
