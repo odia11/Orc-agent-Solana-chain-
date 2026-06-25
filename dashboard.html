@@ -291,16 +291,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-tab:hover{color:var(--text)}
 .feed-tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 /* ── BOT STATUS CARD ── */
-.feed-bot-card{margin:16px 0 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
-.feed-bot-left{display:flex;align-items:center;gap:8px;flex:1;min-width:140px}
-.feed-bot-dot{width:8px;height:8px;border-radius:50%;background:#f5a623;flex-shrink:0;transition:background .3s}
-.feed-bot-dot.running{background:var(--accent);animation:blink 1.2s infinite}
-.feed-bot-status-text{font-size:13px;font-weight:500;color:var(--text)}
-.feed-bot-stats{display:flex;align-items:center;gap:18px;flex-shrink:0}
+.feed-bot-card{margin:16px 22px 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:15px 17px;display:flex;align-items:center;justify-content:space-between;gap:14px}
+.feed-bot-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
+.feed-bot-dot{width:9px;height:9px;min-width:9px;border-radius:50%;background:#f7b955;box-shadow:0 0 0 4px rgba(247,185,85,.14);flex-shrink:0;transition:background .3s,box-shadow .3s}
+.feed-bot-dot.running{background:var(--accent);box-shadow:0 0 0 4px rgba(53,212,196,.14);animation:orcaBlink 1.2s infinite}
+.feed-bot-text-wrap{display:flex;flex-direction:column;gap:3px;min-width:0}
+.feed-bot-status-text{font-size:14px;font-weight:600;color:var(--text)}
+.feed-bot-sub{font-family:'JetBrains Mono',monospace;font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.feed-bot-stats{display:none}
 .feed-bot-stat{display:flex;flex-direction:column;align-items:center;gap:1px}
 .feed-bot-stat-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .feed-bot-stat-val{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:var(--text)}
-.feed-bot-btn{padding:9px 18px;background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s,background .2s;flex-shrink:0}
+.feed-bot-btn{padding:10px 16px;background:#3ad29b;color:#08120f;border:none;border-radius:11px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s;flex-shrink:0}
 .feed-bot-btn:hover:not(:disabled){opacity:.88}
 .feed-bot-btn:disabled{opacity:.4;cursor:not-allowed}
 .feed-bot-btn.stop{background:var(--red);color:#fff}
@@ -316,7 +318,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-composer-pill:hover{background:rgba(53,212,196,.08);border-color:var(--accent)}
 .feed-composer-post{margin-left:auto;padding:8px 20px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .feed-composer-post:hover{opacity:.88}
-@media(max-width:600px){.feed-bot-card{gap:10px}.feed-bot-stats{gap:12px}}
+@media(max-width:600px){.feed-bot-card{margin:12px 12px 0;gap:10px}}
 /* ── FEED CARDS ── */
 #center-feed{display:flex;flex-direction:column}
 .fc-loading{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
@@ -3403,20 +3405,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <div class="feed-bot-card" id="feed-bot-card">
     <div class="feed-bot-left">
       <span class="feed-bot-dot" id="feed-bot-dot"></span>
-      <span class="feed-bot-status-text" id="feed-bot-status-text">Your bot is idle</span>
-    </div>
-    <div class="feed-bot-stats">
-      <div class="feed-bot-stat">
-        <span class="feed-bot-stat-lbl">SOL</span>
-        <span class="feed-bot-stat-val" id="s-sol"><span class="stat-placeholder">——</span></span>
-      </div>
-      <div class="feed-bot-stat">
-        <span class="feed-bot-stat-lbl">Positions</span>
-        <span class="feed-bot-stat-val" id="s-pos">——</span>
-      </div>
-      <div class="feed-bot-stat">
-        <span class="feed-bot-stat-lbl">Win Rate</span>
-        <span class="feed-bot-stat-val" id="sb-wr">—</span>
+      <div class="feed-bot-text-wrap">
+        <span class="feed-bot-status-text" id="feed-bot-status-text">Your bot is idle</span>
+        <span class="feed-bot-sub"><span id="s-sol">——</span> SOL ready · <span id="s-pos">0/5</span> open · <span id="sb-wr">—</span> win rate</span>
       </div>
     </div>
     <button class="feed-bot-btn" id="feed-trade-btn" onclick="toggleTrader()" disabled title="Connect a wallet to enable trading">▶ Start Trading</button>
@@ -6356,6 +6347,18 @@ function updateBtns(){
       sbStartBtn.style.background='';
       sbStartBtn.style.color='';
     }
+  }
+  /* ── feed bot card ── */
+  const feedDot=document.getElementById('feed-bot-dot');
+  const feedStatus=document.getElementById('feed-bot-status-text');
+  const feedBtn=document.getElementById('feed-trade-btn');
+  if(feedDot) feedDot.classList.toggle('running',traderOn);
+  if(feedStatus) feedStatus.textContent=traderOn?'Your bot is running':'Your bot is idle';
+  if(feedBtn){
+    if(traderOn){ feedBtn.textContent='⏹ Stop Trading'; feedBtn.classList.add('stop'); }
+    else { feedBtn.textContent='▶ Start Trading'; feedBtn.classList.remove('stop'); }
+    feedBtn.disabled=!phantomKey;
+    feedBtn.title=phantomKey?'':'Connect a wallet to enable trading';
   }
 }
 
