@@ -4079,7 +4079,6 @@ async function connectReadonlyAddress(){
     }).then(function(x){ return x.json(); });
     if(r.ok){
       phantomKey=r.wallet; walletType='readonly'; _isReadonly=true;
-      localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'readonly'}));
       if(r.csrf_token) window._csrfToken=r.csrf_token;
       launchApp();
     } else {
@@ -4118,7 +4117,6 @@ async function _webAuthnLogin(){
       body:JSON.stringify({credential_id:rawIdB64})
     }).then(res=>res.json()).catch(()=>null);
     if(r&&r.success){
-      if(r.wallet) localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'webauthn'}));
       location.reload();
     } else {
       if(errEl) errEl.textContent=(r&&r.msg)||'Face ID failed — try connecting wallet instead.';
@@ -4153,7 +4151,6 @@ async function _loginWithPassword(){
       body:JSON.stringify({username:username,password:password})
     }).then(res=>res.json()).catch(()=>null);
     if(r&&r.success){
-      if(r.wallet) localStorage.setItem('orcagent_wallet',JSON.stringify({key:r.wallet,type:'password'}));
       if(r.csrf_token) _csrfToken=r.csrf_token;
       window.location.href='/dashboard';
     } else {
@@ -4489,7 +4486,6 @@ function _checkInactivity(){
 function doLogout(){
   _hideInactWarning();
   phantomKey=null; walletType=null; _isAdmin=false;
-  localStorage.removeItem('orcagent_wallet');
   updateAuthBtns();
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-pill').style.display='none';
@@ -4542,9 +4538,6 @@ async function connectWalletOnboard(type){
     }
     phantomKey=pubkey.toString();
     walletType=name;
-    localStorage.setItem('orcagent_wallet',JSON.stringify({key:phantomKey,type:name}));
-    fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})})
-      .then(r=>r.json()).then(r=>{ settingsHasKey=r.has_trading_key||false; _updateKeyStatus(); _isAdmin=r.is_admin||false; if(r.csrf_token) _csrfToken=r.csrf_token; }).catch(()=>{});
     document.getElementById('wallet-type-label').textContent=name+' wallet connected';
     document.getElementById('wallet-addr').textContent=phantomKey;
     document.getElementById('wallet-connected').style.display='flex';
@@ -4553,6 +4546,10 @@ async function connectWalletOnboard(type){
     const cb=document.getElementById('step1-continue-btn');
     cb.disabled=false; cb.style.cssText='background:var(--green);color:#ffffff;cursor:pointer;opacity:1';
     document.getElementById('wallet-back-btn').style.display='block';
+    const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).then(x=>x.json()).catch(()=>null);
+    if(r?.csrf_token) _csrfToken=r.csrf_token;
+    settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false; _updateKeyStatus();
+    if(r?.success){ window.location.href='/dashboard'; return; }
   }catch(e){
     msgEl.textContent='Connection rejected or failed — please try again.';
     msgEl.style.display='block';
@@ -4562,7 +4559,6 @@ async function connectWalletOnboard(type){
 
 function resetWallet(){
   phantomKey=null; walletType=null;
-  localStorage.removeItem('orcagent_wallet');
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
   document.getElementById('wallet-install-msg').style.display='none';
   document.getElementById('wallet-connected').style.display='none';
@@ -6386,21 +6382,8 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── STARTUP: restore session ──
 (async function initApp(){
-  // Trust localStorage directly — wallet extensions are not yet initialised
-  // when this script runs on a fresh page load, so checking provider.isConnected
-  // always returns false and was incorrectly deleting the saved session.
-  // launchApp() already handles re-registering the server session via
-  // /api/wallet/set if the Flask cookie has expired.
-  const saved=JSON.parse(localStorage.getItem('orcagent_wallet')||'null');
-  if(saved?.key){
-    phantomKey=saved.key;
-    walletType=saved.type||'Wallet';
-    await launchApp();
-    return;
-  }
-
-  // No localStorage entry — check if a wallet extension is already connected
-  // (covers dapp browsers and extensions that auto-connect without a prior visit).
+  // Check if a wallet extension is already connected (dapp browsers, auto-connect extensions).
+  // Session state is server-side; no localStorage wallet key used.
   const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected && window.solana?.publicKey;
   const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
   const _p = phantomReady ? window.solana : solflareReady ? window.solflare : null;
@@ -6408,12 +6391,14 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
   if(_p && _n){
     const _pk=_p.publicKey.toString();
     phantomKey=_pk; walletType=_n;
-    localStorage.setItem('orcagent_wallet',JSON.stringify({key:_pk,type:_n}));
+    const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})}).then(x=>x.json()).catch(()=>null);
+    if(r?.csrf_token) _csrfToken=r.csrf_token;
+    if(r?.success){ window.location.href='/dashboard'; return; }
     await launchApp();
     return;
   }
 
-  // No wallet found — launch in view-only mode; Connect Wallet button in header lets user connect
+  // No wallet detected — launchApp restores from Flask session cookie or shows connect screen
   await launchApp();
 })();
 
