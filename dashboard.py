@@ -3015,6 +3015,46 @@ def history():
         is_admin=_is_owner(wallet),
     )
 
+
+@app.route('/wallet')
+def wallet_page():
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/')
+    sol_balance  = 0.0
+    transactions = []
+    error        = None
+    try:
+        sol_balance = _get_user_sol(wallet)
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'getSignaturesForAddress',
+            'params': [wallet, {'limit': 25}]
+        }, timeout=8)
+        for sig in (r.json().get('result') or []):
+            bt = sig.get('blockTime')
+            transactions.append({
+                'signature': sig.get('signature', ''),
+                'slot':      sig.get('slot', 0),
+                'time':      datetime.datetime.utcfromtimestamp(bt).strftime('%Y-%m-%d %H:%M') if bt else '—',
+                'err':       sig.get('err'),
+                'memo':      sig.get('memo') or '',
+            })
+    except Exception as e:
+        print(f'[wallet_page] error: {e}', flush=True)
+        error = str(e)
+    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    return render_template(
+        'wallet.html',
+        wallet=wallet,
+        wallet_short=wallet_short,
+        sol_balance=sol_balance,
+        transactions=transactions,
+        error=error,
+        is_admin=_is_owner(wallet),
+    )
+
+
 # ── HONEYPOTS ──
 # These paths are never legitimately accessed. Any hit means a scanner or attacker.
 # _security_gate() (registered above, runs first) already intercepts most of these

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Wallet — OrcAgent</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#080c14;--bg2:#0d1421;--bg3:#131d30;--bg4:#1a2840;
+  --green:#00ff88;--green2:#00cc77;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;--purple:#b07aff;
+  --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
+  --shadow-card:0 4px 24px rgba(0,0,0,.45);
+}
+html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 50% -10%,#0a1020 0%,#04060d 100%),radial-gradient(ellipse at 15% 20%,rgba(90,150,255,.06) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(0,255,136,.04) 0%,transparent 50%);font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
+.page-wrap{max-width:1100px;margin:0 auto;padding:1.25rem 1rem 3rem}
+
+/* ── NAVBAR ── */
+.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border);box-shadow:0 1px 0 0 rgba(0,255,136,.12);flex-wrap:wrap;gap:8px}
+.logo-row{display:flex;align-items:center;gap:10px;text-decoration:none}
+.brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
+.brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
+.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
+.dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
+a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center}
+a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 10px rgba(0,255,136,.15)}
+a.hdr-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,255,136,.06)}
+
+/* ── PAGE TITLE ── */
+.page-title{font-family:'Orbitron',monospace;font-size:20px;font-weight:900;color:var(--text);letter-spacing:.06em;margin-bottom:1.25rem}
+
+/* ── BALANCE CARD ── */
+.balance-card{background:rgba(13,20,33,.9);border:1px solid rgba(255,255,255,.06);border-radius:14px;padding:20px 24px;margin-bottom:1.25rem;display:flex;align-items:center;gap:20px;flex-wrap:wrap;box-shadow:var(--shadow-card);backdrop-filter:blur(10px)}
+.balance-icon{font-size:32px;line-height:1}
+.balance-meta{display:flex;flex-direction:column;gap:4px}
+.balance-lbl{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.12em;font-weight:600}
+.balance-val{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:var(--green);font-variant-numeric:tabular-nums}
+.balance-addr{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all}
+
+/* ── ERROR BANNER ── */
+.error-banner{background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.3);border-radius:10px;padding:12px 16px;color:var(--red);font-size:11px;margin-bottom:1.1rem;line-height:1.6}
+
+/* ── TABLE ── */
+.table-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.06);border-radius:14px;box-shadow:var(--shadow-card);background:rgba(13,20,33,.9);backdrop-filter:blur(10px)}
+.tx-table{width:100%;border-collapse:collapse;min-width:560px}
+.tx-table th{padding:10px 14px;text-align:left;color:var(--muted);font-family:'Inter',sans-serif;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.018);white-space:nowrap}
+.tx-table td{padding:10px 14px;border-bottom:1px solid rgba(42,64,96,.2);color:var(--dim);font-size:11px;white-space:nowrap;transition:background .1s}
+.tx-table tbody tr:last-child td{border-bottom:none}
+.tx-table tbody tr:nth-child(even) td{background:rgba(255,255,255,.012)}
+.tx-table tbody tr:hover td{background:rgba(0,255,136,.035)!important}
+.tx-table td.sig{font-family:'Share Tech Mono',monospace;color:var(--blue)}
+.tx-table td.ok{color:var(--green)}
+.tx-table td.fail{color:var(--red)}
+.tx-sig-link{color:var(--blue);text-decoration:none;font-family:'Share Tech Mono',monospace}
+.tx-sig-link:hover{text-decoration:underline;color:var(--text)}
+
+/* ── EMPTY STATE ── */
+.empty-state{text-align:center;padding:64px 24px;color:var(--muted);font-size:13px;letter-spacing:.1em;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(13,20,33,.9);backdrop-filter:blur(10px);box-shadow:var(--shadow-card)}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(0,255,136,.3);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
+*{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
+
+@media(max-width:768px){
+  .page-title{font-size:16px}
+  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
+  .balance-val{font-size:22px}
+  .table-wrap{border-radius:10px}
+  .tx-table{min-width:520px}
+}
+</style>
+</head>
+<body>
+<div class="page-wrap">
+
+  <!-- NAVBAR -->
+  <div class="header">
+    <a class="logo-row" href="/" style="text-decoration:none">
+      <svg width="28" height="28" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00ff88" stroke-width="5"/>
+        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00ff88" stroke-width="4"/>
+        <circle cx="62" cy="52" r="9" fill="#00ff88"/>
+        <circle cx="98" cy="52" r="9" fill="#00ff88"/>
+        <circle cx="64" cy="50" r="3" fill="black"/><circle cx="100" cy="50" r="3" fill="black"/>
+      </svg>
+      <div>
+        <div class="brand">ORCAGENT</div>
+        <div class="brand-sub">Solana Smart Scalper v4</div>
+      </div>
+    </a>
+    <div class="header-right">
+      {% if wallet %}
+      <div class="wallet-pill">
+        <div class="dot-green"></div>
+        <span>{{ wallet_short }}</span>
+      </div>
+      {% endif %}
+      <a href="/" class="hdr-btn">⬡ Dashboard</a>
+      <a href="/history" class="hdr-btn">📋 History</a>
+      <a href="/leaderboard" class="hdr-btn">🏆 Leaderboard</a>
+      <a href="/wallet" class="hdr-btn active">💳 Wallet</a>
+      {% if is_admin %}
+      <span class="hdr-btn" style="border-color:rgba(255,193,58,.4);color:#f0b90b">👑 Admin</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- TITLE -->
+  <div class="page-title">💳 Wallet</div>
+
+  {% if error %}
+  <div class="error-banner">⚠ Could not load wallet data: {{ error }}</div>
+  {% endif %}
+
+  <!-- BALANCE CARD -->
+  <div class="balance-card">
+    <div class="balance-icon">◎</div>
+    <div class="balance-meta">
+      <div class="balance-lbl">SOL Balance</div>
+      <div class="balance-val">{{ "%.4f"|format(sol_balance) }} SOL</div>
+      <div class="balance-addr">{{ wallet }}</div>
+    </div>
+  </div>
+
+  <!-- TRANSACTIONS -->
+  <div class="page-title" style="font-size:14px;margin-bottom:.75rem">Recent Transactions</div>
+
+  {% if transactions %}
+  <div class="table-wrap">
+    <table class="tx-table">
+      <thead>
+        <tr>
+          <th>Time (UTC)</th>
+          <th>Signature</th>
+          <th>Slot</th>
+          <th>Status</th>
+          <th>Memo</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for tx in transactions %}
+        <tr>
+          <td>{{ tx.time }}</td>
+          <td class="sig">
+            <a class="tx-sig-link"
+               href="https://solscan.io/tx/{{ tx.signature }}"
+               target="_blank" rel="noopener">
+              {{ tx.signature[:8] }}…{{ tx.signature[-8:] }}
+            </a>
+          </td>
+          <td>{{ tx.slot }}</td>
+          <td class="{{ 'fail' if tx.err else 'ok' }}">{{ '✗ Failed' if tx.err else '✓ OK' }}</td>
+          <td>{{ tx.memo or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">No recent transactions found.</div>
+  {% endif %}
+
+</div>
+</body>
+</html>
