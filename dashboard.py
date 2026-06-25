@@ -814,6 +814,15 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_feed_replies_post ON feed_replies(post_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id       INTEGER NOT NULL,
+        credential_id TEXT NOT NULL UNIQUE,
+        public_key    TEXT NOT NULL,
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_webauthn_cred ON webauthn_credentials(credential_id)')
     conn.commit()
     conn.close()
 
@@ -3060,6 +3069,74 @@ def connect_wallet_readonly():
     add_user_log(address, 'Wallet connected (read-only): ' + address[:6] + '...' + address[-4:])
     return jsonify({'ok': True, 'wallet': address, 'readonly': True,
                     'has_trading_key': False, 'csrf_token': csrf_tok})
+
+@app.route('/api/auth/webauthn/register', methods=['POST'])
+@rate_limit(10, 60)
+def webauthn_register():
+    body           = request.json or {}
+    credential_id  = str(body.get('credential_id', '')).strip()
+    public_key     = str(body.get('public_key', '')).strip()
+    wallet_address = str(body.get('wallet_address', '')).strip()
+    if not credential_id or not public_key:
+        return jsonify({'success': False, 'msg': 'credential_id and public_key are required'}), 400
+    if wallet_address and not is_valid_solana_address(wallet_address):
+        return jsonify({'success': False, 'msg': 'Invalid wallet address'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        if wallet_address:
+            user_id = get_or_create_user(wallet_address)
+        else:
+            # No wallet supplied — create a placeholder user keyed to the credential
+            wallet_address = 'webauthn:' + credential_id[:32]
+            conn.execute(
+                'INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet_address,)
+            )
+            conn.commit()
+            row = conn.execute(
+                'SELECT id FROM users WHERE wallet_address=?', (wallet_address,)
+            ).fetchone()
+            user_id = row[0] if row else None
+        if not user_id:
+            return jsonify({'success': False, 'msg': 'Could not resolve user'}), 500
+        conn.execute(
+            '''INSERT INTO webauthn_credentials (user_id, credential_id, public_key)
+               VALUES (?, ?, ?)
+               ON CONFLICT(credential_id) DO UPDATE SET public_key=excluded.public_key''',
+            (user_id, credential_id, public_key)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'success': True})
+
+@app.route('/api/auth/webauthn/login', methods=['POST'])
+@rate_limit(10, 60)
+def webauthn_login():
+    body          = request.json or {}
+    credential_id = str(body.get('credential_id', '')).strip()
+    if not credential_id:
+        return jsonify({'success': False, 'msg': 'credential_id required'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            '''SELECT wc.user_id, u.wallet_address, COALESCE(u.username, '')
+               FROM webauthn_credentials wc
+               JOIN users u ON u.id = wc.user_id
+               WHERE wc.credential_id = ?''',
+            (credential_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'success': False, 'msg': 'Credential not found — register first'}), 404
+    user_id, wallet_address, username = row
+    session.permanent  = True
+    session['user_id'] = user_id
+    session['wallet']  = wallet_address
+    csrf_tok = _get_csrf_token()
+    return jsonify({'success': True, 'user_id': user_id,
+                    'wallet': wallet_address, 'username': username or '',
+                    'csrf_token': csrf_tok})
 
 @app.route('/api/wallet/set', methods=['POST'])
 @rate_limit(10, 60)
