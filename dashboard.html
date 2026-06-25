@@ -2580,8 +2580,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 }
 
 /* ── WALLET SECTION ── */
-#dash-wallet{display:none;flex:1;min-width:0;flex-direction:column;overflow-y:auto;background:var(--bg)}
-.wlt-page{max-width:480px;margin:0 auto;padding:20px 16px;display:flex;flex-direction:column;gap:14px;width:100%}
+#dash-wallet{
+  display:none;flex-direction:column;
+  height:calc(100vh - 48px);
+  overflow-y:auto;
+  padding:20px;
+  background:var(--bg);
+  align-items:flex-start;
+}
+.wlt-page{max-width:480px;width:100%;margin:0 auto;padding:0;display:flex;flex-direction:column;gap:14px}
 .wlt-header{text-align:center;padding:24px 16px 20px;background:var(--bg2);border:1px solid var(--border);border-radius:12px}
 #wlt-total-usd{font-size:32px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums;letter-spacing:-.5px}
 #wlt-total-sol{font-size:14px;color:var(--muted);margin-top:5px;font-variant-numeric:tabular-nums}
