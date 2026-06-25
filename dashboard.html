@@ -2693,6 +2693,34 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .wlt-token-chg.neg{color:var(--red)}
 .wlt-loading{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px}
 @media(max-width:768px){.wlt-page{padding:14px 12px}}
+/* ── RIGHT RAIL ── */
+#right-rail{width:300px;min-width:300px;flex-shrink:0;height:calc(100vh - 48px);overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--bg3)}
+.rs-card{background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px;overflow:hidden}
+.rs-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.rs-card-title{font-size:14px;font-weight:700;color:var(--text)}
+.rs-card-viewall{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0}
+.rs-card-viewall:hover{text-decoration:underline}
+.rs-mover{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg3)}
+.rs-mover:last-child{border-bottom:none;padding-bottom:0}
+.rs-mover-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.rs-mover-info{flex:1;min-width:0}
+.rs-mover-sym{font-size:13px;font-weight:700;color:var(--text)}
+.rs-mover-name{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs-mover-right{text-align:right;flex-shrink:0}
+.rs-mover-price{font-size:12px;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--text)}
+.rs-mover-pct{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.rs-mover-pct.pos{color:var(--accent)}.rs-mover-pct.neg{color:var(--red)}
+.rs-lb-row{display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--bg3);cursor:pointer}
+.rs-lb-row:last-child{border-bottom:none;padding-bottom:0}
+.rs-lb-row:hover{background:rgba(255,255,255,.02);margin:0 -4px;padding-left:4px;padding-right:4px;border-radius:6px}
+.rs-lb-rank{font-size:12px;font-weight:700;color:var(--muted);width:20px;flex-shrink:0;text-align:center}
+.rs-lb-rank.gold{color:#FFD700}.rs-lb-rank.silver{color:#C0C0C0}.rs-lb-rank.bronze{color:#CD7F32}
+.rs-lb-avatar{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;position:relative;overflow:hidden}
+.rs-lb-info{flex:1;min-width:0}
+.rs-lb-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rs-lb-handle{font-size:11px;color:var(--muted)}
+.rs-lb-pnl{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;flex-shrink:0}
+@media(max-width:768px){#right-rail{display:none!important}}
 
 </style>
 </head>
@@ -3800,6 +3828,24 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div><!-- /dash-admin -->
 
     </div><!-- /main-content -->
+
+  <!-- ── RIGHT RAIL ── -->
+  <div id="right-rail" class="dash-section" style="display:none">
+    <div class="rs-card">
+      <div class="rs-card-hdr">
+        <span class="rs-card-title">Top Movers</span>
+        <button class="rs-card-viewall" onclick="_sbNav('market')">View all →</button>
+      </div>
+      <div id="rs-movers"><div class="fc-loading" style="padding:8px 0 0">Loading…</div></div>
+    </div>
+    <div class="rs-card">
+      <div class="rs-card-hdr">
+        <span class="rs-card-title">Top Traders</span>
+        <button class="rs-card-viewall" onclick="_sbNav('leaderboard')">View all →</button>
+      </div>
+      <div id="rs-leaderboard"><div class="fc-loading" style="padding:8px 0 0">Loading…</div></div>
+    </div>
+  </div>
 
   <!-- ── MESSAGES (full-page sibling of .wrap) ── -->
   <div id="dash-messages" class="dash-section" style="display:none">
@@ -6287,6 +6333,7 @@ function _sbNav(section){
     if(_dm) _dm.style.display='';
     _sbSetActive('sbn-dashboard');
     loadHomeFeed();
+    const _rrD=document.getElementById('right-rail');if(_rrD){_rrD.style.display='flex';loadRightRail();}
   } else if(section==='market'){
     if(_dmOpen) closeMessagesView();
     if(_tradersView) closeTradersView();
@@ -6741,6 +6788,7 @@ function openTradersView(){
   if(tabAll){tabAll.classList.add('active');}
   if(tabFollowing){tabFollowing.classList.remove('active');}
   document.getElementById('dash-main').style.display='none';
+  const _rrT=document.getElementById('right-rail');if(_rrT) _rrT.style.display='none';
   if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
     document.getElementById('dash-admin').style.display='none';
   }
@@ -6770,6 +6818,7 @@ function closeTradersView(){
   const _dmEl=document.getElementById('dash-main');
   _dmEl.style.display='';
   _fadeIn(_dmEl);
+  const _rrC=document.getElementById('right-rail');if(_rrC){_rrC.style.display='flex';loadRightRail();}
   _sbSetActive('sbn-dashboard');
   if(_tvCountdownTimer){clearInterval(_tvCountdownTimer);_tvCountdownTimer=null;}
   const el=document.getElementById('tv-countdown'); if(el) el.textContent='';
@@ -9169,6 +9218,56 @@ async function loadHomeFeed(){
       renderHomeFeed();
     }
   }catch(e){ console.warn('[feed]', e); }
+}
+
+async function loadRightRail(){
+  const [mkt, lb] = await Promise.all([
+    fetch('/api/market/live').then(r=>r.json()).catch(()=>null),
+    fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
+  ]);
+  /* ─ Top Movers ─ */
+  const mEl=document.getElementById('rs-movers');
+  if(mEl){
+    if(mkt&&mkt.ok&&Array.isArray(mkt.tokens)&&mkt.tokens.length){
+      const top5=mkt.tokens.filter(t=>t.price_change_24h!=null).sort((a,b)=>Math.abs(b.price_change_24h)-Math.abs(a.price_change_24h)).slice(0,5);
+      if(top5.length){
+        mEl.innerHTML=top5.map(t=>{
+          const pct=t.price_change_24h,isPos=pct>=0;
+          const pctStr=(isPos?'+':'')+pct.toFixed(1)+'%';
+          const p=t.price;
+          const pStr=p<0.0001?'$'+p.toExponential(2):p<1?'$'+p.toFixed(6):'$'+p.toFixed(4);
+          return '<div class="rs-mover">'
+            +'<span class="rs-mover-dot" style="background:'+(isPos?'var(--accent)':'var(--red)')+'"></span>'
+            +'<div class="rs-mover-info"><div class="rs-mover-sym">'+esc(t.symbol)+'</div><div class="rs-mover-name">'+esc(t.name)+'</div></div>'
+            +'<div class="rs-mover-right"><div class="rs-mover-price">'+esc(pStr)+'</div><div class="rs-mover-pct '+(isPos?'pos':'neg')+'">'+esc(pctStr)+'</div></div>'
+            +'</div>';
+        }).join('');
+      }else{mEl.innerHTML='<div style="padding:8px 0;font-size:12px;color:var(--muted)">No data.</div>';}
+    }else{mEl.innerHTML='<div style="padding:8px 0;font-size:12px;color:var(--muted)">No data.</div>';}
+  }
+  /* ─ Leaderboard ─ */
+  const lEl=document.getElementById('rs-leaderboard');
+  if(lEl){
+    if(Array.isArray(lb)&&lb.length){
+      const top4=lb.slice(0,4);
+      const rankCls=['gold','silver','bronze',''];
+      lEl.innerHTML=top4.map(e=>{
+        const bg=(typeof _lbAvatarColor==='function')?_lbAvatarColor(e.username||e.wallet_address||'?'):'#21252c';
+        const ini=((e.username||e.wallet_address||'?')[0]||'?').toUpperCase();
+        const imgHtml=e.avatar_url?'<img src="'+esc(e.avatar_url)+'" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">':'';
+        const pnl=e.total_pnl||0,isPos=pnl>=0;
+        const pnlStr=(isPos?'+':'')+pnl.toFixed(2)+' SOL';
+        const handle='@'+(e.username?e.username:(e.wallet_address?(e.wallet_address.slice(0,6)+'…'):'?'));
+        const rc=rankCls[e.rank-1]||'';
+        return '<div class="rs-lb-row" onclick="typeof openProfileCard===\'function\'&&openProfileCard('+(e.user_id||0)+')">'
+          +'<span class="rs-lb-rank '+rc+'">#'+e.rank+'</span>'
+          +'<div class="rs-lb-avatar" style="background:'+bg+'">'+imgHtml+ini+'</div>'
+          +'<div class="rs-lb-info"><div class="rs-lb-name">'+esc(e.username||'Trader')+'</div><div class="rs-lb-handle">'+esc(handle)+'</div></div>'
+          +'<span class="rs-lb-pnl" style="color:'+(isPos?'var(--accent)':'var(--red)')+'">'+esc(pnlStr)+'</span>'
+          +'</div>';
+      }).join('');
+    }else{lEl.innerHTML='<div style="padding:8px 0;font-size:12px;color:var(--muted)">No traders yet.</div>';}
+  }
 }
 
 function renderHomeFeed(){
