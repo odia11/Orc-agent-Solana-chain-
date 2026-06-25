@@ -40,8 +40,12 @@ a.hdr-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,
 .balance-val{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;color:var(--green);font-variant-numeric:tabular-nums}
 .balance-addr{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-top:6px;word-break:break-all}
 
-/* ── ERROR BANNER ── */
+/* ── BANNERS ── */
 .error-banner{background:rgba(255,77,106,.08);border:1px solid rgba(255,77,106,.3);border-radius:10px;padding:12px 16px;color:var(--red);font-size:11px;margin-bottom:1.1rem;line-height:1.6}
+.warn-banner{background:rgba(255,193,58,.06);border:1px solid rgba(255,193,58,.25);border-radius:10px;padding:12px 16px;color:var(--yellow);font-size:11px;margin-bottom:1.1rem;line-height:1.6}
+
+/* ── LOADING FALLBACK ── */
+.loading-fallback{text-align:center;padding:48px 24px;color:var(--muted);font-size:13px;letter-spacing:.08em;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(13,20,33,.9);backdrop-filter:blur(10px);margin-bottom:1.1rem}
 
 /* ── TABLE ── */
 .table-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.06);border-radius:14px;box-shadow:var(--shadow-card);background:rgba(13,20,33,.9);backdrop-filter:blur(10px)}
@@ -113,58 +117,100 @@ a.hdr-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,
   <!-- TITLE -->
   <div class="page-title">💳 Wallet</div>
 
+  <!-- ── SESSION / ERROR BANNERS ─────────────────────────── -->
+  {% if not wallet %}
+  <div class="warn-banner">
+    ⚠ No wallet address found in session.
+    <a href="/" style="color:var(--blue);text-decoration:underline;margin-left:6px">Connect wallet →</a>
+  </div>
+  {% endif %}
+
   {% if error %}
   <div class="error-banner">⚠ Could not load wallet data: {{ error }}</div>
   {% endif %}
 
-  <!-- BALANCE CARD -->
-  <div class="balance-card">
-    <div class="balance-icon">◎</div>
-    <div class="balance-meta">
-      <div class="balance-lbl">SOL Balance</div>
-      <div class="balance-val">{{ "%.4f"|format(sol_balance) }} SOL</div>
-      <div class="balance-addr">{{ wallet }}</div>
+  <!-- ── MAIN CONTENT ─────────────────────────────────────── -->
+  <!-- Loading fallback: visible before JS confirms the page rendered; hidden by inline script below -->
+  <div class="loading-fallback" id="wallet-loading">Loading wallet…</div>
+
+  <div id="wallet-content" style="display:none">
+
+    {% if wallet %}
+    <!-- BALANCE CARD -->
+    <div class="balance-card">
+      <div class="balance-icon">◎</div>
+      <div class="balance-meta">
+        <div class="balance-lbl">SOL Balance</div>
+        <div class="balance-val">{{ "%.4f" % (sol_balance or 0.0) }} SOL</div>
+        <div class="balance-addr">{{ wallet }}</div>
+      </div>
     </div>
-  </div>
 
-  <!-- TRANSACTIONS -->
-  <div class="page-title" style="font-size:14px;margin-bottom:.75rem">Recent Transactions</div>
+    <!-- TRANSACTIONS -->
+    <div class="page-title" style="font-size:14px;margin-bottom:.75rem">Recent Transactions</div>
 
-  {% if transactions %}
-  <div class="table-wrap">
-    <table class="tx-table">
-      <thead>
-        <tr>
-          <th>Time (UTC)</th>
-          <th>Signature</th>
-          <th>Slot</th>
-          <th>Status</th>
-          <th>Memo</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for tx in transactions %}
-        <tr>
-          <td>{{ tx.time }}</td>
-          <td class="sig">
-            <a class="tx-sig-link"
-               href="https://solscan.io/tx/{{ tx.signature }}"
-               target="_blank" rel="noopener">
-              {{ tx.signature[:8] }}…{{ tx.signature[-8:] }}
-            </a>
-          </td>
-          <td>{{ tx.slot }}</td>
-          <td class="{{ 'fail' if tx.err else 'ok' }}">{{ '✗ Failed' if tx.err else '✓ OK' }}</td>
-          <td>{{ tx.memo or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div class="empty-state">No recent transactions found.</div>
-  {% endif %}
+    {% if transactions %}
+    <div class="table-wrap">
+      <table class="tx-table">
+        <thead>
+          <tr>
+            <th>Time (UTC)</th>
+            <th>Signature</th>
+            <th>Slot</th>
+            <th>Status</th>
+            <th>Memo</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for tx in transactions %}
+          <tr>
+            <td>{{ tx.time }}</td>
+            <td class="sig">
+              <a class="tx-sig-link"
+                 href="https://solscan.io/tx/{{ tx.signature }}"
+                 target="_blank" rel="noopener">
+                {{ tx.signature[:8] }}…{{ tx.signature[-8:] if tx.signature|length >= 8 else '' }}
+              </a>
+            </td>
+            <td>{{ tx.slot }}</td>
+            <td class="{{ 'fail' if tx.err else 'ok' }}">{{ '✗ Failed' if tx.err else '✓ OK' }}</td>
+            <td>{{ tx.memo or '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty-state">No recent transactions found.</div>
+    {% endif %}
 
-</div>
+    {% endif %}{# end if wallet #}
+
+  </div>{# end #wallet-content #}
+
+</div>{# end .page-wrap #}
+
+<script>
+/* Catch any uncaught JS errors and surface them to the console */
+window.onerror = function(msg, src, line, col, err) {
+  console.error('[wallet] Uncaught JS error:', msg, 'at', (src || '?') + ':' + (line || '?'), err || '');
+};
+window.onunhandledrejection = function(e) {
+  console.error('[wallet] Unhandled promise rejection:', e.reason);
+};
+
+try {
+  /* Swap loading fallback → real content now that server HTML is in the DOM */
+  var loading = document.getElementById('wallet-loading');
+  var content = document.getElementById('wallet-content');
+  if (loading) loading.style.display = 'none';
+  if (content) content.style.display = 'block';
+} catch(e) {
+  console.error('[wallet] init error:', e);
+  /* Keep loading fallback visible so the page isn't blank */
+  var fb = document.getElementById('wallet-loading');
+  if (fb) fb.textContent = 'Error loading wallet page — check console for details.';
+}
+</script>
 </body>
 </html>
