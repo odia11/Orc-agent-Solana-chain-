@@ -3957,7 +3957,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div id="wlt-address"></div>
       </div>
       <div class="wlt-actions">
-        <button class="wlt-btn wlt-btn-buy" onclick="_sbNav('market')">Buy</button>
+        <button class="wlt-btn wlt-btn-buy" onclick="showSection('live-market')">Buy</button>
         <button class="wlt-btn" onclick="_wltSend()">Send</button>
         <button class="wlt-btn" onclick="_wltReceive()">Receive</button>
         <button class="wlt-btn" onclick="_wltSwap()">Swap</button>
@@ -6424,15 +6424,9 @@ function showSection(name){
   _sbNav(map[name]||name);
 }
 
-function _wltSend(){ /* TODO */ }
-function _wltReceive(){
-  const wallet=phantomKey||currentWallet;
-  if(!wallet) return;
-  // show deposit modal if it exists
-  const m=document.getElementById('deposit-modal');
-  if(m) m.style.display='flex';
-}
-function _wltSwap(){ _sbNav('market'); }
+function _wltSend(){ openWithdrawModal(); }
+function _wltReceive(){ openDepositModal(); }
+function _wltSwap(){ window.open('https://jup.ag/swap/SOL-USDC','_blank','noopener'); }
 function _sbUpdateUser(profileData){
   const nameEl=document.getElementById('sb-user-name');
   const dotEl=document.getElementById('sb-online-dot');
