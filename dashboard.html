@@ -117,16 +117,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-start-wrap{padding:4px 12px 10px;flex-shrink:0}
 .sb-start-btn{width:100%;padding:12px;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s}
 .sb-start-btn:hover{opacity:.88}
-.sb-bottom{padding:12px;border-top:1px solid var(--bg3);flex-shrink:0}
-.sb-user-card{display:flex;align-items:center;gap:10px;padding:10px;border-radius:12px;background:var(--bg2);border:1px solid var(--bg4);margin-bottom:8px;cursor:pointer;transition:background .15s}
-.sb-user-card:hover{background:var(--bg3)}
+.sb-bottom{padding:12px;border-top:1px solid var(--bg3);flex-shrink:0;margin-top:auto}
+.sb-user-card{display:flex;align-items:center;gap:11px;padding:10px;border-radius:14px;background:transparent;border:1px solid #16191f;margin-bottom:8px;cursor:pointer;transition:background .15s}
 .sb-user{display:none}
-.sb-avatar{width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;overflow:hidden;position:relative}
+.sb-avatar{width:40px;height:40px;min-width:40px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0;overflow:hidden;position:relative}
 .sb-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .sb-user-info{flex:1;min-width:0}
-.sb-user-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sb-sol{font-size:11px;font-weight:600;color:var(--accent);font-family:'JetBrains Mono',monospace}
-.sb-pnl{font-size:10px;margin-top:1px}
+.sb-user-name{font-size:14px;font-weight:600;color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-handle{font-size:12px;color:#565d68;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.sb-sol-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.sb-sol{font-size:13px;font-weight:700;color:#eef1f5;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.sb-sol-label{font-size:10px;color:#565d68;font-family:'JetBrains Mono',monospace}
+.sb-pnl{font-size:10px;margin-top:1px;display:none}
 .sb-pnl.pos{color:var(--accent);font-weight:700}
 .sb-pnl.neg{color:var(--red)}
 .sb-pnl.neu{color:var(--muted)}
@@ -3264,16 +3266,27 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
       <!-- USER CARD -->
       <div class="sb-bottom">
-        <div class="sb-user-card" id="sb-user-card" onclick="if(window._myProfileId)openProfileCard(_myProfileId)">
+        <div class="sb-user-card" id="sb-user-card"
+             onclick="if(window._myProfileId)openProfileCard(_myProfileId)"
+             onmouseenter="this.style.background='#101216'"
+             onmouseleave="this.style.background='transparent'">
+          <!-- Avatar -->
           <div class="sb-avatar" id="sb-avatar">
             <img id="sb-avatar-img" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none'">
             <span id="sb-avatar-ini"></span>
           </div>
+          <!-- Name + @handle -->
           <div class="sb-user-info">
-            <div class="sb-user-name" id="sb-user-name">—</div>
-            <div class="sb-sol" id="sb-sol">——</div>
-            <div class="sb-pnl neu" id="sb-pnl">—</div>
+            <div class="sb-user-name" id="sb-user-name">You</div>
+            <div class="sb-handle" id="sb-handle">@—</div>
           </div>
+          <!-- SOL balance (right) -->
+          <div class="sb-sol-wrap">
+            <div class="sb-sol" id="sb-sol">—</div>
+            <div class="sb-sol-label">SOL</div>
+          </div>
+          <!-- kept for JS compat, hidden -->
+          <div class="sb-pnl neu" id="sb-pnl" style="display:none">—</div>
           <div class="sb-online-dot" id="sb-online-dot" style="display:none"></div>
         </div>
         <div class="sb-bot-status">
@@ -4807,7 +4820,7 @@ async function fetchState(){
       if(!_solCounterDone) _animateSolCounter(_sv);
       else document.getElementById('s-sol').textContent=_sv.toFixed(4);
       const sbSol=document.getElementById('sb-sol');
-      if(sbSol) sbSol.textContent=_sv.toFixed(4)+' SOL';
+      if(sbSol) sbSol.textContent=_sv.toFixed(4);
       _updateSolUsdc(_sv);
       const uw=document.getElementById('usdc-warn');
       if(uw) uw.style.display=(+r.sol<0.02)?'block':'none';
@@ -6860,18 +6873,21 @@ function _wltSend(){ openWithdrawModal(); }
 function _wltReceive(){ openDepositModal(); }
 function _wltSwap(){ window.open('https://jup.ag/swap/SOL-USDC','_blank','noopener'); }
 function _sbUpdateUser(profileData){
-  const nameEl=document.getElementById('sb-user-name');
-  const dotEl=document.getElementById('sb-online-dot');
-  const iniEl=document.getElementById('sb-avatar-ini');
-  const imgEl=document.getElementById('sb-avatar-img');
-  if(!profileData){ if(nameEl) nameEl.textContent='—'; return; }
-  if(nameEl) nameEl.textContent=profileData.username||profileData.display_name||'—';
+  const nameEl  =document.getElementById('sb-user-name');
+  const handleEl=document.getElementById('sb-handle');
+  const dotEl   =document.getElementById('sb-online-dot');
+  const iniEl   =document.getElementById('sb-avatar-ini');
+  const imgEl   =document.getElementById('sb-avatar-img');
+  if(!profileData){ if(nameEl) nameEl.textContent='You'; return; }
+  const uname=profileData.username||profileData.display_name||'';
+  if(nameEl)   nameEl.textContent=uname||'You';
+  if(handleEl) handleEl.textContent=uname?('@'+uname):(phantomKey?('@'+(phantomKey.slice(0,4)+'…'+phantomKey.slice(-4))):'@—');
   if(dotEl) dotEl.style.display='';
   if(profileData.avatar_url && imgEl){
     imgEl.src=profileData.avatar_url;
     imgEl.style.display='';
   } else if(iniEl){
-    iniEl.textContent=((profileData.username||'?')[0]||'?').toUpperCase();
+    iniEl.textContent=((uname||phantomKey||'?')[0]||'?').toUpperCase();
   }
   const pnlEl=document.getElementById('sb-pnl');
   if(pnlEl && profileData.today_pnl!=null){
