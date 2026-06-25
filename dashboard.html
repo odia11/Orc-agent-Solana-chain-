@@ -4275,9 +4275,10 @@ async function _settingsFaceIdSetup(){
   }
 }
 
-/* Mobile deep-link constants — used by Phantom detection below */
+/* Mobile deep-link constants — used by wallet detection below */
 const isMobile=/iPhone|iPad|Android/i.test(navigator.userAgent);
 const phantomDeepLink='https://phantom.app/ul/browse/'+encodeURIComponent('https://www.orcagent.fun');
+const solflareDeepLink='https://solflare.com/ul/v1/browse/'+encodeURIComponent('https://www.orcagent.fun');
 
 function _applyPhantomDetection(phantomBtn, phantomNote){
   if(!phantomBtn||!phantomNote) return;
@@ -4293,6 +4294,22 @@ function _applyPhantomDetection(phantomBtn, phantomNote){
     /* Desktop: grey out and show install link */
     phantomBtn.style.background='var(--bg3)'; phantomBtn.style.color='var(--muted)'; phantomBtn.style.border='1px solid var(--border2)';
     phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
+  }
+}
+
+function _applySolflareDetection(solflareBtn, solflareNote){
+  if(!solflareBtn||!solflareNote) return;
+  if(window.solflare&&window.solflare.isSolflare) return;
+  if(isMobile){
+    solflareBtn.onclick=function(){ window.location.href=solflareDeepLink; };
+    var lbl=solflareBtn.querySelector('span')||solflareBtn;
+    if(lbl.tagName==='SPAN') lbl.textContent='Open in Solflare App';
+    else solflareBtn.textContent='Open in Solflare App';
+    solflareNote.textContent="Tap to open OrcAgent inside Solflare's browser";
+    solflareNote.style.color='var(--muted)';
+  } else {
+    solflareBtn.style.background='var(--bg3)'; solflareBtn.style.color='var(--muted)'; solflareBtn.style.border='1px solid var(--border2)';
+    solflareNote.innerHTML='Solflare not detected. <a href="https://solflare.com" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Solflare ↗</a>';
   }
 }
 
@@ -4447,8 +4464,8 @@ async function connectWalletOnboard(type){
   const msgEl=document.getElementById('wallet-install-msg');
 
   if(!check){
-    /* On mobile without the extension, redirect into Phantom's in-app browser */
-    if(isPhantom && isMobile){ window.location.href=phantomDeepLink; return; }
+    /* On mobile without the extension, redirect into the wallet's in-app browser */
+    if(isMobile){ window.location.href=isPhantom?phantomDeepLink:solflareDeepLink; return; }
     const other=isPhantom?'Solflare':'Phantom';
     const otherUrl=isPhantom?'https://solflare.com':'https://phantom.app';
     msgEl.innerHTML=name+' wallet not detected. <a href="'+installUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">Install '+name+'</a> or try <a href="'+otherUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">'+other+'</a>.';
