@@ -270,7 +270,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-tabs{display:flex;padding:0 20px;gap:0}
 .feed-tab{flex:1;padding:10px 0;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:500;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;letter-spacing:-.01em}
 .feed-tab:hover{color:var(--text)}
-.feed-tab.active{color:var(--accent);border-bottom-color:var(--accent);font-weight:600}
+.feed-tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 /* ── BOT STATUS CARD ── */
 .feed-bot-card{margin:16px 0 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 .feed-bot-left{display:flex;align-items:center;gap:8px;flex:1;min-width:140px}
@@ -3328,12 +3328,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <div class="feed-composer" id="feed-composer">
     <div class="feed-composer-top">
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
-      <input class="feed-composer-input" type="text" placeholder="Share your last trade..." readonly>
+      <input class="feed-composer-input" id="feed-composer-input" type="text" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_feedComposerPost();}">
     </div>
     <div class="feed-composer-actions">
-      <button class="feed-composer-pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
-      <button class="feed-composer-pill"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
-      <button class="feed-composer-post">POST</button>
+      <button class="feed-composer-pill" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
+      <button class="feed-composer-pill" onclick="_feedComposerTag()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
+      <button class="feed-composer-post" onclick="_feedComposerPost()">POST</button>
     </div>
   </div>
 
@@ -9188,6 +9188,42 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 
 /* ── FEED TAB SWITCHER ── */
+function _feedComposerPost(){
+  var inp = document.getElementById('feed-composer-input');
+  if(!inp) return;
+  var text = inp.value.trim();
+  if(!text) return;
+  var btn = document.querySelector('.feed-composer-post');
+  if(btn){ btn.disabled=true; btn.textContent='Posting…'; }
+  fetch('/api/chat',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({message: text})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok){
+      inp.value='';
+      _homeFeedData.unshift({
+        type:'text', user_id:d.user_id, username:d.username,
+        wallet:d.wallet_address, avatar_url:d.avatar_url,
+        content:d.message, timestamp:d.created_at
+      });
+      renderHomeFeed();
+    } else { alert(d.msg||'Could not post'); }
+  }).catch(function(e){ console.error('[composer]',e); }).finally(function(){
+    if(btn){ btn.disabled=false; btn.textContent='POST'; }
+  });
+}
+
+function _feedComposerChart(){
+  var s=document.getElementById('hdr-search-input');
+  if(s){ s.focus(); s.select(); }
+}
+
+function _feedComposerTag(){
+  var s=document.getElementById('hdr-search-input');
+  if(s){ s.focus(); s.select(); }
+}
+
 function _feedTab(btn, tab){
   document.querySelectorAll('.feed-tab').forEach(function(t){ t.classList.remove('active'); });
   btn.classList.add('active');
