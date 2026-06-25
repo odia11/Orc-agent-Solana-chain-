@@ -307,16 +307,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-bot-btn:disabled{opacity:.4;cursor:not-allowed}
 .feed-bot-btn.stop{background:var(--red);color:#fff}
 /* ── COMPOSER ── */
-.feed-composer{margin:10px 0 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px 18px}
-.feed-composer-top{display:flex;align-items:flex-start;gap:12px;margin-bottom:12px}
-.feed-composer-avatar{width:36px;height:36px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);flex-shrink:0;overflow:hidden;position:relative}
+.feed-composer{margin:10px 0 0;padding:15px 22px;border-bottom:1px solid #16191f}
+.feed-composer-top{display:flex;align-items:flex-start;gap:14px;margin-bottom:12px}
+.feed-composer-avatar{width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);flex-shrink:0;overflow:hidden;position:relative}
 .feed-composer-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
-.feed-composer-input{flex:1;background:transparent;border:none;outline:none;font-family:'Geist',system-ui,sans-serif;font-size:15px;color:var(--text);padding:8px 0;cursor:pointer;caret-color:var(--accent)}
-.feed-composer-input::placeholder{color:var(--muted)}
+.feed-composer-input{flex:1;background:transparent;border:none;outline:none;font-family:'Geist',system-ui,sans-serif;font-size:17px;color:var(--text);padding:8px 0;cursor:pointer;caret-color:var(--accent)}
+.feed-composer-input::placeholder{color:#565d68}
 .feed-composer-actions{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--bg3)}
-.feed-composer-pill{display:flex;align-items:center;gap:5px;padding:6px 14px;background:transparent;border:1px solid var(--bg3);border-radius:20px;font-size:12px;font-weight:500;color:var(--accent);cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,border-color .15s}
-.feed-composer-pill:hover{background:rgba(53,212,196,.08);border-color:var(--accent)}
-.feed-composer-post{margin-left:auto;padding:8px 20px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.feed-composer-pill{display:flex;align-items:center;gap:5px;padding:6px 11px;background:transparent;border:1px solid #21252c;border-radius:9px;font-size:12px;font-weight:500;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,border-color .15s}
+.feed-composer-pill:hover{background:#16191f;border-color:#2d333c;color:#eef1f5}
+.feed-composer-post{padding:8px 18px;background:#3ad29b;color:#08120f;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .feed-composer-post:hover{opacity:.88}
 @media(max-width:600px){.feed-bot-card{margin:12px 12px 0;gap:10px}}
 /* ── FEED CARDS ── */
@@ -3422,6 +3422,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="feed-composer-actions">
       <button class="feed-composer-pill" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
       <button class="feed-composer-pill" onclick="_feedComposerTag()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
+      <div style="flex:1"></div>
       <button class="feed-composer-post" onclick="_feedComposerPost()">POST</button>
     </div>
   </div>
