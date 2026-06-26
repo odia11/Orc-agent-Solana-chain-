@@ -27,7 +27,7 @@ img{max-width:100%;height:auto}
 html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Geist',system-ui,sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
 body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;background:var(--bg3);z-index:9999;pointer-events:none}
 @keyframes top-pulse{0%,100%{opacity:.4}50%{opacity:.8}}
-@keyframes ccPulse{0%,100%{opacity:1}50%{opacity:.25}}
+.live-dot{color:#00ff88;animation:blink 1.5s infinite;font-size:10px;line-height:1}
 @keyframes orcaBlink{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* ── ONBOARDING ── */
@@ -9859,8 +9859,8 @@ function loadInlineSidebar(){
 }
 
 /* ── Live chart cards ── */
-var _ccIntervals    = {};   /* postId -> intervalId */
-var _ccPriceHistory = {};   /* postId -> [price, ...] */
+var _liveChartTimers  = {};  /* cardEl.id -> intervalId */
+var _liveChartHistory = {};  /* cardEl.id -> [price, ...] */
 
 function _ccFmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
 function _ccFmtPrice(p){ if(!p) return '—'; var n=parseFloat(p); if(isNaN(n)) return '—'; if(n>=1000) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:2}); if(n>=1) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:4}); if(n>=0.001) return '$'+n.toLocaleString(undefined,{maximumSignificantDigits:4}); return '$'+n.toExponential(2); }
@@ -9869,15 +9869,13 @@ function _ccSeedHistory(pair){
   var now = parseFloat(pair.priceUsd||0);
   if(!now) return [];
   var pc = pair.priceChange||{};
-  function back(pct){ return pct!=null && pct!==-100 ? now/(1+pct/100) : now; }
+  function back(pct){ return (pct!=null && pct>-100) ? now/(1+pct/100) : now; }
+  /* reconstruct 4 historical points: -24h, -6h, -1h, -5m, now */
   return [back(pc.h24), back(pc.h6), back(pc.h1), back(pc.m5), now];
 }
 
-function _ccDrawSparkline(id){
-  var lineEl = document.getElementById('cc-'+id+'-line');
-  if(!lineEl) return;
-  var pts = _ccPriceHistory[id];
-  if(!pts||pts.length<2) return;
+function _ccDrawSparkline(lineEl, pts){
+  if(!lineEl||!pts||pts.length<2) return;
   var mn = Math.min.apply(null,pts), mx = Math.max.apply(null,pts);
   var range = (mx-mn)||mn*0.01||1e-9;
   var W=220, H=44, PAD=3;
@@ -9887,32 +9885,45 @@ function _ccDrawSparkline(id){
     return x.toFixed(1)+','+y.toFixed(1);
   }).join(' ');
   lineEl.setAttribute('points', points);
-  /* color line green/red based on direction */
-  var rising = pts[pts.length-1] >= pts[0];
-  lineEl.setAttribute('stroke', rising ? '#35d4c4' : '#f76b62');
+  lineEl.setAttribute('stroke', pts[pts.length-1] >= pts[0] ? '#35d4c4' : '#f76b62');
 }
 
-async function _ccFetch(id, sym, pair){
+async function _liveChartPoll(cardEl, pairAddress, symbol){
+  /* stop if card left DOM */
+  if(!document.contains(cardEl)){
+    clearInterval(_liveChartTimers[cardEl.id]);
+    delete _liveChartTimers[cardEl.id];
+    delete _liveChartHistory[cardEl.id];
+    return;
+  }
   try{
-    var r = await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(sym));
+    var url = pairAddress
+      ? 'https://api.dexscreener.com/latest/dex/pairs/solana/'+encodeURIComponent(pairAddress)
+      : 'https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol);
+    var r = await fetch(url);
     var d = await r.json();
-    var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+    var p = pairAddress
+      ? (d.pair || (d.pairs&&d.pairs[0]) || null)
+      : ((d.pairs||[]).find(function(x){ return x.chainId==='solana'; }) || null);
     if(!p) return;
-    /* seed history on first fetch if empty */
-    if(!_ccPriceHistory[id]||!_ccPriceHistory[id].length){
-      _ccPriceHistory[id] = _ccSeedHistory(p);
-    }
+
+    var key = cardEl.id;
+    if(!_liveChartHistory[key]||!_liveChartHistory[key].length)
+      _liveChartHistory[key] = _ccSeedHistory(p);
     var price = parseFloat(p.priceUsd||0);
-    if(price) _ccPriceHistory[id].push(price);
-    if(_ccPriceHistory[id].length > 120) _ccPriceHistory[id].shift();
+    if(price){ _liveChartHistory[key].push(price); }
+    if(_liveChartHistory[key].length > 120) _liveChartHistory[key].shift();
 
     var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
-    var priceEl = document.getElementById('cc-'+id+'-price');
-    var chgEl   = document.getElementById('cc-'+id+'-chg');
-    var volEl   = document.getElementById('cc-'+id+'-vol');
-    var liqEl   = document.getElementById('cc-'+id+'-liq');
-    var buysEl  = document.getElementById('cc-'+id+'-buys');
-    var sellsEl = document.getElementById('cc-'+id+'-sells');
+
+    var priceEl = cardEl.querySelector('[data-cc="price"]');
+    var chgEl   = cardEl.querySelector('[data-cc="chg"]');
+    var volEl   = cardEl.querySelector('[data-cc="vol"]');
+    var liqEl   = cardEl.querySelector('[data-cc="liq"]');
+    var buysEl  = cardEl.querySelector('[data-cc="buys"]');
+    var sellsEl = cardEl.querySelector('[data-cc="sells"]');
+    var lineEl  = cardEl.querySelector('[data-cc="line"]');
+
     if(priceEl) priceEl.textContent = _ccFmtPrice(p.priceUsd);
     if(chgEl){
       chgEl.textContent = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
@@ -9922,27 +9933,31 @@ async function _ccFetch(id, sym, pair){
     if(liqEl)   liqEl.textContent   = _ccFmt(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
     if(buysEl&&p.txns&&p.txns.h24)  buysEl.textContent  = p.txns.h24.buys;
     if(sellsEl&&p.txns&&p.txns.h24) sellsEl.textContent = p.txns.h24.sells;
-    _ccDrawSparkline(id);
+    _ccDrawSparkline(lineEl, _liveChartHistory[key]);
   }catch(e){}
 }
 
+function startLiveChart(cardEl, pairAddress, symbol){
+  var key = cardEl.id;
+  if(_liveChartTimers[key]) return;
+  _liveChartPoll(cardEl, pairAddress, symbol);
+  _liveChartTimers[key] = setInterval(function(){
+    _liveChartPoll(cardEl, pairAddress, symbol);
+  }, 10000);
+}
+
 function _initLiveCharts(){
-  /* stop intervals for cards no longer in DOM */
-  Object.keys(_ccIntervals).forEach(function(id){
-    if(!document.getElementById('cc-'+id)){
-      clearInterval(_ccIntervals[id]);
-      delete _ccIntervals[id];
-      delete _ccPriceHistory[id];
+  /* clean up stale intervals */
+  Object.keys(_liveChartTimers).forEach(function(key){
+    if(!document.getElementById(key)){
+      clearInterval(_liveChartTimers[key]);
+      delete _liveChartTimers[key];
+      delete _liveChartHistory[key];
     }
   });
-  /* start for new cards */
+  /* wire up each chart card found in DOM */
   document.querySelectorAll('[data-chart-sym]').forEach(function(el){
-    var id = el.id.slice(3); /* strip 'cc-' prefix */
-    if(_ccIntervals[id]) return;
-    var sym  = el.getAttribute('data-chart-sym');
-    var pair = el.getAttribute('data-chart-pair');
-    _ccFetch(id, sym, pair);
-    _ccIntervals[id] = setInterval(function(){ _ccFetch(id, sym, pair); }, 10000);
+    startLiveChart(el, el.getAttribute('data-chart-pair'), el.getAttribute('data-chart-sym'));
   });
 }
 
@@ -10144,23 +10159,23 @@ function _renderFeedCard(e){
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
           +'<div style="display:flex;align-items:center;gap:7px">'
           +'<div style="font-size:14px;font-weight:700;color:#eef1f5">$'+esc(_c.symbol||'')+'</div>'
-          +'<span id="'+_ccId+'-dot" style="color:#3ad29b;font-size:10px;line-height:1;animation:ccPulse 1.5s ease-in-out infinite">●</span>'
+          +'<span class="live-dot">●</span>'
           +'<div style="font-size:11px;color:#565d68">'+esc(_c.name||'')+'</div>'
           +'</div>'
           +'<div style="text-align:right">'
-          +'<div id="'+_ccId+'-price" style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">'+_price+'</div>'
-          +'<div id="'+_ccId+'-chg" style="font-size:12px;font-weight:600;color:'+_chgColor+'">'+_chgStr+'</div>'
+          +'<div data-cc="price" style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">'+_price+'</div>'
+          +'<div data-cc="chg" style="font-size:12px;font-weight:600;color:'+_chgColor+'">'+_chgStr+'</div>'
           +'</div>'
           +'</div>'
-          +'<svg id="'+_ccId+'-spark" viewBox="0 0 220 48" width="100%" height="48" preserveAspectRatio="none"'
+          +'<svg viewBox="0 0 220 48" width="100%" height="48" preserveAspectRatio="none"'
           +' style="display:block;margin-bottom:10px;overflow:visible">'
-          +'<polyline id="'+_ccId+'-line" points="" fill="none" stroke="#35d4c4" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
+          +'<polyline data-cc="line" points="" fill="none" stroke="#35d4c4" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
           +'</svg>'
           +'<div style="display:flex;gap:8px">'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">VOL 24H</div><div id="'+_ccId+'-vol" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div></div>'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div id="'+_ccId+'-liq" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.liq)+'</div></div>'
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">VOL 24H</div><div data-cc="vol" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div></div>'
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div data-cc="liq" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.liq)+'</div></div>'
           +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">BUYS/SELLS</div>'
-          +'<div style="font-size:11px;font-weight:600"><span id="'+_ccId+'-buys" style="color:#3ad29b">'+(_c.buys!=null?_c.buys:'—')+'</span><span style="color:#565d68">/</span><span id="'+_ccId+'-sells" style="color:#f76b62">'+(_c.sells!=null?_c.sells:'—')+'</span></div>'
+          +'<div style="font-size:11px;font-weight:600"><span data-cc="buys" style="color:#3ad29b">'+(_c.buys!=null?_c.buys:'—')+'</span><span style="color:#565d68">/</span><span data-cc="sells" style="color:#f76b62">'+(_c.sells!=null?_c.sells:'—')+'</span></div>'
           +'</div>'
           +'</div>'
           +'</div>';
