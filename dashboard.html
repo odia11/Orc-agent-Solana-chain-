@@ -9717,11 +9717,21 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ── FEED TAB SWITCHER ── */
 function tagToken(){
-  const token=prompt('Enter token symbol (e.g. SOL, WIF, BONK):')
-  if(!token) return
-  const ta=document.getElementById('postText')
-  ta.value+=' $'+token.toUpperCase()
-  ta.focus()
+  document.getElementById('tokenModal').style.display='flex'
+  document.getElementById('tokenSearch').focus()
+}
+
+document.getElementById('tokenSearch').addEventListener('input',function(){
+  const q=this.value.toUpperCase()
+  if(q.length<1) return
+  document.getElementById('tokenResults').innerHTML=
+    ['SOL','WIF','BONK','POPCAT','BOME','MEW','SAMO','MYRO'].filter(t=>t.includes(q))
+    .map(t=>`<div onclick="selectToken('${t}')" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;hover:background:#14171c">$${t}</div>`).join('')
+})
+
+function selectToken(t){
+  document.getElementById('postText').value+=' $'+t
+  document.getElementById('tokenModal').style.display='none'
 }
 
 async function submitPost(){
