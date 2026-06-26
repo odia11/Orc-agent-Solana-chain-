@@ -59,18 +59,33 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
 })
 
 fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
-  console.log('tokens:', JSON.stringify(d))
   const t=d.tokens||[]
-  console.log('token count:', t.length)
   const solToken=t.find(x=>x.symbol==='SOL')
   if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
-  document.getElementById('tokens').innerHTML=t.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
-    <div style="width:38px;height:38px;border-radius:50%;background:#512da8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${(x.symbol||'?').slice(0,4)}</div>
-    <div style="flex:1"><div style="font-weight:600">${x.symbol||x.mint?.slice(0,8)}</div>
-    <div style="color:#565d68;font-size:12px">${(x.amount||0).toFixed(4)}</div></div>
-    <div style="text-align:right"><div>$${(x.usd_value||x.value_usd||0).toFixed(2)}</div></div>
-  </div>`).join('')
-})
+  const spl=t.filter(x=>x.symbol!=='SOL')
+  const wrap=document.getElementById('tokens')
+  if(!spl.length){wrap.innerHTML='<span class="muted" style="font-size:13px">No SPL tokens</span>';return}
+  wrap.innerHTML=spl.map(x=>{
+    const sym=(x.symbol||'?')
+    const amt=x.amount||0
+    const usd=x.usd_value||x.value_usd||0
+    const amtStr=amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
+    const logo=x.logo_url||''
+    const logoHtml=logo
+      ?`<img src="${logo}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none';this.nextSibling.style.display='flex'"><div style="display:none;width:38px;height:38px;border-radius:50%;background:#1a1e28;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#565d68;flex-shrink:0">${sym.slice(0,2)}</div>`
+      :`<div style="width:38px;height:38px;border-radius:50%;background:#1a1e28;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#565d68;flex-shrink:0">${sym.slice(0,2)}</div>`
+    return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+      ${logoHtml}
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:600">${sym}</div>
+        <div style="color:#565d68;font-size:12px;font-family:'JetBrains Mono',monospace">${amtStr}</div>
+      </div>
+      <div style="text-align:right;font-family:'JetBrains Mono',monospace">
+        <div style="font-weight:600">$${usd.toFixed(2)}</div>
+      </div>
+    </div>`
+  }).join('')
+}).catch(()=>{document.getElementById('tokens').innerHTML='<span class="muted">Failed to load</span>'})
 
 </script>
 </body>
