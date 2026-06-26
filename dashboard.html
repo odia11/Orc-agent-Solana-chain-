@@ -2767,6 +2767,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 </style>
 </head>
 <body>
+<script>const p=new URLSearchParams(window.location.search).get('action');if(p==='deposit')document.getElementById('depositModal')&&(document.getElementById('depositModal').style.display='flex');if(p==='withdraw')document.getElementById('withdrawModal')&&(document.getElementById('withdrawModal').style.display='flex')</script>
 
 <!-- UPDATE BANNER -->
 <div id="update-banner">

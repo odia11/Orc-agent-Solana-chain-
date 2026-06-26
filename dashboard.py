@@ -3061,6 +3061,16 @@ def messages_page():
     )
 
 
+@app.route('/deposit')
+def deposit_page():
+    return redirect('/dashboard?action=deposit')
+
+
+@app.route('/withdraw')
+def withdraw_page():
+    return redirect('/dashboard?action=withdraw')
+
+
 @app.route('/community')
 def community_page():
     return redirect('/')
