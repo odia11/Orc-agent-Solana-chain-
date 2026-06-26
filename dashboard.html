@@ -4626,6 +4626,7 @@ let lastLogCount=0;
 function appVisible(){ return document.getElementById('app').style.display!=='none'; }
 
 async function fetchState(){
+  if(!document.getElementById('sol-balance-display')) return
   if(!appVisible()) return;
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
@@ -5689,6 +5690,7 @@ async function runTestTrade(){
 
 
 function renderPerfPanel(r){
+  if(!document.getElementById('perf-pnl')) return
   const d=r.daily||{};
   const pnl=d.total_pnl??0;
   const pct=d.total_pnl_pct??0;
