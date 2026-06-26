@@ -125,6 +125,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   <div class="msgs-left" id="msgs-left">
     <div class="msgs-left-hdr">
       <div class="msgs-left-title">Messages</div>
+      <button onclick="newMsg()" style="background:#3ad29b;color:#08120f;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px">+ New</button>
     </div>
     <div id="conv-list"><div class="msgs-left-empty">Loading…</div></div>
   </div>
@@ -343,8 +344,16 @@ function _backToList() {
   document.querySelector('.msgs-layout').classList.remove('thread-open');
 }
 
+function newMsg(){
+  const w=prompt('Enter wallet address to message:')
+  if(w) window.location='/messages/'+w
+}
+
 /* ── INIT ── */
 loadConversations();
+{% if open_wallet %}
+_openThread('{{ open_wallet }}');
+{% endif %}
 </script>
 </body>
 </html>

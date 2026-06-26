@@ -3064,6 +3064,20 @@ def messages_page():
         is_admin=_is_owner(wallet),
     )
 
+@app.route('/messages/<wallet_address>')
+def message_thread(wallet_address):
+    if 'wallet' not in session:
+        return redirect('/')
+    wallet = session['wallet']
+    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    return render_template(
+        'messages.html',
+        wallet=wallet,
+        wallet_short=wallet_short,
+        is_admin=_is_owner(wallet),
+        open_wallet=wallet_address,
+    )
+
 
 @app.route('/deposit')
 def deposit_page():
