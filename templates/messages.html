@@ -368,6 +368,16 @@ function searchUsers(q){
   },300);
 }
 
+document.getElementById('searchUser').addEventListener('input',function(){
+  if(this.value.length<2) return
+  fetch('/api/user/find?q='+encodeURIComponent(this.value))
+  .then(r=>r.json()).then(d=>{
+    document.getElementById('searchResults').innerHTML=d.wallet?
+    `<div onclick="window.location='/messages/${d.wallet}'" style="padding:10px;background:#101216;border-radius:8px;cursor:pointer">${d.wallet.slice(0,12)}...</div>`
+    :'<div style="color:#565d68;font-size:13px">No user found</div>'
+  })
+})
+
 /* ── INIT ── */
 loadConversations();
 {% if open_wallet %}
