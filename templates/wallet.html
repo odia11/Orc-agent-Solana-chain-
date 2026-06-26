@@ -65,5 +65,15 @@ fetch('/api/wallet/transactions').then(r=>r.json()).then(d=>{
     :'<span class="muted">No recent activity</span>'
 }).catch(()=>{ document.getElementById('activity').innerHTML='<span class="muted">Failed to load</span>' })
 </script>
+<script>
+fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
+  document.getElementById('sol').textContent=(d.sol||0).toFixed(4)
+  document.getElementById('usd').textContent=((d.sol||0)*150).toFixed(2)
+})
+fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
+  const t=d.tokens||d||[]
+  document.getElementById('tokens').innerHTML=t.length?t.map(x=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #16191f"><span>${x.symbol||'?'}</span><span class="mono accent">${(x.amount||0).toFixed(4)}</span></div>`).join(''):'<span class="muted">No tokens</span>'
+})
+</script>
 </body>
 </html>
