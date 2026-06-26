@@ -9874,6 +9874,16 @@ function _ccSeedHistory(pair){
   return [back(pc.h24), back(pc.h6), back(pc.h1), back(pc.m5), now];
 }
 
+function _ccSnapHistory(cardEl){
+  /* build 4-point history from the priceChange values stored as data attrs at embed time */
+  var price = parseFloat(cardEl.getAttribute('data-chart-price')||0);
+  if(!price) return [];
+  var g = function(a){ var v=parseFloat(cardEl.getAttribute(a)); return isNaN(v)?null:v; };
+  var pc = {h24:g('data-chart-chg24h'), h6:g('data-chart-chg6h'), h1:g('data-chart-chg1h'), m5:g('data-chart-chg5m')};
+  function back(pct){ return (pct!=null && pct>-100) ? price/(1+pct/100) : price; }
+  return [back(pc.h24), back(pc.h6), back(pc.h1), back(pc.m5), price];
+}
+
 function _ccDrawSparkline(lineEl, pts){
   if(!lineEl||!pts||pts.length<2) return;
   var mn = Math.min.apply(null,pts), mx = Math.max.apply(null,pts);
@@ -9908,9 +9918,11 @@ async function _liveChartPoll(cardEl, pairAddress, symbol){
     if(!p) return;
 
     var key = cardEl.id;
-    if(!_liveChartHistory[key]||!_liveChartHistory[key].length)
-      _liveChartHistory[key] = _ccSeedHistory(p);
     var price = parseFloat(p.priceUsd||0);
+    if(!_liveChartHistory[key]||!_liveChartHistory[key].length){
+      /* prefer live seed; fall back to stored embed values */
+      _liveChartHistory[key] = price ? _ccSeedHistory(p) : _ccSnapHistory(cardEl);
+    }
     if(price){ _liveChartHistory[key].push(price); }
     if(_liveChartHistory[key].length > 120) _liveChartHistory[key].shift();
 
@@ -9940,6 +9952,12 @@ async function _liveChartPoll(cardEl, pairAddress, symbol){
 function startLiveChart(cardEl, pairAddress, symbol){
   var key = cardEl.id;
   if(_liveChartTimers[key]) return;
+  /* immediately draw from stored embed priceChange values so sparkline is never blank */
+  var snap = _ccSnapHistory(cardEl);
+  if(snap.length >= 2){
+    _liveChartHistory[key] = snap;
+    _ccDrawSparkline(cardEl.querySelector('[data-cc="line"]'), snap);
+  }
   _liveChartPoll(cardEl, pairAddress, symbol);
   _liveChartTimers[key] = setInterval(function(){
     _liveChartPoll(cardEl, pairAddress, symbol);
@@ -10154,7 +10172,15 @@ function _renderFeedCard(e){
         var _chgStr  = _chg24!=null ? (_chg24>=0?'+':'')+_chg24.toFixed(2)+'%' : '—';
         var _price   = _c.price ? '$'+parseFloat(_c.price).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
         var _cfmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
-        textBody += '<div id="'+_ccId+'" data-chart-sym="'+esc(_c.symbol||'')+'" data-chart-pair="'+esc(_c.pairAddress||'')+'"'
+        var _safeNum = function(v){ return (v!=null&&!isNaN(v)) ? String(v) : ''; };
+        textBody += '<div id="'+_ccId+'"'
+          +' data-chart-sym="'+esc(_c.symbol||'')+'"'
+          +' data-chart-pair="'+esc(_c.pairAddress||'')+'"'
+          +' data-chart-price="'+_safeNum(_c.price)+'"'
+          +' data-chart-chg5m="'+_safeNum(_c.chg5m)+'"'
+          +' data-chart-chg1h="'+_safeNum(_c.chg1h)+'"'
+          +' data-chart-chg6h="'+_safeNum(_c.chg6h)+'"'
+          +' data-chart-chg24h="'+_safeNum(_c.chg24h)+'"'
           +' style="background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;margin:8px 0 10px;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
           +'<div style="display:flex;align-items:center;gap:7px">'
