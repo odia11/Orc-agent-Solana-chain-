@@ -9813,13 +9813,26 @@ async function loadHomeFeed(){
   if(el && !_homeFeedData.length) el.innerHTML = '<div class="fc-loading">Loading…</div>';
   try{
     const r = await fetch('/api/social/feed?filter=' + filter);
-    if(!r.ok) throw new Error(r.status);
+    console.log('[feed] status:', r.status);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
+    console.log('[feed] items:', Array.isArray(data) ? data.length : data);
     if(Array.isArray(data)){
       _homeFeedData = data;
-      renderHomeFeed();
+      try{
+        renderHomeFeed();
+      }catch(e){
+        console.error('[feed] render error:', e);
+        if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed render error: '+e.message+'</div>';
+      }
+    } else {
+      console.warn('[feed] unexpected response format:', data);
+      if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed error: unexpected response</div>';
     }
-  }catch(e){ console.warn('[feed]', e); }
+  }catch(e){
+    console.error('[feed] load error:', e);
+    if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed error: '+e.message+'</div>';
+  }
 }
 
 async function loadRightRail(){
