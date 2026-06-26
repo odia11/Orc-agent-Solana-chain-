@@ -324,6 +324,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-loading{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s}
+.token-tag{color:#3ad29b;font-weight:700;text-decoration:underline;cursor:pointer}
 .fc-card:hover{background:#0d0f12}
 .fc-body{flex:1;min-width:0}
 .fc-header{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
@@ -9971,7 +9972,8 @@ function _renderFeedCard(e){
   }
 
   /* ── text body ── */
-  var textBody = e.content ? '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+esc(e.content)+'</div>' : '';
+  var _safeContent = e.content ? esc(e.content).replace(/\$([A-Z0-9]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>') : '';
+  var textBody = _safeContent ? '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>' : '';
 
   /* ── copy button ── */
   var copyHtml;
