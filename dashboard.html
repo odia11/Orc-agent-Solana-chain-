@@ -9927,40 +9927,32 @@ function _fmtPrice(p){
 }
 
 function _renderFeedCard(e){
-  /* ── text post fast path ── */
-  if(e.type==='text' || (e.content && !e.token && !e.trade_id)){
-    var bg2=(typeof _lbAvatarColor==='function')?_lbAvatarColor(e.username||e.wallet||'?'):'#21252c';
-    var ini2=(e.username||e.wallet||'?')[0].toUpperCase();
-    var img2=e.avatar_url?'<img src="'+esc(e.avatar_url)+'" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">':'';
-    var handle2='@'+(e.wallet?e.wallet.slice(0,6)+'…'+e.wallet.slice(-4):'unknown');
-    var time2=typeof _tvTimeAgoStr==='function'?_tvTimeAgoStr(e.timestamp||e.created_at||''):'';
-    return '<div class="fc-card" onclick="openProfileCard('+(e.user_id||0)+')">'
-      +'<div class="fc-avatar" style="background:'+bg2+'">'+img2+'<span class="fc-avatar-ini">'+ini2+'</span></div>'
-      +'<div class="fc-body">'
-      +'<div class="fc-header">'
-      +'<span class="fc-name">'+esc(e.username||'Trader')+'</span>'
-      +'<span class="fc-handle">'+esc(handle2)+'</span>'
-      +(time2?'<span class="fc-sep">·</span><span class="fc-time">'+esc(time2)+'</span>':'')
-      +'</div>'
-      +'<div class="fc-text">'+esc(e.content||'')+'</div>'
-      +'<div class="fc-actions" onclick="event.stopPropagation()">'
-      +(e.id?'<button class="fc-action" onclick="_feedToggleReply(this,\'m'+e.id+'\')">↩ <span class="fc-reply-count">0</span></button>':'')
-      +(e.id?'<button class="fc-action" id="lkbtn-m'+e.id+'" onclick="_feedToggleLike(this,\'m'+e.id+'\')">♡ <span class="fc-like-count">0</span></button>':'')
-      +'</div>'
-      +'</div></div>';
-  }
-
   var uid = e.user_id||0;
   var isOpen = e.type==='open';
-  var isTrade = e.type==='trade'||isOpen;
+  var isTrade = (e.type==='trade'||isOpen) && !!(e.token||e.symbol);
+
+  /* ── avatar ── */
   var bg = (typeof _lbAvatarColor==='function') ? _lbAvatarColor(e.username||e.wallet||'?') : '#21252c';
   var ini = (e.username||e.wallet||'?')[0].toUpperCase();
   var imgHtml = e.avatar_url ? '<img src="'+esc(e.avatar_url)+'" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">' : '';
+  var verifiedBadge = e.verified ? '<span style="position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;background:#3ad29b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#08120f;border:1.5px solid #0a0b0e;font-weight:700">✓</span>' : '';
+
+  /* ── header ── */
   var handle = '@'+(e.wallet ? e.wallet.slice(0,6)+'…'+e.wallet.slice(-4) : 'unknown');
   var timeStr = isOpen
     ? (typeof _tvTimeAgo==='function' ? _tvTimeAgo(e.opened_at) : '')
-    : (typeof _tvTimeAgoStr==='function' ? _tvTimeAgoStr(e.timestamp) : '');
+    : (typeof _tvTimeAgoStr==='function' ? _tvTimeAgoStr(e.timestamp||e.created_at||'') : '');
 
+  /* ── post id ── */
+  var postId = e.id ? 'p'+e.id
+    : (e.trade_id ? 't'+e.trade_id
+    : (e.type==='open' ? 'o'+uid+'_'+(e.token_address||e.token||'x').slice(0,12)
+    : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12)));
+  var safePostId = postId.replace(/['"\\]/g,'');
+  var cardId = 'fc-card-'+postId;
+  var isOwn = e.user_id && _myProfileId && e.user_id === _myProfileId;
+
+  /* ── trade card ── */
   var tradeHtml = '';
   if(isTrade){
     var entry = e.entry_price||0;
@@ -9970,57 +9962,50 @@ function _renderFeedCard(e){
       : (entry>0 ? (exit-entry)/entry*100 : 0);
     var isPos = pct == null ? true : pct >= 0;
     var pnlStr = pct == null ? 'Live' : ((pct>=0?'+':'')+pct.toFixed(1)+'%');
-    var badgeCls = isOpen ? 'live' : (isPos ? 'long' : 'stop-loss');
     var badgeLbl = isOpen ? 'LONG' : (isPos ? 'LONG' : 'STOP-LOSS');
-    var entryExit = isOpen ? ('Entry '+_fmtPrice(entry)) : ('Entry '+_fmtPrice(entry)+' → Exit '+_fmtPrice(exit));
+    var badgeColor = isPos ? '#3ad29b' : '#f76b62';
+    var entryExit = isOpen ? ('Entry '+_fmtPrice(entry)) : (_fmtPrice(entry)+' → '+_fmtPrice(exit));
     var tokenColor = (typeof _lbAvatarColor==='function') ? _lbAvatarColor(e.token||'?') : '#3ad29b';
-    var pnlSol = e.pnl_sol != null ? ((e.pnl_sol>=0?'+':'')+Number(e.pnl_sol).toFixed(4)+' SOL') : '';
-    tradeHtml = '<div class="fc-trade-row">'
-      +'<div class="fc-trade-left">'
-      +'<span class="fc-trade-label">'+(isOpen?'Opened':'Closed')+'</span>'
-      +'<div class="fc-trade-token-row">'
-      +'<span class="fc-token-name" style="color:'+tokenColor+'">$'+esc(e.token||'?')+'</span>'
-      +'<span class="fc-trade-badge '+badgeCls+'">'+esc(badgeLbl)+'</span>'
+    /* 22-bar sparkline */
+    var bars=22, seed=((entry||1)*1e6+(exit||entry||1)*1e4)%233280, heights=[], trend=exit>entry?1:exit<entry?-1:0;
+    for(var i=0;i<bars;i++){seed=(seed*9301+49297)%233280;heights.push(Math.max(3,Math.min(18,Math.round(5+(i/(bars-1))*trend*10+((seed/233280)-0.5)*4))));}
+    var sparkHtml='<div style="display:flex;align-items:flex-end;gap:1.5px;height:22px">'+heights.map(function(h){return '<div style="width:3px;height:'+h+'px;background:'+badgeColor+';border-radius:1px;opacity:0.8"></div>';}).join('')+'</div>';
+    tradeHtml = '<div style="background:#101216;border:1px solid #21252c;border-radius:15px;padding:14px;margin:10px 0;display:flex;justify-content:space-between;align-items:center;gap:12px">'
+      +'<div style="flex:1;min-width:0">'
+      +'<div style="font-size:11px;color:#565d68;margin-bottom:4px">'+(isOpen?'Opened':'Closed')+'</div>'
+      +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'
+      +'<span style="font-weight:700;font-size:15px;color:'+tokenColor+'">$'+esc(e.token||e.symbol||'?')+'</span>'
+      +'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:'+badgeColor+'1a;color:'+badgeColor+'">'+esc(badgeLbl)+'</span>'
       +'</div>'
-      +'<span class="fc-entry-exit">'+esc(entryExit)+'</span>'
+      +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#565d68">'+esc(entryExit)+'</div>'
       +'</div>'
-      +'<div class="fc-trade-right">'
-      +'<span class="fc-pnl '+(isPos?'pos':'neg')+'">'+esc(pnlStr)+'</span>'
-      +(pnlSol ? '<span class="fc-pnl-sub '+(isPos?'pos':'neg')+'">'+esc(pnlSol)+'</span>' : '')
+      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
+      +'<div style="font-size:23px;font-weight:700;line-height:1;color:'+(isPos?'#3ad29b':'#f76b62')+'">'+esc(pnlStr)+'</div>'
+      +sparkHtml
       +'</div>'
       +'</div>';
   }
 
-  var textBody = e.content ? '<div class="fc-text">'+esc(e.content)+'</div>' : '';
+  /* ── text body ── */
+  var textBody = e.content ? '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+esc(e.content)+'</div>' : '';
 
-  /* unique post id for likes/replies */
-  var postId = e.trade_id ? 't'+e.trade_id
-    : (e.type==='open' ? 'o'+uid+'_'+(e.token_address||e.token||'x').slice(0,12)
-    : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12));
-  var cardId = 'fc-card-'+postId;
-
-  var safePostId = postId.replace(/['"\\]/g,'');
-  var isOwn = e.user_id && _myProfileId && e.user_id === _myProfileId;
-
-  /* copy action — always visible; for trade posts copies the trade */
+  /* ── copy button ── */
   var copyHtml;
   if(isTrade && e.token_address){
     var alreadyMine = window._feedMyMints && window._feedMyMints.has(e.token_address);
     var safeAddr = e.token_address.replace(/['"\\]/g,'');
-    if(alreadyMine){
-      copyHtml = '<button class="fc-action copy" disabled>⧉ In trade</button>';
-    } else {
-      copyHtml = '<button class="fc-action copy" id="cpbtn-'+esc(safePostId)+'" onclick="_feedCopyTrade(this,\''+safeAddr+'\',' +(e.entry_price||0)+')">⧉ Copy</button>';
-    }
+    copyHtml = alreadyMine
+      ? '<button class="fc-action copy" disabled>⧉ In trade</button>'
+      : '<button class="fc-action copy" id="cpbtn-'+esc(safePostId)+'" onclick="_feedCopyTrade(this,\''+safeAddr+'\',' +(e.entry_price||0)+')">⧉ Copy</button>';
   } else {
     copyHtml = '<button class="fc-action copy" onclick="event.stopPropagation()">⧉ Copy</button>';
   }
 
   return '<div class="fc-card" id="'+esc(cardId)+'" onclick="openProfileCard('+uid+')">'
-    +'<div class="fc-avatar" style="background:'+bg+'">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span></div>'
+    +'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span>'+verifiedBadge+'</div>'
     +'<div class="fc-body">'
     +'<div class="fc-header">'
-    +'<span class="fc-name">'+esc(e.username||'Trader')+'</span>'
+    +'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+'</span>'
     +'<span class="fc-handle">'+esc(handle)+'</span>'
     +(timeStr ? '<span class="fc-sep">·</span><span class="fc-time">'+esc(timeStr)+'</span>' : '')
     +'</div>'
