@@ -3422,7 +3422,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
     <div class="feed-composer-actions">
       <button class="feed-composer-pill" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
-      <button class="feed-composer-pill" onclick="_feedComposerTag()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
+      <button class="feed-composer-pill" onclick="tagToken()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
       <div style="flex:1"></div>
       <button class="feed-composer-post" onclick="submitPost()">POST</button>
     </div>
@@ -9716,6 +9716,14 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 
 /* ── FEED TAB SWITCHER ── */
+function tagToken(){
+  const token=prompt('Enter token symbol (e.g. SOL, WIF, BONK):')
+  if(!token) return
+  const ta=document.getElementById('postText')
+  ta.value+=' $'+token.toUpperCase()
+  ta.focus()
+}
+
 async function submitPost(){
   const t=document.getElementById('postText')
   if(!t.value.trim()) return
