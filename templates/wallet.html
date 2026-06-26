@@ -32,6 +32,16 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24p
     <button onclick="window.location='/deposit'" style="background:#3ad29b;color:#08120f;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer;flex:1">↓ Deposit</button>
     <button onclick="window.location='/withdraw'" style="background:#0a0b0e;border:1px solid #2c313a;color:#eef1f5;border-radius:12px;padding:12px;cursor:pointer;flex:1">↑ Withdraw</button>
   </div>
+  <div style="display:flex;margin-top:10px;border:1px solid #21252c;border-radius:12px;overflow:hidden">
+    <div style="flex:1;padding:12px;background:#0d0f12">
+      <div style="color:#565d68;font-size:11px">Available</div>
+      <div style="font-family:monospace;font-size:16px;font-weight:700;margin-top:4px"><span id="avail">...</span> SOL</div>
+    </div>
+    <div style="flex:1;padding:12px;background:#0d0f12;border-left:1px solid #21252c">
+      <div style="color:#565d68;font-size:11px">In positions</div>
+      <div style="font-family:monospace;font-size:16px;font-weight:700;color:#3ad29b;margin-top:4px"><span id="inpos">0</span> SOL</div>
+    </div>
+  </div>
 </div>
 
 <div class="card">
