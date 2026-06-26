@@ -5045,20 +5045,15 @@ def api_wallet_transactions():
     txns = []
     for row in rows:
         token, entry, exit_p, amount, pnl, ts = row
-        entry_f  = float(entry  or 0)
-        exit_f   = float(exit_p or 0)
-        amount_f = float(amount or 0)
-        is_sell  = exit_f > 0
-        # SOL value = price per token × token quantity
-        sol_value = round((exit_f if is_sell else entry_f) * amount_f, 6)
+        exit_f  = float(exit_p or 0)
+        pnl_sol = float(pnl or 0)
+        is_sell = exit_f > 0
         txns.append({
-            'type':        'Sold' if is_sell else 'Bought',
-            'token':       token or '',
-            'amount_sol':  sol_value,
-            'entry_price': entry_f,
-            'exit_price':  exit_f,
-            'pnl':         float(pnl or 0),
-            'created_at':  ts or '',
+            'type':       'Sold' if is_sell else 'Bought',
+            'token':      token or '',
+            'amount_sol': round(abs(pnl_sol), 4),
+            'pnl':        pnl_sol,
+            'created_at': ts or '',
         })
     return jsonify({'ok': True, 'transactions': txns})
 
