@@ -4626,7 +4626,7 @@ let lastLogCount=0;
 function appVisible(){ return document.getElementById('app').style.display!=='none'; }
 
 async function fetchState(){
-  if(!document.getElementById('sol-balance-display')) return
+  if(!document.getElementById('sol-balance-display')&&!document.getElementById('state-sol')) return
   if(!appVisible()) return;
   const r=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
   if(!r) return;
@@ -6148,6 +6148,7 @@ function _refreshTradeBtnState(){
 
 
 function updateBtns(){
+  if(!document.getElementById('start-btn')&&!document.getElementById('ob-start-btn')) return
   const tb=document.getElementById('trade-btn');
   const tbadge=document.getElementById('trade-badge');
   const tc=document.getElementById('trade-card');
