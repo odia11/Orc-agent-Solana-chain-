@@ -73,15 +73,13 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
 
 fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
   const t=d.tokens||[]
-  if(t.length){
-    document.getElementById('tokens').innerHTML+=t.map(x=>`
-    <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
-      <div style="width:38px;height:38px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${(x.symbol||'?').slice(0,3)}</div>
-      <div style="flex:1"><div style="font-weight:600">${x.symbol||x.mint?.slice(0,6)}</div>
-      <div style="color:#565d68;font-size:12px">${(x.amount||0).toFixed(4)}</div></div>
-      <div style="text-align:right"><div>$${(x.usd_value||x.value_usd||0).toFixed(2)}</div></div>
-    </div>`).join('')
-  }
+  const rows=t.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+    <div style="width:38px;height:38px;border-radius:50%;background:#512da8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${(x.symbol||'?').slice(0,4)}</div>
+    <div style="flex:1"><div style="font-weight:600">${x.symbol||x.mint?.slice(0,8)}</div>
+    <div style="color:#565d68;font-size:12px">${(x.amount||0).toFixed(4)}</div></div>
+    <div style="text-align:right"><div>$${(x.usd_value||x.value_usd||0).toFixed(2)}</div></div>
+  </div>`).join('')
+  if(rows) document.getElementById('tokens').innerHTML+=rows
 })
 
 fetch('/api/wallet/transactions').then(r=>r.json()).then(d=>{
