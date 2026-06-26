@@ -5034,12 +5034,18 @@ def api_wallet_transactions():
     txns = []
     for row in rows:
         token, entry, exit_p, amount, pnl, ts = row
+        entry_f  = float(entry  or 0)
+        exit_f   = float(exit_p or 0)
+        amount_f = float(amount or 0)
+        is_sell  = exit_f > 0
+        # SOL value = price per token × token quantity
+        sol_value = round((exit_f if is_sell else entry_f) * amount_f, 6)
         txns.append({
-            'type':        'sell' if (exit_p and float(exit_p) > 0) else 'buy',
+            'type':        'Sold' if is_sell else 'Bought',
             'token':       token or '',
-            'amount_sol':  float(amount or 0),
-            'entry_price': float(entry or 0),
-            'exit_price':  float(exit_p or 0),
+            'amount_sol':  sol_value,
+            'entry_price': entry_f,
+            'exit_price':  exit_f,
             'pnl':         float(pnl or 0),
             'created_at':  ts or '',
         })
