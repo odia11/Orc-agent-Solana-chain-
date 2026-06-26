@@ -9842,23 +9842,23 @@ function showToken(symbol){
 }
 
 async function showTokenCard(symbol){
-  const modal=document.getElementById('tokenCard')
+  document.getElementById('tokenCard').style.display='flex'
   document.getElementById('tc-symbol').textContent='$'+symbol
-  document.getElementById('tc-price').textContent='Loading…'
+  document.getElementById('tc-price').textContent='Loading...'
   document.getElementById('tc-change').textContent=''
   document.getElementById('tc-vol').textContent=''
   document.getElementById('tc-link').href='https://dexscreener.com/solana/'+symbol
-  modal.style.display='flex'
-  try{
-    const d=await fetch('/api/market/tokens?q='+encodeURIComponent(symbol)).then(r=>r.json())
-    const t=d.find(x=>x.symbol===symbol)||d[0]
-    if(t){
-      document.getElementById('tc-price').textContent=t.price?'$'+parseFloat(t.price).toFixed(6):'—'
-      if(t.mint) document.getElementById('tc-link').href='https://dexscreener.com/solana/'+t.mint
-    } else {
-      document.getElementById('tc-price').textContent='—'
-    }
-  }catch(e){ document.getElementById('tc-price').textContent='—' }
+  const r=await fetch('https://api.dexscreener.com/latest/dex/search?q='+symbol)
+  const d=await r.json()
+  const p=d.pairs?.find(x=>x.chainId==='solana')
+  if(p){
+    document.getElementById('tc-price').textContent='$'+p.priceUsd
+    const ch=parseFloat(p.priceChange?.h24||0)
+    document.getElementById('tc-change').textContent=(ch>=0?'+':'')+ch.toFixed(2)+'% (24h)'
+    document.getElementById('tc-change').style.color=ch>=0?'#3ad29b':'#f76b62'
+    document.getElementById('tc-vol').textContent='Vol 24h: $'+parseInt(p.volume?.h24||0).toLocaleString()
+    document.getElementById('tc-link').href=p.url||'#'
+  }
 }
 
 function renderPost(item){
