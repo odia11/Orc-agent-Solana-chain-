@@ -452,11 +452,14 @@ async function _quickSell(idx, sym, pairAddr, tokenAddr, btn){
 /* shared trade fetch — returns true on success */
 async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
   try{
-    var csrf=(document.cookie.match(/csrf_token=([^;]+)/)||[])[1]||'';
     var r = await fetch('/api/instant-trade',{
       method:'POST',
       credentials:'include',
-      headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
+      headers:{
+        'Content-Type':'application/json',
+        'X-CSRF-Token':_lmCsrf,
+        'X-Requested-With':'XMLHttpRequest'
+      },
       body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
     });
     var d = await r.json();
@@ -630,6 +633,12 @@ function _setError(msg){
   document.getElementById('lm-table-wrap').innerHTML=
     _buildTable('<tr class="lm-status-row"><td colspan="15" style="color:#f76b62">'+msg+'</td></tr>');
 }
+
+/* ── CSRF token ── */
+var _lmCsrf = '';
+fetch('/api/csrf-token',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+  _lmCsrf = d.token||'';
+}).catch(function(){});
 
 /* ── init ── */
 _loadTab('trending');

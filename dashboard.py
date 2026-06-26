@@ -109,7 +109,13 @@ def _csrf_check():
             if not _validate_csrf(tok):
                 _log_security_event('csrf_fail', session.get('wallet', 'unknown'),
                                     f'bad/missing token on {request.path}')
-                return jsonify({'error': 'CSRF validation failed'}), 403
+                print(f'[csrf_fail] path={request.path} wallet={session.get("wallet","?")} '
+                      f'tok_sent={bool(tok)} headers={dict(request.headers)}', flush=True)
+                return jsonify({
+                    'error': 'CSRF validation failed',
+                    'logged_in': bool(session.get('wallet')),
+                    'hint': 'Send the token from GET /api/csrf-token in X-CSRF-Token header'
+                }), 403
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -3987,8 +3993,10 @@ def social_feed():
 @rate_limit(10, 60)
 def api_instant_trade():
     wallet = _current_wallet()
+    print(f'[instant_trade] wallet={wallet!r} session_keys={list(session.keys())} '
+          f'csrf_header={request.headers.get("X-CSRF-Token","(none)")!r}', flush=True)
     if not wallet:
-        return jsonify({'error': 'Not logged in'}), 401
+        return jsonify({'error': 'not authenticated', 'logged_in': False}), 401
 
     data         = request.get_json(silent=True) or {}
     symbol       = str(data.get('symbol',       '')).strip().upper()
