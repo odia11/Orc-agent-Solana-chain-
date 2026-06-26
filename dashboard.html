@@ -113,7 +113,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-nav-item.active{background:rgba(58,210,155,.1);color:#eef1f5;font-weight:600;border-radius:11px}
 .sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
 .sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
-.sb-nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:700;border-radius:10px;padding:2px 6px;min-width:18px;text-align:center}
+.sb-nav-badge{margin-left:auto;background:#3ad29b;color:#08120f;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
 .sb-start-wrap{padding:4px 12px 10px;flex-shrink:0}
 .sb-start-btn{width:100%;padding:12px;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s}
 .sb-start-btn:hover{opacity:.88}
@@ -9302,8 +9302,11 @@ async function _dmAutoRefresh(){
 
 async function dmFetchUnread(){
   try{
-    const r=await fetch('/api/messages/unread').then(x=>x.json());
-    if(r.ok) _dmSetUnreadBadge(r.unread||0);
+    const [r1,r2]=await Promise.all([
+      fetch('/api/messages/unread').then(x=>x.json()).catch(()=>({ok:false,unread:0})),
+      fetch('/api/messages/unread_count').then(x=>x.json()).catch(()=>({count:0}))
+    ]);
+    _dmSetUnreadBadge((r1.ok?r1.unread||0:0)+(r2.count||0));
   }catch(e){}
 }
 
@@ -9322,7 +9325,7 @@ function _dmUpdateUnreadBadge(){
 }
 
 // Poll unread count on every page, even outside messages view
-setInterval(dmFetchUnread, 10000);
+setInterval(dmFetchUnread, 30000);
 
 // ── PROFILE COMMENTS ──
 let _tvcCurrentUserId=null, _tvcCanComment=false, _tvcIsSelf=false;

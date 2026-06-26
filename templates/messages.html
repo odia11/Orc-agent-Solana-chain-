@@ -73,6 +73,10 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msgs-send:hover{opacity:.88}
 .msgs-send:disabled{opacity:.4;cursor:not-allowed}
 
+/* back button (visible on mobile only) */
+.msgs-back{display:none;align-items:center;gap:5px;background:transparent;border:none;color:#8a919c;font-size:14px;cursor:pointer;padding:0 8px 0 0;font-family:'Geist',system-ui,sans-serif;transition:color .15s;flex-shrink:0}
+.msgs-back:hover{color:#eef1f5}
+
 /* scrollbar */
 ::-webkit-scrollbar{width:4px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -80,9 +84,17 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 ::-webkit-scrollbar-thumb:hover{background:#2d333c}
 *{scrollbar-width:thin;scrollbar-color:#21252c transparent}
 
-@media(max-width:680px){
-  .msgs-left{position:absolute;width:100%;z-index:10;background:#0a0b0e;height:calc(100vh - 60px);border-right:none}
-  .msgs-left.slide-out{display:none}
+@media(max-width:768px){
+  /* default: only list visible */
+  .msgs-left{width:100%;border-right:none}
+  .msgs-right{display:none}
+  /* thread open: swap panels */
+  .msgs-layout.thread-open .msgs-left{display:none}
+  .msgs-layout.thread-open .msgs-right{display:flex}
+  /* back button visible */
+  .msgs-back{display:flex}
+  /* input stays above keyboard */
+  .msgs-input-bar{position:sticky;bottom:0;background:#0a0b0e}
 }
 </style>
 </head>
@@ -224,11 +236,17 @@ async function _openThread(peerWallet) {
   var thread = document.getElementById('msgs-thread');
   thread.style.display = 'flex';
 
+  /* mobile: show thread, hide list */
+  if (window.innerWidth <= 768) {
+    document.querySelector('.msgs-layout').classList.add('thread-open');
+  }
+
   /* thread header */
   var color = _avatarColor(peerWallet);
   var ini   = (peerWallet[0] || '?').toUpperCase();
   document.getElementById('msgs-thread-hdr').innerHTML =
-    '<div class="msgs-thread-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
+    '<button class="msgs-back" onclick="_backToList()">← Back</button>'
+    + '<div class="msgs-thread-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
     + '<div>'
     +   '<div class="msgs-thread-name">'+_esc(_short(peerWallet))+'</div>'
     +   '<div class="msgs-thread-addr">'+_esc(peerWallet)+'</div>'
@@ -318,6 +336,11 @@ async function _sendMessage() {
   }
   btn.disabled = false;
   input.focus();
+}
+
+/* ── BACK (mobile) ── */
+function _backToList() {
+  document.querySelector('.msgs-layout').classList.remove('thread-open');
 }
 
 /* ── INIT ── */
