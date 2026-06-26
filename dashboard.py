@@ -2668,6 +2668,45 @@ def api_test_auth():
         'x_client_secret_sent':     bool(request.headers.get('X-Client-Secret')),
     })
 
+@app.route('/api/my-trades')
+def api_my_trades():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'error': 'not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if not row:
+            return jsonify({'trades': []})
+        user_id = row['id']
+        trades = conn.execute(
+            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, opened_at, mint_address '
+            'FROM trades WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0 '
+            'ORDER BY timestamp DESC LIMIT 5',
+            (user_id,)
+        ).fetchall()
+        result = []
+        for t in trades:
+            entry  = t['entry_price'] or 0
+            exit_p = t['exit_price']  or 0
+            pnl_pct = round(((exit_p - entry) / entry * 100), 2) if entry else 0
+            result.append({
+                'symbol':      t['token'],
+                'token':       t['token'],
+                'entry_price': entry,
+                'exit_price':  exit_p,
+                'pnl':         t['pnl'],
+                'pnl_pct':     pnl_pct,
+                'pnl_sol':     t['pnl'],
+                'opened_at':   t['opened_at'],
+                'timestamp':   t['timestamp'],
+                'token_address': t['mint_address'] or '',
+            })
+        return jsonify({'trades': result})
+    finally:
+        conn.close()
+
 @app.route('/api/connect-wallet', methods=['POST'])
 def api_connect_wallet():
     return set_wallet()
