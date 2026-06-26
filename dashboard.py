@@ -845,6 +845,15 @@ def init_db():
         likes      INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS user_tokens (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id       INTEGER NOT NULL,
+        token_address TEXT    NOT NULL,
+        symbol        TEXT    NOT NULL DEFAULT '',
+        amount        REAL    NOT NULL DEFAULT 0,
+        updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, token_address)
+    )''')
     conn.commit()
     conn.close()
 
@@ -4052,23 +4061,73 @@ def api_instant_trade():
     if not sig:
         return jsonify({'error': 'Swap ran but no signature returned: ' + stdout[-200:]}), 500
 
-    # Record trade in DB
+    # Update DB: trades log + user_tokens portfolio
+    new_balance = None
     try:
-        conn = sqlite3.connect(DB_FILE)
-        user_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        conn     = sqlite3.connect(DB_FILE)
+        user_row = conn.execute(
+            'SELECT id FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
         if user_row:
+            uid = user_row[0]
+            now = datetime.datetime.utcnow().isoformat()
+
+            # trades log
             conn.execute(
-                'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address) '
+                'INSERT INTO trades '
+                '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address) '
                 'VALUES (?,?,?,?,?,?,?,?,?)',
-                (user_row[0], symbol, 0, 0, amount_sol if side == 'buy' else 0,
-                 0, 0, datetime.datetime.utcnow().isoformat(), token_address)
+                (uid, symbol, 0, 0, amount_sol if side == 'buy' else 0,
+                 0, 0, now, token_address)
             )
+
+            # portfolio upsert
+            if side == 'buy':
+                conn.execute(
+                    '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
+                       VALUES (?, ?, ?, ?, ?)
+                       ON CONFLICT(user_id, token_address) DO UPDATE SET
+                           symbol     = excluded.symbol,
+                           amount     = user_tokens.amount + excluded.amount,
+                           updated_at = excluded.updated_at''',
+                    (uid, token_address, symbol, amount_sol, now)
+                )
+            else:
+                conn.execute(
+                    '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
+                       VALUES (?, ?, ?, 0, ?)
+                       ON CONFLICT(user_id, token_address) DO UPDATE SET
+                           amount     = 0,
+                           updated_at = excluded.updated_at''',
+                    (uid, token_address, symbol, now)
+                )
+
             conn.commit()
         conn.close()
     except Exception as e:
         print(f'[instant-trade] DB record error: {e}', flush=True)
 
-    return jsonify({'success': True, 'tx': sig, 'side': side, 'symbol': symbol})
+    # Fetch updated SOL balance from RPC (best-effort)
+    try:
+        for _rpc in _PROXY_RPCS:
+            try:
+                _rb = requests.post(_rpc, json={
+                    'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+                }, timeout=5)
+                new_balance = round(_rb.json()['result']['value'] / 1e9, 4)
+                break
+            except Exception:
+                continue
+    except Exception:
+        pass
+
+    return jsonify({
+        'success':     True,
+        'tx':          sig,
+        'side':        side,
+        'symbol':      symbol,
+        'new_balance': new_balance,
+    })
 
 
 @app.route('/api/feed/post', methods=['POST'])
