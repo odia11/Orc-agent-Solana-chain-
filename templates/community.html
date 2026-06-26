@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Community — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+.cm-header{position:sticky;top:0;z-index:20;height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0a0b0e;border-bottom:1px solid #16191f}
+.cm-hdr-left{display:flex;align-items:center;gap:10px}
+.cm-back{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:#101216;border:1px solid #21252c;color:#8a919c;text-decoration:none;font-size:16px;transition:color .15s,background .15s;flex-shrink:0}
+.cm-back:hover{background:#16191f;color:#eef1f5}
+.cm-title{font-size:20px;font-weight:600;color:#eef1f5;letter-spacing:-0.01em}
+.cm-pill{display:flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a919c}
+.cm-pill-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+
+.cm-msg{display:flex;flex-direction:column;gap:3px;padding:10px 14px;border-radius:12px;background:#101216;border:1px solid #16191f}
+.cm-msg-meta{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace}
+.cm-msg-text{font-size:14px;color:#eef1f5;line-height:1.45;word-break:break-word}
+
+.cm-composer{position:fixed;bottom:0;left:0;right:0;background:#0a0b0e;border-top:1px solid #16191f;padding:12px 16px;display:flex;gap:10px;align-items:flex-end}
+.cm-input{flex:1;background:#101216;border:1px solid #21252c;border-radius:12px;padding:10px 14px;color:#eef1f5;font-size:14px;font-family:'Geist',system-ui,sans-serif;outline:none;resize:none;min-height:42px;max-height:120px;line-height:1.4}
+.cm-input::placeholder{color:#565d68}
+.cm-input:focus{border-color:#3ad29b}
+.cm-send{background:#3ad29b;color:#08120f;border:none;border-radius:10px;padding:10px 18px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;height:42px}
+.cm-send:disabled{opacity:.5;cursor:default}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header class="cm-header">
+  <div class="cm-hdr-left">
+    <a class="cm-back" href="/" title="Back">←</a>
+    <span class="cm-title">Community</span>
+  </div>
+  {% if wallet_short %}
+  <div class="cm-pill">
+    <div class="cm-pill-dot"></div>
+    <span>{{ wallet_short }}</span>
+  </div>
+  {% endif %}
+</header>
+
+<div id="msgs" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;height:calc(100vh - 120px)">
+  <div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">Loading messages…</div>
+</div>
+
+<div class="cm-composer">
+  <textarea class="cm-input" id="cm-text" placeholder="Say something…" rows="1" maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg();}"></textarea>
+  <button class="cm-send" id="cm-send" onclick="sendMsg()">Send</button>
+</div>
+
+<script>
+function _shortWallet(w){
+  if(!w) return 'unknown';
+  return w.length>=10 ? w.slice(0,6)+'…'+w.slice(-4) : w;
+}
+
+function _timeAgo(ts){
+  if(!ts) return '';
+  var s=(ts.indexOf('T')<0)?ts.replace(' ','T')+'Z':ts;
+  var sec=Math.floor((Date.now()-new Date(s).getTime())/1000);
+  if(isNaN(sec)||sec<5) return 'just now';
+  if(sec<60) return sec+'s ago';
+  if(sec<3600) return Math.floor(sec/60)+'m ago';
+  if(sec<86400) return Math.floor(sec/3600)+'h ago';
+  return Math.floor(sec/86400)+'d ago';
+}
+
+function renderMsgs(msgs){
+  var el=document.getElementById('msgs');
+  if(!msgs.length){
+    el.innerHTML='<div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">No messages yet. Be the first!</div>';
+    return;
+  }
+  el.innerHTML=msgs.map(function(m){
+    return '<div class="cm-msg">'
+      +'<div class="cm-msg-meta">'+_shortWallet(m.wallet)+' · '+_timeAgo(m.created_at)+'</div>'
+      +'<div class="cm-msg-text">'+m.content.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>'
+      +'</div>';
+  }).reverse().join('');
+  el.scrollTop=el.scrollHeight;
+}
+
+async function loadMsgs(){
+  try{
+    var r=await fetch('/api/community/messages');
+    var d=await r.json();
+    renderMsgs(d);
+  }catch(e){
+    document.getElementById('msgs').innerHTML='<div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">Failed to load messages.</div>';
+  }
+}
+
+async function sendMsg(){
+  var ta=document.getElementById('cm-text');
+  var btn=document.getElementById('cm-send');
+  var text=ta.value.trim();
+  if(!text) return;
+  btn.disabled=true;
+  try{
+    await fetch('/api/community/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})});
+    ta.value='';
+    loadMsgs();
+  }catch(e){}
+  btn.disabled=false;
+}
+
+loadMsgs();
+setInterval(loadMsgs,15000);
+</script>
+</body>
+</html>

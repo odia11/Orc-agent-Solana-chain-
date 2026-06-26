@@ -3077,7 +3077,11 @@ def withdraw_page():
 
 @app.route('/community')
 def community_page():
-    return redirect('/')
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/?next=community')
+    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    return render_template('community.html', wallet=wallet, wallet_short=wallet_short, is_admin=_is_owner(wallet))
 
 @app.route('/api/community/messages')
 def community_messages():
