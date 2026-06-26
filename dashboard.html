@@ -9896,8 +9896,12 @@ async function loadRightRail(){
 }
 
 function renderHomeFeed(){
-  const el = document.getElementById('center-feed');
+  const el = document.getElementById('center-feed')||document.getElementById('feed-list')||document.getElementById('feed-container');
   if(!el) return;
+  if(!_homeFeedData||!_homeFeedData.length){
+    el.innerHTML='<p style="color:#565d68;padding:20px">No posts yet</p>';
+    return;
+  }
   /* build set of mints the current user already holds */
   window._feedMyMints = new Set();
   _homeFeedData.forEach(function(i){
