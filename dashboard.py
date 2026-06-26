@@ -835,6 +835,9 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_webauthn_cred ON webauthn_credentials(credential_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS community_messages
+        (id INTEGER PRIMARY KEY AUTOINCREMENT, wallet TEXT, content TEXT,
+         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
     conn.commit()
     conn.close()
 
@@ -3075,6 +3078,38 @@ def withdraw_page():
 @app.route('/community')
 def community_page():
     return redirect('/')
+
+@app.route('/api/community/messages')
+def community_messages():
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            'SELECT id, wallet, content, created_at FROM community_messages ORDER BY created_at DESC LIMIT 50'
+        ).fetchall()
+        return jsonify([{'id': r[0], 'wallet': r[1], 'content': r[2], 'created_at': r[3]} for r in rows])
+    finally:
+        conn.close()
+
+@app.route('/api/community/message', methods=['POST'])
+@rate_limit(10, 60)
+def post_community():
+    if 'wallet' not in session:
+        return jsonify({}), 401
+    content = (request.json or {}).get('content', '').strip()
+    if not content:
+        return jsonify({'ok': False, 'msg': 'Empty content'}), 400
+    if len(content) > 500:
+        return jsonify({'ok': False, 'msg': 'Too long'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            'INSERT INTO community_messages (wallet, content) VALUES (?,?)',
+            [session['wallet'], _sanitize(content)]
+        )
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 
 
 @app.route('/notifications')
