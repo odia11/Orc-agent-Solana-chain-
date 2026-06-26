@@ -9875,7 +9875,7 @@ async function showTokenCard(symbol){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
         ${pctBadge(p.priceChange?.m5,'5m')}${pctBadge(p.priceChange?.h1,'1h')}${pctBadge(p.priceChange?.h6,'6h')}${pctBadge(p.priceChange?.h24,'24h')}
       </div>
-      <a href="${p.url||'https://dexscreener.com/solana/'+symbol}" target="_blank" rel="noopener" style="display:block;text-align:center;background:#35d4c4;color:#0d1117;border-radius:12px;padding:12px;font-weight:700;text-decoration:none;font-size:14px;font-family:'JetBrains Mono',monospace">View Chart ↗</a>`
+      `
   }catch(e){
     body.innerHTML='<div style="text-align:center;padding:40px 0;color:#f76b62;font-size:13px">Failed to load token data</div>'
   }
