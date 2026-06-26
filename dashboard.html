@@ -3409,8 +3409,20 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
       <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}" style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
     </div>
+    <!-- CHART SEARCH (hidden by default) -->
+    <div id="composer-chart-search" style="display:none;margin-bottom:10px;position:relative" onclick="event.stopPropagation()">
+      <input id="composer-chart-input" type="text" placeholder="Search token, e.g. WIF, SOL..." autocomplete="off"
+        oninput="_chartSearch(this.value)"
+        style="width:100%;background:#0d0f12;border:1px solid #21252c;border-radius:10px;padding:9px 12px;color:#eef1f5;font-size:13px;outline:none;font-family:'Geist',system-ui,sans-serif">
+      <div id="composer-chart-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:#101216;border:1px solid #21252c;border-radius:10px;margin-top:4px;z-index:50;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.5)"></div>
+    </div>
+    <!-- CHART PREVIEW CARD (shown after selection) -->
+    <div id="composer-chart-preview" style="display:none;margin-bottom:10px;background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;position:relative" onclick="event.stopPropagation()">
+      <button onclick="_clearComposerChart()" style="position:absolute;top:10px;right:10px;background:none;border:none;color:#565d68;cursor:pointer;font-size:15px;line-height:1">✕</button>
+      <div id="composer-chart-card"></div>
+    </div>
     <div class="feed-composer-actions">
-      <button class="feed-composer-pill" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
+      <button class="feed-composer-pill" id="chart-pill-btn" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
       <button class="feed-composer-pill" onclick="tagToken()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
       <div style="flex:1"></div>
       <button class="feed-composer-post" onclick="submitPost()">POST</button>
@@ -9616,12 +9628,21 @@ function selectToken(symbol, mint){
 
 async function submitPost(){
   const t=document.getElementById('postText')
-  if(!t.value.trim()) return
-  const r=await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:t.value})})
+  var text = t.value.trim()
+  if(!text && !_composerChart) return
+  var content = text
+  if(_composerChart) content = (text ? text+'\n' : '') + '__CHART__'+JSON.stringify(_composerChart)
+  const r=await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content})})
   const d=await r.json()
-  console.log('post result:',r.status,d)
-  if(r.ok){t.value='';window.location.reload()}
-  else alert('Error: '+JSON.stringify(d))
+  if(r.ok){
+    t.value=''
+    _composerChart=null
+    var prev=document.getElementById('composer-chart-preview')
+    if(prev) prev.style.display='none'
+    var bar=document.getElementById('composer-chart-search')
+    if(bar) bar.style.display='none'
+    window.location.reload()
+  } else alert('Error: '+JSON.stringify(d))
 }
 
 var _deletePostId=null
@@ -9677,9 +9698,120 @@ function _feedComposerPost(){
   });
 }
 
+var _composerChart = null;
+
 function _feedComposerChart(){
-  var s=document.getElementById('hdr-search-input');
-  if(s){ s.focus(); s.select(); }
+  var bar = document.getElementById('composer-chart-search');
+  if(!bar) return;
+  var isOpen = bar.style.display !== 'none';
+  if(isOpen){
+    bar.style.display = 'none';
+    document.getElementById('chart-pill-btn').style.background = '';
+  } else {
+    bar.style.display = 'block';
+    document.getElementById('chart-pill-btn').style.background = '#21252c';
+    var inp = document.getElementById('composer-chart-input');
+    if(inp){ inp.value=''; inp.focus(); }
+    document.getElementById('composer-chart-results').style.display = 'none';
+  }
+}
+
+var _chartSearchTimer = null;
+function _chartSearch(q){
+  clearTimeout(_chartSearchTimer);
+  var res = document.getElementById('composer-chart-results');
+  if(!q || q.length < 1){ res.style.display='none'; return; }
+  res.style.display = 'block';
+  res.innerHTML = '<div style="padding:10px;color:#565d68;font-size:13px">Searching…</div>';
+  _chartSearchTimer = setTimeout(function(){
+    fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,5);
+      if(!pairs.length){ res.innerHTML='<div style="padding:10px;color:#565d68;font-size:13px">No Solana tokens found</div>'; return; }
+      res.innerHTML = pairs.map(function(p,i){
+        var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
+        var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
+        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+        var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+        var name = (p.baseToken&&p.baseToken.name)||'';
+        var safeIdx = i;
+        return '<div onclick="_attachChartEmbed('+i+')" data-pair-idx="'+i+'" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;transition:background .1s" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div><div style="font-weight:700;color:#eef1f5;font-size:13px">'+sym+'</div><div style="color:#565d68;font-size:11px">'+name+'</div></div><div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#eef1f5">'+price+'</div><div style="font-size:11px">'+chgStr+'</div></div></div>';
+      }).join('');
+      window._chartSearchPairs = pairs;
+    })
+    .catch(function(){ res.innerHTML='<div style="padding:10px;color:#f76b62;font-size:13px">Search failed</div>'; });
+  }, 300);
+}
+
+function _attachChartEmbed(idx){
+  var pairs = window._chartSearchPairs;
+  if(!pairs || !pairs[idx]) return;
+  var p = pairs[idx];
+  _composerChart = {
+    symbol:  (p.baseToken&&p.baseToken.symbol)||'?',
+    name:    (p.baseToken&&p.baseToken.name)||'',
+    price:   p.priceUsd||null,
+    chg5m:   p.priceChange&&p.priceChange.m5!=null  ? p.priceChange.m5  : null,
+    chg1h:   p.priceChange&&p.priceChange.h1!=null  ? p.priceChange.h1  : null,
+    chg6h:   p.priceChange&&p.priceChange.h6!=null  ? p.priceChange.h6  : null,
+    chg24h:  p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null,
+    vol24h:  p.volume&&p.volume.h24!=null ? p.volume.h24 : null,
+    liq:     p.liquidity&&p.liquidity.usd!=null ? p.liquidity.usd : null,
+    buys:    p.txns&&p.txns.h24 ? p.txns.h24.buys  : null,
+    sells:   p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
+    mint:    (p.baseToken&&p.baseToken.address)||''
+  };
+  document.getElementById('composer-chart-search').style.display = 'none';
+  document.getElementById('chart-pill-btn').style.background = '#3ad29b22';
+  _renderComposerChartPreview();
+}
+
+function _renderComposerChartPreview(){
+  if(!_composerChart) return;
+  var c = _composerChart;
+  var chg24 = c.chg24h;
+  var chgColor = chg24!=null ? (chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
+  var chgStr  = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
+  var price   = c.price ? '$'+parseFloat(c.price).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+  var fmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
+
+  /* mini bar chart from timeframe changes */
+  var tfs = [
+    {label:'5m',  val:c.chg5m},
+    {label:'1h',  val:c.chg1h},
+    {label:'6h',  val:c.chg6h},
+    {label:'24h', val:c.chg24h}
+  ];
+  var maxAbs = 0.01;
+  tfs.forEach(function(tf){ if(tf.val!=null && Math.abs(tf.val)>maxAbs) maxAbs=Math.abs(tf.val); });
+  var bars = tfs.map(function(tf){
+    var h = tf.val!=null ? Math.max(4, Math.round(Math.abs(tf.val)/maxAbs*36)) : 4;
+    var col = tf.val!=null ? (tf.val>=0?'#3ad29b':'#f76b62') : '#21252c';
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:10px;height:'+h+'px;background:'+col+';border-radius:3px 3px 0 0"></div><div style="font-size:9px;color:#565d68;font-family:\'JetBrains Mono\',monospace">'+tf.label+'</div></div>';
+  }).join('');
+
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+    +'<div><div style="font-size:15px;font-weight:700;color:#eef1f5">$'+c.symbol+'</div>'
+    +'<div style="font-size:11px;color:#565d68">'+c.name+'</div></div>'
+    +'<div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:#eef1f5">'+price+'</div>'
+    +'<div style="font-size:12px;color:'+chgColor+';font-weight:600">'+chgStr+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;align-items:flex-end;gap:6px;height:52px;margin-bottom:10px">'+bars+'</div>'
+    +'<div style="display:flex;gap:10px">'
+    +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:8px"><div style="font-size:10px;color:#565d68;margin-bottom:2px">VOL 24H</div><div style="font-size:12px;font-weight:600;color:#eef1f5">'+fmt(c.vol24h)+'</div></div>'
+    +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:8px"><div style="font-size:10px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div style="font-size:12px;font-weight:600;color:#eef1f5">'+fmt(c.liq)+'</div></div>'
+    +(c.buys!=null?'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:8px"><div style="font-size:10px;color:#565d68;margin-bottom:2px">BUYS/SELLS</div><div style="font-size:12px;font-weight:600;color:#eef1f5">'+c.buys+'/'+c.sells+'</div></div>':'')
+    +'</div>';
+
+  document.getElementById('composer-chart-card').innerHTML = html;
+  document.getElementById('composer-chart-preview').style.display = 'block';
+}
+
+function _clearComposerChart(){
+  _composerChart = null;
+  document.getElementById('composer-chart-preview').style.display = 'none';
+  document.getElementById('chart-pill-btn').style.background = '';
 }
 
 function _feedComposerTag(){
@@ -9991,8 +10123,54 @@ function _renderFeedCard(e){
   }
 
   /* ── text body ── */
-  var _safeContent = e.content ? esc(e.content).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>') : '';
-  var textBody = _safeContent ? '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>' : '';
+  var textBody = '';
+  if(e.content){
+    var _rawContent = e.content;
+    var _chartMatch = _rawContent.indexOf('__CHART__');
+    if(_chartMatch !== -1){
+      var _textPart = _rawContent.slice(0, _chartMatch).trim();
+      var _chartJson = _rawContent.slice(_chartMatch + 9);
+      var _chartData = null;
+      try{ _chartData = JSON.parse(_chartJson); }catch(ex){}
+      if(_textPart){
+        var _safeText = esc(_textPart).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+        textBody += '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeText+'</div>';
+      }
+      if(_chartData){
+        var _c = _chartData;
+        var _chg24 = _c.chg24h!=null ? _c.chg24h : null;
+        var _chgColor = _chg24!=null ? (_chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
+        var _chgStr  = _chg24!=null ? (_chg24>=0?'+':'')+_chg24.toFixed(2)+'%' : '—';
+        var _price   = _c.price ? '$'+parseFloat(_c.price).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+        var _cfmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
+        var _tfs = [{l:'5m',v:_c.chg5m},{l:'1h',v:_c.chg1h},{l:'6h',v:_c.chg6h},{l:'24h',v:_c.chg24h}];
+        var _maxAbs = 0.01;
+        _tfs.forEach(function(tf){ if(tf.v!=null && Math.abs(tf.v)>_maxAbs) _maxAbs=Math.abs(tf.v); });
+        var _bars = _tfs.map(function(tf){
+          var h=tf.v!=null?Math.max(4,Math.round(Math.abs(tf.v)/_maxAbs*36)):4;
+          var col=tf.v!=null?(tf.v>=0?'#3ad29b':'#f76b62'):'#21252c';
+          return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:10px;height:'+h+'px;background:'+col+';border-radius:3px 3px 0 0"></div><div style="font-size:9px;color:#565d68;font-family:\'JetBrains Mono\',monospace">'+tf.l+'</div></div>';
+        }).join('');
+        textBody += '<div style="background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;margin:8px 0 10px;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
+          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
+          +'<div><div style="font-size:14px;font-weight:700;color:#eef1f5">$'+esc(_c.symbol||'')+'</div>'
+          +'<div style="font-size:11px;color:#565d68">'+esc(_c.name||'')+'</div></div>'
+          +'<div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">'+_price+'</div>'
+          +'<div style="font-size:12px;color:'+_chgColor+';font-weight:600">'+_chgStr+'</div></div>'
+          +'</div>'
+          +'<div style="display:flex;align-items:flex-end;gap:6px;height:52px;margin-bottom:10px">'+_bars+'</div>'
+          +'<div style="display:flex;gap:8px">'
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">VOL 24H</div><div style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div></div>'
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.liq)+'</div></div>'
+          +(_c.buys!=null?'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">BUYS/SELLS</div><div style="font-size:11px;font-weight:600;color:#3ad29b">'+_c.buys+'<span style="color:#565d68">/</span><span style="color:#f76b62">'+_c.sells+'</span></div></div>':'')
+          +'</div>'
+          +'</div>';
+      }
+    } else {
+      var _safeContent = esc(_rawContent).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+      textBody = '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>';
+    }
+  }
 
   /* ── copy button ── */
   var copyHtml;
