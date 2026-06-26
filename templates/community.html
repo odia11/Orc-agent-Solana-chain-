@@ -53,65 +53,26 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 </div>
 
 <div style="position:fixed;bottom:0;padding:12px;background:#0a0b0e;border-top:1px solid #16191f;display:flex;gap:10px;width:100%">
-  <input id="msg" placeholder="Say something..." style="flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5" onkeydown="if(event.key==='Enter')sendMsg()">
+  <input id="msg" placeholder="Say something..." style="flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5" onkeydown="if(event.key==='Enter')send()">
   <button onclick="sendMsg()" style="background:#3ad29b;color:#08120f;border:none;border-radius:11px;padding:11px 18px;font-weight:700">Send</button>
 </div>
 
 <script>
-function _shortWallet(w){
-  if(!w) return 'unknown';
-  return w.length>=10 ? w.slice(0,6)+'…'+w.slice(-4) : w;
+async function load(){
+  const d=await fetch('/api/community/messages').then(r=>r.json())
+  document.getElementById('msgs').innerHTML=d.reverse().map(m=>`
+    <div style="display:flex;gap:10px;margin-bottom:8px">
+      <div style="width:36px;height:36px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700">${m.wallet.slice(0,2)}</div>
+      <div><div style="font-size:12px;color:#565d68">${m.wallet.slice(0,8)}...</div>
+      <div style="color:#eef1f5">${m.content}</div></div>
+    </div>`).join('')
 }
-
-function _timeAgo(ts){
-  if(!ts) return '';
-  var s=(ts.indexOf('T')<0)?ts.replace(' ','T')+'Z':ts;
-  var sec=Math.floor((Date.now()-new Date(s).getTime())/1000);
-  if(isNaN(sec)||sec<5) return 'just now';
-  if(sec<60) return sec+'s ago';
-  if(sec<3600) return Math.floor(sec/60)+'m ago';
-  if(sec<86400) return Math.floor(sec/3600)+'h ago';
-  return Math.floor(sec/86400)+'d ago';
+async function send(){
+  const t=document.getElementById('msg')
+  await fetch('/api/community/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:t.value})})
+  t.value='';load()
 }
-
-function renderMsgs(msgs){
-  var el=document.getElementById('msgs');
-  if(!msgs.length){
-    el.innerHTML='<div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">No messages yet. Be the first!</div>';
-    return;
-  }
-  el.innerHTML=msgs.map(function(m){
-    return '<div class="cm-msg">'
-      +'<div class="cm-msg-meta">'+_shortWallet(m.wallet)+' · '+_timeAgo(m.created_at)+'</div>'
-      +'<div class="cm-msg-text">'+m.content.replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</div>'
-      +'</div>';
-  }).reverse().join('');
-  el.scrollTop=el.scrollHeight;
-}
-
-async function loadMsgs(){
-  try{
-    var r=await fetch('/api/community/messages');
-    var d=await r.json();
-    renderMsgs(d);
-  }catch(e){
-    document.getElementById('msgs').innerHTML='<div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">Failed to load messages.</div>';
-  }
-}
-
-async function sendMsg(){
-  var inp=document.getElementById('msg');
-  var text=inp.value.trim();
-  if(!text) return;
-  inp.value='';
-  try{
-    await fetch('/api/community/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})});
-    loadMsgs();
-  }catch(e){}
-}
-
-loadMsgs();
-setInterval(loadMsgs,15000);
+load();setInterval(load,5000)
 </script>
 </body>
 </html>
