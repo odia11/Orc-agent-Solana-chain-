@@ -9598,9 +9598,16 @@ async function submitPost(){
   else alert('Error: '+JSON.stringify(d))
 }
 
-async function deletePost(id){
-  if(!confirm('Delete this post?')) return
-  const r=await fetch('/api/feed/post/'+id,{method:'DELETE'})
+var _deletePostId=null
+function deletePost(id){
+  _deletePostId=id
+  document.getElementById('deleteModal').style.display='flex'
+}
+async function confirmDelete(){
+  document.getElementById('deleteModal').style.display='none'
+  if(!_deletePostId) return
+  const r=await fetch('/api/feed/post/'+_deletePostId,{method:'DELETE'})
+  _deletePostId=null
   if(r.ok) window.location.reload()
 }
 
@@ -10271,6 +10278,17 @@ document.addEventListener('DOMContentLoaded', function() {
     <input id="tokenSearch" placeholder="Search token e.g. SOL, WIF..." style="width:100%;background:#0a0b0e;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;outline:none">
     <div id="tokenResults" style="margin-top:10px;max-height:200px;overflow-y:auto"></div>
     <button onclick="document.getElementById('tokenModal').style.display='none'" style="margin-top:12px;width:100%;background:#21252c;border:none;border-radius:10px;padding:10px;color:#8a919c;cursor:pointer">Cancel</button>
+  </div>
+</div>
+
+<div id="deleteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#101216;border:1px solid #21252c;border-radius:18px;padding:24px;width:300px;text-align:center">
+    <div style="font-size:18px;font-weight:600;margin-bottom:8px">Delete post?</div>
+    <div style="color:#565d68;font-size:14px;margin-bottom:20px">This cannot be undone.</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="confirmDelete()" style="flex:1;background:#f76b62;color:#fff;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer">Delete</button>
+      <button onclick="document.getElementById('deleteModal').style.display='none'" style="flex:1;background:#21252c;color:#eef1f5;border:none;border-radius:12px;padding:12px;cursor:pointer">Cancel</button>
+    </div>
   </div>
 </div>
 </body>
