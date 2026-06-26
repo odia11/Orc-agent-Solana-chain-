@@ -138,32 +138,7 @@ html,body{min-height:100vh;background:#0a0e1a;color:#eef1f5;font-family:'JetBrai
   <button class="lm-tab"        id="tab-gainers"   onclick="_setTab('gainers')">Gainers</button>
 </div>
 
-<div class="lm-table-wrap">
-  <table class="lm-table">
-    <thead>
-      <tr>
-        <th style="padding-left:16px;width:36px">#</th>
-        <th>TOKEN</th>
-        <th>MCAP</th>
-        <th>PRICE</th>
-        <th>AGE</th>
-        <th>TXNS</th>
-        <th>VOLUME</th>
-        <th>TRADERS</th>
-        <th>5M</th>
-        <th>1H</th>
-        <th>6H</th>
-        <th>24H</th>
-        <th>LIQUIDITY</th>
-        <th class="th-act">BUY</th>
-        <th class="th-act">SELL</th>
-      </tr>
-    </thead>
-    <tbody id="lm-grid">
-      <tr class="lm-status-row"><td colspan="15"><span class="lm-spinner-ring"></span>Loading…</td></tr>
-    </tbody>
-  </table>
-</div>
+<div id="lm-table-wrap" class="lm-table-wrap"></div>
 
 <!-- token detail modal -->
 <div id="lm-token-modal" onclick="if(event.target===this)this.style.display='none'">
@@ -287,16 +262,39 @@ async function _doSearch(q){
   }catch(e){ _setError('Search failed'); }
 }
 
+/* thead HTML — defined once, prepended before every tbody write */
+var _THEAD = '<thead><tr>'
+  +'<th style="padding-left:16px;width:36px">#</th>'
+  +'<th>TOKEN</th>'
+  +'<th>MCAP</th>'
+  +'<th>PRICE</th>'
+  +'<th>AGE</th>'
+  +'<th>TXNS</th>'
+  +'<th>VOLUME</th>'
+  +'<th>TRADERS</th>'
+  +'<th>5M</th>'
+  +'<th>1H</th>'
+  +'<th>6H</th>'
+  +'<th>24H</th>'
+  +'<th>LIQUIDITY</th>'
+  +'<th class="th-act">BUY</th>'
+  +'<th class="th-act">SELL</th>'
+  +'</tr></thead>';
+
+function _buildTable(tbodyRows){
+  return '<table class="lm-table">'+_THEAD+'<tbody id="lm-grid">'+tbodyRows+'</tbody></table>';
+}
+
 /* ── render table ── */
 function _renderTable(pairs){
   _closeBuyDrop();
   _pairs = pairs;
-  var tbody = document.getElementById('lm-grid');
+  var wrap = document.getElementById('lm-table-wrap');
   if(!pairs.length){
-    tbody.innerHTML='<tr class="lm-status-row"><td colspan="15">No tokens found</td></tr>';
+    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="15">No tokens found</td></tr>');
     return;
   }
-  tbody.innerHTML = pairs.map(function(p,i){ return _rowHtml(p,i); }).join('');
+  wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 function _chgCell(v){
@@ -609,12 +607,12 @@ function _esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function _setLoading(){
-  document.getElementById('lm-grid').innerHTML=
-    '<tr class="lm-status-row"><td colspan="15"><span class="lm-spinner-ring"></span>Loading…</td></tr>';
+  document.getElementById('lm-table-wrap').innerHTML=
+    _buildTable('<tr class="lm-status-row"><td colspan="15"><span class="lm-spinner-ring"></span>Loading…</td></tr>');
 }
 function _setError(msg){
-  document.getElementById('lm-grid').innerHTML=
-    '<tr class="lm-status-row"><td colspan="15" style="color:#f76b62">'+msg+'</td></tr>';
+  document.getElementById('lm-table-wrap').innerHTML=
+    _buildTable('<tr class="lm-status-row"><td colspan="15" style="color:#f76b62">'+msg+'</td></tr>');
 }
 
 /* ── init ── */
