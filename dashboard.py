@@ -3927,7 +3927,8 @@ def social_feed():
     try:
         rows = conn.execute('''
             SELECT fp.id, fp.wallet, fp.content, fp.created_at, fp.likes,
-                   u.username, NULL as symbol, NULL as pnl_pct
+                   u.username, NULL as symbol, NULL as pnl_pct,
+                   (fp.wallet = ?) as is_own
             FROM feed_posts fp
             LEFT JOIN users u ON fp.wallet = u.wallet_address
             UNION ALL
@@ -3937,17 +3938,18 @@ def social_feed():
                    t.token as symbol,
                    CASE WHEN t.entry_price > 0 AND t.exit_price > 0
                         THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
-                        ELSE 0 END as pnl_pct
+                        ELSE 0 END as pnl_pct,
+                   (u.wallet_address = ?) as is_own
             FROM trades t
             LEFT JOIN users u ON t.user_id = u.id
             ORDER BY created_at DESC LIMIT 50
-        ''').fetchall()
+        ''', (my_wallet, my_wallet)).fetchall()
     finally:
         conn.close()
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, likes, username, symbol, pnl_pct = row
+        rid, wallet, content, created_at, likes, username, symbol, pnl_pct, is_own = row
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
         feed.append({
@@ -3960,7 +3962,7 @@ def social_feed():
             'symbol':     symbol or '',
             'pnl_pct':    pnl_pct or 0,
             'type':       'text' if content else 'trade',
-            'is_own':     bool(wallet and my_wallet and wallet == my_wallet),
+            'is_own':     bool(is_own),
         })
     return jsonify(feed)
 
