@@ -3057,6 +3057,25 @@ def messages_page():
     )
 
 
+@app.route('/community')
+def community_page():
+    return redirect('/')
+
+
+@app.route('/notifications')
+def notifications_page():
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/?next=notifications')
+    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    return render_template(
+        'notifications.html',
+        wallet=wallet,
+        wallet_short=wallet_short,
+        is_admin=_is_owner(wallet),
+    )
+
+
 # ── HONEYPOTS ──
 # These paths are never legitimately accessed. Any hit means a scanner or attacker.
 # _security_gate() (registered above, runs first) already intercepts most of these

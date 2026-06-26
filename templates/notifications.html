@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Notifications — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+.ntf-header{position:sticky;top:0;z-index:20;height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0a0b0e;border-bottom:1px solid #16191f}
+.ntf-hdr-left{display:flex;align-items:center;gap:10px}
+.ntf-back{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:#101216;border:1px solid #21252c;color:#8a919c;text-decoration:none;font-size:16px;transition:color .15s,background .15s;flex-shrink:0}
+.ntf-back:hover{background:#16191f;color:#eef1f5}
+.ntf-title{font-size:20px;font-weight:600;color:#eef1f5;letter-spacing:-0.01em}
+.ntf-nav-pill{display:flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a919c}
+.ntf-nav-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+
+.ntf-body{max-width:520px;margin:0 auto;padding:20px 16px 60px}
+
+.ntf-filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.ntf-filter{background:#101216;border:1px solid #21252c;border-radius:9px;padding:6px 13px;font-size:13px;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,color .15s,border-color .15s}
+.ntf-filter.active,.ntf-filter:hover{background:#16191f;color:#eef1f5;border-color:#3ad29b}
+
+.ntf-list{display:flex;flex-direction:column;gap:2px}
+
+.ntf-row{display:flex;align-items:flex-start;gap:12px;padding:14px 16px;border-radius:12px;cursor:pointer;transition:background .12s;text-decoration:none;color:inherit}
+.ntf-row:hover{background:#101216}
+.ntf-row.unread{background:#0d1510}
+.ntf-row.unread:hover{background:#101e15}
+
+.ntf-icon{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
+.ntf-icon.trade{background:rgba(58,210,155,.12);color:#3ad29b}
+.ntf-icon.like{background:rgba(247,107,98,.12);color:#f76b62}
+.ntf-icon.follow{background:rgba(99,102,241,.12);color:#6366f1}
+.ntf-icon.copy{background:rgba(247,185,85,.12);color:#f7b955}
+.ntf-icon.system{background:#16191f;color:#8a919c}
+
+.ntf-info{flex:1;min-width:0}
+.ntf-text{font-size:14px;color:#eef1f5;line-height:1.4}
+.ntf-text .ntf-actor{font-weight:600}
+.ntf-meta{font-size:12px;color:#565d68;margin-top:3px}
+.ntf-unread-dot{width:7px;height:7px;border-radius:50%;background:#3ad29b;flex-shrink:0;margin-top:5px}
+
+.ntf-empty{text-align:center;padding:60px 20px;color:#565d68;font-size:14px}
+.ntf-empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header class="ntf-header">
+  <div class="ntf-hdr-left">
+    <a class="ntf-back" href="/" title="Back to dashboard">←</a>
+    <span class="ntf-title">Notifications</span>
+  </div>
+  {% if wallet_short %}
+  <div class="ntf-nav-pill">
+    <div class="ntf-nav-dot"></div>
+    <span>{{ wallet_short }}</span>
+  </div>
+  {% endif %}
+</header>
+
+<div class="ntf-body">
+
+  <div class="ntf-filter-row">
+    <button class="ntf-filter active" onclick="_setFilter('all',this)">All</button>
+    <button class="ntf-filter" onclick="_setFilter('trades',this)">Trades</button>
+    <button class="ntf-filter" onclick="_setFilter('social',this)">Social</button>
+    <button class="ntf-filter" onclick="_setFilter('system',this)">System</button>
+  </div>
+
+  <div class="ntf-list" id="ntf-list">
+    <div class="ntf-empty">
+      <div class="ntf-empty-icon">🔔</div>
+      No notifications yet.
+    </div>
+  </div>
+
+</div>
+
+<script>
+var _filter = 'all';
+
+function _setFilter(f, btn) {
+  _filter = f;
+  document.querySelectorAll('.ntf-filter').forEach(function(b){ b.classList.remove('active'); });
+  btn.classList.add('active');
+  _renderList();
+}
+
+var _ntfData = [];
+
+function _timeAgo(ts) {
+  if (!ts) return '';
+  var s = (typeof ts === 'string' && ts.indexOf('T') < 0) ? ts.replace(' ', 'T') + 'Z' : ts;
+  var sec = Math.floor((Date.now() - new Date(s).getTime()) / 1000);
+  if (isNaN(sec) || sec < 5) return 'just now';
+  if (sec < 60)    return sec + 's ago';
+  if (sec < 3600)  return Math.floor(sec / 60) + 'm ago';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+  return Math.floor(sec / 86400) + 'd ago';
+}
+
+function _iconForType(type) {
+  if (type === 'trade' || type === 'copy') return '<div class="ntf-icon trade">📈</div>';
+  if (type === 'like')   return '<div class="ntf-icon like">♡</div>';
+  if (type === 'follow') return '<div class="ntf-icon follow">+</div>';
+  if (type === 'system') return '<div class="ntf-icon system">⚙</div>';
+  return '<div class="ntf-icon system">·</div>';
+}
+
+function _renderList() {
+  var el = document.getElementById('ntf-list');
+  var items = _filter === 'all' ? _ntfData
+    : _filter === 'trades' ? _ntfData.filter(function(n){ return n.type === 'trade' || n.type === 'copy'; })
+    : _filter === 'social' ? _ntfData.filter(function(n){ return n.type === 'like' || n.type === 'follow'; })
+    : _ntfData.filter(function(n){ return n.type === 'system'; });
+
+  if (!items.length) {
+    el.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>No notifications yet.</div>';
+    return;
+  }
+  el.innerHTML = items.map(function(n) {
+    var unread = n.read ? '' : ' unread';
+    return '<div class="ntf-row' + unread + '">'
+      + _iconForType(n.type)
+      + '<div class="ntf-info">'
+      +   '<div class="ntf-text">' + (n.text || '') + '</div>'
+      +   '<div class="ntf-meta">' + _timeAgo(n.created_at) + '</div>'
+      + '</div>'
+      + (n.read ? '' : '<div class="ntf-unread-dot"></div>')
+      + '</div>';
+  }).join('');
+}
+
+async function _loadNotifications() {
+  try {
+    var r = await fetch('/api/notifications').then(function(x){ return x.json(); });
+    if (r.ok && r.notifications) {
+      _ntfData = r.notifications;
+      _renderList();
+    }
+  } catch(e) {}
+}
+
+_loadNotifications();
+</script>
+</body>
+</html>
