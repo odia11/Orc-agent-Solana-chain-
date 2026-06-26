@@ -3958,6 +3958,18 @@ def social_feed():
             LIMIT 50
         ''')
         _trade_rows = c.fetchall()
+
+        # User text posts from group_chat
+        c.execute('''
+            SELECT gc.id, gc.user_id, gc.message, gc.created_at,
+                   u.username, u.avatar_url, u.wallet_address
+            FROM group_chat gc
+            JOIN users u ON u.id = gc.user_id
+            WHERE gc.message_type = 'text' AND gc.message IS NOT NULL
+            ORDER BY gc.created_at DESC
+            LIMIT 50
+        ''')
+        _post_rows = c.fetchall()
     finally:
         conn.close()
 
@@ -4038,6 +4050,27 @@ def social_feed():
             'pnl':           round(float(_pnl   or 0), 6),
             'timestamp':     _ts_str or '',
             '_sort_ts':      _sort_ts,
+        })
+
+    # ── Text posts (group_chat) ──
+    for _pid, _uid, _msg, _ts_str, _uname, _avatar, _wallet in _post_rows:
+        _sw = _short(_wallet or '')
+        _display = _uname if _uname else _sw
+        try:
+            _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%d %H:%M:%S').replace(
+                tzinfo=datetime.timezone.utc).timestamp()
+        except Exception:
+            _sort_ts = 0.0
+        feed.append({
+            'type':       'text',
+            'id':         _pid,
+            'user_id':    _uid,
+            'username':   _display,
+            'avatar_url': _avatar or '',
+            'wallet':     _sw,
+            'content':    _msg or '',
+            'timestamp':  _ts_str or '',
+            '_sort_ts':   _sort_ts,
         })
 
     if _allowed_ids is not None:
