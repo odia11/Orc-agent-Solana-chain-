@@ -9841,6 +9841,26 @@ function showToken(symbol){
   window.open('https://dexscreener.com/solana/'+symbol,'_blank')
 }
 
+async function showTokenCard(symbol){
+  const modal=document.getElementById('tokenCard')
+  document.getElementById('tc-symbol').textContent='$'+symbol
+  document.getElementById('tc-price').textContent='Loading…'
+  document.getElementById('tc-change').textContent=''
+  document.getElementById('tc-vol').textContent=''
+  document.getElementById('tc-link').href='https://dexscreener.com/solana/'+symbol
+  modal.style.display='flex'
+  try{
+    const d=await fetch('/api/market/tokens?q='+encodeURIComponent(symbol)).then(r=>r.json())
+    const t=d.find(x=>x.symbol===symbol)||d[0]
+    if(t){
+      document.getElementById('tc-price').textContent=t.price?'$'+parseFloat(t.price).toFixed(6):'—'
+      if(t.mint) document.getElementById('tc-link').href='https://dexscreener.com/solana/'+t.mint
+    } else {
+      document.getElementById('tc-price').textContent='—'
+    }
+  }catch(e){ document.getElementById('tc-price').textContent='—' }
+}
+
 function renderPost(item){
   const init=(item.username||item.wallet||'?').slice(0,2).toUpperCase()
   const name=item.username||item.wallet?.slice(0,8)||'Unknown'
@@ -10310,6 +10330,19 @@ document.addEventListener('DOMContentLoaded', function() {
       style="width:100%;background:#0a0b0e;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;outline:none">
     <div id="tokenResults" style="margin-top:10px;max-height:200px;overflow-y:auto"></div>
     <button onclick="document.getElementById('tokenModal').style.display='none'" style="margin-top:12px;width:100%;background:#21252c;border:none;border-radius:10px;padding:10px;color:#8a919c;cursor:pointer">Cancel</button>
+  </div>
+</div>
+
+<div id="tokenCard" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
+  <div style="background:#101216;border:1px solid #21252c;border-radius:18px;padding:20px;width:340px">
+    <div style="display:flex;justify-content:space-between;margin-bottom:16px">
+      <span id="tc-symbol" style="font-size:20px;font-weight:700;color:#3ad29b"></span>
+      <button onclick="document.getElementById('tokenCard').style.display='none'" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:18px">✕</button>
+    </div>
+    <div id="tc-price" style="font-size:32px;font-weight:700;font-family:monospace"></div>
+    <div id="tc-change" style="font-size:14px;margin-top:4px"></div>
+    <div id="tc-vol" style="color:#565d68;font-size:13px;margin-top:8px"></div>
+    <a id="tc-link" href="#" target="_blank" rel="noopener" style="display:block;margin-top:16px;text-align:center;background:#3ad29b;color:#08120f;border-radius:12px;padding:11px;font-weight:700;text-decoration:none;font-size:14px">View on DexScreener ↗</a>
   </div>
 </div>
 
