@@ -3418,13 +3418,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <div class="feed-composer" id="feed-composer">
     <div class="feed-composer-top">
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
-      <input class="feed-composer-input" id="feed-composer-input" type="text" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_feedComposerPost();}">
+      <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}" style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit"></textarea>
     </div>
     <div class="feed-composer-actions">
       <button class="feed-composer-pill" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
       <button class="feed-composer-pill" onclick="_feedComposerTag()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
       <div style="flex:1"></div>
-      <button class="feed-composer-post" onclick="_feedComposerPost()">POST</button>
+      <button class="feed-composer-post" onclick="submitPost()">POST</button>
     </div>
   </div>
 
@@ -9716,8 +9716,21 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 
 /* ── FEED TAB SWITCHER ── */
+async function submitPost(){
+  const text=document.getElementById('postText').value
+  if(!text.trim()) return
+  var btn=document.querySelector('.feed-composer-post');
+  if(btn){btn.disabled=true;btn.textContent='Posting…';}
+  try{
+    await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})})
+    document.getElementById('postText').value=''
+    loadHomeFeed()
+  }catch(e){console.error('[submitPost]',e);}
+  finally{if(btn){btn.disabled=false;btn.textContent='POST';}}
+}
+
 function _feedComposerPost(){
-  var inp = document.getElementById('feed-composer-input');
+  var inp = document.getElementById('postText');
   if(!inp) return;
   var text = inp.value.trim();
   if(!text) return;
