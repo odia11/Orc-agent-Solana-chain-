@@ -39,11 +39,11 @@ html,body{min-height:100vh;background:#0a0e1a;color:#eef1f5;font-family:'JetBrai
 
 /* ── table ── */
 .lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:1100px}
-.lm-table thead tr{background:#101216;position:sticky;top:97px;z-index:10}
 .lm-table thead th{
   padding:10px 10px;font-size:11px;font-weight:700;color:#3d4b62;
   text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1a2035;
-  white-space:nowrap;text-align:right;font-family:'JetBrains Mono',monospace
+  white-space:nowrap;text-align:right;font-family:'JetBrains Mono',monospace;
+  background:#101216;position:sticky;top:97px;z-index:10
 }
 .lm-table thead th:first-child,.lm-table thead th:nth-child(2){text-align:left}
 .lm-table thead th.th-act{text-align:center}
@@ -247,14 +247,22 @@ async function _fetchGainers(){
 }
 
 function _dedupeByAddress(pairs, iconMap){
-  var seen={}, out=[];
+  /* keep the pair with highest liquidity.usd per unique base-token address */
+  var best={};
   pairs.forEach(function(p){
     var addr = p.baseToken&&p.baseToken.address;
-    if(!addr||seen[addr]) return;
-    seen[addr]=true;
+    if(!addr) return;
+    var liq = (p.liquidity&&p.liquidity.usd)||0;
+    var prev = best[addr];
+    if(!prev || liq > ((prev.liquidity&&prev.liquidity.usd)||0)){
+      best[addr] = p;
+    }
+  });
+  var out = Object.keys(best).map(function(addr){
+    var p = best[addr];
     if(iconMap[addr]&&!(p.info&&p.info.imageUrl))
-      p=Object.assign({},p,{_icon:iconMap[addr]});
-    out.push(p);
+      p = Object.assign({},p,{_icon:iconMap[addr]});
+    return p;
   });
   return out.slice(0,50);
 }
