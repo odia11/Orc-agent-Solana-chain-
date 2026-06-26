@@ -327,11 +327,11 @@ async function showTokenCard(symbol){
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+statsHtml+'</div>'
       +'<div style="display:flex;gap:6px;margin-bottom:16px">'+tfHtml+'</div>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-top:4px">'
-        +'<button onclick="executeTrade(\''+_esc(sym).replace(/'/g,"\\'")+'\',\''+_esc(p.pairAddress||'').replace(/'/g,"\\'")+'\',\'buy\',document.getElementById(\'lm-trade-amount\').value)"'
+        +'<button id="lm-buy-btn" onclick="executeTrade(\''+_esc(sym).replace(/'/g,"\\'")+'\',\''+_esc(p.pairAddress||'').replace(/'/g,"\\'")+'\',\'buy\',document.getElementById(\'lm-trade-amount\').value,\''+_esc((p.baseToken&&p.baseToken.address)||'').replace(/'/g,"\\'")+'\',this)"'
           +' style="flex:1;background:#35d4c4;color:#0a0e1a;border:none;border-radius:10px;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s" onmouseover="this.style.opacity=\'.85\'" onmouseout="this.style.opacity=\'1\'">⚡ Buy</button>'
         +'<input id="lm-trade-amount" type="number" min="0.001" step="0.1" placeholder="SOL" value="0.1"'
           +' style="width:80px;background:#1a2035;border:1px solid #21252c;border-radius:10px;padding:10px 10px;color:#eef1f5;font-size:13px;font-family:\'JetBrains Mono\',monospace;text-align:center;outline:none;-moz-appearance:textfield" onclick="event.stopPropagation()">'
-        +'<button onclick="executeTrade(\''+_esc(sym).replace(/'/g,"\\'")+'\',\''+_esc(p.pairAddress||'').replace(/'/g,"\\'")+'\',\'sell\',document.getElementById(\'lm-trade-amount\').value)"'
+        +'<button id="lm-sell-btn" onclick="executeTrade(\''+_esc(sym).replace(/'/g,"\\'")+'\',\''+_esc(p.pairAddress||'').replace(/'/g,"\\'")+'\',\'sell\',document.getElementById(\'lm-trade-amount\').value,\''+_esc((p.baseToken&&p.baseToken.address)||'').replace(/'/g,"\\'")+'\',this)"'
           +' style="flex:1;background:#ff4444;color:#fff;border:none;border-radius:10px;padding:11px 0;font-size:14px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s" onmouseover="this.style.opacity=\'.85\'" onmouseout="this.style.opacity=\'1\'">Sell</button>'
       +'</div>';
   }catch(e){
@@ -339,34 +339,59 @@ async function showTokenCard(symbol){
   }
 }
 
+/* ── toast ── */
+function _toast(msg, ok){
+  var t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);'
+    +'background:'+(ok?'#0d2e1e':'#2e0d0d')+';color:'+(ok?'#35d4c4':'#ff6b6b')
+    +';border:1px solid '+(ok?'#35d4c433':'#ff444433')
+    +';border-radius:12px;padding:12px 22px;font-size:14px;font-weight:600;'
+    +'font-family:\'JetBrains Mono\',monospace;z-index:9999;pointer-events:none;'
+    +'opacity:0;transition:opacity .2s,transform .2s;white-space:nowrap;box-shadow:0 4px 24px rgba(0,0,0,.5)';
+  document.body.appendChild(t);
+  requestAnimationFrame(function(){
+    t.style.opacity='1'; t.style.transform='translateX(-50%) translateY(0)';
+    setTimeout(function(){
+      t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(12px)';
+      setTimeout(function(){ t.remove(); }, 250);
+    }, 3000);
+  });
+}
+
 /* ── trade execution ── */
-async function executeTrade(symbol, pairAddress, side, amountStr){
+async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, btn){
   var amount = parseFloat(amountStr);
-  if(!amount || amount <= 0){ alert('Enter a valid SOL amount'); return; }
-  var btn = document.querySelector(
-    side==='buy'
-      ? 'button[onclick*="\'buy\'"]'
-      : 'button[onclick*="\'sell\'"]'
-  );
-  var origText = btn ? btn.textContent : '';
-  if(btn){ btn.textContent = '…'; btn.disabled = true; }
+  if(!amount || amount <= 0){ _toast('Enter a valid SOL amount', false); return; }
+
+  var origHtml = btn ? btn.innerHTML : '';
+  var origBg   = btn ? btn.style.background : '';
+  var spinner  = '<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,.3);border-top-color:'+(side==='buy'?'#0a0e1a':'#fff')+';border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>';
+  if(btn){ btn.innerHTML = spinner; btn.disabled = true; btn.style.opacity = '1'; }
+
   try{
-    var r = await fetch('/api/trade/execute', {
+    var r = await fetch('/api/instant-trade', {
       method: 'POST',
-      headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({symbol: symbol, pair_address: pairAddress, side: side, amount_sol: amount})
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        symbol:        symbol,
+        pair_address:  pairAddress,
+        side:          side,
+        amount_sol:    amount,
+        token_address: tokenAddress
+      })
     });
     var d = await r.json();
     if(r.ok){
-      if(btn){ btn.textContent = side==='buy'?'✓ Bought':'✓ Sold'; btn.style.background = '#35d4c4'; btn.style.color = '#0a0e1a'; }
-      setTimeout(function(){ if(btn){ btn.textContent=origText; btn.disabled=false; btn.style.background=side==='buy'?'#35d4c4':'#ff4444'; btn.style.color=side==='buy'?'#0a0e1a':'#fff'; } }, 2000);
+      _toast(side==='buy' ? '✅ Buy order executed' : '✅ Sold', true);
+      if(btn){ btn.innerHTML = origHtml; btn.disabled = false; btn.style.background = origBg; }
     } else {
-      alert('Trade failed: '+(d.error||d.message||JSON.stringify(d)));
-      if(btn){ btn.textContent=origText; btn.disabled=false; }
+      _toast('❌ '+(d.error||d.message||'Trade failed'), false);
+      if(btn){ btn.innerHTML = origHtml; btn.disabled = false; btn.style.background = origBg; }
     }
   }catch(e){
-    alert('Trade failed: network error');
-    if(btn){ btn.textContent=origText; btn.disabled=false; }
+    _toast('❌ Network error — trade not sent', false);
+    if(btn){ btn.innerHTML = origHtml; btn.disabled = false; btn.style.background = origBg; }
   }
 }
 
