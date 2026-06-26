@@ -594,12 +594,14 @@ async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, 
 /* ── helpers ── */
 function _fmtPrice(p){
   if(!p) return '—';
-  var n=parseFloat(p);
-  if(isNaN(n)) return '—';
-  if(n>=1000)  return '$'+n.toLocaleString(undefined,{maximumFractionDigits:2});
-  if(n>=1)     return '$'+n.toLocaleString(undefined,{maximumFractionDigits:4});
-  if(n>=0.001) return '$'+n.toLocaleString(undefined,{maximumSignificantDigits:4});
-  return '$'+n.toExponential(2);
+  p=parseFloat(p);
+  if(isNaN(p)||p<=0) return '—';
+  if(p>=1) return '$'+p.toFixed(2);
+  if(p>=0.01) return '$'+p.toFixed(4);
+  var s=p.toFixed(10);
+  var m=s.match(/0\.(0*)/);
+  var zeros=m?m[1].length:0;
+  return '$0.0'+(zeros>0?zeros.toString().sub():'')+p.toFixed(zeros+4).slice(2+zeros);
 }
 function _fmtNum(n){
   if(n==null||isNaN(n)) return '—';
