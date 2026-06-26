@@ -9594,6 +9594,16 @@ function tagToken(){
   }
 }
 
+function searchToken(q){
+  if(q.length<1) return
+  fetch('/api/market/tokens?q='+encodeURIComponent(q))
+  .then(r=>r.json()).then(d=>{
+    document.getElementById('tokenResults').innerHTML=d.length?
+    d.map(t=>`<div onclick="selectToken('${t.symbol}')" style="padding:10px;cursor:pointer;color:#3ad29b;font-weight:700;border-bottom:1px solid #16191f">$${t.symbol}</div>`).join('')
+    :'<div style="color:#565d68;padding:10px">No tokens found</div>'
+  })
+}
+
 function selectToken(t){
   document.getElementById('postText').value+=' $'+t
   document.getElementById('tokenModal').style.display='none'
@@ -10286,7 +10296,9 @@ document.addEventListener('DOMContentLoaded', function() {
 <div id="tokenModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
   <div style="background:#101216;border:1px solid #21252c;border-radius:18px;padding:20px;width:340px">
     <div style="font-size:16px;font-weight:600;margin-bottom:12px">Tag a token</div>
-    <input id="tokenSearch" placeholder="Search token e.g. SOL, WIF..." style="width:100%;background:#0a0b0e;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;outline:none">
+    <input id="tokenSearch" placeholder="Search token e.g. SOL, WIF..."
+      oninput="searchToken(this.value)"
+      style="width:100%;background:#0a0b0e;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;outline:none">
     <div id="tokenResults" style="margin-top:10px;max-height:200px;overflow-y:auto"></div>
     <button onclick="document.getElementById('tokenModal').style.display='none'" style="margin-top:12px;width:100%;background:#21252c;border:none;border-radius:10px;padding:10px;color:#8a919c;cursor:pointer">Cancel</button>
   </div>
