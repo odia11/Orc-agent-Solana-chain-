@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token }}">
 <title>Live Market — OrcAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -457,7 +458,7 @@ async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
       credentials:'include',
       headers:{
         'Content-Type':'application/json',
-        'X-CSRF-Token':_lmCsrf,
+        'X-CSRF-Token':(document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf,
         'X-Requested-With':'XMLHttpRequest'
       },
       body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
@@ -634,11 +635,8 @@ function _setError(msg){
     _buildTable('<tr class="lm-status-row"><td colspan="15" style="color:#f76b62">'+msg+'</td></tr>');
 }
 
-/* ── CSRF token ── */
-var _lmCsrf = '';
-fetch('/api/csrf-token',{credentials:'include'}).then(function(r){return r.json();}).then(function(d){
-  _lmCsrf = d.token||'';
-}).catch(function(){});
+/* ── CSRF token (injected server-side, always available synchronously) ── */
+var _lmCsrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
 
 /* ── init ── */
 _loadTab('trending');

@@ -2998,7 +2998,9 @@ def live_market():
     session_wallet = _current_wallet()
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
-    return render_template('live_market.html', wallet_short=wallet_short)
+    return render_template('live_market.html',
+                           wallet_short=wallet_short,
+                           csrf_token=_get_csrf_token())
 
 
 @app.route('/history')
