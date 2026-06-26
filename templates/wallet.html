@@ -58,6 +58,7 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24p
 fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('sol').textContent=(d.sol||0).toFixed(4)
   document.getElementById('usd').textContent=d.usd?(+d.usd).toFixed(2):'—'
+  document.getElementById('avail').textContent=(d.sol||0).toFixed(4)
 }).catch(()=>{
   document.getElementById('sol').textContent='—'
   document.getElementById('usd').textContent='—'
