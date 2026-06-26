@@ -4666,6 +4666,22 @@ def _is_following_ids(conn, follower: int, following: int) -> bool:
         'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (follower, following)
     ).fetchone())
 
+@app.route('/api/user/find')
+@rate_limit(30, 60)
+def find_user():
+    q = request.args.get('q', '').strip()
+    if not q:
+        return jsonify({})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT wallet_address FROM users WHERE wallet_address=? OR username=? COLLATE NOCASE LIMIT 1',
+            (q, q)
+        ).fetchone()
+    finally:
+        conn.close()
+    return jsonify({'wallet': row[0]} if row else {})
+
 @app.route('/api/users/search', methods=['GET'])
 @rate_limit(60, 60)
 def search_users():

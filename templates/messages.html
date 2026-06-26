@@ -345,8 +345,14 @@ function _backToList() {
 }
 
 function newMsg(){
-  const w=prompt('Enter wallet address to message:')
-  if(w) window.location='/messages/'+w
+  const w=prompt('Enter username or wallet address:')
+  if(!w) return
+  fetch('/api/user/find?q='+encodeURIComponent(w))
+    .then(r=>r.json())
+    .then(d=>{
+      if(d.wallet) window.location='/messages/'+d.wallet
+      else alert('User not found')
+    })
 }
 
 /* ── INIT ── */
