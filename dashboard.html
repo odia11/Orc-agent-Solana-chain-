@@ -9909,10 +9909,6 @@ function renderHomeFeed(){
   });
   var items = _homeFeedData;
   if(_homeFeedFilter === 'livetrades') items = items.filter(function(i){ return i.type==='trade'||i.type==='open'; });
-  if(_homeFeedFilter === 'following' && !items.length){
-    el.innerHTML = '<div class="fc-empty">Follow traders to see their activity here.</div>';
-    return;
-  }
   if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
   el.innerHTML = items.map(_renderFeedCard).join('');
 }
