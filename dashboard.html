@@ -9565,27 +9565,34 @@ document.addEventListener('DOMContentLoaded', function(){
 })();
 
 /* ── FEED TAB SWITCHER ── */
+var _tokenSearchBound=false
 function tagToken(){
   document.getElementById('tokenModal').style.display='flex'
-  document.getElementById('tokenSearch').focus()
+  const inp=document.getElementById('tokenSearch')
+  if(inp){
+    inp.value=''
+    document.getElementById('tokenResults').innerHTML=''
+    inp.focus()
+    if(!_tokenSearchBound){
+      _tokenSearchBound=true
+      inp.addEventListener('input',function(){
+        const q=this.value
+        console.log('searching:',q)
+        if(q.length<1) return
+        fetch('/api/market/tokens?q='+encodeURIComponent(q))
+        .then(r=>r.json())
+        .then(d=>{
+          console.log('results:',d)
+          const el=document.getElementById('tokenResults')
+          el.innerHTML=d.length?d.map(t=>`
+          <div onclick="selectToken('${t.symbol}')" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;background:#0a0b0e;margin-top:4px">
+            <span style="color:#3ad29b;font-weight:700">$${t.symbol}</span>
+          </div>`).join(''):'<div style="color:#565d68;padding:10px">No tokens found</div>'
+        })
+      })
+    }
+  }
 }
-
-const tokenSearch=document.getElementById('tokenSearch')
-if(tokenSearch) tokenSearch.addEventListener('input',function(){
-  const q=this.value
-  console.log('searching:',q)
-  if(q.length<1) return
-  fetch('/api/market/tokens?q='+encodeURIComponent(q))
-  .then(r=>r.json())
-  .then(d=>{
-    console.log('results:',d)
-    const el=document.getElementById('tokenResults')
-    el.innerHTML=d.length?d.map(t=>`
-    <div onclick="selectToken('${t.symbol}')" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;background:#0a0b0e;margin-top:4px">
-      <span style="color:#3ad29b;font-weight:700">$${t.symbol}</span>
-    </div>`).join(''):'<div style="color:#565d68;padding:10px">No tokens found</div>'
-  })
-})
 
 function selectToken(t){
   document.getElementById('postText').value+=' $'+t
