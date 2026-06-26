@@ -3029,13 +3029,15 @@ def history():
 @app.route('/wallet')
 def wallet_page():
     try:
-        wallet_address = session.get('wallet', None)
-        wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if wallet_address and len(wallet_address) >= 8 else ''
+        if 'wallet' not in session:
+            return redirect('/?next=wallet')
+        wallet_address = session['wallet']
+        wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else ''
         return render_template(
             'wallet.html',
             wallet_address=wallet_address,
             wallet_short=wallet_short,
-            is_admin=_is_owner(wallet_address) if wallet_address else False,
+            is_admin=_is_owner(wallet_address),
         )
     except Exception as e:
         return f'<h1>Wallet Error: {str(e)}</h1>', 500
