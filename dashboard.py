@@ -780,6 +780,16 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_dm_receiver ON direct_messages(receiver_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_dm_sender ON direct_messages(sender_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS messages (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        sender_wallet   TEXT NOT NULL,
+        receiver_wallet TEXT NOT NULL,
+        content         TEXT NOT NULL,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        is_read         INTEGER DEFAULT 0
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_messages_receiver ON messages(receiver_wallet)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_messages_sender   ON messages(sender_wallet)')
     c.execute('''CREATE TABLE IF NOT EXISTS profile_comments (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         profile_user_id INTEGER NOT NULL,
@@ -5380,6 +5390,130 @@ def share_trade_dm(peer_id):
     finally:
         conn.close()
     return jsonify({'ok': True, 'message_id': message_id, 'created_at': now})
+
+
+# ── WALLET-BASED DM SYSTEM ──
+
+@app.route('/api/messages/unread_count', methods=['GET'])
+@rate_limit(120, 60)
+def wallet_unread_count():
+    me = _current_wallet()
+    if not me:
+        return jsonify({'count': 0})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        count = conn.execute(
+            'SELECT COUNT(*) FROM messages WHERE receiver_wallet=? AND is_read=0', (me,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return jsonify({'count': count})
+
+
+@app.route('/api/messages/conversations', methods=['GET'])
+@rate_limit(60, 60)
+def wallet_conversations():
+    me = _current_wallet()
+    if not me:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute('''
+            SELECT
+                sub.peer,
+                (SELECT content FROM messages
+                 WHERE (sender_wallet=? AND receiver_wallet=sub.peer)
+                    OR (sender_wallet=sub.peer AND receiver_wallet=?)
+                 ORDER BY created_at DESC LIMIT 1) AS last_msg,
+                sub.max_ts,
+                (SELECT COUNT(*) FROM messages
+                 WHERE receiver_wallet=? AND sender_wallet=sub.peer AND is_read=0) AS unread
+            FROM (
+                SELECT
+                    CASE WHEN sender_wallet=? THEN receiver_wallet ELSE sender_wallet END AS peer,
+                    MAX(created_at) AS max_ts
+                FROM messages
+                WHERE sender_wallet=? OR receiver_wallet=?
+                GROUP BY peer
+            ) sub
+            ORDER BY sub.max_ts DESC
+            LIMIT 100
+        ''', (me, me, me, me, me, me)).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'conversations': [
+        {'peer_wallet': r[0], 'last_message': r[1], 'timestamp': r[2], 'unread_count': r[3]}
+        for r in rows
+    ]})
+
+
+@app.route('/api/messages/<wallet>', methods=['GET'])
+@rate_limit(60, 60)
+def get_wallet_thread(wallet):
+    me = _current_wallet()
+    if not me:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    if not is_valid_solana_address(wallet):
+        return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute('''
+            SELECT id, sender_wallet, receiver_wallet, content, created_at, is_read
+            FROM messages
+            WHERE (sender_wallet=? AND receiver_wallet=?)
+               OR (sender_wallet=? AND receiver_wallet=?)
+            ORDER BY created_at ASC
+            LIMIT 200
+        ''', (me, wallet, wallet, me)).fetchall()
+        conn.execute(
+            'UPDATE messages SET is_read=1 WHERE receiver_wallet=? AND sender_wallet=? AND is_read=0',
+            (me, wallet)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'messages': [
+        {
+            'id': r[0], 'sender_wallet': r[1], 'receiver_wallet': r[2],
+            'content': r[3], 'created_at': r[4], 'is_read': bool(r[5]),
+            'mine': r[1] == me
+        }
+        for r in rows
+    ]})
+
+
+@app.route('/api/messages/<wallet>', methods=['POST'])
+@rate_limit(20, 60)
+def send_wallet_message(wallet):
+    me = _current_wallet()
+    if not me:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    if not is_valid_solana_address(wallet):
+        return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
+    if wallet == me:
+        return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
+    content = str((request.json or {}).get('content', '')).strip()
+    if not content:
+        return jsonify({'ok': False, 'msg': 'content required'}), 400
+    if len(content) > 2000:
+        return jsonify({'ok': False, 'msg': 'Message too long (max 2000 chars)'}), 400
+    now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute(
+            'INSERT INTO messages (sender_wallet, receiver_wallet, content, created_at) VALUES (?,?,?,?)',
+            (me, wallet, content, now)
+        )
+        conn.commit()
+        msg_id = cur.lastrowid
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'message': {
+        'id': msg_id, 'sender_wallet': me, 'receiver_wallet': wallet,
+        'content': content, 'created_at': now, 'is_read': False, 'mine': True
+    }})
 
 
 @app.route('/api/trades/copy-from-message', methods=['POST'])
