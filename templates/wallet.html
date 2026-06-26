@@ -64,11 +64,21 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
 })
 
 fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
-  var tokens=d.tokens||[]
-  document.getElementById('tokens').innerHTML=tokens.length
-    ?tokens.map(t=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #16191f"><span class="mono">${t.symbol||t.mint?.slice(0,6)||'?'}</span><span class="muted mono">${(+t.amount||0).toFixed(4)}</span></div>`).join('')
-    :'<span class="muted">No tokens</span>'
-}).catch(()=>{ document.getElementById('tokens').innerHTML='<span class="muted">Failed to load</span>' })
+  const t=d.tokens||[]
+  const html=t.map(x=>`
+<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+  <div style="width:38px;height:38px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${(x.symbol||'?').slice(0,3)}</div>
+  <div style="flex:1">
+    <div style="font-weight:600">${x.symbol||'?'}</div>
+    <div style="color:#565d68;font-size:12px;font-family:monospace">${(x.amount||0).toFixed(4)}</div>
+  </div>
+  <div style="text-align:right">
+    <div>$${(x.usd_value||0).toFixed(2)}</div>
+    <div style="color:${(x.change||0)>=0?'#3ad29b':'#f76b62'};font-size:12px">${(x.change||0)>=0?'+':''}${(x.change||0).toFixed(1)}%</div>
+  </div>
+</div>`).join('')
+  document.getElementById('tokens').innerHTML=html||'<span style="color:#565d68">No tokens</span>'
+}).catch(()=>{ document.getElementById('tokens').innerHTML='<span style="color:#565d68">Failed to load</span>' })
 
 fetch('/api/wallet/transactions').then(r=>r.json()).then(d=>{
   var txns=d.transactions||[]
