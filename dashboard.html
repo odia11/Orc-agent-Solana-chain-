@@ -27,6 +27,7 @@ img{max-width:100%;height:auto}
 html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Geist',system-ui,sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
 body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;background:var(--bg3);z-index:9999;pointer-events:none}
 @keyframes top-pulse{0%,100%{opacity:.4}50%{opacity:.8}}
+@keyframes ccPulse{0%,100%{opacity:1}50%{opacity:.25}}
 @keyframes orcaBlink{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* ── ONBOARDING ── */
@@ -9662,9 +9663,10 @@ function _attachChartEmbed(idx){
     chg24h:  p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null,
     vol24h:  p.volume&&p.volume.h24!=null ? p.volume.h24 : null,
     liq:     p.liquidity&&p.liquidity.usd!=null ? p.liquidity.usd : null,
-    buys:    p.txns&&p.txns.h24 ? p.txns.h24.buys  : null,
-    sells:   p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
-    mint:    (p.baseToken&&p.baseToken.address)||''
+    buys:        p.txns&&p.txns.h24 ? p.txns.h24.buys  : null,
+    sells:       p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
+    mint:        (p.baseToken&&p.baseToken.address)||'',
+    pairAddress: p.pairAddress||''
   };
   document.getElementById('composer-chart-search').style.display = 'none';
   document.getElementById('chart-pill-btn').style.background = '#3ad29b22';
@@ -9856,6 +9858,94 @@ function loadInlineSidebar(){
   }).catch(()=>{});
 }
 
+/* ── Live chart cards ── */
+var _ccIntervals    = {};   /* postId -> intervalId */
+var _ccPriceHistory = {};   /* postId -> [price, ...] */
+
+function _ccFmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
+function _ccFmtPrice(p){ if(!p) return '—'; var n=parseFloat(p); if(isNaN(n)) return '—'; if(n>=1000) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:2}); if(n>=1) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:4}); if(n>=0.001) return '$'+n.toLocaleString(undefined,{maximumSignificantDigits:4}); return '$'+n.toExponential(2); }
+
+function _ccSeedHistory(pair){
+  var now = parseFloat(pair.priceUsd||0);
+  if(!now) return [];
+  var pc = pair.priceChange||{};
+  function back(pct){ return pct!=null && pct!==-100 ? now/(1+pct/100) : now; }
+  return [back(pc.h24), back(pc.h6), back(pc.h1), back(pc.m5), now];
+}
+
+function _ccDrawSparkline(id){
+  var lineEl = document.getElementById('cc-'+id+'-line');
+  if(!lineEl) return;
+  var pts = _ccPriceHistory[id];
+  if(!pts||pts.length<2) return;
+  var mn = Math.min.apply(null,pts), mx = Math.max.apply(null,pts);
+  var range = (mx-mn)||mn*0.01||1e-9;
+  var W=220, H=44, PAD=3;
+  var points = pts.map(function(v,i){
+    var x = (i/(pts.length-1))*W;
+    var y = PAD + (1-(v-mn)/range)*(H-PAD*2);
+    return x.toFixed(1)+','+y.toFixed(1);
+  }).join(' ');
+  lineEl.setAttribute('points', points);
+  /* color line green/red based on direction */
+  var rising = pts[pts.length-1] >= pts[0];
+  lineEl.setAttribute('stroke', rising ? '#35d4c4' : '#f76b62');
+}
+
+async function _ccFetch(id, sym, pair){
+  try{
+    var r = await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(sym));
+    var d = await r.json();
+    var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+    if(!p) return;
+    /* seed history on first fetch if empty */
+    if(!_ccPriceHistory[id]||!_ccPriceHistory[id].length){
+      _ccPriceHistory[id] = _ccSeedHistory(p);
+    }
+    var price = parseFloat(p.priceUsd||0);
+    if(price) _ccPriceHistory[id].push(price);
+    if(_ccPriceHistory[id].length > 120) _ccPriceHistory[id].shift();
+
+    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
+    var priceEl = document.getElementById('cc-'+id+'-price');
+    var chgEl   = document.getElementById('cc-'+id+'-chg');
+    var volEl   = document.getElementById('cc-'+id+'-vol');
+    var liqEl   = document.getElementById('cc-'+id+'-liq');
+    var buysEl  = document.getElementById('cc-'+id+'-buys');
+    var sellsEl = document.getElementById('cc-'+id+'-sells');
+    if(priceEl) priceEl.textContent = _ccFmtPrice(p.priceUsd);
+    if(chgEl){
+      chgEl.textContent = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
+      chgEl.style.color = chg24!=null ? (chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
+    }
+    if(volEl)   volEl.textContent   = _ccFmt(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+    if(liqEl)   liqEl.textContent   = _ccFmt(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+    if(buysEl&&p.txns&&p.txns.h24)  buysEl.textContent  = p.txns.h24.buys;
+    if(sellsEl&&p.txns&&p.txns.h24) sellsEl.textContent = p.txns.h24.sells;
+    _ccDrawSparkline(id);
+  }catch(e){}
+}
+
+function _initLiveCharts(){
+  /* stop intervals for cards no longer in DOM */
+  Object.keys(_ccIntervals).forEach(function(id){
+    if(!document.getElementById('cc-'+id)){
+      clearInterval(_ccIntervals[id]);
+      delete _ccIntervals[id];
+      delete _ccPriceHistory[id];
+    }
+  });
+  /* start for new cards */
+  document.querySelectorAll('[data-chart-sym]').forEach(function(el){
+    var id = el.id.slice(3); /* strip 'cc-' prefix */
+    if(_ccIntervals[id]) return;
+    var sym  = el.getAttribute('data-chart-sym');
+    var pair = el.getAttribute('data-chart-pair');
+    _ccFetch(id, sym, pair);
+    _ccIntervals[id] = setInterval(function(){ _ccFetch(id, sym, pair); }, 10000);
+  });
+}
+
 function renderHomeFeed(){
   const el = document.getElementById('center-feed');
   if(!el) return;
@@ -9872,6 +9962,7 @@ function renderHomeFeed(){
   if(_homeFeedFilter === 'livetrades') items = items.filter(function(i){ return i.type==='trade'||i.type==='open'; });
   if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
   el.innerHTML = items.map(_renderFeedCard).join('');
+  _initLiveCharts();
 }
 
 function showToken(symbol){
@@ -10042,31 +10133,35 @@ function _renderFeedCard(e){
       }
       if(_chartData){
         var _c = _chartData;
+        var _ccId = 'cc-'+postId;
         var _chg24 = _c.chg24h!=null ? _c.chg24h : null;
         var _chgColor = _chg24!=null ? (_chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
         var _chgStr  = _chg24!=null ? (_chg24>=0?'+':'')+_chg24.toFixed(2)+'%' : '—';
         var _price   = _c.price ? '$'+parseFloat(_c.price).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
         var _cfmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
-        var _tfs = [{l:'5m',v:_c.chg5m},{l:'1h',v:_c.chg1h},{l:'6h',v:_c.chg6h},{l:'24h',v:_c.chg24h}];
-        var _maxAbs = 0.01;
-        _tfs.forEach(function(tf){ if(tf.v!=null && Math.abs(tf.v)>_maxAbs) _maxAbs=Math.abs(tf.v); });
-        var _bars = _tfs.map(function(tf){
-          var h=tf.v!=null?Math.max(4,Math.round(Math.abs(tf.v)/_maxAbs*36)):4;
-          var col=tf.v!=null?(tf.v>=0?'#3ad29b':'#f76b62'):'#21252c';
-          return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px"><div style="width:10px;height:'+h+'px;background:'+col+';border-radius:3px 3px 0 0"></div><div style="font-size:9px;color:#565d68;font-family:\'JetBrains Mono\',monospace">'+tf.l+'</div></div>';
-        }).join('');
-        textBody += '<div style="background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;margin:8px 0 10px;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
+        textBody += '<div id="'+_ccId+'" data-chart-sym="'+esc(_c.symbol||'')+'" data-chart-pair="'+esc(_c.pairAddress||'')+'"'
+          +' style="background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;margin:8px 0 10px;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
           +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-          +'<div><div style="font-size:14px;font-weight:700;color:#eef1f5">$'+esc(_c.symbol||'')+'</div>'
-          +'<div style="font-size:11px;color:#565d68">'+esc(_c.name||'')+'</div></div>'
-          +'<div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">'+_price+'</div>'
-          +'<div style="font-size:12px;color:'+_chgColor+';font-weight:600">'+_chgStr+'</div></div>'
+          +'<div style="display:flex;align-items:center;gap:7px">'
+          +'<div style="font-size:14px;font-weight:700;color:#eef1f5">$'+esc(_c.symbol||'')+'</div>'
+          +'<span id="'+_ccId+'-dot" style="color:#3ad29b;font-size:10px;line-height:1;animation:ccPulse 1.5s ease-in-out infinite">●</span>'
+          +'<div style="font-size:11px;color:#565d68">'+esc(_c.name||'')+'</div>'
           +'</div>'
-          +'<div style="display:flex;align-items:flex-end;gap:6px;height:52px;margin-bottom:10px">'+_bars+'</div>'
+          +'<div style="text-align:right">'
+          +'<div id="'+_ccId+'-price" style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">'+_price+'</div>'
+          +'<div id="'+_ccId+'-chg" style="font-size:12px;font-weight:600;color:'+_chgColor+'">'+_chgStr+'</div>'
+          +'</div>'
+          +'</div>'
+          +'<svg id="'+_ccId+'-spark" viewBox="0 0 220 48" width="100%" height="48" preserveAspectRatio="none"'
+          +' style="display:block;margin-bottom:10px;overflow:visible">'
+          +'<polyline id="'+_ccId+'-line" points="" fill="none" stroke="#35d4c4" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
+          +'</svg>'
           +'<div style="display:flex;gap:8px">'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">VOL 24H</div><div style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div></div>'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.liq)+'</div></div>'
-          +(_c.buys!=null?'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">BUYS/SELLS</div><div style="font-size:11px;font-weight:600;color:#3ad29b">'+_c.buys+'<span style="color:#565d68">/</span><span style="color:#f76b62">'+_c.sells+'</span></div></div>':'')
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">VOL 24H</div><div id="'+_ccId+'-vol" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div></div>'
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div id="'+_ccId+'-liq" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.liq)+'</div></div>'
+          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">BUYS/SELLS</div>'
+          +'<div style="font-size:11px;font-weight:600"><span id="'+_ccId+'-buys" style="color:#3ad29b">'+(_c.buys!=null?_c.buys:'—')+'</span><span style="color:#565d68">/</span><span id="'+_ccId+'-sells" style="color:#f76b62">'+(_c.sells!=null?_c.sells:'—')+'</span></div>'
+          +'</div>'
           +'</div>'
           +'</div>';
       }
