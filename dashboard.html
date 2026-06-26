@@ -10058,12 +10058,23 @@ async function showTokenCard(symbol){
     const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString()
     const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#35d4c4':'#f76b62',bg=n>=0?'rgba(53,212,196,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
     const ch24=parseFloat(p.priceChange?.h24||0)
+    const _links=[...(p.info?.socials||[]),...(p.info?.websites||[]).map(function(w){return{type:'website',url:w.url}}),...(p.info?.links||[])];
+    const _li=function(l){var t=(l.type||'').toLowerCase(),u=(l.url||'').toLowerCase();if(t==='twitter'||u.indexOf('twitter.com')>=0||u.indexOf('x.com')>=0)return'\u{1F426}';if(t==='telegram'||u.indexOf('t.me/')>=0)return'✈️';if(t==='discord'||u.indexOf('discord')>=0)return'\u{1F4AC}';return'\u{1F310}';};
+    const _lbl=function(l){var s=(l.type||l.label||'link');return s.charAt(0).toUpperCase()+s.slice(1);};
+    const _addr=p.pairAddress||'';
+    const _addrShort=_addr?(_addr.slice(0,6)+'...'+_addr.slice(-4)):'';
     body.innerHTML=`
+      ${p.info?.header?`<img src="${p.info.header}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:block" onerror="this.style.display='none'">` : ''}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#35d4c4;font-size:15px">${symbol.slice(0,2)}</div>'}
-        <div>
+        <div style="flex:1;min-width:0">
           <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:'JetBrains Mono',monospace">$${p.baseToken?.symbol||symbol}</div>
-          <div style="font-size:12px;color:#565d68">${p.baseToken?.name||''} <span style="background:rgba(53,212,196,0.12);color:#35d4c4;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:4px">SOLANA</span></div>
+          <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px">
+            <span style="font-size:12px;color:#565d68">${p.baseToken?.name||''}</span>
+            <span style="background:rgba(53,212,196,0.12);color:#35d4c4;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
+            ${p.dexId?`<span style="background:#1a1f2e;border:1px solid #21252c;color:#35d4c4;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.04em">${p.dexId.toUpperCase()}</span>`:''}
+            ${(p.labels||[]).map(lb=>`<span style="background:#1a1f2e;border:1px solid #21252c;color:#8a919c;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">${lb}</span>`).join('')}
+          </div>
         </div>
       </div>
       <div style="font-size:34px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#eef1f5;margin-bottom:4px">${fmt(p.priceUsd)}</div>
@@ -10072,11 +10083,14 @@ async function showTokenCard(symbol){
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">24h Volume</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.volume?.h24)}</div></div>
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Liquidity</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.liquidity?.usd)}</div></div>
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Market Cap</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.marketCap)}</div></div>
-        <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Buys / Sells</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700"><span style="color:#35d4c4">${p.txns?.h24?.buys||0}</span><span style="color:#565d68"> / </span><span style="color:#f76b62">${p.txns?.h24?.sells||0}</span></div></div>
+        <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">FDV</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.fdv)}</div></div>
+        <div style="background:#161b22;border-radius:10px;padding:10px 12px;grid-column:span 2"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Buys / Sells (24h)</div><div style="font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700"><span style="color:#35d4c4">${p.txns?.h24?.buys||0}</span><span style="color:#565d68"> / </span><span style="color:#f76b62">${p.txns?.h24?.sells||0}</span></div></div>
       </div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:16px">
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
         ${pctBadge(p.priceChange?.m5,'5m')}${pctBadge(p.priceChange?.h1,'1h')}${pctBadge(p.priceChange?.h6,'6h')}${pctBadge(p.priceChange?.h24,'24h')}
       </div>
+      ${_links.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${_links.slice(0,6).map(function(l){return '<a href="'+l.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#1a1f2e;border:1px solid #21252c;border-radius:20px;padding:4px 10px;font-size:11px;color:#adb5bd;text-decoration:none" onmouseover="this.style.color=\'#35d4c4\';this.style.borderColor=\'#35d4c4\'" onmouseout="this.style.color=\'#adb5bd\';this.style.borderColor=\'#21252c\'">'+_li(l)+' '+_lbl(l)+'</a>';}).join('')}</div>`:''}
+      ${_addr?`<div style="display:flex;align-items:center;gap:8px;background:#161b22;border-radius:10px;padding:8px 12px;margin-bottom:4px"><span style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0">Pair</span><span style="font-family:'JetBrains Mono',monospace;font-size:11px;color:#8a919c;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_addrShort}</span><button onclick="navigator.clipboard.writeText('${_addr}').then(function(){this.textContent='✓';var b=this;setTimeout(function(){b.textContent='⧉'},1500)}.bind(this)).catch(function(){})" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:13px;padding:2px 6px;flex-shrink:0">⧉</button></div>`:''}
       `
   }catch(e){
     clearTimeout(_timeout);
