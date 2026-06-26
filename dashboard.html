@@ -9844,7 +9844,7 @@ function showToken(symbol){
 function renderPost(item){
   const init=(item.username||item.wallet||'?').slice(0,2).toUpperCase()
   const name=item.username||item.wallet?.slice(0,8)||'Unknown'
-  const content=item.content?item.content.replace(/\$([A-Z0-9]+)/g,'<span onclick="showToken(\'$1\')" style="color:#3ad29b;cursor:pointer;font-weight:700">$$$1</span>'):''
+  const content=item.content?item.content.replace(/\$([A-Z0-9]+)/g,'<span onclick="showTokenCard(\'$1\')" style="color:#3ad29b;cursor:pointer;font-weight:700;text-decoration:underline">$$$1</span>'):''
   const text=content?`<div style="margin-top:8px;color:#c7ccd4;font-size:14.5px">${content}</div>`:''
   const pct=(item.pnl_pct||0)
   const col=pct>=0?'#3ad29b':'#f76b62'
