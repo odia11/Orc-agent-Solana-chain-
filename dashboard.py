@@ -7050,38 +7050,23 @@ def api_market_top():
 @app.route('/api/market/tokens', methods=['GET'])
 @rate_limit(60, 60)
 def api_market_tokens_search():
-    q = request.args.get('q', '').upper().strip()
-    # First try live state tokens (include mint address)
-    live = state.get('tokens', [])
-    if live:
-        if q:
-            live = [t for t in live if q in (t.get('symbol') or '').upper() or q in (t.get('name') or '').upper()]
-        result = []
-        for t in live[:10]:
-            sym  = t.get('symbol', '')
-            mint = t.get('mint', '')
-            result.append({
-                'symbol':  sym,
-                'name':    t.get('name', sym),
-                'mint':    mint,
-                'display': f"{sym} ({mint[:8]}...)" if mint else sym,
-            })
-        return jsonify(result)
-    # Fallback: search trades table
-    conn = sqlite3.connect(DB_FILE)
+    q = request.args.get('q', '')
+    if not q:
+        return jsonify([])
     try:
-        rows = conn.execute(
-            'SELECT DISTINCT token, mint_address FROM trades WHERE UPPER(token) LIKE ? LIMIT 10',
-            (f'%{q}%',)
-        ).fetchall()
-    finally:
-        conn.close()
-    return jsonify([{
-        'symbol':  r[0] or '',
-        'name':    r[0] or '',
-        'mint':    r[1] or '',
-        'display': f"{r[0]} ({r[1][:8]}...)" if r[1] else (r[0] or ''),
-    } for r in rows])
+        r = requests.get(f'https://api.dexscreener.com/latest/dex/search?q={q}', timeout=5)
+        pairs = r.json().get('pairs', [])[:10]
+        tokens = [
+            {
+                'symbol': p['baseToken']['symbol'],
+                'mint':   p['baseToken']['address'],
+                'price':  p.get('priceUsd', '?'),
+            }
+            for p in pairs if p.get('chainId') == 'solana'
+        ]
+        return jsonify(tokens[:8])
+    except Exception:
+        return jsonify([])
 
 
 _market_live_cache: dict = {'ts': 0.0, 'data': []}
