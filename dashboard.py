@@ -3116,6 +3116,36 @@ def post_community():
         conn.close()
 
 
+@app.route('/api/notifications')
+def get_notifications():
+    if 'wallet' not in session:
+        return jsonify([])
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute('''
+            SELECT u.wallet_address, t.token, t.entry_price, t.exit_price, t.pnl, t.timestamp
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.timestamp > datetime("now", "-24 hours")
+            ORDER BY t.timestamp DESC
+            LIMIT 30
+        ''').fetchall()
+    finally:
+        conn.close()
+    result = []
+    for wallet_addr, token, entry, exit_p, pnl, ts in rows:
+        entry_f = float(entry or 0)
+        exit_f  = float(exit_p or 0)
+        pnl_pct = round((exit_f - entry_f) / entry_f * 100, 2) if entry_f else None
+        result.append({
+            'wallet':     wallet_addr or '',
+            'symbol':     token or '',
+            'pnl_pct':    pnl_pct,
+            'pnl':        round(float(pnl or 0), 4),
+            'created_at': ts or '',
+        })
+    return jsonify(result)
+
 @app.route('/notifications')
 def notifications_page():
     wallet = _current_wallet()
