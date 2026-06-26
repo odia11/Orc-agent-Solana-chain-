@@ -38,12 +38,13 @@ html,body{min-height:100vh;background:#0a0e1a;color:#eef1f5;font-family:'JetBrai
 .lm-table-wrap{overflow-x:auto;width:100%}
 
 /* ── table ── */
-.lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:1100px}
+.lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:900px}
 .lm-table thead th{
   padding:10px 10px;font-size:11px;font-weight:700;color:#3d4b62;
-  text-transform:uppercase;letter-spacing:.06em;border-bottom:1px solid #1a2035;
+  text-transform:uppercase;letter-spacing:.06em;
+  border-bottom:1px solid #1a1f2e;
   white-space:nowrap;text-align:right;font-family:'JetBrains Mono',monospace;
-  background:#101216;position:sticky;top:97px;z-index:10
+  background:#060810
 }
 .lm-table thead th:first-child,.lm-table thead th:nth-child(2){text-align:left}
 .lm-table thead th.th-act{text-align:center}
@@ -63,6 +64,22 @@ html,body{min-height:100vh;background:#0a0e1a;color:#eef1f5;font-family:'JetBrai
 .lm-tok-sym{font-size:13px;font-weight:700;color:#eef1f5}
 .lm-tok-name{font-size:10px;color:#3d4b62;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
 .lm-tok-chain{display:inline-block;font-size:9px;color:#35d4c4;background:rgba(53,212,196,.1);border-radius:3px;padding:1px 4px;margin-top:2px;letter-spacing:.04em}
+
+/* ── mobile ── */
+@media(max-width:768px){
+  .lm-table{min-width:0;width:100%}
+  .col-hide{display:none}
+  .lm-table thead th{font-size:9px;padding:8px 6px}
+  .lm-table tbody td{padding:0 6px;height:48px;font-size:12px}
+  .lm-table tbody td:first-child{display:none}
+  .lm-tok-cell{gap:5px}
+  .lm-tok-logo,.lm-tok-logo-ph{width:22px;height:22px;font-size:8px}
+  .lm-tok-sym{font-size:11px}
+  .lm-tok-name{display:none}
+  .lm-tok-chain{display:none}
+  .lm-btn-buy,.lm-btn-sell{font-size:10px;padding:3px 8px}
+  .lm-drop-inner{flex-wrap:wrap;gap:6px;padding:8px 10px}
+}
 
 /* price change cells */
 .chg-up{color:#35d4c4;font-weight:700}
@@ -266,17 +283,17 @@ async function _doSearch(q){
 var _THEAD = '<thead><tr>'
   +'<th style="padding-left:16px;width:36px">#</th>'
   +'<th>TOKEN</th>'
-  +'<th>MCAP</th>'
+  +'<th class="col-hide">MCAP</th>'
   +'<th>PRICE</th>'
-  +'<th>AGE</th>'
-  +'<th>TXNS</th>'
-  +'<th>VOLUME</th>'
-  +'<th>TRADERS</th>'
-  +'<th>5M</th>'
-  +'<th>1H</th>'
-  +'<th>6H</th>'
+  +'<th class="col-hide">AGE</th>'
+  +'<th class="col-hide">TXNS</th>'
+  +'<th class="col-hide">VOLUME</th>'
+  +'<th class="col-hide">TRADERS</th>'
+  +'<th class="col-hide">5M</th>'
+  +'<th class="col-hide">1H</th>'
+  +'<th class="col-hide">6H</th>'
   +'<th>24H</th>'
-  +'<th>LIQUIDITY</th>'
+  +'<th class="col-hide">LIQUIDITY</th>'
   +'<th class="th-act">BUY</th>'
   +'<th class="th-act">SELL</th>'
   +'</tr></thead>';
@@ -297,10 +314,11 @@ function _renderTable(pairs){
   wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
-function _chgCell(v){
-  if(v==null) return '<td class="chg-fl">—</td>';
+function _chgCell(v, extra){
+  var x = extra ? ' '+extra : '';
+  if(v==null) return '<td class="chg-fl'+x+'">—</td>';
   var s=(v>=0?'+':'')+v.toFixed(2)+'%';
-  return '<td class="'+(v>=0?'chg-up':'chg-dn')+'">'+s+'</td>';
+  return '<td class="'+(v>=0?'chg-up':'chg-dn')+x+'">'+s+'</td>';
 }
 
 function _rowHtml(p, idx){
@@ -338,17 +356,17 @@ function _rowHtml(p, idx){
         +'</div>'
       +'</div>'
     +'</td>'
-    +'<td>'+mcap+'</td>'
+    +'<td class="col-hide">'+mcap+'</td>'
     +'<td style="color:#eef1f5;font-weight:700">'+price+'</td>'
-    +'<td>'+age+'</td>'
-    +'<td>'+txns+'</td>'
-    +'<td>'+vol+'</td>'
-    +'<td>'+traders+'</td>'
-    +_chgCell(p.priceChange&&p.priceChange.m5 !=null?p.priceChange.m5 :null)
-    +_chgCell(p.priceChange&&p.priceChange.h1 !=null?p.priceChange.h1 :null)
-    +_chgCell(p.priceChange&&p.priceChange.h6 !=null?p.priceChange.h6 :null)
-    +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null)
-    +'<td>'+liq+'</td>'
+    +'<td class="col-hide">'+age+'</td>'
+    +'<td class="col-hide">'+txns+'</td>'
+    +'<td class="col-hide">'+vol+'</td>'
+    +'<td class="col-hide">'+traders+'</td>'
+    +_chgCell(p.priceChange&&p.priceChange.m5 !=null?p.priceChange.m5 :null,'col-hide')
+    +_chgCell(p.priceChange&&p.priceChange.h1 !=null?p.priceChange.h1 :null,'col-hide')
+    +_chgCell(p.priceChange&&p.priceChange.h6 !=null?p.priceChange.h6 :null,'col-hide')
+    +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null,'')
+    +'<td class="col-hide">'+liq+'</td>'
     +'<td style="text-align:center">'
       +'<button class="lm-btn-buy" onclick="event.stopPropagation();_openBuyDrop('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Buy</button>'
     +'</td>'
