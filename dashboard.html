@@ -10175,6 +10175,18 @@ function showToken(symbol){
   window.open('https://dexscreener.com/solana/'+symbol,'_blank')
 }
 
+function fmtTokenPrice(p){
+  p=parseFloat(p);
+  if(!p) return '$0';
+  if(p>=1) return '$'+p.toFixed(2);
+  if(p>=0.01) return '$'+p.toFixed(4);
+  if(p>=0.0001) return '$'+p.toFixed(6);
+  var s=p.toFixed(12);
+  var zeros=s.match(/^0\.0*/)[0].length-2;
+  var sig=s.replace(/^0\.0*/,'').slice(0,4);
+  return '$0.0'+zeros+sig;
+}
+
 async function showTokenCard(symbol){
   const modal=document.getElementById('tokenCard')
   const body=document.getElementById('tc-body')
@@ -10211,7 +10223,7 @@ async function showTokenCard(symbol){
           </div>
         </div>
       </div>
-      <div style="font-size:34px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:#eef1f5;margin-bottom:4px">${fmt(p.priceUsd)}</div>
+      <div style="font-size:34px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:#eef1f5;margin-bottom:4px">${fmtTokenPrice(p.priceUsd)}</div>
       <div style="font-size:15px;font-weight:700;color:${ch24>=0?'#35d4c4':'#f76b62'};margin-bottom:16px">${ch24>=0?'+':''}${ch24.toFixed(2)}% <span style="color:#565d68;font-size:12px;font-weight:400">(24h)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">24h Volume</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.volume?.h24)}</div></div>
