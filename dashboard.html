@@ -9967,24 +9967,36 @@ async function _liveChartPoll(cardEl, pairAddress, symbol){
 
     var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
 
-    var priceEl = cardEl.querySelector('[data-cc="price"]');
-    var chgEl   = cardEl.querySelector('[data-cc="chg"]');
-    var volEl   = cardEl.querySelector('[data-cc="vol"]');
-    var liqEl   = cardEl.querySelector('[data-cc="liq"]');
-    var buysEl  = cardEl.querySelector('[data-cc="buys"]');
-    var sellsEl = cardEl.querySelector('[data-cc="sells"]');
-    var lineEl  = cardEl.querySelector('[data-cc="line"]');
+    var priceEl   = cardEl.querySelector('[data-cc="price"]');
+    var chgEl     = cardEl.querySelector('[data-cc="chg"]');
+    var volEl     = cardEl.querySelector('[data-cc="vol"]');
+    var liqEl     = cardEl.querySelector('[data-cc="liq"]');
+    var buysEl    = cardEl.querySelector('[data-cc="buys"]');
+    var sellsEl   = cardEl.querySelector('[data-cc="sells"]');
+    var buysBarEl = cardEl.querySelector('[data-cc="buysbar"]');
+    var bannerEl  = cardEl.querySelector('[data-cc="banner"]');
+    var logoEl    = cardEl.querySelector('[data-cc="logo"]');
 
     if(priceEl) priceEl.textContent = _ccFmtPrice(p.priceUsd);
     if(chgEl){
       chgEl.textContent = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
       chgEl.style.color = chg24!=null ? (chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
     }
-    if(volEl)   volEl.textContent   = _ccFmt(p.volume&&p.volume.h24!=null?p.volume.h24:null);
-    if(liqEl)   liqEl.textContent   = _ccFmt(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
-    if(buysEl&&p.txns&&p.txns.h24)  buysEl.textContent  = p.txns.h24.buys;
-    if(sellsEl&&p.txns&&p.txns.h24) sellsEl.textContent = p.txns.h24.sells;
-    _ccDrawSparkline(lineEl, _liveChartHistory[key]);
+    if(volEl) volEl.textContent = _ccFmt(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+    if(liqEl) liqEl.textContent = _ccFmt(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+    if(p.txns&&p.txns.h24){
+      var _b=p.txns.h24.buys||0, _s=p.txns.h24.sells||0, _tot=_b+_s;
+      if(buysEl)    buysEl.textContent    = _b;
+      if(sellsEl)   sellsEl.textContent   = _s;
+      if(buysBarEl) buysBarEl.style.width = (_tot>0?((_b/_tot)*100).toFixed(1):'50')+'%';
+    }
+    if(bannerEl&&p.info&&p.info.header&&!bannerEl.style.backgroundImage){
+      bannerEl.style.backgroundImage='url('+p.info.header+')';
+    }
+    if(logoEl&&p.info&&p.info.imageUrl&&!logoEl.querySelector('img')){
+      logoEl.innerHTML='<img src="'+p.info.imageUrl+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">';
+    }
+    _ccDrawSparkline(cardEl, _liveChartHistory[key]);
   }catch(e){}
 }
 
@@ -10231,6 +10243,10 @@ function _renderFeedCard(e){
         var _price   = (function(){ var n=parseFloat(_c.price||0); if(!n||isNaN(n)) return '—'; return n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6); })();
         var _cfmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
         var _safeNum = function(v){ return (v!=null&&!isNaN(v)) ? String(v) : ''; };
+        var _initBuys    = _c.buys!=null?_c.buys:'—';
+        var _initSells   = _c.sells!=null?_c.sells:'—';
+        var _initBuysPct = (_c.buys!=null&&_c.sells!=null&&(_c.buys+_c.sells)>0)?((_c.buys/(_c.buys+_c.sells))*100).toFixed(1):'50';
+        var _gradId = 'scg-'+_ccId;
         textBody += '<div id="'+_ccId+'"'
           +' data-chart-sym="'+esc(_c.symbol||'')+'"'
           +' data-chart-pair="'+esc(_c.pairAddress||'')+'"'
@@ -10239,27 +10255,46 @@ function _renderFeedCard(e){
           +' data-chart-chg1h="'+_safeNum(_c.chg1h)+'"'
           +' data-chart-chg6h="'+_safeNum(_c.chg6h)+'"'
           +' data-chart-chg24h="'+_safeNum(_c.chg24h)+'"'
-          +' style="background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;margin:8px 0 10px;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
-          +'<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-          +'<div style="display:flex;align-items:center;gap:7px">'
-          +'<div style="font-size:14px;font-weight:700;color:#eef1f5">$'+esc(_c.symbol||'')+'</div>'
-          +'<span class="live-dot">●</span>'
-          +'<div style="font-size:11px;color:#565d68">'+esc(_c.name||'')+'</div>'
+          +' style="background:#101216;border-radius:16px;overflow:hidden;margin:8px 0 10px;cursor:pointer;position:relative" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
+          +'<span class="live-dot" style="position:absolute;top:10px;right:12px;z-index:3;color:#00ff88;font-size:12px">●</span>'
+          +'<div style="position:relative;min-height:90px;overflow:hidden;background:#0d1117">'
+          +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
+          +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.45),rgba(16,18,22,0.97))"></div>'
+          +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 12px">'
+          +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#35d4c4;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+esc((_c.symbol||'??').slice(0,2).toUpperCase())+'</div>'
+          +'<div style="font-size:20px;font-weight:700;color:#eef1f5;letter-spacing:-.01em;margin-bottom:5px">$'+esc(_c.symbol||'')+'</div>'
+          +'<span style="background:rgba(53,212,196,0.15);color:#35d4c4;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">SOL</span>'
+          +'</div>'
+          +'</div>'
+          +'<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none" style="display:block;background:#101216">'
+          +'<defs><linearGradient id="'+_gradId+'" x1="0" y1="0" x2="0" y2="1">'
+          +'<stop offset="0%" stop-color="#35d4c4" stop-opacity="0.3"/>'
+          +'<stop offset="100%" stop-color="#35d4c4" stop-opacity="0"/>'
+          +'</linearGradient></defs>'
+          +'<path data-cc="fill" d="" fill="url(#'+_gradId+')" stroke="none"/>'
+          +'<path data-cc="line" d="" fill="none" stroke="#35d4c4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+          +'</svg>'
+          +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:10px 16px 8px;border-top:1px solid #1a1e28">'
+          +'<div>'
+          +'<div style="font-size:9px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Price</div>'
+          +'<div data-cc="price" style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:#eef1f5">'+_price+'</div>'
+          +'</div>'
+          +'<div style="text-align:center">'
+          +'<div style="font-size:9px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">24H</div>'
+          +'<div data-cc="chg" style="font-size:14px;font-weight:700;color:'+_chgColor+'">'+_chgStr+'</div>'
           +'</div>'
           +'<div style="text-align:right">'
-          +'<div data-cc="price" style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">'+_price+'</div>'
-          +'<div data-cc="chg" style="font-size:12px;font-weight:600;color:'+_chgColor+'">'+_chgStr+'</div>'
+          +'<div style="font-size:9px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:2px">Volume</div>'
+          +'<div data-cc="vol" style="font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div>'
           +'</div>'
           +'</div>'
-          +'<svg viewBox="0 0 220 48" width="100%" height="48" preserveAspectRatio="none"'
-          +' style="display:block;margin-bottom:10px;overflow:visible">'
-          +'<polyline data-cc="line" points="" fill="none" stroke="#35d4c4" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>'
-          +'</svg>'
-          +'<div style="display:flex;gap:8px">'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">VOL 24H</div><div data-cc="vol" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.vol24h)+'</div></div>'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">LIQUIDITY</div><div data-cc="liq" style="font-size:11px;font-weight:600;color:#eef1f5">'+_cfmt(_c.liq)+'</div></div>'
-          +'<div style="flex:1;background:#0a0b0e;border-radius:8px;padding:7px"><div style="font-size:9px;color:#565d68;margin-bottom:2px">BUYS/SELLS</div>'
-          +'<div style="font-size:11px;font-weight:600"><span data-cc="buys" style="color:#3ad29b">'+(_c.buys!=null?_c.buys:'—')+'</span><span style="color:#565d68">/</span><span data-cc="sells" style="color:#f76b62">'+(_c.sells!=null?_c.sells:'—')+'</span></div>'
+          +'<div style="padding:0 16px 14px">'
+          +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px">'
+          +'<span style="color:#3ad29b;font-weight:600">B <span data-cc="buys">'+_initBuys+'</span></span>'
+          +'<span style="color:#f76b62;font-weight:600"><span data-cc="sells">'+_initSells+'</span> S</span>'
+          +'</div>'
+          +'<div style="height:4px;border-radius:2px;background:#f76b62;overflow:hidden">'
+          +'<div data-cc="buysbar" style="height:100%;background:#3ad29b;border-radius:2px;transition:width .6s ease;width:'+_initBuysPct+'%"></div>'
           +'</div>'
           +'</div>'
           +'</div>';
