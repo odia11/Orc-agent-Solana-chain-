@@ -2711,6 +2711,65 @@ def api_my_trades():
 def api_connect_wallet():
     return set_wallet()
 
+@app.route('/profile')
+def profile():
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/')
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        user = conn.execute(
+            'SELECT id, username, avatar_url, bio, created_at FROM users WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+        if not user:
+            return redirect('/')
+        user_id = user['id']
+        stats = conn.execute(
+            'SELECT COUNT(*) AS total, '
+            'SUM(CASE WHEN pnl >= 0 THEN 1 ELSE 0 END) AS wins, '
+            'SUM(pnl) AS total_pnl '
+            'FROM trades WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0',
+            (user_id,)
+        ).fetchone()
+        posts = conn.execute(
+            'SELECT content, likes, created_at FROM feed_posts '
+            'WHERE wallet=? ORDER BY created_at DESC LIMIT 5',
+            (wallet,)
+        ).fetchall()
+        followers = conn.execute(
+            'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
+        ).fetchone()[0]
+        following = conn.execute(
+            'SELECT COUNT(*) FROM follows WHERE follower_id=?', (user_id,)
+        ).fetchone()[0]
+        total     = stats['total'] or 0
+        wins      = stats['wins']  or 0
+        win_rate  = round(wins / total * 100) if total else 0
+        total_pnl = round(stats['total_pnl'] or 0, 4)
+        wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+        return render_template(
+            'profile.html',
+            wallet=wallet,
+            wallet_short=wallet_short,
+            display_name=user['username'] or wallet_short,
+            username=user['username'],
+            avatar_url=user['avatar_url'],
+            bio=user['bio'],
+            created_at=(user['created_at'] or '')[:10],
+            total_trades=total,
+            wins=wins,
+            win_rate=win_rate,
+            total_pnl=total_pnl,
+            pnl_positive=total_pnl >= 0,
+            followers=followers,
+            following=following,
+            posts=[dict(p) for p in posts],
+        )
+    finally:
+        conn.close()
+
 _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
 @app.route('/token/<mint_address>')

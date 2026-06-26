@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>{{ display_name }} — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+.pf-header{position:sticky;top:0;z-index:20;height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0a0b0e;border-bottom:1px solid #16191f}
+.pf-hdr-left{display:flex;align-items:center;gap:10px}
+.pf-back{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:#101216;border:1px solid #21252c;color:#8a919c;text-decoration:none;font-size:16px;transition:color .15s,background .15s;flex-shrink:0}
+.pf-back:hover{background:#16191f;color:#eef1f5}
+.pf-title{font-size:17px;font-weight:600;color:#eef1f5}
+.pf-pill{display:flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a919c}
+.pf-pill-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+.pf-body{max-width:600px;margin:0 auto;padding:24px 16px 80px}
+
+.pf-card{background:#101216;border:1px solid #21252c;border-radius:18px;padding:22px;margin-bottom:14px}
+
+.pf-avatar-row{display:flex;align-items:center;gap:16px;margin-bottom:16px}
+.pf-avatar{width:72px;height:72px;border-radius:50%;object-fit:cover;border:2px solid #21252c;flex-shrink:0}
+.pf-avatar-fallback{width:72px;height:72px;border-radius:50%;background:#1a1e28;display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:#3ad29b;border:2px solid #21252c;flex-shrink:0;font-family:'JetBrains Mono',monospace}
+.pf-name-col{min-width:0}
+.pf-display-name{font-size:20px;font-weight:700;color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-handle{font-size:12px;color:#565d68;font-family:'JetBrains Mono',monospace;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-bio{font-size:14px;color:#8a919c;line-height:1.5;margin-bottom:14px}
+.pf-wallet-row{display:flex;align-items:center;gap:8px;background:#0d0f12;border:1px solid #16191f;border-radius:10px;padding:9px 12px}
+.pf-wallet-addr{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-copy-btn{background:none;border:none;color:#565d68;cursor:pointer;font-size:15px;padding:0;transition:color .15s;flex-shrink:0;line-height:1}
+.pf-copy-btn:hover{color:#3ad29b}
+.pf-joined{font-size:11px;color:#565d68;margin-top:10px;font-family:'JetBrains Mono',monospace}
+
+.pf-follow-row{display:flex;gap:24px;margin-bottom:14px}
+.pf-follow-item{display:flex;flex-direction:column;align-items:center;gap:2px}
+.pf-follow-count{font-size:20px;font-weight:700;color:#eef1f5;font-family:'JetBrains Mono',monospace}
+.pf-follow-label{font-size:11px;color:#565d68;text-transform:uppercase;letter-spacing:.08em}
+
+.pf-stats-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.pf-stat{background:#0d0f12;border:1px solid #16191f;border-radius:12px;padding:14px 12px;display:flex;flex-direction:column;gap:4px}
+.pf-stat-lbl{font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.pf-stat-val{font-size:18px;font-weight:700;font-family:'JetBrains Mono',monospace;color:#eef1f5}
+.pf-stat-val.pos{color:#3ad29b}
+.pf-stat-val.neg{color:#ff4757}
+
+.pf-section-title{font-size:13px;font-weight:600;color:#8a919c;text-transform:uppercase;letter-spacing:.1em;margin-bottom:12px}
+.pf-post{background:#0d0f12;border:1px solid #16191f;border-radius:12px;padding:14px;margin-bottom:10px}
+.pf-post:last-child{margin-bottom:0}
+.pf-post-content{font-size:14px;color:#eef1f5;line-height:1.5;word-break:break-word;white-space:pre-wrap}
+.pf-post-meta{display:flex;align-items:center;justify-content:space-between;margin-top:10px}
+.pf-post-time{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace}
+.pf-post-likes{font-size:11px;color:#565d68;display:flex;align-items:center;gap:4px}
+.pf-empty{font-size:13px;color:#565d68;text-align:center;padding:32px 0}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header class="pf-header">
+  <div class="pf-hdr-left">
+    <a class="pf-back" href="/" title="Back">←</a>
+    <span class="pf-title">Profile</span>
+  </div>
+  <div class="pf-pill">
+    <div class="pf-pill-dot"></div>
+    <span>{{ wallet_short }}</span>
+  </div>
+</header>
+
+<div class="pf-body">
+
+  <!-- Identity card -->
+  <div class="pf-card">
+    <div class="pf-avatar-row">
+      {% if avatar_url %}
+      <img class="pf-avatar" src="{{ avatar_url }}" alt="avatar" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+      <div class="pf-avatar-fallback" style="display:none">{{ (username or wallet_short)[:2]|upper }}</div>
+      {% else %}
+      <div class="pf-avatar-fallback">{{ (username or wallet_short)[:2]|upper }}</div>
+      {% endif %}
+      <div class="pf-name-col">
+        <div class="pf-display-name">{{ display_name }}</div>
+        {% if username %}
+        <div class="pf-handle">@{{ username }}</div>
+        {% else %}
+        <div class="pf-handle">{{ wallet_short }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if bio %}
+    <div class="pf-bio">{{ bio }}</div>
+    {% endif %}
+
+    <div class="pf-wallet-row">
+      <span class="pf-wallet-addr" id="pf-addr">{{ wallet }}</span>
+      <button class="pf-copy-btn" onclick="copyWallet()" title="Copy address">⧉</button>
+    </div>
+    {% if created_at %}
+    <div class="pf-joined">Joined {{ created_at }}</div>
+    {% endif %}
+  </div>
+
+  <!-- Follow counts -->
+  <div class="pf-card">
+    <div class="pf-follow-row">
+      <div class="pf-follow-item">
+        <span class="pf-follow-count">{{ following }}</span>
+        <span class="pf-follow-label">Following</span>
+      </div>
+      <div class="pf-follow-item">
+        <span class="pf-follow-count">{{ followers }}</span>
+        <span class="pf-follow-label">Followers</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Trade stats -->
+  <div class="pf-card">
+    <div class="pf-section-title">Trade Stats</div>
+    <div class="pf-stats-grid">
+      <div class="pf-stat">
+        <div class="pf-stat-lbl">Trades</div>
+        <div class="pf-stat-val">{{ total_trades }}</div>
+      </div>
+      <div class="pf-stat">
+        <div class="pf-stat-lbl">Win Rate</div>
+        <div class="pf-stat-val {% if win_rate >= 50 %}pos{% else %}neg{% endif %}">{{ win_rate }}%</div>
+      </div>
+      <div class="pf-stat">
+        <div class="pf-stat-lbl">Total PnL</div>
+        <div class="pf-stat-val {% if pnl_positive %}pos{% else %}neg{% endif %}">
+          {{ '+' if pnl_positive else '' }}{{ total_pnl }} SOL
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent posts -->
+  <div class="pf-card">
+    <div class="pf-section-title">Recent Posts</div>
+    {% if posts %}
+    {% for post in posts %}
+    <div class="pf-post">
+      <div class="pf-post-content">{{ post.content }}</div>
+      <div class="pf-post-meta">
+        <span class="pf-post-time">{{ (post.created_at or '')[:16] }}</span>
+        <span class="pf-post-likes">♥ {{ post.likes or 0 }}</span>
+      </div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="pf-empty">No posts yet</div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+function copyWallet(){
+  var addr = document.getElementById('pf-addr').textContent.trim();
+  navigator.clipboard.writeText(addr).then(function(){
+    var btn = document.querySelector('.pf-copy-btn');
+    btn.textContent = '✓';
+    btn.style.color = '#3ad29b';
+    setTimeout(function(){ btn.textContent = '⧉'; btn.style.color = ''; }, 1800);
+  }).catch(function(){});
+}
+</script>
+</body>
+</html>
