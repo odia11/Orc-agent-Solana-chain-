@@ -9600,13 +9600,18 @@ async function deletePost(id){
   loadHomeFeed()
 }
 
-function replyPost(id){ document.getElementById('postText').focus() }
 function copyTrade(id){ alert('Copy trade coming soon') }
-async function likePost(id, btn){
+async function likePost(id,btn){
+  await fetch('/api/feed/like/'+id,{method:'POST'})
   const span=btn.querySelector('span')
-  const cur=parseInt(span.textContent)||0
+  span.textContent=parseInt(span.textContent)+1
   btn.style.color='#f76b62'
-  span.textContent=cur+1
+}
+async function replyPost(id){
+  const text=prompt('Reply:')
+  if(!text) return
+  await fetch('/api/feed/reply/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})})
+  window.location.reload()
 }
 
 function _feedComposerPost(){
