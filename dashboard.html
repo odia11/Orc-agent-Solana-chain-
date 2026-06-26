@@ -9917,6 +9917,26 @@ function renderHomeFeed(){
   el.innerHTML = items.map(_renderFeedCard).join('');
 }
 
+function renderPost(item){
+  const init=(item.username||item.wallet||'?').slice(0,2).toUpperCase()
+  const name=item.username||item.wallet?.slice(0,8)||'Unknown'
+  const text=item.content?`<div style="margin-top:8px;color:#c7ccd4;font-size:14.5px">${item.content}</div>`:''
+  const pct=(item.pnl_pct||0)
+  const col=pct>=0?'#3ad29b':'#f76b62'
+  const trade=item.symbol?`<div style="margin-top:10px;background:#101216;border:1px solid #21252c;border-radius:15px;padding:14px;display:flex;justify-content:space-between">
+    <span style="color:#3ad29b;font-weight:700;font-family:monospace">$${item.symbol}</span>
+    <span style="font-size:22px;font-weight:700;font-family:monospace;color:${col}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
+  </div>`:''
+  const bg=(typeof _lbAvatarColor==='function')?_lbAvatarColor(name):'#21252c'
+  return `<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #16191f">
+    <div style="width:44px;height:44px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0">${init}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:14px">${name}</div>
+      ${trade}${text}
+    </div>
+  </div>`
+}
+
 function _feedSparkline(entry, exit, isPos){
   if(!entry) return '';
   var bars = 8, trend = exit > entry ? 1 : exit < entry ? -1 : 0;
