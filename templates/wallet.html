@@ -71,9 +71,12 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('usd').textContent='—'
 })
 
-fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
-  const t=d.tokens||[]
-  const html=t.map(x=>`
+fetch('/api/wallet/tokens')
+  .then(r=>{console.log('tokens status:',r.status);return r.json()})
+  .then(d=>{
+    console.log('tokens response:',d)
+    const t=d.tokens||[]
+    const html=t.map(x=>`
 <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
   <div style="width:38px;height:38px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${(x.symbol||'?').slice(0,3)}</div>
   <div style="flex:1">
@@ -85,8 +88,12 @@ fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
     <div style="color:${(x.change||0)>=0?'#3ad29b':'#f76b62'};font-size:12px">${(x.change||0)>=0?'+':''}${(x.change||0).toFixed(1)}%</div>
   </div>
 </div>`).join('')
-  document.getElementById('tokens').innerHTML=html||'<span style="color:#565d68">No tokens</span>'
-}).catch(()=>{ document.getElementById('tokens').innerHTML='<span style="color:#565d68">Failed to load</span>' })
+    document.getElementById('tokens').innerHTML=html||'<span style="color:#565d68">No tokens</span>'
+  })
+  .catch(e=>{
+    console.error('tokens error:',e)
+    document.getElementById('tokens').innerHTML='<span style="color:#565d68">Failed to load</span>'
+  })
 
 fetch('/api/wallet/transactions').then(r=>r.json()).then(d=>{
   var txns=d.transactions||[]
