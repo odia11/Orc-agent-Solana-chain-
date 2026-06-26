@@ -4461,9 +4461,9 @@ async function launchApp(){
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
     document.getElementById('wallet-pill').style.display='flex';
-    document.getElementById('deposit-sol-btn').style.display='';
-    document.getElementById('withdraw-sol-btn').style.display='';
-    document.getElementById('perf-share-btns').style.display='flex';
+    const _dsb=document.getElementById('deposit-sol-btn'); if(_dsb) _dsb.style.display='';
+    const _wsb=document.getElementById('withdraw-sol-btn'); if(_wsb) _wsb.style.display='';
+    const _psb=document.getElementById('perf-share-btns'); if(_psb) _psb.style.display='flex';
     document.getElementById('btn-solscan').onclick=()=>window.open('https://solscan.io/account/'+phantomKey,'_blank');
     fetch('/api/username').then(r=>r.json()).then(r=>{
       _displayName=r?.ok&&r.username?r.username:null;
@@ -4637,12 +4637,12 @@ async function fetchState(){
     settingsHasKey=r.has_trading_key;
     _updateKeyStatus();
   }
-  document.getElementById('s-pos').textContent=(r.positions??0)+'/5';
+  const _sposEl=document.getElementById('s-pos'); if(_sposEl) _sposEl.textContent=(r.positions??0)+'/5';
   if(phantomKey){
     if(r.sol!=null){
       const _sv=+r.sol;
       if(!_solCounterDone) _animateSolCounter(_sv);
-      else document.getElementById('s-sol').textContent=_sv.toFixed(4);
+      else { const _ssolEl=document.getElementById('s-sol'); if(_ssolEl) _ssolEl.textContent=_sv.toFixed(4); }
       const sbSol=document.getElementById('sb-sol');
       if(sbSol) sbSol.textContent=_sv.toFixed(4);
       _updateSolUsdc(_sv);
