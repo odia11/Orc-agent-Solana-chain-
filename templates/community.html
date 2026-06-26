@@ -52,9 +52,9 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   <div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">Loading messages…</div>
 </div>
 
-<div class="cm-composer">
-  <textarea class="cm-input" id="cm-text" placeholder="Say something…" rows="1" maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMsg();}"></textarea>
-  <button class="cm-send" id="cm-send" onclick="sendMsg()">Send</button>
+<div style="position:fixed;bottom:0;padding:12px;background:#0a0b0e;border-top:1px solid #16191f;display:flex;gap:10px;width:100%">
+  <input id="msg" placeholder="Say something..." style="flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5" onkeydown="if(event.key==='Enter')sendMsg()">
+  <button onclick="sendMsg()" style="background:#3ad29b;color:#08120f;border:none;border-radius:11px;padding:11px 18px;font-weight:700">Send</button>
 </div>
 
 <script>
@@ -100,17 +100,14 @@ async function loadMsgs(){
 }
 
 async function sendMsg(){
-  var ta=document.getElementById('cm-text');
-  var btn=document.getElementById('cm-send');
-  var text=ta.value.trim();
+  var inp=document.getElementById('msg');
+  var text=inp.value.trim();
   if(!text) return;
-  btn.disabled=true;
+  inp.value='';
   try{
     await fetch('/api/community/message',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})});
-    ta.value='';
     loadMsgs();
   }catch(e){}
-  btn.disabled=false;
 }
 
 loadMsgs();
