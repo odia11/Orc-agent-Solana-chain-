@@ -7157,6 +7157,17 @@ def api_burn_tokens():
 def api_market():
     return jsonify({'tokens': state['tokens']})
 
+@app.route('/api/market/top', methods=['GET'])
+@rate_limit(60, 60)
+def api_market_top():
+    tokens = state.get('tokens', [])
+    top = sorted(
+        [t for t in tokens if t.get('price_change_24h') is not None],
+        key=lambda t: abs(float(t.get('price_change_24h') or 0)),
+        reverse=True
+    )[:5]
+    return jsonify({'ok': True, 'tokens': top})
+
 @app.route('/api/market/tokens', methods=['GET'])
 @rate_limit(60, 60)
 def api_market_tokens_search():
