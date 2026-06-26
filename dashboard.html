@@ -2825,14 +2825,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div id="mobile-deeplink-section" style="display:none"></div>
       <button id="solflare-ob-btn" style="display:none" onclick="connectWalletOnboard('solflare')"></button>
 
-      <!-- ── Mobile password login (shown on mobile when no Face ID saved) ── -->
-      <div id="ob-pwd-form" style="display:none">
-        <input class="ob-addr-input" id="ob-pwd-user" type="text" placeholder="Username or wallet address" autocomplete="username" spellcheck="false" onkeydown="if(event.key==='Enter')document.getElementById('ob-pwd-pass').focus()">
-        <input class="ob-addr-input" id="ob-pwd-pass" type="password" placeholder="Password" autocomplete="current-password" style="margin-top:8px" onkeydown="if(event.key==='Enter')_loginWithPassword()">
-        <div class="ob-input-err" id="ob-pwd-err"></div>
-        <button class="ob-btn" id="ob-pwd-btn" onclick="_loginWithPassword()" style="background:var(--accent);color:#0a0b0e;margin-bottom:4px">Login &amp; Trade</button>
-        <div style="font-size:10px;color:var(--muted);text-align:center;margin-bottom:8px">Your keys are encrypted and stored securely</div>
-      </div>
 
       <!-- ── Face ID (shown ONLY when credential saved in localStorage) ── -->
       <button class="ob-btn" onclick="_webAuthnLogin()" id="ob-bio-btn"
@@ -4057,21 +4049,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div><!-- /app-body -->
 </div><!-- #app -->
 
-<!-- ── MOBILE BOTTOM NAV ── -->
-<nav id="mob-bottom-nav" aria-label="Mobile navigation">
-  <a class="mob-nav-item" href="/history">
-    <span class="mob-nav-icon">📋</span>
-    <span class="mob-nav-lbl">History</span>
-  </a>
-  <button class="mob-nav-item" onclick="openTradersView()">
-    <span class="mob-nav-icon">👥</span>
-    <span class="mob-nav-lbl">Traders</span>
-  </button>
-  <a class="mob-nav-item" href="/leaderboard">
-    <span class="mob-nav-icon">🏆</span>
-    <span class="mob-nav-lbl">Leaderboard</span>
-  </a>
-</nav>
 
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false, _copySource=null;
