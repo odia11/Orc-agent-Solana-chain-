@@ -1094,12 +1094,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* Section panel (activity feed) */
 .tv-panel{background:var(--bg2);border:1px solid var(--border2);border-radius:12px;overflow:hidden;margin-bottom:12px}
 .tv-section-hdr{font-family:'Share Tech Mono',monospace;font-size:9px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.14em;padding:11px 16px 9px;border-bottom:1px solid var(--border);background:rgba(255,255,255,.013)}
-.tv-feed-tabs{display:flex;gap:6px;padding:10px 16px 6px}
-.tv-feed-tab{font-family:'Share Tech Mono',monospace;font-size:10px;font-weight:600;letter-spacing:.06em;padding:5px 14px;border-radius:20px;border:1px solid #2e2e2e;background:transparent;color:var(--muted);cursor:pointer;transition:all .15s;line-height:1.2}
-.tv-feed-tab:hover{border-color:rgba(0,0,0,.45);color:var(--text)}
-.tv-feed-tab.active{background:var(--green);border-color:var(--green);color:#060d08;font-weight:700}
-/* Feed list */
-.tv-list{display:flex;flex-direction:column}
 .tv-empty{text-align:center;padding:48px 20px;font-size:11px;color:var(--muted);letter-spacing:.1em}
 /* Row card */
 .tv-card{display:flex;align-items:center;gap:14px;padding:15px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s}
@@ -3338,21 +3332,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <!-- Two-column body -->
     <div class="tv-layout" id="tv-layout">
 
-      <!-- Left 65%: Activity Feed -->
-      <div class="tv-main">
-        <div class="tv-panel">
-          <div class="tv-section-hdr">⚡ Recent Activity</div>
-          <div class="tv-feed-tabs">
-            <button class="tv-feed-tab active" id="tv-tab-all" onclick="setTvFeedFilter('all')">All Traders</button>
-            <button class="tv-feed-tab" id="tv-tab-following" onclick="setTvFeedFilter('following')">Following</button>
-          </div>
-          <div id="tv-list" class="tv-list">
-            <div class="tv-empty">Loading trader activity…</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Right 35%: Sidebar -->
+      <!-- Right sidebar -->
       <div class="tv-sidebar">
 
         <!-- TODAY'S TOP leaderboard -->
@@ -7018,59 +6998,6 @@ async function _tvFollowToggle(btn, key, userId, username){
   }
 }
 
-function renderTradersFeed(items){
-  const list=document.getElementById('tv-list');
-  if(!list) return;
-  _tvFeedCache=Array.isArray(items)?items:[];
-  if(!items||!items.length){
-    list.innerHTML='<div class="tv-empty">No trader activity yet.</div>';
-    return;
-  }
-  list.innerHTML=items.map(e=>{
-    const key=esc(e.username+'|'+e.wallet);
-    const isFollowed=_tvFollowed.has(e.username+'|'+e.wallet);
-    const followCls='tv-follow-btn'+(isFollowed?' followed':'');
-    const avatarHtml=_tvAvatarHtml(e);
-    const uid=e.user_id||0;
-
-    let signalHtml, timeStr;
-    if(e.type==='open'){
-      const pct=e.current_pnl_pct;
-      const sol=e.current_pnl_sol;
-      const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'in trade';
-      const pnlCls=pct!=null&&pct<0?'tv-pnl-neg':'tv-pnl-pos';
-      let solStr='';
-      if(sol!=null){
-        const solAbs=Math.abs(sol);
-        const solSign=sol>=0?'+':'-';
-        solStr=' / '+(sol>=0&&solAbs<0.0001?'<0.0001':solSign+solAbs.toFixed(4))+' SOL';
-      }
-      signalHtml=`<span class="tv-badge-open">● LIVE</span><span class="tv-token">${esc(e.token)}</span><span class="${pnlCls}">${esc(pctStr+solStr)}</span>`;
-      timeStr=_tvTimeAgo(e.opened_at);
-    } else {
-      const pnl=e.pnl||0;
-      const pos=pnl>=0;
-      let pnlStr;
-      if(pos&&pnl<0.0001){pnlStr='<0.0001 SOL';}
-      else{pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';}
-      signalHtml=`<span class="${pos?'tv-badge-win':'tv-badge-loss'}">${pos?'✓ WIN':'✗ LOSS'}</span><span class="tv-token">${esc(e.token)}</span><span class="${pos?'tv-pnl-pos':'tv-pnl-neg'}">${esc(pnlStr)}</span>`;
-      timeStr=_tvTimeAgoStr(e.timestamp);
-    }
-
-    return `<div class="tv-card" onclick="openProfileCard(${uid})">
-      ${avatarHtml}
-      <div class="tv-identity">
-        <span class="tv-name">${esc(e.username)}${isFollowed?'<span class="fstate-following-pill">Following</span>':''}</span>
-        <span class="tv-wallet">${esc(e.wallet)}</span>
-      </div>
-      <div class="tv-signal">${signalHtml}</div>
-      <div class="tv-right" onclick="event.stopPropagation()">
-        <span class="tv-time">${esc(timeStr)}</span>
-        <button class="${followCls}" onclick="_tvFollowToggle(this,'${key}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')">` + (isFollowed?'✓ Following':'Follow') + `</button>
-      </div>
-    </div>`;
-  }).join('');
-}
 
 function _tvTopAvatar(e){
   const bg=_lbAvatarColor(e.username||e.wallet||'?');
@@ -7120,30 +7047,12 @@ function renderPlatformStats(s){
   }
 }
 
-function setTvFeedFilter(filter){
-  _tvFeedFilter=filter;
-  document.getElementById('tv-tab-all').classList.toggle('active', filter==='all');
-  document.getElementById('tv-tab-following').classList.toggle('active', filter==='following');
-  const list=document.getElementById('tv-list');
-  if(list) list.innerHTML='<div class="tv-empty">Loading…</div>';
-  fetchTradersFeed();
-}
-
 async function fetchTradersFeed(){
   if(!_tradersView) return;
-  const feedUrl='/api/social/feed'+(_tvFeedFilter==='following'?'?filter=following':'');
-  const [feed, lb, stats]=await Promise.all([
-    fetch(feedUrl).then(r=>r.json()).catch(()=>null),
+  const [lb, stats]=await Promise.all([
     fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
     fetch('/api/platform/stats').then(r=>r.json()).catch(()=>null),
   ]);
-  console.log('[feed] received', Array.isArray(feed) ? feed.length : 0, 'items', feed);
-  if(_tvFeedFilter==='following' && Array.isArray(feed) && feed.length===0){
-    const list=document.getElementById('tv-list');
-    if(list) list.innerHTML='<div class="tv-empty" style="padding:24px 16px;font-size:11px;line-height:1.7;color:var(--muted)">Follow some traders to see their activity here.<br><span style="font-size:10px;opacity:.6">Click any trader\'s name in the feed to view their profile and follow them.</span></div>';
-  } else if(Array.isArray(feed)){
-    renderTradersFeed(feed);
-  }
   if(Array.isArray(lb)) renderTopTraders(lb);
   if(stats&&stats.ok) renderPlatformStats(stats);
   _tvStartCountdown();
@@ -7169,11 +7078,6 @@ function _fadeIn(el){
 function openTradersView(){
   if(_tradersView) return;
   _tradersView=true;
-  _tvFeedFilter='all';
-  const tabAll=document.getElementById('tv-tab-all');
-  const tabFollowing=document.getElementById('tv-tab-following');
-  if(tabAll){tabAll.classList.add('active');}
-  if(tabFollowing){tabFollowing.classList.remove('active');}
   document.getElementById('dash-main').style.display='none';
   const _rrT=document.getElementById('right-rail');if(_rrT) _rrT.style.display='none';
   if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
