@@ -7051,22 +7051,37 @@ def api_market_top():
 @rate_limit(60, 60)
 def api_market_tokens_search():
     q = request.args.get('q', '').upper().strip()
-    # First try live state tokens
-    tokens = state.get('tokens', [])
-    if tokens:
+    # First try live state tokens (include mint address)
+    live = state.get('tokens', [])
+    if live:
         if q:
-            tokens = [t for t in tokens if q in (t.get('symbol') or '').upper() or q in (t.get('name') or '').upper()]
-        return jsonify([{'symbol': t.get('symbol', ''), 'name': t.get('name', ''), 'mint': t.get('mint', '')} for t in tokens[:8]])
+            live = [t for t in live if q in (t.get('symbol') or '').upper() or q in (t.get('name') or '').upper()]
+        result = []
+        for t in live[:10]:
+            sym  = t.get('symbol', '')
+            mint = t.get('mint', '')
+            result.append({
+                'symbol':  sym,
+                'name':    t.get('name', sym),
+                'mint':    mint,
+                'display': f"{sym} ({mint[:8]}...)" if mint else sym,
+            })
+        return jsonify(result)
     # Fallback: search trades table
     conn = sqlite3.connect(DB_FILE)
     try:
         rows = conn.execute(
-            'SELECT DISTINCT token, mint_address FROM trades WHERE UPPER(token) LIKE ? LIMIT 8',
+            'SELECT DISTINCT token, mint_address FROM trades WHERE UPPER(token) LIKE ? LIMIT 10',
             (f'%{q}%',)
         ).fetchall()
     finally:
         conn.close()
-    return jsonify([{'symbol': r[0] or '', 'name': r[0] or '', 'mint': r[1] or ''} for r in rows])
+    return jsonify([{
+        'symbol':  r[0] or '',
+        'name':    r[0] or '',
+        'mint':    r[1] or '',
+        'display': f"{r[0]} ({r[1][:8]}...)" if r[1] else (r[0] or ''),
+    } for r in rows])
 
 
 _market_live_cache: dict = {'ts': 0.0, 'data': []}
