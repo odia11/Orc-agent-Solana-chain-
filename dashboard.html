@@ -4222,13 +4222,13 @@ function _applyPhantomDetection(phantomBtn, phantomNote){
   if(isMobile){
     /* Mobile: use Phantom v1/connect Universal Link */
     phantomBtn.onclick=function(){ _phantomMobileV1Connect(); };
-    var lbl=document.getElementById(‘phantom-ob-label’);
-    if(lbl) lbl.textContent=’Connect Phantom →’;
-    if(phantomNote){ phantomNote.textContent=’Opens Phantom to approve connection’; phantomNote.style.color=’var(--muted)’; }
+    var lbl=document.getElementById('phantom-ob-label');
+    if(lbl) lbl.textContent='Connect Phantom →';
+    if(phantomNote){ phantomNote.textContent='Opens Phantom to approve connection'; phantomNote.style.color='var(--muted)'; }
   } else {
     /* Desktop: grey out and show install link */
-    phantomBtn.style.background=’var(--bg3)’; phantomBtn.style.color=’var(--muted)’; phantomBtn.style.border=’1px solid var(--border2)’;
-    if(phantomNote) phantomNote.innerHTML=’Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>’;
+    phantomBtn.style.background='var(--bg3)'; phantomBtn.style.color='var(--muted)'; phantomBtn.style.border='1px solid var(--border2)';
+    if(phantomNote) phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
   }
 }
 
