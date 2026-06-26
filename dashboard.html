@@ -9609,7 +9609,7 @@ function searchToken(q){
 
 function selectToken(symbol, mint){
   const ta=document.getElementById('postText')
-  if(ta) ta.value+=' $'+symbol+' ('+mint+')'
+  if(ta) ta.value+=' $'+symbol+(mint&&mint!='undefined'?' ('+mint+')':'')
   document.getElementById('tokenModal').style.display='none'
 }
 

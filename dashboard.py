@@ -7060,6 +7060,7 @@ def api_market_tokens_search():
             {
                 'symbol': p['baseToken']['symbol'],
                 'mint':   p['baseToken']['address'],
+                'name':   p['baseToken'].get('name', ''),
                 'price':  p.get('priceUsd', '?'),
             }
             for p in pairs if p.get('chainId') == 'solana'
