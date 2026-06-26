@@ -9600,6 +9600,15 @@ async function deletePost(id){
   loadHomeFeed()
 }
 
+function replyPost(id){ document.getElementById('postText').focus() }
+function copyTrade(id){ alert('Copy trade coming soon') }
+async function likePost(id, btn){
+  const span=btn.querySelector('span')
+  const cur=parseInt(span.textContent)||0
+  btn.style.color='#f76b62'
+  span.textContent=cur+1
+}
+
 function _feedComposerPost(){
   var inp = document.getElementById('postText');
   if(!inp) return;
@@ -9797,11 +9806,18 @@ function renderPost(item){
     <span style="color:#3ad29b;font-weight:700;font-family:monospace">$${item.symbol}</span>
     <span style="font-size:22px;font-weight:700;font-family:monospace;color:${col}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
   </div>`:''
+  const actions=`<div style="display:flex;gap:24px;margin-top:12px;font-size:13px;color:#565d68">
+    <button onclick="replyPost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">↩ <span>${item.replies||0}</span></button>
+    <button onclick="copyTrade(${item.id})" style="background:none;border:none;color:#3ad29b;cursor:pointer;display:flex;align-items:center;gap:6px">⧉ Copy <span>${item.copies||0}</span></button>
+    <button onclick="likePost(${item.id},this)" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">♡ <span>${item.likes||0}</span></button>
+    ${item.is_own?`<button onclick="deletePost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;margin-left:auto">🗑</button>`:''}
+  </div>`
   return `<article style="padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px">
     <div style="width:44px;height:44px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${init}</div>
     <div style="flex:1">
       <div style="font-weight:600">${name} <span style="color:#565d68;font-size:13px">· ${item.created_at||''}</span></div>
       ${text}${trade}
+      ${actions}
     </div>
   </article>`
 }
