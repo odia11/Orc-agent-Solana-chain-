@@ -9677,7 +9677,7 @@ function _renderTradeTerminalCard(t){
   var exit_p = _fp(t.exit);
   var dur    = t.duration ? ' | '+esc(t.duration) : '';
   var sym    = esc(t.symbol||'');
-  return '<div style="background:#0d1117;border:1px solid #1a1f2e;border-radius:8px;padding:12px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;font-size:13px;line-height:1.6;cursor:pointer;overflow-x:auto;white-space:nowrap" onclick="event.stopPropagation();showTokenCard('+bs+q+'+sym+'+bs+q+')"><span style="color:'+sideCol+';font-weight:700">['+esc((t.side||'BUY').toUpperCase())+']</span> <span style="color:#eef1f5;font-weight:700">$'+sym+'</span> <span style="color:#565d68">@</span> <span style="color:#8a919c">'+entry+' &rarr; '+exit_p+'</span> <span style="color:#565d68">|</span> <span style="color:'+pctCol+';font-weight:700">'+pctStr+'</span> <span style="color:#565d68">|</span> <span style="color:#35d4c4">'+solStr+'</span>'+dur+'</div>';
+  return '<div style="background:#0d1117;border:1px solid #1a1f2e;border-radius:8px;padding:12px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;font-size:13px;line-height:1.6;cursor:pointer;overflow-x:auto;white-space:nowrap" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')"><span style="color:'+sideCol+';font-weight:700">['+esc((t.side||'BUY').toUpperCase())+']</span> <span style="color:#eef1f5;font-weight:700">$'+sym+'</span> <span style="color:#565d68">@</span> <span style="color:#8a919c">'+entry+' &rarr; '+exit_p+'</span> <span style="color:#565d68">|</span> <span style="color:'+pctCol+';font-weight:700">'+pctStr+'</span> <span style="color:#565d68">|</span> <span style="color:#35d4c4">'+solStr+'</span>'+dur+'</div>';
 }
 
 function _feedComposerTrade(){
