@@ -9943,7 +9943,7 @@ function _renderFeedCard(e){
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
     +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
-    +(isOwn && e.id ? '<button onclick="event.stopPropagation();deletePost('+e.id+')" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:11px;margin-left:auto">🗑</button>' : '')
+    +(e.id ? '<button onclick="event.stopPropagation();deletePost('+e.id+')" style="background:none;border:none;color:#f76b62;cursor:pointer;font-size:13px;padding:0;margin-left:auto">🗑</button>' : '')
     +'</div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
