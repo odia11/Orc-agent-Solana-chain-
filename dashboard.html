@@ -9818,6 +9818,7 @@ async function loadHomeFeed(){
     const data = await r.json();
     console.log('[feed] items:', Array.isArray(data) ? data.length : data);
     if(Array.isArray(data)){
+      console.log('[feed] first item:', JSON.stringify(data[0]));
       _homeFeedData = data;
       try{
         renderHomeFeed();
