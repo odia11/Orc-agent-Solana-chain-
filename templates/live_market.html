@@ -452,9 +452,11 @@ async function _quickSell(idx, sym, pairAddr, tokenAddr, btn){
 /* shared trade fetch — returns true on success */
 async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
   try{
+    var csrf=(document.cookie.match(/csrf_token=([^;]+)/)||[])[1]||'';
     var r = await fetch('/api/instant-trade',{
       method:'POST',
-      headers:{'Content-Type':'application/json'},
+      credentials:'include',
+      headers:{'Content-Type':'application/json','X-CSRFToken':csrf},
       body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
     });
     var d = await r.json();
@@ -597,11 +599,8 @@ function _fmtPrice(p){
   p=parseFloat(p);
   if(isNaN(p)||p<=0) return '—';
   if(p>=1) return '$'+p.toFixed(2);
-  if(p>=0.01) return '$'+p.toFixed(4);
-  var s=p.toFixed(10);
-  var m=s.match(/0\.(0*)/);
-  var zeros=m?m[1].length:0;
-  return '$0.0'+(zeros>0?zeros.toString().sub():'')+p.toFixed(zeros+4).slice(2+zeros);
+  if(p>=0.0001) return '$'+p.toFixed(6);
+  return '$'+p.toFixed(10).replace(/0+$/,'');
 }
 function _fmtNum(n){
   if(n==null||isNaN(n)) return '—';
