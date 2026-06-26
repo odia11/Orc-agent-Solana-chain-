@@ -54,103 +54,21 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 </head>
 <body>
 
-<header class="ntf-header">
-  <div class="ntf-hdr-left">
-    <a class="ntf-back" href="/" title="Back to dashboard">←</a>
-    <span class="ntf-title">Notifications</span>
-  </div>
-  {% if wallet_short %}
-  <div class="ntf-nav-pill">
-    <div class="ntf-nav-dot"></div>
-    <span>{{ wallet_short }}</span>
-  </div>
-  {% endif %}
-</header>
-
-<div class="ntf-body">
-
-  <div class="ntf-filter-row">
-    <button class="ntf-filter active" onclick="_setFilter('all',this)">All</button>
-    <button class="ntf-filter" onclick="_setFilter('trades',this)">Trades</button>
-    <button class="ntf-filter" onclick="_setFilter('social',this)">Social</button>
-    <button class="ntf-filter" onclick="_setFilter('system',this)">System</button>
-  </div>
-
-  <div class="ntf-list" id="ntf-list">
-    <div class="ntf-empty">
-      <div class="ntf-empty-icon">🔔</div>
-      No notifications yet.
-    </div>
-  </div>
-
+<div id="notifs" style="padding:16px;display:flex;flex-direction:column;gap:8px">
+  <p style="color:#565d68">Loading...</p>
 </div>
 
 <script>
-var _filter = 'all';
-
-function _setFilter(f, btn) {
-  _filter = f;
-  document.querySelectorAll('.ntf-filter').forEach(function(b){ b.classList.remove('active'); });
-  btn.classList.add('active');
-  _renderList();
+async function load(){
+  const d=await fetch('/api/notifications').then(r=>r.json())
+  document.getElementById('notifs').innerHTML=d.length
+    ?d.map(n=>`<div style="background:#101216;border:1px solid #21252c;border-radius:12px;padding:12px 14px">
+      <div style="font-size:12px;color:#565d68;margin-bottom:4px">${n.wallet.slice(0,8)}... · ${n.created_at}</div>
+      <div style="color:#eef1f5">${n.symbol} <span style="color:${(n.pnl_pct||0)>=0?'#3ad29b':'#f76b62'}">${(n.pnl_pct||0)>=0?'+':''}${(n.pnl_pct||0).toFixed(1)}%</span></div>
+    </div>`).join('')
+    :'<p style="color:#565d68">No trade notifications in the last 24h.</p>'
 }
-
-var _ntfData = [];
-
-function _timeAgo(ts) {
-  if (!ts) return '';
-  var s = (typeof ts === 'string' && ts.indexOf('T') < 0) ? ts.replace(' ', 'T') + 'Z' : ts;
-  var sec = Math.floor((Date.now() - new Date(s).getTime()) / 1000);
-  if (isNaN(sec) || sec < 5) return 'just now';
-  if (sec < 60)    return sec + 's ago';
-  if (sec < 3600)  return Math.floor(sec / 60) + 'm ago';
-  if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
-  return Math.floor(sec / 86400) + 'd ago';
-}
-
-function _iconForType(type) {
-  if (type === 'trade' || type === 'copy') return '<div class="ntf-icon trade">📈</div>';
-  if (type === 'like')   return '<div class="ntf-icon like">♡</div>';
-  if (type === 'follow') return '<div class="ntf-icon follow">+</div>';
-  if (type === 'system') return '<div class="ntf-icon system">⚙</div>';
-  return '<div class="ntf-icon system">·</div>';
-}
-
-function _renderList() {
-  var el = document.getElementById('ntf-list');
-  var items = _filter === 'all' ? _ntfData
-    : _filter === 'trades' ? _ntfData.filter(function(n){ return n.type === 'trade' || n.type === 'copy'; })
-    : _filter === 'social' ? _ntfData.filter(function(n){ return n.type === 'like' || n.type === 'follow'; })
-    : _ntfData.filter(function(n){ return n.type === 'system'; });
-
-  if (!items.length) {
-    el.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>No notifications yet.</div>';
-    return;
-  }
-  el.innerHTML = items.map(function(n) {
-    var unread = n.read ? '' : ' unread';
-    return '<div class="ntf-row' + unread + '">'
-      + _iconForType(n.type)
-      + '<div class="ntf-info">'
-      +   '<div class="ntf-text">' + (n.text || '') + '</div>'
-      +   '<div class="ntf-meta">' + _timeAgo(n.created_at) + '</div>'
-      + '</div>'
-      + (n.read ? '' : '<div class="ntf-unread-dot"></div>')
-      + '</div>';
-  }).join('');
-}
-
-async function _loadNotifications() {
-  try {
-    var r = await fetch('/api/notifications').then(function(x){ return x.json(); });
-    if (r.ok && r.notifications) {
-      _ntfData = r.notifications;
-      _renderList();
-    }
-  } catch(e) {}
-}
-
-_loadNotifications();
+load()
 </script>
 </body>
 </html>
