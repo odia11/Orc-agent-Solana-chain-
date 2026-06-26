@@ -72,13 +72,33 @@ html,body{min-height:100vh;background:#0a0e1a;color:#eef1f5;font-family:'JetBrai
 /* action buttons */
 .lm-btn-buy,.lm-btn-sell{
   font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
-  border:none;border-radius:6px;padding:5px 10px;cursor:pointer;
-  transition:opacity .15s;white-space:nowrap
+  border-width:1px;border-style:solid;border-radius:6px;padding:5px 10px;cursor:pointer;
+  transition:background .15s,color .15s;white-space:nowrap
 }
-.lm-btn-buy{background:#35d4c4;color:#0a0e1a}
-.lm-btn-sell{background:#ff4444;color:#fff}
-.lm-btn-buy:hover,.lm-btn-sell:hover{opacity:.8}
-.lm-btn-buy:disabled,.lm-btn-sell:disabled{opacity:.5;cursor:default}
+.lm-btn-buy{background:#1a3a2a;color:#00ff88;border-color:#00ff88}
+.lm-btn-sell{background:#3a1a1a;color:#ff4444;border-color:#ff4444}
+.lm-btn-buy:hover{background:#00ff88;color:#0a0e1a}
+.lm-btn-sell:hover{background:#ff4444;color:#fff}
+.lm-btn-buy:disabled,.lm-btn-sell:disabled{opacity:.4;cursor:default}
+
+/* buy dropdown row */
+.lm-drop-row td{padding:0;border-bottom:1px solid #1a2035}
+.lm-drop-inner{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#0d1525;border-top:1px solid #1a2035}
+.lm-drop-label{font-size:11px;color:#3d4b62;white-space:nowrap}
+.lm-drop-input{width:80px;background:#0a0e1a;border:1px solid #1a2035;border-radius:6px;padding:6px 8px;color:#eef1f5;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield}
+.lm-drop-input:focus{border-color:#00ff88}
+.lm-drop-input::-webkit-inner-spin-button,.lm-drop-input::-webkit-outer-spin-button{-webkit-appearance:none}
+.lm-drop-confirm{background:#00ff88;color:#0a0e1a;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s}
+.lm-drop-confirm:hover{opacity:.85}
+.lm-drop-confirm:disabled{opacity:.4;cursor:default}
+.lm-drop-cancel{background:none;border:none;color:#3d4b62;font-size:12px;cursor:pointer;font-family:'JetBrains Mono',monospace;padding:6px 8px;transition:color .15s}
+.lm-drop-cancel:hover{color:#eef1f5}
+
+/* row flash */
+@keyframes flashGreen{0%{background:#00ff8822}100%{background:transparent}}
+@keyframes flashRed  {0%{background:#ff444422}100%{background:transparent}}
+.flash-green{animation:flashGreen 1.2s ease-out forwards}
+.flash-red  {animation:flashRed   1.2s ease-out forwards}
 
 /* status rows */
 .lm-status-row td{text-align:center;padding:60px 20px;color:#3d4b62;font-size:13px}
@@ -261,6 +281,7 @@ async function _doSearch(q){
 
 /* ── render table ── */
 function _renderTable(pairs){
+  _closeBuyDrop();
   _pairs = pairs;
   var tbody = document.getElementById('lm-grid');
   if(!pairs.length){
@@ -299,7 +320,7 @@ function _rowHtml(p, idx){
   var safeAddr = _esc(addr).replace(/'/g,"\\'");
   var safePair = _esc(p.pairAddress||'').replace(/'/g,"\\'");
 
-  return '<tr onclick="_rowClick(event,\''+safeSym+'\')">'
+  return '<tr id="lm-row-'+idx+'" onclick="_rowClick(event,\''+safeSym+'\')">'
     +'<td>'+(idx+1)+'</td>'
     +'<td>'
       +'<div class="lm-tok-cell">'
@@ -323,10 +344,10 @@ function _rowHtml(p, idx){
     +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null)
     +'<td>'+liq+'</td>'
     +'<td style="text-align:center">'
-      +'<button class="lm-btn-buy" onclick="event.stopPropagation();_quickTrade(\''+safeSym+'\',\''+safePair+'\',\'buy\',\''+safeAddr+'\',this)">Buy</button>'
+      +'<button class="lm-btn-buy" onclick="event.stopPropagation();_openBuyDrop('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Buy</button>'
     +'</td>'
     +'<td style="text-align:center">'
-      +'<button class="lm-btn-sell" onclick="event.stopPropagation();_quickTrade(\''+safeSym+'\',\''+safePair+'\',\'sell\',\''+safeAddr+'\',this)">Sell</button>'
+      +'<button class="lm-btn-sell" onclick="event.stopPropagation();_quickSell('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Sell</button>'
     +'</td>'
     +'</tr>';
 }
@@ -337,9 +358,100 @@ function _rowClick(e, sym){
   showTokenCard(sym);
 }
 
-function _quickTrade(sym, pairAddr, side, tokenAddr, btn){
-  var amount = parseFloat(document.getElementById('lm-global-amount').value||'0.1');
-  executeTrade(sym, pairAddr, side, amount, tokenAddr, btn);
+/* ── inline buy dropdown ── */
+var _openDropIdx = -1;
+
+function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
+  /* toggle off if already open for this row */
+  if(_openDropIdx === idx){ _closeBuyDrop(); return; }
+  _closeBuyDrop();
+  _openDropIdx = idx;
+
+  var dataRow = document.getElementById('lm-row-'+idx);
+  if(!dataRow) return;
+
+  var dropId  = 'lm-drop-'+idx;
+  var inputId = 'lm-drop-amt-'+idx;
+  var tr = document.createElement('tr');
+  tr.id = dropId;
+  tr.className = 'lm-drop-row';
+  tr.innerHTML = '<td colspan="15">'
+    +'<div class="lm-drop-inner">'
+      +'<span class="lm-drop-label">Buy <strong style="color:#00ff88">$'+_esc(sym)+'</strong></span>'
+      +'<span class="lm-drop-label">SOL amount:</span>'
+      +'<input class="lm-drop-input" id="'+inputId+'" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
+      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" onclick="event.stopPropagation();_confirmBuy('+idx+',\''+_esc(sym).replace(/'/g,"\\'")+'\',\''+_esc(pairAddr).replace(/'/g,"\\'")+'\',\''+_esc(tokenAddr).replace(/'/g,"\\'")+'\')">Confirm Buy</button>'
+      +'<button class="lm-drop-cancel" onclick="event.stopPropagation();_closeBuyDrop()">✕ Cancel</button>'
+    +'</div>'
+    +'</td>';
+
+  dataRow.insertAdjacentElement('afterend', tr);
+  /* auto-focus the amount input */
+  setTimeout(function(){ var el=document.getElementById(inputId); if(el) el.focus(); }, 30);
+}
+
+function _closeBuyDrop(){
+  if(_openDropIdx < 0) return;
+  var el = document.getElementById('lm-drop-'+_openDropIdx);
+  if(el) el.remove();
+  _openDropIdx = -1;
+}
+
+async function _confirmBuy(idx, sym, pairAddr, tokenAddr){
+  var inputEl   = document.getElementById('lm-drop-amt-'+idx);
+  var confirmBtn= document.getElementById('lm-drop-confirm-'+idx);
+  var amount    = parseFloat(inputEl ? inputEl.value : '0.1');
+  if(!amount || amount <= 0){ _toast('Enter a valid SOL amount', false); return; }
+
+  if(confirmBtn){ confirmBtn.textContent='…'; confirmBtn.disabled=true; }
+
+  var ok = await _doTrade(sym, pairAddr, 'buy', amount, tokenAddr);
+  _closeBuyDrop();
+  if(ok){
+    _flashRow(idx, true);
+    _toast('✅ Bought $'+sym, true);
+  } else {
+    _flashRow(idx, false);
+  }
+}
+
+async function _quickSell(idx, sym, pairAddr, tokenAddr, btn){
+  var origHtml = btn ? btn.innerHTML : '';
+  if(btn){ btn.innerHTML='…'; btn.disabled=true; }
+  _closeBuyDrop();
+
+  var ok = await _doTrade(sym, pairAddr, 'sell', 0, tokenAddr);
+  if(btn){ btn.innerHTML=origHtml; btn.disabled=false; }
+  if(ok){
+    _flashRow(idx, false);
+    _toast('🔴 Sold $'+sym, true);
+  }
+}
+
+/* shared trade fetch — returns true on success */
+async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
+  try{
+    var r = await fetch('/api/instant-trade',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
+    });
+    var d = await r.json();
+    if(r.ok) return true;
+    _toast('❌ '+(d.error||d.message||'Trade failed'), false);
+    return false;
+  }catch(e){
+    _toast('❌ Network error — trade not sent', false);
+    return false;
+  }
+}
+
+function _flashRow(idx, green){
+  var row = document.getElementById('lm-row-'+idx);
+  if(!row) return;
+  row.classList.remove('flash-green','flash-red');
+  void row.offsetWidth; /* reflow to restart animation */
+  row.classList.add(green ? 'flash-green' : 'flash-red');
 }
 
 /* ── token modal ── */
@@ -444,7 +556,7 @@ function _toast(msg, ok){
   });
 }
 
-/* ── trade execution ── */
+/* ── trade execution (modal buttons) ── */
 async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, btn){
   var amount = parseFloat(amountStr);
   if(!amount||amount<=0){ _toast('Enter a valid SOL amount',false); return; }
@@ -453,24 +565,9 @@ async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, 
   var spinColor = side==='buy'?'#0a0e1a':'#fff';
   var spinner = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.25);border-top-color:'+spinColor+';border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>';
   if(btn){ btn.innerHTML=spinner; btn.disabled=true; btn.style.opacity='1'; }
-  try{
-    var r = await fetch('/api/instant-trade',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({symbol:symbol,pair_address:pairAddress,side:side,amount_sol:amount,token_address:tokenAddress})
-    });
-    var d = await r.json();
-    if(r.ok){
-      _toast(side==='buy'?'✅ Buy order executed':'✅ Sold',true);
-      if(btn){ btn.innerHTML=origHtml; btn.disabled=false; btn.style.background=origBg; }
-    } else {
-      _toast('❌ '+(d.error||d.message||'Trade failed'),false);
-      if(btn){ btn.innerHTML=origHtml; btn.disabled=false; btn.style.background=origBg; }
-    }
-  }catch(e){
-    _toast('❌ Network error — trade not sent',false);
-    if(btn){ btn.innerHTML=origHtml; btn.disabled=false; btn.style.background=origBg; }
-  }
+  var ok = await _doTrade(symbol, pairAddress, side, amount, tokenAddress);
+  if(btn){ btn.innerHTML=origHtml; btn.disabled=false; btn.style.background=origBg; }
+  if(ok) _toast(side==='buy'?'✅ Buy order executed':'✅ Sold', true);
 }
 
 /* ── helpers ── */
