@@ -6774,6 +6774,22 @@ function _sbUpdateUser(profileData){
   } else if(iniEl){
     iniEl.textContent=((uname||phantomKey||'?')[0]||'?').toUpperCase();
   }
+  var _ca=document.getElementById('feed-composer-avatar');
+  if(_ca){
+    _ca.innerHTML='';
+    _ca.removeAttribute('style');
+    if(profileData.avatar_url){
+      var _ci=document.createElement('img');
+      _ci.src=profileData.avatar_url;
+      _ci.style.cssText='position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%';
+      _ci.onerror=function(){this.remove();};
+      _ca.appendChild(_ci);
+    } else {
+      var _ini=((uname||phantomKey||'?')[0]||'?').toUpperCase();
+      _ca.textContent=_ini;
+      _ca.style.cssText='width:44px;height:44px;border-radius:50%;background:#35d4c4;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#000;flex-shrink:0';
+    }
+  }
   const pnlEl=document.getElementById('sb-pnl');
   if(pnlEl && profileData.today_pnl!=null){
     const v=profileData.today_pnl;
