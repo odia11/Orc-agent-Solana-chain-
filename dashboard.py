@@ -4162,7 +4162,16 @@ def feed_post_delete(post_id):
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
-        conn.execute('DELETE FROM feed_posts WHERE id=? AND wallet=?', (post_id, wallet))
+        row = conn.execute(
+            'SELECT wallet FROM feed_posts WHERE id=?', (post_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+        is_own   = row[0] == wallet
+        is_admin = _is_owner(wallet)
+        if not is_own and not is_admin:
+            return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+        conn.execute('DELETE FROM feed_posts WHERE id=?', (post_id,))
         conn.commit()
         return jsonify({'ok': True})
     finally:
