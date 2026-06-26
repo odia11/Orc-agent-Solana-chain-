@@ -4048,19 +4048,22 @@ def api_instant_trade():
     if request.method == 'OPTIONS':
         return app.response_class('', status=200)
 
-    # Diagnostic: every request that reaches Flask is logged so Railway logs show
-    # method, content-type, session state, and key headers in one line.
+    # ── TEMPORARY DEBUG BYPASS — remove once 403 source is confirmed ──────────
+    _w = session.get('wallet', '')
     print(
-        f'[instant_trade] method={request.method}'
+        f'[instant-trade] method={request.method}'
+        f' wallet={(_w[:4]+"..."+_w[-4:]) if len(_w)>=8 else _w or "(none)"}'
+        f' authenticated={bool(_w)}'
         f' ip={request.remote_addr}'
         f' ct={request.content_type!r}'
         f' origin={request.headers.get("Origin","")!r}'
         f' host={request.host!r}'
-        f' wallet={session.get("wallet","(none)")[:8] if session.get("wallet") else "(none)"!r}'
         f' csrf_hdr={bool(request.headers.get("X-CSRF-Token") or request.headers.get("X-CSRFToken"))}'
         f' secret_hdr={bool(request.headers.get("X-Client-Secret"))}',
         flush=True
     )
+    return jsonify({'debug': 'reached', 'authenticated': bool(_w), 'wallet': (_w[:4]+'...'+_w[-4:]) if len(_w)>=8 else _w or None})
+    # ── END TEMPORARY DEBUG BYPASS ────────────────────────────────────────────
 
     if not request.is_json:
         return jsonify({'error': 'Content-Type must be application/json', 'received': request.content_type}), 400
