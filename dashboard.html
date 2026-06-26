@@ -9927,14 +9927,13 @@ function renderPost(item){
     <span style="color:#3ad29b;font-weight:700;font-family:monospace">$${item.symbol}</span>
     <span style="font-size:22px;font-weight:700;font-family:monospace;color:${col}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
   </div>`:''
-  const bg=(typeof _lbAvatarColor==='function')?_lbAvatarColor(name):'#21252c'
-  return `<div style="display:flex;gap:12px;padding:14px 0;border-bottom:1px solid #16191f">
-    <div style="width:44px;height:44px;border-radius:50%;background:${bg};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff;flex-shrink:0">${init}</div>
-    <div style="flex:1;min-width:0">
-      <div style="font-weight:700;font-size:14px">${name}</div>
-      ${trade}${text}
+  return `<article style="padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px">
+    <div style="width:44px;height:44px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${init}</div>
+    <div style="flex:1">
+      <div style="font-weight:600">${name} <span style="color:#565d68;font-size:13px">· ${item.created_at||''}</span></div>
+      ${text}${trade}
     </div>
-  </div>`
+  </article>`
 }
 
 function _feedSparkline(entry, exit, isPos){
