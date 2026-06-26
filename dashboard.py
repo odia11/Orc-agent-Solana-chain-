@@ -7157,6 +7157,16 @@ def api_burn_tokens():
 def api_market():
     return jsonify({'tokens': state['tokens']})
 
+@app.route('/api/market/tokens', methods=['GET'])
+@rate_limit(60, 60)
+def api_market_tokens_search():
+    q = request.args.get('q', '').upper().strip()
+    tokens = state.get('tokens', [])
+    if q:
+        tokens = [t for t in tokens if q in (t.get('symbol') or '').upper() or q in (t.get('name') or '').upper()]
+    result = [{'symbol': t.get('symbol', ''), 'name': t.get('name', '')} for t in tokens[:20]]
+    return jsonify(result)
+
 
 _market_live_cache: dict = {'ts': 0.0, 'data': []}
 _market_live_lock         = threading.Lock()

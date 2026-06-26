@@ -9724,9 +9724,13 @@ function tagToken(){
 document.getElementById('tokenSearch').addEventListener('input',function(){
   const q=this.value.toUpperCase()
   if(q.length<1) return
-  document.getElementById('tokenResults').innerHTML=
-    ['SOL','WIF','BONK','POPCAT','BOME','MEW','SAMO','MYRO'].filter(t=>t.includes(q))
-    .map(t=>`<div onclick="selectToken('${t}')" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;hover:background:#14171c">$${t}</div>`).join('')
+  fetch('/api/market/tokens?q='+q).then(r=>r.json()).then(d=>{
+    document.getElementById('tokenResults').innerHTML=d.slice(0,6).map(t=>`
+    <div onclick="selectToken('${t.symbol}')" style="padding:10px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:10px;color:#eef1f5">
+      <span style="font-family:monospace;color:#3ad29b;font-weight:700">$${t.symbol}</span>
+      <span style="color:#565d68;font-size:12px">${t.name||''}</span>
+    </div>`).join('')||'<span style="color:#565d68;font-size:13px">No tokens found</span>'
+  })
 })
 
 function selectToken(t){
