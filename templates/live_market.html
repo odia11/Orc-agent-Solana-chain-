@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Live Market — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+.lm-header{position:sticky;top:0;z-index:20;height:58px;display:flex;align-items:center;justify-content:space-between;padding:0 22px;background:#0a0b0e;border-bottom:1px solid #16191f}
+.lm-hdr-left{display:flex;align-items:center;gap:10px}
+.lm-back{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:#101216;border:1px solid #21252c;color:#8a919c;text-decoration:none;font-size:16px;transition:color .15s,background .15s;flex-shrink:0}
+.lm-back:hover{background:#16191f;color:#eef1f5}
+.lm-title{font-size:20px;font-weight:600;color:#eef1f5;letter-spacing:-0.01em}
+.lm-pill{display:flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a919c}
+.lm-pill-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0;animation:lmPulse 2s ease-in-out infinite}
+@keyframes lmPulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+.lm-body{max-width:720px;margin:0 auto;padding:20px 16px 60px}
+
+.lm-search-row{display:flex;gap:10px;margin-bottom:20px}
+.lm-search{flex:1;background:#101216;border:1px solid #21252c;border-radius:12px;padding:10px 14px;color:#eef1f5;font-size:14px;font-family:'Geist',system-ui,sans-serif;outline:none}
+.lm-search::placeholder{color:#565d68}
+.lm-search:focus{border-color:#3ad29b}
+
+.lm-grid{display:flex;flex-direction:column;gap:10px}
+
+.lm-card{background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px;cursor:pointer;transition:border-color .15s,background .15s}
+.lm-card:hover{border-color:#3ad29b33;background:#0d1117}
+
+.lm-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.lm-card-left{display:flex;align-items:center;gap:10px}
+.lm-card-logo{width:38px;height:38px;border-radius:50%;object-fit:cover;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;color:#8a919c;flex-shrink:0}
+.lm-card-sym{font-size:16px;font-weight:700;color:#eef1f5}
+.lm-card-name{font-size:12px;color:#565d68;margin-top:1px}
+.lm-card-price{font-family:'JetBrains Mono',monospace;font-size:16px;font-weight:700;color:#eef1f5;text-align:right}
+.lm-card-chg{font-size:13px;font-weight:600;text-align:right;margin-top:2px}
+.lm-card-chg.up{color:#3ad29b}
+.lm-card-chg.down{color:#f76b62}
+
+.lm-card-stats{display:flex;gap:8px}
+.lm-stat{flex:1;background:#0a0b0e;border-radius:8px;padding:8px}
+.lm-stat-label{font-size:9px;color:#565d68;text-transform:uppercase;letter-spacing:.04em;margin-bottom:3px}
+.lm-stat-val{font-size:12px;font-weight:600;color:#eef1f5}
+
+.lm-tfs{display:flex;gap:6px;margin-top:10px}
+.lm-tf{font-size:11px;font-family:'JetBrains Mono',monospace;padding:3px 8px;border-radius:6px;font-weight:600}
+.lm-tf.up{background:rgba(58,210,155,.12);color:#3ad29b}
+.lm-tf.down{background:rgba(247,107,98,.12);color:#f76b62}
+.lm-tf.flat{background:#16191f;color:#565d68}
+
+.lm-empty{text-align:center;padding:60px 20px;color:#565d68;font-size:14px}
+.lm-spinner{text-align:center;padding:60px 20px;color:#565d68;font-size:14px}
+
+/* token card modal reused from dashboard */
+#tokenCard{display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:2000;align-items:center;justify-content:center;padding:16px}
+@keyframes tcSpin{to{transform:rotate(360deg)}}
+
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+</style>
+</head>
+<body>
+
+<header class="lm-header">
+  <div class="lm-hdr-left">
+    <a class="lm-back" href="/" title="Back">←</a>
+    <span class="lm-title">Live Market</span>
+  </div>
+  {% if wallet_short %}
+  <div class="lm-pill">
+    <div class="lm-pill-dot"></div>
+    <span>{{ wallet_short }}</span>
+  </div>
+  {% else %}
+  <div class="lm-pill">
+    <div class="lm-pill-dot"></div>
+    <span>LIVE</span>
+  </div>
+  {% endif %}
+</header>
+
+<div class="lm-body">
+  <div class="lm-search-row">
+    <input class="lm-search" id="lm-search" type="text" placeholder="Search token, e.g. SOL, WIF, BONK…" oninput="_lmSearch(this.value)" autocomplete="off">
+  </div>
+  <div class="lm-grid" id="lm-grid">
+    <div class="lm-spinner">Loading top Solana tokens…</div>
+  </div>
+</div>
+
+<!-- token detail modal -->
+<div id="tokenCard" onclick="if(event.target===this)this.style.display='none'">
+  <div style="background:#0d1117;border:1px solid #21252c;border-radius:20px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative">
+    <button onclick="document.getElementById('tokenCard').style.display='none'" style="position:absolute;top:14px;right:14px;background:#16191f;border:1px solid #21252c;color:#8a919c;border-radius:8px;width:28px;height:28px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;z-index:1">✕</button>
+    <div id="tc-body" style="padding:20px"></div>
+  </div>
+</div>
+
+<script>
+var _lmSearchTimer = null;
+var _lmPairs = [];
+
+var _DEFAULT_TOKENS = ['SOL','WIF','BONK','JUP','PYTH','RNDR','RAY','ORCA','MEME','POPCAT'];
+
+function _fmtPrice(p){
+  if(!p) return '—';
+  var n = parseFloat(p);
+  if(isNaN(n)) return '—';
+  if(n >= 1000) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:2});
+  if(n >= 1)    return '$'+n.toLocaleString(undefined,{maximumFractionDigits:4});
+  return '$'+n.toLocaleString(undefined,{maximumSignificantDigits:4});
+}
+function _fmtNum(n){
+  if(n==null||isNaN(n)) return '—';
+  if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B';
+  if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
+  if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K';
+  return '$'+n.toFixed(2);
+}
+function _chgClass(v){ return v==null?'flat':v>=0?'up':'down'; }
+function _chgStr(v,label){
+  if(v==null) return '<span class="lm-tf flat">'+label+' —</span>';
+  return '<span class="lm-tf '+_chgClass(v)+'">'+label+' '+(v>=0?'+':'')+v.toFixed(2)+'%</span>';
+}
+
+function _renderCards(pairs){
+  _lmPairs = pairs;
+  var grid = document.getElementById('lm-grid');
+  if(!pairs.length){ grid.innerHTML='<div class="lm-empty">No tokens found</div>'; return; }
+  grid.innerHTML = pairs.map(function(p,i){
+    var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
+    var name = (p.baseToken&&p.baseToken.name)||'';
+    var logo = p.info&&p.info.imageUrl ? '<img src="'+p.info.imageUrl+'" style="width:38px;height:38px;border-radius:50%;object-fit:cover">' : '<div class="lm-card-logo">'+sym.slice(0,2)+'</div>';
+    var price = _fmtPrice(p.priceUsd);
+    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
+    var chgCls = _chgClass(chg24);
+    var chgTxt = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
+    var vol   = p.volume&&p.volume.h24!=null  ? _fmtNum(p.volume.h24)  : '—';
+    var liq   = p.liquidity&&p.liquidity.usd!=null ? _fmtNum(p.liquidity.usd) : '—';
+    var buys  = p.txns&&p.txns.h24 ? p.txns.h24.buys  : null;
+    var sells = p.txns&&p.txns.h24 ? p.txns.h24.sells : null;
+    var bsHtml = buys!=null
+      ? '<div class="lm-stat"><div class="lm-stat-label">Buys / Sells</div><div class="lm-stat-val" style="color:#3ad29b">'+buys+'<span style="color:#565d68"> / </span><span style="color:#f76b62">'+sells+'</span></div></div>'
+      : '';
+    var tfs = _chgStr(p.priceChange&&p.priceChange.m5!=null?p.priceChange.m5:null,'5m')
+            + _chgStr(p.priceChange&&p.priceChange.h1!=null?p.priceChange.h1:null,'1h')
+            + _chgStr(p.priceChange&&p.priceChange.h6!=null?p.priceChange.h6:null,'6h')
+            + _chgStr(chg24,'24h');
+    return '<div class="lm-card" onclick="_lmOpenToken('+i+')">'
+      +'<div class="lm-card-top">'
+      +'<div class="lm-card-left">'+logo+'<div><div class="lm-card-sym">$'+sym+'</div><div class="lm-card-name">'+name+'</div></div></div>'
+      +'<div><div class="lm-card-price">'+price+'</div><div class="lm-card-chg '+chgCls+'">'+chgTxt+'</div></div>'
+      +'</div>'
+      +'<div class="lm-card-stats">'
+      +'<div class="lm-stat"><div class="lm-stat-label">Vol 24h</div><div class="lm-stat-val">'+vol+'</div></div>'
+      +'<div class="lm-stat"><div class="lm-stat-label">Liquidity</div><div class="lm-stat-val">'+liq+'</div></div>'
+      +bsHtml
+      +'</div>'
+      +'<div class="lm-tfs">'+tfs+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function _lmOpenToken(idx){
+  var p = _lmPairs[idx];
+  if(!p) return;
+  showTokenCard((p.baseToken&&p.baseToken.symbol)||'');
+}
+
+function _lmFetch(q){
+  var grid = document.getElementById('lm-grid');
+  grid.innerHTML = '<div class="lm-spinner">Searching…</div>';
+  fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,20);
+    _renderCards(pairs);
+  })
+  .catch(function(){
+    document.getElementById('lm-grid').innerHTML='<div class="lm-empty">Failed to load market data</div>';
+  });
+}
+
+function _lmSearch(q){
+  clearTimeout(_lmSearchTimer);
+  if(!q.trim()){ _lmFetch(_DEFAULT_TOKENS[0]); return; }
+  _lmSearchTimer = setTimeout(function(){ _lmFetch(q); }, 350);
+}
+
+/* token detail modal (same logic as dashboard) */
+async function showTokenCard(symbol){
+  var modal = document.getElementById('tokenCard');
+  var body  = document.getElementById('tc-body');
+  modal.style.display = 'flex';
+  body.innerHTML = '<div style="text-align:center;padding:40px 0"><div style="width:28px;height:28px;border:3px solid #21252c;border-top-color:#35d4c4;border-radius:50%;margin:0 auto 12px;animation:tcSpin .8s linear infinite"></div><div style="color:#565d68;font-size:13px">Loading…</div></div>';
+  try{
+    var r = await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol));
+    var d = await r.json();
+    var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+    if(!p){ body.innerHTML='<div style="text-align:center;padding:40px;color:#565d68;font-size:13px">No Solana pair found for $'+symbol+'</div>'; return; }
+    var sym   = (p.baseToken&&p.baseToken.symbol)||symbol;
+    var name  = (p.baseToken&&p.baseToken.name)||'';
+    var logo  = p.info&&p.info.imageUrl ? '<img src="'+p.info.imageUrl+'" style="width:52px;height:52px;border-radius:50%;object-fit:cover;margin-bottom:12px">' : '<div style="width:52px;height:52px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#8a919c;margin:0 auto 12px">'+sym.slice(0,2)+'</div>';
+    var price = _fmtPrice(p.priceUsd);
+    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
+    var chgColor = chg24!=null ? (chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
+    var chgStr   = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
+    var mkCap = p.marketCap ? _fmtNum(p.marketCap) : '—';
+    var tfs = [
+      {l:'5m', v:p.priceChange&&p.priceChange.m5!=null?p.priceChange.m5:null},
+      {l:'1h', v:p.priceChange&&p.priceChange.h1!=null?p.priceChange.h1:null},
+      {l:'6h', v:p.priceChange&&p.priceChange.h6!=null?p.priceChange.h6:null},
+      {l:'24h',v:chg24}
+    ];
+    body.innerHTML = '<div style="text-align:center;padding-top:8px">'+logo
+      +'<div style="font-size:22px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$'+sym+'</div>'
+      +'<div style="font-size:13px;color:#565d68;margin-bottom:14px">'+name+' <span style="background:#3ad29b22;color:#3ad29b;font-size:10px;font-family:\'JetBrains Mono\',monospace;padding:2px 7px;border-radius:5px;margin-left:4px">SOLANA</span></div>'
+      +'<div style="font-size:28px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace;margin-bottom:4px">'+price+'</div>'
+      +'<div style="font-size:16px;font-weight:600;color:'+chgColor+';margin-bottom:20px">'+chgStr+' (24h)</div>'
+      +'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px">'
+      +[{l:'Volume 24h',v:p.volume&&p.volume.h24!=null?_fmtNum(p.volume.h24):'—'},
+        {l:'Liquidity',  v:p.liquidity&&p.liquidity.usd!=null?_fmtNum(p.liquidity.usd):'—'},
+        {l:'Market Cap', v:mkCap},
+        {l:'Buys / Sells', v:p.txns&&p.txns.h24?'<span style="color:#3ad29b">'+p.txns.h24.buys+'</span><span style="color:#565d68"> / </span><span style="color:#f76b62">'+p.txns.h24.sells+'</span>':'—'}
+      ].map(function(s){ return '<div style="background:#16191f;border-radius:10px;padding:10px"><div style="font-size:10px;color:#565d68;margin-bottom:4px">'+s.l+'</div><div style="font-size:14px;font-weight:600;color:#eef1f5">'+s.v+'</div></div>'; }).join('')
+      +'</div>'
+      +'<div style="display:flex;gap:6px;flex-wrap:wrap">'
+      +tfs.map(function(tf){
+        var col = tf.v!=null?(tf.v>=0?'rgba(58,210,155,.15)':'rgba(247,107,98,.15)'):'#16191f';
+        var tc  = tf.v!=null?(tf.v>=0?'#3ad29b':'#f76b62'):'#565d68';
+        var vs  = tf.v!=null?(tf.v>=0?'+':'')+tf.v.toFixed(2)+'%':'—';
+        return '<div style="flex:1;background:'+col+';border-radius:8px;padding:8px;text-align:center"><div style="font-size:10px;color:#565d68;margin-bottom:2px">'+tf.l+'</div><div style="font-size:12px;font-weight:600;color:'+tc+';font-family:\'JetBrains Mono\',monospace">'+vs+'</div></div>';
+      }).join('')
+      +'</div>';
+  } catch(e){
+    body.innerHTML='<div style="text-align:center;padding:40px;color:#f76b62;font-size:13px">Failed to load token data</div>';
+  }
+}
+
+/* load top tokens on page load */
+(function(){
+  var grid = document.getElementById('lm-grid');
+  grid.innerHTML = '<div class="lm-spinner">Loading top Solana tokens…</div>';
+  var fetches = _DEFAULT_TOKENS.slice(0,5).map(function(sym){
+    return fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(sym))
+      .then(function(r){ return r.json(); })
+      .then(function(d){ return (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; })[0]||null; })
+      .catch(function(){ return null; });
+  });
+  Promise.all(fetches).then(function(results){
+    var pairs = results.filter(function(p){ return p!==null; });
+    _renderCards(pairs);
+  }).catch(function(){
+    grid.innerHTML = '<div class="lm-empty">Failed to load market data</div>';
+  });
+})();
+</script>
+</body>
+</html>
