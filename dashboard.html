@@ -9599,7 +9599,10 @@ function searchToken(q){
   fetch('/api/market/tokens?q='+encodeURIComponent(q))
   .then(r=>r.json()).then(d=>{
     document.getElementById('tokenResults').innerHTML=d.length?
-    d.map(t=>`<div onclick="selectToken('${t.symbol}')" style="padding:10px;cursor:pointer;color:#3ad29b;font-weight:700;border-bottom:1px solid #16191f">$${t.symbol}</div>`).join('')
+    d.map(t=>`<div onclick="selectToken('${t.symbol}')" style="padding:10px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;justify-content:space-between;align-items:center">
+      <span style="color:#3ad29b;font-weight:700">$${t.symbol}</span>
+      <span style="color:#565d68;font-size:11px;font-family:monospace">${t.mint?.slice(0,8)}...</span>
+    </div>`).join('')
     :'<div style="color:#565d68;padding:10px">No tokens found</div>'
   })
 }
