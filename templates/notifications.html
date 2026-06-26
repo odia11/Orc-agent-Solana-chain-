@@ -59,16 +59,17 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 </div>
 
 <script>
-async function load(){
-  const d=await fetch('/api/notifications').then(r=>r.json())
-  document.getElementById('notifs').innerHTML=d.length
-    ?d.map(n=>`<div style="background:#101216;border:1px solid #21252c;border-radius:12px;padding:12px 14px">
-      <div style="font-size:12px;color:#565d68;margin-bottom:4px">${n.wallet.slice(0,8)}... · ${n.created_at}</div>
-      <div style="color:#eef1f5">${n.symbol} <span style="color:${(n.pnl_pct||0)>=0?'#3ad29b':'#f76b62'}">${(n.pnl_pct||0)>=0?'+':''}${(n.pnl_pct||0).toFixed(1)}%</span></div>
-    </div>`).join('')
-    :'<p style="color:#565d68">No trade notifications in the last 24h.</p>'
-}
-load()
+fetch('/api/notifications').then(r=>r.json()).then(d=>{
+  document.getElementById('notifs').innerHTML=d.length?d.map(n=>`
+    <div style="display:flex;align-items:center;gap:12px;padding:14px;background:#101216;border:1px solid #21252c;border-radius:14px">
+      <div style="width:36px;height:36px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700">${n.wallet.slice(0,2)}</div>
+      <div style="flex:1">
+        <div><b>${n.wallet.slice(0,8)}...</b> traded <b>$${n.symbol}</b></div>
+        <div style="font-size:12px;color:#565d68">${n.created_at}</div>
+      </div>
+      <div style="font-family:monospace;font-weight:700;color:${n.pnl_pct>=0?'#3ad29b':'#f76b62'}">${n.pnl_pct>=0?'+':''}${(n.pnl_pct||0).toFixed(1)}%</div>
+    </div>`).join(''):'<p style="color:#565d68">No notifications yet</p>'
+})
 </script>
 </body>
 </html>
