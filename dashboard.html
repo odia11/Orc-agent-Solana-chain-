@@ -9863,7 +9863,7 @@ var _liveChartTimers  = {};  /* cardEl.id -> intervalId */
 var _liveChartHistory = {};  /* cardEl.id -> [price, ...] */
 
 function _ccFmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
-function _ccFmtPrice(p){ if(!p) return '—'; var n=parseFloat(p); if(isNaN(n)) return '—'; if(n>=1000) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:2}); if(n>=1) return '$'+n.toLocaleString(undefined,{maximumFractionDigits:4}); if(n>=0.001) return '$'+n.toLocaleString(undefined,{maximumSignificantDigits:4}); return '$'+n.toExponential(2); }
+function _ccFmtPrice(p){ if(!p) return '—'; var n=parseFloat(p); if(isNaN(n)||n<=0) return '—'; return n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6); }
 
 function _ccSeedHistory(pair){
   var now = parseFloat(pair.priceUsd||0);
@@ -10170,7 +10170,7 @@ function _renderFeedCard(e){
         var _chg24 = _c.chg24h!=null ? _c.chg24h : null;
         var _chgColor = _chg24!=null ? (_chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
         var _chgStr  = _chg24!=null ? (_chg24>=0?'+':'')+_chg24.toFixed(2)+'%' : '—';
-        var _price   = _c.price ? '$'+parseFloat(_c.price).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+        var _price   = (function(){ var n=parseFloat(_c.price||0); if(!n||isNaN(n)) return '—'; return n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6); })();
         var _cfmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
         var _safeNum = function(v){ return (v!=null&&!isNaN(v)) ? String(v) : ''; };
         textBody += '<div id="'+_ccId+'"'
