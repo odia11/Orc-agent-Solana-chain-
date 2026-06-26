@@ -7051,11 +7051,22 @@ def api_market_top():
 @rate_limit(60, 60)
 def api_market_tokens_search():
     q = request.args.get('q', '').upper().strip()
+    # First try live state tokens
     tokens = state.get('tokens', [])
-    if q:
-        tokens = [t for t in tokens if q in (t.get('symbol') or '').upper() or q in (t.get('name') or '').upper()]
-    result = [{'symbol': t.get('symbol', ''), 'name': t.get('name', '')} for t in tokens[:20]]
-    return jsonify(result)
+    if tokens:
+        if q:
+            tokens = [t for t in tokens if q in (t.get('symbol') or '').upper() or q in (t.get('name') or '').upper()]
+        return jsonify([{'symbol': t.get('symbol', ''), 'name': t.get('name', ''), 'mint': t.get('mint', '')} for t in tokens[:8]])
+    # Fallback: search trades table
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            'SELECT DISTINCT token, mint_address FROM trades WHERE UPPER(token) LIKE ? LIMIT 8',
+            (f'%{q}%',)
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify([{'symbol': r[0] or '', 'name': r[0] or '', 'mint': r[1] or ''} for r in rows])
 
 
 _market_live_cache: dict = {'ts': 0.0, 'data': []}
