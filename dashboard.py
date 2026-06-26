@@ -3974,6 +3974,103 @@ def social_feed():
         })
     return jsonify(feed)
 
+@app.route('/api/instant-trade', methods=['POST'])
+@rate_limit(10, 60)
+def api_instant_trade():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'error': 'Not logged in'}), 401
+
+    data         = request.get_json(silent=True) or {}
+    symbol       = str(data.get('symbol',       '')).strip().upper()
+    token_address = str(data.get('token_address', '')).strip()
+    pair_address  = str(data.get('pair_address',  '')).strip()
+    side          = str(data.get('side',          '')).strip().lower()
+    try:
+        amount_sol = float(data.get('amount_sol', 0))
+    except (TypeError, ValueError):
+        amount_sol = 0.0
+
+    if side not in ('buy', 'sell'):
+        return jsonify({'error': 'side must be buy or sell'}), 400
+    if not token_address:
+        return jsonify({'error': 'token_address is required'}), 400
+    if side == 'buy' and amount_sol <= 0:
+        return jsonify({'error': 'amount_sol must be > 0 for buy'}), 400
+
+    # Fetch encrypted key
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row  = conn.execute(
+            'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+        conn.close()
+    except Exception as e:
+        return jsonify({'error': f'DB error: {e}'}), 500
+    if not row or not row[0]:
+        return jsonify({'error': 'No private key saved — add it in Settings'}), 400
+
+    try:
+        private_key = decrypt_private_key(row[0], wallet)
+    except Exception:
+        return jsonify({'error': 'Could not decrypt private key'}), 500
+
+    # Run swap in subprocess (same pattern as _execute_user_swap but captures sig)
+    try:
+        env                      = os.environ.copy()
+        env['WALLET_ADDRESS']     = wallet
+        env['WALLET_PRIVATE_KEY'] = private_key
+        _ext_hit('jupiter')
+        amount_str = str(amount_sol) if side == 'buy' else '0'
+        result = subprocess.run(
+            [sys.executable, os.path.join(BASE, 'orcagent_solana.py'),
+             side, token_address, amount_str],
+            env=env, capture_output=True, text=True, timeout=120
+        )
+        env['WALLET_PRIVATE_KEY'] = ''
+        private_key               = ''
+    except subprocess.TimeoutExpired:
+        return jsonify({'error': 'Trade timed out (>120s)'}), 504
+    except Exception as e:
+        return jsonify({'error': f'Swap subprocess error: {e}'}), 500
+
+    stdout = _redact_keys(result.stdout.strip())
+    stderr = _redact_keys(result.stderr.strip())
+    add_user_log(wallet, f'instant-trade {side} {symbol}: ' + (stdout[-300:] or stderr[-200:]))
+
+    if result.returncode != 0:
+        err_msg = stderr.split('\n')[-1] if stderr else 'Swap failed (no output)'
+        return jsonify({'error': err_msg[-200:]}), 500
+
+    # Extract TX signature from stdout: "… TX:<sig>"
+    sig = None
+    for line in stdout.split('\n'):
+        if 'TX:' in line:
+            sig = line.split('TX:')[-1].strip().split()[0]
+            break
+
+    if not sig:
+        return jsonify({'error': 'Swap ran but no signature returned: ' + stdout[-200:]}), 500
+
+    # Record trade in DB
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        user_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if user_row:
+            conn.execute(
+                'INSERT INTO trades (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address) '
+                'VALUES (?,?,?,?,?,?,?,?,?)',
+                (user_row[0], symbol, 0, 0, amount_sol if side == 'buy' else 0,
+                 0, 0, datetime.datetime.utcnow().isoformat(), token_address)
+            )
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        print(f'[instant-trade] DB record error: {e}', flush=True)
+
+    return jsonify({'success': True, 'tx': sig, 'side': side, 'symbol': symbol})
+
+
 @app.route('/api/feed/post', methods=['POST'])
 @rate_limit(15, 60)
 def feed_post_create():
