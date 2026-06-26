@@ -838,6 +838,13 @@ def init_db():
     c.execute('''CREATE TABLE IF NOT EXISTS community_messages
         (id INTEGER PRIMARY KEY AUTOINCREMENT, wallet TEXT, content TEXT,
          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    c.execute('''CREATE TABLE IF NOT EXISTS feed_posts (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet     TEXT NOT NULL,
+        content    TEXT NOT NULL,
+        likes      INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
     conn.commit()
     conn.close()
 
@@ -3915,171 +3922,47 @@ def platform_stats():
 @rate_limit(60, 60)
 def social_feed():
     feed_filter = request.args.get('filter', 'all')
-
-    # Build mint→current_price from shared token state (best-effort; may be empty if scan hasn't run)
-    _mint_price: dict = {
-        t['mint']: float(t['price'])
-        for t in state.get('tokens', [])
-        if t.get('mint') and t.get('price')
-    }
-
-    # Resolve set of allowed user_ids when filter=following
-    _allowed_ids: set | None = None
-    if feed_filter == 'following':
-        _my_wallet = session.get('wallet')
-        if _my_wallet:
-            _fc = sqlite3.connect(DB_FILE)
-            try:
-                _me_row = _fc.execute('SELECT id FROM users WHERE wallet_address=?', (_my_wallet,)).fetchone()
-                if _me_row:
-                    _rows = _fc.execute('SELECT following_id FROM follows WHERE follower_id=?', (_me_row[0],)).fetchall()
-                    _allowed_ids = {r[0] for r in _rows}
-                else:
-                    _allowed_ids = set()
-            finally:
-                _fc.close()
-        else:
-            _allowed_ids = set()
-
+    my_wallet = session.get('wallet', '')
     conn = sqlite3.connect(DB_FILE)
     try:
-        c = conn.cursor()
-        # Load all users for enrichment lookups
-        c.execute('SELECT id, wallet_address, username, avatar_url FROM users')
-        _user_rows = c.fetchall()
-
-        # Recent closed trades — no time cap, just newest 50 across ALL users
-        c.execute('''
-            SELECT t.id, t.user_id, t.token, t.entry_price, t.exit_price, t.pnl, t.timestamp,
-                   COALESCE(t.mint_address,''), u.username, u.avatar_url, u.wallet_address
+        rows = conn.execute('''
+            SELECT fp.id, fp.wallet, fp.content, fp.created_at, fp.likes,
+                   u.username, NULL as symbol, NULL as pnl_pct
+            FROM feed_posts fp
+            LEFT JOIN users u ON fp.wallet = u.wallet_address
+            UNION ALL
+            SELECT t.id, u.wallet_address as wallet, NULL as content,
+                   t.timestamp as created_at, 0 as likes,
+                   u.username,
+                   t.token as symbol,
+                   CASE WHEN t.entry_price > 0 AND t.exit_price > 0
+                        THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
+                        ELSE 0 END as pnl_pct
             FROM trades t
-            JOIN users u ON u.id = t.user_id
-            ORDER BY t.timestamp DESC
-            LIMIT 50
-        ''')
-        _trade_rows = c.fetchall()
-
-        # User text posts from group_chat
-        c.execute('''
-            SELECT gc.id, gc.user_id, gc.message, gc.created_at,
-                   u.username, u.avatar_url, u.wallet_address
-            FROM group_chat gc
-            JOIN users u ON u.id = gc.user_id
-            WHERE gc.message_type = 'text' AND gc.message IS NOT NULL
-            ORDER BY gc.created_at DESC
-            LIMIT 50
-        ''')
-        _post_rows = c.fetchall()
+            LEFT JOIN users u ON t.user_id = u.id
+            ORDER BY created_at DESC LIMIT 50
+        ''').fetchall()
     finally:
         conn.close()
 
-    def _short(wallet: str) -> str:
-        return (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
-
-    # Build lookup maps
-    _wallet_info: dict = {}
-    _id_info:     dict = {}
-    for _uid, _wallet, _uname, _avatar in _user_rows:
-        _sw   = _short(_wallet)
-        _info = {
-            'user_id':    _uid,
-            'username':   _uname if _uname else _sw,
-            'avatar_url': _avatar or '',
-            'wallet':     _sw,
-        }
-        if _wallet:
-            _wallet_info[_wallet] = _info
-        _id_info[_uid] = _info
-
     feed = []
-
-    # ── Open positions (in-memory) ──
-    for _wallet, _us in list(user_states.items()):
-        _info = _wallet_info.get(_wallet)
-        if not _info:
-            continue
-        for _mint, _pos in list(_us.get('positions', {}).items()):
-            if not _pos.get('amount') or not _pos.get('buy_price'):
-                continue
-            _buy     = float(_pos['buy_price'])
-            _amount  = float(_pos.get('amount') or 0)
-            _cur     = _mint_price.get(_mint)
-            _pnl_pct = round((_cur - _buy) / _buy * 100, 2) if _cur and _buy else None
-            _pnl_sol = round(_amount * (_cur - _buy), 6) if _cur and _buy and _amount else None
-            _opened  = float(_pos.get('opened_at') or 0)
-            feed.append({
-                'type':            'open',
-                'user_id':         _info['user_id'],
-                'username':        _info['username'],
-                'avatar_url':      _info['avatar_url'],
-                'wallet':          _info['wallet'],
-                'token':           _pos.get('symbol') or _mint[:8],
-                'token_address':   _mint,
-                'entry_price':     round(_buy, 8),
-                'current_pnl_pct': _pnl_pct,
-                'current_pnl_sol': _pnl_sol,
-                'opened_at':       int(_opened),
-                '_sort_ts':        _opened,
-            })
-
-    # ── Closed trades (DB) ──
-    for _tid, _uid, _token, _entry, _exit, _pnl, _ts_str, _mint_addr, _uname, _avatar, _wallet in _trade_rows:
-        _sw = _short(_wallet or '')
-        _display = _uname if _uname else _sw
-        try:
-            _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%dT%H:%M:%SZ').replace(
-                tzinfo=datetime.timezone.utc).timestamp()
-        except Exception:
-            try:
-                # fallback for SQLite default CURRENT_TIMESTAMP format
-                _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%d %H:%M:%S').replace(
-                    tzinfo=datetime.timezone.utc).timestamp()
-            except Exception:
-                _sort_ts = 0.0
+    for row in rows:
+        rid, wallet, content, created_at, likes, username, symbol, pnl_pct = row
+        short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
+        display = username if username else short
         feed.append({
-            'type':          'trade',
-            'trade_id':      _tid,
-            'user_id':       _uid,
-            'username':      _display,
-            'avatar_url':    _avatar or '',
-            'wallet':        _sw,
-            'token':         _token or '',
-            'token_address': _mint_addr or '',
-            'entry_price':   round(float(_entry or 0), 8),
-            'exit_price':    round(float(_exit  or 0), 8),
-            'pnl':           round(float(_pnl   or 0), 6),
-            'timestamp':     _ts_str or '',
-            '_sort_ts':      _sort_ts,
+            'id':         rid,
+            'wallet':     short,
+            'content':    content or '',
+            'created_at': created_at or '',
+            'likes':      likes or 0,
+            'username':   display,
+            'symbol':     symbol or '',
+            'pnl_pct':    pnl_pct or 0,
+            'type':       'text' if content else 'trade',
+            'is_own':     bool(wallet and my_wallet and wallet == my_wallet),
         })
-
-    # ── Text posts (group_chat) ──
-    for _pid, _uid, _msg, _ts_str, _uname, _avatar, _wallet in _post_rows:
-        _sw = _short(_wallet or '')
-        _display = _uname if _uname else _sw
-        try:
-            _sort_ts = datetime.datetime.strptime(_ts_str, '%Y-%m-%d %H:%M:%S').replace(
-                tzinfo=datetime.timezone.utc).timestamp()
-        except Exception:
-            _sort_ts = 0.0
-        feed.append({
-            'type':       'text',
-            'id':         _pid,
-            'user_id':    _uid,
-            'username':   _display,
-            'avatar_url': _avatar or '',
-            'wallet':     _sw,
-            'content':    _msg or '',
-            'timestamp':  _ts_str or '',
-            '_sort_ts':   _sort_ts,
-        })
-
-    if _allowed_ids is not None:
-        feed = [f for f in feed if f.get('user_id') in _allowed_ids]
-
-    feed.sort(key=lambda x: x['_sort_ts'], reverse=True)
-    for _item in feed:
-        _item.pop('_sort_ts', None)
-    return jsonify(feed[:50])
+    return jsonify(feed)
 
 @app.route('/api/feed/post', methods=['POST'])
 @rate_limit(15, 60)
@@ -4095,13 +3978,10 @@ def feed_post_create():
         return jsonify({'ok': False, 'msg': 'Too long (max 500)'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
-        me = _get_uid(conn, wallet)
-        if not me:
-            return jsonify({'ok': False, 'msg': 'User not found'}), 404
         now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
-            'INSERT INTO group_chat (user_id, message, message_type, created_at) VALUES (?,?,?,?)',
-            (me, content, 'text', now)
+            'INSERT INTO feed_posts (wallet, content, created_at) VALUES (?,?,?)',
+            (wallet, content, now)
         )
         conn.commit()
         return jsonify({'ok': True, 'id': cur.lastrowid})
@@ -4116,10 +3996,7 @@ def feed_post_delete(post_id):
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
-        conn.execute(
-            'DELETE FROM group_chat WHERE id=? AND user_id=(SELECT id FROM users WHERE wallet_address=?)',
-            (post_id, wallet)
-        )
+        conn.execute('DELETE FROM feed_posts WHERE id=? AND wallet=?', (post_id, wallet))
         conn.commit()
         return jsonify({'ok': True})
     finally:
