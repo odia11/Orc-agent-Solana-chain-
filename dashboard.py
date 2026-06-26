@@ -4966,7 +4966,8 @@ def api_wallet_tokens():
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     try:
         data = _fetch_wallet_tokens(wallet)
-        return jsonify({'ok': True, 'tokens': data['tokens'], 'cached': False})
+        tokens = [{**t, 'usd_value': t['value_usd']} for t in data['tokens']]
+        return jsonify({'ok': True, 'tokens': tokens, 'cached': False})
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
@@ -4987,6 +4988,61 @@ def api_wallet_total():
         })
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@app.route('/api/wallet/balance', methods=['GET'])
+@rate_limit(30, 60)
+def api_wallet_balance():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+        }, timeout=8)
+        lamports = r.json()['result']['value']
+        sol = round(lamports / 1e9, 6)
+        usd = round(sol * _sol_price_usd, 4) if _sol_price_usd else None
+        return jsonify({'ok': True, 'sol': sol, 'usd': usd, 'sol_price_usd': _sol_price_usd})
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+
+@app.route('/api/wallet/transactions', methods=['GET'])
+@rate_limit(30, 60)
+def api_wallet_transactions():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': True, 'transactions': []})
+        rows = conn.execute('''
+            SELECT token, entry_price, exit_price, amount, pnl, timestamp
+            FROM trades
+            WHERE user_id = ?
+            ORDER BY timestamp DESC
+            LIMIT 20
+        ''', (uid,)).fetchall()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+    finally:
+        conn.close()
+    txns = []
+    for row in rows:
+        token, entry, exit_p, amount, pnl, ts = row
+        txns.append({
+            'type':        'sell' if (exit_p and float(exit_p) > 0) else 'buy',
+            'token':       token or '',
+            'amount_sol':  float(amount or 0),
+            'entry_price': float(entry or 0),
+            'exit_price':  float(exit_p or 0),
+            'pnl':         float(pnl or 0),
+            'created_at':  ts or '',
+        })
+    return jsonify({'ok': True, 'transactions': txns})
 
 
 @app.route('/api/messages/unread', methods=['GET'])
