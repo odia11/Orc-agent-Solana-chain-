@@ -9722,7 +9722,7 @@ async function submitPost(){
   const r=await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:t.value})})
   const d=await r.json()
   console.log('post result:',r.status,d)
-  if(r.ok){t.value='';loadHomeFeed()}
+  if(r.ok){t.value='';window.location.reload()}
   else alert('Error: '+JSON.stringify(d))
 }
 
