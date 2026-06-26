@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Messages — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ── NAV ── */
+.msgs-nav{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #16191f;flex-shrink:0}
+.msgs-nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#eef1f5}
+.msgs-nav-logo{width:32px;height:32px;background:#3ad29b;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.msgs-nav-logo::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
+.msgs-nav-name{font-size:16px;font-weight:700;letter-spacing:-0.02em}
+.msgs-nav-right{display:flex;align-items:center;gap:6px}
+.msgs-nav-link{font-size:13px;color:#8a919c;text-decoration:none;padding:6px 10px;border-radius:8px;transition:color .15s,background .15s}
+.msgs-nav-link:hover{color:#eef1f5;background:#14171c}
+.msgs-nav-pill{display:flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a919c}
+.msgs-nav-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+
+/* ── TWO-PANEL LAYOUT ── */
+.msgs-layout{display:flex;height:calc(100vh - 60px)}
+
+/* ── LEFT PANEL ── */
+.msgs-left{width:320px;border-right:1px solid #16191f;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column}
+.msgs-left-hdr{padding:16px 20px;border-bottom:1px solid #16191f;flex-shrink:0}
+.msgs-left-title{font-size:18px;font-weight:600;color:#eef1f5}
+.conv-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #16191f;cursor:pointer;transition:background .12s}
+.conv-row:hover{background:#14171c}
+.conv-row.active{background:#101216}
+.conv-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff}
+.conv-info{flex:1;min-width:0}
+.conv-name{font-size:14px;font-weight:600;color:#eef1f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.conv-preview{font-size:13px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.conv-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.conv-time{font-size:11px;color:#565d68;white-space:nowrap}
+.conv-badge{background:#3ad29b;color:#08120f;border-radius:999px;font-size:11px;font-weight:700;padding:1px 7px}
+.msgs-left-empty{padding:48px 20px;text-align:center;color:#565d68;font-size:13px;line-height:1.7}
+
+/* ── RIGHT PANEL ── */
+.msgs-right{flex:1;display:flex;flex-direction:column;min-width:0}
+.msgs-placeholder{flex:1;display:flex;align-items:center;justify-content:center;color:#565d68;font-size:14px}
+.msgs-thread{flex:1;display:flex;flex-direction:column;min-height:0}
+
+/* thread header */
+.msgs-thread-hdr{padding:14px 20px;border-bottom:1px solid #16191f;display:flex;align-items:center;gap:12px;flex-shrink:0}
+.msgs-thread-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.msgs-thread-name{font-size:14px;font-weight:600;color:#eef1f5}
+.msgs-thread-addr{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace;margin-top:2px}
+
+/* messages area */
+.msgs-area{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.msg-wrap{display:flex;flex-direction:column}
+.msg-wrap.mine{align-items:flex-end}
+.msg-wrap.theirs{align-items:flex-start}
+.msg-bubble{padding:10px 14px;max-width:70%;word-break:break-word;font-size:14px;line-height:1.5}
+.msg-wrap.mine   .msg-bubble{background:#3ad29b;color:#08120f;border-radius:18px 18px 4px 18px}
+.msg-wrap.theirs .msg-bubble{background:#16191f;color:#eef1f5;border-radius:18px 18px 18px 4px}
+.msg-time{font-size:11px;color:#565d68;margin-top:3px;padding:0 2px}
+.msgs-area-empty{text-align:center;color:#565d68;font-size:13px;padding:40px 0;margin:auto}
+
+/* input bar */
+.msgs-input-bar{border-top:1px solid #16191f;padding:12px 16px;display:flex;gap:10px;flex-shrink:0}
+.msgs-input{flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5;font-size:14px;font-family:'Geist',system-ui,sans-serif;outline:none;transition:border-color .15s}
+.msgs-input::placeholder{color:#565d68}
+.msgs-input:focus{border-color:#3ad29b}
+.msgs-send{background:#3ad29b;color:#08120f;border:none;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s;flex-shrink:0}
+.msgs-send:hover{opacity:.88}
+.msgs-send:disabled{opacity:.4;cursor:not-allowed}
+
+/* scrollbar */
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:#2d333c}
+*{scrollbar-width:thin;scrollbar-color:#21252c transparent}
+
+@media(max-width:680px){
+  .msgs-left{position:absolute;width:100%;z-index:10;background:#0a0b0e;height:calc(100vh - 60px);border-right:none}
+  .msgs-left.slide-out{display:none}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="msgs-nav">
+  <a class="msgs-nav-brand" href="/">
+    <div class="msgs-nav-logo"></div>
+    <span class="msgs-nav-name">OrcAgent</span>
+  </a>
+  <div class="msgs-nav-right">
+    <a href="/" class="msgs-nav-link">Dashboard</a>
+    <a href="/wallet" class="msgs-nav-link">Wallet</a>
+    {% if wallet %}
+    <div class="msgs-nav-pill">
+      <div class="msgs-nav-dot"></div>
+      <span>{{ wallet_short }}</span>
+    </div>
+    {% endif %}
+  </div>
+</nav>
+
+<!-- TWO-PANEL LAYOUT -->
+<div class="msgs-layout">
+
+  <!-- LEFT: Conversation list -->
+  <div class="msgs-left" id="msgs-left">
+    <div class="msgs-left-hdr">
+      <div class="msgs-left-title">Messages</div>
+    </div>
+    <div id="conv-list"><div class="msgs-left-empty">Loading…</div></div>
+  </div>
+
+  <!-- RIGHT: Thread -->
+  <div class="msgs-right" id="msgs-right">
+
+    <div class="msgs-placeholder" id="msgs-placeholder">Select a conversation to start messaging</div>
+
+    <div class="msgs-thread" id="msgs-thread" style="display:none">
+      <div class="msgs-thread-hdr" id="msgs-thread-hdr"></div>
+      <div class="msgs-area" id="msgs-area"></div>
+      <div class="msgs-input-bar">
+        <input class="msgs-input" id="msgs-input" type="text"
+               placeholder="Write a message…" maxlength="2000"
+               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_sendMessage();}">
+        <button class="msgs-send" id="msgs-send" onclick="_sendMessage()">Send</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+var _myWallet     = {{ wallet|tojson }};
+var _activeWallet = null;
+var _pollTimer    = null;
+var _conversations = [];
+
+/* ── HELPERS ── */
+function _avatarColor(s) {
+  var p = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6','#f97316','#a855f7'];
+  var h = 0;
+  for (var i = 0; i < (s||'').length; i++) h = (h * 31 + (s.charCodeAt(i)|0)) | 0;
+  return p[Math.abs(h) % p.length];
+}
+
+function _timeAgo(ts) {
+  if (!ts) return '';
+  var s = typeof ts === 'string' && ts.indexOf('T') < 0 ? ts.replace(' ', 'T') + 'Z' : ts;
+  var sec = Math.floor((Date.now() - new Date(s).getTime()) / 1000);
+  if (isNaN(sec) || sec < 5) return 'now';
+  if (sec < 60)    return sec + 's';
+  if (sec < 3600)  return Math.floor(sec / 60) + 'm';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'h';
+  return Math.floor(sec / 86400) + 'd';
+}
+
+function _short(w) {
+  return w ? (w.slice(0, 4) + '…' + w.slice(-4)) : '';
+}
+
+function _esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _scrollToBottom() {
+  var area = document.getElementById('msgs-area');
+  if (area) { area.scrollTop = area.scrollHeight; }
+}
+
+/* ── CONVERSATIONS ── */
+async function loadConversations() {
+  try {
+    var r = await fetch('/api/messages/conversations');
+    var d = await r.json();
+    if (d.ok) { _conversations = d.conversations || []; _renderConvList(); }
+    else { document.getElementById('conv-list').innerHTML = '<div class="msgs-left-empty">Failed to load.</div>'; }
+  } catch(e) {
+    document.getElementById('conv-list').innerHTML = '<div class="msgs-left-empty">Could not connect.</div>';
+  }
+}
+
+function _renderConvList() {
+  var el = document.getElementById('conv-list');
+  if (!_conversations.length) {
+    el.innerHTML = '<div class="msgs-left-empty">No conversations yet.<br>Send a message to start one.</div>';
+    return;
+  }
+  el.innerHTML = _conversations.map(function(c) {
+    var peer  = c.peer_wallet || '';
+    var color = _avatarColor(peer);
+    var ini   = (peer[0] || '?').toUpperCase();
+    var active = peer === _activeWallet ? ' active' : '';
+    var badge  = (c.unread_count > 0)
+      ? '<span class="conv-badge">'+c.unread_count+'</span>' : '';
+    return '<div class="conv-row'+active+'" onclick="_openThread(\''+_esc(peer)+'\')">'
+      + '<div class="conv-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
+      + '<div class="conv-info">'
+      +   '<div class="conv-name">'+_esc(_short(peer))+'</div>'
+      +   '<div class="conv-preview">'+_esc((c.last_message||'').slice(0,60))+'</div>'
+      + '</div>'
+      + '<div class="conv-meta">'
+      +   '<span class="conv-time">'+_esc(_timeAgo(c.timestamp))+'</span>'
+      +   badge
+      + '</div>'
+      + '</div>';
+  }).join('');
+}
+
+/* ── THREAD ── */
+async function _openThread(peerWallet) {
+  _activeWallet = peerWallet;
+  _renderConvList();
+
+  /* show thread, hide placeholder */
+  document.getElementById('msgs-placeholder').style.display = 'none';
+  var thread = document.getElementById('msgs-thread');
+  thread.style.display = 'flex';
+
+  /* thread header */
+  var color = _avatarColor(peerWallet);
+  var ini   = (peerWallet[0] || '?').toUpperCase();
+  document.getElementById('msgs-thread-hdr').innerHTML =
+    '<div class="msgs-thread-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
+    + '<div>'
+    +   '<div class="msgs-thread-name">'+_esc(_short(peerWallet))+'</div>'
+    +   '<div class="msgs-thread-addr">'+_esc(peerWallet)+'</div>'
+    + '</div>';
+
+  document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
+  await loadThread(peerWallet);
+
+  /* (re)start poll */
+  if (_pollTimer) clearInterval(_pollTimer);
+  _pollTimer = setInterval(function() {
+    if (_activeWallet) loadThread(_activeWallet);
+  }, 5000);
+}
+
+async function loadThread(peerWallet) {
+  try {
+    var r = await fetch('/api/messages/' + encodeURIComponent(peerWallet));
+    var d = await r.json();
+    if (d.ok) _renderMessages(d.messages || []);
+  } catch(e) {
+    console.warn('[messages] thread load error', e);
+  }
+}
+
+function _renderMessages(msgs) {
+  var area = document.getElementById('msgs-area');
+  if (!area) return;
+  var atBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
+  if (!msgs.length) {
+    area.innerHTML = '<div class="msgs-area-empty">No messages yet. Say hello!</div>';
+    return;
+  }
+  area.innerHTML = msgs.map(function(m) {
+    var mine = m.mine != null ? m.mine : (m.sender_wallet === _myWallet);
+    return '<div class="msg-wrap '+(mine?'mine':'theirs')+'">'
+      + '<div class="msg-bubble">'+_esc(m.content)+'</div>'
+      + '<span class="msg-time">'+_esc(_timeAgo(m.created_at))+'</span>'
+      + '</div>';
+  }).join('');
+  if (atBottom || msgs.length <= 30) _scrollToBottom();
+  /* clear unread badge for this conversation */
+  var conv = _conversations.find(function(c){ return c.peer_wallet === _activeWallet; });
+  if (conv && conv.unread_count > 0) { conv.unread_count = 0; _renderConvList(); }
+}
+
+/* ── SEND ── */
+async function _sendMessage() {
+  var input = document.getElementById('msgs-input');
+  var btn   = document.getElementById('msgs-send');
+  if (!input || !_activeWallet) return;
+  var text = input.value.trim();
+  if (!text) return;
+
+  input.value = '';
+  btn.disabled = true;
+  try {
+    var r = await fetch('/api/messages/' + encodeURIComponent(_activeWallet), {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content: text})
+    });
+    var d = await r.json();
+    if (d.ok && d.message) {
+      /* append bubble immediately without waiting for poll */
+      var area = document.getElementById('msgs-area');
+      /* remove empty state if present */
+      var empty = area.querySelector('.msgs-area-empty');
+      if (empty) empty.remove();
+      var div = document.createElement('div');
+      div.className = 'msg-wrap mine';
+      div.innerHTML = '<div class="msg-bubble">'+_esc(d.message.content)+'</div>'
+        + '<span class="msg-time">now</span>';
+      area.appendChild(div);
+      _scrollToBottom();
+      /* update conversation preview */
+      var conv = _conversations.find(function(c){ return c.peer_wallet === _activeWallet; });
+      if (conv) { conv.last_message = text; conv.timestamp = d.message.created_at; }
+      else { _conversations.unshift({peer_wallet:_activeWallet, last_message:text, timestamp:d.message.created_at, unread_count:0}); }
+      _renderConvList();
+    } else {
+      input.value = text;  /* restore on server error */
+    }
+  } catch(e) {
+    input.value = text;
+    console.error('[messages] send error', e);
+  }
+  btn.disabled = false;
+  input.focus();
+}
+
+/* ── INIT ── */
+loadConversations();
+</script>
+</body>
+</html>
