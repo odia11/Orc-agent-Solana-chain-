@@ -16,19 +16,54 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24p
 .btn-o{background:#0a0b0e;border:1px solid #2c313a;color:#eef1f5;border-radius:12px;padding:12px;cursor:pointer;flex:1}
 </style>
 </head>
-<body style="background:#0a0b0e;color:#eef1f5;font-family:sans-serif;margin:0;padding:20px">
-<h2>Wallet</h2>
-<p style="color:#565d68;font-size:13px;font-family:monospace">{{ wallet_address }}</p>
-<p id="sol" style="font-size:32px;color:#3ad29b;font-family:monospace">Loading...</p>
-<div id="tokens"></div>
+<body>
+
+<a href="/dashboard" style="color:#565d68;font-size:13px;text-decoration:none">← Back</a>
+<h1 style="font-size:20px;font-weight:600;margin:8px 0 20px">Wallet</h1>
+
+<div class="card">
+  <div class="muted" style="font-size:11px;letter-spacing:.08em;margin-bottom:8px">TOTAL BALANCE</div>
+  <div style="font-size:36px;font-weight:700" class="mono"><span id="sol">...</span> SOL</div>
+  <div class="muted mono" style="font-size:13px;margin-top:4px">≈ $<span id="usd">...</span> USD</div>
+</div>
+
+<div class="card">
+  <div style="font-weight:600;margin-bottom:12px">Holdings</div>
+  <div id="tokens"><span class="muted">Loading...</span></div>
+</div>
+
+<div class="card">
+  <div style="font-weight:600;margin-bottom:12px">Recent Activity</div>
+  <div id="activity"><span class="muted">Loading...</span></div>
+</div>
+
 <script>
 fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
-  document.getElementById('sol').textContent=(d.sol||0).toFixed(4)+' SOL'
+  document.getElementById('sol').textContent=(d.sol||0).toFixed(4)
+  document.getElementById('usd').textContent=d.usd?(+d.usd).toFixed(2):'—'
+}).catch(()=>{
+  document.getElementById('sol').textContent='—'
+  document.getElementById('usd').textContent='—'
 })
+
 fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
-  var tokens = d.tokens || d || [];
-  document.getElementById('tokens').innerHTML=tokens.map(t=>`<div style="padding:8px 0;border-bottom:1px solid #16191f">${t.symbol||t.mint||'?'} &nbsp; ${t.amount||0}</div>`).join('')||'<p style="color:#565d68">No tokens</p>'
-})
+  var tokens=d.tokens||[]
+  document.getElementById('tokens').innerHTML=tokens.length
+    ?tokens.map(t=>`<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #16191f"><span class="mono">${t.symbol||t.mint?.slice(0,6)||'?'}</span><span class="muted mono">${(+t.amount||0).toFixed(4)}</span></div>`).join('')
+    :'<span class="muted">No tokens</span>'
+}).catch(()=>{ document.getElementById('tokens').innerHTML='<span class="muted">Failed to load</span>' })
+
+fetch('/api/wallet/transactions').then(r=>r.json()).then(d=>{
+  var txns=d.transactions||[]
+  document.getElementById('activity').innerHTML=txns.length
+    ?txns.map(t=>{
+        var isIn=t.type==='buy'||t.type==='deposit'
+        var sign=isIn?'+':'-'
+        var col=isIn?'#3ad29b':'#f76b62'
+        return `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid #16191f"><span>${t.type==='buy'?'Bought':t.type==='sell'?'Sold':t.type||'Tx'} <span class="muted">${t.token||''}</span></span><span class="mono" style="color:${col}">${sign}${(+t.amount_sol||0).toFixed(4)} SOL</span></div>`
+      }).join('')
+    :'<span class="muted">No recent activity</span>'
+}).catch(()=>{ document.getElementById('activity').innerHTML='<span class="muted">Failed to load</span>' })
 </script>
 </body>
 </html>
