@@ -4784,12 +4784,14 @@ function safeMint(m){
 
 // ── FORMATTING ──
 function fmtPrice(p){
-  if(!p) return '$0';
-  if(p<0.000001) return '$'+p.toExponential(2);
-  if(p<0.0001)   return '$'+p.toFixed(8);
-  if(p<0.01)     return '$'+p.toFixed(6);
-  if(p<1)        return '$'+p.toFixed(4);
-  return '$'+p.toFixed(2);
+  if(!p) return '—';
+  p=parseFloat(p);
+  if(p>=1) return '$'+p.toFixed(2);
+  if(p>=0.01) return '$'+p.toFixed(4);
+  const s=p.toFixed(10);
+  const m=s.match(/0\.(0*)/);
+  const zeros=m?m[1].length:0;
+  return '$0.0'+(zeros>0?zeros.toString().sub():'')+p.toFixed(zeros+4).slice(2+zeros);
 }
 function fmtNum(n){
   if(!n||n===0) return '—';
