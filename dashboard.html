@@ -9927,6 +9927,29 @@ function _fmtPrice(p){
 }
 
 function _renderFeedCard(e){
+  /* ── text post fast path ── */
+  if(e.type==='text' || (e.content && !e.token && !e.trade_id)){
+    var bg2=(typeof _lbAvatarColor==='function')?_lbAvatarColor(e.username||e.wallet||'?'):'#21252c';
+    var ini2=(e.username||e.wallet||'?')[0].toUpperCase();
+    var img2=e.avatar_url?'<img src="'+esc(e.avatar_url)+'" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">':'';
+    var handle2='@'+(e.wallet?e.wallet.slice(0,6)+'…'+e.wallet.slice(-4):'unknown');
+    var time2=typeof _tvTimeAgoStr==='function'?_tvTimeAgoStr(e.timestamp||e.created_at||''):'';
+    return '<div class="fc-card" onclick="openProfileCard('+(e.user_id||0)+')">'
+      +'<div class="fc-avatar" style="background:'+bg2+'">'+img2+'<span class="fc-avatar-ini">'+ini2+'</span></div>'
+      +'<div class="fc-body">'
+      +'<div class="fc-header">'
+      +'<span class="fc-name">'+esc(e.username||'Trader')+'</span>'
+      +'<span class="fc-handle">'+esc(handle2)+'</span>'
+      +(time2?'<span class="fc-sep">·</span><span class="fc-time">'+esc(time2)+'</span>':'')
+      +'</div>'
+      +'<div class="fc-text">'+esc(e.content||'')+'</div>'
+      +'<div class="fc-actions" onclick="event.stopPropagation()">'
+      +(e.id?'<button class="fc-action" onclick="_feedToggleReply(this,\'m'+e.id+'\')">↩ <span class="fc-reply-count">0</span></button>':'')
+      +(e.id?'<button class="fc-action" id="lkbtn-m'+e.id+'" onclick="_feedToggleLike(this,\'m'+e.id+'\')">♡ <span class="fc-like-count">0</span></button>':'')
+      +'</div>'
+      +'</div></div>';
+  }
+
   var uid = e.user_id||0;
   var isOpen = e.type==='open';
   var isTrade = e.type==='trade'||isOpen;
