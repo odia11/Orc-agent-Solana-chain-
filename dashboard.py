@@ -3965,6 +3965,50 @@ def social_feed():
         _item.pop('_sort_ts', None)
     return jsonify(feed[:50])
 
+@app.route('/api/feed/post', methods=['POST'])
+@rate_limit(15, 60)
+def feed_post_create():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    content = _sanitize(str(body.get('content', '')))
+    if not content:
+        return jsonify({'ok': False, 'msg': 'Content cannot be empty'}), 400
+    if len(content) > 500:
+        return jsonify({'ok': False, 'msg': 'Too long (max 500)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        cur = conn.execute(
+            'INSERT INTO group_chat (user_id, message, message_type, created_at) VALUES (?,?,?,?)',
+            (me, content, 'text', now)
+        )
+        conn.commit()
+        return jsonify({'ok': True, 'id': cur.lastrowid})
+    finally:
+        conn.close()
+
+@app.route('/api/feed/post/<int:post_id>', methods=['DELETE'])
+@rate_limit(20, 60)
+def feed_post_delete(post_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            'DELETE FROM group_chat WHERE id=? AND user_id=(SELECT id FROM users WHERE wallet_address=?)',
+            (post_id, wallet)
+        )
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
 # ── FEED INTERACTIONS ──
 @app.route('/api/feed/like/<path:post_id>', methods=['POST'])
 @rate_limit(60, 60)

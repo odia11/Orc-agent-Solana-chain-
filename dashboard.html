@@ -9729,6 +9729,12 @@ async function submitPost(){
   finally{if(btn){btn.disabled=false;btn.textContent='POST';}}
 }
 
+async function deletePost(id){
+  if(!confirm('Delete post?')) return
+  await fetch('/api/feed/post/'+id,{method:'DELETE'})
+  loadHomeFeed()
+}
+
 function _feedComposerPost(){
   var inp = document.getElementById('postText');
   if(!inp) return;
@@ -9938,6 +9944,7 @@ function _renderFeedCard(e){
   var cardId = 'fc-card-'+postId;
 
   var safePostId = postId.replace(/['"\\]/g,'');
+  var isOwn = e.user_id && _myProfileId && e.user_id === _myProfileId;
 
   /* copy action — always visible; for trade posts copies the trade */
   var copyHtml;
@@ -9968,6 +9975,7 @@ function _renderFeedCard(e){
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
     +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
+    +(isOwn && e.id ? '<button onclick="event.stopPropagation();deletePost('+e.id+')" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:11px;margin-left:auto">🗑</button>' : '')
     +'</div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
