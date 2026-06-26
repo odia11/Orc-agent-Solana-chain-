@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="client-secret" content="{{ client_secret }}">
 <title>Live Market — OrcAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -453,14 +454,17 @@ async function _quickSell(idx, sym, pairAddr, tokenAddr, btn){
 /* shared trade fetch — returns true on success */
 async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
   try{
+    var _cs=_lmClientSecret||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
+    var _csrf=(document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf||'';
     var r = await fetch('/api/instant-trade',{
       method:'POST',
       credentials:'include',
-      headers:{
+      headers:Object.assign({
         'Content-Type':'application/json',
-        'X-CSRF-Token':(document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf,
+        'X-CSRF-Token':_csrf,
+        'X-CSRFToken':_csrf,
         'X-Requested-With':'XMLHttpRequest'
-      },
+      }, _cs ? {'X-Client-Secret':_cs} : {}),
       body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
     });
     var d = await r.json();
@@ -635,8 +639,15 @@ function _setError(msg){
     _buildTable('<tr class="lm-status-row"><td colspan="15" style="color:#f76b62">'+msg+'</td></tr>');
 }
 
-/* ── CSRF token (injected server-side, always available synchronously) ── */
+/* ── Auth headers (injected server-side, always available synchronously) ── */
 var _lmCsrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+var _lmClientSecret = (document.querySelector('meta[name="client-secret"]')||{}).content||'';
+
+/* ── Session diagnostic (logs to console on page load — remove once 403 is resolved) ── */
+fetch('/api/test-auth',{credentials:'include'})
+  .then(function(r){return r.json();})
+  .then(function(d){console.log('[OrcAgent test-auth]',d);})
+  .catch(function(e){console.warn('[OrcAgent test-auth] fetch failed',e);});
 
 /* ── init ── */
 _loadTab('trending');

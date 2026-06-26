@@ -36,6 +36,10 @@ def _jinja_fmtk(v):
 @app.before_request
 def force_www():
     host = request.host
+    # Don't redirect API POST/OPTIONS — 301 converts POST→GET and strips credentials.
+    # JS fetches use relative URLs, so they always land on the right host already.
+    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'):
+        return None
     if 'railway.app' in host or host == 'orcagent.fun':
         url = 'https://www.orcagent.fun' + request.full_path
         return redirect(url, code=301)
@@ -69,7 +73,7 @@ def _refresh_session():
 
 # /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
 # cannot require a session-scoped CSRF token. Origin check still protects it.
-_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password'})
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade'})
 
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
@@ -86,36 +90,43 @@ def _validate_csrf(token: str) -> bool:
 
 @app.before_request
 def _csrf_check():
-    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE') and request.path.startswith('/api/'):
-        # ── 0. Shared client secret (only enforced if X_CLIENT_SECRET is configured) ──
-        if X_CLIENT_SECRET:
-            sent = request.headers.get('X-Client-Secret', '')
-            if not sent or not hmac.compare_digest(sent.encode(), X_CLIENT_SECRET.encode()):
-                _log_security_event('client_secret_fail', session.get('wallet', 'unknown'),
-                                    f'bad/missing X-Client-Secret on {request.path}')
-                return jsonify({'error': 'Forbidden'}), 403
-        # ── 1. Origin / Host validation ──────────────────────────────────────
-        origin = request.headers.get('Origin', '')
-        if origin:
-            host = request.headers.get('Host', '') or ''
-            host_bare = host.split(':')[0]
-            origin_bare = origin.split('//')[-1].split(':')[0]
-            if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
-                return jsonify({'error': 'CSRF check failed'}), 403
-        # ── 2. CSRF token for authenticated sessions ──────────────────────────
-        if session.get('wallet') and request.path not in _CSRF_EXEMPT_PATHS:
-            tok = (request.headers.get('X-CSRF-Token', '') or
-                   (request.get_json(silent=True) or {}).get('csrf_token', ''))
-            if not _validate_csrf(tok):
-                _log_security_event('csrf_fail', session.get('wallet', 'unknown'),
-                                    f'bad/missing token on {request.path}')
-                print(f'[csrf_fail] path={request.path} wallet={session.get("wallet","?")} '
-                      f'tok_sent={bool(tok)} headers={dict(request.headers)}', flush=True)
-                return jsonify({
-                    'error': 'CSRF validation failed',
-                    'logged_in': bool(session.get('wallet')),
-                    'hint': 'Send the token from GET /api/csrf-token in X-CSRF-Token header'
-                }), 403
+    if request.method not in ('POST', 'PUT', 'PATCH', 'DELETE') or not request.path.startswith('/api/'):
+        return None
+    # Fully exempt paths skip ALL sub-checks (client-secret, origin, token).
+    # These routes either bootstrap auth (no session yet) or handle their own
+    # auth/CORS (instant-trade has its own CORS after_request + session wallet check).
+    if request.path in _CSRF_EXEMPT_PATHS:
+        return None
+    # ── 0. Shared client secret (only enforced if X_CLIENT_SECRET is configured) ──
+    if X_CLIENT_SECRET:
+        sent = request.headers.get('X-Client-Secret', '')
+        if not sent or not hmac.compare_digest(sent.encode(), X_CLIENT_SECRET.encode()):
+            _log_security_event('client_secret_fail', session.get('wallet', 'unknown'),
+                                f'bad/missing X-Client-Secret on {request.path}')
+            return jsonify({'error': 'Forbidden'}), 403
+    # ── 1. Origin / Host validation ──────────────────────────────────────────
+    origin = request.headers.get('Origin', '')
+    if origin:
+        host = request.headers.get('Host', '') or ''
+        host_bare = host.split(':')[0]
+        origin_bare = origin.split('//')[-1].split(':')[0]
+        if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
+            return jsonify({'error': 'CSRF check failed'}), 403
+    # ── 2. CSRF token for authenticated sessions ──────────────────────────────
+    if session.get('wallet'):
+        tok = (request.headers.get('X-CSRF-Token', '') or
+               request.headers.get('X-CSRFToken', '') or
+               (request.get_json(silent=True) or {}).get('csrf_token', ''))
+        if not _validate_csrf(tok):
+            _log_security_event('csrf_fail', session.get('wallet', 'unknown'),
+                                f'bad/missing token on {request.path}')
+            print(f'[csrf_fail] path={request.path} wallet={session.get("wallet","?")} '
+                  f'tok_sent={bool(tok)} headers={dict(request.headers)}', flush=True)
+            return jsonify({
+                'error': 'CSRF validation failed',
+                'logged_in': bool(session.get('wallet')),
+                'hint': 'Send the token from GET /api/csrf-token in X-CSRF-Token header'
+            }), 403
 
 log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
@@ -2637,6 +2648,30 @@ def dashboard_redirect():
     target = '/?' + qs if qs else '/'
     return redirect(target, 302)
 
+@app.route('/phantom-callback')
+def phantom_callback():
+    return render_template('phantom_callback.html')
+
+@app.route('/api/test-auth')
+def api_test_auth():
+    """Temporary diagnostic: call from live_market to confirm session reaches Flask."""
+    wallet = session.get('wallet', '')
+    csrf_in_session = 'csrf_token' in session
+    return jsonify({
+        'authenticated': bool(wallet),
+        'wallet':        (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet or None,
+        'csrf_token_set': csrf_in_session,
+        'session_keys':  list(session.keys()),
+        'host':          request.host,
+        'origin':        request.headers.get('Origin', ''),
+        'x_client_secret_required': bool(X_CLIENT_SECRET),
+        'x_client_secret_sent':     bool(request.headers.get('X-Client-Secret')),
+    })
+
+@app.route('/api/connect-wallet', methods=['POST'])
+def api_connect_wallet():
+    return set_wallet()
+
 _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
 @app.route('/token/<mint_address>')
@@ -3000,7 +3035,8 @@ def live_market():
                     if len(session_wallet) >= 8 else '')
     return render_template('live_market.html',
                            wallet_short=wallet_short,
-                           csrf_token=_get_csrf_token())
+                           csrf_token=_get_csrf_token(),
+                           client_secret=X_CLIENT_SECRET)
 
 
 @app.route('/history')
@@ -3991,14 +4027,47 @@ def social_feed():
         })
     return jsonify(feed)
 
-@app.route('/api/instant-trade', methods=['POST'])
+@app.after_request
+def _instant_trade_cors(resp):
+    """Add CORS headers on every response from /api/instant-trade (preflight + actual)."""
+    if request.path == '/api/instant-trade':
+        origin = request.headers.get('Origin', 'https://www.orcagent.fun')
+        resp.headers['Access-Control-Allow-Origin']      = origin
+        resp.headers['Access-Control-Allow-Credentials'] = 'true'
+        resp.headers['Access-Control-Allow-Methods']     = 'POST, OPTIONS'
+        resp.headers['Access-Control-Allow-Headers']     = (
+            'Content-Type, X-CSRF-Token, X-Client-Secret, X-Requested-With'
+        )
+        resp.headers['Access-Control-Max-Age'] = '86400'
+    return resp
+
+@app.route('/api/instant-trade', methods=['POST', 'OPTIONS'])
 @rate_limit(10, 60)
 def api_instant_trade():
+    # CORS preflight — _instant_trade_cors after_request stamps the headers automatically.
+    if request.method == 'OPTIONS':
+        return app.response_class('', status=200)
+
+    # Diagnostic: every request that reaches Flask is logged so Railway logs show
+    # method, content-type, session state, and key headers in one line.
+    print(
+        f'[instant_trade] method={request.method}'
+        f' ip={request.remote_addr}'
+        f' ct={request.content_type!r}'
+        f' origin={request.headers.get("Origin","")!r}'
+        f' host={request.host!r}'
+        f' wallet={session.get("wallet","(none)")[:8] if session.get("wallet") else "(none)"!r}'
+        f' csrf_hdr={bool(request.headers.get("X-CSRF-Token") or request.headers.get("X-CSRFToken"))}'
+        f' secret_hdr={bool(request.headers.get("X-Client-Secret"))}',
+        flush=True
+    )
+
+    if not request.is_json:
+        return jsonify({'error': 'Content-Type must be application/json', 'received': request.content_type}), 400
+
     wallet = _current_wallet()
-    print(f'[instant_trade] wallet={wallet!r} session_keys={list(session.keys())} '
-          f'csrf_header={request.headers.get("X-CSRF-Token","(none)")!r}', flush=True)
     if not wallet:
-        return jsonify({'error': 'not authenticated', 'logged_in': False}), 401
+        return jsonify({'error': 'not logged in', 'logged_in': False}), 401
 
     data         = request.get_json(silent=True) or {}
     symbol       = str(data.get('symbol',       '')).strip().upper()

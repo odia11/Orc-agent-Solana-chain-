@@ -12,6 +12,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 img{max-width:100%;height:auto}
@@ -1309,6 +1310,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .tv-me-profile-btn{width:100%}
   #dash-profile-bar{flex-wrap:wrap}
   .dpb-view-btn{width:100%}
+  .tv-back-btn,.adash-back-btn,.tvp-back-btn{position:static!important;display:inline-block;margin-bottom:8px}
 }
 
 /* ── DAILY LEADERBOARD ── */
@@ -4174,23 +4176,59 @@ async function _settingsFaceIdSetup(){
 
 /* Mobile deep-link constants — used by wallet detection below */
 const isMobile=/iPhone|iPad|Android/i.test(navigator.userAgent);
-const phantomDeepLink='https://phantom.app/ul/browse/'+encodeURIComponent('https://www.orcagent.fun');
-const solflareDeepLink='https://solflare.com/ul/v1/browse/'+encodeURIComponent('https://www.orcagent.fun');
+const phantomDeepLink='https://phantom.app/ul/browse/'+encodeURIComponent('https://orcagent.fun');
+const solflareDeepLink='https://solflare.com/ul/v1/browse/'+encodeURIComponent('https://orcagent.fun');
+
+// Minimal base58 encoder for Phantom v1/connect deep link keypair
+var _b58enc=(function(){
+  var A='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  return function(buf){
+    var d=[],s='';
+    for(var i=0;i<buf.length;i++){
+      var c=buf[i];
+      for(var j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=c/58|0;}
+      while(c>0){d.push(c%58);c=c/58|0;}
+    }
+    for(var k=0;buf[k]===0&&k<buf.length-1;k++) s+='1';
+    return s+d.reverse().map(function(x){return A[x];}).join('');
+  };
+})();
+
+function _phantomMobileV1Connect(){
+  var msgEl=document.getElementById('wallet-install-msg');
+  if(typeof nacl==='undefined'){
+    // nacl not loaded yet — fall back to browse deeplink
+    window.location.href=phantomDeepLink;
+    return;
+  }
+  try{
+    var kp=nacl.box.keyPair();
+    localStorage.setItem('_phantom_dapp_sk',JSON.stringify(Array.from(kp.secretKey)));
+    var params=new URLSearchParams({
+      app_url:'https://orcagent.fun',
+      dapp_encryption_public_key:_b58enc(kp.publicKey),
+      redirect_link:'https://orcagent.fun/phantom-callback',
+      cluster:'mainnet-beta'
+    });
+    window.location.href='https://phantom.app/ul/v1/connect?'+params.toString();
+  }catch(e){
+    if(msgEl){msgEl.textContent='Could not initiate Phantom connection: '+e.message;msgEl.style.display='block';}
+  }
+}
 
 function _applyPhantomDetection(phantomBtn, phantomNote){
   if(!phantomBtn||!phantomNote) return;
   if(window.solana&&window.solana.isPhantom) return; // extension present — nothing to do
   if(isMobile){
-    /* Mobile: repurpose button as deep link into Phantom's in-app browser */
-    phantomBtn.onclick=function(){ window.location.href=phantomDeepLink; };
-    var lbl=document.getElementById('phantom-ob-label');
-    if(lbl) lbl.textContent='Open in Phantom →';
-    phantomNote.textContent='Opens OrcAgent inside your wallet’s browser';
-    phantomNote.style.color='var(--muted)';
+    /* Mobile: use Phantom v1/connect Universal Link */
+    phantomBtn.onclick=function(){ _phantomMobileV1Connect(); };
+    var lbl=document.getElementById(‘phantom-ob-label’);
+    if(lbl) lbl.textContent=’Connect Phantom →’;
+    if(phantomNote){ phantomNote.textContent=’Opens Phantom to approve connection’; phantomNote.style.color=’var(--muted)’; }
   } else {
     /* Desktop: grey out and show install link */
-    phantomBtn.style.background='var(--bg3)'; phantomBtn.style.color='var(--muted)'; phantomBtn.style.border='1px solid var(--border2)';
-    phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
+    phantomBtn.style.background=’var(--bg3)’; phantomBtn.style.color=’var(--muted)’; phantomBtn.style.border=’1px solid var(--border2)’;
+    if(phantomNote) phantomNote.innerHTML=’Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>’;
   }
 }
 
@@ -4229,13 +4267,12 @@ document.addEventListener('DOMContentLoaded',function(){
     if(phantomNote)phantomNote.style.display='none';
     if(skipBtn)    skipBtn.style.display='none';
   } else if(isMobile){
-    /* Mobile, no Face ID: show password form only */
+    /* Mobile, no Face ID: show password form + Phantom connect button */
     if(pwdForm)    pwdForm.style.display='block';
     if(bioBtn)     bioBtn.style.display='none';
     if(altLink)    altLink.style.display='none';
-    if(phantomBtn) phantomBtn.style.display='none';
-    if(phantomNote)phantomNote.style.display='none';
     if(skipBtn)    skipBtn.style.display='none';
+    if(phantomBtn){ phantomBtn.style.display='flex'; _applyPhantomDetection(phantomBtn, phantomNote||{style:{},innerHTML:'',textContent:''}); }
   } else {
     /* Desktop: show Phantom + Browse, hide Face ID and password form */
     if(pwdForm)    pwdForm.style.display='none';
@@ -4371,8 +4408,8 @@ async function connectWalletOnboard(type){
   const msgEl=document.getElementById('wallet-install-msg');
 
   if(!check){
-    /* On mobile without the extension, redirect into the wallet's in-app browser */
-    if(isMobile){ window.location.href=isPhantom?phantomDeepLink:solflareDeepLink; return; }
+    /* On mobile without the extension, use deep link */
+    if(isMobile){ if(isPhantom){ _phantomMobileV1Connect(); return; } window.location.href=solflareDeepLink; return; }
     const other=isPhantom?'Solflare':'Phantom';
     const otherUrl=isPhantom?'https://solflare.com':'https://phantom.app';
     msgEl.innerHTML=name+' wallet not detected. <a href="'+installUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">Install '+name+'</a> or try <a href="'+otherUrl+'" target="_blank" style="color:var(--blue);text-decoration:underline">'+other+'</a>.';
@@ -10009,8 +10046,11 @@ async function showTokenCard(symbol){
   const body=document.getElementById('tc-body')
   modal.style.display='flex'
   body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68"><div style="font-size:28px;margin-bottom:10px;animation:tcSpin 1s linear infinite;display:inline-block">◌</div><div style="font-size:13px">Loading...</div></div>'
+  var _ctrl=new AbortController();
+  var _timeout=setTimeout(function(){_ctrl.abort();},10000);
   try{
-    const r=await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol))
+    const r=await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol),{signal:_ctrl.signal})
+    clearTimeout(_timeout);
     const d=await r.json()
     const p=(d.pairs||[]).find(x=>x.chainId==='solana')
     if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No Solana pair found for <b style="color:#eef1f5">$'+symbol+'</b></div>';return}
@@ -10039,7 +10079,9 @@ async function showTokenCard(symbol){
       </div>
       `
   }catch(e){
-    body.innerHTML='<div style="text-align:center;padding:40px 0;color:#f76b62;font-size:13px">Failed to load token data</div>'
+    clearTimeout(_timeout);
+    var _msg=(e.name==='AbortError')?'Request timed out — check your connection':'Failed to load token data';
+    body.innerHTML='<div style="text-align:center;padding:40px 0;color:#f76b62;font-size:13px">'+_msg+'</div>'
   }
 }
 
@@ -10575,15 +10617,15 @@ document.addEventListener('DOMContentLoaded', function() {
 </div>
 
 <style>@keyframes tcSpin{to{transform:rotate(360deg)}}</style>
-<div id="tokenCard" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.75);z-index:2000;align-items:center;justify-content:center;padding:16px" onclick="if(event.target===this)this.style.display='none'">
+<div id="tokenCard" style="display:none;position:fixed;inset:0;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:#0d1117;border:1px solid #21252c;border-radius:20px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative">
     <button onclick="document.getElementById('tokenCard').style.display='none'" style="position:absolute;top:14px;right:14px;background:none;border:none;color:#565d68;cursor:pointer;font-size:20px;z-index:1;line-height:1">✕</button>
     <div id="tc-body" style="padding:20px"></div>
   </div>
 </div>
 
-<div id="deleteModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center">
-  <div style="background:#101216;border:1px solid #21252c;border-radius:18px;padding:24px;width:300px;text-align:center">
+<div id="deleteModal" style="display:none;position:fixed;inset:0;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#101216;border:1px solid #21252c;border-radius:18px;padding:24px;width:calc(100% - 32px);max-width:300px;text-align:center">
     <div style="font-size:18px;font-weight:600;margin-bottom:8px">Delete post?</div>
     <div style="color:#565d68;font-size:14px;margin-bottom:20px">This cannot be undone.</div>
     <div style="display:flex;gap:10px">

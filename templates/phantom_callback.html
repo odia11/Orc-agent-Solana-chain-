@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Connecting wallet… — OrcAgent</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:14px;padding:20px;text-align:center}
+.spin{font-size:36px;animation:spin 1s linear infinite;display:inline-block;color:#3ad29b}
+@keyframes spin{to{transform:rotate(360deg)}}
+.msg{font-size:14px;color:#8a919c;max-width:300px;line-height:1.5}
+.err{color:#f76b62}
+.brand{font-size:11px;color:#565d68;margin-top:20px;letter-spacing:.08em;text-transform:uppercase}
+</style>
+</head>
+<body>
+<div class="spin">◌</div>
+<div class="msg" id="msg">Completing wallet connection…</div>
+<div class="brand">OrcAgent</div>
+
+<script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
+<script>
+(function(){
+  // Minimal base58 decode for Phantom v1/connect response
+  var ALPHA='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  var MAP={};
+  for(var i=0;i<ALPHA.length;i++) MAP[ALPHA[i]]=i;
+  function b58dec(str){
+    var d=[0],c;
+    for(var i=0;i<str.length;i++){
+      c=MAP[str[i]];
+      if(c===undefined) throw new Error('Invalid base58 char: '+str[i]);
+      for(var j=0;j<d.length;j++){c+=d[j]*58;d[j]=c&255;c>>=8;}
+      while(c>0){d.push(c&255);c>>=8;}
+    }
+    for(var k=0;str[k]==='1'&&k<str.length-1;k++) d.push(0);
+    return new Uint8Array(d.reverse());
+  }
+
+  var msg=document.getElementById('msg');
+  function fail(txt){ msg.className='msg err'; msg.textContent=txt; setTimeout(function(){window.location.href='/';},4000); }
+
+  // Parse callback params from URL
+  var p=new URLSearchParams(window.location.search);
+  var errCode=p.get('errorCode');
+  var errMsg=p.get('errorMessage');
+  if(errCode){
+    fail('Phantom rejected the connection'+(errMsg?' — '+decodeURIComponent(errMsg):'')+' ('+errCode+')');
+    return;
+  }
+
+  var phantomPubB58=p.get('phantom_encryption_public_key');
+  var nonceB58=p.get('nonce');
+  var dataB58=p.get('data');
+  if(!phantomPubB58||!nonceB58||!dataB58){ fail('Invalid callback — missing parameters. Please try again.'); return; }
+
+  // Retrieve dapp secret key stored before redirect
+  var dappSkJson=localStorage.getItem('_phantom_dapp_sk');
+  if(!dappSkJson){ fail('Session expired — please try connecting again.'); return; }
+
+  try{
+    var dappSk=new Uint8Array(JSON.parse(dappSkJson));
+    var phantomPub=b58dec(phantomPubB58);
+    var nonce=b58dec(nonceB58);
+    var data=b58dec(dataB58);
+
+    var decrypted=nacl.box.open(data,nonce,phantomPub,dappSk);
+    if(!decrypted){ fail('Failed to decrypt wallet response. Please try again.'); return; }
+
+    var payload=JSON.parse(new TextDecoder().decode(decrypted));
+    var walletAddress=payload.public_key;
+    localStorage.removeItem('_phantom_dapp_sk');
+
+    if(!walletAddress){ fail('No wallet address in response.'); return; }
+
+    msg.textContent='Wallet approved — setting up session…';
+
+    fetch('/api/wallet/set',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({address:walletAddress})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok||d.success){
+        msg.textContent='Connected! Redirecting…';
+        window.location.href='/dashboard';
+      } else {
+        fail('Session error: '+(d.msg||'unknown'));
+      }
+    })
+    .catch(function(){ fail('Network error — please check your connection.'); });
+  }catch(e){
+    fail('Error: '+e.message);
+  }
+})();
+</script>
+</body>
+</html>
