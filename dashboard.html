@@ -9717,16 +9717,13 @@ document.addEventListener('DOMContentLoaded', function(){
 
 /* ── FEED TAB SWITCHER ── */
 async function submitPost(){
-  const text=document.getElementById('postText').value
-  if(!text.trim()) return
-  var btn=document.querySelector('.feed-composer-post');
-  if(btn){btn.disabled=true;btn.textContent='Posting…';}
-  try{
-    await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:text})})
-    document.getElementById('postText').value=''
-    loadHomeFeed()
-  }catch(e){console.error('[submitPost]',e);}
-  finally{if(btn){btn.disabled=false;btn.textContent='POST';}}
+  const t=document.getElementById('postText')
+  if(!t.value.trim()) return
+  const r=await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:t.value})})
+  const d=await r.json()
+  console.log('post result:',r.status,d)
+  if(r.ok){t.value='';loadHomeFeed()}
+  else alert('Error: '+JSON.stringify(d))
 }
 
 async function deletePost(id){
