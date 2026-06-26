@@ -125,7 +125,11 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   <div class="msgs-left" id="msgs-left">
     <div class="msgs-left-hdr">
       <div class="msgs-left-title">Messages</div>
-      <button onclick="newMsg()" style="background:#3ad29b;color:#08120f;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px">+ New</button>
+      <button onclick="document.getElementById('newMsgBar').style.display='block';document.getElementById('searchUser').focus()" style="background:#3ad29b;color:#08120f;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px">+ New</button>
+    </div>
+    <div id="newMsgBar" style="display:none;padding:12px;border-bottom:1px solid #16191f">
+      <input id="searchUser" placeholder="Search username..." style="width:100%;background:#101216;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5" oninput="searchUsers(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('newMsgBar').style.display='none'}">
+      <div id="searchResults" style="margin-top:8px"></div>
     </div>
     <div id="conv-list"><div class="msgs-left-empty">Loading…</div></div>
   </div>
@@ -344,15 +348,24 @@ function _backToList() {
   document.querySelector('.msgs-layout').classList.remove('thread-open');
 }
 
-function newMsg(){
-  const w=prompt('Enter username or wallet address:')
-  if(!w) return
-  fetch('/api/user/find?q='+encodeURIComponent(w))
-    .then(r=>r.json())
-    .then(d=>{
-      if(d.wallet) window.location='/messages/'+d.wallet
-      else alert('User not found')
-    })
+var _searchTimer=null;
+function searchUsers(q){
+  clearTimeout(_searchTimer);
+  const el=document.getElementById('searchResults');
+  if(!q.trim()){el.innerHTML='';return;}
+  _searchTimer=setTimeout(function(){
+    fetch('/api/users/search?q='+encodeURIComponent(q))
+      .then(r=>r.json())
+      .then(function(d){
+        const users=d.users||d||[];
+        if(!users.length){el.innerHTML='<div style="color:#565d68;font-size:12px;padding:6px">No users found</div>';return;}
+        el.innerHTML=users.map(function(u){
+          var w=u.wallet_address||u.wallet||'';
+          var name=u.username||w.slice(0,8)+'...';
+          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread(\''+w+'\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div style="width:30px;height:30px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">'+name[0].toUpperCase()+'</div><div style="font-size:13px;font-weight:600">'+name+'</div></div>';
+        }).join('');
+      }).catch(function(){el.innerHTML='';});
+  },300);
 }
 
 /* ── INIT ── */
