@@ -57,15 +57,7 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24p
 <script>
 fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('sol').textContent=(d.sol||0).toFixed(4)
-  document.getElementById('usd').textContent=d.usd?(+d.usd).toFixed(2):'—'
   document.getElementById('avail').textContent=(d.sol||0).toFixed(4)
-  const solRow=`<div style="display:flex;align-items:center;gap:12px;padding:12px 0">
-  <div style="width:38px;height:38px;border-radius:50%;background:#9945FF;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">SOL</div>
-  <div style="flex:1"><div style="font-weight:600">Solana</div>
-  <div style="color:#565d68;font-size:12px">${(d.sol||0).toFixed(4)} SOL</div></div>
-  <div style="text-align:right"><div>$${((d.sol||0)*(d.sol_price_usd||150)).toFixed(2)}</div></div>
-</div>`
-  document.getElementById('tokens').innerHTML=solRow
 }).catch(()=>{
   document.getElementById('sol').textContent='—'
   document.getElementById('usd').textContent='—'
@@ -75,13 +67,14 @@ fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
   console.log('tokens:', JSON.stringify(d))
   const t=d.tokens||[]
   console.log('token count:', t.length)
-  const rows=t.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+  const solToken=t.find(x=>x.symbol==='SOL')
+  if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
+  document.getElementById('tokens').innerHTML=t.map(x=>`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
     <div style="width:38px;height:38px;border-radius:50%;background:#512da8;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${(x.symbol||'?').slice(0,4)}</div>
     <div style="flex:1"><div style="font-weight:600">${x.symbol||x.mint?.slice(0,8)}</div>
     <div style="color:#565d68;font-size:12px">${(x.amount||0).toFixed(4)}</div></div>
     <div style="text-align:right"><div>$${(x.usd_value||x.value_usd||0).toFixed(2)}</div></div>
   </div>`).join('')
-  if(rows) document.getElementById('tokens').innerHTML+=rows
 })
 
 fetch('/api/wallet/transactions').then(r=>r.json()).then(d=>{
