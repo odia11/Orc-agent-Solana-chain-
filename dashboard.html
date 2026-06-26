@@ -3415,10 +3415,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div>
 
   <!-- COMPOSER -->
-  <div class="feed-composer" id="feed-composer">
+  <div class="feed-composer" id="feed-composer" onclick="document.getElementById('postText').focus()">
     <div class="feed-composer-top">
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
-      <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}" style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit"></textarea>
+      <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}" style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
     </div>
     <div class="feed-composer-actions">
       <button class="feed-composer-pill" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
