@@ -146,17 +146,24 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
   <!-- Recent posts -->
   <div class="pf-card">
     <div class="pf-section-title">Recent Posts</div>
-    {% if posts %}
+    {% set ns = namespace(shown=0) %}
     {% for post in posts %}
+      {% set _t = post.content %}
+      {% if '__TRADE__' in _t %}{% set _t = _t.split('__TRADE__')[0] %}{% endif %}
+      {% if '__CHART__' in _t %}{% set _t = _t.split('__CHART__')[0] %}{% endif %}
+      {% set _t = _t.strip() %}
+      {% if _t %}
+      {% set ns.shown = ns.shown + 1 %}
     <div class="pf-post">
-      <div class="pf-post-content">{{ post.content }}</div>
+      <div class="pf-post-content">{{ _t }}</div>
       <div class="pf-post-meta">
         <span class="pf-post-time">{{ (post.created_at or '')[:16] }}</span>
         <span class="pf-post-likes">♥ {{ post.likes or 0 }}</span>
       </div>
     </div>
+      {% endif %}
     {% endfor %}
-    {% else %}
+    {% if ns.shown == 0 %}
     <div class="pf-empty">No posts yet</div>
     {% endif %}
   </div>
