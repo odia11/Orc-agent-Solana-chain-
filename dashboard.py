@@ -2608,8 +2608,9 @@ def index():
 
 @app.route('/dashboard')
 def dashboard_redirect():
-    from flask import redirect
-    return redirect('/', 302)
+    qs = request.query_string.decode('utf-8')
+    target = '/?' + qs if qs else '/'
+    return redirect(target, 302)
 
 _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
@@ -3063,12 +3064,12 @@ def messages_page():
 
 @app.route('/deposit')
 def deposit_page():
-    return redirect('/dashboard?action=deposit')
+    return redirect('/?action=deposit')
 
 
 @app.route('/withdraw')
 def withdraw_page():
-    return redirect('/dashboard?action=withdraw')
+    return redirect('/?action=withdraw')
 
 
 @app.route('/community')
