@@ -10290,6 +10290,11 @@ document.addEventListener('DOMContentLoaded', function() {
     var first = document.querySelector('.dash-section');
     if (first) first.style.display = 'block';
   }
+
+  // Open deposit/withdraw modal if redirected from /wallet
+  var action = new URLSearchParams(window.location.search).get('action');
+  if (action === 'deposit'  && typeof openDepositModal  === 'function') openDepositModal();
+  if (action === 'withdraw' && typeof openWithdrawModal === 'function') openWithdrawModal();
 });
 </script>
 </body>
