@@ -9972,7 +9972,7 @@ function _renderFeedCard(e){
   }
 
   /* ── text body ── */
-  var _safeContent = e.content ? esc(e.content).replace(/\$([A-Z0-9]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>') : '';
+  var _safeContent = e.content ? esc(e.content).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>') : '';
   var textBody = _safeContent ? '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>' : '';
 
   /* ── copy button ── */
