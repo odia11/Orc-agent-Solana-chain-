@@ -7,13 +7,22 @@
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Geist:wght@400;600;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0}
-body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24px;max-width:700px}
-.card{background:#101216;border:1px solid #21252c;border-radius:18px;padding:20px;margin-bottom:16px}
+body{background:#0a0b0e;color:#e8eaed;font-family:'Geist',sans-serif;padding:24px;max-width:760px;font-size:14px}
+.card{background:#101216;border:1px solid #1a1f2e;border-radius:18px;padding:20px;margin-bottom:16px}
 .mono{font-family:'JetBrains Mono',monospace}
 .muted{color:#565d68}
 .accent{color:#3ad29b}
 .btn-p{background:#3ad29b;color:#08120f;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer;flex:1}
-.btn-o{background:#0a0b0e;border:1px solid #2c313a;color:#eef1f5;border-radius:12px;padding:12px;cursor:pointer;flex:1}
+.btn-o{background:#0a0b0e;border:1px solid #2c313a;color:#e8eaed;border-radius:12px;padding:12px;cursor:pointer;flex:1}
+.w-buy-btn{background:#0a2a1a;color:#00d084;border:1px solid #00d08430;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:background .15s,color .15s}
+.w-buy-btn:hover{background:#00d084;color:#000}
+.w-buy-btn:disabled{opacity:.45;cursor:not-allowed}
+.w-sell-btn{background:#1a0a0a;color:#ff4757;border:1px solid #ff475730;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:background .15s,color .15s}
+.w-sell-btn:hover{background:#ff4757;color:#fff}
+.w-sell-btn:disabled{opacity:.45;cursor:not-allowed}
+.w-inp{width:80px;background:#0a0c14;border:1px solid #1a1f2e;border-radius:8px;color:#e8eaed;padding:6px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none}
+.w-inp:focus{border-color:#3ad29b44}
+.w-sel{background:#1a0a0a;color:#ff4757;border:1px solid #ff475730;border-radius:8px;padding:6px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none}
 </style>
 </head>
 <body>
@@ -157,54 +166,49 @@ function loadTokens(bust){
     }
 
     wrap.innerHTML=spl.map((x,i)=>{
-      const sym=(x.symbol||'?')
+      const sym=x.symbol||'?'
       const amt=x.amount||0
       const usd=x.usd_value||x.value_usd||0
       const amtStr=amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
-      const logo=x.logo_url||''
-      const logoHtml=logo
-        ?`<img src="${logo}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none';this.nextSibling.style.display='flex'"><div style="display:none;width:38px;height:38px;border-radius:50%;background:#1a1e28;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#565d68;flex-shrink:0">${sym.slice(0,2)}</div>`
-        :`<div style="width:38px;height:38px;border-radius:50%;background:#1a1e28;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#565d68;flex-shrink:0">${sym.slice(0,2)}</div>`
 
-      // Per-token PnL
-      let pnlHtml=''
+      // Logo
+      const logo=x.logo_url||''
+      const initials=sym.slice(0,2).toUpperCase()
+      const logoHtml=logo
+        ?`<img src="${logo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none';this.nextSibling.style.display='flex'"><div style="display:none;width:40px;height:40px;border-radius:50%;background:#141820;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#444;flex-shrink:0">${initials}</div>`
+        :`<div style="width:40px;height:40px;border-radius:50%;background:#141820;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#444;flex-shrink:0">${initials}</div>`
+
+      // PnL pill
+      let pnlPill=''
       const avg=x.avg_price||0, cur=x.price_usd||0
       if(avg>0&&cur>0){
-        const pnlPct=(cur-avg)/avg*100
-        const pnlUsd=(cur-avg)*amt
-        const pnlCol=pnlPct>=0?'#3ad29b':'#f76b62'
-        const pnlSign=pnlPct>=0?'+':''
-        pnlHtml=`<div style="color:${pnlCol};font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:2px">${pnlSign}${pnlPct.toFixed(1)}% · ${pnlSign}$${Math.abs(pnlUsd).toFixed(2)}</div>`
+        const pct=(cur-avg)/avg*100
+        const col=pct>=0?'#00d084':'#ff4757'
+        const bg=pct>=0?'#00d08415':'#ff475715'
+        const sign=pct>=0?'+':''
+        pnlPill=`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:${col};background:${bg};border:1px solid ${col}22;border-radius:6px;padding:3px 8px;white-space:nowrap;flex-shrink:0">${sign}${pct.toFixed(1)}%</span>`
       }
 
-      const btnBase='border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:\'JetBrains Mono\',monospace;font-weight:600'
-      const inpStyle='width:70px;background:#0d1117;border:1px solid #21252c;color:#fff;border-radius:6px;padding:4px 8px;font-size:12px;font-family:\'JetBrains Mono\',monospace'
-      const selStyle='background:#0d1117;border:1px solid #21252c;color:#ff4757;border-radius:6px;padding:4px 4px;font-size:11px;cursor:pointer;font-family:\'JetBrains Mono\',monospace'
-
-      return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+      return`<div style="display:flex;align-items:center;padding:16px 0;border-bottom:1px solid #0d1117;gap:16px">
         <div onclick="window.location='/live-market?token='+encodeURIComponent('${sym}')" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
           ${logoHtml}
           <div style="min-width:0">
-            <div style="font-weight:600">${sym}</div>
-            <div style="color:#565d68;font-size:12px;font-family:'JetBrains Mono',monospace">${amtStr}</div>
-            ${pnlHtml}
+            <div style="font-weight:700;font-size:14px;color:#e8eaed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sym}</div>
+            <div style="font-size:12px;color:#444;font-family:'JetBrains Mono',monospace;margin-top:2px">${amtStr}</div>
           </div>
         </div>
-        <div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
-          <div style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px">$${usd.toFixed(2)}</div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <input id="winput-${i}" type="number" value="0.1" min="0.001" step="0.01" onclick="event.stopPropagation()" style="${inpStyle}">
-            <button id="wbtn-${i}-buy" onclick="event.stopPropagation();_wTrade(${i},'buy')" style="${btnBase};background:#0a2a1a;color:#00d084;border:1px solid #00d084">BUY</button>
-          </div>
-          <div style="display:flex;align-items:center;gap:4px">
-            <select id="wsel-${i}" onclick="event.stopPropagation()" style="${selStyle}">
-              <option value="25">25%</option>
-              <option value="50">50%</option>
-              <option value="100" selected>100%</option>
-            </select>
-            <button id="wbtn-${i}-sell" onclick="event.stopPropagation();_wTrade(${i},'sell')" style="${btnBase};background:#2a0a0a;color:#ff4757;border:1px solid #ff4757">SELL</button>
-          </div>
+        ${pnlPill}
+        <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
+          <input id="winput-${i}" class="w-inp" type="number" value="0.1" min="0.001" step="0.01" onclick="event.stopPropagation()">
+          <button id="wbtn-${i}-buy" class="w-buy-btn" onclick="event.stopPropagation();_wTrade(${i},'buy')">BUY</button>
+          <select id="wsel-${i}" class="w-sel" onclick="event.stopPropagation()">
+            <option value="25">25%</option>
+            <option value="50">50%</option>
+            <option value="100" selected>100%</option>
+          </select>
+          <button id="wbtn-${i}-sell" class="w-sell-btn" onclick="event.stopPropagation();_wTrade(${i},'sell')">SELL</button>
         </div>
+        <div style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#e8eaed;min-width:80px;text-align:right;font-size:14px;flex-shrink:0">$${usd.toFixed(2)}</div>
       </div>`
     }).join('')
   }).catch(()=>{wrap.innerHTML='<span class="muted">Failed to load</span>'})
