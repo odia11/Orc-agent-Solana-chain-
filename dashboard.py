@@ -5396,6 +5396,8 @@ def api_wallet_tokens():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    if request.args.get('bust'):
+        _wallet_tokens_cache.pop(wallet, None)
     try:
         data = _fetch_wallet_tokens(wallet)
         tokens = [{**t, 'usd_value': t['value_usd']} for t in data['tokens']]

@@ -47,7 +47,7 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24p
 <div class="card">
   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
     <div style="font-weight:600">Holdings</div>
-    <button onclick="loadTokens()" style="background:none;border:1px solid #35d4c4;color:#35d4c4;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;">↻ Refresh</button>
+    <button onclick="loadTokens(true)" style="background:none;border:1px solid #35d4c4;color:#35d4c4;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;">↻ Refresh</button>
   </div>
   <div id="tokens"><span class="muted">Loading...</span></div>
 </div>
@@ -61,10 +61,10 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('usd').textContent='—'
 })
 
-function loadTokens(){
+function loadTokens(bust){
   const wrap=document.getElementById('tokens')
   wrap.innerHTML='<span class="muted">Loading...</span>'
-  fetch('/api/wallet/tokens').then(r=>r.json()).then(d=>{
+  fetch('/api/wallet/tokens'+(bust?'?bust=1':'')).then(r=>r.json()).then(d=>{
     const t=d.tokens||[]
     const solToken=t.find(x=>x.symbol==='SOL')
     if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
