@@ -10361,35 +10361,16 @@ function _renderFeedCard(e){
   /* ── trade card ── */
   var tradeHtml = '';
   if(isTrade){
-    var entry = e.entry_price||0;
-    var exit  = isOpen ? (entry*(1+(e.current_pnl_pct||0)/100)) : (e.exit_price||entry);
-    var pct   = isOpen
-      ? (e.current_pnl_pct != null ? e.current_pnl_pct : null)
-      : (entry>0 ? (exit-entry)/entry*100 : parseFloat(e.pnl_pct||0));
-    var isPos = pct == null ? true : pct >= 0;
-    var pnlStr = pct == null ? 'Live' : ((pct>=0?'+':'')+pct.toFixed(1)+'%');
-    var badgeLbl = isOpen ? 'LONG' : (isPos ? 'LONG' : 'STOP-LOSS');
-    var badgeColor = isPos ? '#3ad29b' : '#f76b62';
-    var entryExit = isOpen ? ('Entry '+_fmtPrice(entry)) : (_fmtPrice(entry)+' → '+_fmtPrice(exit));
-    var tokenColor = (typeof _lbAvatarColor==='function') ? _lbAvatarColor(e.token||'?') : '#3ad29b';
-    /* 22-bar sparkline */
-    var bars=22, seed=((entry||1)*1e6+(exit||entry||1)*1e4)%233280, heights=[], trend=exit>entry?1:exit<entry?-1:0;
-    for(var i=0;i<bars;i++){seed=(seed*9301+49297)%233280;heights.push(Math.max(3,Math.min(18,Math.round(5+(i/(bars-1))*trend*10+((seed/233280)-0.5)*4))));}
-    var sparkHtml='<div style="display:flex;align-items:flex-end;gap:1.5px;height:22px">'+heights.map(function(h){return '<div style="width:3px;height:'+h+'px;background:'+badgeColor+';border-radius:1px;opacity:0.8"></div>';}).join('')+'</div>';
-    tradeHtml = '<div style="background:#101216;border:1px solid #21252c;border-radius:15px;padding:14px;margin:10px 0;display:flex;justify-content:space-between;align-items:center;gap:12px">'
-      +'<div style="flex:1;min-width:0">'
-      +'<div style="font-size:11px;color:#565d68;margin-bottom:4px">'+(isOpen?'Opened':'Closed')+'</div>'
-      +'<div style="display:flex;align-items:center;gap:7px;margin-bottom:5px">'
-      +'<span style="font-weight:700;font-size:15px;color:'+tokenColor+'">$'+esc(e.token||e.symbol||'?')+'</span>'
-      +'<span style="font-size:10px;font-weight:700;padding:2px 7px;border-radius:5px;background:'+badgeColor+'1a;color:'+badgeColor+'">'+esc(badgeLbl)+'</span>'
-      +'</div>'
-      +'<div style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#565d68">'+esc(entryExit)+'</div>'
-      +'</div>'
-      +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">'
-      +'<div style="font-size:23px;font-weight:700;line-height:1;color:'+(isPos?'#3ad29b':'#f76b62')+'">'+esc(pnlStr)+'</div>'
-      +sparkHtml
-      +'</div>'
-      +'</div>';
+    tradeHtml = _renderTradeTerminalCard({
+      symbol:      e.symbol || e.token || '',
+      pct:         e.pnl_pct || 0,
+      pnl_pct:     e.pnl_pct || 0,
+      entry:       e.entry_price || 0,
+      entry_price: e.entry_price || 0,
+      exit:        e.exit_price  || 0,
+      exit_price:  e.exit_price  || 0,
+      side:        'BUY',
+    });
   }
 
   /* ── text body ── */
@@ -10404,7 +10385,15 @@ function _renderFeedCard(e){
       var _tradeJsonStr = _tradeNL >= 0 ? _tradeRaw.slice(0, _tradeNL) : _tradeRaw;
       var _trd = null;
       try{ _trd = JSON.parse(_tradeJsonStr); }catch(ex){}
-      if(_trd) textBody += _renderTradeTerminalCard(_trd);
+      if(_trd) textBody += _renderTradeTerminalCard(Object.assign({
+        symbol:      e.symbol      || '',
+        pct:         e.pnl_pct     || 0,
+        pnl_pct:     e.pnl_pct     || 0,
+        entry:       e.entry_price || 0,
+        entry_price: e.entry_price || 0,
+        exit:        e.exit_price  || 0,
+        exit_price:  e.exit_price  || 0,
+      }, _trd));
       _rawContent = (_rawContent.slice(0, _tradeIdx).trimEnd() + (_tradeNL >= 0 ? '\n'+_tradeRaw.slice(_tradeNL) : '')).trim();
     }
     var _chartMatch = _rawContent.indexOf('__CHART__');
