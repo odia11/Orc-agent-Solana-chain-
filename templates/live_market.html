@@ -645,6 +645,12 @@ var _lmClientSecret = (document.querySelector('meta[name="client-secret"]')||{})
 
 /* ── init ── */
 _loadTab('trending');
+
+/* ── deep-link: /live-market?token=WIF opens the modal immediately ── */
+(function(){
+  var _urlToken = new URLSearchParams(location.search).get('token');
+  if(_urlToken) showTokenCard(_urlToken);
+})();
 </script>
 </body>
 </html>

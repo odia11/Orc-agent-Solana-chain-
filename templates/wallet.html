@@ -114,7 +114,7 @@ function loadTokens(bust){
         pnlHtml=`<div style="color:${pnlCol};font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:2px">${pnlSign}${pnlPct.toFixed(1)}% · ${pnlSign}$${Math.abs(pnlUsd).toFixed(2)}</div>`
       }
 
-      return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+      return`<div onclick="window.location='/live-market?token='+encodeURIComponent('${sym}')" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f;cursor:pointer">
         ${logoHtml}
         <div style="flex:1;min-width:0">
           <div style="font-weight:600">${sym}</div>
