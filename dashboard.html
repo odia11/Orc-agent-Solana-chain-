@@ -9680,6 +9680,23 @@ var _composerTrade = null;
 
 function _renderTradeTerminalCard(t){
   if(!t) return '';
+  // If passed a raw feed item (has content field), normalize to trade field names
+  if(t.content != null){
+    t = {
+      symbol:       t.symbol      || '',
+      side:         t.side        || 'BUY',
+      pct:          t.pnl_pct     || 0,
+      pnl_pct:      t.pnl_pct     || 0,
+      entry:        t.entry_price || 0,
+      entry_price:  t.entry_price || 0,
+      exit:         t.exit_price  || 0,
+      exit_price:   t.exit_price  || 0,
+      pnl_sol:      t.pnl_sol     || 0,
+      amount:       t.amount      || 0,
+      duration:     t.duration    || '',
+      token_address:t.token_address || '',
+    };
+  }
   console.log('[trade]', t);
   var isBuy   = (t.side||'BUY').toUpperCase() !== 'SELL';
   var sideCol = isBuy ? '#00d084' : '#ff4757';
@@ -10361,16 +10378,7 @@ function _renderFeedCard(e){
   /* ── trade card ── */
   var tradeHtml = '';
   if(isTrade){
-    tradeHtml = _renderTradeTerminalCard({
-      symbol:      e.symbol || e.token || '',
-      pct:         e.pnl_pct || 0,
-      pnl_pct:     e.pnl_pct || 0,
-      entry:       e.entry_price || 0,
-      entry_price: e.entry_price || 0,
-      exit:        e.exit_price  || 0,
-      exit_price:  e.exit_price  || 0,
-      side:        'BUY',
-    });
+    tradeHtml = _renderTradeTerminalCard(e);
   }
 
   /* ── text body ── */
