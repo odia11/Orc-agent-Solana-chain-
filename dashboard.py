@@ -35,6 +35,7 @@ app.permanent_session_lifetime = timedelta(days=30)
 app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
+app.config['SESSION_COOKIE_PATH']       = '/'
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 @app.template_filter('fmtk')

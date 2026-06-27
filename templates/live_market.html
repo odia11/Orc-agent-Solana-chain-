@@ -643,12 +643,6 @@ function _setError(msg){
 var _lmCsrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
 var _lmClientSecret = (document.querySelector('meta[name="client-secret"]')||{}).content||'';
 
-/* ── Session diagnostic (logs to console on page load — remove once 403 is resolved) ── */
-fetch('/api/test-auth',{credentials:'include'})
-  .then(function(r){return r.json();})
-  .then(function(d){console.log('[OrcAgent test-auth]',d);})
-  .catch(function(e){console.warn('[OrcAgent test-auth] fetch failed',e);});
-
 /* ── init ── */
 _loadTab('trending');
 </script>
