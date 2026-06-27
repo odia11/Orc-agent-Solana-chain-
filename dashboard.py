@@ -31,7 +31,7 @@ def _load_secret_key() -> bytes:
         return _key
 
 app.secret_key = _load_secret_key()
-app.permanent_session_lifetime = timedelta(days=30)
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
 app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
@@ -4163,6 +4163,8 @@ def api_instant_trade():
 
     if not request.is_json:
         return jsonify({'error': 'Content-Type must be application/json', 'received': request.content_type}), 400
+
+    print(f'[instant-trade] session keys: {list(session.keys())}, wallet: {session.get("wallet")}', flush=True)
 
     wallet = _current_wallet()
     if not wallet:
