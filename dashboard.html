@@ -9680,18 +9680,21 @@ var _composerTrade = null;
 
 function _renderTradeTerminalCard(t){
   if(!t) return '';
+  console.log('[trade card]', t);
   var isBuy   = (t.side||'BUY').toUpperCase() !== 'SELL';
   var sideCol = isBuy ? '#00d084' : '#ff4757';
-  var pct     = parseFloat(t.pct != null ? t.pct : (t.pnl_pct != null ? t.pnl_pct : 0));
-  if(pct === 0 && t.entry && t.exit && parseFloat(t.entry) > 0)
-    pct = (parseFloat(t.exit) - parseFloat(t.entry)) / parseFloat(t.entry) * 100;
+  // canonical API names: entry_price, exit_price, pnl_pct, pnl_sol — fall back to old short names for legacy posts
+  var entryN  = parseFloat(t.entry_price != null ? t.entry_price : (t.entry || 0));
+  var exitN   = parseFloat(t.exit_price  != null ? t.exit_price  : (t.exit  || 0));
+  var pct     = parseFloat(t.pnl_pct     != null ? t.pnl_pct     : (t.pct   != null ? t.pct : 0));
+  if(pct === 0 && entryN > 0 && exitN > 0) pct = (exitN - entryN) / entryN * 100;
   var pctCol  = pct >= 0 ? '#00d084' : '#ff4757';
   var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-  var sol     = parseFloat(t.sol_profit || t.pnl_sol || 0);
+  var sol     = parseFloat(t.pnl_sol != null ? t.pnl_sol : (t.sol_profit || 0));
   var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(4) + ' SOL';
   var _fp = function(n){ n=parseFloat(n||0); return n ? (n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6)) : '—'; };
-  var entry  = _fp(t.entry);
-  var exit_p = _fp(t.exit);
+  var entry  = _fp(entryN);
+  var exit_p = _fp(exitN);
   var dur    = t.duration ? '<span style="color:#565d68;font-size:11px"> · '+esc(t.duration)+'</span>' : '';
   var sym    = esc(t.symbol||'');
   var amtStr = '';
@@ -9780,7 +9783,7 @@ function _attachTradeEmbed(idx){
     dur = (h>0 ? h+'h ' : '') + m + 'm';
   }
   var amount = parseFloat(t.amount || 0);
-  _composerTrade = {symbol:sym, side:side, entry:entry, exit:exit, pct:pct, sol_profit:sol, amount:amount, duration:dur, token_address:t.token_address||''};
+  _composerTrade = {symbol:sym, side:side, entry_price:entry, exit_price:exit, pnl_pct:pct, pnl_sol:sol, amount:amount, duration:dur, token_address:t.token_address||''};
   document.getElementById('composer-trade-dropdown').style.display = 'none';
   document.getElementById('trade-pill-btn').style.background = '#00d08422';
   _renderComposerTradePreview();
