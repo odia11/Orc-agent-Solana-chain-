@@ -62,6 +62,67 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('usd').textContent='—'
 })
 
+function _wToast(msg, ok){
+  var t=document.createElement('div')
+  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:'+(ok?'#0a2a1a':'#2a0a0a')+';color:'+(ok?'#3ad29b':'#f76b62')+';border:1px solid '+(ok?'#3ad29b':'#f76b62')+';padding:10px 20px;border-radius:8px;font-size:13px;font-family:\'JetBrains Mono\',monospace;z-index:9999;white-space:nowrap;pointer-events:none;transition:opacity .25s'
+  t.textContent=msg
+  document.body.appendChild(t)
+  setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},260)},3000)
+}
+
+function _wTrade(i, side){
+  var tok=(window._wTokens||[])[i]
+  if(!tok) return
+  var buyBtn=document.getElementById('wbtn-'+i+'-buy')
+  var sellBtn=document.getElementById('wbtn-'+i+'-sell')
+  var origBuy=buyBtn?buyBtn.textContent:'BUY'
+  var origSell=sellBtn?sellBtn.textContent:'SELL'
+  if(buyBtn){buyBtn.disabled=true}
+  if(sellBtn){sellBtn.disabled=true}
+  if(side==='buy'&&buyBtn) buyBtn.textContent='…'
+  if(side==='sell'&&sellBtn) sellBtn.textContent='…'
+
+  var amount_sol=0
+  if(side==='buy'){
+    amount_sol=parseFloat((document.getElementById('winput-'+i)||{}).value)||0
+    if(amount_sol<=0){
+      _wToast('Enter a valid SOL amount',false)
+      if(buyBtn){buyBtn.disabled=false;buyBtn.textContent=origBuy}
+      if(sellBtn){sellBtn.disabled=false}
+      return
+    }
+  } else {
+    var pct=parseFloat((document.getElementById('wsel-'+i)||{}).value)||100
+    if(pct>=100){
+      amount_sol=0  // backend does full sell when 0
+    } else {
+      var tokUsd=(tok.usd_value||tok.value_usd||0)*pct/100
+      var solPx=window._wSolPrice||0
+      amount_sol=solPx>0?tokUsd/solPx:0
+    }
+  }
+
+  fetch('/api/instant-trade',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token_address:tok.mint,symbol:tok.symbol||'',side:side,amount_sol:amount_sol})
+  }).then(function(r){return r.json()}).then(function(d){
+    if(d.success||d.ok){
+      _wToast((side==='buy'?'✅ Bought ':'✅ Sold ')+(tok.symbol||''),true)
+      loadTokens(true)
+    } else {
+      _wToast('❌ '+(d.error||'Trade failed'),false)
+      if(buyBtn){buyBtn.disabled=false;buyBtn.textContent=origBuy}
+      if(sellBtn){sellBtn.disabled=false;sellBtn.textContent=origSell}
+    }
+  }).catch(function(){
+    _wToast('❌ Network error',false)
+    if(buyBtn){buyBtn.disabled=false;buyBtn.textContent=origBuy}
+    if(sellBtn){sellBtn.disabled=false;sellBtn.textContent=origSell}
+  })
+}
+
 function loadTokens(bust){
   const wrap=document.getElementById('tokens')
   wrap.innerHTML='<span class="muted">Loading...</span>'
@@ -71,6 +132,8 @@ function loadTokens(bust){
     if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
     const spl=t.filter(x=>x.symbol!=='SOL')
     if(!spl.length){wrap.innerHTML='<span class="muted" style="font-size:13px">No SPL tokens</span>';return}
+    window._wTokens=spl
+    window._wSolPrice=solToken?parseFloat(solToken.price_usd||0):0
 
     // Portfolio PnL total
     let totalPnlUsd=0, hasPnl=false
@@ -93,7 +156,7 @@ function loadTokens(bust){
       ppEl.innerHTML=`<span style="color:#565d68">Portfolio PnL: </span><span style="color:${ppCol};font-weight:600">${ppSign}$${Math.abs(totalPnlUsd).toFixed(2)} (${ppSign}${ppPct.toFixed(1)}%)</span>`
     }
 
-    wrap.innerHTML=spl.map(x=>{
+    wrap.innerHTML=spl.map((x,i)=>{
       const sym=(x.symbol||'?')
       const amt=x.amount||0
       const usd=x.usd_value||x.value_usd||0
@@ -114,15 +177,33 @@ function loadTokens(bust){
         pnlHtml=`<div style="color:${pnlCol};font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:2px">${pnlSign}${pnlPct.toFixed(1)}% · ${pnlSign}$${Math.abs(pnlUsd).toFixed(2)}</div>`
       }
 
-      return`<div onclick="window.location='/live-market?token='+encodeURIComponent('${sym}')" style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f;cursor:pointer">
-        ${logoHtml}
-        <div style="flex:1;min-width:0">
-          <div style="font-weight:600">${sym}</div>
-          <div style="color:#565d68;font-size:12px;font-family:'JetBrains Mono',monospace">${amtStr}</div>
-          ${pnlHtml}
+      const btnBase='border-radius:6px;padding:4px 10px;font-size:11px;cursor:pointer;font-family:\'JetBrains Mono\',monospace;font-weight:600'
+      const inpStyle='width:70px;background:#0d1117;border:1px solid #21252c;color:#fff;border-radius:6px;padding:4px 8px;font-size:12px;font-family:\'JetBrains Mono\',monospace'
+      const selStyle='background:#0d1117;border:1px solid #21252c;color:#ff4757;border-radius:6px;padding:4px 4px;font-size:11px;cursor:pointer;font-family:\'JetBrains Mono\',monospace'
+
+      return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
+        <div onclick="window.location='/live-market?token='+encodeURIComponent('${sym}')" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
+          ${logoHtml}
+          <div style="min-width:0">
+            <div style="font-weight:600">${sym}</div>
+            <div style="color:#565d68;font-size:12px;font-family:'JetBrains Mono',monospace">${amtStr}</div>
+            ${pnlHtml}
+          </div>
         </div>
-        <div style="text-align:right;font-family:'JetBrains Mono',monospace">
-          <div style="font-weight:600">$${usd.toFixed(2)}</div>
+        <div onclick="event.stopPropagation()" style="display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0">
+          <div style="font-family:'JetBrains Mono',monospace;font-weight:600;font-size:14px">$${usd.toFixed(2)}</div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <input id="winput-${i}" type="number" value="0.1" min="0.001" step="0.01" onclick="event.stopPropagation()" style="${inpStyle}">
+            <button id="wbtn-${i}-buy" onclick="event.stopPropagation();_wTrade(${i},'buy')" style="${btnBase};background:#0a2a1a;color:#00d084;border:1px solid #00d084">BUY</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:4px">
+            <select id="wsel-${i}" onclick="event.stopPropagation()" style="${selStyle}">
+              <option value="25">25%</option>
+              <option value="50">50%</option>
+              <option value="100" selected>100%</option>
+            </select>
+            <button id="wbtn-${i}-sell" onclick="event.stopPropagation();_wTrade(${i},'sell')" style="${btnBase};background:#2a0a0a;color:#ff4757;border:1px solid #ff4757">SELL</button>
+          </div>
         </div>
       </div>`
     }).join('')
