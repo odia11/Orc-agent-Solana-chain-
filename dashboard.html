@@ -3406,7 +3406,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <!-- TRADE DROPDOWN (hidden by default) -->
     <div id="composer-trade-dropdown" style="display:none;margin-bottom:10px;position:relative" onclick="event.stopPropagation()">
       <div style="background:#101216;border:1px solid #21252c;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
-        <div style="padding:9px 14px;border-bottom:1px solid #16191f;font-size:10px;font-weight:700;color:#565d68;letter-spacing:.08em;text-transform:uppercase">Recent closed trades</div>
+        <div style="padding:9px 14px;border-bottom:1px solid #16191f;font-size:10px;font-weight:700;color:#565d68;letter-spacing:.08em;text-transform:uppercase;position:relative">Recent closed trades<button onclick="document.getElementById('composer-trade-dropdown').style.display='none';document.getElementById('trade-pill-btn').style.background=''" style="position:absolute;top:50%;right:8px;transform:translateY(-50%);background:none;border:none;color:#666;font-size:16px;cursor:pointer;line-height:1">✕</button></div>
         <div id="composer-trade-list"><div style="padding:12px 14px;color:#565d68;font-size:12px">Loading…</div></div>
       </div>
     </div>
