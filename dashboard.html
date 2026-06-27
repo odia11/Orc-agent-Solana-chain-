@@ -9635,6 +9635,7 @@ async function confirmDelete(){
   const url=_deletePostType==='trade'
     ? '/api/trades/'+_deletePostId
     : '/api/feed/post/'+_deletePostId
+  console.log('[delete] url:', url)
   const r=await fetch(url,{method:'DELETE'})
   _deletePostId=null
   _deletePostType=null
@@ -9708,7 +9709,7 @@ function _renderTradeTerminalCard(t){
   var sideCol = isBuy ? '#00d084' : '#ff4757';
   var entryN  = parseFloat(t.entry_price || t.entry || 0);
   var exitN   = parseFloat(t.exit_price  || t.exit  || 0);
-  var pct     = parseFloat(t.pct || t.pnl_pct || (t.exit > 0 && t.entry > 0 ? (t.exit - t.entry) / t.entry * 100 : (exitN > 0 && entryN > 0 ? (exitN - entryN) / entryN * 100 : 0)));
+  var pct     = parseFloat(t.pnl_pct || t.pct || 0);
   var pctCol  = pct >= 0 ? '#00d084' : '#ff4757';
   var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
   var sol     = parseFloat(t.pnl_sol != null ? t.pnl_sol : (t.sol_profit || 0));
@@ -9731,7 +9732,7 @@ function _renderTradeTerminalCard(t){
     +'<span style="color:#eef1f5;font-weight:700;font-size:15px">$'+sym+'</span>'
     +dur
     +'</div>'
-    +'<div style="color:#8a919c;font-size:11px;margin-bottom:5px">'+entry+' &rarr; '+exit_p+'</div>'
+    +'<div style="color:#8a919c;font-size:11px;margin-bottom:5px">$'+esc(String(t.entry_price||entryN||'—'))+' → $'+esc(String(t.exit_price||exitN||'—'))+'</div>'
     +'<div style="color:#35d4c4;font-size:12px;font-weight:600">'+solStr+'</div>'
     +amtStr
     +'</div>'
