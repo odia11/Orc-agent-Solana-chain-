@@ -9680,16 +9680,14 @@ var _composerTrade = null;
 
 function _renderTradeTerminalCard(t){
   if(!t) return '';
-  console.log('[trade card]', t);
+  console.log('[trade]', t);
   var isBuy   = (t.side||'BUY').toUpperCase() !== 'SELL';
   var sideCol = isBuy ? '#00d084' : '#ff4757';
-  // canonical API names: entry_price, exit_price, pnl_pct, pnl_sol — fall back to old short names for legacy posts
-  var entryN  = parseFloat(t.entry_price != null ? t.entry_price : (t.entry || 0));
-  var exitN   = parseFloat(t.exit_price  != null ? t.exit_price  : (t.exit  || 0));
-  var pct     = parseFloat(t.pnl_pct     != null ? t.pnl_pct     : (t.pct   != null ? t.pct : 0));
-  if(pct === 0 && entryN > 0 && exitN > 0) pct = (exitN - entryN) / entryN * 100;
+  var entryN  = parseFloat(t.entry_price || t.entry || 0);
+  var exitN   = parseFloat(t.exit_price  || t.exit  || 0);
+  var pct     = parseFloat(t.pnl_pct || t.pct || (entryN && exitN ? (exitN - entryN) / entryN * 100 : 0));
   var pctCol  = pct >= 0 ? '#00d084' : '#ff4757';
-  var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
+  var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
   var sol     = parseFloat(t.pnl_sol != null ? t.pnl_sol : (t.sol_profit || 0));
   var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(4) + ' SOL';
   var _fp = function(n){ n=parseFloat(n||0); return n ? (n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6)) : '—'; };
