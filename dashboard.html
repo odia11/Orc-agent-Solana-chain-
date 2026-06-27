@@ -9682,17 +9682,38 @@ function _renderTradeTerminalCard(t){
   if(!t) return '';
   var isBuy   = (t.side||'BUY').toUpperCase() !== 'SELL';
   var sideCol = isBuy ? '#00d084' : '#ff4757';
-  var pct     = parseFloat(t.pct||0);
+  var pct     = parseFloat(t.pct != null ? t.pct : (t.pnl_pct != null ? t.pnl_pct : 0));
+  if(pct === 0 && t.entry && t.exit && parseFloat(t.entry) > 0)
+    pct = (parseFloat(t.exit) - parseFloat(t.entry)) / parseFloat(t.entry) * 100;
   var pctCol  = pct >= 0 ? '#00d084' : '#ff4757';
   var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(1) + '%';
-  var sol     = parseFloat(t.sol_profit||0);
-  var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(3) + ' SOL';
+  var sol     = parseFloat(t.sol_profit || t.pnl_sol || 0);
+  var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(4) + ' SOL';
   var _fp = function(n){ n=parseFloat(n||0); return n ? (n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6)) : '—'; };
   var entry  = _fp(t.entry);
   var exit_p = _fp(t.exit);
-  var dur    = t.duration ? ' | '+esc(t.duration) : '';
+  var dur    = t.duration ? '<span style="color:#565d68;font-size:11px"> · '+esc(t.duration)+'</span>' : '';
   var sym    = esc(t.symbol||'');
-  return '<div style="background:#0d1117;border:1px solid #1a1f2e;border-radius:8px;padding:12px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;font-size:13px;line-height:1.6;cursor:pointer;overflow-x:auto;white-space:nowrap" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')"><span style="color:'+sideCol+';font-weight:700">['+esc((t.side||'BUY').toUpperCase())+']</span> <span style="color:#eef1f5;font-weight:700">$'+sym+'</span> <span style="color:#565d68">@</span> <span style="color:#8a919c">'+entry+' &rarr; '+exit_p+'</span> <span style="color:#565d68">|</span> <span style="color:'+pctCol+';font-weight:700">'+pctStr+'</span> <span style="color:#565d68">|</span> <span style="color:#35d4c4">'+solStr+'</span>'+dur+'</div>';
+  var amtStr = '';
+  if(t.amount && parseFloat(t.amount) > 0){
+    var _amt = parseFloat(t.amount);
+    amtStr = '<div style="color:#565d68;font-size:11px;margin-top:3px">'+(_amt>=1000?_amt.toLocaleString('en-US',{maximumFractionDigits:0}):_amt.toFixed(4))+' tokens</div>';
+  }
+  return '<div style="background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+    +'<div style="flex:1;min-width:0">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'
+    +'<span style="color:'+sideCol+';font-weight:700;font-size:11px;border:1px solid '+sideCol+'33;border-radius:4px;padding:1px 5px">'+(isBuy?'BUY':'SELL')+'</span>'
+    +'<span style="color:#eef1f5;font-weight:700;font-size:15px">$'+sym+'</span>'
+    +dur
+    +'</div>'
+    +'<div style="color:#8a919c;font-size:11px;margin-bottom:5px">'+entry+' &rarr; '+exit_p+'</div>'
+    +'<div style="color:#35d4c4;font-size:12px;font-weight:600">'+solStr+'</div>'
+    +amtStr
+    +'</div>'
+    +'<div style="font-size:26px;font-weight:700;color:'+pctCol+';line-height:1;text-align:right;padding-left:14px;align-self:center">'+pctStr+'</div>'
+    +'</div>'
+    +'</div>';
 }
 
 function _feedComposerTrade(){
@@ -9758,7 +9779,8 @@ function _attachTradeEmbed(idx){
     var h  = Math.floor(ms/3600000), m = Math.floor((ms%3600000)/60000);
     dur = (h>0 ? h+'h ' : '') + m + 'm';
   }
-  _composerTrade = {symbol:sym, side:side, entry:entry, exit:exit, pct:pct, sol_profit:sol, duration:dur, token_address:t.token_address||''};
+  var amount = parseFloat(t.amount || 0);
+  _composerTrade = {symbol:sym, side:side, entry:entry, exit:exit, pct:pct, sol_profit:sol, amount:amount, duration:dur, token_address:t.token_address||''};
   document.getElementById('composer-trade-dropdown').style.display = 'none';
   document.getElementById('trade-pill-btn').style.background = '#00d08422';
   _renderComposerTradePreview();
@@ -10342,7 +10364,7 @@ function _renderFeedCard(e){
     var exit  = isOpen ? (entry*(1+(e.current_pnl_pct||0)/100)) : (e.exit_price||entry);
     var pct   = isOpen
       ? (e.current_pnl_pct != null ? e.current_pnl_pct : null)
-      : (entry>0 ? (exit-entry)/entry*100 : 0);
+      : (entry>0 ? (exit-entry)/entry*100 : parseFloat(e.pnl_pct||0));
     var isPos = pct == null ? true : pct >= 0;
     var pnlStr = pct == null ? 'Live' : ((pct>=0?'+':'')+pct.toFixed(1)+'%');
     var badgeLbl = isOpen ? 'LONG' : (isPos ? 'LONG' : 'STOP-LOSS');

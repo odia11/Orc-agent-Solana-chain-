@@ -2707,15 +2707,16 @@ def api_my_trades():
             exit_p = t['exit_price']  or 0
             pnl_pct = round(((exit_p - entry) / entry * 100), 2) if entry else 0
             result.append({
-                'symbol':      t['token'],
-                'token':       t['token'],
-                'entry_price': entry,
-                'exit_price':  exit_p,
-                'pnl':         t['pnl'],
-                'pnl_pct':     pnl_pct,
-                'pnl_sol':     t['pnl'],
-                'opened_at':   t['opened_at'],
-                'timestamp':   t['timestamp'],
+                'symbol':        t['token'],
+                'token':         t['token'],
+                'entry_price':   entry,
+                'exit_price':    exit_p,
+                'amount':        float(t['amount'] or 0),
+                'pnl':           t['pnl'],
+                'pnl_pct':       pnl_pct,
+                'pnl_sol':       t['pnl'],
+                'opened_at':     t['opened_at'],
+                'timestamp':     t['timestamp'],
                 'token_address': t['mint_address'] or '',
             })
         return jsonify({'trades': result})
@@ -4102,7 +4103,7 @@ def social_feed():
         rows = conn.execute('''
             SELECT fp.id, fp.wallet, fp.content, fp.created_at, fp.likes,
                    u.username, NULL as symbol, NULL as pnl_pct,
-                   (fp.wallet = ?) as is_own
+                   (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price
             FROM feed_posts fp
             LEFT JOIN users u ON fp.wallet = u.wallet_address
             UNION ALL
@@ -4113,7 +4114,7 @@ def social_feed():
                    CASE WHEN t.entry_price > 0 AND t.exit_price > 0
                         THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                         ELSE 0 END as pnl_pct,
-                   (u.wallet_address = ?) as is_own
+                   (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price
             FROM trades t
             LEFT JOIN users u ON t.user_id = u.id
             ORDER BY created_at DESC LIMIT 50
@@ -4123,20 +4124,22 @@ def social_feed():
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, likes, username, symbol, pnl_pct, is_own = row
+        rid, wallet, content, created_at, likes, username, symbol, pnl_pct, is_own, entry_price, exit_price = row
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
         feed.append({
-            'id':         rid,
-            'wallet':     short,
-            'content':    content or '',
-            'created_at': created_at or '',
-            'likes':      likes or 0,
-            'username':   display,
-            'symbol':     symbol or '',
-            'pnl_pct':    pnl_pct or 0,
-            'type':       'text' if content else 'trade',
-            'is_own':     bool(is_own),
+            'id':          rid,
+            'wallet':      short,
+            'content':     content or '',
+            'created_at':  created_at or '',
+            'likes':       likes or 0,
+            'username':    display,
+            'symbol':      symbol or '',
+            'pnl_pct':     pnl_pct or 0,
+            'entry_price': entry_price or 0,
+            'exit_price':  exit_price or 0,
+            'type':        'text' if content else 'trade',
+            'is_own':      bool(is_own),
         })
     return jsonify(feed)
 
