@@ -4397,6 +4397,30 @@ def feed_post_delete(post_id):
     finally:
         conn.close()
 
+@app.route('/api/trades/<int:trade_id>', methods=['DELETE'])
+@rate_limit(20, 60)
+def trade_delete(trade_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute('SELECT user_id FROM trades WHERE id=?', (trade_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Trade not found'}), 404
+        is_own   = row[0] == uid
+        is_admin = _is_owner(wallet)
+        if not is_own and not is_admin:
+            return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+        conn.execute('DELETE FROM trades WHERE id=?', (trade_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
 # ── FEED INTERACTIONS ──
 @app.route('/api/feed/like/<path:post_id>', methods=['POST'])
 @rate_limit(60, 60)

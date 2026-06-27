@@ -9623,15 +9623,21 @@ async function submitPost(){
 }
 
 var _deletePostId=null
-function deletePost(id){
+var _deletePostType=null
+function deletePost(id,type){
   _deletePostId=id
+  _deletePostType=type||'text'
   document.getElementById('deleteModal').style.display='flex'
 }
 async function confirmDelete(){
   document.getElementById('deleteModal').style.display='none'
   if(!_deletePostId) return
-  const r=await fetch('/api/feed/post/'+_deletePostId,{method:'DELETE'})
+  const url=_deletePostType==='trade'
+    ? '/api/trades/'+_deletePostId
+    : '/api/feed/post/'+_deletePostId
+  const r=await fetch(url,{method:'DELETE'})
   _deletePostId=null
+  _deletePostType=null
   if(r.ok) window.location.reload()
 }
 
@@ -10315,7 +10321,7 @@ function renderPost(item){
     <button onclick="replyPost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">↩ <span>${item.replies||0}</span></button>
     <button onclick="copyTrade(${item.id})" style="background:none;border:none;color:#3ad29b;cursor:pointer;display:flex;align-items:center;gap:6px">⧉ Copy <span>${item.copies||0}</span></button>
     <button onclick="likePost(${item.id},this)" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">♡ <span>${item.likes||0}</span></button>
-    ${(item.is_own||_isAdmin)?`<button onclick="deletePost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:14px;margin-left:auto" title="Delete">🗑</button>`:''}
+    ${(item.is_own||_isAdmin)?`<button onclick="deletePost(${item.id},'${item.type}')" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:14px;margin-left:auto" title="Delete">🗑</button>`:''}
   </div>`
   return `<article style="padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px">
     <div style="width:44px;height:44px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${init}</div>
@@ -10514,7 +10520,7 @@ function _renderFeedCard(e){
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
     +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
-    +((e.id&&(e.is_own||_isAdmin)) ? '<button onclick="event.stopPropagation();deletePost('+e.id+')" style="background:none;border:none;color:#f76b62;cursor:pointer;font-size:13px;padding:0;margin-left:auto">🗑</button>' : '')
+    +((e.id&&(e.is_own||_isAdmin)) ? '<button onclick="event.stopPropagation();deletePost('+e.id+',\''+e.type+'\')" style="background:none;border:none;color:#f76b62;cursor:pointer;font-size:13px;padding:0;margin-left:auto">🗑</button>' : '')
     +'</div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
