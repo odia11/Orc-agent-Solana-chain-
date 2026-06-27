@@ -5307,31 +5307,41 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
     })
 
     # ── SPL token accounts ──
+    print(f'[wallet-tokens] wallet={wallet}', flush=True)
     mints_needed: list = []
     raw_accounts: list = []
-    try:
-        r = requests.post(SOLANA_RPC, json={
-            'jsonrpc': '2.0', 'id': 1,
-            'method': 'getTokenAccountsByOwner',
-            'params': [
-                wallet,
-                {'programId': TOKEN_PROGRAM_ID},
-                {'encoding': 'jsonParsed'},
-            ]
-        }, timeout=12)
-        accounts = r.json().get('result', {}).get('value') or []
-        for acc in accounts:
-            info = (acc.get('account') or {}).get('data', {}).get('parsed', {}).get('info') or {}
-            mint = info.get('mint', '')
-            ta   = info.get('tokenAmount') or {}
-            decimals = int(ta.get('decimals', 0))
-            amount   = int(ta.get('amount', 0)) / (10 ** decimals) if decimals >= 0 else 0.0
-            if amount <= 0 or not mint or mint == SOL_MINT:
-                continue
-            raw_accounts.append({'mint': mint, 'amount': amount, 'decimals': decimals})
-            mints_needed.append(mint)
-    except Exception:
-        pass
+    _rpc_raw = None
+    _spl_accounts: list = []
+    _rpcs_to_try = [SOLANA_RPC] + [ep for ep in _PROXY_RPCS if ep != SOLANA_RPC]
+    for _rpc_url in _rpcs_to_try:
+        try:
+            _rpc_r = requests.post(_rpc_url, json={
+                'jsonrpc': '2.0', 'id': 1,
+                'method': 'getTokenAccountsByOwner',
+                'params': [
+                    wallet,
+                    {'programId': TOKEN_PROGRAM_ID},
+                    {'encoding': 'jsonParsed'},
+                ],
+            }, timeout=12)
+            _rpc_raw = _rpc_r.json()
+            _spl_accounts = _rpc_raw.get('result', {}).get('value') or []
+            print(f'[wallet-tokens] RPC {_rpc_url}: {len(_spl_accounts)} accounts', flush=True)
+            if _spl_accounts:
+                break
+        except Exception as _rpc_err:
+            print(f'[wallet-tokens] RPC {_rpc_url} error: {_rpc_err}', flush=True)
+    print(f'[wallet-tokens] RPC response (truncated): {str(_rpc_raw)[:500]}', flush=True)
+    for acc in _spl_accounts:
+        info = (acc.get('account') or {}).get('data', {}).get('parsed', {}).get('info') or {}
+        mint = info.get('mint', '')
+        ta   = info.get('tokenAmount') or {}
+        decimals = int(ta.get('decimals', 0))
+        amount   = int(ta.get('amount', 0)) / (10 ** decimals) if decimals >= 0 else 0.0
+        if amount <= 0 or not mint or mint == SOL_MINT:
+            continue
+        raw_accounts.append({'mint': mint, 'amount': amount, 'decimals': decimals})
+        mints_needed.append(mint)
 
     # ── Batch DexScreener price lookup (max 30 per request) ──
     price_map: dict = {}
@@ -5401,7 +5411,10 @@ def api_wallet_tokens():
     try:
         data = _fetch_wallet_tokens(wallet)
         tokens = [{**t, 'usd_value': t['value_usd']} for t in data['tokens']]
-        return jsonify({'ok': True, 'tokens': tokens, 'cached': False})
+        print(f'[wallet-tokens] tokens found: {len(tokens)}', flush=True)
+        # ── TEMPORARY DEBUG RETURN — remove once RPC response is confirmed ──
+        return jsonify({'debug': data['tokens'], 'wallet': wallet, 'token_count': len(tokens)})
+        # ── END TEMPORARY DEBUG RETURN ──
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
