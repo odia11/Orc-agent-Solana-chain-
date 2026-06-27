@@ -197,20 +197,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   padding:15px 18px 13px;border-bottom:1px solid var(--divider);
 }
 .holdings-title{font-size:13px;font-weight:600;color:var(--text)}
-.refresh-btn{
-  background:none;border:1px solid var(--accent);color:var(--accent);
-  border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;
-  font-family:var(--ui);font-weight:500;transition:background .15s,color .15s;
+.hide-small-btn{
+  background:none;border:none;cursor:pointer;
+  font-family:var(--ui);font-size:11px;font-weight:500;
+  color:var(--accent);padding:0;transition:opacity .15s;
 }
-.refresh-btn:hover{background:var(--accent);color:#000}
+.hide-small-btn:hover{opacity:.7}
+.tok-list{padding:0 18px}
 
 /* ── token row ── */
 .tok-row{
   display:flex;align-items:center;gap:12px;
-  padding:13px 18px;border-bottom:1px solid var(--divider);transition:background .12s;
+  padding:12px 0;border-bottom:1px solid #16191f;
 }
 .tok-row:last-child{border-bottom:none}
-.tok-row:hover{background:var(--divider)}
 .tok-logo{width:38px;height:38px;border-radius:50%;flex-shrink:0;object-fit:cover}
 .tok-init{
   width:38px;height:38px;border-radius:50%;flex-shrink:0;
@@ -218,8 +218,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   font-family:var(--ui);font-weight:700;font-size:12px;color:#fff;
 }
 .tok-info{flex:1;min-width:0;cursor:pointer}
-.tok-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tok-amount{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+.tok-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tok-amount{font-family:var(--mono);font-size:12px;color:#565d68;margin-top:2px}
 .tok-val{text-align:right;flex-shrink:0;min-width:72px}
 .tok-usd{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)}
 .tok-pct{font-family:var(--mono);font-size:11px;margin-top:2px}
@@ -392,9 +392,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   <div class="holdings">
     <div class="holdings-hdr">
       <span class="holdings-title">Holdings</span>
-      <button class="refresh-btn" onclick="loadTokens(true)">↻ Refresh</button>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="hide-small-btn" id="hide-small-btn" onclick="_toggleHideSmall()">Hide small balances</button>
+        <button onclick="loadTokens(true)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0" title="Refresh">↻</button>
+      </div>
     </div>
-    <div id="tokens"><div class="state-msg">Loading…</div></div>
+    <div class="tok-list" id="tokens"><div class="state-msg">Loading…</div></div>
   </div>
 
 </div><!-- .page -->
@@ -766,6 +769,57 @@ function _sbSearch(q){
   if(q.length>1) window.location='/live-market?token='+encodeURIComponent(q.trim())
 }
 
+// ── render holdings rows ──────────────────────────────────
+function _renderHoldings(spl){
+  var wrap=document.getElementById('tokens')
+  if(!wrap) return
+  if(!spl.length){
+    wrap.innerHTML='<div class="state-msg">No tokens'+((_hideSmall&&_allSpl.length)?' — try showing small balances':'')+'</div>'
+    return
+  }
+  wrap.innerHTML=spl.map(function(x,i){
+    var realI=_allSpl.indexOf(x)
+    var sym=x.symbol||'?'
+    var amt=parseFloat(x.amount||0)
+    var usd=parseFloat(x.usd_value||x.value_usd||0)
+    var amtStr=amt===0?'0':amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
+    var logo=x.logo_url||''
+    var init=sym.slice(0,2).toUpperCase()
+    var circ='<div class="tok-init" style="background:'+_symColor(sym)+'">'+init+'</div>'
+    var logoHtml=logo
+      ?'<img class="tok-logo" src="'+logo+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'+circ
+      :circ
+    var avg=parseFloat(x.avg_price||0),cur=parseFloat(x.price_usd||0)
+    var pnlHtml=''
+    if(avg>0&&cur>0){
+      var chg=(cur-avg)/avg*100
+      var col=chg>=0?'#3ad29b':'#f76b62'
+      pnlHtml='<div class="tok-pct" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div>'
+    }
+    return '<div class="tok-row">'
+      +logoHtml
+      +'<div class="tok-info" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(\''+sym+'\')">'
+        +'<div class="tok-name">'+sym+'</div>'
+        +'<div class="tok-amount">'+amtStr+'</div>'
+      +'</div>'
+      +'<div class="tok-trade" onclick="event.stopPropagation()">'
+        +'<input id="winput-'+realI+'" class="w-inp" type="number" value="0.1" min="0.000001" step="0.01">'
+        +'<button id="wbtn-'+realI+'-buy" class="w-buy-btn" onclick="_wTrade('+realI+',\'buy\')">BUY</button>'
+        +'<select id="wsel-'+realI+'" class="w-sel">'
+          +'<option value="25">25%</option>'
+          +'<option value="50">50%</option>'
+          +'<option value="100" selected>100%</option>'
+        +'</select>'
+        +'<button id="wbtn-'+realI+'-sell" class="w-sell-btn" onclick="_wTrade('+realI+',\'sell\')">SELL</button>'
+      +'</div>'
+      +'<div class="tok-val">'
+        +'<div class="tok-usd">$'+usd.toFixed(2)+'</div>'
+        +pnlHtml
+      +'</div>'
+    +'</div>'
+  }).join('')
+}
+
 // ── balance ───────────────────────────────────────────────
 function loadBalance(){
   fetch('/api/wallet/balance').then(function(r){return r.json()}).then(function(d){
@@ -778,6 +832,16 @@ function loadBalance(){
   })
 }
 loadBalance()
+
+// ── hide small balances toggle ────────────────────────────
+var _hideSmall=false
+var _allSpl=[]
+function _toggleHideSmall(){
+  _hideSmall=!_hideSmall
+  var btn=document.getElementById('hide-small-btn')
+  if(btn) btn.style.color=_hideSmall?'var(--text)':'var(--accent)'
+  _renderHoldings(_hideSmall?_allSpl.filter(function(x){return parseFloat(x.usd_value||x.value_usd||0)>=1}):_allSpl)
+}
 
 // ── holdings ──────────────────────────────────────────────
 function loadTokens(bust){
@@ -824,53 +888,8 @@ function loadTokens(bust){
       }
     }
 
-    if(!spl.length){
-      wrap.innerHTML='<div class="state-msg">No SPL tokens in wallet</div>'
-      return
-    }
-
-    wrap.innerHTML=spl.map(function(x,i){
-      var sym=x.symbol||'?'
-      var amt=parseFloat(x.amount||0)
-      var usd=parseFloat(x.usd_value||x.value_usd||0)
-      var amtStr=amt===0?'0':amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
-      var logo=x.logo_url||''
-      var init=sym.slice(0,2).toUpperCase()
-      var circ='<div class="tok-init" style="background:'+_symColor(sym)+'">'+init+'</div>'
-      var logoHtml=logo
-        ?'<img class="tok-logo" src="'+logo+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'+circ
-        :circ
-
-      var pnlHtml=''
-      var avg=parseFloat(x.avg_price||0),cur=parseFloat(x.price_usd||0)
-      if(avg>0&&cur>0){
-        var chg=(cur-avg)/avg*100
-        var col=chg>=0?'var(--green)':'var(--red)'
-        pnlHtml='<div class="tok-pct" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div>'
-      }
-
-      return '<div class="tok-row">'
-        +logoHtml
-        +'<div class="tok-info" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(\''+sym+'\')">'
-          +'<div class="tok-name">'+sym+'</div>'
-          +'<div class="tok-amount">'+amtStr+'</div>'
-        +'</div>'
-        +'<div class="tok-trade" onclick="event.stopPropagation()">'
-          +'<input id="winput-'+i+'" class="w-inp" type="number" value="0.1" min="0.000001" step="0.01">'
-          +'<button id="wbtn-'+i+'-buy" class="w-buy-btn" onclick="_wTrade('+i+',\'buy\')">BUY</button>'
-          +'<select id="wsel-'+i+'" class="w-sel">'
-            +'<option value="25">25%</option>'
-            +'<option value="50">50%</option>'
-            +'<option value="100" selected>100%</option>'
-          +'</select>'
-          +'<button id="wbtn-'+i+'-sell" class="w-sell-btn" onclick="_wTrade('+i+',\'sell\')">SELL</button>'
-        +'</div>'
-        +'<div class="tok-val">'
-          +'<div class="tok-usd">$'+usd.toFixed(2)+'</div>'
-          +pnlHtml
-        +'</div>'
-      +'</div>'
-    }).join('')
+    _allSpl=spl
+    _renderHoldings(_hideSmall?spl.filter(function(x){return parseFloat(x.usd_value||x.value_usd||0)>=1}):spl)
 
   }).catch(function(err){
     console.error('[wallet/tokens]', err)
