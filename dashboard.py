@@ -5437,9 +5437,7 @@ def api_wallet_tokens():
         data = _fetch_wallet_tokens(wallet)
         tokens = [{**t, 'usd_value': t['value_usd']} for t in data['tokens']]
         print(f'[wallet-tokens] tokens found: {len(tokens)}', flush=True)
-        # ── TEMPORARY DEBUG RETURN — remove once RPC response is confirmed ──
-        return jsonify({'debug': data['tokens'], 'wallet': wallet, 'token_count': len(tokens)})
-        # ── END TEMPORARY DEBUG RETURN ──
+        return jsonify({'ok': True, 'tokens': tokens, 'cached': False})
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
