@@ -28,6 +28,7 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',sans-serif;padding:24p
     <span id="pct" style="color:#3ad29b;font-size:13px;margin-left:12px"></span>
   </div>
   <div class="muted" style="font-size:13px;font-family:monospace">≈ $<span id="usd">...</span> USD</div>
+  <div id="portfolio-pnl" style="display:none;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:13px"></div>
   <div style="display:flex;gap:9px;margin-top:16px">
     <button onclick="window.location='/?action=deposit'" style="background:#3ad29b;color:#08120f;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer;flex:1">↓ Deposit</button>
     <button onclick="window.location='/?action=withdraw'" style="background:#0a0b0e;border:1px solid #2c313a;color:#eef1f5;border-radius:12px;padding:12px;cursor:pointer;flex:1">↑ Withdraw</button>
@@ -70,6 +71,28 @@ function loadTokens(bust){
     if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
     const spl=t.filter(x=>x.symbol!=='SOL')
     if(!spl.length){wrap.innerHTML='<span class="muted" style="font-size:13px">No SPL tokens</span>';return}
+
+    // Portfolio PnL total
+    let totalPnlUsd=0, hasPnl=false
+    spl.forEach(x=>{
+      const avg=x.avg_price||0, cur=x.price_usd||0, amt=x.amount||0
+      if(avg>0&&cur>0){totalPnlUsd+=(cur-avg)*amt;hasPnl=true}
+    })
+    const ppEl=document.getElementById('portfolio-pnl')
+    if(ppEl&&hasPnl){
+      const ppSign=totalPnlUsd>=0?'+':''
+      const ppPct=spl.reduce((s,x)=>{
+        const avg=x.avg_price||0,cur=x.price_usd||0,amt=x.amount||0
+        return avg>0&&cur>0?s+(cur-avg)*amt:s
+      },0) / Math.max(spl.reduce((s,x)=>{
+        const avg=x.avg_price||0,amt=x.amount||0
+        return avg>0?s+avg*amt:s
+      },0),0.000001) * 100
+      const ppCol=totalPnlUsd>=0?'#3ad29b':'#f76b62'
+      ppEl.style.display='block'
+      ppEl.innerHTML=`<span style="color:#565d68">Portfolio PnL: </span><span style="color:${ppCol};font-weight:600">${ppSign}$${Math.abs(totalPnlUsd).toFixed(2)} (${ppSign}${ppPct.toFixed(1)}%)</span>`
+    }
+
     wrap.innerHTML=spl.map(x=>{
       const sym=(x.symbol||'?')
       const amt=x.amount||0
@@ -79,11 +102,24 @@ function loadTokens(bust){
       const logoHtml=logo
         ?`<img src="${logo}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none';this.nextSibling.style.display='flex'"><div style="display:none;width:38px;height:38px;border-radius:50%;background:#1a1e28;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#565d68;flex-shrink:0">${sym.slice(0,2)}</div>`
         :`<div style="width:38px;height:38px;border-radius:50%;background:#1a1e28;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:#565d68;flex-shrink:0">${sym.slice(0,2)}</div>`
+
+      // Per-token PnL
+      let pnlHtml=''
+      const avg=x.avg_price||0, cur=x.price_usd||0
+      if(avg>0&&cur>0){
+        const pnlPct=(cur-avg)/avg*100
+        const pnlUsd=(cur-avg)*amt
+        const pnlCol=pnlPct>=0?'#3ad29b':'#f76b62'
+        const pnlSign=pnlPct>=0?'+':''
+        pnlHtml=`<div style="color:${pnlCol};font-family:'JetBrains Mono',monospace;font-size:12px;margin-top:2px">${pnlSign}${pnlPct.toFixed(1)}% · ${pnlSign}$${Math.abs(pnlUsd).toFixed(2)}</div>`
+      }
+
       return`<div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f">
         ${logoHtml}
         <div style="flex:1;min-width:0">
           <div style="font-weight:600">${sym}</div>
           <div style="color:#565d68;font-size:12px;font-family:'JetBrains Mono',monospace">${amtStr}</div>
+          ${pnlHtml}
         </div>
         <div style="text-align:right;font-family:'JetBrains Mono',monospace">
           <div style="font-weight:600">$${usd.toFixed(2)}</div>

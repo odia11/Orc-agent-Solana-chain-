@@ -883,6 +883,7 @@ def init_db():
         token_address TEXT    NOT NULL,
         symbol        TEXT    NOT NULL DEFAULT '',
         amount        REAL    NOT NULL DEFAULT 0,
+        avg_price     REAL    NOT NULL DEFAULT 0,
         updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, token_address)
     )''')
@@ -898,6 +899,7 @@ def run_migrations():
         "ALTER TABLE direct_messages ADD COLUMN message_type TEXT DEFAULT 'text'",
         "ALTER TABLE users ADD COLUMN webauthn_ready INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL",
+        "ALTER TABLE user_tokens ADD COLUMN avg_price REAL NOT NULL DEFAULT 0",
     ]:
         try:
             con.execute(sql)
@@ -4273,14 +4275,37 @@ def api_instant_trade():
                      0, 0, now, token_address)
                 )
                 if side == 'buy':
+                    # Fetch current token price for avg_price tracking
+                    _buy_price_usd = 0.0
+                    try:
+                        _pr = _dex_get(
+                            'https://api.dexscreener.com/latest/dex/tokens/' + token_address,
+                            timeout=6
+                        )
+                        if _pr and _pr.status_code == 200:
+                            _sol_pairs = [p for p in (_pr.json().get('pairs') or [])
+                                          if p.get('chainId') == 'solana']
+                            if _sol_pairs:
+                                _best = max(_sol_pairs,
+                                            key=lambda p: float((p.get('liquidity') or {}).get('usd') or 0))
+                                _buy_price_usd = float(_best.get('priceUsd') or 0)
+                    except Exception:
+                        pass
                     conn.execute(
-                        '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
-                           VALUES (?, ?, ?, ?, ?)
+                        '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, avg_price, updated_at)
+                           VALUES (?, ?, ?, ?, ?, ?)
                            ON CONFLICT(user_id, token_address) DO UPDATE SET
                                symbol     = excluded.symbol,
                                amount     = user_tokens.amount + excluded.amount,
+                               avg_price  = CASE
+                                   WHEN excluded.avg_price > 0 AND (user_tokens.amount + excluded.amount) > 0
+                                   THEN (user_tokens.amount * user_tokens.avg_price
+                                         + excluded.amount * excluded.avg_price)
+                                        / (user_tokens.amount + excluded.amount)
+                                   ELSE COALESCE(NULLIF(user_tokens.avg_price, 0), excluded.avg_price)
+                               END,
                                updated_at = excluded.updated_at''',
-                        (uid, token_address, symbol, amount_sol, now)
+                        (uid, token_address, symbol, amount_sol, _buy_price_usd, now)
                     )
                 else:
                     conn.execute(
@@ -5355,16 +5380,17 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
             ).fetchone()
             if _uid_row:
                 _fb_rows = _fb_conn.execute(
-                    'SELECT token_address, symbol, amount FROM user_tokens'
+                    'SELECT token_address, symbol, amount, avg_price FROM user_tokens'
                     ' WHERE user_id=? AND amount > 0',
                     (_uid_row[0],)
                 ).fetchall()
-                for _ta, _sym, _amt in _fb_rows:
+                for _ta, _sym, _amt, _avg in _fb_rows:
                     if not _ta or _ta in _seen_mints:
                         continue
                     _seen_mints.add(_ta)
                     raw_accounts.append({'mint': _ta, 'amount': float(_amt),
-                                         'decimals': 0, 'symbol_hint': _sym})
+                                         'decimals': 0, 'symbol_hint': _sym,
+                                         'avg_price': float(_avg or 0)})
                     mints_needed.append(_ta)
                 print(f'[wallet-tokens] DB fallback: {len(_fb_rows)} rows, {len(raw_accounts)} usable', flush=True)
             _fb_conn.close()
@@ -5399,6 +5425,23 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
         except Exception:
             continue
 
+    # ── Load avg_price from user_tokens for PnL display ──
+    _avg_prices: dict = {}
+    try:
+        _ap_conn = sqlite3.connect(DB_FILE)
+        _ap_uid  = _ap_conn.execute(
+            'SELECT id FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+        if _ap_uid:
+            for _ta, _avg in _ap_conn.execute(
+                'SELECT token_address, avg_price FROM user_tokens WHERE user_id=?',
+                (_ap_uid[0],)
+            ).fetchall():
+                _avg_prices[_ta] = float(_avg or 0)
+        _ap_conn.close()
+    except Exception:
+        pass
+
     # ── Assemble SPL token rows ──
     for acc in raw_accounts:
         mint   = acc['mint']
@@ -5407,6 +5450,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
         price  = pd.get('price_usd', 0.0)
         value  = round(amount * price, 4)
         total_usd += value
+        avg_price = acc.get('avg_price') or _avg_prices.get(mint, 0)
         result.append({
             'symbol':           pd.get('symbol') or acc.get('symbol_hint') or mint[:6],
             'name':             pd.get('name') or '',
@@ -5417,6 +5461,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
             'value_usd':        value,
             'price_change_24h': pd.get('price_change_24h', 0.0),
             'logo_url':         pd.get('logo_url', ''),
+            'avg_price':        avg_price,
         })
 
     # Sort by value descending (SOL already at index 0 from insertion order, but re-sort anyway)
