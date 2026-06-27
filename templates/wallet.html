@@ -97,6 +97,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .sb-footer:hover{background:var(--divider);border-color:var(--accent)}
 @media(max-width:960px){.sidebar{display:none}}
 
+/* ── trader row ── */
+.sb-tr-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--divider)}
+.sb-tr-row:last-child{border-bottom:none}
+.sb-tr-rank{font-family:var(--mono);font-size:10px;color:var(--muted);width:14px;flex-shrink:0;text-align:center}
+.sb-tr-av{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:11px;color:#fff;
+}
+.sb-tr-avimg{width:30px;height:30px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.sb-tr-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-tr-handle{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-tr-pnl{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green);white-space:nowrap;flex-shrink:0}
+
+/* ── platform stats ── */
+.sb-stat-grid{display:flex;flex-direction:column;gap:2px}
+.sb-stat-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--divider)}
+.sb-stat-row:last-child{border-bottom:none}
+.sb-stat-lbl{font-size:11px;color:var(--muted)}
+.sb-stat-val{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--text)}
+
 /* ── hero card ── */
 .hero{
   background:linear-gradient(160deg,#11151a 0%,#0e1013 100%);
@@ -390,6 +411,24 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
     <div id="sb-market-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Loading…</div></div>
     <a class="sb-footer" href="/live-market">Show all markets →</a>
   </div>
+
+  <!-- top traders -->
+  <div class="sb-card" style="margin-top:14px">
+    <div class="sb-card-hdr">
+      <span class="sb-card-title">Top Traders</span>
+      <span style="font-family:var(--mono);font-size:10px;color:var(--muted)">24h</span>
+    </div>
+    <div id="sb-traders-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Loading…</div></div>
+    <a class="sb-footer" href="/leaderboard">Leaderboard →</a>
+  </div>
+
+  <!-- platform 24h stats -->
+  <div class="sb-card" style="margin-top:14px">
+    <div class="sb-card-hdr">
+      <span class="sb-card-title">Platform 24h</span>
+    </div>
+    <div id="sb-stats-body"><div style="color:var(--muted);font-size:12px;padding:6px 0">Loading…</div></div>
+  </div>
 </aside>
 
 </div><!-- .app-body -->
@@ -663,6 +702,64 @@ async function _loadSidebarMarket(){
   }
 }
 _loadSidebarMarket()
+
+// ── sidebar: top traders ──────────────────────────────────
+async function _loadSidebarTraders(){
+  var el=document.getElementById('sb-traders-list')
+  if(!el) return
+  try{
+    var data=await fetch('/api/leaderboard?limit=4').then(function(r){return r.json()})
+    var traders=Array.isArray(data)?data.slice(0,4):[]
+    if(!traders.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px 0">No trades today</div>';return}
+    el.innerHTML=traders.map(function(t){
+      var name=t.username||'Anonymous'
+      var handle=(t.wallet_address||'').slice(0,6)+'…'+(t.wallet_address||'').slice(-4)
+      var pnl=parseFloat(t.total_pnl||0)
+      var pnlStr=(pnl>=0?'+':'')+pnl.toFixed(4)+' SOL'
+      var pnlCol=pnl>=0?'var(--green)':'var(--red)'
+      var init=name.slice(0,2).toUpperCase()
+      var circCol='hsl('+(_hash(name)%360)+',46%,33%)'
+      var avHtml=t.avatar_url
+        ?'<img class="sb-tr-avimg" src="'+t.avatar_url+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+          +'<div class="sb-tr-av" style="display:none;background:'+circCol+'">'+init+'</div>'
+        :'<div class="sb-tr-av" style="background:'+circCol+'">'+init+'</div>'
+      return '<div class="sb-tr-row">'
+        +'<span class="sb-tr-rank">'+(t.rank||'')+'</span>'
+        +avHtml
+        +'<div style="flex:1;min-width:0">'
+          +'<div class="sb-tr-name">'+name+'</div>'
+          +'<div class="sb-tr-handle">'+handle+'</div>'
+        +'</div>'
+        +'<div class="sb-tr-pnl" style="color:'+pnlCol+'">'+pnlStr+'</div>'
+      +'</div>'
+    }).join('')
+  }catch(e){
+    console.error('[sidebar traders]',e)
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px 0">Failed to load</div>'
+  }
+}
+_loadSidebarTraders()
+
+// ── sidebar: platform stats ───────────────────────────────
+async function _loadSidebarStats(){
+  var el=document.getElementById('sb-stats-body')
+  if(!el) return
+  try{
+    var d=await fetch('/api/stats').then(function(r){return r.json()})
+    var netSol=parseFloat(d.net_sol_24h||0)
+    var netCol=netSol>=0?'var(--green)':'var(--red)'
+    var netStr=(netSol>=0?'+':'')+netSol.toFixed(2)
+    el.innerHTML='<div class="sb-stat-grid">'
+      +'<div class="sb-stat-row"><span class="sb-stat-lbl">Trades</span><span class="sb-stat-val">'+(d.trades_24h||0)+'</span></div>'
+      +'<div class="sb-stat-row"><span class="sb-stat-lbl">Net SOL</span><span class="sb-stat-val" style="color:'+netCol+'">'+netStr+'</span></div>'
+      +'<div class="sb-stat-row"><span class="sb-stat-lbl">Online</span><span class="sb-stat-val" style="color:var(--accent)">'+(d.online||0)+'</span></div>'
+      +'</div>'
+  }catch(e){
+    console.error('[sidebar stats]',e)
+    el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px 0">Failed to load</div>'
+  }
+}
+_loadSidebarStats()
 
 // ── sidebar: search (routes to live-market page) ──────────
 function _sbSearch(q){

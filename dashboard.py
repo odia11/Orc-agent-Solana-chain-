@@ -3913,6 +3913,27 @@ def get_leaderboard():
         })
     return jsonify(result)
 
+@app.route('/api/stats', methods=['GET'])
+@rate_limit(60, 60)
+def api_stats():
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute(
+            "SELECT COUNT(*), COALESCE(SUM(pnl),0) FROM trades "
+            "WHERE timestamp >= datetime('now','-24 hours')"
+        )
+        trades_24h, net_sol_24h = c.fetchone()
+        c.execute("SELECT COUNT(*) FROM users WHERE trading_active=1")
+        online = c.fetchone()[0]
+    finally:
+        conn.close()
+    return jsonify({
+        'trades_24h':  int(trades_24h or 0),
+        'net_sol_24h': round(float(net_sol_24h or 0), 4),
+        'online':      int(online or 0),
+    })
+
 # Two-entry RPC list for the frontend proxy endpoints:
 # SOLANA_RPC_URL (Railway env var) first; public mainnet-beta as fallback.
 _PROXY_RPCS = [u for u in [SOLANA_RPC_URL, SOLANA_RPC] if u]
