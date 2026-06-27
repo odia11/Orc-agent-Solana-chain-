@@ -5254,7 +5254,8 @@ def api_trade_position(token_address):
 _wallet_tokens_cache: dict = {}   # wallet → {'ts': float, 'tokens': list, 'total_usd': float, 'total_sol': float}
 _WALLET_CACHE_TTL = 30            # seconds
 
-TOKEN_PROGRAM_ID = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+TOKEN_PROGRAM_ID      = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 
 def _fetch_wallet_tokens(wallet: str) -> dict:
     """Fetch all SPL tokens + SOL for wallet, price each via DexScreener. Cached 30 s."""
@@ -5306,42 +5307,40 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
         'logo_url':         sol_logo,
     })
 
-    # ── SPL token accounts ──
-    print(f'[wallet-tokens] wallet={wallet}', flush=True)
+    # ── SPL token accounts (legacy Token Program + Token-2022) ──
+    print(f'[wallet-tokens] wallet={wallet!r} len={len(wallet)}', flush=True)
     mints_needed: list = []
     raw_accounts: list = []
-    _rpc_raw = None
-    _spl_accounts: list = []
+    _seen_mints: set = set()
     _rpcs_to_try = [SOLANA_RPC] + [ep for ep in _PROXY_RPCS if ep != SOLANA_RPC]
-    for _rpc_url in _rpcs_to_try:
-        try:
-            _rpc_r = requests.post(_rpc_url, json={
-                'jsonrpc': '2.0', 'id': 1,
-                'method': 'getTokenAccountsByOwner',
-                'params': [
-                    wallet,
-                    {'programId': TOKEN_PROGRAM_ID},
-                    {'encoding': 'jsonParsed'},
-                ],
-            }, timeout=12)
-            _rpc_raw = _rpc_r.json()
-            _spl_accounts = _rpc_raw.get('result', {}).get('value') or []
-            print(f'[wallet-tokens] RPC {_rpc_url}: {len(_spl_accounts)} accounts', flush=True)
-            if _spl_accounts:
-                break
-        except Exception as _rpc_err:
-            print(f'[wallet-tokens] RPC {_rpc_url} error: {_rpc_err}', flush=True)
-    print(f'[wallet-tokens] RPC response (truncated): {str(_rpc_raw)[:500]}', flush=True)
-    for acc in _spl_accounts:
-        info = (acc.get('account') or {}).get('data', {}).get('parsed', {}).get('info') or {}
-        mint = info.get('mint', '')
-        ta   = info.get('tokenAmount') or {}
-        decimals = int(ta.get('decimals', 0))
-        amount   = int(ta.get('amount', 0)) / (10 ** decimals) if decimals >= 0 else 0.0
-        if amount <= 0 or not mint or mint == SOL_MINT:
-            continue
-        raw_accounts.append({'mint': mint, 'amount': amount, 'decimals': decimals})
-        mints_needed.append(mint)
+    for _prog_id in (TOKEN_PROGRAM_ID, TOKEN_2022_PROGRAM_ID):
+        _prog_accounts: list = []
+        for _rpc_url in _rpcs_to_try:
+            try:
+                _rpc_r = requests.post(_rpc_url, json={
+                    'jsonrpc': '2.0', 'id': 1,
+                    'method': 'getTokenAccountsByOwner',
+                    'params': [wallet, {'programId': _prog_id}, {'encoding': 'jsonParsed'}],
+                }, timeout=12)
+                _rpc_raw = _rpc_r.json()
+                _prog_accounts = _rpc_raw.get('result', {}).get('value') or []
+                print(f'[wallet-tokens] prog={_prog_id[:8]} rpc={_rpc_url}: {len(_prog_accounts)} accounts', flush=True)
+                if _prog_accounts:
+                    break
+            except Exception as _rpc_err:
+                print(f'[wallet-tokens] prog={_prog_id[:8]} rpc={_rpc_url} error: {_rpc_err}', flush=True)
+        for acc in _prog_accounts:
+            info     = (acc.get('account') or {}).get('data', {}).get('parsed', {}).get('info') or {}
+            mint     = info.get('mint', '')
+            ta       = info.get('tokenAmount') or {}
+            ui_amount = float(ta.get('uiAmount') or 0)
+            decimals  = int(ta.get('decimals', 0))
+            if ui_amount < 0.000001 or not mint or mint == SOL_MINT or mint in _seen_mints:
+                continue
+            _seen_mints.add(mint)
+            raw_accounts.append({'mint': mint, 'amount': ui_amount, 'decimals': decimals})
+            mints_needed.append(mint)
+    print(f'[wallet-tokens] total SPL accounts after merge: {len(raw_accounts)}', flush=True)
 
     # ── Batch DexScreener price lookup (max 30 per request) ──
     price_map: dict = {}
