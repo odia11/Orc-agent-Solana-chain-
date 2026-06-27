@@ -16,7 +16,21 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
-app.secret_key = os.getenv('SECRET_KEY') or os.urandom(32)
+def _load_secret_key() -> bytes:
+    _env = os.getenv('SECRET_KEY')
+    if _env:
+        return _env.encode() if isinstance(_env, str) else _env
+    _key_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.secret_key')
+    try:
+        with open(_key_path, 'rb') as _f:
+            return _f.read()
+    except FileNotFoundError:
+        _key = os.urandom(32)
+        with open(_key_path, 'wb') as _f:
+            _f.write(_key)
+        return _key
+
+app.secret_key = _load_secret_key()
 app.permanent_session_lifetime = timedelta(days=30)
 app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'

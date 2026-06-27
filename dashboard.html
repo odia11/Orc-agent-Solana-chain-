@@ -3207,7 +3207,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           </svg>
           <span class="sb-logo-text">OrcAgent</span>
         </div>
-        <div class="sb-beta-badge">INVITE-ONLY · BETA</div>
       </div>
       <!-- NAV -->
       <nav class="sb-nav">
@@ -10478,12 +10477,14 @@ function _renderFeedCard(e){
     copyHtml = '<button class="fc-action copy" onclick="event.stopPropagation()">⧉ Copy</button>';
   }
 
-  return '<div class="fc-card" id="'+esc(cardId)+'" onclick="openProfileCard('+uid+')">'
-    +'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span>'+verifiedBadge+'</div>'
+  var _profileHref = '/profile/'+encodeURIComponent(e.username||e.wallet||'');
+  var _aProf = '<a href="'+_profileHref+'" onclick="event.stopPropagation()" style="text-decoration:none;color:inherit;">';
+  return '<div class="fc-card" id="'+esc(cardId)+'">'
+    +_aProf+'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span>'+verifiedBadge+'</div></a>'
     +'<div class="fc-body">'
     +'<div class="fc-header">'
-    +'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+'</span>'
-    +'<span class="fc-handle">'+esc(handle)+'</span>'
+    +_aProf+'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+'</span></a>'
+    +_aProf+'<span class="fc-handle">'+esc(handle)+'</span></a>'
     +(timeStr ? '<span class="fc-sep">·</span><span class="fc-time">'+esc(timeStr)+'</span>' : '')
     +'</div>'
     +tradeHtml
