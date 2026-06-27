@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib, traceback
 from datetime import timedelta
 import bcrypt as _bcrypt
 try:
@@ -4164,150 +4164,162 @@ def api_instant_trade():
     if not request.is_json:
         return jsonify({'error': 'Content-Type must be application/json', 'received': request.content_type}), 400
 
-    print(f'[instant-trade] session keys: {list(session.keys())}, wallet: {session.get("wallet")}', flush=True)
-
-    wallet = _current_wallet()
-    if not wallet:
-        return jsonify({'error': 'not logged in', 'logged_in': False}), 401
-
-    data         = request.get_json(silent=True) or {}
-    symbol       = str(data.get('symbol',       '')).strip().upper()
-    token_address = str(data.get('token_address', '')).strip()
-    pair_address  = str(data.get('pair_address',  '')).strip()
-    side          = str(data.get('side',          '')).strip().lower()
     try:
-        amount_sol = float(data.get('amount_sol', 0))
-    except (TypeError, ValueError):
-        amount_sol = 0.0
+        print(f'[instant-trade] session keys: {list(session.keys())}, wallet: {session.get("wallet")}', flush=True)
 
-    if side not in ('buy', 'sell'):
-        return jsonify({'error': 'side must be buy or sell'}), 400
-    if not token_address:
-        return jsonify({'error': 'token_address is required'}), 400
-    if side == 'buy' and amount_sol <= 0:
-        return jsonify({'error': 'amount_sol must be > 0 for buy'}), 400
+        wallet = _current_wallet()
+        if not wallet:
+            return jsonify({'error': 'not logged in', 'logged_in': False}), 401
 
-    # Fetch encrypted key
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        row  = conn.execute(
-            'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
-        ).fetchone()
-        conn.close()
-    except Exception as e:
-        return jsonify({'error': f'DB error: {e}'}), 500
-    if not row or not row[0]:
-        return jsonify({'error': 'No private key saved — add it in Settings'}), 400
+        data          = request.get_json(silent=True) or {}
+        symbol        = str(data.get('symbol',        '')).strip().upper()
+        token_address = str(data.get('token_address', '')).strip()
+        pair_address  = str(data.get('pair_address',  '')).strip()
+        side          = str(data.get('side',          '')).strip().lower()
+        try:
+            amount_sol = float(data.get('amount_sol', 0))
+        except (TypeError, ValueError):
+            amount_sol = 0.0
 
-    try:
-        private_key = decrypt_private_key(row[0], wallet)
-    except Exception:
-        return jsonify({'error': 'Could not decrypt private key'}), 500
+        print(f'[instant-trade] side={side!r} token={token_address!r} amount={amount_sol}', flush=True)
 
-    # Run swap in subprocess (same pattern as _execute_user_swap but captures sig)
-    try:
-        env                      = os.environ.copy()
-        env['WALLET_ADDRESS']     = wallet
-        env['WALLET_PRIVATE_KEY'] = private_key
-        _ext_hit('jupiter')
-        amount_str = str(amount_sol) if side == 'buy' else '0'
-        result = subprocess.run(
-            [sys.executable, os.path.join(BASE, 'orcagent_solana.py'),
-             side, token_address, amount_str],
-            env=env, capture_output=True, text=True, timeout=120
-        )
-        env['WALLET_PRIVATE_KEY'] = ''
-        private_key               = ''
-    except subprocess.TimeoutExpired:
-        return jsonify({'error': 'Trade timed out (>120s)'}), 504
-    except Exception as e:
-        return jsonify({'error': f'Swap subprocess error: {e}'}), 500
+        if side not in ('buy', 'sell'):
+            return jsonify({'error': 'side must be buy or sell'}), 400
+        if not token_address:
+            return jsonify({'error': 'token_address is required'}), 400
+        if side == 'buy' and amount_sol <= 0:
+            return jsonify({'error': 'amount_sol must be > 0 for buy'}), 400
 
-    stdout = _redact_keys(result.stdout.strip())
-    stderr = _redact_keys(result.stderr.strip())
-    add_user_log(wallet, f'instant-trade {side} {symbol}: ' + (stdout[-300:] or stderr[-200:]))
+        # Fetch encrypted key
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            row  = conn.execute(
+                'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+            conn.close()
+        except Exception as e:
+            print(f'[instant-trade] DB key fetch error: {e}', flush=True)
+            traceback.print_exc()
+            return jsonify({'error': f'DB error: {e}'}), 500
+        if not row or not row[0]:
+            return jsonify({'error': 'No private key saved — add it in Settings'}), 400
 
-    if result.returncode != 0:
-        err_msg = stderr.split('\n')[-1] if stderr else 'Swap failed (no output)'
-        return jsonify({'error': err_msg[-200:]}), 500
+        try:
+            private_key = decrypt_private_key(row[0], wallet)
+        except Exception as e:
+            print(f'[instant-trade] decrypt error: {e}', flush=True)
+            traceback.print_exc()
+            return jsonify({'error': 'Could not decrypt private key'}), 500
 
-    # Extract TX signature from stdout: "… TX:<sig>"
-    sig = None
-    for line in stdout.split('\n'):
-        if 'TX:' in line:
-            sig = line.split('TX:')[-1].strip().split()[0]
-            break
-
-    if not sig:
-        return jsonify({'error': 'Swap ran but no signature returned: ' + stdout[-200:]}), 500
-
-    # Update DB: trades log + user_tokens portfolio
-    new_balance = None
-    try:
-        conn     = sqlite3.connect(DB_FILE)
-        user_row = conn.execute(
-            'SELECT id FROM users WHERE wallet_address=?', (wallet,)
-        ).fetchone()
-        if user_row:
-            uid = user_row[0]
-            now = datetime.datetime.utcnow().isoformat()
-
-            # trades log
-            conn.execute(
-                'INSERT INTO trades '
-                '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address) '
-                'VALUES (?,?,?,?,?,?,?,?,?)',
-                (uid, symbol, 0, 0, amount_sol if side == 'buy' else 0,
-                 0, 0, now, token_address)
+        # Run swap in subprocess (same pattern as _execute_user_swap but captures sig)
+        try:
+            env                       = os.environ.copy()
+            env['WALLET_ADDRESS']     = wallet
+            env['WALLET_PRIVATE_KEY'] = private_key
+            _ext_hit('jupiter')
+            amount_str = str(amount_sol) if side == 'buy' else '0'
+            print(f'[instant-trade] launching subprocess: {side} {token_address} {amount_str}', flush=True)
+            result = subprocess.run(
+                [sys.executable, os.path.join(BASE, 'orcagent_solana.py'),
+                 side, token_address, amount_str],
+                env=env, capture_output=True, text=True, timeout=120
             )
+            env['WALLET_PRIVATE_KEY'] = ''
+            private_key               = ''
+        except subprocess.TimeoutExpired:
+            return jsonify({'error': 'Trade timed out (>120s)'}), 504
+        except Exception as e:
+            print(f'[instant-trade] subprocess launch error: {e}', flush=True)
+            traceback.print_exc()
+            return jsonify({'error': f'Swap subprocess error: {e}'}), 500
 
-            # portfolio upsert
-            if side == 'buy':
-                conn.execute(
-                    '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
-                       VALUES (?, ?, ?, ?, ?)
-                       ON CONFLICT(user_id, token_address) DO UPDATE SET
-                           symbol     = excluded.symbol,
-                           amount     = user_tokens.amount + excluded.amount,
-                           updated_at = excluded.updated_at''',
-                    (uid, token_address, symbol, amount_sol, now)
-                )
-            else:
-                conn.execute(
-                    '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
-                       VALUES (?, ?, ?, 0, ?)
-                       ON CONFLICT(user_id, token_address) DO UPDATE SET
-                           amount     = 0,
-                           updated_at = excluded.updated_at''',
-                    (uid, token_address, symbol, now)
-                )
+        stdout = _redact_keys(result.stdout.strip())
+        stderr = _redact_keys(result.stderr.strip())
+        print(f'[instant-trade] returncode={result.returncode} stdout={stdout[-300:]!r} stderr={stderr[-300:]!r}', flush=True)
+        add_user_log(wallet, f'instant-trade {side} {symbol}: ' + (stdout[-300:] or stderr[-200:]))
 
-            conn.commit()
-        conn.close()
-    except Exception as e:
-        print(f'[instant-trade] DB record error: {e}', flush=True)
+        if result.returncode != 0:
+            err_msg = stderr.split('\n')[-1] if stderr else 'Swap failed (no output)'
+            return jsonify({'error': err_msg[-200:], 'detail': stderr[-500:]}), 500
 
-    # Fetch updated SOL balance from RPC (best-effort)
-    try:
-        for _rpc in _PROXY_RPCS:
-            try:
-                _rb = requests.post(_rpc, json={
-                    'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
-                }, timeout=5)
-                new_balance = round(_rb.json()['result']['value'] / 1e9, 4)
+        # Extract TX signature from stdout: "… TX:<sig>"
+        sig = None
+        for line in stdout.split('\n'):
+            if 'TX:' in line:
+                sig = line.split('TX:')[-1].strip().split()[0]
                 break
-            except Exception:
-                continue
-    except Exception:
-        pass
 
-    return jsonify({
-        'success':     True,
-        'tx':          sig,
-        'side':        side,
-        'symbol':      symbol,
-        'new_balance': new_balance,
-    })
+        if not sig:
+            return jsonify({'error': 'Swap ran but no signature returned', 'stdout': stdout[-300:]}), 500
+
+        # Update DB: trades log + user_tokens portfolio
+        new_balance = None
+        try:
+            conn     = sqlite3.connect(DB_FILE)
+            user_row = conn.execute(
+                'SELECT id FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+            if user_row:
+                uid = user_row[0]
+                now = datetime.datetime.utcnow().isoformat()
+                conn.execute(
+                    'INSERT INTO trades '
+                    '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address) '
+                    'VALUES (?,?,?,?,?,?,?,?,?)',
+                    (uid, symbol, 0, 0, amount_sol if side == 'buy' else 0,
+                     0, 0, now, token_address)
+                )
+                if side == 'buy':
+                    conn.execute(
+                        '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
+                           VALUES (?, ?, ?, ?, ?)
+                           ON CONFLICT(user_id, token_address) DO UPDATE SET
+                               symbol     = excluded.symbol,
+                               amount     = user_tokens.amount + excluded.amount,
+                               updated_at = excluded.updated_at''',
+                        (uid, token_address, symbol, amount_sol, now)
+                    )
+                else:
+                    conn.execute(
+                        '''INSERT INTO user_tokens (user_id, token_address, symbol, amount, updated_at)
+                           VALUES (?, ?, ?, 0, ?)
+                           ON CONFLICT(user_id, token_address) DO UPDATE SET
+                               amount     = 0,
+                               updated_at = excluded.updated_at''',
+                        (uid, token_address, symbol, now)
+                    )
+                conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f'[instant-trade] DB record error: {e}', flush=True)
+            traceback.print_exc()
+
+        # Fetch updated SOL balance from RPC (best-effort)
+        try:
+            for _rpc in _PROXY_RPCS:
+                try:
+                    _rb = requests.post(_rpc, json={
+                        'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+                    }, timeout=5)
+                    new_balance = round(_rb.json()['result']['value'] / 1e9, 4)
+                    break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+        return jsonify({
+            'success':     True,
+            'tx':          sig,
+            'side':        side,
+            'symbol':      symbol,
+            'new_balance': new_balance,
+        })
+
+    except Exception as e:
+        print(f'[instant-trade] ERROR: {e}', flush=True)
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 @app.route('/api/feed/post', methods=['POST'])
