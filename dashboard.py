@@ -5342,6 +5342,32 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
             mints_needed.append(mint)
     print(f'[wallet-tokens] total SPL accounts after merge: {len(raw_accounts)}', flush=True)
 
+    # ── DB fallback: if RPC returned no SPL tokens, read user_tokens table ──
+    if not raw_accounts:
+        print(f'[wallet-tokens] RPC empty — falling back to user_tokens DB', flush=True)
+        try:
+            _fb_conn = sqlite3.connect(DB_FILE)
+            _uid_row = _fb_conn.execute(
+                'SELECT id FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+            if _uid_row:
+                _fb_rows = _fb_conn.execute(
+                    'SELECT token_address, symbol, amount FROM user_tokens'
+                    ' WHERE user_id=? AND amount > 0',
+                    (_uid_row[0],)
+                ).fetchall()
+                for _ta, _sym, _amt in _fb_rows:
+                    if not _ta or _ta in _seen_mints:
+                        continue
+                    _seen_mints.add(_ta)
+                    raw_accounts.append({'mint': _ta, 'amount': float(_amt),
+                                         'decimals': 0, 'symbol_hint': _sym})
+                    mints_needed.append(_ta)
+                print(f'[wallet-tokens] DB fallback: {len(_fb_rows)} rows, {len(raw_accounts)} usable', flush=True)
+            _fb_conn.close()
+        except Exception as _fb_err:
+            print(f'[wallet-tokens] DB fallback error: {_fb_err}', flush=True)
+
     # ── Batch DexScreener price lookup (max 30 per request) ──
     price_map: dict = {}
     BATCH = 30
@@ -5379,7 +5405,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
         value  = round(amount * price, 4)
         total_usd += value
         result.append({
-            'symbol':           pd.get('symbol') or mint[:6],
+            'symbol':           pd.get('symbol') or acc.get('symbol_hint') or mint[:6],
             'name':             pd.get('name') or '',
             'mint':             mint,
             'amount':           amount,
