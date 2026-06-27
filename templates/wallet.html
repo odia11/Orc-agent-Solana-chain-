@@ -4,81 +4,270 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Wallet — OrcAgent</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Geist:wght@400;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box;margin:0}
-body{background:#0a0b0e;color:#e8eaed;font-family:'Geist',sans-serif;padding:24px;max-width:760px;font-size:14px}
-.card{background:#101216;border:1px solid #1a1f2e;border-radius:18px;padding:20px;margin-bottom:16px}
-.mono{font-family:'JetBrains Mono',monospace}
-.muted{color:#565d68}
-.accent{color:#3ad29b}
-.btn-p{background:#3ad29b;color:#08120f;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer;flex:1}
-.btn-o{background:#0a0b0e;border:1px solid #2c313a;color:#e8eaed;border-radius:12px;padding:12px;cursor:pointer;flex:1}
-.w-buy-btn{background:#0a2a1a;color:#00d084;border:1px solid #00d08430;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:background .15s,color .15s}
-.w-buy-btn:hover{background:#00d084;color:#000}
-.w-buy-btn:disabled{opacity:.45;cursor:not-allowed}
-.w-sell-btn{background:#1a0a0a;color:#ff4757;border:1px solid #ff475730;border-radius:8px;padding:6px 16px;font-size:12px;font-weight:600;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:background .15s,color .15s}
-.w-sell-btn:hover{background:#ff4757;color:#fff}
-.w-sell-btn:disabled{opacity:.45;cursor:not-allowed}
-.w-inp{width:80px;background:#0a0c14;border:1px solid #1a1f2e;border-radius:8px;color:#e8eaed;padding:6px 10px;font-size:13px;font-family:'JetBrains Mono',monospace;outline:none}
-.w-inp:focus{border-color:#3ad29b44}
-.w-sel{background:#1a0a0a;color:#ff4757;border:1px solid #ff475730;border-radius:8px;padding:6px 10px;font-size:12px;font-family:'JetBrains Mono',monospace;cursor:pointer;outline:none}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;
+  --card:#101216;
+  --border:#21252c;
+  --divider:#16191f;
+  --accent:#35d4c4;
+  --green:#00d084;
+  --red:#ff4757;
+  --text:#eef1f5;
+  --muted:#565d68;
+  --sub:#8a919c;
+  --mono:'JetBrains Mono',monospace;
+  --ui:'Geist',sans-serif;
+}
+body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100vh;padding-bottom:40px}
+
+/* ── sticky header ── */
+.hdr{
+  position:sticky;top:0;z-index:100;
+  background:rgba(10,11,14,.88);
+  backdrop-filter:blur(12px);
+  -webkit-backdrop-filter:blur(12px);
+  border-bottom:1px solid var(--divider);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:14px 20px;
+}
+.hdr-title{font-size:16px;font-weight:600;letter-spacing:.01em}
+.hdr-back{font-size:13px;color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:5px}
+.hdr-back:hover{color:var(--text)}
+.net-pill{
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;
+  color:var(--accent);border:1px solid var(--accent);border-radius:20px;
+  padding:3px 10px;white-space:nowrap;
+}
+
+/* ── page layout ── */
+.page{max-width:600px;margin:0 auto;padding:20px 16px 0}
+
+/* ── hero balance card ── */
+.hero{
+  background:linear-gradient(160deg,#11151a 0%,#0e1013 100%);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:24px 22px 20px;
+  margin-bottom:14px;
+}
+.hero-label{font-size:10px;font-weight:600;letter-spacing:.14em;color:var(--muted);margin-bottom:10px}
+.hero-bal{display:flex;align-items:baseline;gap:8px;margin-bottom:4px}
+.hero-bal-num{font-family:var(--mono);font-size:38px;font-weight:700;line-height:1;color:var(--text)}
+.hero-bal-unit{font-family:var(--mono);font-size:16px;color:var(--muted);font-weight:400}
+.hero-usd{font-family:var(--mono);font-size:13px;color:var(--sub);margin-bottom:3px}
+.hero-today{font-family:var(--mono);font-size:12px;font-weight:600}
+
+/* ── action buttons row ── */
+.actions{display:flex;gap:8px;margin:18px 0 16px}
+.act-btn{
+  flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
+  background:var(--divider);border:1px solid var(--border);border-radius:12px;
+  padding:11px 4px;cursor:pointer;color:var(--sub);
+  font-family:var(--ui);font-size:11px;font-weight:500;
+  transition:background .15s,color .15s,border-color .15s;
+}
+.act-btn:hover{background:#1a1f2e;color:var(--text);border-color:var(--accent)}
+.act-icon{font-size:16px;line-height:1}
+
+/* ── available / in-positions ── */
+.split{display:flex;border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.split-cell{flex:1;padding:12px 14px;background:#0d0f12}
+.split-cell+.split-cell{border-left:1px solid var(--border)}
+.split-lbl{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-bottom:5px}
+.split-val{font-family:var(--mono);font-size:15px;font-weight:700}
+
+/* ── portfolio PnL bar ── */
+.pnl-bar{
+  display:none;margin-top:12px;padding:10px 14px;
+  background:var(--divider);border:1px solid var(--border);border-radius:10px;
+  font-family:var(--mono);font-size:12px;display:flex;justify-content:space-between;align-items:center;
+}
+
+/* ── holdings card ── */
+.holdings{
+  background:var(--card);
+  border:1px solid var(--border);
+  border-radius:20px;
+  overflow:hidden;
+}
+.holdings-hdr{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:16px 18px 14px;
+  border-bottom:1px solid var(--divider);
+}
+.holdings-title{font-size:13px;font-weight:600;color:var(--text)}
+.refresh-btn{
+  background:none;border:1px solid var(--accent);color:var(--accent);
+  border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;
+  font-family:var(--ui);transition:background .15s,color .15s;
+}
+.refresh-btn:hover{background:var(--accent);color:#000}
+
+/* ── token row ── */
+.tok-row{
+  display:flex;align-items:center;gap:12px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--divider);
+  transition:background .12s;
+}
+.tok-row:last-child{border-bottom:none}
+.tok-row:hover{background:#0d0f12}
+
+/* logo circle */
+.tok-logo{width:38px;height:38px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.tok-init{
+  width:38px;height:38px;border-radius:50%;
+  background:#141820;display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:12px;color:var(--muted);flex-shrink:0;
+}
+
+/* name + amount (clickable) */
+.tok-info{flex:1;min-width:0;cursor:pointer}
+.tok-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tok-amount{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
+
+/* USD + % change */
+.tok-val{text-align:right;flex-shrink:0;min-width:72px}
+.tok-usd{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text)}
+.tok-pct{font-family:var(--mono);font-size:11px;margin-top:2px}
+
+/* inline trade controls */
+.tok-trade{display:flex;align-items:center;gap:5px;flex-shrink:0}
+.w-inp{
+  width:68px;background:#0a0c14;border:1px solid var(--border);
+  border-radius:7px;color:var(--text);padding:5px 8px;
+  font-size:12px;font-family:var(--mono);outline:none;
+}
+.w-inp:focus{border-color:#35d4c444}
+.w-buy-btn{
+  background:#0a2a1a;color:var(--green);border:1px solid #00d08430;
+  border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:var(--mono);white-space:nowrap;
+  transition:background .15s,color .15s;
+}
+.w-buy-btn:hover{background:var(--green);color:#000}
+.w-buy-btn:disabled{opacity:.4;cursor:not-allowed}
+.w-sel{
+  background:#1a0a0a;color:var(--red);border:1px solid #ff475730;
+  border-radius:7px;padding:5px 7px;font-size:11px;font-family:var(--mono);
+  cursor:pointer;outline:none;
+}
+.w-sell-btn{
+  background:#1a0a0a;color:var(--red);border:1px solid #ff475730;
+  border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;
+  cursor:pointer;font-family:var(--mono);white-space:nowrap;
+  transition:background .15s,color .15s;
+}
+.w-sell-btn:hover{background:var(--red);color:#fff}
+.w-sell-btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── empty / loading states ── */
+.state-msg{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
+
+/* ── toast ── */
+.w-toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  padding:10px 20px;border-radius:10px;font-size:13px;
+  font-family:var(--mono);z-index:9999;white-space:nowrap;
+  pointer-events:none;transition:opacity .25s;
+}
+
+/* ── mobile ── */
+@media(max-width:480px){
+  .hero-bal-num{font-size:30px}
+  .tok-trade{display:none}
+  .tok-val{min-width:60px}
+  .actions{gap:6px}
+  .act-btn{padding:9px 2px;font-size:10px}
+}
 </style>
 </head>
 <body>
 
-<a href="/dashboard" style="color:#565d68;font-size:13px;text-decoration:none">← Back</a>
-<h1 style="font-size:20px;font-weight:600;margin:8px 0 20px">Wallet</h1>
+<!-- sticky header -->
+<header class="hdr">
+  <a href="/dashboard" class="hdr-back">← <span class="hdr-title">Wallet</span></a>
+  <span class="net-pill">SOLANA · MAINNET</span>
+</header>
 
-<div class="card">
-  <div class="muted" style="font-size:11px;letter-spacing:0.12em">TOTAL BALANCE</div>
-  <div style="font-size:40px;font-weight:700;font-family:monospace;margin-top:8px">
-    <span id="sol">...</span> <span class="muted" style="font-size:18px">SOL</span>
-    <span id="pct" style="color:#3ad29b;font-size:13px;margin-left:12px"></span>
-  </div>
-  <div class="muted" style="font-size:13px;font-family:monospace">≈ $<span id="usd">...</span> USD</div>
-  <div id="portfolio-pnl" style="display:none;margin-top:6px;font-family:'JetBrains Mono',monospace;font-size:13px"></div>
-  <div style="display:flex;gap:9px;margin-top:16px">
-    <button onclick="window.location='/?action=deposit'" style="background:#3ad29b;color:#08120f;border:none;border-radius:12px;padding:12px;font-weight:700;cursor:pointer;flex:1">↓ Deposit</button>
-    <button onclick="window.location='/?action=withdraw'" style="background:#0a0b0e;border:1px solid #2c313a;color:#eef1f5;border-radius:12px;padding:12px;cursor:pointer;flex:1">↑ Withdraw</button>
-  </div>
-  <div style="display:flex;margin-top:10px;border:1px solid #21252c;border-radius:12px;overflow:hidden">
-    <div style="flex:1;padding:12px;background:#0d0f12">
-      <div style="color:#565d68;font-size:11px">Available</div>
-      <div style="font-family:monospace;font-size:16px;font-weight:700;margin-top:4px"><span id="avail">...</span> SOL</div>
-    </div>
-    <div style="flex:1;padding:12px;background:#0d0f12;border-left:1px solid #21252c">
-      <div style="color:#565d68;font-size:11px">In positions</div>
-      <div style="font-family:monospace;font-size:16px;font-weight:700;color:#3ad29b;margin-top:4px"><span id="inpos">0</span> SOL</div>
-    </div>
-  </div>
-</div>
+<div class="page">
 
-<div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-    <div style="font-weight:600">Holdings</div>
-    <button onclick="loadTokens(true)" style="background:none;border:1px solid #35d4c4;color:#35d4c4;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;">↻ Refresh</button>
+  <!-- hero balance card -->
+  <div class="hero">
+    <div class="hero-label">TOTAL BALANCE</div>
+    <div class="hero-bal">
+      <span class="hero-bal-num" id="sol">—</span>
+      <span class="hero-bal-unit">SOL</span>
+    </div>
+    <div class="hero-usd">≈ $<span id="usd">—</span> USD</div>
+    <div class="hero-today" id="today-pct" style="display:none"></div>
+
+    <div class="actions">
+      <button class="act-btn" onclick="window.location='/?action=deposit'">
+        <span class="act-icon">↓</span>Deposit
+      </button>
+      <button class="act-btn" onclick="window.location='/?action=withdraw'">
+        <span class="act-icon">↑</span>Withdraw
+      </button>
+      <button class="act-btn" onclick="window.location='/?action=send'">
+        <span class="act-icon">→</span>Send
+      </button>
+      <button class="act-btn" onclick="window.location='/?action=swap'">
+        <span class="act-icon">⇄</span>Swap
+      </button>
+    </div>
+
+    <div class="split">
+      <div class="split-cell">
+        <div class="split-lbl">AVAILABLE</div>
+        <div class="split-val" id="avail">— SOL</div>
+      </div>
+      <div class="split-cell">
+        <div class="split-lbl">IN POSITIONS</div>
+        <div class="split-val" style="color:var(--accent)" id="inpos">0 SOL</div>
+      </div>
+    </div>
+
+    <div class="pnl-bar" id="portfolio-pnl" style="display:none"></div>
   </div>
-  <div id="tokens"><span class="muted">Loading...</span></div>
+
+  <!-- holdings -->
+  <div class="holdings">
+    <div class="holdings-hdr">
+      <span class="holdings-title">Holdings</span>
+      <button class="refresh-btn" onclick="loadTokens(true)">↻ Refresh</button>
+    </div>
+    <div id="tokens"><div class="state-msg">Loading…</div></div>
+  </div>
+
 </div>
 
 <script>
+// ── balance ──────────────────────────────────────────────
 fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('sol').textContent=(d.sol||0).toFixed(4)
-  document.getElementById('avail').textContent=(d.sol||0).toFixed(4)
+  document.getElementById('avail').textContent=(d.sol||0).toFixed(4)+' SOL'
 }).catch(()=>{
   document.getElementById('sol').textContent='—'
   document.getElementById('usd').textContent='—'
 })
 
+// ── toast ────────────────────────────────────────────────
 function _wToast(msg, ok){
   var t=document.createElement('div')
-  t.style.cssText='position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:'+(ok?'#0a2a1a':'#2a0a0a')+';color:'+(ok?'#3ad29b':'#f76b62')+';border:1px solid '+(ok?'#3ad29b':'#f76b62')+';padding:10px 20px;border-radius:8px;font-size:13px;font-family:\'JetBrains Mono\',monospace;z-index:9999;white-space:nowrap;pointer-events:none;transition:opacity .25s'
+  t.className='w-toast'
+  t.style.background=ok?'#0a2a1a':'#2a0a0a'
+  t.style.color=ok?'#00d084':'#ff4757'
+  t.style.border='1px solid '+(ok?'#00d084':'#ff4757')
   t.textContent=msg
   document.body.appendChild(t)
   setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},260)},3000)
 }
 
+// ── trade ─────────────────────────────────────────────────
 function _wTrade(i, side){
   var tok=(window._wTokens||[])[i]
   if(!tok) return
@@ -86,8 +275,8 @@ function _wTrade(i, side){
   var sellBtn=document.getElementById('wbtn-'+i+'-sell')
   var origBuy=buyBtn?buyBtn.textContent:'BUY'
   var origSell=sellBtn?sellBtn.textContent:'SELL'
-  if(buyBtn){buyBtn.disabled=true}
-  if(sellBtn){sellBtn.disabled=true}
+  if(buyBtn) buyBtn.disabled=true
+  if(sellBtn) sellBtn.disabled=true
   if(side==='buy'&&buyBtn) buyBtn.textContent='…'
   if(side==='sell'&&sellBtn) sellBtn.textContent='…'
 
@@ -97,13 +286,13 @@ function _wTrade(i, side){
     if(amount_sol<=0){
       _wToast('Enter a valid SOL amount',false)
       if(buyBtn){buyBtn.disabled=false;buyBtn.textContent=origBuy}
-      if(sellBtn){sellBtn.disabled=false}
+      if(sellBtn) sellBtn.disabled=false
       return
     }
   } else {
     var pct=parseFloat((document.getElementById('wsel-'+i)||{}).value)||100
     if(pct>=100){
-      amount_sol=0  // backend does full sell when 0
+      amount_sol=0
     } else {
       var tokUsd=(tok.usd_value||tok.value_usd||0)*pct/100
       var solPx=window._wSolPrice||0
@@ -112,8 +301,7 @@ function _wTrade(i, side){
   }
 
   fetch('/api/instant-trade',{
-    method:'POST',
-    credentials:'include',
+    method:'POST',credentials:'include',
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({token_address:tok.mint,symbol:tok.symbol||'',side:side,amount_sol:amount_sol})
   }).then(function(r){return r.json()}).then(function(d){
@@ -132,86 +320,90 @@ function _wTrade(i, side){
   })
 }
 
+// ── load tokens ───────────────────────────────────────────
 function loadTokens(bust){
-  const wrap=document.getElementById('tokens')
-  wrap.innerHTML='<span class="muted">Loading...</span>'
+  var wrap=document.getElementById('tokens')
+  wrap.innerHTML='<div class="state-msg">Loading…</div>'
   fetch('/api/wallet/tokens'+(bust?'?bust=1':'')).then(r=>r.json()).then(d=>{
-    const t=d.tokens||[]
-    const solToken=t.find(x=>x.symbol==='SOL')
-    if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
-    const spl=t.filter(x=>x.symbol!=='SOL')
-    if(!spl.length){wrap.innerHTML='<span class="muted" style="font-size:13px">No SPL tokens</span>';return}
+    var t=d.tokens||[]
+    var solToken=t.find(x=>x.symbol==='SOL')
+    if(solToken){
+      document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
+    }
+    var spl=t.filter(x=>x.symbol!=='SOL')
     window._wTokens=spl
     window._wSolPrice=solToken?parseFloat(solToken.price_usd||0):0
 
-    // Portfolio PnL total
-    let totalPnlUsd=0, hasPnl=false
-    spl.forEach(x=>{
-      const avg=x.avg_price||0, cur=x.price_usd||0, amt=x.amount||0
-      if(avg>0&&cur>0){totalPnlUsd+=(cur-avg)*amt;hasPnl=true}
+    // portfolio PnL
+    var totalCost=0,totalCur=0,hasPnl=false
+    spl.forEach(function(x){
+      var avg=x.avg_price||0,cur=x.price_usd||0,amt=x.amount||0
+      if(avg>0&&cur>0){totalCost+=avg*amt;totalCur+=cur*amt;hasPnl=true}
     })
-    const ppEl=document.getElementById('portfolio-pnl')
+    var ppEl=document.getElementById('portfolio-pnl')
     if(ppEl&&hasPnl){
-      const ppSign=totalPnlUsd>=0?'+':''
-      const ppPct=spl.reduce((s,x)=>{
-        const avg=x.avg_price||0,cur=x.price_usd||0,amt=x.amount||0
-        return avg>0&&cur>0?s+(cur-avg)*amt:s
-      },0) / Math.max(spl.reduce((s,x)=>{
-        const avg=x.avg_price||0,amt=x.amount||0
-        return avg>0?s+avg*amt:s
-      },0),0.000001) * 100
-      const ppCol=totalPnlUsd>=0?'#3ad29b':'#f76b62'
-      ppEl.style.display='block'
-      ppEl.innerHTML=`<span style="color:#565d68">Portfolio PnL: </span><span style="color:${ppCol};font-weight:600">${ppSign}$${Math.abs(totalPnlUsd).toFixed(2)} (${ppSign}${ppPct.toFixed(1)}%)</span>`
+      var pnlUsd=totalCur-totalCost
+      var pnlPct=totalCost>0?(pnlUsd/totalCost*100):0
+      var col=pnlUsd>=0?'#00d084':'#ff4757'
+      var sign=pnlUsd>=0?'+':''
+      ppEl.style.display='flex'
+      ppEl.innerHTML='<span style="color:var(--muted)">Portfolio PnL</span>'
+        +'<span style="color:'+col+';font-weight:600">'+sign+'$'+Math.abs(pnlUsd).toFixed(2)
+        +' <span style="opacity:.7">('+sign+pnlPct.toFixed(2)+'%)</span></span>'
     }
 
-    wrap.innerHTML=spl.map((x,i)=>{
-      const sym=x.symbol||'?'
-      const amt=x.amount||0
-      const usd=x.usd_value||x.value_usd||0
-      const amtStr=amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
+    if(!spl.length){
+      wrap.innerHTML='<div class="state-msg">No SPL tokens in wallet</div>'
+      return
+    }
 
-      // Logo
-      const logo=x.logo_url||''
-      const initials=sym.slice(0,2).toUpperCase()
-      const logoHtml=logo
-        ?`<img src="${logo}" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display='none';this.nextSibling.style.display='flex'"><div style="display:none;width:40px;height:40px;border-radius:50%;background:#141820;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#444;flex-shrink:0">${initials}</div>`
-        :`<div style="width:40px;height:40px;border-radius:50%;background:#141820;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#444;flex-shrink:0">${initials}</div>`
+    wrap.innerHTML=spl.map(function(x,i){
+      var sym=x.symbol||'?'
+      var amt=x.amount||0
+      var usd=x.usd_value||x.value_usd||0
+      var amtStr=amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
+      var logo=x.logo_url||''
+      var init=sym.slice(0,2).toUpperCase()
 
-      // PnL pill
-      let pnlPill=''
-      const avg=x.avg_price||0, cur=x.price_usd||0
+      var logoHtml=logo
+        ?'<img class="tok-logo" src="'+logo+'" alt="" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+         +'<div class="tok-init" style="display:none">'+init+'</div>'
+        :'<div class="tok-init">'+init+'</div>'
+
+      var pnlPill=''
+      var avg=x.avg_price||0,cur=x.price_usd||0
       if(avg>0&&cur>0){
-        const pct=(cur-avg)/avg*100
-        const col=pct>=0?'#00d084':'#ff4757'
-        const bg=pct>=0?'#00d08415':'#ff475715'
-        const sign=pct>=0?'+':''
-        pnlPill=`<span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:${col};background:${bg};border:1px solid ${col}22;border-radius:6px;padding:3px 8px;white-space:nowrap;flex-shrink:0">${sign}${pct.toFixed(1)}%</span>`
+        var pct=(cur-avg)/avg*100
+        var col=pct>=0?'#00d084':'#ff4757'
+        var sign=pct>=0?'+':''
+        pnlPill='<div class="tok-pct" style="color:'+col+'">'+sign+pct.toFixed(2)+'%</div>'
       }
 
-      return`<div style="display:flex;align-items:center;padding:16px 0;border-bottom:1px solid #0d1117;gap:16px">
-        <div onclick="window.location='/live-market?token='+encodeURIComponent('${sym}')" style="display:flex;align-items:center;gap:12px;flex:1;min-width:0;cursor:pointer">
-          ${logoHtml}
-          <div style="min-width:0">
-            <div style="font-weight:700;font-size:14px;color:#e8eaed;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${sym}</div>
-            <div style="font-size:12px;color:#444;font-family:'JetBrains Mono',monospace;margin-top:2px">${amtStr}</div>
-          </div>
-        </div>
-        ${pnlPill}
-        <div onclick="event.stopPropagation()" style="display:flex;align-items:center;gap:6px;flex-shrink:0">
-          <input id="winput-${i}" class="w-inp" type="number" value="0.1" min="0.001" step="0.01" onclick="event.stopPropagation()">
-          <button id="wbtn-${i}-buy" class="w-buy-btn" onclick="event.stopPropagation();_wTrade(${i},'buy')">BUY</button>
-          <select id="wsel-${i}" class="w-sel" onclick="event.stopPropagation()">
-            <option value="25">25%</option>
-            <option value="50">50%</option>
-            <option value="100" selected>100%</option>
-          </select>
-          <button id="wbtn-${i}-sell" class="w-sell-btn" onclick="event.stopPropagation();_wTrade(${i},'sell')">SELL</button>
-        </div>
-        <div style="font-family:'JetBrains Mono',monospace;font-weight:600;color:#e8eaed;min-width:80px;text-align:right;font-size:14px;flex-shrink:0">$${usd.toFixed(2)}</div>
-      </div>`
+      return '<div class="tok-row">'
+        +logoHtml
+        +'<div class="tok-info" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(\''+sym+'\')">'
+          +'<div class="tok-name">'+sym+'</div>'
+          +'<div class="tok-amount">'+amtStr+'</div>'
+        +'</div>'
+        +'<div class="tok-trade" onclick="event.stopPropagation()">'
+          +'<input id="winput-'+i+'" class="w-inp" type="number" value="0.1" min="0.001" step="0.01">'
+          +'<button id="wbtn-'+i+'-buy" class="w-buy-btn" onclick="_wTrade('+i+',\'buy\')">BUY</button>'
+          +'<select id="wsel-'+i+'" class="w-sel">'
+            +'<option value="25">25%</option>'
+            +'<option value="50">50%</option>'
+            +'<option value="100" selected>100%</option>'
+          +'</select>'
+          +'<button id="wbtn-'+i+'-sell" class="w-sell-btn" onclick="_wTrade('+i+',\'sell\')">SELL</button>'
+        +'</div>'
+        +'<div class="tok-val">'
+          +'<div class="tok-usd">$'+usd.toFixed(2)+'</div>'
+          +pnlPill
+        +'</div>'
+      +'</div>'
     }).join('')
-  }).catch(()=>{wrap.innerHTML='<span class="muted">Failed to load</span>'})
+  }).catch(function(){
+    wrap.innerHTML='<div class="state-msg">Failed to load tokens</div>'
+  })
 }
 
 loadTokens()
