@@ -34,8 +34,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   padding:14px 20px;gap:12px;
 }
 .hdr-left{display:flex;flex-direction:column;gap:2px}
-.hdr-title{font-size:16px;font-weight:600;color:var(--text);letter-spacing:.01em}
-.hdr-sub{font-size:11px;color:var(--muted);letter-spacing:.01em}
+.hdr-title{font-size:16px;font-weight:600;color:var(--text)}
+.hdr-sub{font-size:11px;color:var(--muted)}
 .hdr-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
 .hdr-back{font-size:13px;color:var(--muted);text-decoration:none}
 .hdr-back:hover{color:var(--text)}
@@ -47,8 +47,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 }
 .net-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
 
-/* ── page layout ── */
-.page{max-width:600px;margin:0 auto;padding:20px 16px 0}
+/* ── layout ── */
+.page{max-width:600px;margin:0 auto;padding:20px 16px 0;display:flex;flex-direction:column;gap:14px}
 
 /* ── hero balance card ── */
 .hero{
@@ -56,44 +56,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   border:1px solid var(--border);
   border-radius:18px;
   padding:24px 22px 20px;
-  margin-bottom:14px;
 }
-.hero-label{
-  font-size:10px;font-weight:600;letter-spacing:.14em;
-  color:var(--muted);margin-bottom:12px;
-}
+.hero-label{font-size:10px;font-weight:600;letter-spacing:.14em;color:var(--muted);margin-bottom:12px}
 .hero-bal-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
-.hero-bal-num{
-  font-family:var(--mono);font-size:40px;font-weight:700;
-  line-height:1;color:var(--text);
-}
+.hero-bal-num{font-family:var(--mono);font-size:40px;font-weight:700;line-height:1;color:var(--text)}
 .hero-bal-unit{font-family:var(--mono);font-size:17px;color:var(--muted);font-weight:400}
-.hero-today{
-  font-family:var(--mono);font-size:13px;font-weight:600;
-  color:var(--green);display:none;
-}
-.hero-usd{
-  font-family:var(--mono);font-size:13px;color:var(--sub);
-  margin-bottom:20px;
-}
+.hero-today{font-family:var(--mono);font-size:13px;font-weight:600;display:none}
+.hero-usd{font-family:var(--mono);font-size:13px;color:var(--sub);margin-bottom:20px}
 
-/* ── 4 action buttons ── */
+/* ── action buttons ── */
 .actions{display:flex;gap:8px;margin-bottom:18px}
 .act-btn{
   flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
   border-radius:12px;padding:11px 4px;cursor:pointer;
   font-family:var(--ui);font-size:11px;font-weight:600;
-  transition:opacity .15s,filter .15s;
+  transition:opacity .15s;
 }
-.act-btn:hover{opacity:.85}
-.act-primary{
-  background:var(--accent);color:#06100f;
-  border:1px solid var(--accent);
-}
-.act-secondary{
-  background:var(--bg);color:var(--sub);
-  border:1px solid var(--border);
-}
+.act-btn:hover{opacity:.82}
+.act-primary{background:var(--accent);color:#06100f;border:1px solid var(--accent)}
+.act-secondary{background:var(--bg);color:var(--sub);border:1px solid var(--border)}
 .act-secondary:hover{border-color:var(--accent);color:var(--text);opacity:1}
 .act-icon{font-size:15px;line-height:1}
 
@@ -101,9 +82,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .split{display:flex;border:1px solid var(--border);border-radius:12px;overflow:hidden}
 .split-cell{flex:1;padding:12px 14px;background:#0d0f12}
 .split-cell+.split-cell{border-left:1px solid var(--border)}
-.split-lbl{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-bottom:5px;font-weight:500}
+.split-lbl{font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin-bottom:5px}
 .split-val{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text)}
-.split-val.accent{color:var(--accent)}
 
 /* ── portfolio PnL bar ── */
 .pnl-bar{
@@ -113,13 +93,48 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   display:none;justify-content:space-between;align-items:center;
 }
 
-/* ── holdings card ── */
-.holdings{
+/* ── deposit card ── */
+.dep-card{
   background:var(--card);
-  border:1px solid var(--border);
+  border:1px solid var(--divider);
   border-radius:18px;
-  overflow:hidden;
+  padding:17px;
 }
+.dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.dep-title{font-size:13px;font-weight:600;color:var(--text)}
+.dep-network{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.06em}
+.dep-body{display:flex;gap:14px;align-items:flex-start}
+.dep-qr{
+  width:74px;height:74px;flex-shrink:0;
+  background:var(--divider);border:1px solid var(--border);border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:3px;
+}
+.dep-qr-grid{
+  display:grid;grid-template-columns:repeat(5,8px);grid-template-rows:repeat(5,8px);gap:1.5px;
+}
+.dep-qr-cell{border-radius:1px}
+.dep-right{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
+.dep-addr{
+  font-family:var(--mono);font-size:11px;color:var(--sub);
+  word-break:break-all;line-height:1.55;
+  background:var(--divider);border:1px solid var(--border);
+  border-radius:8px;padding:8px 10px;
+}
+.dep-btns{display:flex;gap:7px}
+.dep-btn{
+  flex:1;padding:7px 0;border-radius:8px;cursor:pointer;
+  font-family:var(--ui);font-size:11px;font-weight:600;
+  transition:background .15s,color .15s,border-color .15s;
+  text-align:center;text-decoration:none;display:inline-block;
+}
+.dep-copy{background:var(--accent);color:#06100f;border:1px solid var(--accent)}
+.dep-copy:hover{opacity:.85}
+.dep-scan{background:var(--bg);color:var(--sub);border:1px solid var(--border)}
+.dep-scan:hover{border-color:var(--accent);color:var(--accent)}
+
+/* ── holdings card ── */
+.holdings{background:var(--card);border:1px solid var(--divider);border-radius:18px;overflow:hidden}
 .holdings-hdr{
   display:flex;align-items:center;justify-content:space-between;
   padding:15px 18px 13px;
@@ -144,26 +159,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .tok-row:last-child{border-bottom:none}
 .tok-row:hover{background:var(--divider)}
 
-/* logo circle */
+/* ── 38px colored initials circle ── */
 .tok-logo{width:38px;height:38px;border-radius:50%;flex-shrink:0;object-fit:cover}
 .tok-init{
-  width:38px;height:38px;border-radius:50%;
-  background:var(--divider);border:1px solid var(--border);
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:12px;color:var(--muted);flex-shrink:0;
+  font-family:var(--ui);font-weight:700;font-size:12px;color:#fff;
 }
 
-/* name + amount */
+/* ── name + amount ── */
 .tok-info{flex:1;min-width:0;cursor:pointer}
 .tok-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tok-amount{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:2px}
 
-/* USD + % change */
+/* ── USD + % right ── */
 .tok-val{text-align:right;flex-shrink:0;min-width:72px}
-.tok-usd{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--text)}
+.tok-usd{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)}
 .tok-pct{font-family:var(--mono);font-size:11px;margin-top:2px}
 
-/* inline trade controls */
+/* ── inline trade controls ── */
 .tok-trade{display:flex;align-items:center;gap:5px;flex-shrink:0}
 .w-inp{
   width:68px;background:var(--bg);border:1px solid var(--border);
@@ -211,13 +225,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   .tok-val{min-width:60px}
   .actions{gap:6px}
   .act-btn{padding:9px 2px;font-size:10px}
-  .act-icon{font-size:14px}
+  .dep-body{flex-direction:column}
+  .dep-qr{width:100%;height:64px;flex-direction:row}
 }
 </style>
 </head>
 <body>
 
-<!-- sticky header -->
 <header class="hdr">
   <div class="hdr-left">
     <div class="hdr-title">Wallet</div>
@@ -263,11 +277,32 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
       </div>
       <div class="split-cell">
         <div class="split-lbl">IN POSITIONS</div>
-        <div class="split-val accent" id="inpos">0 SOL</div>
+        <div class="split-val" style="color:var(--accent)" id="inpos">0 SOL</div>
       </div>
     </div>
 
     <div class="pnl-bar" id="portfolio-pnl"></div>
+  </div>
+
+  <!-- deposit address card -->
+  <div class="dep-card">
+    <div class="dep-header">
+      <span class="dep-title">Deposit Address</span>
+      <span class="dep-network">SPL · SOL</span>
+    </div>
+    <div class="dep-body">
+      <!-- QR placeholder: 5×5 pixel-art grid -->
+      <div class="dep-qr" title="QR code">
+        <div class="dep-qr-grid" id="dep-qr-grid"></div>
+      </div>
+      <div class="dep-right">
+        <div class="dep-addr" id="dep-addr-text">{{ wallet_address }}</div>
+        <div class="dep-btns">
+          <button class="dep-btn dep-copy" onclick="_copyAddr()">Copy Address</button>
+          <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ wallet_address }}" target="_blank" rel="noopener">Solscan ↗</a>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- holdings -->
@@ -282,6 +317,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 </div>
 
 <script>
+var _walletAddr='{{ wallet_address }}'
+
 // ── balance ──────────────────────────────────────────────
 fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('sol').textContent=(d.sol||0).toFixed(4)
@@ -290,6 +327,43 @@ fetch('/api/wallet/balance').then(r=>r.json()).then(d=>{
   document.getElementById('sol').textContent='—'
   document.getElementById('usd').textContent='—'
 })
+
+// ── QR placeholder (seeded pixel-art pattern) ────────────
+;(function(){
+  var grid=document.getElementById('dep-qr-grid')
+  if(!grid) return
+  var addr=_walletAddr||''
+  var seed=0; for(var i=0;i<addr.length;i++) seed=(seed*31+addr.charCodeAt(i))&0xffffff
+  var ON='#35d4c4',OFF='#1a1f26'
+  // 5×5 symmetric pattern (mirror columns 0-1 to 4-3)
+  for(var r=0;r<5;r++){
+    var row=[]
+    for(var c=0;c<3;c++){seed=(seed*6364136223846793005+1442695040888963407)&0xffffff;row.push(seed%3>0)}
+    row[3]=row[1]; row[4]=row[0]
+    for(var c=0;c<5;c++){
+      var cell=document.createElement('div')
+      cell.className='dep-qr-cell'
+      cell.style.background=row[c]?ON:OFF
+      grid.appendChild(cell)
+    }
+  }
+})()
+
+// ── copy address ─────────────────────────────────────────
+function _copyAddr(){
+  var addr=_walletAddr
+  if(!addr) return
+  navigator.clipboard.writeText(addr).then(function(){
+    _wToast('Address copied',true)
+  }).catch(function(){
+    // fallback
+    var el=document.createElement('textarea')
+    el.value=addr; el.style.position='fixed'; el.style.opacity='0'
+    document.body.appendChild(el); el.select()
+    try{document.execCommand('copy');_wToast('Address copied',true)}catch(e){_wToast('Copy failed',false)}
+    document.body.removeChild(el)
+  })
+}
 
 // ── toast ────────────────────────────────────────────────
 function _wToast(msg, ok){
@@ -301,6 +375,12 @@ function _wToast(msg, ok){
   t.textContent=msg
   document.body.appendChild(t)
   setTimeout(function(){t.style.opacity='0';setTimeout(function(){t.remove()},260)},3000)
+}
+
+// ── symbol → color (deterministic hue) ───────────────────
+function _symColor(sym){
+  var h=0; for(var i=0;i<sym.length;i++) h=(h*31+sym.charCodeAt(i))&0xfffff
+  return 'hsl('+(h%360)+',48%,32%)'
 }
 
 // ── trade ─────────────────────────────────────────────────
@@ -363,9 +443,7 @@ function loadTokens(bust){
   fetch('/api/wallet/tokens'+(bust?'?bust=1':'')).then(r=>r.json()).then(d=>{
     var t=d.tokens||[]
     var solToken=t.find(x=>x.symbol==='SOL')
-    if(solToken){
-      document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
-    }
+    if(solToken) document.getElementById('usd').textContent=(solToken.usd_value||solToken.value_usd||0).toFixed(2)
     var spl=t.filter(x=>x.symbol!=='SOL')
     window._wTokens=spl
     window._wSolPrice=solToken?parseFloat(solToken.price_usd||0):0
@@ -386,7 +464,6 @@ function loadTokens(bust){
       ppEl.innerHTML='<span style="color:var(--muted)">Portfolio PnL</span>'
         +'<span style="color:'+col+';font-weight:600">'+sign+'$'+Math.abs(pnlUsd).toFixed(2)
         +' <span style="opacity:.65">('+sign+pnlPct.toFixed(2)+'%)</span></span>'
-      // also show today % in hero
       var todayEl=document.getElementById('today-pct')
       if(todayEl){
         todayEl.textContent=(pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'% today'
@@ -395,10 +472,7 @@ function loadTokens(bust){
       }
     }
 
-    if(!spl.length){
-      wrap.innerHTML='<div class="state-msg">No SPL tokens in wallet</div>'
-      return
-    }
+    if(!spl.length){wrap.innerHTML='<div class="state-msg">No SPL tokens in wallet</div>';return}
 
     wrap.innerHTML=spl.map(function(x,i){
       var sym=x.symbol||'?'
@@ -407,19 +481,19 @@ function loadTokens(bust){
       var amtStr=amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
       var logo=x.logo_url||''
       var init=sym.slice(0,2).toUpperCase()
+      var circleColor=_symColor(sym)
 
       var logoHtml=logo
         ?'<img class="tok-logo" src="'+logo+'" alt="" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
-         +'<div class="tok-init" style="display:none">'+init+'</div>'
-        :'<div class="tok-init">'+init+'</div>'
+         +'<div class="tok-init" style="display:none;background:'+circleColor+'">'+init+'</div>'
+        :'<div class="tok-init" style="background:'+circleColor+'">'+init+'</div>'
 
-      var pnlPill=''
+      var pnlHtml=''
       var avg=x.avg_price||0,cur=x.price_usd||0
       if(avg>0&&cur>0){
         var chg=(cur-avg)/avg*100
         var col=chg>=0?'#00d084':'#ff4757'
-        var sign=chg>=0?'+':''
-        pnlPill='<div class="tok-pct" style="color:'+col+'">'+sign+chg.toFixed(2)+'%</div>'
+        pnlHtml='<div class="tok-pct" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div>'
       }
 
       return '<div class="tok-row">'
@@ -432,15 +506,14 @@ function loadTokens(bust){
           +'<input id="winput-'+i+'" class="w-inp" type="number" value="0.1" min="0.001" step="0.01">'
           +'<button id="wbtn-'+i+'-buy" class="w-buy-btn" onclick="_wTrade('+i+',\'buy\')">BUY</button>'
           +'<select id="wsel-'+i+'" class="w-sel">'
-            +'<option value="25">25%</option>'
-            +'<option value="50">50%</option>'
+            +'<option value="25">25%</option><option value="50">50%</option>'
             +'<option value="100" selected>100%</option>'
           +'</select>'
           +'<button id="wbtn-'+i+'-sell" class="w-sell-btn" onclick="_wTrade('+i+',\'sell\')">SELL</button>'
         +'</div>'
         +'<div class="tok-val">'
           +'<div class="tok-usd">$'+usd.toFixed(2)+'</div>'
-          +pnlPill
+          +pnlHtml
         +'</div>'
       +'</div>'
     }).join('')
