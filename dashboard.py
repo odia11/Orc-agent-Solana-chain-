@@ -3165,12 +3165,21 @@ def pnl_card_page(wallet_addr):
 @app.route('/traders')
 def traders():
     session_wallet = _current_wallet()
-    entries = []
+    entries        = []
+    following_ids  = set()
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
+        # Resolve current user's id and who they follow
+        if session_wallet:
+            row = c.execute('SELECT id FROM users WHERE wallet_address=?', (session_wallet,)).fetchone()
+            if row:
+                me_id = row[0]
+                frows = c.execute('SELECT following_id FROM follows WHERE follower_id=?', (me_id,)).fetchall()
+                following_ids = {r[0] for r in frows}
         c.execute('''
             SELECT
+                u.id,
                 u.wallet_address,
                 u.username,
                 u.avatar_url,
@@ -3184,8 +3193,14 @@ def traders():
                          THEN (t.exit_price - t.entry_price) / t.entry_price * 100.0
                          ELSE 0.0 END
                 ), 1)                                                          AS best_trade_pct,
+                (SELECT t2.token FROM trades t2
+                 WHERE t2.user_id = u.id AND t2.entry_price > 0
+                 ORDER BY (t2.exit_price - t2.entry_price) / t2.entry_price DESC
+                 LIMIT 1)                                                      AS best_token,
                 (SELECT COUNT(*) FROM follows f
-                 WHERE f.following_id = u.id)                                 AS follower_count
+                 WHERE f.following_id = u.id)                                 AS follower_count,
+                ROUND(SUM(CASE WHEN t.timestamp >= datetime(\'now\',\'-7 days\')
+                               THEN t.pnl ELSE 0.0 END), 4)                  AS week_pnl
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
@@ -3198,12 +3213,14 @@ def traders():
     except Exception as e:
         print(f'[traders] DB error: {e}', flush=True)
         rows = []
-    for rank, (wallet, username, avatar_url, badges_str,
+    for rank, (uid, wallet, username, avatar_url, badges_str,
                total_pnl, win_rate, trade_count,
-               best_trade_pct, follower_count) in enumerate(rows, 1):
+               best_trade_pct, best_token,
+               follower_count, week_pnl) in enumerate(rows, 1):
         wallet = wallet or ''
         anon   = (wallet[:4] + '…' + wallet[-4:]) if len(wallet) >= 8 else (wallet or '???')
         entries.append({
+            'user_id':        int(uid),
             'rank':           rank,
             'wallet':         wallet,
             'wallet_short':   anon,
@@ -3214,8 +3231,11 @@ def traders():
             'win_rate':       round(float(win_rate        or 0), 1),
             'trade_count':    int  (trade_count           or 0),
             'best_trade_pct': round(float(best_trade_pct or 0), 1),
+            'best_token':     (best_token or '').upper()[:12],
             'follower_count': int  (follower_count        or 0),
+            'week_pnl':       round(float(week_pnl        or 0), 4),
             'is_me':          bool(session_wallet and wallet == session_wallet),
+            'is_following':   int(uid) in following_ids,
         })
     wallet_short = ((session_wallet[:4] + '…' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
@@ -3224,6 +3244,7 @@ def traders():
         entries=entries,
         wallet=session_wallet,
         wallet_short=wallet_short,
+        logged_in=bool(session_wallet),
     )
 
 @app.route('/leaderboard')
