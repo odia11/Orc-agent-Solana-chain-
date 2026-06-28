@@ -6800,6 +6800,53 @@ def bot_status():
         'win_rate': win_rate,
     })
 
+@app.route('/api/bot/positions', methods=['GET'])
+@rate_limit(30, 60)
+def bot_positions():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'positions': [], 'total_pnl_sol': 0.0}), 401
+    us = get_user_state(wallet)
+    raw_positions = us.get('positions', {})
+    live_map = {t['mint']: t for t in state.get('tokens', [])}
+    result = []
+    total_pnl_sol = 0.0
+    for mint, pos in raw_positions.items():
+        if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
+            continue
+        symbol     = pos.get('symbol', mint[:8]) or mint[:8]
+        buy_price  = float(pos.get('buy_price', 0))
+        amount     = float(pos.get('amount', 0))
+        spend      = float(pos.get('spend', 0))
+        live       = live_map.get(mint)
+        if live:
+            cur_price = float(live.get('price', 0) or 0)
+        else:
+            td        = get_token_data(mint)
+            cur_price = float(td['price']) if td else 0.0
+        if buy_price > 0 and cur_price > 0:
+            pnl_pct = round((cur_price - buy_price) / buy_price * 100, 2)
+            pnl_sol = round(amount * (cur_price - buy_price), 6)
+        else:
+            pnl_pct = 0.0
+            pnl_sol = 0.0
+        total_pnl_sol += pnl_sol
+        result.append({
+            'symbol':        symbol,
+            'mint':          mint,
+            'entry_price':   buy_price,
+            'current_price': cur_price,
+            'pnl_pct':       pnl_pct,
+            'pnl_sol':       pnl_sol,
+            'spend':         spend,
+        })
+    result.sort(key=lambda x: x['pnl_sol'], reverse=True)
+    return jsonify({
+        'ok':           True,
+        'positions':    result,
+        'total_pnl_sol': round(total_pnl_sol, 6),
+    })
+
 # ── MANUAL SELL ──
 @app.route('/api/sell', methods=['POST'])
 @rate_limit(10, 60)

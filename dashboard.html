@@ -133,6 +133,22 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-bot-btn:hover{opacity:.88}
 .sb-bot-btn.running{background:#1a2a22;color:#3ad29b;border:1px solid #3ad29b30}
 .sb-bot-btn.running:hover{background:#1f3328}
+.sb-pnl-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:12px;margin-top:8px}
+.sb-pnl-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.sb-pnl-lbl{font-size:10px;font-weight:700;color:#565d68;letter-spacing:.1em}
+.sb-pnl-total{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;font-weight:700}
+.sb-pnl-pos{display:flex;align-items:center;gap:8px;padding:7px 0;border-top:1px solid #16191f}
+.sb-pnl-circ{width:24px;height:24px;min-width:24px;border-radius:50%;background:#161a22;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#8a919c;letter-spacing:-.02em;flex-shrink:0}
+.sb-pnl-mid{flex:1;min-width:0}
+.sb-pnl-sym{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;font-weight:700;color:#eef1f5}
+.sb-pnl-sub{font-size:10px;color:#565d68;margin-top:1px}
+.sb-pnl-right{text-align:right;flex-shrink:0}
+.sb-pnl-pct{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:12px;font-weight:700}
+.sb-pnl-sol{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:10px;color:#565d68;margin-top:1px}
+.sb-pnl-empty{font-size:11px;color:#565d68;text-align:center;padding:8px 0}
+.sb-pnl-footer{margin-top:10px;text-align:center}
+.sb-pnl-viewall{font-size:11px;color:#35d4c4;text-decoration:none;font-weight:600}
+.sb-pnl-viewall:hover{text-decoration:underline}
 
 .sb-start-wrap{padding:4px 12px 10px;flex-shrink:0}
 .sb-start-btn{width:100%;padding:12px;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s}
@@ -3235,6 +3251,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           </div>
           <div class="sb-bot-stats" id="bot-stats">— SOL ready · 0/5 open · —% win rate</div>
           <button class="sb-bot-btn" id="bot-toggle-btn" onclick="_botToggle()">▶ Start Trading</button>
+          <!-- BOT PNL PANEL -->
+          <div class="sb-pnl-card">
+            <div class="sb-pnl-hdr">
+              <span class="sb-pnl-lbl">BOT PNL</span>
+              <span class="sb-pnl-total" id="bot-pnl-total" style="color:#565d68">—</span>
+            </div>
+            <div id="bot-pnl-list"><div class="sb-pnl-empty">No open positions</div></div>
+            <div class="sb-pnl-footer"><a href="/history" class="sb-pnl-viewall">View all positions →</a></div>
+          </div>
         </div>
       </div>
       <!-- NAV -->
@@ -6774,6 +6799,49 @@ async function _botToggle(){
 // Initial fetch + 30s poll
 _botFetchStatus()
 _botPollTimer=setInterval(_botFetchStatus,30000)
+
+// ── bot PNL panel ──────────────────────────────────────
+async function _botLoadPositions(){
+  var listEl=document.getElementById('bot-pnl-list')
+  var totalEl=document.getElementById('bot-pnl-total')
+  try{
+    var d=await fetch('/api/bot/positions').then(function(r){return r.json()})
+    if(!d.ok||!d.positions){return}
+    var pos=d.positions
+    var tot=parseFloat(d.total_pnl_sol||0)
+    if(totalEl){
+      totalEl.textContent=(tot>=0?'+':'')+tot.toFixed(4)+' SOL'
+      totalEl.style.color=tot>0?'#3ad29b':tot<0?'#f76b62':'#565d68'
+    }
+    if(!listEl) return
+    if(!pos.length){listEl.innerHTML='<div class="sb-pnl-empty">No open positions</div>';return}
+    var html=''
+    pos.forEach(function(p){
+      var initials=(p.symbol||'?').replace(/[^A-Za-z0-9]/g,'').slice(0,3).toUpperCase()
+      var pct=parseFloat(p.pnl_pct||0)
+      var sol=parseFloat(p.pnl_sol||0)
+      var col=pct>0?'#3ad29b':pct<0?'#f76b62':'#565d68'
+      var pctStr=(pct>=0?'+':'')+pct.toFixed(2)+'%'
+      var solStr=(sol>=0?'+':'')+sol.toFixed(4)+' SOL'
+      var tpPct=5
+      var statusStr='TP +'+tpPct+'% · open'
+      html+='<div class="sb-pnl-pos">'
+        +'<div class="sb-pnl-circ">'+initials+'</div>'
+        +'<div class="sb-pnl-mid">'
+          +'<div class="sb-pnl-sym">$'+p.symbol+'</div>'
+          +'<div class="sb-pnl-sub">'+statusStr+'</div>'
+        +'</div>'
+        +'<div class="sb-pnl-right">'
+          +'<div class="sb-pnl-pct" style="color:'+col+'">'+pctStr+'</div>'
+          +'<div class="sb-pnl-sol" style="color:'+col+'">'+solStr+'</div>'
+        +'</div>'
+        +'</div>'
+    })
+    listEl.innerHTML=html
+  }catch(e){}
+}
+_botLoadPositions()
+setInterval(_botLoadPositions,10000)
 
 function _sbNav(section){
   if(section!=='wallet') _stopWalletRefresh();
