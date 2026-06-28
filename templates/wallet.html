@@ -249,6 +249,25 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .w-sell-btn:hover{background:var(--red);color:#fff}
 .w-sell-btn:disabled{opacity:.4;cursor:not-allowed}
 
+/* ── recent activity ── */
+.act-card{background:#101216;border:1px solid #16191f;border-radius:16px;overflow:hidden}
+.act-hdr{display:flex;align-items:center;justify-content:space-between;padding:15px 16px 13px;border-bottom:1px solid #16191f}
+.act-title{font-size:13px;font-weight:600;color:var(--text)}
+.act-viewall{font-size:12px;color:var(--accent);text-decoration:none;transition:opacity .15s}
+.act-viewall:hover{opacity:.7}
+.act-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #16191f}
+.act-row:last-child{border-bottom:none}
+.act-tile{
+  width:38px;height:38px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;
+}
+.act-main{flex:1;min-width:0}
+.act-type{font-size:14px;font-weight:700;color:var(--text)}
+.act-sub{font-size:12px;color:#565d68;margin-top:2px;font-family:var(--mono)}
+.act-right{text-align:right;flex-shrink:0}
+.act-amt{font-family:var(--mono);font-size:13px;font-weight:700}
+.act-time{font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+
 /* ── states ── */
 .state-msg{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
 
@@ -260,6 +279,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .w-modal-box{
   background:var(--card);border:1px solid var(--border);border-radius:18px;
   padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
+  position:relative;
+}
+/* ── swap modal box ── */
+.swap-modal-box{
+  background:#101216;border:1px solid #21252c;border-radius:20px;
+  padding:24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
   position:relative;
 }
 .w-modal-close{
@@ -295,6 +320,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   display:grid;grid-template-columns:repeat(7,1fr);gap:2.5px;
 }
 .w-modal-qr-cell{border-radius:1.5px}
+
+/* ── swap modal ── */
+.swap-inp-card{background:#0a0b0e;border:1px solid #21252c;border-radius:14px;padding:16px}
+.swap-tok-row{display:flex;align-items:center;gap:10px}
+.swap-tok-sel{background:transparent;border:none;color:var(--text);font-family:var(--ui);font-size:14px;font-weight:700;cursor:pointer;outline:none;max-width:100px;flex-shrink:0;-webkit-appearance:none;appearance:none}
+.swap-tok-sel option{background:#0a0b0e;color:var(--text)}
+.swap-amount-inp{flex:1;background:transparent;border:none;color:var(--text);font-family:var(--mono);font-size:24px;font-weight:700;text-align:right;outline:none;width:0;min-width:0}
+.swap-amount-inp::placeholder{color:var(--muted)}
+.swap-amount-out{flex:1;font-family:var(--mono);font-size:24px;font-weight:700;color:var(--muted);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.swap-bal{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:8px}
+.swap-dir-wrap{display:flex;justify-content:center;margin:10px 0}
+.swap-dir-btn{width:36px;height:36px;border-radius:50%;background:rgba(53,212,196,.12);border:2px solid var(--accent);color:var(--accent);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;font-family:var(--mono)}
+.swap-dir-btn:hover{background:rgba(53,212,196,.22)}
+.swap-info-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;font-size:12px;color:#565d68;font-family:var(--mono)}
 
 /* ── toast ── */
 .w-toast{
@@ -351,7 +390,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
       <button class="act-btn act-secondary" onclick="_modalSend()">
         <span class="act-icon">→</span>Send
       </button>
-      <button class="act-btn act-secondary" onclick="_modalSwap()">
+      <button class="act-btn act-secondary" onclick="openSwapModal()">
         <span class="act-icon">⇄</span>Swap
       </button>
     </div>
@@ -400,6 +439,15 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
     <div class="tok-list" id="tokens"><div class="state-msg">Loading…</div></div>
   </div>
 
+  <!-- recent activity -->
+  <div class="act-card" style="margin-top:18px">
+    <div class="act-hdr">
+      <span class="act-title">Recent activity</span>
+      <a href="/history" class="act-viewall">View all →</a>
+    </div>
+    <div id="activity-list"><div class="state-msg">Loading…</div></div>
+  </div>
+
 </div><!-- .page -->
 </div><!-- .main-col -->
 
@@ -441,6 +489,14 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   <div class="w-modal-box">
     <button class="w-modal-close" onclick="_closeModal()">✕</button>
     <div id="w-modal-body"></div>
+  </div>
+</div>
+
+<!-- swap modal -->
+<div class="w-modal-back" id="swapModal" onclick="if(event.target===this)_closeSwapModal()">
+  <div class="swap-modal-box">
+    <button class="w-modal-close" onclick="_closeSwapModal()">✕</button>
+    <div id="swap-modal-body"></div>
   </div>
 </div>
 
@@ -578,15 +634,143 @@ function _execSend(){
   })
 }
 
-function _modalSwap(){
-  _showModal(
-    '<div class="w-modal-title">Swap</div>'
-    +'<div class="w-modal-note" style="margin-bottom:14px">Swap tokens directly on Solana using Jupiter, the leading DEX aggregator.</div>'
-    +'<div class="w-modal-btns">'
-      +'<button class="w-modal-btn w-modal-secondary" onclick="_closeModal()">Cancel</button>'
-      +'<a class="w-modal-btn w-modal-primary" href="https://jup.ag" target="_blank" rel="noopener">Open Jupiter ↗</a>'
+// ── swap modal ───────────────────────────────────────────
+var _sw={from:'__SOL__',to:'',amt:0}
+
+function openSwapModal(){
+  document.getElementById('swapModal').style.display='flex'
+}
+function _closeSwapModal(){
+  document.getElementById('swapModal').style.display='none'
+}
+function _swRender(){
+  var el=document.getElementById('swap-modal-body')
+  if(el) el.innerHTML=_swBuildHtml()
+}
+
+function _swBuildHtml(){
+  var spl=window._wTokens||[]
+  var fromMint=_sw.from, toMint=_sw.to
+  function tokOpts(sel,excl){
+    var o='<option value="__SOL__"'+(sel==='__SOL__'?' selected':'')+'>SOL</option>'
+    spl.forEach(function(t){
+      if(t.mint===excl) return
+      o+='<option value="'+t.mint+'"'+(t.mint===sel?' selected':'')+'>'+( t.symbol||t.mint.slice(0,6))+'</option>'
+    })
+    return o
+  }
+  var fromSpl=spl.find(function(t){return t.mint===fromMint})
+  var toSpl=spl.find(function(t){return t.mint===toMint})
+  var fromIsSOL=fromMint==='__SOL__'
+  var solPx=window._wSolPrice||0
+  var fromPx=fromIsSOL?solPx:parseFloat((fromSpl||{}).price_usd||0)
+  var toPx=parseFloat((toSpl||{}).price_usd||0)
+  var fromAmt=_sw.amt||0
+  var outAmt=(fromAmt>0&&fromPx>0&&toPx>0)?fromAmt*fromPx/toPx:0
+  var estOut=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'—'
+  var fromSym=fromIsSOL?'SOL':((fromSpl||{}).symbol||'?')
+  var toSym=(toSpl||{}).symbol||'?'
+  var rate=(fromPx>0&&toPx>0)?'1 '+fromSym+' = '+(fromPx/toPx).toFixed(4)+' '+toSym:'—'
+  var solBalEl=document.getElementById('sol')
+  var fromBal=fromIsSOL
+    ?(solBalEl?parseFloat(solBalEl.textContent||0).toFixed(4):'—')
+    :parseFloat((fromSpl||{}).amount||0).toFixed(4)
+  var toBal=toSpl?parseFloat(toSpl.amount||0).toFixed(4):'—'
+  return (
+    '<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:20px">Swap</div>'
+    +'<div class="swap-inp-card">'
+      +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:8px">FROM</div>'
+      +'<div class="swap-tok-row">'
+        +'<select class="swap-tok-sel" id="sw-from" onchange="_swChgFrom(this.value)">'+tokOpts(fromMint,toMint)+'</select>'
+        +'<span style="color:var(--muted);font-size:14px;flex-shrink:0">▾</span>'
+        +'<input class="swap-amount-inp" id="sw-amt" type="number" placeholder="0.00" value="'+(fromAmt||'')+'" oninput="_swChgAmt(this.value)">'
+      +'</div>'
+      +'<div class="swap-bal">Balance: '+fromBal+'</div>'
     +'</div>'
+    +'<div class="swap-dir-wrap"><button class="swap-dir-btn" onclick="_swFlip()">↕</button></div>'
+    +'<div class="swap-inp-card">'
+      +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:8px">TO</div>'
+      +'<div class="swap-tok-row">'
+        +'<select class="swap-tok-sel" id="sw-to" onchange="_swChgTo(this.value)">'+tokOpts(toMint,fromMint)+'</select>'
+        +'<span style="color:var(--muted);font-size:14px;flex-shrink:0">▾</span>'
+        +'<div class="swap-amount-out" id="sw-out">'+estOut+'</div>'
+      +'</div>'
+      +'<div class="swap-bal">Balance: '+toBal+'</div>'
+    +'</div>'
+    +'<div class="swap-info-row">'
+      +'<span id="sw-rate">Rate: '+rate+'</span>'
+      +'<span>Impact: ~0.3%</span>'
+    +'</div>'
+    +'<button id="sw-btn" onclick="_execSwap()" style="'
+      +'width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;'
+      +'background:var(--accent);color:#06100f;font-family:var(--ui);font-size:15px;font-weight:700;'
+      +'margin-top:4px;transition:opacity .15s'
+    +'">⚡ Swap</button>'
   )
+}
+
+function _modalSwap(){
+  var spl=window._wTokens||[]
+  _sw.from='__SOL__'
+  _sw.to=spl.length?spl[0].mint:''
+  _sw.amt=0
+  _swRender()
+  openSwapModal()
+}
+function _swChgFrom(v){_sw.from=v;_swRender()}
+function _swChgTo(v){_sw.to=v;_swRender()}
+function _swChgAmt(v){
+  _sw.amt=parseFloat(v)||0
+  var spl=window._wTokens||[]
+  var fromSpl=spl.find(function(t){return t.mint===_sw.from})
+  var toSpl=spl.find(function(t){return t.mint===_sw.to})
+  var fromPx=_sw.from==='__SOL__'?(window._wSolPrice||0):parseFloat((fromSpl||{}).price_usd||0)
+  var toPx=parseFloat((toSpl||{}).price_usd||0)
+  var outAmt=(_sw.amt>0&&fromPx>0&&toPx>0)?_sw.amt*fromPx/toPx:0
+  var estOut=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'—'
+  var outEl=document.getElementById('sw-out')
+  if(outEl) outEl.textContent=estOut
+  var fromSym=_sw.from==='__SOL__'?'SOL':((fromSpl||{}).symbol||'?')
+  var toSym=(toSpl||{}).symbol||'?'
+  var rateEl=document.getElementById('sw-rate')
+  if(rateEl) rateEl.textContent='Rate: '+((fromPx>0&&toPx>0)?'1 '+fromSym+' = '+(fromPx/toPx).toFixed(4)+' '+toSym:'—')
+}
+function _swFlip(){
+  var tmp=_sw.from; _sw.from=_sw.to||'__SOL__'; _sw.to=tmp; _sw.amt=0
+  _swRender()
+}
+async function _execSwap(){
+  var spl=window._wTokens||[]
+  var fromIsSOL=_sw.from==='__SOL__'
+  var fromSpl=spl.find(function(t){return t.mint===_sw.from})
+  var toSpl=spl.find(function(t){return t.mint===_sw.to})
+  var btn=document.getElementById('sw-btn')
+  if(_sw.amt<=0){_wToast('Enter an amount',false);return}
+  if(!_sw.to&&fromIsSOL){_wToast('Select a token to receive',false);return}
+  if(btn){btn.disabled=true;btn.textContent='Swapping…'}
+  var payload=fromIsSOL
+    ?{side:'buy',token_address:_sw.to,symbol:(toSpl||{}).symbol||'',amount_sol:_sw.amt}
+    :{side:'sell',token_address:_sw.from,symbol:(fromSpl||{}).symbol||'',amount_sol:0}
+  try{
+    var r=await fetch('/api/instant-trade',{
+      method:'POST',credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    })
+    var d=await r.json()
+    if(d.success||d.ok){
+      _closeSwapModal()
+      var sym=fromIsSOL?(toSpl||{}).symbol||'token':(fromSpl||{}).symbol||'token'
+      _wToast((fromIsSOL?'⚡ Bought ':'⚡ Sold ')+sym,true)
+      setTimeout(function(){loadTokens(true);loadBalance();_loadActivity()},1500)
+    } else {
+      _wToast('Swap failed: '+(d.error||d.msg||'Unknown error'),false)
+      if(btn){btn.disabled=false;btn.textContent='⚡ Swap'}
+    }
+  }catch(e){
+    _wToast('Network error',false)
+    if(btn){btn.disabled=false;btn.textContent='⚡ Swap'}
+  }
 }
 
 // ── toast ─────────────────────────────────────────────────
@@ -898,6 +1082,43 @@ function loadTokens(bust){
 }
 
 loadTokens()
+
+// ── recent activity ──────────────────────────────────────
+async function _loadActivity(){
+  var list=document.getElementById('activity-list')
+  try{
+    var r=await fetch('/api/wallet/activity')
+    var d=await r.json()
+    if(!d.ok||!d.activity||!d.activity.length){
+      list.innerHTML='<div class="state-msg">No recent activity</div>'
+      return
+    }
+    var html=''
+    d.activity.forEach(function(a){
+      var isBuy=a.color==='#3ad29b'
+      var iconBg=isBuy?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)'
+      var arrow=isBuy?'↑':'↓'
+      var sign=isBuy?'+':'-'
+      var amt=Math.abs(parseFloat(a.amount_sol||0)).toFixed(4)
+      html+='<div class="act-row">'
+        +'<div class="act-tile" style="background:'+iconBg+';color:'+a.color+'">'+arrow+'</div>'
+        +'<div class="act-main">'
+        +'<div class="act-type">'+a.type+'</div>'
+        +'<div class="act-sub">'+a.sub+'</div>'
+        +'</div>'
+        +'<div class="act-right">'
+        +'<div class="act-amt" style="color:'+a.color+'">'+sign+amt+' SOL</div>'
+        +'<div class="act-time">'+a.time+'</div>'
+        +'</div>'
+        +'</div>'
+    })
+    list.innerHTML=html
+  }catch(e){
+    console.error('[activity]',e)
+    list.innerHTML='<div class="state-msg">Failed to load activity</div>'
+  }
+}
+_loadActivity()
 </script>
 </body>
 </html>

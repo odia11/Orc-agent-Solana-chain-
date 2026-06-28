@@ -3934,6 +3934,60 @@ def api_stats():
         'online':      int(online or 0),
     })
 
+@app.route('/api/wallet/activity', methods=['GET'])
+@rate_limit(30, 60)
+def wallet_activity():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        user_row = conn.execute(
+            'SELECT id FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+        if not user_row:
+            return jsonify({'ok': True, 'activity': []})
+        uid = user_row[0]
+        rows = conn.execute(
+            'SELECT token, entry_price, exit_price, amount, pnl, timestamp '
+            'FROM trades WHERE user_id=? ORDER BY timestamp DESC LIMIT 10',
+            (uid,)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    now = datetime.datetime.utcnow()
+    activity = []
+    for token, entry_price, exit_price, amount, pnl, timestamp in rows:
+        sym = (token or '?').lstrip('$').upper()
+        is_buy = float(amount or 0) > 0
+        trade_type = 'Buy' if is_buy else 'Sell'
+        color = '#3ad29b' if is_buy else '#f76b62'
+        amt_sol = float(amount if is_buy else (pnl or 0))
+        sub = ('Bought' if is_buy else 'Sold') + ' $' + sym
+        try:
+            ts = datetime.datetime.fromisoformat((timestamp or '').replace('Z', ''))
+            delta = now - ts
+            secs = int(delta.total_seconds())
+            if secs < 60:
+                rel = f'{secs}s ago'
+            elif secs < 3600:
+                rel = f'{secs // 60}m ago'
+            elif secs < 86400:
+                rel = f'{secs // 3600}h ago'
+            else:
+                rel = f'{secs // 86400}d ago'
+        except Exception:
+            rel = (timestamp or '')[:10]
+        activity.append({
+            'type':       trade_type,
+            'sub':        sub,
+            'amount_sol': round(amt_sol, 4),
+            'color':      color,
+            'time':       rel,
+        })
+    return jsonify({'ok': True, 'activity': activity})
+
 # Two-entry RPC list for the frontend proxy endpoints:
 # SOLANA_RPC_URL (Railway env var) first; public mainnet-beta as fallback.
 _PROXY_RPCS = [u for u in [SOLANA_RPC_URL, SOLANA_RPC] if u]
