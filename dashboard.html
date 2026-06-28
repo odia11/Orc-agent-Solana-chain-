@@ -4293,31 +4293,34 @@ var _b58enc=(function(){
 
 function _phantomMobileV1Connect(){
   var msgEl=document.getElementById('wallet-install-msg');
-  if(typeof nacl==='undefined'){
-    // nacl not loaded yet — fall back to browse deeplink
-    window.location.href=phantomDeepLink;
-    return;
+  var noteEl=document.getElementById('ob-phantom-note');
+  function _setNote(txt,col){
+    if(noteEl){noteEl.textContent=txt;if(col)noteEl.style.color=col;}
+    if(msgEl&&msgEl!==noteEl){msgEl.textContent=txt;msgEl.style.display='block';}
   }
-  try{
-    var kp=nacl.box.keyPair();
-    var _skB58=_b58enc(kp.secretKey);
-    // Store in both storages as best-effort fallback (may not survive Phantom's WebView)
-    var _skJson=JSON.stringify(Array.from(kp.secretKey));
-    try{ localStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){}
-    try{ sessionStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){}
-    // Primary fix: embed SK in redirect_link — Phantom preserves all params on callback
-    var _cbUrl='https://orcagent.fun/phantom-callback?sk='+encodeURIComponent(_skB58);
-    console.log('[phantom] keypair generated, embedding sk in redirect_link');
+  _setNote('Initialising connection…','var(--muted)');
+  // Server generates the NaCl keypair — no browser storage needed
+  fetch('/api/phantom/init',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:'{}'})
+  .then(function(r){return r.json();})
+  .then(function(d){
+    if(!d.ok||!d.dapp_pk||!d.token){
+      _setNote('Connection init failed — please try again.','var(--red)');
+      return;
+    }
+    var _cbUrl='https://orcagent.fun/phantom-callback?token='+encodeURIComponent(d.token);
+    console.log('[phantom] server-side init ok, token=',d.token.slice(0,8)+'…');
     var params=new URLSearchParams({
       app_url:'https://orcagent.fun',
-      dapp_encryption_public_key:_b58enc(kp.publicKey),
+      dapp_encryption_public_key:d.dapp_pk,
       redirect_link:_cbUrl,
       cluster:'mainnet-beta'
     });
     window.location.href='https://phantom.app/ul/v1/connect?'+params.toString();
-  }catch(e){
-    if(msgEl){msgEl.textContent='Could not initiate Phantom connection: '+e.message;msgEl.style.display='block';}
-  }
+  })
+  .catch(function(e){
+    _setNote('Network error — please try again.','var(--red)');
+    console.error('[phantom] init fetch failed:',e);
+  });
 }
 
 function _applyPhantomDetection(phantomBtn, phantomNote){

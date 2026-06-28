@@ -19,111 +19,77 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
 <div class="msg" id="msg">Completing wallet connection…</div>
 <div class="brand">OrcAgent</div>
 
-<script src="https://unpkg.com/tweetnacl@1.0.3/nacl-fast.min.js"></script>
 <script>
 (function(){
-  // Minimal base58 decode for Phantom v1/connect response
-  var ALPHA='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
-  var MAP={};
-  for(var i=0;i<ALPHA.length;i++) MAP[ALPHA[i]]=i;
-  function b58dec(str){
-    var d=[0],c;
-    for(var i=0;i<str.length;i++){
-      c=MAP[str[i]];
-      if(c===undefined) throw new Error('Invalid base58 char: '+str[i]);
-      for(var j=0;j<d.length;j++){c+=d[j]*58;d[j]=c&255;c>>=8;}
-      while(c>0){d.push(c&255);c>>=8;}
-    }
-    for(var k=0;str[k]==='1'&&k<str.length-1;k++) d.push(0);
-    return new Uint8Array(d.reverse());
+  var msg=document.getElementById('msg');
+  function fail(txt){
+    msg.className='msg err';
+    msg.textContent=txt;
+    setTimeout(function(){window.location.href='/';},5000);
   }
 
-  var msg=document.getElementById('msg');
-  function fail(txt){ msg.className='msg err'; msg.textContent=txt; setTimeout(function(){window.location.href='/';},4000); }
-
-  // ── DEBUG: log all URL params on page load ──
   var p=new URLSearchParams(window.location.search);
-  console.log('[phantom-cb] page loaded, full URL:', window.location.href);
-  console.log('[phantom-cb] URL params:');
-  p.forEach(function(v,k){ console.log('  '+k+' =', k==='data'||k==='nonce'?v.slice(0,20)+'…':v); });
+  console.log('[phantom-cb] full URL:', window.location.href);
+  p.forEach(function(v,k){
+    console.log('[phantom-cb] param', k, '=', (k==='data'||k==='nonce')?v.slice(0,20)+'…':v);
+  });
 
-  // ── DEBUG: log storage state ──
-  var _lsSk=null,_ssSk=null;
-  try{ _lsSk=localStorage.getItem('_phantom_dapp_sk'); }catch(e){ console.warn('[phantom-cb] localStorage unavailable:',e); }
-  try{ _ssSk=sessionStorage.getItem('_phantom_dapp_sk'); }catch(e){ console.warn('[phantom-cb] sessionStorage unavailable:',e); }
-  console.log('[phantom-cb] localStorage._phantom_dapp_sk:', _lsSk?'present':'MISSING');
-  console.log('[phantom-cb] sessionStorage._phantom_dapp_sk:', _ssSk?'present':'MISSING');
-  var _urlSkB58=p.get('sk');
-  console.log('[phantom-cb] sk in URL param:', _urlSkB58?'present ('+_urlSkB58.length+' chars)':'MISSING');
-
-  // Parse callback params from URL
   var errCode=p.get('errorCode');
-  var errMsg=p.get('errorMessage');
   if(errCode){
-    console.error('[phantom-cb] Phantom returned error:',errCode,errMsg);
-    fail('Phantom rejected the connection'+(errMsg?' — '+decodeURIComponent(errMsg):'')+' ('+errCode+')');
+    fail('Phantom rejected the connection — '+(p.get('errorMessage')||'')+' ('+errCode+')');
     return;
   }
 
-  var phantomPubB58=p.get('phantom_encryption_public_key');
-  var nonceB58=p.get('nonce');
-  var dataB58=p.get('data');
-  console.log('[phantom-cb] has phantom_encryption_public_key:', !!phantomPubB58);
-  console.log('[phantom-cb] has nonce:', !!nonceB58);
-  console.log('[phantom-cb] has data:', !!dataB58);
-  if(!phantomPubB58||!nonceB58||!dataB58){ fail('Invalid callback — missing parameters. Please try again.'); return; }
+  var token       = p.get('token');
+  var phantomPk   = p.get('phantom_encryption_public_key');
+  var nonce       = p.get('nonce');
+  var data        = p.get('data');
 
-  // Retrieve dapp secret key — URL param is primary (survives Phantom WebView context switch)
-  // Storage fallbacks are best-effort for desktop browsers where context is shared
-  var dappSk=null;
-  if(_urlSkB58){
-    console.log('[phantom-cb] using sk from URL param');
-    try{ dappSk=new Uint8Array(b58dec(_urlSkB58)); }catch(e){ console.error('[phantom-cb] b58dec sk failed:',e); }
-  }
-  if(!dappSk){
-    var _fallbackJson=_lsSk||_ssSk;
-    console.log('[phantom-cb] URL sk failed/missing — trying storage:', _fallbackJson?'found':'NONE');
-    if(!_fallbackJson){ fail('Session expired — please try connecting again.'); return; }
-    try{ dappSk=new Uint8Array(JSON.parse(_fallbackJson)); }catch(e){ fail('Session data corrupted — please try again.'); return; }
-  }
+  console.log('[phantom-cb] token:', token ? token.slice(0,8)+'…' : 'MISSING');
+  console.log('[phantom-cb] phantom_pk:', !!phantomPk);
+  console.log('[phantom-cb] nonce:', !!nonce);
+  console.log('[phantom-cb] data:', !!data);
 
-  try{
-    var phantomPub=b58dec(phantomPubB58);
-    var nonce=b58dec(nonceB58);
-    var data=b58dec(dataB58);
+  if(!token)  { fail('Session token missing — please try connecting again.'); return; }
+  if(!phantomPk||!nonce||!data){ fail('Incomplete callback — missing Phantom params. Please try again.'); return; }
 
-    var decrypted=nacl.box.open(data,nonce,phantomPub,dappSk);
-    if(!decrypted){ fail('Failed to decrypt wallet response. Please try again.'); return; }
+  msg.textContent='Decrypting wallet response…';
 
-    var payload=JSON.parse(new TextDecoder().decode(decrypted));
-    var walletAddress=payload.public_key;
-    console.log('[phantom-cb] decrypted OK, wallet=', walletAddress);
-    try{ localStorage.removeItem('_phantom_dapp_sk'); }catch(e){}
-    try{ sessionStorage.removeItem('_phantom_dapp_sk'); }catch(e){}
-
-    if(!walletAddress){ fail('No wallet address in response.'); return; }
-
+  fetch('/api/phantom/decrypt',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({token:token, phantom_pk:phantomPk, nonce:nonce, data:data})
+  })
+  .then(function(r){return r.json();})
+  .then(function(d){
+    console.log('[phantom-cb] decrypt response:', d);
+    if(!d.ok||!d.wallet_address){
+      fail('Decrypt failed: '+(d.error||'unknown error'));
+      return;
+    }
     msg.textContent='Wallet approved — setting up session…';
-
-    fetch('/api/wallet/set',{
+    return fetch('/api/wallet/set',{
       method:'POST',
       credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({address:walletAddress})
+      body:JSON.stringify({address:d.wallet_address})
     })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      if(d.ok||d.success){
+    .then(function(r){return r.json();})
+    .then(function(wd){
+      console.log('[phantom-cb] wallet/set response:', wd);
+      if(wd.ok||wd.success){
         msg.textContent='Connected! Redirecting…';
-        window.location.href='/dashboard';
+        window.location.href='/';
       } else {
-        fail('Session error: '+(d.msg||'unknown'));
+        fail('Session error: '+(wd.msg||'unknown'));
       }
-    })
-    .catch(function(){ fail('Network error — please check your connection.'); });
-  }catch(e){
-    fail('Error: '+e.message);
-  }
+    });
+  })
+  .catch(function(e){
+    console.error('[phantom-cb] fetch error:', e);
+    fail('Network error: '+e.message);
+  });
 })();
 </script>
 </body>

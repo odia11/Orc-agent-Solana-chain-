@@ -2,6 +2,11 @@ import threading, time, json, os, sys, subprocess, requests, logging, datetime, 
 from datetime import timedelta
 import bcrypt as _bcrypt
 try:
+    import nacl.public as _nacl_public
+    _NACL_OK = True
+except ImportError:
+    _NACL_OK = False
+try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
     _APSCHEDULER_OK = True
@@ -88,7 +93,7 @@ def _refresh_session():
 
 # /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
 # cannot require a session-scoped CSRF token. Origin check still protects it.
-_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade'})
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade', '/api/phantom/init', '/api/phantom/decrypt'})
 
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
@@ -1377,6 +1382,31 @@ def _dex_get(url: str, timeout: int = 10):
 # ── PER-USER STATE ──
 user_states: dict = {}
 
+# ── PHANTOM DEEP-LINK SESSIONS (server-side keypair, TTL 10 min) ──
+_phantom_sessions: dict = {}   # token_hex → {sk: bytes, created: float}
+_B58_ALPHA = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+_B58_MAP   = {c: i for i, c in enumerate(_B58_ALPHA)}
+
+def _b58enc(buf: bytes) -> str:
+    d = []
+    for byte in buf:
+        c = byte
+        for j in range(len(d)):
+            c += d[j] << 8; d[j] = c % 58; c //= 58
+        while c: d.append(c % 58); c //= 58
+    n_leading = next((i for i, b in enumerate(buf) if b != 0), len(buf))
+    return '1' * n_leading + ''.join(_B58_ALPHA[x] for x in reversed(d))
+
+def _b58dec(s: str) -> bytes:
+    d = []
+    for char in s:
+        c = _B58_MAP[char]
+        for j in range(len(d)):
+            c += d[j] * 58; d[j] = c & 255; c >>= 8
+        while c: d.append(c & 255); c >>= 8
+    n_leading = len(s) - len(s.lstrip('1'))
+    return bytes([0] * n_leading) + bytes(reversed(d))
+
 def get_user_state(wallet: str) -> dict:
     if wallet not in user_states:
         user_states[wallet] = {
@@ -2648,6 +2678,59 @@ def dashboard_redirect():
     qs = request.query_string.decode('utf-8')
     target = '/?' + qs if qs else '/'
     return redirect(target, 302)
+
+@app.route('/api/phantom/init', methods=['POST'])
+def api_phantom_init():
+    """Generate a NaCl keypair server-side for Phantom v1 deep-link.
+    Returns {ok, dapp_pk (b58), token}. Token is used by /api/phantom/decrypt."""
+    if not _NACL_OK:
+        return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
+    # Evict expired sessions (TTL 10 min)
+    now = time.time()
+    expired = [t for t, v in _phantom_sessions.items() if now - v['created'] > 600]
+    for t in expired:
+        _phantom_sessions.pop(t, None)
+    sk_obj = _nacl_public.PrivateKey.generate()
+    dapp_pk_bytes = bytes(sk_obj.public_key)
+    dapp_sk_bytes = bytes(sk_obj)
+    token = secrets.token_hex(32)
+    _phantom_sessions[token] = {'sk': dapp_sk_bytes, 'created': now}
+    print(f'[phantom] init token={token[:8]}… pk={_b58enc(dapp_pk_bytes)[:12]}…', flush=True)
+    return jsonify({'ok': True, 'dapp_pk': _b58enc(dapp_pk_bytes), 'token': token})
+
+
+@app.route('/api/phantom/decrypt', methods=['POST'])
+def api_phantom_decrypt():
+    """Decrypt Phantom v1 callback payload using the stored server-side keypair.
+    Body: {token, phantom_pk, nonce, data} — all b58-encoded strings."""
+    if not _NACL_OK:
+        return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
+    body = request.get_json(silent=True) or {}
+    token       = body.get('token', '')
+    phantom_pk_b58 = body.get('phantom_pk', '')
+    nonce_b58   = body.get('nonce', '')
+    data_b58    = body.get('data', '')
+    if not all([token, phantom_pk_b58, nonce_b58, data_b58]):
+        return jsonify({'ok': False, 'error': 'missing params'}), 400
+    session_data = _phantom_sessions.pop(token, None)
+    if not session_data:
+        print(f'[phantom] decrypt — token not found: {token[:8]}…', flush=True)
+        return jsonify({'ok': False, 'error': 'session expired or invalid'}), 400
+    try:
+        phantom_pk_obj = _nacl_public.PublicKey(_b58dec(phantom_pk_b58))
+        dapp_sk_obj    = _nacl_public.PrivateKey(session_data['sk'])
+        box            = _nacl_public.Box(dapp_sk_obj, phantom_pk_obj)
+        decrypted      = box.decrypt(_b58dec(data_b58), _b58dec(nonce_b58))
+        payload        = json.loads(decrypted.decode('utf-8'))
+        wallet_address = payload.get('public_key', '')
+        if not wallet_address:
+            return jsonify({'ok': False, 'error': 'no public_key in payload'}), 400
+        print(f'[phantom] decrypt OK wallet={wallet_address[:8]}…', flush=True)
+        return jsonify({'ok': True, 'wallet_address': wallet_address})
+    except Exception as e:
+        print(f'[phantom] decrypt ERROR: {e}', flush=True)
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
 
 @app.route('/phantom-callback')
 def phantom_callback():
