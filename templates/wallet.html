@@ -334,6 +334,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .swap-dir-btn{width:36px;height:36px;border-radius:50%;background:rgba(53,212,196,.12);border:2px solid var(--accent);color:var(--accent);font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s;font-family:var(--mono)}
 .swap-dir-btn:hover{background:rgba(53,212,196,.22)}
 .swap-info-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;font-size:12px;color:#565d68;font-family:var(--mono)}
+.sw-pct-btn{
+  background:rgba(53,212,196,.1);border:1px solid rgba(53,212,196,.25);
+  color:var(--accent);border-radius:6px;padding:3px 8px;
+  font-size:10px;font-weight:600;font-family:var(--mono);cursor:pointer;transition:background .15s;
+}
+.sw-pct-btn:hover{background:rgba(53,212,196,.22)}
 
 /* ── toast ── */
 .w-toast{
@@ -496,7 +502,60 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 <div class="w-modal-back" id="swapModal" onclick="if(event.target===this)_closeSwapModal()">
   <div class="swap-modal-box">
     <button class="w-modal-close" onclick="_closeSwapModal()">✕</button>
-    <div id="swap-modal-body"></div>
+
+    <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:20px">⚡ Swap</div>
+
+    <!-- FROM card -->
+    <div class="swap-inp-card">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:10px">FROM</div>
+      <div class="swap-tok-row">
+        <select class="swap-tok-sel" id="sw-from-sel" onchange="_swFromChanged()">
+          <option value="__SOL__">SOL</option>
+        </select>
+        <span style="color:var(--muted);font-size:13px;flex-shrink:0;margin-left:-4px">▾</span>
+        <input class="swap-amount-inp" id="sw-amt-inp" type="number" placeholder="0.00" min="0" step="any" oninput="_swUpdateEst()">
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-top:9px">
+        <div class="swap-bal" id="sw-from-bal">Balance: —</div>
+        <div id="sw-pct-row" style="display:none;gap:5px;align-items:center">
+          <button class="sw-pct-btn" onclick="_swSetPct(25)">25%</button>
+          <button class="sw-pct-btn" onclick="_swSetPct(50)">50%</button>
+          <button class="sw-pct-btn" onclick="_swSetPct(100)">MAX</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- flip direction -->
+    <div class="swap-dir-wrap">
+      <button class="swap-dir-btn" onclick="_swFlip()">↕</button>
+    </div>
+
+    <!-- TO card -->
+    <div class="swap-inp-card">
+      <div style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:10px">TO</div>
+      <div class="swap-tok-row">
+        <select class="swap-tok-sel" id="sw-to-sel" onchange="_swToChanged()">
+          <option value="__SOL__">SOL</option>
+        </select>
+        <span style="color:var(--muted);font-size:13px;flex-shrink:0;margin-left:-4px">▾</span>
+        <div class="swap-amount-out" id="sw-out-amt">—</div>
+      </div>
+      <div class="swap-bal" id="sw-to-bal" style="margin-top:9px">Balance: —</div>
+    </div>
+
+    <!-- rate + slippage -->
+    <div class="swap-info-row">
+      <span id="sw-rate-lbl">Rate: —</span>
+      <span>Slippage 1%</span>
+    </div>
+
+    <!-- confirm -->
+    <button id="sw-confirm-btn" onclick="_execSwap()" style="
+      width:100%;padding:14px;border-radius:14px;border:none;cursor:pointer;
+      background:var(--accent);color:#06100f;font-family:var(--ui);font-size:15px;font-weight:700;
+      transition:opacity .15s;margin-top:2px
+    ">Swap</button>
+
   </div>
 </div>
 
@@ -635,122 +694,185 @@ function _execSend(){
 }
 
 // ── swap modal ───────────────────────────────────────────
-var _sw={from:'__SOL__',to:'',amt:0}
+var _swFromMint='__SOL__'
+var _swToMint=''
+var _swDexCache={}
 
 function openSwapModal(){
+  var spl=window._wTokens||_allSpl||[]
+  _swFromMint='__SOL__'
+  _swToMint=spl.length?spl[0].mint:''
+  _swPopulateSelects(spl)
+  _swUpdateFromBal()
+  _swUpdateToBal()
+  var amtEl=document.getElementById('sw-amt-inp')
+  if(amtEl) amtEl.value=''
+  var outEl=document.getElementById('sw-out-amt')
+  if(outEl) outEl.textContent='—'
+  var rateEl=document.getElementById('sw-rate-lbl')
+  if(rateEl) rateEl.textContent='Rate: —'
   document.getElementById('swapModal').style.display='flex'
 }
 function _closeSwapModal(){
   document.getElementById('swapModal').style.display='none'
 }
-function _swRender(){
-  var el=document.getElementById('swap-modal-body')
-  if(el) el.innerHTML=_swBuildHtml()
-}
 
-function _swBuildHtml(){
-  var spl=window._wTokens||[]
-  var fromMint=_sw.from, toMint=_sw.to
-  function tokOpts(sel,excl){
-    var o='<option value="__SOL__"'+(sel==='__SOL__'?' selected':'')+'>SOL</option>'
+function _swPopulateSelects(spl){
+  var fromSel=document.getElementById('sw-from-sel')
+  var toSel=document.getElementById('sw-to-sel')
+  if(!fromSel||!toSel) return
+  function makeOpts(selectedMint, excludeMint){
+    var o='<option value="__SOL__"'+(selectedMint==='__SOL__'?' selected':'')+'>SOL</option>'
     spl.forEach(function(t){
-      if(t.mint===excl) return
-      o+='<option value="'+t.mint+'"'+(t.mint===sel?' selected':'')+'>'+( t.symbol||t.mint.slice(0,6))+'</option>'
+      if(t.mint===excludeMint) return
+      o+='<option value="'+t.mint+'"'+(t.mint===selectedMint?' selected':'')+'>'+(t.symbol||t.mint.slice(0,6))+'</option>'
     })
     return o
   }
-  var fromSpl=spl.find(function(t){return t.mint===fromMint})
-  var toSpl=spl.find(function(t){return t.mint===toMint})
-  var fromIsSOL=fromMint==='__SOL__'
-  var solPx=window._wSolPrice||0
-  var fromPx=fromIsSOL?solPx:parseFloat((fromSpl||{}).price_usd||0)
-  var toPx=parseFloat((toSpl||{}).price_usd||0)
-  var fromAmt=_sw.amt||0
-  var outAmt=(fromAmt>0&&fromPx>0&&toPx>0)?fromAmt*fromPx/toPx:0
-  var estOut=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'—'
-  var fromSym=fromIsSOL?'SOL':((fromSpl||{}).symbol||'?')
-  var toSym=(toSpl||{}).symbol||'?'
-  var rate=(fromPx>0&&toPx>0)?'1 '+fromSym+' = '+(fromPx/toPx).toFixed(4)+' '+toSym:'—'
-  var solBalEl=document.getElementById('sol')
-  var fromBal=fromIsSOL
-    ?(solBalEl?parseFloat(solBalEl.textContent||0).toFixed(4):'—')
-    :parseFloat((fromSpl||{}).amount||0).toFixed(4)
-  var toBal=toSpl?parseFloat(toSpl.amount||0).toFixed(4):'—'
-  return (
-    '<div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:20px">Swap</div>'
-    +'<div class="swap-inp-card">'
-      +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:8px">FROM</div>'
-      +'<div class="swap-tok-row">'
-        +'<select class="swap-tok-sel" id="sw-from" onchange="_swChgFrom(this.value)">'+tokOpts(fromMint,toMint)+'</select>'
-        +'<span style="color:var(--muted);font-size:14px;flex-shrink:0">▾</span>'
-        +'<input class="swap-amount-inp" id="sw-amt" type="number" placeholder="0.00" value="'+(fromAmt||'')+'" oninput="_swChgAmt(this.value)">'
-      +'</div>'
-      +'<div class="swap-bal">Balance: '+fromBal+'</div>'
-    +'</div>'
-    +'<div class="swap-dir-wrap"><button class="swap-dir-btn" onclick="_swFlip()">↕</button></div>'
-    +'<div class="swap-inp-card">'
-      +'<div style="font-family:var(--mono);font-size:11px;color:var(--muted);letter-spacing:.06em;margin-bottom:8px">TO</div>'
-      +'<div class="swap-tok-row">'
-        +'<select class="swap-tok-sel" id="sw-to" onchange="_swChgTo(this.value)">'+tokOpts(toMint,fromMint)+'</select>'
-        +'<span style="color:var(--muted);font-size:14px;flex-shrink:0">▾</span>'
-        +'<div class="swap-amount-out" id="sw-out">'+estOut+'</div>'
-      +'</div>'
-      +'<div class="swap-bal">Balance: '+toBal+'</div>'
-    +'</div>'
-    +'<div class="swap-info-row">'
-      +'<span id="sw-rate">Rate: '+rate+'</span>'
-      +'<span>Impact: ~0.3%</span>'
-    +'</div>'
-    +'<button id="sw-btn" onclick="_execSwap()" style="'
-      +'width:100%;padding:14px;border-radius:12px;border:none;cursor:pointer;'
-      +'background:var(--accent);color:#06100f;font-family:var(--ui);font-size:15px;font-weight:700;'
-      +'margin-top:4px;transition:opacity .15s'
-    +'">⚡ Swap</button>'
-  )
+  fromSel.innerHTML=makeOpts(_swFromMint, _swToMint)
+  toSel.innerHTML=makeOpts(_swToMint, _swFromMint)
 }
 
-function _modalSwap(){
-  var spl=window._wTokens||[]
-  _sw.from='__SOL__'
-  _sw.to=spl.length?spl[0].mint:''
-  _sw.amt=0
-  _swRender()
-  openSwapModal()
+function _swUpdateFromBal(){
+  var spl=window._wTokens||_allSpl||[]
+  var el=document.getElementById('sw-from-bal')
+  var pctRow=document.getElementById('sw-pct-row')
+  if(!el) return
+  if(_swFromMint==='__SOL__'){
+    var solEl=document.getElementById('sol')
+    el.textContent='Balance: '+(solEl?parseFloat(solEl.textContent||0).toFixed(4):'—')+' SOL'
+    if(pctRow) pctRow.style.display='none'
+  } else {
+    var tok=spl.find(function(t){return t.mint===_swFromMint})
+    el.textContent='Balance: '+(tok?parseFloat(tok.amount||0).toFixed(4):'—')
+    if(pctRow) pctRow.style.display='flex'
+  }
 }
-function _swChgFrom(v){_sw.from=v;_swRender()}
-function _swChgTo(v){_sw.to=v;_swRender()}
-function _swChgAmt(v){
-  _sw.amt=parseFloat(v)||0
-  var spl=window._wTokens||[]
-  var fromSpl=spl.find(function(t){return t.mint===_sw.from})
-  var toSpl=spl.find(function(t){return t.mint===_sw.to})
-  var fromPx=_sw.from==='__SOL__'?(window._wSolPrice||0):parseFloat((fromSpl||{}).price_usd||0)
-  var toPx=parseFloat((toSpl||{}).price_usd||0)
-  var outAmt=(_sw.amt>0&&fromPx>0&&toPx>0)?_sw.amt*fromPx/toPx:0
-  var estOut=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'—'
-  var outEl=document.getElementById('sw-out')
-  if(outEl) outEl.textContent=estOut
-  var fromSym=_sw.from==='__SOL__'?'SOL':((fromSpl||{}).symbol||'?')
-  var toSym=(toSpl||{}).symbol||'?'
-  var rateEl=document.getElementById('sw-rate')
-  if(rateEl) rateEl.textContent='Rate: '+((fromPx>0&&toPx>0)?'1 '+fromSym+' = '+(fromPx/toPx).toFixed(4)+' '+toSym:'—')
+function _swUpdateToBal(){
+  var spl=window._wTokens||_allSpl||[]
+  var el=document.getElementById('sw-to-bal')
+  if(!el) return
+  if(_swToMint==='__SOL__'){
+    var solEl=document.getElementById('sol')
+    el.textContent='Balance: '+(solEl?parseFloat(solEl.textContent||0).toFixed(4):'—')+' SOL'
+  } else {
+    var tok=spl.find(function(t){return t.mint===_swToMint})
+    el.textContent='Balance: '+(tok?parseFloat(tok.amount||0).toFixed(4):'0')
+  }
 }
+
+function _swFromChanged(){
+  var sel=document.getElementById('sw-from-sel')
+  if(!sel) return
+  _swFromMint=sel.value
+  // rebuild TO options excluding the new FROM
+  var spl=window._wTokens||_allSpl||[]
+  var toSel=document.getElementById('sw-to-sel')
+  if(toSel){
+    var o=_swFromMint!=='__SOL__'?'<option value="__SOL__"'+((_swToMint==='__SOL__')?' selected':'')+'>SOL</option>':''
+    spl.forEach(function(t){
+      if(t.mint===_swFromMint) return
+      o+='<option value="'+t.mint+'"'+(t.mint===_swToMint?' selected':'')+'>'+(t.symbol||t.mint.slice(0,6))+'</option>'
+    })
+    toSel.innerHTML=o
+    _swToMint=toSel.value
+  }
+  var amtEl=document.getElementById('sw-amt-inp')
+  if(amtEl) amtEl.value=''
+  _swUpdateFromBal()
+  _swUpdateToBal()
+  _swUpdateEst()
+}
+
+function _swToChanged(){
+  var sel=document.getElementById('sw-to-sel')
+  if(!sel) return
+  _swToMint=sel.value
+  _swUpdateToBal()
+  _swUpdateEst()
+}
+
+function _swSetPct(pct){
+  var spl=window._wTokens||_allSpl||[]
+  var tok=spl.find(function(t){return t.mint===_swFromMint})
+  if(!tok) return
+  var amt=parseFloat(tok.amount||0)*pct/100
+  var amtEl=document.getElementById('sw-amt-inp')
+  if(amtEl){amtEl.value=amt>0?amt.toFixed(6):'';_swUpdateEst()}
+}
+
 function _swFlip(){
-  var tmp=_sw.from; _sw.from=_sw.to||'__SOL__'; _sw.to=tmp; _sw.amt=0
-  _swRender()
+  var spl=window._wTokens||_allSpl||[]
+  var tmp=_swFromMint
+  _swFromMint=_swToMint||'__SOL__'
+  _swToMint=tmp
+  _swPopulateSelects(spl)
+  var amtEl=document.getElementById('sw-amt-inp')
+  if(amtEl) amtEl.value=''
+  _swUpdateFromBal()
+  _swUpdateToBal()
+  _swUpdateEst()
 }
+
+async function _swUpdateEst(){
+  var spl=window._wTokens||_allSpl||[]
+  var amtEl=document.getElementById('sw-amt-inp')
+  var outEl=document.getElementById('sw-out-amt')
+  var rateEl=document.getElementById('sw-rate-lbl')
+  var amt=parseFloat((amtEl||{}).value)||0
+  var fromIsSOL=_swFromMint==='__SOL__'
+  var toIsSOL=_swToMint==='__SOL__'
+  var solPx=window._wSolPrice||0
+  var fromTok=spl.find(function(t){return t.mint===_swFromMint})
+  var toTok=spl.find(function(t){return t.mint===_swToMint})
+  var fromPx=fromIsSOL?solPx:parseFloat((fromTok||{}).price_usd||0)
+  var toPx=toIsSOL?solPx:parseFloat((toTok||{}).price_usd||0)
+  // live DexScreener price for TO token if not cached
+  if(!toIsSOL&&toPx===0&&_swToMint&&!_swDexCache[_swToMint]){
+    try{
+      var res=await fetch('https://api.dexscreener.com/tokens/v1/solana/'+_swToMint)
+      var raw=await res.json()
+      var arr=Array.isArray(raw)?raw:(raw.pairs||[])
+      if(arr.length){
+        var best=arr.reduce(function(a,b){
+          return parseFloat((b.liquidity||{}).usd||0)>parseFloat((a.liquidity||{}).usd||0)?b:a
+        },arr[0])
+        toPx=parseFloat(best.priceUsd||0)
+        _swDexCache[_swToMint]=toPx
+      }
+    }catch(e){}
+  } else if(_swDexCache[_swToMint]){
+    toPx=_swDexCache[_swToMint]
+  }
+  var outAmt=(amt>0&&fromPx>0&&toPx>0)?amt*fromPx/toPx:0
+  var estOut=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'—'
+  if(outEl) outEl.textContent=estOut
+  var fromSym=fromIsSOL?'SOL':((fromTok||{}).symbol||'?')
+  var toSym=toIsSOL?'SOL':((toTok||{}).symbol||'?')
+  if(rateEl) rateEl.textContent=(fromPx>0&&toPx>0)?'1 '+fromSym+' = '+(fromPx/toPx).toFixed(4)+' '+toSym:'Rate: —'
+}
+
 async function _execSwap(){
-  var spl=window._wTokens||[]
-  var fromIsSOL=_sw.from==='__SOL__'
-  var fromSpl=spl.find(function(t){return t.mint===_sw.from})
-  var toSpl=spl.find(function(t){return t.mint===_sw.to})
-  var btn=document.getElementById('sw-btn')
-  if(_sw.amt<=0){_wToast('Enter an amount',false);return}
-  if(!_sw.to&&fromIsSOL){_wToast('Select a token to receive',false);return}
+  var spl=window._wTokens||_allSpl||[]
+  var fromIsSOL=_swFromMint==='__SOL__'
+  var fromTok=spl.find(function(t){return t.mint===_swFromMint})
+  var toTok=spl.find(function(t){return t.mint===_swToMint})
+  var amtEl=document.getElementById('sw-amt-inp')
+  var amt=parseFloat((amtEl||{}).value)||0
+  var btn=document.getElementById('sw-confirm-btn')
+  if(amt<=0){_wToast('Enter an amount',false);return}
+  if(fromIsSOL&&!_swToMint){_wToast('Select a token to receive',false);return}
   if(btn){btn.disabled=true;btn.textContent='Swapping…'}
-  var payload=fromIsSOL
-    ?{side:'buy',token_address:_sw.to,symbol:(toSpl||{}).symbol||'',amount_sol:_sw.amt}
-    :{side:'sell',token_address:_sw.from,symbol:(fromSpl||{}).symbol||'',amount_sol:0}
+  var payload
+  if(fromIsSOL){
+    payload={side:'buy',token_address:_swToMint,symbol:(toTok||{}).symbol||'',amount_sol:amt}
+  } else {
+    var fromBal=parseFloat((fromTok||{}).amount||0)
+    var solPx=window._wSolPrice||0
+    var tokPx=parseFloat((fromTok||{}).price_usd||0)
+    var amtSol=(fromBal>0&&amt>=fromBal*0.99)?0:solPx>0?amt*tokPx/solPx:0
+    payload={side:'sell',token_address:_swFromMint,symbol:(fromTok||{}).symbol||'',amount_sol:amtSol}
+  }
   try{
     var r=await fetch('/api/instant-trade',{
       method:'POST',credentials:'include',
@@ -760,16 +882,16 @@ async function _execSwap(){
     var d=await r.json()
     if(d.success||d.ok){
       _closeSwapModal()
-      var sym=fromIsSOL?(toSpl||{}).symbol||'token':(fromSpl||{}).symbol||'token'
-      _wToast((fromIsSOL?'⚡ Bought ':'⚡ Sold ')+sym,true)
+      var sym=fromIsSOL?(toTok||{}).symbol||'token':(fromTok||{}).symbol||'token'
+      _wToast('⚡ '+(fromIsSOL?'Bought':'Sold')+' '+sym,true)
       setTimeout(function(){loadTokens(true);loadBalance();_loadActivity()},1500)
     } else {
       _wToast('Swap failed: '+(d.error||d.msg||'Unknown error'),false)
-      if(btn){btn.disabled=false;btn.textContent='⚡ Swap'}
+      if(btn){btn.disabled=false;btn.textContent='Swap'}
     }
   }catch(e){
     _wToast('Network error',false)
-    if(btn){btn.disabled=false;btn.textContent='⚡ Swap'}
+    if(btn){btn.disabled=false;btn.textContent='Swap'}
   }
 }
 
