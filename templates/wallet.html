@@ -387,6 +387,53 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .sw-review-btn:hover{opacity:.88}
 .sw-review-btn:disabled{opacity:.45;cursor:not-allowed}
 
+/* ── token picker overlay ── */
+.sw-picker{
+  display:none;position:absolute;inset:0;
+  background:#0e1116;border-radius:22px;
+  padding:22px 22px 20px;
+  flex-direction:column;z-index:10;overflow:hidden;
+}
+.sw-picker-back{
+  background:none;border:none;color:var(--muted);
+  font-size:20px;cursor:pointer;padding:0;line-height:1;
+  transition:color .15s;flex-shrink:0;
+}
+.sw-picker-back:hover{color:var(--text)}
+.sw-picker-search{
+  width:100%;background:#0a0b0e;border:1px solid #21252c;border-radius:12px;
+  color:var(--text);padding:11px 14px;font-size:13px;font-family:var(--ui);
+  outline:none;margin:14px 0 10px;
+}
+.sw-picker-search::placeholder{color:var(--muted)}
+.sw-picker-search:focus{border-color:var(--accent)}
+.sw-picker-chips{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:14px}
+.sw-picker-chip{
+  background:#101216;border:1px solid #21252c;border-radius:999px;
+  color:var(--text);padding:6px 12px;font-size:12px;font-weight:600;
+  cursor:pointer;font-family:var(--ui);transition:border-color .15s,color .15s;
+  white-space:nowrap;
+}
+.sw-picker-chip:hover{border-color:var(--accent);color:var(--accent)}
+.sw-picker-lbl{font-size:10px;font-weight:600;color:#565d68;letter-spacing:.08em;margin-bottom:8px}
+.sw-picker-list{flex:1;overflow-y:auto;max-height:280px;margin:0 -4px}
+.sw-picker-row{
+  display:flex;align-items:center;gap:11px;
+  padding:10px 8px;border-radius:13px;cursor:pointer;
+  transition:background .12s;
+}
+.sw-picker-row:hover{background:#14171c}
+.sw-picker-circ{
+  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:12px;color:#fff;
+}
+.sw-picker-ticker{font-size:14px;font-weight:700;color:var(--text)}
+.sw-picker-name{font-size:11px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sw-picker-right{text-align:right;flex-shrink:0;margin-left:auto}
+.sw-picker-bal{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)}
+.sw-picker-usd{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px}
+
 /* ── toast ── */
 .w-toast{
   position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
@@ -562,10 +609,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
       </div>
       <div class="sw-panel-mid">
         <input class="sw-amt-inp" id="sw-amt-inp" type="number" placeholder="0" min="0" step="any" oninput="_swUpdateEst()">
-        <div class="sw-tok-pill">
-          <select id="sw-from-sel" onchange="_swFromChanged()">
-            <option value="__SOL__">SOL</option>
-          </select>
+        <div class="sw-tok-pill" onclick="_swOpenPicker('from')">
+          <span id="sw-from-sym" style="font-size:13px;font-weight:700;color:var(--text)">SOL</span>
           <span class="sw-tok-pill-caret">▾</span>
         </div>
       </div>
@@ -592,10 +637,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
       </div>
       <div class="sw-panel-mid">
         <div class="sw-amt-out" id="sw-out-amt">0</div>
-        <div class="sw-tok-pill sw-tok-pill-acc">
-          <select id="sw-to-sel" onchange="_swToChanged()">
-            <option value="__SOL__">SOL</option>
-          </select>
+        <div class="sw-tok-pill sw-tok-pill-acc" onclick="_swOpenPicker('to')">
+          <span id="sw-to-sym" style="font-size:13px;font-weight:700;color:var(--text)">Select</span>
           <span class="sw-tok-pill-caret" style="color:var(--accent)">▾</span>
         </div>
       </div>
@@ -610,6 +653,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 
     <!-- confirm -->
     <button class="sw-review-btn" id="sw-confirm-btn" onclick="_execSwap()">Review swap</button>
+
+    <!-- token picker overlay (absolute, covers entire modal box) -->
+    <div class="sw-picker" id="sw-picker">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="sw-picker-back" onclick="_swClosePicker()">←</button>
+        <span style="font-size:16px;font-weight:700;color:var(--text)">Select token</span>
+      </div>
+      <input class="sw-picker-search" id="sw-picker-search" placeholder="Search name or paste address…" oninput="_swPickerSearch(this.value)">
+      <div class="sw-picker-chips" id="sw-picker-chips"></div>
+      <div class="sw-picker-lbl">YOUR TOKENS</div>
+      <div class="sw-picker-list" id="sw-picker-list"></div>
+    </div>
 
   </div>
 </div>
@@ -752,12 +807,34 @@ function _execSend(){
 var _swFromMint='__SOL__'
 var _swToMint=''
 var _swDexCache={}
+var _swPickerSlot=''
+var _swAllTokens=[]
+
+var _SW_CHIPS=[
+  {sym:'SOL', mint:'__SOL__'},
+  {sym:'USDC',mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'},
+  {sym:'WIF', mint:'EKpQGSJtjMFqKZ9KQanSqYXRcF8fBopzLHYxdM65zcjm'},
+  {sym:'POP', mint:'FRhB8L7Y9Qq41qZXYLtC2nw8An1D9b6ieryLyFoChtcY'}
+]
+
+function _swSym(mint){
+  if(mint==='__SOL__') return 'SOL'
+  var t=(_swAllTokens||[]).find(function(x){return x.mint===mint})
+  return t?(t.symbol||mint.slice(0,6)):mint.slice(0,6)
+}
+function _swUpdatePills(){
+  var fromEl=document.getElementById('sw-from-sym')
+  var toEl=document.getElementById('sw-to-sym')
+  if(fromEl) fromEl.textContent=_swSym(_swFromMint)
+  if(toEl) toEl.textContent=_swToMint?_swSym(_swToMint):'Select'
+}
 
 function openSwapModal(){
   var spl=window._wTokens||_allSpl||[]
+  _swAllTokens=spl
   _swFromMint='__SOL__'
   _swToMint=spl.length?spl[0].mint:''
-  _swPopulateSelects(spl)
+  _swUpdatePills()
   _swUpdateFromBal()
   _swUpdateToBal()
   var amtEl=document.getElementById('sw-amt-inp')
@@ -770,26 +847,101 @@ function openSwapModal(){
   if(fuEl) fuEl.textContent='≈ $—'
   var tuEl=document.getElementById('sw-to-usd')
   if(tuEl) tuEl.textContent='≈ $—'
+  _swClosePicker()
   document.getElementById('swapModal').style.display='flex'
 }
 function _closeSwapModal(){
   document.getElementById('swapModal').style.display='none'
 }
 
-function _swPopulateSelects(spl){
-  var fromSel=document.getElementById('sw-from-sel')
-  var toSel=document.getElementById('sw-to-sel')
-  if(!fromSel||!toSel) return
-  function makeOpts(selectedMint, excludeMint){
-    var o='<option value="__SOL__"'+(selectedMint==='__SOL__'?' selected':'')+'>SOL</option>'
-    spl.forEach(function(t){
-      if(t.mint===excludeMint) return
-      o+='<option value="'+t.mint+'"'+(t.mint===selectedMint?' selected':'')+'>'+(t.symbol||t.mint.slice(0,6))+'</option>'
-    })
-    return o
+// ── token picker ──────────────────────────────────────────
+function _swOpenPicker(slot){
+  var spl=window._wTokens||_allSpl||[]
+  _swAllTokens=spl
+  _swPickerSlot=slot
+  var p=document.getElementById('sw-picker')
+  if(p) p.style.display='flex'
+  var s=document.getElementById('sw-picker-search')
+  if(s){s.value='';setTimeout(function(){s.focus()},60)}
+  _swPickerRender(spl,'')
+}
+function _swClosePicker(){
+  var p=document.getElementById('sw-picker')
+  if(p) p.style.display='none'
+}
+function _swPickerSearch(q){
+  var spl=_swAllTokens||[]
+  var ql=(q||'').toLowerCase().trim()
+  var filtered=ql?spl.filter(function(t){
+    return (t.symbol||'').toLowerCase().includes(ql)
+      ||(t.name||'').toLowerCase().includes(ql)
+      ||t.mint.toLowerCase().startsWith(ql)
+  }):spl
+  _swPickerRender(filtered,ql)
+}
+function _swPickerRender(tokens,q){
+  // chips
+  var chipsEl=document.getElementById('sw-picker-chips')
+  if(chipsEl){
+    chipsEl.innerHTML=_SW_CHIPS.map(function(c){
+      var ms=c.mint.replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+      return '<button class="sw-picker-chip" onclick="_swPickToken(\''+ms+'\')">'+c.sym+'</button>'
+    }).join('')
   }
-  fromSel.innerHTML=makeOpts(_swFromMint, _swToMint)
-  toSel.innerHTML=makeOpts(_swToMint, _swFromMint)
+  // token list: SOL always first unless filtered out
+  var items=[]
+  var solPx=window._wSolPrice||0
+  var solEl=document.getElementById('sol')
+  var solBal=solEl?parseFloat(solEl.textContent||0):0
+  if(!q||'solana'.includes(q)||'sol'.startsWith(q)){
+    items.push({mint:'__SOL__',symbol:'SOL',name:'Solana',amount:solBal,usd_value:solBal*solPx})
+  }
+  tokens.forEach(function(t){if((t.symbol||'').toUpperCase()!=='SOL') items.push(t)})
+  var listEl=document.getElementById('sw-picker-list')
+  if(!listEl) return
+  if(!items.length){
+    listEl.innerHTML='<div style="padding:24px;text-align:center;color:var(--muted);font-size:13px">No tokens found</div>'
+    return
+  }
+  listEl.innerHTML=items.map(function(t){
+    var sym=(t.symbol||t.mint.slice(0,6)).toUpperCase()
+    var name=t.name||sym
+    var amt=parseFloat(t.amount||0)
+    var usd=parseFloat(t.usd_value||t.value_usd||0)
+    var amtStr=amt>0?(amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(4):amt.toFixed(2)):''
+    var usdStr=usd>0?'$'+usd.toFixed(2):''
+    var bg='hsl('+(_hash(sym)%360)+',46%,33%)'
+    var init=sym.slice(0,2)
+    var ms=t.mint.replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+    return '<div class="sw-picker-row" onclick="_swPickToken(\''+ms+'\')">'
+      +'<div class="sw-picker-circ" style="background:'+bg+'">'+init+'</div>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div class="sw-picker-ticker">'+sym+'</div>'
+        +'<div class="sw-picker-name">'+name+'</div>'
+      +'</div>'
+      +(amtStr||usdStr
+        ?'<div class="sw-picker-right">'
+          +(amtStr?'<div class="sw-picker-bal">'+amtStr+'</div>':'')
+          +(usdStr?'<div class="sw-picker-usd">'+usdStr+'</div>':'')
+        +'</div>':'')
+    +'</div>'
+  }).join('')
+}
+function _swPickToken(mint){
+  if(_swPickerSlot==='from'){
+    if(mint===_swToMint){_swToMint=_swFromMint}
+    _swFromMint=mint
+  } else {
+    if(mint===_swFromMint){_swFromMint=_swToMint||'__SOL__'}
+    _swToMint=mint
+  }
+  _swUpdatePills()
+  var amtEl=document.getElementById('sw-amt-inp')
+  if(amtEl) amtEl.value=''
+  _swUpdateFromBal()
+  _swUpdateToBal()
+  _swUpdateEst()
+  _swClosePicker()
 }
 
 function _swUpdateFromBal(){
@@ -800,14 +952,11 @@ function _swUpdateFromBal(){
   var span=el.querySelector('span')
   if(_swFromMint==='__SOL__'){
     var solEl=document.getElementById('sol')
-    var bal=solEl?parseFloat(solEl.textContent||0).toFixed(4):'—'
-    if(span) span.textContent=bal+' SOL'
+    if(span) span.textContent=(solEl?parseFloat(solEl.textContent||0).toFixed(4):'—')+' SOL'
     if(pctRow) pctRow.style.display='none'
   } else {
     var tok=spl.find(function(t){return t.mint===_swFromMint})
-    var bal=tok?parseFloat(tok.amount||0).toFixed(4):'—'
-    var sym=tok?(' '+(tok.symbol||'')):'';
-    if(span) span.textContent=bal+sym
+    if(span) span.textContent=(tok?parseFloat(tok.amount||0).toFixed(4):'—')+(tok?' '+(tok.symbol||''):'')
     if(pctRow) pctRow.style.display='flex'
   }
 }
@@ -818,45 +967,11 @@ function _swUpdateToBal(){
   var span=el.querySelector('span')
   if(_swToMint==='__SOL__'){
     var solEl=document.getElementById('sol')
-    var bal=solEl?parseFloat(solEl.textContent||0).toFixed(4):'—'
-    if(span) span.textContent=bal+' SOL'
+    if(span) span.textContent=(solEl?parseFloat(solEl.textContent||0).toFixed(4):'—')+' SOL'
   } else {
     var tok=spl.find(function(t){return t.mint===_swToMint})
-    var bal=tok?parseFloat(tok.amount||0).toFixed(4):'0'
-    var sym=tok?(' '+(tok.symbol||'')):'';
-    if(span) span.textContent=bal+sym
+    if(span) span.textContent=(tok?parseFloat(tok.amount||0).toFixed(4):'0')+(tok?' '+(tok.symbol||''):'')
   }
-}
-
-function _swFromChanged(){
-  var sel=document.getElementById('sw-from-sel')
-  if(!sel) return
-  _swFromMint=sel.value
-  // rebuild TO options excluding the new FROM
-  var spl=window._wTokens||_allSpl||[]
-  var toSel=document.getElementById('sw-to-sel')
-  if(toSel){
-    var o=_swFromMint!=='__SOL__'?'<option value="__SOL__"'+((_swToMint==='__SOL__')?' selected':'')+'>SOL</option>':''
-    spl.forEach(function(t){
-      if(t.mint===_swFromMint) return
-      o+='<option value="'+t.mint+'"'+(t.mint===_swToMint?' selected':'')+'>'+(t.symbol||t.mint.slice(0,6))+'</option>'
-    })
-    toSel.innerHTML=o
-    _swToMint=toSel.value
-  }
-  var amtEl=document.getElementById('sw-amt-inp')
-  if(amtEl) amtEl.value=''
-  _swUpdateFromBal()
-  _swUpdateToBal()
-  _swUpdateEst()
-}
-
-function _swToChanged(){
-  var sel=document.getElementById('sw-to-sel')
-  if(!sel) return
-  _swToMint=sel.value
-  _swUpdateToBal()
-  _swUpdateEst()
 }
 
 function _swSetPct(pct){
@@ -869,11 +984,10 @@ function _swSetPct(pct){
 }
 
 function _swFlip(){
-  var spl=window._wTokens||_allSpl||[]
   var tmp=_swFromMint
   _swFromMint=_swToMint||'__SOL__'
   _swToMint=tmp
-  _swPopulateSelects(spl)
+  _swUpdatePills()
   var amtEl=document.getElementById('sw-amt-inp')
   if(amtEl) amtEl.value=''
   _swUpdateFromBal()
@@ -894,7 +1008,6 @@ async function _swUpdateEst(){
   var toTok=spl.find(function(t){return t.mint===_swToMint})
   var fromPx=fromIsSOL?solPx:parseFloat((fromTok||{}).price_usd||0)
   var toPx=toIsSOL?solPx:parseFloat((toTok||{}).price_usd||0)
-  // live DexScreener price for TO token if not cached
   if(!toIsSOL&&toPx===0&&_swToMint&&!_swDexCache[_swToMint]){
     try{
       var res=await fetch('https://api.dexscreener.com/tokens/v1/solana/'+_swToMint)
@@ -912,14 +1025,11 @@ async function _swUpdateEst(){
     toPx=_swDexCache[_swToMint]
   }
   var outAmt=(amt>0&&fromPx>0&&toPx>0)?amt*fromPx/toPx:0
-  var estOut=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'0'
-  if(outEl) outEl.textContent=estOut
-  // USD sub-lines
+  if(outEl) outEl.textContent=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'0'
   var fromUsdEl=document.getElementById('sw-from-usd')
   var toUsdEl=document.getElementById('sw-to-usd')
   if(fromUsdEl) fromUsdEl.textContent='≈ $'+(amt>0&&fromPx>0?(amt*fromPx).toFixed(2):'—')
   if(toUsdEl) toUsdEl.textContent='≈ $'+(outAmt>0&&toPx>0?(outAmt*toPx).toFixed(2):'—')
-  // rate line
   var fromSym=fromIsSOL?'SOL':((fromTok||{}).symbol||'?')
   var toSym=toIsSOL?'SOL':((toTok||{}).symbol||'?')
   if(rateEl) rateEl.textContent=(fromPx>0&&toPx>0)?'1 '+fromSym+' ≈ '+(fromPx/toPx).toFixed(4)+' '+toSym:'—'
