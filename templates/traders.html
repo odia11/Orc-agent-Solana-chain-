@@ -3,6 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="client-secret" content="{{ client_secret }}">
 <title>Traders — OrcAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -456,10 +458,17 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 <div class="toast" id="toast"></div>
 
 <script>
-var _loggedIn   = {{ 'true' if logged_in else 'false' }};
-var _csrfToken  = '{{ csrf_token }}';
-var _allCards   = Array.from(document.querySelectorAll('.card'));
-var _activeTab  = 'all';
+var _loggedIn     = {{ 'true' if logged_in else 'false' }};
+var _csrfToken    = (document.querySelector('meta[name="csrf-token"]')    || {}).content || '';
+var _clientSecret = (document.querySelector('meta[name="client-secret"]') || {}).content || '';
+var _allCards     = Array.from(document.querySelectorAll('.card'));
+var _activeTab    = 'all';
+
+function _apiHeaders(){
+  var h = {'Content-Type':'application/json','X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
+  if(_clientSecret) h['X-Client-Secret'] = _clientSecret;
+  return h;
+}
 
 /* ── Copy modal state ─────────────────── */
 var _copyModal = { wallet: null, userId: null, btn: null, stopping: false };
@@ -503,7 +512,7 @@ function _toggleFollow(wallet, btn){
   btn.disabled = true;
   fetch('/api/follow/toggle', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    headers:_apiHeaders(),
     body: JSON.stringify({ wallet: wallet })
   })
   .then(function(r){ return r.json(); })
@@ -570,7 +579,7 @@ function _confirmCopy(){
   if(m.stopping){
     fetch('/api/copy-trade/toggle', {
       method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      headers:_apiHeaders(),
       body: JSON.stringify({ wallet: m.wallet })
     })
     .then(function(r){ return r.json(); })
@@ -592,7 +601,7 @@ function _confirmCopy(){
     }
     fetch('/api/copy-trade/toggle', {
       method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      headers:_apiHeaders(),
       body: JSON.stringify({ wallet: m.wallet, sol_amount: raw })
     })
     .then(function(r){ return r.json(); })

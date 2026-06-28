@@ -3363,6 +3363,7 @@ def traders():
         wallet_short=wallet_short,
         logged_in=bool(session_wallet),
         csrf_token=_get_csrf_token() if session_wallet else '',
+        client_secret=X_CLIENT_SECRET,
     )
 
 @app.route('/leaderboard')
