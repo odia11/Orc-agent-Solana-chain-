@@ -93,13 +93,16 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
   background:var(--card);border:1px solid var(--border2);border-radius:16px;
   padding:20px;display:flex;flex-direction:column;gap:16px;
   transition:border-color .2s,box-shadow .2s;
-  position:relative;overflow:hidden;
+  position:relative;overflow:hidden;cursor:pointer;
 }
 .card::before{
   content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;
   background:linear-gradient(135deg,rgba(255,255,255,.015) 0%,transparent 60%);
 }
 .card:hover{border-color:var(--border);box-shadow:0 4px 24px rgba(0,0,0,.4)}
+/* Invisible full-card link sits at z-index 1; interactive elements override at z-index 2 */
+.card-link{position:absolute;inset:0;z-index:1;border-radius:16px}
+.card-footer,.rank-pip{position:relative;z-index:2}
 .card.is-me{border-color:var(--accent-border);background:linear-gradient(135deg,rgba(53,212,196,.04),var(--card))}
 .card.top-1{border-color:rgba(247,185,85,.35)}
 .card.top-2{border-color:rgba(180,180,200,.22)}
@@ -268,6 +271,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
          data-week="{{ e.week_pnl }}"
          data-following="{{ '1' if e.is_following else '0' }}"
          data-name="{{ (e.username|lower) }}{{ (e.wallet_short|lower) }}">
+
+      <a class="card-link" href="/profile/{{ e.wallet }}" aria-label="View {{ e.username }}'s profile"></a>
 
       <span class="rank-pip">
         {%- if e.rank == 1 %}🥇{%- elif e.rank == 2 %}🥈{%- elif e.rank == 3 %}🥉{%- else %}#{{ e.rank }}{%- endif %}

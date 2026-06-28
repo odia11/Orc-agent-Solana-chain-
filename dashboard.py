@@ -2859,6 +2859,71 @@ def profile():
     finally:
         conn.close()
 
+@app.route('/profile/<wallet_address>')
+def profile_view(wallet_address: str):
+    """Public profile page for any wallet address."""
+    session_wallet = _current_wallet()
+    if not is_valid_solana_address(wallet_address):
+        return redirect('/traders')
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        user = conn.execute(
+            'SELECT id, username, avatar_url, bio, created_at FROM users WHERE wallet_address=?',
+            (wallet_address,)
+        ).fetchone()
+        if not user:
+            return redirect('/traders')
+        user_id = user['id']
+        stats = conn.execute(
+            'SELECT COUNT(*) AS total, '
+            'SUM(CASE WHEN pnl >= 0 THEN 1 ELSE 0 END) AS wins, '
+            'SUM(pnl) AS total_pnl '
+            'FROM trades WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0',
+            (user_id,)
+        ).fetchone()
+        posts = conn.execute(
+            'SELECT content, likes, created_at FROM feed_posts '
+            'WHERE wallet=? ORDER BY created_at DESC LIMIT 5',
+            (wallet_address,)
+        ).fetchall()
+        followers = conn.execute(
+            'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
+        ).fetchone()[0]
+        following = conn.execute(
+            'SELECT COUNT(*) FROM follows WHERE follower_id=?', (user_id,)
+        ).fetchone()[0]
+        total     = stats['total'] or 0
+        wins      = stats['wins']  or 0
+        win_rate  = round(wins / total * 100) if total else 0
+        total_pnl = round(stats['total_pnl'] or 0, 4)
+        wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else wallet_address
+        sw = session_wallet or ''
+        sw_short = (sw[:4] + '...' + sw[-4:]) if len(sw) >= 8 else sw
+        return render_template(
+            'profile.html',
+            wallet=wallet_address,
+            wallet_short=wallet_short,
+            session_wallet=sw,
+            session_wallet_short=sw_short,
+            display_name=user['username'] or wallet_short,
+            username=user['username'],
+            avatar_url=user['avatar_url'],
+            bio=user['bio'],
+            created_at=(user['created_at'] or '')[:10],
+            total_trades=total,
+            wins=wins,
+            win_rate=win_rate,
+            total_pnl=total_pnl,
+            pnl_positive=total_pnl >= 0,
+            followers=followers,
+            following=following,
+            posts=[dict(p) for p in posts],
+        )
+    finally:
+        conn.close()
+
+
 _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
 @app.route('/token/<mint_address>')
