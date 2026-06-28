@@ -108,14 +108,16 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .card.top-2{border-color:rgba(180,180,200,.22)}
 .card.top-3{border-color:rgba(205,140,82,.22)}
 
-/* rank pip */
+/* rank badge */
 .rank-pip{
   position:absolute;top:14px;right:14px;
-  font-family:var(--mono);font-size:11px;color:var(--muted);font-weight:700;letter-spacing:.04em;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;
+  padding:3px 7px;border-radius:6px;border:1px solid transparent;
+  color:var(--muted);background:transparent;
 }
-.top-1 .rank-pip{font-size:18px}
-.top-2 .rank-pip{font-size:15px}
-.top-3 .rank-pip{font-size:13px}
+.rank-pip.gold  {color:#f7b955;background:rgba(247,185,85,.10);border-color:rgba(247,185,85,.28)}
+.rank-pip.silver{color:#b8b8c8;background:rgba(184,184,200,.08);border-color:rgba(184,184,200,.20)}
+.rank-pip.bronze{color:#cd8c52;background:rgba(205,140,82,.08);border-color:rgba(205,140,82,.22)}
 
 /* ── identity row ── */
 .ident{display:flex;align-items:center;gap:12px}
@@ -274,9 +276,11 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 
       <a class="card-link" href="/profile/{{ e.wallet }}" aria-label="View {{ e.username }}'s profile"></a>
 
-      <span class="rank-pip">
-        {%- if e.rank == 1 %}🥇{%- elif e.rank == 2 %}🥈{%- elif e.rank == 3 %}🥉{%- else %}#{{ e.rank }}{%- endif %}
-      </span>
+      {%- if e.rank == 1 %}<span class="rank-pip gold">#1</span>
+      {%- elif e.rank == 2 %}<span class="rank-pip silver">#2</span>
+      {%- elif e.rank == 3 %}<span class="rank-pip bronze">#3</span>
+      {%- else %}<span class="rank-pip">#{{ e.rank }}</span>
+      {%- endif %}
 
       <!-- identity -->
       <div class="ident">
