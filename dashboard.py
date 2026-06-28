@@ -3162,6 +3162,10 @@ def pnl_card_page(wallet_addr):
     return render_template('card.html', stats=stats, card_url=card_url)
 
 
+@app.route('/traders')
+def traders():
+    return redirect('/leaderboard', 301)
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
