@@ -393,7 +393,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
           {% if not e.is_me %}
           <button class="btn btn-follow{% if e.is_following %} following{% endif %}"
                   id="follow-{{ e.user_id }}"
-                  onclick="_toggleFollow({{ e.user_id }}, this)"
+                  onclick="_toggleFollow('{{ e.wallet }}', this)"
                   {% if not logged_in %}title="Connect wallet to follow"{% endif %}>
             {{ '✓ Following' if e.is_following else '+ Follow' }}
           </button>
@@ -456,9 +456,10 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 <div class="toast" id="toast"></div>
 
 <script>
-var _loggedIn = {{ 'true' if logged_in else 'false' }};
-var _allCards = Array.from(document.querySelectorAll('.card'));
-var _activeTab = 'all';
+var _loggedIn   = {{ 'true' if logged_in else 'false' }};
+var _csrfToken  = '{{ csrf_token }}';
+var _allCards   = Array.from(document.querySelectorAll('.card'));
+var _activeTab  = 'all';
 
 /* ── Copy modal state ─────────────────── */
 var _copyModal = { wallet: null, userId: null, btn: null, stopping: false };
@@ -497,10 +498,14 @@ function _applyFilters(){
 }
 
 /* ── Follow toggle ─────────────────────── */
-function _toggleFollow(userId, btn){
+function _toggleFollow(wallet, btn){
   if(!_loggedIn){ _toast('Connect your wallet to follow traders', 'err'); return; }
   btn.disabled = true;
-  fetch('/api/follow/' + userId, { method:'POST', credentials:'include' })
+  fetch('/api/follow/toggle', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body: JSON.stringify({ wallet: wallet })
+  })
   .then(function(r){ return r.json(); })
   .then(function(d){
     btn.disabled = false;
@@ -565,8 +570,8 @@ function _confirmCopy(){
   if(m.stopping){
     fetch('/api/copy-trade/toggle', {
       method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ target_wallet: m.wallet, amount_sol: 0 })
+      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      body: JSON.stringify({ wallet: m.wallet })
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -575,10 +580,6 @@ function _confirmCopy(){
       document.getElementById('copy-modal-backdrop').classList.remove('open');
       m.btn.textContent = 'Copy';
       m.btn.classList.remove('copying');
-      /* clear all other copying states */
-      document.querySelectorAll('.btn-copy.copying').forEach(function(b){
-        if(b !== m.btn){ b.textContent = 'Copy'; b.classList.remove('copying'); }
-      });
       _toast('Copy trading stopped', 'ok');
     })
     .catch(function(){ confirmBtn.disabled = false; _toast('Network error', 'err'); });
@@ -591,15 +592,14 @@ function _confirmCopy(){
     }
     fetch('/api/copy-trade/toggle', {
       method:'POST', credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ target_wallet: m.wallet, amount_sol: raw })
+      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      body: JSON.stringify({ wallet: m.wallet, sol_amount: raw })
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
       confirmBtn.disabled = false;
       if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
       document.getElementById('copy-modal-backdrop').classList.remove('open');
-      /* clear previous copying button */
       document.querySelectorAll('.btn-copy.copying').forEach(function(b){
         b.textContent = 'Copy'; b.classList.remove('copying');
       });

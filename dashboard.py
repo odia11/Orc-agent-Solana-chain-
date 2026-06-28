@@ -41,6 +41,10 @@ app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
 app.config['SESSION_COOKIE_PATH']       = '/'
+# Dot-prefixed domain: cookie is valid for both orcagent.fun and www.orcagent.fun.
+# Only set in production — omitting it on localhost lets Flask default to 127.0.0.1.
+if os.getenv('RAILWAY_ENVIRONMENT'):
+    app.config['SESSION_COOKIE_DOMAIN'] = '.orcagent.fun'
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 @app.template_filter('fmtk')
@@ -54,14 +58,14 @@ def _jinja_fmtk(v):
     return f'{v:.0f}'
 
 @app.before_request
-def force_www():
-    host = request.host
-    # Don't redirect API POST/OPTIONS — 301 converts POST→GET and strips credentials.
-    # JS fetches use relative URLs, so they always land on the right host already.
+def redirect_to_canonical():
+    """Redirect www.orcagent.fun → orcagent.fun (canonical).
+    Skips POST/PUT/PATCH/DELETE/OPTIONS — 301 would silently convert POST→GET."""
+    host = request.host.split(':')[0]  # strip port for local dev safety
     if request.method in ('POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'):
         return None
-    if 'railway.app' in host or host == 'orcagent.fun':
-        url = 'https://www.orcagent.fun' + request.full_path
+    if host == 'www.orcagent.fun':
+        url = 'https://orcagent.fun' + request.full_path
         return redirect(url, code=301)
 
 @app.before_request
@@ -3210,34 +3214,38 @@ def api_copy_trade_toggle():
     wallet = _current_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
-    body       = request.get_json(silent=True) or {}
-    target     = str(body.get('target_wallet', '')).strip()
-    amount_sol = body.get('amount_sol', 0.1)
+    body   = request.get_json(silent=True) or {}
+    # accept both 'wallet' (new) and 'target_wallet' (legacy)
+    target = str(body.get('wallet') or body.get('target_wallet', '')).strip()
+    # accept both 'sol_amount' (new) and 'amount_sol' (legacy)
+    raw_amount = body.get('sol_amount') if body.get('sol_amount') is not None else body.get('amount_sol', 0.1)
     if not is_valid_solana_address(target):
         return jsonify({'ok': False, 'msg': 'Invalid target wallet'}), 400
     if target == wallet:
         return jsonify({'ok': False, 'msg': 'Cannot copy yourself'}), 400
-    try:
-        amount_sol = round(float(amount_sol), 4)
-        if amount_sol <= 0 or amount_sol > 100:
-            return jsonify({'ok': False, 'msg': 'Amount must be between 0.01 and 100 SOL'}), 400
-    except (TypeError, ValueError):
-        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT copy_source FROM users WHERE wallet_address=?', (wallet,)).fetchone()
         currently_copying_target = row and row[0] == target
         if currently_copying_target:
+            # Toggle OFF — amount irrelevant
             conn.execute('UPDATE users SET copy_source=NULL, copy_amount=NULL WHERE wallet_address=?', (wallet,))
             conn.commit()
             print(f'[copy-trade] {wallet[:8]}… stopped copying {target[:8]}…', flush=True)
             return jsonify({'ok': True, 'copying': False})
         else:
+            # Toggle ON — validate amount
+            try:
+                amount_sol = round(float(raw_amount), 4)
+                if amount_sol < 0.01 or amount_sol > 100:
+                    return jsonify({'ok': False, 'msg': 'Amount must be 0.01–100 SOL'}), 400
+            except (TypeError, ValueError):
+                return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
             conn.execute('UPDATE users SET copy_source=?, copy_amount=? WHERE wallet_address=?',
                          (target, amount_sol, wallet))
             conn.commit()
             print(f'[copy-trade] {wallet[:8]}… now copying {target[:8]}… at {amount_sol} SOL/trade', flush=True)
-            return jsonify({'ok': True, 'copying': True, 'amount_sol': amount_sol})
+            return jsonify({'ok': True, 'copying': True, 'sol_amount': amount_sol})
     finally:
         conn.close()
 
@@ -3354,6 +3362,7 @@ def traders():
         wallet=session_wallet,
         wallet_short=wallet_short,
         logged_in=bool(session_wallet),
+        csrf_token=_get_csrf_token() if session_wallet else '',
     )
 
 @app.route('/leaderboard')
@@ -5110,6 +5119,51 @@ def toggle_follow(target_id: int):
         conn.close()
 
     return jsonify({'ok': True, 'following': following, 'follower_count': int(follower_count)})
+
+
+@app.route('/api/follow/toggle', methods=['POST'])
+@rate_limit(60, 60)
+def follow_toggle_by_wallet():
+    """Wallet-address-based follow toggle used by traders.html."""
+    me_wallet = _current_wallet()
+    if not me_wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    body = request.get_json(silent=True) or {}
+    target_wallet = str(body.get('wallet', '')).strip()
+    if not is_valid_solana_address(target_wallet):
+        return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
+    if target_wallet == me_wallet:
+        return jsonify({'ok': False, 'msg': 'Cannot follow yourself'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address=?', (me_wallet,))
+        me_row = c.fetchone()
+        if not me_row:
+            return jsonify({'ok': False, 'msg': 'Your account not found'}), 404
+        me_id = me_row[0]
+        c.execute('SELECT id FROM users WHERE wallet_address=?', (target_wallet,))
+        tgt_row = c.fetchone()
+        if not tgt_row:
+            return jsonify({'ok': False, 'msg': 'Target user not found'}), 404
+        target_id = tgt_row[0]
+        c.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (me_id, target_id))
+        already = c.fetchone()
+        if already:
+            c.execute('DELETE FROM follows WHERE follower_id=? AND following_id=?', (me_id, target_id))
+            following = False
+        else:
+            c.execute(
+                'INSERT INTO follows (follower_id, following_id, created_at) VALUES (?,?,?)',
+                (me_id, target_id, datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')))
+            following = True
+        c.execute('SELECT COUNT(*) FROM follows WHERE following_id=?', (target_id,))
+        follower_count = (c.fetchone() or [0])[0]
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'following': following, 'follower_count': int(follower_count)})
+
 
 # ── FOLLOWERS / FOLLOWING LISTS ──
 def _viewer_follows_set(c, viewer_wallet, uid_list):
