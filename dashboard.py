@@ -917,6 +917,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL",
         "ALTER TABLE user_tokens ADD COLUMN avg_price REAL NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN copy_amount REAL DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN bot_enabled INTEGER DEFAULT 0",
     ]:
         try:
             con.execute(sql)
@@ -2254,7 +2255,17 @@ def user_trader_loop(stop_event, config, wallet: str):
                 us_sol  = _get_user_sol(_trading_wallet)
                 total_live = len(live)
                 print(f'[bot] {short} running=True tokens={total_live} pos={open_pos}/5 sol={round(us_sol,4)} scanning...', flush=True)
-                if total_live == 0:
+
+                _GAS_MIN = 0.005  # minimum SOL needed to pay transaction fees
+                if us_sol < _GAS_MIN:
+                    _gas_msg = (f'[{short}] ⚠ LOW SOL — trading wallet has {round(us_sol, 6)} SOL '
+                                f'(need ≥{_GAS_MIN} for gas). Buys skipped. '
+                                f'Fund: {_trading_wallet}')
+                    add_user_log(wallet, _gas_msg)
+                    print(f'[bot] {short} SKIPPING BUYS — insufficient SOL ({round(us_sol,6)}) '
+                          f'in trading wallet {_trading_wallet}', flush=True)
+                    # Exit checks (Pass 1) still run below — sells return SOL.
+                elif total_live == 0:
                     add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
                 else:
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
@@ -2383,7 +2394,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                          'bot paused for 1 hour to protect gains')
 
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 5 and us_sol > 0.01 and not _pc_locked:
+                if not stop_event.is_set() and open_pos < 5 and us_sol >= _GAS_MIN and not _pc_locked:
                     # Re-fetch blacklist each scan so additions take effect immediately
                     try:
                         _bl_conn = sqlite3.connect(DB_FILE)
@@ -7084,6 +7095,13 @@ def bot_start():
         us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)
         us['trader_thread'].start()
         us['trader_running'] = True
+    try:
+        _en_conn = sqlite3.connect(DB_FILE)
+        _en_conn.execute('UPDATE users SET bot_enabled=1 WHERE wallet_address=?', (wallet,))
+        _en_conn.commit()
+        _en_conn.close()
+    except Exception:
+        pass
     short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     print(f'[bot/start] {short} manually started', flush=True)
     return jsonify({'ok': True, 'status': 'running'})
@@ -7098,6 +7116,13 @@ def bot_stop():
     if us.get('trader_stop'):
         us['trader_stop'].set()
     us['trader_running'] = False
+    try:
+        _dis_conn = sqlite3.connect(DB_FILE)
+        _dis_conn.execute('UPDATE users SET bot_enabled=0 WHERE wallet_address=?', (wallet,))
+        _dis_conn.commit()
+        _dis_conn.close()
+    except Exception:
+        pass
     short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     print(f'[bot/stop] {short} manually stopped', flush=True)
     return jsonify({'ok': True, 'status': 'stopped'})
@@ -9437,15 +9462,42 @@ threading.Thread(target=_audit_loop,           daemon=True).start()
 threading.Thread(target=_security_check_loop,  daemon=True).start()
 _security_selftest()
 add_log('OrcAgent started')
-try:
-    _conn = sqlite3.connect(DB_FILE)
-    _n_traders = _conn.execute(
-        "SELECT COUNT(*) FROM users WHERE encrypted_private_key != '' AND encrypted_private_key IS NOT NULL"
-    ).fetchone()[0]
-    _conn.close()
-    print(f'[startup] Active traders: 0  ({_n_traders} user{"s" if _n_traders != 1 else ""} with trading key configured — start via dashboard)', flush=True)
-except Exception as _e:
-    print(f'[startup] Active traders: unknown ({_e})', flush=True)
+def _autostart_bots():
+    """Re-start bots for users who had bot_enabled=1 before the last deploy.
+    Runs in a background thread so it doesn't block Flask startup."""
+    time.sleep(5)  # let DB init and migrations finish
+    try:
+        _conn = sqlite3.connect(DB_FILE)
+        _rows = _conn.execute(
+            "SELECT wallet_address FROM users "
+            "WHERE bot_enabled=1 AND encrypted_private_key != '' AND encrypted_private_key IS NOT NULL"
+        ).fetchall()
+        _n_total = _conn.execute(
+            "SELECT COUNT(*) FROM users WHERE encrypted_private_key != '' AND encrypted_private_key IS NOT NULL"
+        ).fetchone()[0]
+        _conn.close()
+    except Exception as _e:
+        print(f'[startup] autostart query failed: {_e}', flush=True)
+        return
+    print(f'[startup] {len(_rows)} bot(s) set to auto-restart  '
+          f'({_n_total} user{"s" if _n_total != 1 else ""} with trading key configured)', flush=True)
+    for (_wal,) in _rows:
+        try:
+            us = get_user_state(_wal)
+            if us.get('trader_running'):
+                continue
+            us['trader_stop']   = threading.Event()
+            us['trader_thread'] = threading.Thread(
+                target=user_trader_loop, args=(us['trader_stop'], {}, _wal), daemon=True)
+            us['trader_thread'].start()
+            us['trader_running'] = True
+            _sh = (_wal[:6] + '...' + _wal[-4:]) if len(_wal) >= 10 else _wal
+            print(f'[startup] auto-restarted bot for {_sh}', flush=True)
+            add_user_log(_wal, f'[{_sh}] Bot auto-restarted after deploy')
+        except Exception as _e2:
+            print(f'[startup] failed to auto-restart {_wal[:8]}: {_e2}', flush=True)
+
+threading.Thread(target=_autostart_bots, daemon=True).start()
 
 def _startup_fee_recovery():
     """One-time recovery run 30 s after boot — collects any fees missed before fee_paid tracking."""
