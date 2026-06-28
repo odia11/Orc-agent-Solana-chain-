@@ -605,7 +605,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
     <div class="sw-panel">
       <div class="sw-panel-top">
         <span class="sw-panel-lbl">YOU PAY</span>
-        <span class="sw-panel-bal" id="sw-from-bal">Balance: <span>—</span></span>
+        <span class="sw-panel-bal" id="sw-from-bal" style="display:flex;align-items:center;gap:5px">Balance: <span onclick="_swSetMax()" style="cursor:pointer;text-decoration:underline dotted;color:#35d4c4">—</span><button onclick="_swSetMax()" style="background:none;border:none;color:#35d4c4;font-size:11px;cursor:pointer;font-weight:700;padding:0;line-height:1">MAX</button></span>
       </div>
       <div class="sw-panel-mid">
         <input class="sw-amt-inp" id="sw-amt-inp" type="number" placeholder="0" min="0" step="any" oninput="_swUpdateEst()">
@@ -974,6 +974,21 @@ function _swUpdateToBal(){
   }
 }
 
+function _swSetMax(){
+  var amtEl=document.getElementById('sw-amt-inp')
+  if(!amtEl) return
+  var amt=0
+  if(_swFromMint==='__SOL__'){
+    var solEl=document.getElementById('sol')
+    amt=parseFloat((solEl?solEl.textContent:'0')||0)
+  } else {
+    var spl=window._wTokens||_allSpl||[]
+    var tok=spl.find(function(t){return t.mint===_swFromMint})
+    amt=tok?parseFloat(tok.amount||0):0
+  }
+  amtEl.value=amt>0?amt.toFixed(6):'0'
+  _swUpdateEst()
+}
 function _swSetPct(pct){
   var spl=window._wTokens||_allSpl||[]
   var tok=spl.find(function(t){return t.mint===_swFromMint})
