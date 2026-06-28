@@ -4300,7 +4300,10 @@ function _phantomMobileV1Connect(){
   }
   try{
     var kp=nacl.box.keyPair();
-    localStorage.setItem('_phantom_dapp_sk',JSON.stringify(Array.from(kp.secretKey)));
+    var _skJson=JSON.stringify(Array.from(kp.secretKey));
+    try{ localStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){ console.warn('[phantom] localStorage write failed:',e); }
+    try{ sessionStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){ console.warn('[phantom] sessionStorage write failed:',e); }
+    console.log('[phantom] dapp keypair stored, pubkey='+_b58enc(kp.publicKey));
     var params=new URLSearchParams({
       app_url:'https://orcagent.fun',
       dapp_encryption_public_key:_b58enc(kp.publicKey),

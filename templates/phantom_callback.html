@@ -41,11 +41,24 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
   var msg=document.getElementById('msg');
   function fail(txt){ msg.className='msg err'; msg.textContent=txt; setTimeout(function(){window.location.href='/';},4000); }
 
-  // Parse callback params from URL
+  // ── DEBUG: log all URL params on page load ──
   var p=new URLSearchParams(window.location.search);
+  console.log('[phantom-cb] page loaded, full URL:', window.location.href);
+  console.log('[phantom-cb] URL params:');
+  p.forEach(function(v,k){ console.log('  '+k+' =', k==='data'||k==='nonce'?v.slice(0,20)+'…':v); });
+
+  // ── DEBUG: log storage state ──
+  var _lsSk=null,_ssSk=null;
+  try{ _lsSk=localStorage.getItem('_phantom_dapp_sk'); }catch(e){ console.warn('[phantom-cb] localStorage unavailable:',e); }
+  try{ _ssSk=sessionStorage.getItem('_phantom_dapp_sk'); }catch(e){ console.warn('[phantom-cb] sessionStorage unavailable:',e); }
+  console.log('[phantom-cb] localStorage._phantom_dapp_sk:', _lsSk?'present ('+JSON.parse(_lsSk).length+' bytes)':'MISSING');
+  console.log('[phantom-cb] sessionStorage._phantom_dapp_sk:', _ssSk?'present ('+JSON.parse(_ssSk).length+' bytes)':'MISSING');
+
+  // Parse callback params from URL
   var errCode=p.get('errorCode');
   var errMsg=p.get('errorMessage');
   if(errCode){
+    console.error('[phantom-cb] Phantom returned error:',errCode,errMsg);
     fail('Phantom rejected the connection'+(errMsg?' — '+decodeURIComponent(errMsg):'')+' ('+errCode+')');
     return;
   }
@@ -53,10 +66,14 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
   var phantomPubB58=p.get('phantom_encryption_public_key');
   var nonceB58=p.get('nonce');
   var dataB58=p.get('data');
+  console.log('[phantom-cb] has phantom_encryption_public_key:', !!phantomPubB58);
+  console.log('[phantom-cb] has nonce:', !!nonceB58);
+  console.log('[phantom-cb] has data:', !!dataB58);
   if(!phantomPubB58||!nonceB58||!dataB58){ fail('Invalid callback — missing parameters. Please try again.'); return; }
 
-  // Retrieve dapp secret key stored before redirect
-  var dappSkJson=localStorage.getItem('_phantom_dapp_sk');
+  // Retrieve dapp secret key — try localStorage first, fall back to sessionStorage
+  var dappSkJson=_lsSk||_ssSk;
+  console.log('[phantom-cb] dappSkJson source:', _lsSk?'localStorage':_ssSk?'sessionStorage':'NONE');
   if(!dappSkJson){ fail('Session expired — please try connecting again.'); return; }
 
   try{
@@ -70,7 +87,9 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
 
     var payload=JSON.parse(new TextDecoder().decode(decrypted));
     var walletAddress=payload.public_key;
-    localStorage.removeItem('_phantom_dapp_sk');
+    console.log('[phantom-cb] decrypted OK, wallet=', walletAddress);
+    try{ localStorage.removeItem('_phantom_dapp_sk'); }catch(e){}
+    try{ sessionStorage.removeItem('_phantom_dapp_sk'); }catch(e){}
 
     if(!walletAddress){ fail('No wallet address in response.'); return; }
 
