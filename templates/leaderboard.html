@@ -6,257 +6,209 @@
 <title>Leaderboard — OrcAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700&family=Orbitron:wght@700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-img{max-width:100%;height:auto}
 :root{
-  --bg:#080c14;--bg2:#0d1421;--bg3:#131d30;--bg4:#1a2840;
-  --green:#00ff88;--red:#ff4d6a;--yellow:#ffc13a;--blue:#6aa3ff;
-  --text:#eef6ff;--muted:#6e8faf;--dim:#a0bcd4;--border:#2a4060;--border2:#365475;
-  --gold:#ffd700;--silver:#c8c8d4;--bronze:#cd8c52;
-  --shadow-card:0 4px 24px rgba(0,0,0,.5);
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;--bg4:#16191f;
+  --accent:#35d4c4;--accent-dim:rgba(53,212,196,.12);--accent-border:rgba(53,212,196,.25);
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --green:#3ad29b;--red:#f76b62;
+  --gold:#f7b955;--silver:#c8c8d4;--bronze:#cd8c52;
+  --mono:'JetBrains Mono','Share Tech Mono',monospace;
+  --ui:'Geist',system-ui,sans-serif;
 }
-html,body{min-height:100vh;background:var(--bg);background-image:radial-gradient(ellipse at 50% -10%,#0a1020 0%,#04060d 100%),radial-gradient(ellipse at 15% 20%,rgba(90,150,255,.06) 0%,transparent 50%),radial-gradient(ellipse at 85% 80%,rgba(0,255,136,.04) 0%,transparent 50%);font-family:'Inter',sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
-.page-wrap{max-width:920px;margin:0 auto;padding:1.25rem 1rem 3rem}
+html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
 
 /* ── NAVBAR ── */
-.header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;padding-bottom:1rem;border-bottom:1px solid var(--border);box-shadow:0 1px 0 0 rgba(0,255,136,.12);flex-wrap:wrap;gap:8px}
-.logo-row{display:flex;align-items:center;gap:10px;text-decoration:none}
-.brand{font-family:'Orbitron',monospace;font-size:15px;font-weight:900;color:var(--green);letter-spacing:.05em}
-.brand-sub{font-size:8px;color:var(--muted);margin-top:3px;letter-spacing:.12em;text-transform:uppercase}
-.header-right{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid rgba(255,255,255,.07);border-radius:20px;padding:5px 12px;font-size:10px;color:var(--dim)}
-.dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite;flex-shrink:0}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
-@keyframes orcaBlink{0%,100%{opacity:1}50%{opacity:.35}}
-a.hdr-btn,button.hdr-btn{background:transparent;border:1px solid var(--border);border-radius:8px;padding:6px 12px;font-family:'Inter',sans-serif;font-size:10px;color:var(--muted);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:4px}
-a.hdr-btn:hover,button.hdr-btn:hover{border-color:var(--green);color:var(--green);box-shadow:0 0 10px rgba(0,255,136,.15)}
-a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(255,193,58,.06)}
+.navbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(10,11,14,.82);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid #16191f;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:56px;gap:16px;
+}
+.nav-left{display:flex;align-items:center;gap:14px;text-decoration:none;flex-shrink:0}
+.nav-logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #06100f}
+.nav-brand{font-family:var(--ui);font-size:18px;font-weight:700;color:var(--text);letter-spacing:.04em;line-height:1}
+.nav-tag{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-family:var(--mono);font-size:10px;color:var(--sub)}
+.wallet-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.nav-btn{display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;font-family:var(--ui);font-size:12px;font-weight:600;text-decoration:none;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
+.nav-btn:hover{border-color:#35353d;color:var(--text)}
+.nav-btn.active{background:var(--accent);color:#06100f;border-color:var(--accent)}
 
-/* ── PAGE TITLE ── */
-.page-title{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--text);letter-spacing:.06em;margin-bottom:4px;display:flex;align-items:center;gap:10px}
-.page-sub{font-size:10px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1.5rem}
+/* ── BODY ── */
+.page{max-width:1180px;margin:0 auto;padding:30px 28px 60px}
 
 /* ── PODIUM ── */
-.podium{display:flex;gap:14px;margin-bottom:1.75rem;justify-content:center;flex-wrap:wrap}
+.podium{display:flex;gap:14px;margin-bottom:24px}
 .podium-card{
-  flex:1;min-width:200px;max-width:270px;
-  border-radius:18px;padding:28px 20px;text-align:center;
+  flex:1;border-radius:16px;padding:24px 20px;text-align:center;
   position:relative;overflow:hidden;
-  backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);
-  transition:transform .2s,box-shadow .2s;
+  display:flex;flex-direction:column;align-items:center;
 }
-.podium-card:hover{transform:translateY(-4px)}
-.podium-card::before{content:'';position:absolute;top:0;left:0;right:0;height:4px;z-index:1}
-
-.podium-card.gold{
-  background:rgba(255,215,0,.07);
-  border:1px solid rgba(255,215,0,.55);
-  box-shadow:0 0 40px rgba(255,215,0,.15),0 0 0 1px rgba(255,215,0,.08),var(--shadow-card);
+.podium-card::after{
+  content:'';position:absolute;inset:0;border-radius:16px;
+  pointer-events:none;
 }
-.podium-card.gold::before{background:linear-gradient(90deg,transparent 0%,var(--gold) 50%,transparent 100%)}
-.podium-card.gold:hover{box-shadow:0 0 56px rgba(255,215,0,.25),0 0 0 1px rgba(255,215,0,.15),0 8px 40px rgba(0,0,0,.5)}
-
-.podium-card.silver{
-  background:rgba(200,200,212,.05);
-  border:1px solid rgba(200,200,212,.38);
-  box-shadow:0 0 28px rgba(200,200,212,.08),0 0 0 1px rgba(200,200,212,.05),var(--shadow-card);
-}
-.podium-card.silver::before{background:linear-gradient(90deg,transparent 0%,var(--silver) 50%,transparent 100%)}
-.podium-card.silver:hover{box-shadow:0 0 40px rgba(200,200,212,.15),0 8px 40px rgba(0,0,0,.5)}
-
-.podium-card.bronze{
-  background:rgba(205,140,82,.05);
-  border:1px solid rgba(205,140,82,.38);
-  box-shadow:0 0 28px rgba(205,140,82,.08),0 0 0 1px rgba(205,140,82,.05),var(--shadow-card);
-}
-.podium-card.bronze::before{background:linear-gradient(90deg,transparent 0%,var(--bronze) 50%,transparent 100%)}
-.podium-card.bronze:hover{box-shadow:0 0 40px rgba(205,140,82,.15),0 8px 40px rgba(0,0,0,.5)}
-
-.podium-medal{font-size:40px;margin-bottom:6px;display:block;line-height:1;filter:drop-shadow(0 2px 10px rgba(0,0,0,.5))}
-.podium-rank-lbl{font-family:'Orbitron',monospace;font-size:9px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;margin-bottom:10px}
-.podium-card.gold   .podium-rank-lbl{color:var(--gold)}
-.podium-card.silver .podium-rank-lbl{color:var(--silver)}
-.podium-card.bronze .podium-rank-lbl{color:var(--bronze)}
-.podium-wallet{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--dim);margin-bottom:12px;letter-spacing:.05em}
-.podium-wallet.is-me{color:var(--green);font-weight:700}
-.podium-pnl{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;margin-bottom:5px;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
-.podium-card.gold   .podium-pnl.pos{color:var(--gold);text-shadow:0 0 20px rgba(255,215,0,.45)}
-.podium-card.silver .podium-pnl.pos{color:var(--silver);text-shadow:0 0 12px rgba(200,200,212,.3)}
-.podium-card.bronze .podium-pnl.pos{color:var(--bronze);text-shadow:0 0 12px rgba(205,140,82,.3)}
+.podium-card.gold  {background:rgba(247,185,85,.06);border:1px solid rgba(247,185,85,.45)}
+.podium-card.silver{background:rgba(200,200,212,.04);border:1px solid rgba(200,200,212,.32)}
+.podium-card.bronze{background:rgba(205,140,82,.04);border:1px solid rgba(205,140,82,.32)}
+.podium-top-line{position:absolute;top:0;left:20%;right:20%;height:2px;border-radius:0 0 4px 4px}
+.podium-card.gold   .podium-top-line{background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+.podium-card.silver .podium-top-line{background:linear-gradient(90deg,transparent,var(--silver),transparent)}
+.podium-card.bronze .podium-top-line{background:linear-gradient(90deg,transparent,var(--bronze),transparent)}
+.podium-medal{font-size:38px;line-height:1;margin-bottom:8px}
+.podium-place{font-size:10px;font-weight:700;letter-spacing:.14em;margin-bottom:12px}
+.podium-card.gold   .podium-place{color:var(--gold)}
+.podium-card.silver .podium-place{color:var(--silver)}
+.podium-card.bronze .podium-place{color:var(--bronze)}
+.podium-wallet{font-family:var(--mono);font-size:11px;color:var(--muted);margin-bottom:14px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.podium-wallet.is-me{color:var(--accent);font-weight:700}
+.podium-pnl{font-family:var(--mono);font-size:28px;font-weight:700;line-height:1;margin-bottom:6px}
 .podium-pnl.pos{color:var(--green)}
 .podium-pnl.neg{color:var(--red)}
-.podium-meta{font-size:9px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
-.podium-me-badge{display:inline-block;background:rgba(0,255,136,.14);border:1px solid rgba(0,255,136,.4);border-radius:10px;padding:2px 10px;font-size:8px;color:var(--green);font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.1em;margin-top:8px}
+.podium-meta{font-size:11px;color:var(--muted)}
+
+/* ── YOUR RANK BANNER ── */
+.rank-banner{
+  background:var(--accent-dim);
+  border:1px solid var(--accent-border);
+  border-radius:12px;padding:14px 20px;
+  margin-bottom:20px;
+  font-size:13px;color:var(--accent);
+  display:flex;align-items:center;gap:10px;
+}
+.rank-banner-check{font-size:16px;flex-shrink:0}
 
 /* ── TABLE ── */
-.table-wrap{overflow-x:auto;border:1px solid rgba(255,255,255,.06);border-radius:14px;box-shadow:var(--shadow-card);background:rgba(13,20,33,.9);backdrop-filter:blur(10px)}
-.lb-table{width:100%;border-collapse:collapse;min-width:560px}
-.lb-table th{padding:11px 16px;text-align:left;color:var(--muted);font-family:'Inter',sans-serif;font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.018);white-space:nowrap}
-.lb-table th:first-child{text-align:center;width:60px}
-.lb-table td{padding:12px 16px;border-bottom:1px solid rgba(42,64,96,.22);color:var(--dim);font-size:11px;white-space:nowrap;vertical-align:middle;transition:background .12s;border-left:3px solid transparent}
+.table-wrap{overflow-x:auto;border-radius:14px;border:1px solid #16191f}
+.lb-table{width:100%;border-collapse:collapse}
+.lb-table thead th{
+  padding:12px 14px;text-align:left;
+  font-size:10px;font-weight:700;color:var(--muted);
+  letter-spacing:.1em;text-transform:uppercase;
+  border-bottom:1px solid #16191f;
+  white-space:nowrap;background:var(--bg2);
+}
+.lb-table thead th:first-child{text-align:center;width:56px}
+.lb-table tbody td{
+  padding:14px 14px;
+  border-bottom:1px solid #16191f;
+  font-size:13px;color:var(--sub);
+  vertical-align:middle;white-space:nowrap;
+  transition:background .12s;
+}
 .lb-table tbody tr:last-child td{border-bottom:none}
+.lb-table tbody tr:hover td{background:#0d0f12}
+.td-rank{text-align:center;font-family:var(--mono);font-size:13px;color:var(--muted)}
+.td-rank.top1{font-size:22px}
+.td-rank.top2{font-size:18px}
+.td-rank.top3{font-size:15px}
+.td-wallet{font-family:var(--mono);font-size:12px;color:var(--text)}
+.td-wallet.is-me{color:var(--accent);font-weight:700}
+.me-chip{display:inline-block;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:20px;padding:1px 8px;font-size:9px;color:var(--accent);font-weight:700;margin-left:7px;vertical-align:middle}
+.td-pnl{font-family:var(--mono);font-size:13px;font-weight:700}
+.td-pnl.pos{color:var(--green)}
+.td-pnl.neg{color:var(--red)}
+.td-wr{font-family:var(--mono);font-size:13px}
+.td-wr.pos{color:var(--green)}
+.td-wr.neg{color:var(--red)}
+.td-num{font-family:var(--mono);font-size:13px;color:var(--sub)}
+.td-best{font-family:var(--mono);font-size:13px;color:var(--green)}
+.row-me td{background:rgba(53,212,196,.04)}
+.row-gold td{background:rgba(247,185,85,.03)}
+.row-silver td{background:rgba(200,200,212,.02)}
+.row-bronze td{background:rgba(205,140,82,.02)}
 
-/* hover: green left border slide-in */
-.lb-table tbody tr{transition:all .15s}
-.lb-table tbody tr:hover td{background:rgba(255,255,255,.022)}
-.lb-table tbody tr:hover td:first-child{border-left-color:rgba(0,255,136,.6)!important}
+/* ── EMPTY ── */
+.empty{text-align:center;padding:72px 24px;color:var(--muted);font-size:13px;border:1px solid #16191f;border-radius:14px;background:var(--bg2)}
+.empty-icon{font-size:36px;margin-bottom:14px}
 
-/* rank cells */
-.rank-cell{text-align:center;font-family:'Orbitron',monospace;font-weight:700;color:var(--muted);font-size:12px;transition:all .15s}
-.rank-cell.r1{font-size:22px;color:var(--gold);text-shadow:0 0 16px rgba(255,215,0,.5)}
-.rank-cell.r2{font-size:18px;color:var(--silver);text-shadow:0 0 12px rgba(200,200,212,.3)}
-.rank-cell.r3{font-size:15px;color:var(--bronze);text-shadow:0 0 12px rgba(205,140,82,.3)}
-
-/* row colour overlays */
-.row-gold td{background:rgba(255,215,0,.035);border-left-color:rgba(255,215,0,.65)!important}
-.row-silver td{background:rgba(192,192,192,.025);border-left-color:rgba(192,192,192,.45)!important}
-.row-bronze td{background:rgba(205,140,82,.025);border-left-color:rgba(205,140,82,.45)!important}
-.row-me td{background:rgba(0,255,136,.035);border-left-color:var(--green)!important}
-
-/* gold #1 shimmer */
-@keyframes rowShimmer{
-  0%{background-position:-600px 0}
-  60%,100%{background-position:600px 0}
-}
-.row-gold td{
-  background-color:rgba(255,215,0,.035);
-  background-image:linear-gradient(105deg,transparent 35%,rgba(255,215,0,.055) 50%,transparent 65%);
-  background-size:600px 100%;
-  animation:rowShimmer 4.5s ease-in-out infinite;
-}
-
-.td-wallet{font-family:'Share Tech Mono',monospace;color:var(--text);letter-spacing:.06em}
-.td-wallet.is-me{color:var(--green);font-weight:700}
-.me-badge{display:inline-block;background:rgba(0,255,136,.14);border:1px solid rgba(0,255,136,.4);border-radius:10px;padding:1px 8px;font-size:8px;color:var(--green);font-family:'Orbitron',monospace;font-weight:700;letter-spacing:.08em;margin-left:6px;vertical-align:middle}
-.td-pnl-pos{color:var(--green);font-family:'Orbitron',monospace;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
-.td-pnl-neg{color:var(--red);font-family:'Orbitron',monospace;font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
-.td-wr-pos{color:var(--green)}.td-wr-neg{color:var(--red)}
-.td-best{color:var(--green);font-size:11px;font-variant-numeric:tabular-nums}
-
-/* ── EMPTY STATE ── */
-.empty-state{text-align:center;padding:72px 24px;color:var(--muted);font-size:13px;letter-spacing:.08em;border:1px solid rgba(255,255,255,.06);border-radius:14px;background:rgba(13,20,33,.9);backdrop-filter:blur(10px);line-height:1.9;box-shadow:var(--shadow-card)}
-.empty-state svg{display:block;margin:0 auto 18px;opacity:.2}
-
-/* ── MY RANK CALLOUT ── */
-.my-rank-bar{background:rgba(0,255,136,.06);border:1px solid rgba(0,255,136,.22);border-radius:10px;padding:11px 18px;margin-bottom:1.1rem;font-size:11px;color:var(--green);display:flex;align-items:center;gap:8px}
-.my-rank-bar svg{flex-shrink:0;opacity:.7}
-
+/* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(0,255,136,.3);border-radius:4px}
-::-webkit-scrollbar-thumb:hover{background:rgba(0,255,136,.5)}
-*{scrollbar-width:thin;scrollbar-color:rgba(0,255,136,.3) transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
 
-/* ── BADGES ── */
-.badges-row{display:flex;flex-wrap:wrap;gap:4px}
-.badge-pill{
-  display:inline-flex;align-items:center;gap:3px;
-  padding:3px 8px;border-radius:20px;
-  font-size:10px;font-weight:500;letter-spacing:.01em;
-  background:#1a2035;border:1px solid rgba(255,255,255,.12);
-  white-space:nowrap;cursor:default;font-family:'Inter',sans-serif;
-  position:relative;
-}
-.badge-pill.earned{color:#eef6ff;border-color:var(--bp-color,rgba(0,255,136,.35))}
-
+/* ── MOBILE ── */
 @media(max-width:768px){
-  .page-title{font-size:17px}
-  a.hdr-btn,button.hdr-btn{padding:5px 8px;font-size:9px}
-
-  /* Podium: stack vertically, full width, truncate names */
-  .podium{flex-direction:column;align-items:stretch;gap:10px}
-  .podium-card{min-width:unset;max-width:none;width:100%;padding:20px 16px;flex:none}
-  .podium-medal{font-size:30px}
-  .podium-pnl{font-size:18px}
-  .podium-wallet{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%}
-
-  /* Table: ensure min-width for horizontal scroll */
-  .table-wrap{border-radius:10px}
-  .lb-table{min-width:600px}
-
-  /* Hide Best Trade column (6th) */
-  .lb-table th:nth-child(6),
-  .lb-table td:nth-child(6){display:none}
+  .navbar{padding:0 14px;height:52px}
+  .nav-tag{display:none}
+  .nav-btn{padding:6px 10px;font-size:11px}
+  .page{padding:16px 12px 60px}
+  .podium{flex-direction:column;gap:10px}
+  .podium-pnl{font-size:22px}
+  .lb-table thead th:nth-child(6),
+  .lb-table tbody td:nth-child(6){display:none}
 }
 </style>
 </head>
 <body>
-<div class="page-wrap">
 
-  <!-- NAVBAR -->
-  <div class="header">
-    <a class="logo-row" href="/">
-      <svg width="28" height="28" viewBox="0 0 160 160" fill="none" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="80" cy="82" rx="62" ry="58" fill="#0d2a1e" stroke="#00ff88" stroke-width="5"/>
-        <ellipse cx="80" cy="56" rx="38" ry="32" fill="#0d2a1e" stroke="#00ff88" stroke-width="4"/>
-        <circle cx="62" cy="52" r="9" fill="#00ff88"/><circle cx="98" cy="52" r="9" fill="#00ff88"/>
-        <circle cx="64" cy="50" r="3" fill="black"/><circle cx="100" cy="50" r="3" fill="black"/>
-      </svg>
-      <div><div class="brand">ORCAGENT</div><div class="brand-sub">Solana Smart Scalper v4</div></div>
-    </a>
-    <div class="header-right">
-      {% if wallet %}
-      <div class="wallet-pill"><div class="dot-green"></div><span>{{ wallet_short }}</span></div>
-      {% endif %}
-      <a href="/" class="hdr-btn">⬡ Dashboard</a>
-      <a href="/history" class="hdr-btn">📋 History</a>
-      <a href="/leaderboard" class="hdr-btn active">🏆 Leaderboard</a>
-      {% if is_admin %}<span class="hdr-btn" style="border-color:rgba(255,193,58,.4);color:#f0b90b">👑 Admin</span>{% endif %}
+<!-- NAVBAR -->
+<nav class="navbar">
+  <a class="nav-left" href="/">
+    <div class="nav-logo-tile"></div>
+    <div>
+      <div class="nav-brand">ORCAGENT</div>
+      <div class="nav-tag">SOLANA SMART SCALPER V4</div>
     </div>
+  </a>
+  <div class="nav-right">
+    {% if wallet_short %}
+    <div class="wallet-pill"><div class="wallet-dot"></div><span>{{ wallet_short }}</span></div>
+    {% endif %}
+    <a href="/" class="nav-btn">Dashboard</a>
+    <a href="/history" class="nav-btn">History</a>
+    <a href="/leaderboard" class="nav-btn active">Leaderboard</a>
   </div>
+</nav>
 
-  <!-- TITLE -->
-  <div class="page-title">🏆 Leaderboard</div>
-  <div class="page-sub">Top OrcAgent traders · All-time PnL · Wallets anonymized</div>
+<!-- BODY -->
+<div class="page">
 
-  {% if entries %}
+{% if entries %}
 
-  <!-- SESSION USER CALLOUT -->
+  <!-- YOUR RANK BANNER -->
   {% for e in entries %}{% if e.is_me %}
-  <div class="my-rank-bar">
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-    You are ranked <strong style="font-family:'Orbitron',monospace;font-size:12px">#{{ e.rank }}</strong> with {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f' | format(e.total_pnl) }} SOL total PnL across {{ e.trade_count }} trade{{ 's' if e.trade_count != 1 else '' }}.
+  <div class="rank-banner">
+    <span class="rank-banner-check">✓</span>
+    <span>You are ranked <strong>#{{ e.rank }}</strong> with <strong>{{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }} SOL</strong> across <strong>{{ e.trade_count }} trade{{ 's' if e.trade_count != 1 else '' }}</strong>.</span>
   </div>
   {% endif %}{% endfor %}
 
-  <!-- PODIUM (top 3) -->
-  {% set top3 = entries[:3] %}
-  {% if top3 | length >= 1 %}
+  <!-- PODIUM -->
+  {% if entries|length >= 1 %}
+  {%- set podium_meta = [('🥇','gold','1ST PLACE'),('🥈','silver','2ND PLACE'),('🥉','bronze','3RD PLACE')] -%}
   <div class="podium">
-    {%- set medals = [('🥇','gold','1ST'),('🥈','silver','2ND'),('🥉','bronze','3RD')] -%}
-    {% for e in top3 %}
-    {% set medal, cls, lbl = medals[loop.index0] %}
+    {% for e in entries[:3] %}
+    {%- set medal, cls, lbl = podium_meta[loop.index0] -%}
     <div class="podium-card {{ cls }}">
-      <span class="podium-medal">{{ medal }}</span>
-      <div class="podium-rank-lbl">{{ lbl }} PLACE</div>
-      <div class="podium-wallet {{ 'is-me' if e.is_me else '' }}">{{ e.wallet }}</div>
-      {% if e.is_me %}<div class="podium-me-badge">YOU</div>{% endif %}
+      <div class="podium-top-line"></div>
+      <div class="podium-medal">{{ medal }}</div>
+      <div class="podium-place">{{ lbl }}</div>
+      <div class="podium-wallet{{ ' is-me' if e.is_me else '' }}">{{ e.wallet }}</div>
       <div class="podium-pnl {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
-        {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f' | format(e.total_pnl) }} SOL
+        {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }} SOL
       </div>
-      <div class="podium-meta">{{ '%.1f' | format(e.win_rate) }}% WR · {{ e.trade_count }} trades</div>
-      {% if e.badges %}
-      <div class="badges-row" style="justify-content:center;margin-top:10px">
-        {% for b in e.badges %}
-        <span class="badge-pill earned">{{ b }}</span>
-        {% endfor %}
-      </div>
-      {% endif %}
+      <div class="podium-meta">{{ '%.1f'|format(e.win_rate) }}% WR &middot; {{ e.trade_count }} trades</div>
     </div>
     {% endfor %}
   </div>
   {% endif %}
 
-  <!-- FULL TABLE -->
+  <!-- TABLE -->
   <div class="table-wrap">
     <table class="lb-table">
       <thead>
         <tr>
           <th>Rank</th>
           <th>Wallet</th>
-          <th>Total PnL (SOL)</th>
+          <th>Total PNL</th>
           <th>Win Rate</th>
           <th>Trades</th>
           <th>Best Trade</th>
@@ -264,59 +216,37 @@ a.hdr-btn.active{border-color:var(--yellow);color:var(--yellow);background:rgba(
       </thead>
       <tbody>
         {% for e in entries %}
-        {% if e.is_me %}
-        <tr class="row-me">
-        {% elif e.rank == 1 %}
-        <tr class="row-gold">
-        {% elif e.rank == 2 %}
-        <tr class="row-silver">
-        {% elif e.rank == 3 %}
-        <tr class="row-bronze">
-        {% else %}
-        <tr>
-        {% endif %}
-          <td class="rank-cell{% if e.rank == 1 %} r1{% elif e.rank == 2 %} r2{% elif e.rank == 3 %} r3{% endif %}">
-            {% if e.rank == 1 %}🥇
-            {% elif e.rank == 2 %}🥈
-            {% elif e.rank == 3 %}🥉
-            {% else %}{{ e.rank }}{% endif %}
+        <tr class="{% if e.is_me %}row-me{% elif e.rank == 1 %}row-gold{% elif e.rank == 2 %}row-silver{% elif e.rank == 3 %}row-bronze{% endif %}">
+          <td class="td-rank{% if e.rank == 1 %} top1{% elif e.rank == 2 %} top2{% elif e.rank == 3 %} top3{% endif %}">
+            {%- if e.rank == 1 %}🥇{%- elif e.rank == 2 %}🥈{%- elif e.rank == 3 %}🥉{%- else %}{{ e.rank }}{%- endif %}
           </td>
           <td>
-            <span class="td-wallet {{ 'is-me' if e.is_me else '' }}">{{ e.wallet }}</span>
-            {% if e.is_me %}<span class="me-badge">YOU</span>{% endif %}
-            {% if e.badges %}
-            <div class="badges-row" style="margin-top:5px;gap:3px">
-              {% for b in e.badges %}
-              <span class="badge-pill earned" style="font-size:9px;padding:2px 6px">{{ b }}</span>
-              {% endfor %}
-            </div>
-            {% endif %}
+            <span class="td-wallet{{ ' is-me' if e.is_me else '' }}">{{ e.wallet }}</span>
+            {% if e.is_me %}<span class="me-chip">YOU</span>{% endif %}
           </td>
-          <td class="{{ 'td-pnl-pos' if e.total_pnl >= 0 else 'td-pnl-neg' }}">
-            {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f' | format(e.total_pnl) }}
+          <td class="td-pnl {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
+            {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }}
           </td>
-          <td class="{{ 'td-wr-pos' if e.win_rate >= 50 else 'td-wr-neg' }}">{{ '%.1f' | format(e.win_rate) }}%</td>
-          <td style="color:var(--dim)">{{ e.trade_count }}</td>
-          <td class="td-best">{{ '+' if e.best_trade >= 0 else '' }}{{ '%.4f' | format(e.best_trade) }}</td>
+          <td class="td-wr {{ 'pos' if e.win_rate >= 50 else 'neg' }}">{{ '%.1f'|format(e.win_rate) }}%</td>
+          <td class="td-num">{{ e.trade_count }}</td>
+          <td class="td-best">+{{ '%.4f'|format(e.best_trade) }}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </div>
 
-  {% else %}
+{% else %}
 
-  <!-- EMPTY STATE -->
-  <div class="empty-state">
-    <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
-      <path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
-    </svg>
-    No trades recorded yet.<br>
-    Start the bot and your first trade will appear here.
+  <!-- EMPTY -->
+  <div class="empty">
+    <div class="empty-icon">🏆</div>
+    No trades on the board yet.<br>
+    Start the bot — your first trade will appear here.
   </div>
 
-  {% endif %}
+{% endif %}
 
-</div><!-- /page-wrap -->
+</div><!-- /page -->
 </body>
 </html>
