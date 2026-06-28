@@ -1679,7 +1679,9 @@ def score_token(data: dict) -> tuple:
     if liq < 5_000:
         penalties += 4.0;  risk_flags.append('VERY LOW LIQ')
     elif liq < 15_000:
-        penalties += 2.0;  risk_flags.append('LOW LIQ')
+        penalties += 1.5;  risk_flags.append('LOW LIQ')
+    elif liq < 50_000:
+        penalties += 0.5;  risk_flags.append('LOW LIQ')
     if 0 < activity < 100:
         penalties += 1.0;  risk_flags.append('FEW TRADERS')
     if fdv > 0 and liq > 0 and fdv / liq > 100:
@@ -2153,7 +2155,7 @@ def user_trader_loop(stop_event, config, wallet: str):
     take_profit      = TAKE_PROFIT
     stop_loss        = STOP_LOSS
     crash_exit       = CRASH_EXIT
-    m5_min           = 15   # entry threshold: change5m OR change1h must hit this
+    m5_min           = 8    # entry threshold: change5m OR change1h must hit this
     m5_max           = None
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
@@ -2175,7 +2177,7 @@ def user_trader_loop(stop_event, config, wallet: str):
     _m5_desc = ('≥' + str(m5_min) + '%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
     print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
     print(f'[trader] STRATEGY SETTINGS:', flush=True)
-    print(f'[trader]   entry  : change5m >= {m5_min}% OR change1h >= {m5_min}% (plus 1h < 50% exhaustion guard)', flush=True)
+    print(f'[trader]   entry  : change5m >= {m5_min}% OR change1h >= {m5_min}% + vol rising + not reversing >5%', flush=True)
     print(f'[trader]   TP     : +{round(take_profit*100)}%', flush=True)
     print(f'[trader]   SL     : -{round(stop_loss*100)}%', flush=True)
     print(f'[trader]   exit   : {round(EXIT_PERCENTAGE*100)}% of position', flush=True)
@@ -2404,7 +2406,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _snap = _price_snapshots.get(_t['mint'])
                         _reversing = bool(
                             _snap and
-                            _t['price'] < _snap['price'] * 0.98
+                            _t['price'] < _snap['price'] * 0.95
                         )
                         _cd_exp  = cooldown_tokens.get(_tsym)
                         _cooling = bool(_cd_exp and _now_cd < _cd_exp)
@@ -2431,11 +2433,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
                                  str(total_live) + ' qualify (' + _m5_desc + ' 5m OR 1h + vol rising + not reversing)')
-                    print(f'[scan] entry threshold: {m5_min}% 5m OR 1h — {len(qualifying)}/{len(not_held)} qualify', flush=True)
-                    if not qualifying and _skip_log:
-                        print(f'[qualify] {short} 0/{len(not_held)} — skip reasons:', flush=True)
-                        for _sl in _skip_log:
-                            print(f'  {_sl}', flush=True)
+                    print(f'[scan] threshold={m5_min}% — {len(qualifying)}/{len(not_held)} qualify — top skips:', flush=True)
+                    for _sl in _skip_log[:5]:
+                        print(f'  {_sl}', flush=True)
+                    if qualifying:
+                        for _qt in qualifying[:3]:
+                            print(f'  [qualify] {_qt.get("symbol","")} score={_qt.get("score",0)} '
+                                  f'5m={round(_qt.get("change5m",0),1)}% 1h={round(_qt.get("change1h",0),1)}%', flush=True)
                     if qualifying:
                         best  = qualifying[0]
                         bmint = best['mint']
