@@ -1407,39 +1407,9 @@ def fetch_user_balances(wallet: str):
     us['balance_fetched_at'] = time.time()
 
 def _autostart_if_ready(wallet: str):
-    """Fetch SOL balance then auto-start the trader if key + balance conditions are met.
-    Runs in a daemon thread on every wallet connect so reconnects re-evaluate eligibility."""
+    """Disabled — bot must be started manually via /api/bot/start.
+    Kept as a no-op so any lingering call sites are safe."""
     fetch_user_balances(wallet)
-    us = get_user_state(wallet)
-    if us.get('trader_running'):
-        return
-    if _sec_check_state.get('trading_paused'):
-        return
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        row  = conn.execute(
-            'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
-        ).fetchone()
-        conn.close()
-    except Exception:
-        return
-    if not row or not row[0]:
-        return
-    sol = us.get('sol', 0.0)
-    if sol < 0.05:
-        return
-    with _trader_lock:
-        if us.get('trader_running'):  # double-check under lock
-            return
-        us['trader_stop']   = threading.Event()
-        us['trader_thread'] = threading.Thread(
-            target=user_trader_loop, args=(us['trader_stop'], {}, wallet), daemon=True
-        )
-        us['trader_thread'].start()
-        us['trader_running'] = True
-    short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    add_user_log(wallet, '[auto-start] ' + short + ' bot started automatically')
-    print('[auto-start] ' + short + ' bot started automatically (sol=' + str(round(sol, 4)) + ')', flush=True)
 
 # ── TOKEN DISCOVERY ──
 TOTD_INTERVAL = 900  # 15 minutes
@@ -3636,7 +3606,7 @@ def set_wallet():
         try:
             get_or_create_user(address)
         except: pass
-        threading.Thread(target=_autostart_if_ready, args=(address,), daemon=True).start()
+        threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])
         # Multi-IP detection: same wallet from 3+ IPs in 1 h → CRITICAL alert + pause trader
         threading.Thread(target=_check_wallet_multi_ip, args=(address, ip), daemon=True).start()
@@ -6742,6 +6712,53 @@ def stop_trader():
         us['trader_stop'].set()
     us['trader_running'] = False
     return jsonify({'ok': True})
+
+# ── /api/bot/start + /api/bot/stop — canonical manual-start routes ────────────
+@app.route('/api/bot/start', methods=['POST'])
+@rate_limit(5, 60)
+def bot_start():
+    ip     = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        kr   = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        conn.close()
+    except Exception as e:
+        print(f'[bot/start] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Internal error'}), 500
+    if not kr or not kr[0]:
+        return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    if _sec_check_state.get('trading_paused'):
+        return jsonify({'ok': False, 'msg': 'Trading suspended — security check failure'}), 503
+    with _trader_lock:
+        us = get_user_state(wallet)
+        if us['trader_running']:
+            return jsonify({'ok': True, 'status': 'running'})
+        config = request.json or {}
+        us['trader_stop']   = threading.Event()
+        us['trader_thread'] = threading.Thread(target=user_trader_loop, args=(us['trader_stop'], config, wallet), daemon=True)
+        us['trader_thread'].start()
+        us['trader_running'] = True
+    short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    print(f'[bot/start] {short} manually started', flush=True)
+    return jsonify({'ok': True, 'status': 'running'})
+
+@app.route('/api/bot/stop', methods=['POST'])
+@rate_limit(10, 60)
+def bot_stop():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    us = get_user_state(wallet)
+    if us.get('trader_stop'):
+        us['trader_stop'].set()
+    us['trader_running'] = False
+    short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    print(f'[bot/stop] {short} manually stopped', flush=True)
+    return jsonify({'ok': True, 'status': 'stopped'})
 
 @app.route('/api/bot/status', methods=['GET'])
 @rate_limit(60, 60)

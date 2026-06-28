@@ -6756,7 +6756,7 @@ async function _botToggle(){
   var btn=document.getElementById('bot-toggle-btn')
   if(btn){btn.disabled=true;btn.textContent=_botRunning?'Stopping…':'Starting…'}
   try{
-    var url=_botRunning?'/api/trader/stop':'/api/trader/start'
+    var url=_botRunning?'/api/bot/stop':'/api/bot/start'
     var r=await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:'{}'})
     var d=await r.json()
     if(d.ok||d.success){
