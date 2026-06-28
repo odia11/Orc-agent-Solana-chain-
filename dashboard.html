@@ -355,7 +355,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* ── FEED LAYOUT ── */
 .feed-hdr{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
 .feed-hdr-top{display:flex;align-items:center;gap:10px;padding:16px 20px 12px}
-.feed-hdr-title{font-size:18px;font-weight:700;color:var(--text);flex:1;letter-spacing:-.02em}
+.feed-hdr-title-wrap{display:flex;flex-direction:column;gap:2px;flex:1}
+.feed-hdr-title{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.feed-hdr-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:-.01em;line-height:1.4}
 .feed-live-pill{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
 .feed-live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
 .feed-tabs{display:flex;padding:0 20px;gap:0}
@@ -3460,7 +3462,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- FEED STICKY HEADER -->
   <div class="feed-hdr">
     <div class="feed-hdr-top">
-      <h1 class="feed-hdr-title">Home</h1>
+      <div class="feed-hdr-title-wrap">
+        <h1 class="feed-hdr-title">Home</h1>
+        <div class="feed-hdr-sub"><span id="feed-online-count">—</span> traders online · scanner running</div>
+      </div>
       <div class="feed-live-pill"><span class="feed-live-dot"></span>LIVE</div>
     </div>
     <div class="feed-tabs">
@@ -3468,6 +3473,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <button class="feed-tab" onclick="_feedTab(this,'following')">Following</button>
       <button class="feed-tab" onclick="_feedTab(this,'livetrades')">Live Trades</button>
     </div>
+  </div>
+
+  <!-- BOT STATUS CARD -->
+  <div class="feed-bot-card">
+    <div class="feed-bot-left">
+      <div class="feed-bot-dot" id="feed-bot-dot"></div>
+      <div class="feed-bot-text-wrap">
+        <div class="feed-bot-status-text" id="feed-bot-status-text">Your bot is idle</div>
+        <div class="feed-bot-sub">Configure strategy in Settings to auto-trade</div>
+      </div>
+    </div>
+    <button class="feed-bot-btn" id="feed-trade-btn" onclick="_botToggle()">▶ Start Trading</button>
   </div>
 
   <!-- COMPOSER -->
@@ -7981,8 +7998,13 @@ function renderLeaderboard(entries){
 
 async function fetchLeaderboard(){
   if(!appVisible()) return;
-  const r=await fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null);
+  const [r,ps]=await Promise.all([
+    fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
+    fetch('/api/platform/stats').then(r=>r.json()).catch(()=>null)
+  ]);
   if(Array.isArray(r)) renderLeaderboard(r);
+  const _foc=document.getElementById('feed-online-count');
+  if(_foc&&ps&&ps.ok) _foc.textContent=ps.active_traders??'—';
   _lbStartCountdown();
 }
 
