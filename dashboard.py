@@ -41,10 +41,6 @@ app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
 app.config['SESSION_COOKIE_PATH']       = '/'
-# Dot-prefixed domain: cookie is valid for both orcagent.fun and www.orcagent.fun.
-# Only set in production — omitting it on localhost lets Flask default to 127.0.0.1.
-if os.getenv('RAILWAY_ENVIRONMENT'):
-    app.config['SESSION_COOKIE_DOMAIN'] = '.orcagent.fun'
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 @app.template_filter('fmtk')
@@ -132,8 +128,10 @@ def _csrf_check():
     origin = request.headers.get('Origin', '')
     if origin:
         host = request.headers.get('Host', '') or ''
-        host_bare = host.split(':')[0]
-        origin_bare = origin.split('//')[-1].split(':')[0]
+        # Strip www. from both sides before comparing so that a browser on
+        # www.orcagent.fun posting to orcagent.fun (after redirect) still passes.
+        host_bare   = host.split(':')[0].removeprefix('www.')
+        origin_bare = origin.split('//')[-1].split(':')[0].removeprefix('www.')
         if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
             return jsonify({'error': 'CSRF check failed'}), 403
     # ── 2. CSRF token for authenticated sessions ──────────────────────────────
@@ -141,6 +139,11 @@ def _csrf_check():
         tok = (request.headers.get('X-CSRF-Token', '') or
                request.headers.get('X-CSRFToken', '') or
                (request.get_json(silent=True) or {}).get('csrf_token', ''))
+        # If session has no csrf_token yet (pre-dates CSRF system, or old cookie
+        # without the token), generate one now and let this request through.
+        # Origin + client-secret checks above already validated the caller.
+        if not session.get('csrf_token'):
+            session['csrf_token'] = secrets.token_hex(32)
         if not _validate_csrf(tok):
             _log_security_event('csrf_fail', session.get('wallet', 'unknown'),
                                 f'bad/missing token on {request.path}')
