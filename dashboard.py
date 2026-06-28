@@ -782,6 +782,10 @@ def init_db():
         c.execute('ALTER TABLE trades ADD COLUMN mint_address TEXT DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
+    try:
+        c.execute("ALTER TABLE trades ADD COLUMN source TEXT DEFAULT 'bot'")
+    except sqlite3.OperationalError:
+        pass
     c.execute('''CREATE TABLE IF NOT EXISTS follows (
         follower_id  INTEGER NOT NULL,
         following_id INTEGER NOT NULL,
@@ -3110,6 +3114,7 @@ def leaderboard():
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
+              AND (t.source = \'manual\' OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
             ORDER BY total_pnl DESC
             LIMIT 50
@@ -3888,6 +3893,7 @@ def get_leaderboard():
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE date(t.timestamp) = date('now')
+              AND (t.source = 'manual' OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
             ORDER BY total_pnl DESC
             LIMIT 10
@@ -4344,10 +4350,10 @@ def api_instant_trade():
                 now = datetime.datetime.utcnow().isoformat()
                 conn.execute(
                     'INSERT INTO trades '
-                    '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address) '
-                    'VALUES (?,?,?,?,?,?,?,?,?)',
+                    '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address, source) '
+                    'VALUES (?,?,?,?,?,?,?,?,?,?)',
                     (uid, symbol, 0, 0, amount_sol if side == 'buy' else 0,
-                     0, 0, now, token_address)
+                     0, 0, now, token_address, 'manual')
                 )
                 if side == 'buy':
                     # Fetch current token price for avg_price tracking
