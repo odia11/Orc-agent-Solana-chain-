@@ -909,6 +909,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN webauthn_ready INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL",
         "ALTER TABLE user_tokens ADD COLUMN avg_price REAL NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN copy_amount REAL DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -2494,7 +2495,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
             conn = sqlite3.connect(DB_FILE)
             try:
                 rows = conn.execute(
-                    'SELECT wallet_address, encrypted_private_key, min_trade_size FROM users '
+                    'SELECT wallet_address, encrypted_private_key, min_trade_size, copy_amount FROM users '
                     'WHERE copy_source=? AND encrypted_private_key != "" AND encrypted_private_key IS NOT NULL',
                     (buyer_wallet,)
                 ).fetchall()
@@ -2504,7 +2505,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
             print(f'[copy-trade] DB error: {e}', flush=True)
             return
 
-        for c_wallet, c_enc, c_min_usdc in rows:
+        for c_wallet, c_enc, c_min_usdc, c_copy_amount in rows:
             try:
                 c_short = c_wallet[:6] + '...' + c_wallet[-4:]
                 c_us    = get_user_state(c_wallet)
@@ -2529,8 +2530,11 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                     add_user_log(c_wallet, f'[copy] Skip {symbol}: insufficient SOL ({c_sol})')
                     continue
 
-                min_spend_sol = (float(c_min_usdc or 1.0) / _sol_price_usd) if _sol_price_usd > 0 else 0.02
-                spend = round(min(min_spend_sol, c_sol * 0.5), 4)
+                if c_copy_amount and float(c_copy_amount) > 0:
+                    spend = round(min(float(c_copy_amount), c_sol * 0.9), 4)
+                else:
+                    min_spend_sol = (float(c_min_usdc or 1.0) / _sol_price_usd) if _sol_price_usd > 0 else 0.02
+                    spend = round(min(min_spend_sol, c_sol * 0.5), 4)
                 if spend < 0.001:
                     continue
 
@@ -3200,6 +3204,44 @@ def api_copy_trade_stop():
     return jsonify({'ok': True})
 
 
+@app.route('/api/copy-trade/toggle', methods=['POST'])
+@rate_limit(20, 60)
+def api_copy_trade_toggle():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    body       = request.get_json(silent=True) or {}
+    target     = str(body.get('target_wallet', '')).strip()
+    amount_sol = body.get('amount_sol', 0.1)
+    if not is_valid_solana_address(target):
+        return jsonify({'ok': False, 'msg': 'Invalid target wallet'}), 400
+    if target == wallet:
+        return jsonify({'ok': False, 'msg': 'Cannot copy yourself'}), 400
+    try:
+        amount_sol = round(float(amount_sol), 4)
+        if amount_sol <= 0 or amount_sol > 100:
+            return jsonify({'ok': False, 'msg': 'Amount must be between 0.01 and 100 SOL'}), 400
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT copy_source FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        currently_copying_target = row and row[0] == target
+        if currently_copying_target:
+            conn.execute('UPDATE users SET copy_source=NULL, copy_amount=NULL WHERE wallet_address=?', (wallet,))
+            conn.commit()
+            print(f'[copy-trade] {wallet[:8]}… stopped copying {target[:8]}…', flush=True)
+            return jsonify({'ok': True, 'copying': False})
+        else:
+            conn.execute('UPDATE users SET copy_source=?, copy_amount=? WHERE wallet_address=?',
+                         (target, amount_sol, wallet))
+            conn.commit()
+            print(f'[copy-trade] {wallet[:8]}… now copying {target[:8]}… at {amount_sol} SOL/trade', flush=True)
+            return jsonify({'ok': True, 'copying': True, 'amount_sol': amount_sol})
+    finally:
+        conn.close()
+
+
 @app.route('/api/copy-trade/status', methods=['GET'])
 @rate_limit(60, 60)
 def api_copy_trade_status():
@@ -3232,14 +3274,15 @@ def traders():
     session_wallet = _current_wallet()
     entries        = []
     following_ids  = set()
+    my_copy_source = None   # wallet address the session user is currently copying
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        # Resolve current user's id and who they follow
+        # Resolve current user's id, follow list, and active copy source
         if session_wallet:
-            row = c.execute('SELECT id FROM users WHERE wallet_address=?', (session_wallet,)).fetchone()
+            row = c.execute('SELECT id, copy_source FROM users WHERE wallet_address=?', (session_wallet,)).fetchone()
             if row:
-                me_id = row[0]
+                me_id, my_copy_source = row[0], row[1]
                 frows = c.execute('SELECT following_id FROM follows WHERE follower_id=?', (me_id,)).fetchall()
                 following_ids = {r[0] for r in frows}
         c.execute('''
@@ -3301,6 +3344,7 @@ def traders():
             'week_pnl':       round(float(week_pnl        or 0), 4),
             'is_me':          bool(session_wallet and wallet == session_wallet),
             'is_following':   int(uid) in following_ids,
+            'is_copying':     bool(my_copy_source and my_copy_source == wallet),
         })
     wallet_short = ((session_wallet[:4] + '…' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')

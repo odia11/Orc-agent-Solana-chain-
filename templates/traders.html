@@ -181,6 +181,52 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
 .empty-sub{font-size:13px;color:var(--muted)}
 
+/* ─── COPY MODAL ────────────────────────── */
+.modal-backdrop{
+  display:none;position:fixed;inset:0;z-index:300;
+  background:rgba(0,0,0,.72);
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  align-items:center;justify-content:center;padding:20px;
+}
+.modal-backdrop.open{display:flex}
+.modal{
+  background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:28px 24px 24px;width:100%;max-width:380px;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);
+  display:flex;flex-direction:column;gap:20px;
+  animation:modal-in .18s ease;
+}
+@keyframes modal-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
+.modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.modal-title{font-size:16px;font-weight:700;color:var(--text)}
+.modal-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0;flex-shrink:0;margin-top:-2px}
+.modal-close:hover{color:var(--text)}
+.modal-desc{font-size:13px;color:var(--sub);line-height:1.55}
+.modal-desc strong{color:var(--text)}
+.modal-field{display:flex;flex-direction:column;gap:6px}
+.modal-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
+.modal-inp-wrap{position:relative}
+.modal-inp{
+  width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;
+  padding:10px 44px 10px 14px;font-size:15px;font-family:var(--mono);font-weight:700;
+  color:var(--text);outline:none;transition:border-color .15s;
+}
+.modal-inp:focus{border-color:var(--accent)}
+.modal-inp-unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted);pointer-events:none;font-family:var(--mono)}
+.modal-hint{font-size:11px;color:var(--muted)}
+.modal-actions{display:flex;gap:8px}
+.modal-btn{
+  flex:1;padding:11px;border-radius:10px;font-size:13px;font-weight:700;
+  font-family:var(--ui);cursor:pointer;border:1px solid var(--border);
+  background:transparent;color:var(--sub);transition:all .15s;
+}
+.modal-btn:hover{border-color:var(--sub);color:var(--text)}
+.modal-btn.primary{background:var(--accent);border-color:var(--accent);color:#06100f}
+.modal-btn.primary:hover{opacity:.9}
+.modal-btn.primary:disabled{opacity:.5;cursor:not-allowed}
+.modal-btn.danger{border-color:rgba(247,107,98,.4);color:var(--red)}
+.modal-btn.danger:hover{background:rgba(247,107,98,.08)}
+
 /* ─── TOAST ─────────────────────────────── */
 .toast{
   position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
@@ -351,11 +397,11 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
                   {% if not logged_in %}title="Connect wallet to follow"{% endif %}>
             {{ '✓ Following' if e.is_following else '+ Follow' }}
           </button>
-          <button class="btn btn-copy"
+          <button class="btn btn-copy{% if e.is_copying %} copying{% endif %}"
                   id="copy-{{ e.user_id }}"
-                  onclick="_copyTrade('{{ e.wallet }}', {{ e.user_id }}, this)"
+                  onclick="_openCopyModal('{{ e.wallet }}','{{ e.username|replace("'","\\'") }}',{{ e.user_id }},this)"
                   {% if not logged_in %}title="Connect wallet to copy"{% endif %}>
-            Copy
+            {{ '✓ Copying' if e.is_copying else 'Copy' }}
           </button>
           {% else %}
           <a href="/profile" class="btn" style="text-decoration:none">My Profile</a>
@@ -377,6 +423,35 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 
 </div>
 
+<!-- COPY MODAL -->
+<div class="modal-backdrop" id="copy-modal-backdrop" onclick="_closeCopyModal(event)">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Copy Trading</div>
+      <button class="modal-close" onclick="_closeCopyModal()" aria-label="Close">✕</button>
+    </div>
+    <div class="modal-desc" id="modal-desc">
+      When <strong id="modal-username"></strong> opens a trade, you automatically mirror it.
+    </div>
+    <div class="modal-field" id="modal-amount-field">
+      <label class="modal-label" for="modal-sol-inp">Amount per trade</label>
+      <div class="modal-inp-wrap">
+        <input class="modal-inp" id="modal-sol-inp" type="number"
+               min="0.01" max="100" step="0.01" value="0.1"
+               placeholder="0.1">
+        <span class="modal-inp-unit">SOL</span>
+      </div>
+      <div class="modal-hint" id="modal-hint">Each mirrored trade will spend this amount of SOL.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="modal-btn" onclick="_closeCopyModal()">Cancel</button>
+      <button class="modal-btn primary" id="modal-confirm-btn" onclick="_confirmCopy()">
+        Start Copying
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -384,6 +459,9 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 var _loggedIn = {{ 'true' if logged_in else 'false' }};
 var _allCards = Array.from(document.querySelectorAll('.card'));
 var _activeTab = 'all';
+
+/* ── Copy modal state ─────────────────── */
+var _copyModal = { wallet: null, userId: null, btn: null, stopping: false };
 
 /* ── Filter / search ───────────────────── */
 function _setTab(btn){
@@ -430,10 +508,8 @@ function _toggleFollow(userId, btn){
     var isNow = d.following;
     btn.textContent = isNow ? '✓ Following' : '+ Follow';
     btn.classList.toggle('following', isNow);
-    /* update data-following on parent card for filter */
     var card = btn.closest('.card');
     if(card) card.dataset.following = isNow ? '1' : '0';
-    /* update follower count */
     var fEl = card ? card.querySelector('.followers-n') : null;
     if(fEl){
       var cur = parseInt(fEl.textContent || '0', 10);
@@ -444,43 +520,101 @@ function _toggleFollow(userId, btn){
   .catch(function(){ btn.disabled = false; _toast('Network error', 'err'); });
 }
 
-/* ── Copy trade ─────────────────────────── */
-function _copyTrade(wallet, userId, btn){
+/* ── Copy trade modal ──────────────────── */
+function _openCopyModal(wallet, username, userId, btn){
   if(!_loggedIn){ _toast('Connect your wallet to copy trades', 'err'); return; }
-  var copying = btn.classList.contains('copying');
-  btn.disabled = true;
-  if(copying){
-    fetch('/api/copy-trade/stop', { method:'POST', credentials:'include' })
-    .then(function(r){ return r.json(); })
-    .then(function(d){
-      btn.disabled = false;
-      if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
-      btn.textContent = 'Copy';
-      btn.classList.remove('copying');
-      _toast('Copy trade stopped', 'ok');
-    })
-    .catch(function(){ btn.disabled = false; _toast('Network error', 'err'); });
+  var isCopying = btn.classList.contains('copying');
+  _copyModal = { wallet: wallet, userId: userId, btn: btn, stopping: isCopying };
+
+  document.getElementById('modal-username').textContent = username;
+  var confirmBtn = document.getElementById('modal-confirm-btn');
+  var amountField = document.getElementById('modal-amount-field');
+  var hint = document.getElementById('modal-hint');
+
+  if(isCopying){
+    /* already copying — show stop confirmation */
+    document.getElementById('modal-desc').innerHTML =
+      'Stop copying <strong>' + username + '</strong>? No new trades will be mirrored.';
+    amountField.style.display = 'none';
+    confirmBtn.textContent = 'Stop Copying';
+    confirmBtn.className = 'modal-btn danger';
   } else {
-    fetch('/api/copy-trade', {
+    document.getElementById('modal-desc').innerHTML =
+      'When <strong>' + username + '</strong> opens a trade, you automatically mirror it with the amount below.';
+    amountField.style.display = '';
+    document.getElementById('modal-sol-inp').value = '0.1';
+    confirmBtn.textContent = 'Start Copying';
+    confirmBtn.className = 'modal-btn primary';
+    hint.textContent = 'Each mirrored trade will spend this amount of SOL.';
+  }
+
+  document.getElementById('copy-modal-backdrop').classList.add('open');
+  if(!isCopying) document.getElementById('modal-sol-inp').focus();
+}
+
+function _closeCopyModal(e){
+  if(e && e.target !== document.getElementById('copy-modal-backdrop')) return;
+  document.getElementById('copy-modal-backdrop').classList.remove('open');
+}
+
+function _confirmCopy(){
+  var confirmBtn = document.getElementById('modal-confirm-btn');
+  confirmBtn.disabled = true;
+  var m = _copyModal;
+
+  if(m.stopping){
+    fetch('/api/copy-trade/toggle', {
       method:'POST', credentials:'include',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({target_wallet: wallet})
+      body: JSON.stringify({ target_wallet: m.wallet, amount_sol: 0 })
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
-      btn.disabled = false;
+      confirmBtn.disabled = false;
       if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
-      /* clear any previous copy buttons */
+      document.getElementById('copy-modal-backdrop').classList.remove('open');
+      m.btn.textContent = 'Copy';
+      m.btn.classList.remove('copying');
+      /* clear all other copying states */
       document.querySelectorAll('.btn-copy.copying').forEach(function(b){
-        if(b !== btn){ b.textContent = 'Copy'; b.classList.remove('copying'); }
+        if(b !== m.btn){ b.textContent = 'Copy'; b.classList.remove('copying'); }
       });
-      btn.textContent = '✓ Copying';
-      btn.classList.add('copying');
-      _toast('Now copying this trader', 'ok');
+      _toast('Copy trading stopped', 'ok');
     })
-    .catch(function(){ btn.disabled = false; _toast('Network error', 'err'); });
+    .catch(function(){ confirmBtn.disabled = false; _toast('Network error', 'err'); });
+  } else {
+    var raw = parseFloat(document.getElementById('modal-sol-inp').value);
+    if(!raw || raw < 0.01 || raw > 100){
+      _toast('Enter a valid amount (0.01 – 100 SOL)', 'err');
+      confirmBtn.disabled = false;
+      return;
+    }
+    fetch('/api/copy-trade/toggle', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ target_wallet: m.wallet, amount_sol: raw })
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      confirmBtn.disabled = false;
+      if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
+      document.getElementById('copy-modal-backdrop').classList.remove('open');
+      /* clear previous copying button */
+      document.querySelectorAll('.btn-copy.copying').forEach(function(b){
+        b.textContent = 'Copy'; b.classList.remove('copying');
+      });
+      m.btn.textContent = '✓ Copying';
+      m.btn.classList.add('copying');
+      _toast('Now copying — ' + raw + ' SOL per trade', 'ok');
+    })
+    .catch(function(){ confirmBtn.disabled = false; _toast('Network error', 'err'); });
   }
 }
+
+/* close modal on Escape */
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') document.getElementById('copy-modal-backdrop').classList.remove('open');
+});
 
 /* ── Toast ──────────────────────────────── */
 var _toastTimer;
