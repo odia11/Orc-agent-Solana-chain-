@@ -4300,14 +4300,18 @@ function _phantomMobileV1Connect(){
   }
   try{
     var kp=nacl.box.keyPair();
+    var _skB58=_b58enc(kp.secretKey);
+    // Store in both storages as best-effort fallback (may not survive Phantom's WebView)
     var _skJson=JSON.stringify(Array.from(kp.secretKey));
-    try{ localStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){ console.warn('[phantom] localStorage write failed:',e); }
-    try{ sessionStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){ console.warn('[phantom] sessionStorage write failed:',e); }
-    console.log('[phantom] dapp keypair stored, pubkey='+_b58enc(kp.publicKey));
+    try{ localStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){}
+    try{ sessionStorage.setItem('_phantom_dapp_sk',_skJson); }catch(e){}
+    // Primary fix: embed SK in redirect_link — Phantom preserves all params on callback
+    var _cbUrl='https://orcagent.fun/phantom-callback?sk='+encodeURIComponent(_skB58);
+    console.log('[phantom] keypair generated, embedding sk in redirect_link');
     var params=new URLSearchParams({
       app_url:'https://orcagent.fun',
       dapp_encryption_public_key:_b58enc(kp.publicKey),
-      redirect_link:'https://orcagent.fun/phantom-callback',
+      redirect_link:_cbUrl,
       cluster:'mainnet-beta'
     });
     window.location.href='https://phantom.app/ul/v1/connect?'+params.toString();

@@ -51,8 +51,10 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
   var _lsSk=null,_ssSk=null;
   try{ _lsSk=localStorage.getItem('_phantom_dapp_sk'); }catch(e){ console.warn('[phantom-cb] localStorage unavailable:',e); }
   try{ _ssSk=sessionStorage.getItem('_phantom_dapp_sk'); }catch(e){ console.warn('[phantom-cb] sessionStorage unavailable:',e); }
-  console.log('[phantom-cb] localStorage._phantom_dapp_sk:', _lsSk?'present ('+JSON.parse(_lsSk).length+' bytes)':'MISSING');
-  console.log('[phantom-cb] sessionStorage._phantom_dapp_sk:', _ssSk?'present ('+JSON.parse(_ssSk).length+' bytes)':'MISSING');
+  console.log('[phantom-cb] localStorage._phantom_dapp_sk:', _lsSk?'present':'MISSING');
+  console.log('[phantom-cb] sessionStorage._phantom_dapp_sk:', _ssSk?'present':'MISSING');
+  var _urlSkB58=p.get('sk');
+  console.log('[phantom-cb] sk in URL param:', _urlSkB58?'present ('+_urlSkB58.length+' chars)':'MISSING');
 
   // Parse callback params from URL
   var errCode=p.get('errorCode');
@@ -71,13 +73,21 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
   console.log('[phantom-cb] has data:', !!dataB58);
   if(!phantomPubB58||!nonceB58||!dataB58){ fail('Invalid callback — missing parameters. Please try again.'); return; }
 
-  // Retrieve dapp secret key — try localStorage first, fall back to sessionStorage
-  var dappSkJson=_lsSk||_ssSk;
-  console.log('[phantom-cb] dappSkJson source:', _lsSk?'localStorage':_ssSk?'sessionStorage':'NONE');
-  if(!dappSkJson){ fail('Session expired — please try connecting again.'); return; }
+  // Retrieve dapp secret key — URL param is primary (survives Phantom WebView context switch)
+  // Storage fallbacks are best-effort for desktop browsers where context is shared
+  var dappSk=null;
+  if(_urlSkB58){
+    console.log('[phantom-cb] using sk from URL param');
+    try{ dappSk=new Uint8Array(b58dec(_urlSkB58)); }catch(e){ console.error('[phantom-cb] b58dec sk failed:',e); }
+  }
+  if(!dappSk){
+    var _fallbackJson=_lsSk||_ssSk;
+    console.log('[phantom-cb] URL sk failed/missing — trying storage:', _fallbackJson?'found':'NONE');
+    if(!_fallbackJson){ fail('Session expired — please try connecting again.'); return; }
+    try{ dappSk=new Uint8Array(JSON.parse(_fallbackJson)); }catch(e){ fail('Session data corrupted — please try again.'); return; }
+  }
 
   try{
-    var dappSk=new Uint8Array(JSON.parse(dappSkJson));
     var phantomPub=b58dec(phantomPubB58);
     var nonce=b58dec(nonceB58);
     var data=b58dec(dataB58);
