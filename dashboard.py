@@ -160,7 +160,7 @@ HEARTBEAT_FILE = os.path.join(_DATA_DIR, 'heartbeat.txt')
 _APP_START     = time.time()
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
-TAKE_PROFIT     = 0.12   # 12% — universal take profit
+TAKE_PROFIT     = 0.05   # 5%  — universal take profit
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
@@ -2153,7 +2153,7 @@ def user_trader_loop(stop_event, config, wallet: str):
     take_profit      = TAKE_PROFIT
     stop_loss        = STOP_LOSS
     crash_exit       = CRASH_EXIT
-    m5_min           = 5
+    m5_min           = 15   # entry threshold: change5m OR change1h must hit this
     m5_max           = None
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
@@ -2174,9 +2174,15 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     _m5_desc = ('≥' + str(m5_min) + '%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
     print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
+    print(f'[trader] STRATEGY SETTINGS:', flush=True)
+    print(f'[trader]   entry  : change5m >= {m5_min}% OR change1h >= {m5_min}% (plus 1h < 50% exhaustion guard)', flush=True)
+    print(f'[trader]   TP     : +{round(take_profit*100)}%', flush=True)
+    print(f'[trader]   SL     : -{round(stop_loss*100)}%', flush=True)
+    print(f'[trader]   exit   : {round(EXIT_PERCENTAGE*100)}% of position', flush=True)
+    print(f'[trader]   max pos: 5  |  scan interval: 30s', flush=True)
     add_user_log(wallet, '[' + short + '] Trader started — TP:+' + str(round(take_profit*100)) +
                  '% SL:-' + str(round(stop_loss*100)) +
-                 '% | momentum ' + _m5_desc + ' in 5m + not reversing | max 5 pos | scan 30s')
+                 '% | entry: ' + _m5_desc + ' 5m OR 1h + not reversing | max 5 pos | scan 30s')
     positions = us['positions']
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
@@ -2389,10 +2395,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _dex  = _t.get('dexId', '') or ''
                         _sc   = _t.get('score', 0)
                         _m5   = _t.get('change5m', 0)
+                        _h1   = _t.get('change1h', 0)
                         _v5m  = _t.get('volume5m', 0)
                         _v1h  = _t.get('volume1h', 0)
                         _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
-                        _m5_ok = (_m5 >= m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max)
+                        _m5_ok = (_m5 >= m5_min or _h1 >= m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max or m5_min <= _h1 <= m5_max)
                         _snap = _price_snapshots.get(_t['mint'])
                         _reversing = bool(
                             _snap and
@@ -2405,7 +2412,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                             _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < 5.0)')
                             continue
                         if not _m5_ok:
-                            _skip_log.append(f'[skip] {_tsym}: change5m too low ({round(_m5,1)}% vs {_m5_desc})')
+                            _skip_log.append(f'[skip] {_tsym}: trend too low (5m:{round(_m5,1)}% 1h:{round(_h1,1)}% — need {_m5_desc} on either)')
                             continue
                         if not _vol_rising:
                             _skip_log.append(f'[skip] {_tsym}: vol not rising (v5m={int(_v5m)} v1h={int(_v1h)})')
@@ -2422,8 +2429,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (' + _m5_desc + ' m5 + vol rising + not reversing)')
-                    print(f'[scan] entry threshold: {m5_min}% m5 — {len(qualifying)}/{len(not_held)} qualify', flush=True)
+                                 str(total_live) + ' qualify (' + _m5_desc + ' 5m OR 1h + vol rising + not reversing)')
+                    print(f'[scan] entry threshold: {m5_min}% 5m OR 1h — {len(qualifying)}/{len(not_held)} qualify', flush=True)
                     if not qualifying and _skip_log:
                         print(f'[qualify] {short} 0/{len(not_held)} — skip reasons:', flush=True)
                         for _sl in _skip_log:
