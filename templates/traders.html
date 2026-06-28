@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Traders — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;--bg4:#16191f;
+  --accent:#35d4c4;--accent-dim:rgba(53,212,196,.10);--accent-border:rgba(53,212,196,.22);
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --green:#3ad29b;--red:#f76b62;
+  --mono:'JetBrains Mono','Share Tech Mono',monospace;
+  --ui:'Geist',system-ui,sans-serif;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ── NAVBAR ── */
+.navbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(10,11,14,.85);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid #16191f;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:56px;gap:16px;
+}
+.nav-left{display:flex;align-items:center;gap:14px;text-decoration:none;flex-shrink:0}
+.nav-logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #06100f}
+.nav-brand{font-size:18px;font-weight:700;color:var(--text);letter-spacing:.04em;line-height:1}
+.nav-tag{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-family:var(--mono);font-size:10px;color:var(--sub)}
+.wallet-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+.nav-btn{display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;font-size:12px;font-weight:600;text-decoration:none;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
+.nav-btn:hover{border-color:#35353d;color:var(--text)}
+.nav-btn.active{background:var(--accent);color:#06100f;border-color:var(--accent)}
+
+/* ── PAGE ── */
+.page{max-width:1180px;margin:0 auto;padding:30px 28px 80px}
+
+/* ── PAGE HEADER ── */
+.page-hdr{margin-bottom:28px}
+.page-title{font-size:22px;font-weight:700;letter-spacing:.02em;color:var(--text)}
+.page-sub{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* ── FILTERS BAR ── */
+.filters{display:flex;align-items:center;gap:10px;margin-bottom:20px;flex-wrap:wrap}
+.filter-pill{padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s}
+.filter-pill:hover,.filter-pill.active{border-color:var(--accent);color:var(--accent);background:var(--accent-dim)}
+.filter-sep{flex:1}
+.search-wrap{position:relative}
+.search-inp{background:var(--bg2);border:1px solid #21252c;border-radius:10px;padding:7px 12px 7px 32px;font-size:12px;color:var(--text);outline:none;width:190px;transition:border-color .15s}
+.search-inp:focus{border-color:var(--accent)}
+.search-ico{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:13px;pointer-events:none}
+
+/* ── GRID ── */
+.traders-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+
+/* ── TRADER CARD ── */
+.tc{
+  background:var(--bg2);border:1px solid #16191f;border-radius:16px;
+  padding:20px;display:flex;flex-direction:column;gap:14px;
+  transition:border-color .15s,transform .12s;position:relative;overflow:hidden;
+}
+.tc:hover{border-color:#21252c;transform:translateY(-1px)}
+.tc.is-me{border-color:var(--accent-border);background:rgba(53,212,196,.03)}
+.tc-rank{position:absolute;top:14px;right:14px;font-family:var(--mono);font-size:10px;color:var(--muted);font-weight:700}
+.tc-rank.top1{color:#f7b955;font-size:13px}
+.tc-rank.top2{color:#c8c8d4;font-size:12px}
+.tc-rank.top3{color:#cd8c52;font-size:12px}
+
+/* avatar + name row */
+.tc-head{display:flex;align-items:center;gap:12px}
+.tc-avatar{width:42px;height:42px;border-radius:12px;background:var(--bg3);flex-shrink:0;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:18px;border:1px solid #21252c}
+.tc-avatar img{width:100%;height:100%;object-fit:cover;border-radius:12px}
+.tc-name{font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px}
+.tc-name.is-me{color:var(--accent)}
+.tc-wallet{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:1px}
+.tc-badges{display:flex;gap:4px;flex-wrap:wrap;margin-top:3px}
+.tc-badge{font-size:13px;line-height:1}
+
+/* stats grid */
+.tc-stats{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.tc-stat{background:var(--bg3);border-radius:10px;padding:10px 12px}
+.tc-stat-lbl{font-size:10px;color:var(--muted);font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:3px}
+.tc-stat-val{font-family:var(--mono);font-size:15px;font-weight:700;line-height:1}
+.tc-stat-val.pos{color:var(--green)}
+.tc-stat-val.neg{color:var(--red)}
+.tc-stat-val.neu{color:var(--text)}
+.tc-stat-val.acc{color:var(--accent)}
+
+/* footer row */
+.tc-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-top:4px;border-top:1px solid #16191f}
+.tc-followers{font-size:12px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.tc-followers-n{font-family:var(--mono);font-weight:700;color:var(--sub);font-size:12px}
+.tc-profile-btn{font-size:11px;font-weight:600;color:var(--accent);text-decoration:none;padding:4px 10px;border:1px solid var(--accent-border);border-radius:20px;transition:all .15s}
+.tc-profile-btn:hover{background:var(--accent-dim)}
+
+/* ── EMPTY ── */
+.empty{text-align:center;padding:80px 24px;color:var(--muted);font-size:13px;border:1px solid #16191f;border-radius:16px;background:var(--bg2)}
+.empty-icon{font-size:36px;margin-bottom:14px}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  .navbar{padding:0 14px;height:52px}
+  .nav-tag,.wallet-pill{display:none}
+  .nav-btn{padding:6px 10px;font-size:11px}
+  .page{padding:16px 12px 80px}
+  .traders-grid{grid-template-columns:1fr}
+  .search-inp{width:140px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <a class="nav-left" href="/">
+    <div class="nav-logo-tile"></div>
+    <div>
+      <div class="nav-brand">ORCAGENT</div>
+      <div class="nav-tag">SOLANA SMART SCALPER V4</div>
+    </div>
+  </a>
+  <div class="nav-right">
+    {% if wallet_short %}
+    <div class="wallet-pill"><div class="wallet-dot"></div><span>{{ wallet_short }}</span></div>
+    {% endif %}
+    <a href="/" class="nav-btn">Dashboard</a>
+    <a href="/leaderboard" class="nav-btn">Leaderboard</a>
+    <a href="/traders" class="nav-btn active">Traders</a>
+    <a href="/history" class="nav-btn">History</a>
+  </div>
+</nav>
+
+<!-- PAGE -->
+<div class="page">
+
+  <div class="page-hdr">
+    <div class="page-title">Traders</div>
+    <div class="page-sub">{{ entries|length }} trader{{ 's' if entries|length != 1 else '' }} ranked by total PnL</div>
+  </div>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <button class="filter-pill active" onclick="_filter('all',this)">All</button>
+    <button class="filter-pill" onclick="_filter('pos',this)">Profitable</button>
+    <button class="filter-pill" onclick="_filter('top10',this)">Top 10</button>
+    <div class="filter-sep"></div>
+    <div class="search-wrap">
+      <span class="search-ico">⌕</span>
+      <input class="search-inp" id="search-inp" type="text" placeholder="Search username…" oninput="_search(this.value)">
+    </div>
+  </div>
+
+  {% if entries %}
+  <div class="traders-grid" id="traders-grid">
+    {% for e in entries %}
+    <div class="tc{% if e.is_me %} is-me{% endif %}"
+         data-pnl="{{ e.total_pnl }}"
+         data-rank="{{ e.rank }}"
+         data-name="{{ (e.username or '')|lower }}">
+
+      <!-- rank badge -->
+      <span class="tc-rank{% if e.rank == 1 %} top1{% elif e.rank == 2 %} top2{% elif e.rank == 3 %} top3{% endif %}">
+        {%- if e.rank == 1 %}🥇{%- elif e.rank == 2 %}🥈{%- elif e.rank == 3 %}🥉{%- else %}#{{ e.rank }}{%- endif %}
+      </span>
+
+      <!-- avatar + name -->
+      <div class="tc-head">
+        <div class="tc-avatar">
+          {% if e.avatar_url %}
+          <img src="{{ e.avatar_url }}" alt="" loading="lazy">
+          {% else %}
+          🐳
+          {% endif %}
+        </div>
+        <div>
+          <div class="tc-name{% if e.is_me %} is-me{% endif %}">
+            {{ e.username }}{% if e.is_me %} <span style="font-size:10px;color:var(--accent);font-weight:400">(you)</span>{% endif %}
+          </div>
+          <div class="tc-wallet">{{ e.wallet_short }}</div>
+          {% if e.badges %}
+          <div class="tc-badges">
+            {% for b in e.badges[:4] %}<span class="tc-badge">{{ b }}</span>{% endfor %}
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- stats -->
+      <div class="tc-stats">
+        <div class="tc-stat">
+          <div class="tc-stat-lbl">Total PnL</div>
+          <div class="tc-stat-val {% if e.total_pnl >= 0 %}pos{% else %}neg{% endif %}">
+            {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }}
+            <span style="font-size:10px;font-weight:400;color:var(--muted)">SOL</span>
+          </div>
+        </div>
+        <div class="tc-stat">
+          <div class="tc-stat-lbl">Win Rate</div>
+          <div class="tc-stat-val {% if e.win_rate >= 50 %}pos{% else %}neg{% endif %}">
+            {{ '%.1f'|format(e.win_rate) }}<span style="font-size:11px;font-weight:400">%</span>
+          </div>
+        </div>
+        <div class="tc-stat">
+          <div class="tc-stat-lbl">Trades</div>
+          <div class="tc-stat-val neu">{{ e.trade_count }}</div>
+        </div>
+        <div class="tc-stat">
+          <div class="tc-stat-lbl">Best Trade</div>
+          <div class="tc-stat-val {% if e.best_trade_pct >= 0 %}pos{% else %}neg{% endif %}">
+            {{ '+' if e.best_trade_pct >= 0 else '' }}{{ '%.1f'|format(e.best_trade_pct) }}<span style="font-size:11px;font-weight:400">%</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- footer -->
+      <div class="tc-footer">
+        <div class="tc-followers">
+          <span>👥</span>
+          <span class="tc-followers-n">{{ e.follower_count }}</span>
+          <span>follower{{ 's' if e.follower_count != 1 else '' }}</span>
+        </div>
+        <a href="/profile?wallet={{ e.wallet }}" class="tc-profile-btn">View →</a>
+      </div>
+
+    </div>
+    {% endfor %}
+  </div>
+
+  {% else %}
+  <div class="empty">
+    <div class="empty-icon">🐋</div>
+    No traders yet.<br>
+    Start the bot — your first trade will appear here.
+  </div>
+  {% endif %}
+
+</div><!-- /page -->
+
+<script>
+var _allCards=Array.from(document.querySelectorAll('.tc'));
+var _activeFilter='all';
+var _searchVal='';
+
+function _filter(type,btn){
+  _activeFilter=type;
+  document.querySelectorAll('.filter-pill').forEach(function(b){b.classList.remove('active')});
+  btn.classList.add('active');
+  _apply();
+}
+function _search(val){
+  _searchVal=val.toLowerCase().trim();
+  _apply();
+}
+function _apply(){
+  _allCards.forEach(function(card){
+    var pnl=parseFloat(card.dataset.pnl||0);
+    var rank=parseInt(card.dataset.rank||99,10);
+    var name=(card.dataset.name||'');
+    var passFilter=true;
+    if(_activeFilter==='pos') passFilter=pnl>=0;
+    else if(_activeFilter==='top10') passFilter=rank<=10;
+    var passSearch=!_searchVal||name.includes(_searchVal);
+    card.style.display=(passFilter&&passSearch)?'':'none';
+  });
+}
+</script>
+</body>
+</html>
