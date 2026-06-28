@@ -6730,6 +6730,46 @@ def stop_trader():
     us['trader_running'] = False
     return jsonify({'ok': True})
 
+@app.route('/api/bot/status', methods=['GET'])
+@rate_limit(60, 60)
+def bot_status():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'running': False}), 401
+    us = get_user_state(wallet)
+    running = bool(us.get('trader_running', False))
+    open_positions = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+    # SOL balance from in-memory state
+    sol_ready = round(float(us.get('sol', 0) or 0), 4)
+    # Win rate: last 30 trades
+    win_rate = 0.0
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        uid_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if uid_row:
+            c.execute(
+                'SELECT COUNT(*) FROM trades WHERE user_id=? AND pnl IS NOT NULL AND timestamp >= datetime(\'now\',\'-7 days\')',
+                (uid_row[0],)
+            )
+            total = c.fetchone()[0] or 0
+            c.execute(
+                'SELECT COUNT(*) FROM trades WHERE user_id=? AND pnl > 0 AND timestamp >= datetime(\'now\',\'-7 days\')',
+                (uid_row[0],)
+            )
+            wins = c.fetchone()[0] or 0
+            win_rate = round(wins / total * 100, 1) if total > 0 else 0.0
+        conn.close()
+    except Exception:
+        pass
+    return jsonify({
+        'ok': True,
+        'running': running,
+        'sol_ready': sol_ready,
+        'open_positions': open_positions,
+        'win_rate': win_rate,
+    })
+
 # ── MANUAL SELL ──
 @app.route('/api/sell', methods=['POST'])
 @rate_limit(10, 60)

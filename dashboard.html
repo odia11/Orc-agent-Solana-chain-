@@ -116,6 +116,24 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
 .sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
 .sb-nav-badge{margin-left:auto;background:#3ad29b;color:#08120f;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
+
+/* ── bot status card ── */
+.sb-bot-wrap{padding:10px 12px 4px;flex-shrink:0}
+.sb-bot-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:12px;margin-bottom:8px}
+.sb-bot-status-row{display:flex;align-items:center;gap:7px;margin-bottom:4px}
+.sb-bot-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .3s}
+.sb-bot-label{font-size:12px;font-weight:600;color:#eef1f5}
+.sb-bot-stats{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:11px;color:#565d68;line-height:1.55;margin-bottom:10px}
+.sb-bot-btn{
+  width:100%;padding:13px;background:#35d4c4;color:#06100f;
+  border:none;border-radius:13px;font-family:'Geist',system-ui,sans-serif;
+  font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.01em;
+  transition:opacity .15s,background .2s;
+}
+.sb-bot-btn:hover{opacity:.88}
+.sb-bot-btn.running{background:#1a2a22;color:#3ad29b;border:1px solid #3ad29b30}
+.sb-bot-btn.running:hover{background:#1f3328}
+
 .sb-start-wrap{padding:4px 12px 10px;flex-shrink:0}
 .sb-start-btn{width:100%;padding:12px;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s}
 .sb-start-btn:hover{opacity:.88}
@@ -3206,6 +3224,17 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
             <ellipse cx="98" cy="75" rx="6" ry="7" fill="#0a0b0e"/>
           </svg>
           <span class="sb-logo-text">OrcAgent</span>
+        </div>
+      </div>
+      <!-- BOT STATUS -->
+      <div class="sb-bot-wrap">
+        <div class="sb-bot-card">
+          <div class="sb-bot-status-row">
+            <span class="sb-bot-dot" id="bot-dot" style="background:#f7b955"></span>
+            <span class="sb-bot-label" id="bot-label">Bot is idle</span>
+          </div>
+          <div class="sb-bot-stats" id="bot-stats">— SOL ready · 0/5 open · —% win rate</div>
+          <button class="sb-bot-btn" id="bot-toggle-btn" onclick="_botToggle()">▶ Start Trading</button>
         </div>
       </div>
       <!-- NAV -->
@@ -6686,6 +6715,66 @@ function _sbSetActive(id){
   if(el) el.classList.add('active');
   if(window.innerWidth<=768) _closeSidebar();
 }
+// ── bot status sidebar card ───────────────────────────────
+var _botRunning=false
+var _botPollTimer=null
+
+async function _botFetchStatus(){
+  try{
+    var r=await fetch('/api/bot/status')
+    var d=await r.json()
+    if(!d.ok) return
+    _botRunning=!!d.running
+    // dot + label
+    var dot=document.getElementById('bot-dot')
+    var lbl=document.getElementById('bot-label')
+    if(dot) dot.style.background=_botRunning?'#3ad29b':'#f7b955'
+    if(lbl) lbl.textContent=_botRunning?'Bot running':'Bot is idle'
+    // stats line
+    var statsEl=document.getElementById('bot-stats')
+    if(statsEl){
+      var sol=parseFloat(d.sol_ready||0).toFixed(2)
+      var open=parseInt(d.open_positions||0)
+      var wr=parseFloat(d.win_rate||0).toFixed(0)
+      statsEl.textContent=sol+' SOL ready · '+open+'/5 open · '+wr+'% win rate'
+    }
+    // button state
+    var btn=document.getElementById('bot-toggle-btn')
+    if(btn){
+      if(_botRunning){
+        btn.textContent='⏹ Stop Trading'
+        btn.classList.add('running')
+      } else {
+        btn.textContent='▶ Start Trading'
+        btn.classList.remove('running')
+      }
+    }
+  }catch(e){}
+}
+
+async function _botToggle(){
+  var btn=document.getElementById('bot-toggle-btn')
+  if(btn){btn.disabled=true;btn.textContent=_botRunning?'Stopping…':'Starting…'}
+  try{
+    var url=_botRunning?'/api/trader/stop':'/api/trader/start'
+    var r=await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:'{}'})
+    var d=await r.json()
+    if(d.ok||d.success){
+      await _botFetchStatus()
+    } else {
+      if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
+      alert(d.msg||'Failed')
+    }
+  }catch(e){
+    if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
+  }
+  if(btn) btn.disabled=false
+}
+
+// Initial fetch + 30s poll
+_botFetchStatus()
+_botPollTimer=setInterval(_botFetchStatus,30000)
+
 function _sbNav(section){
   if(section!=='wallet') _stopWalletRefresh();
   if(section==='dashboard'){
