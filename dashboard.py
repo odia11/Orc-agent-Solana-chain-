@@ -41,6 +41,12 @@ app.config['SESSION_COOKIE_HTTPONLY']    = True
 app.config['SESSION_COOKIE_SAMESITE']   = 'Lax'
 app.config['SESSION_COOKIE_SECURE']     = bool(os.getenv('RAILWAY_ENVIRONMENT'))
 app.config['SESSION_COOKIE_PATH']       = '/'
+# 'orca_s' avoids conflicts with the old 'session' cookie (no domain attr).
+# '.orcagent.fun' (dot prefix) lets both www and bare share the same session.
+# Only set in production — local dev keeps Flask defaults.
+if os.getenv('RAILWAY_ENVIRONMENT'):
+    app.config['SESSION_COOKIE_NAME']   = 'orca_s'
+    app.config['SESSION_COOKIE_DOMAIN'] = '.orcagent.fun'
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
 
 @app.template_filter('fmtk')
@@ -52,17 +58,6 @@ def _jinja_fmtk(v):
     if v >= 1_000:
         return f'{v / 1_000:.1f}K'
     return f'{v:.0f}'
-
-@app.before_request
-def redirect_to_canonical():
-    """Redirect www.orcagent.fun → orcagent.fun (canonical).
-    Skips POST/PUT/PATCH/DELETE/OPTIONS — 301 would silently convert POST→GET."""
-    host = request.host.split(':')[0]  # strip port for local dev safety
-    if request.method in ('POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'):
-        return None
-    if host == 'www.orcagent.fun':
-        url = 'https://orcagent.fun' + request.full_path
-        return redirect(url, code=301)
 
 @app.before_request
 def _security_gate():
