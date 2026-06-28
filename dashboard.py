@@ -2213,6 +2213,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                 open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
                 us_sol  = _get_user_sol(_trading_wallet)
                 total_live = len(live)
+                print(f'[bot] {short} running=True tokens={total_live} pos={open_pos}/5 sol={round(us_sol,4)} scanning...', flush=True)
                 if total_live == 0:
                     add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
                 else:
@@ -2442,9 +2443,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 add_user_log(wallet, '[' + short + '] ✗ BUY failed — ' + label + ' position NOT recorded')
                                 positions.pop(bmint, None)
             except Exception as e:
+                print(f'[bot] {short} LOOP ERROR: {e}', flush=True)
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             stop_event.wait(config.get('interval', 30))
     finally:
+        print(f'[bot] {short} loop exited — running set to False', flush=True)
         add_user_log(wallet, '[' + short + '] Trader stopped')
         us['trader_running'] = False
 
