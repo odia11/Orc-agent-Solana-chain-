@@ -121,22 +121,26 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
 .sb-nav-badge{margin-left:auto;background:#3ad29b;color:#08120f;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
 
+.sb-cta-btn{display:block;width:calc(100% - 24px);margin:4px 12px 0;padding:13px;background:#35d4c4;color:#06100f;border:none;border-radius:13px;font-family:'Geist',system-ui,sans-serif;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s,background .2s;text-align:center}
+.sb-cta-btn:hover{opacity:.88}
+.sb-cta-btn.stop{background:#1a2a22;color:#3ad29b;border:1px solid rgba(58,210,155,.2)}
+.sb-cta-btn.stop:hover{background:#1f3328}
 /* ── bot status card ── */
 .sb-bot-wrap{padding:10px 12px 4px;flex-shrink:0}
 .sb-bot-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:12px;margin-bottom:8px}
 .sb-bot-status-row{display:flex;align-items:center;gap:7px;margin-bottom:4px}
 .sb-bot-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0;transition:background .3s}
 .sb-bot-label{font-size:12px;font-weight:600;color:#eef1f5}
-.sb-bot-stats{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:11px;color:#565d68;line-height:1.55;margin-bottom:10px}
+.sb-bot-stats{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:11px;color:#565d68;line-height:1.55;margin-bottom:8px}
 .sb-bot-btn{
-  width:100%;padding:13px;background:#35d4c4;color:#06100f;
-  border:none;border-radius:13px;font-family:'Geist',system-ui,sans-serif;
-  font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.01em;
-  transition:opacity .15s,background .2s;
+  width:100%;padding:7px 10px;background:transparent;color:var(--muted);
+  border:1px solid #16191f;border-radius:10px;font-family:'Geist',system-ui,sans-serif;
+  font-size:12px;font-weight:600;cursor:pointer;letter-spacing:.01em;
+  transition:background .15s,color .15s,border-color .15s;
 }
-.sb-bot-btn:hover{opacity:.88}
-.sb-bot-btn.running{background:#1a2a22;color:#3ad29b;border:1px solid #3ad29b30}
-.sb-bot-btn.running:hover{background:#1f3328}
+.sb-bot-btn:hover{background:#14171c;color:#eef1f5;border-color:#21252c}
+.sb-bot-btn.running{background:rgba(58,210,155,.08);color:#3ad29b;border-color:rgba(58,210,155,.25)}
+.sb-bot-btn.running:hover{background:rgba(58,210,155,.14)}
 .sb-pnl-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:12px;margin-top:8px}
 .sb-pnl-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .sb-pnl-lbl{font-size:10px;font-weight:700;color:#565d68;letter-spacing:.1em}
@@ -355,7 +359,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #s-sol{font-size:13px!important;font-weight:600;font-family:\'JetBrains Mono\',monospace;color:var(--text)!important;text-shadow:none}
 #s-pos{font-size:13px!important;font-weight:600;font-family:\'JetBrains Mono\',monospace;color:var(--text)!important}
 /* ── FEED LAYOUT ── */
-.feed-hdr{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
+.feed-hdr{position:sticky;top:0;z-index:50;background:rgba(10,11,14,0.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
 .feed-hdr-top{display:flex;align-items:center;gap:10px;padding:16px 20px 12px}
 .feed-hdr-title-wrap{display:flex;flex-direction:column;gap:2px;flex:1}
 .feed-hdr-title{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
@@ -3357,6 +3361,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           History
         </a>
       </nav>
+      <!-- START TRADING CTA -->
+      <button class="sb-cta-btn" id="sb-start-btn" onclick="_botToggle()">▶ Start Trading</button>
       <!-- BOT STATUS -->
       <div class="sb-bot-wrap">
         <div class="sb-bot-card">
@@ -3410,6 +3416,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
           Help &amp; Tips
         </button>
+      </div>
+      <!-- JS compat hidden elements -->
+      <div style="display:none" aria-hidden="true">
+        <span id="sb-allpnl"></span>
+        <span id="sb-wr"></span>
+        <span id="bot-scan-text"></span>
+        <div id="bot-idle-banner" class="hide"></div>
       </div>
     </aside>
     <div id="sidebar-overlay" onclick="_closeSidebar()"></div>
@@ -4102,6 +4115,21 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
   </div><!-- /dash-wallet -->
 
+  <!-- JS compat hidden elements (critical IDs accessed without null checks) -->
+  <div style="display:none" aria-hidden="true">
+    <span id="s-sol">0</span>
+    <span id="s-sol-usdc">0</span>
+    <span id="s-pos">0</span>
+    <span id="state-sol">0</span>
+    <button id="deposit-sol-btn"></button>
+    <button id="withdraw-sol-btn"></button>
+    <div id="perf-share-btns"></div>
+    <div id="trade-warn"></div>
+    <div id="trade-card"></div>
+    <div id="trade-badge"></div>
+    <button id="trade-btn"></button>
+    <button id="start-btn"></button>
+  </div>
   </div><!-- /app-body -->
 </div><!-- #app -->
 
