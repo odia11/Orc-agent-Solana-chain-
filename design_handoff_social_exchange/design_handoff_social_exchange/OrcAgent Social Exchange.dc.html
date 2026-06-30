@@ -1,0 +1,1383 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: #0a0b0e; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #21252c; border-radius: 5px; border: 2px solid #0a0b0e; }
+  ::-webkit-scrollbar-thumb:hover { background: #2c313a; }
+  input::placeholder { color: #565d68; }
+  @keyframes orcaBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+</style>
+</helmet>
+
+<div data-screen-label="OrcAgent Social Exchange" style="display:flex; justify-content:center; min-height:100vh; background:#0a0b0e; color:#eef1f5; font-family:'Geist', sans-serif;">
+  <div style="display:flex; width:100%; max-width:1320px;">
+
+    <!-- ============ LEFT RAIL ============ -->
+    <sc-if value="{{ notHistory }}" hint-placeholder-val="{{ true }}">
+    <aside style="width:260px; flex-shrink:0; border-right:1px solid #16191f; padding:18px 14px 16px; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto;">
+      <div style="display:flex; align-items:center; gap:11px; padding:4px 8px;">
+        <div style="width:36px; height:36px; border-radius:11px; background:{{ accent }}; display:flex; align-items:center; justify-content:center;">
+          <div style="width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:13px solid #0a0b0e;"></div>
+        </div>
+        <div style="font-size:18px; font-weight:700; letter-spacing:-0.02em;">OrcAgent</div>
+      </div>
+      <div style="margin:14px 8px 16px; align-self:flex-start; display:inline-flex; align-items:center; gap:7px; font-size:10px; font-weight:600; letter-spacing:0.14em; color:{{ accent }}; background:{{ accentSoft }}; border:1px solid {{ accentBorder }}; border-radius:7px; padding:5px 9px;">
+        <span style="width:5px; height:5px; border-radius:50%; background:{{ accent }};"></span>INVITE-ONLY · BETA
+      </div>
+
+      <nav style="display:flex; flex-direction:column; gap:2px;">
+        <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="10">
+          <a href="#" onClick="{{ n.onClick }}" style="display:flex; align-items:center; justify-content:space-between; padding:11px 12px; border-radius:11px; text-decoration:none; font-size:15px; font-weight:{{ n.weight }}; color:{{ n.color }}; background:{{ n.bg }}; cursor:pointer;" style-hover="background:{{ n.hoverBg }};">
+            <span>{{ n.label }}</span>
+            <sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:#0a0b0e; background:{{ accent }}; border-radius:999px; padding:1px 7px;">{{ n.badge }}</span></sc-if>
+            <sc-if value="{{ n.dot }}" hint-placeholder-val="{{ false }}"><span style="width:6px; height:6px; border-radius:50%; background:{{ accent }};"></span></sc-if>
+          </a>
+        </sc-for>
+      </nav>
+
+      <button style="margin-top:18px; width:100%; background:{{ accent }}; color:#08120f; border:none; border-radius:13px; padding:13px; font-family:inherit; font-size:15px; font-weight:700; cursor:pointer; letter-spacing:0.01em;" style-hover="filter:brightness(1.08);">▶  Start Trading</button>
+
+      <!-- Bot PnL -->
+      <div style="margin-top:18px; border:1px solid #16191f; border-radius:14px; background:#101216; overflow:hidden;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:11px 12px 9px;">
+          <div style="display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:0.08em; color:#8a919c;">
+            <span style="width:6px; height:6px; border-radius:50%; background:{{ botDotColor }}; box-shadow:0 0 0 3px {{ botDotGlow }};"></span>BOT PNL
+          </div>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ botTotalColor }};">{{ botTotal }}</span>
+        </div>
+        <sc-for list="{{ botPositions }}" as="b" hint-placeholder-count="3">
+          <div style="display:flex; align-items:center; gap:9px; padding:7px 12px;" style-hover="background:#14171c;">
+            <div style="width:24px; height:24px; border-radius:7px; flex-shrink:0; background:{{ b.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:8px;">{{ b.tick }}</div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;">${{ b.tick }}</div>
+              <div style="font-size:10px; color:#565d68; line-height:1.2;">{{ b.status }}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ b.pnlColor }};">{{ b.pnl }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:{{ b.pnlColor }}; opacity:0.7; line-height:1.2;">{{ b.sol }}</div>
+            </div>
+          </div>
+        </sc-for>
+        <div style="padding:9px 12px 10px; border-top:1px solid #16191f; font-size:11px; color:{{ accent }}; cursor:pointer;">View all positions →</div>
+      </div>
+
+      <div onClick="{{ goWallet }}" style="margin-top:14px; display:flex; align-items:center; gap:11px; padding:10px; border-radius:14px; border:1px solid #16191f; cursor:pointer;" style-hover="background:#101216;">
+        <div style="width:40px; height:40px; border-radius:50%; flex-shrink:0; background:#2b6cff; display:flex; align-items:center; justify-content:center; font-weight:600; color:#fff; font-size:15px;">Y</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:14px; font-weight:600; line-height:1.2;">You</div>
+          <div style="font-size:12px; color:#565d68;">@you</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700;">2.41</div>
+          <div style="font-size:10px; color:#565d68; letter-spacing:0.06em;">SOL</div>
+        </div>
+      </div>
+    </aside>
+    </sc-if>
+
+    <!-- ============ HISTORY VIEW (full width) ============ -->
+    <sc-if value="{{ isHistory }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:14px 30px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:20px;">
+          <div style="display:flex; align-items:center; gap:12px;">
+            <div style="width:38px; height:38px; border-radius:11px; background:{{ accentSoft }}; border:1px solid {{ accentBorder }}; display:flex; align-items:center; justify-content:center; font-size:19px;">🐳</div>
+            <div>
+              <div style="font-size:18px; font-weight:700; letter-spacing:0.04em; color:{{ accent }};">ORCAGENT</div>
+              <div style="font-size:10px; letter-spacing:0.14em; color:#565d68; font-weight:600; margin-top:2px;">SOLANA SMART SCALPER V4</div>
+            </div>
+          </div>
+          <div style="display:flex; align-items:center; gap:9px;">
+            <span style="display:inline-flex; align-items:center; gap:7px; font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600; color:#c7ccd4; background:#101216; border:1px solid #21252c; border-radius:10px; padding:8px 13px;"><span style="width:6px; height:6px; border-radius:50%; background:{{ accent }};"></span>Cdn8…eAM9</span>
+            <sc-for list="{{ histNav }}" as="n" hint-placeholder-count="3">
+              <button onClick="{{ n.onClick }}" style="display:inline-flex; align-items:center; gap:6px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer; border-radius:10px; padding:8px 14px; color:{{ n.color }}; background:{{ n.bg }}; border:1px solid {{ n.border }};" style-hover="filter:brightness(1.12);">{{ n.icon }} {{ n.label }}</button>
+            </sc-for>
+          </div>
+        </div>
+      </header>
+
+      <div style="max-width:1180px; margin:0 auto; padding:24px 30px 48px;">
+        <div style="display:flex; align-items:center; gap:11px; margin-bottom:20px;">
+          <span style="font-size:24px;">📋</span>
+          <div style="font-size:26px; font-weight:700; letter-spacing:-0.01em;">Trade History</div>
+        </div>
+        <!-- filters -->
+        <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:18px 20px; display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap;">
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <label style="font-size:10px; letter-spacing:0.1em; color:#565d68; font-weight:600;">TOKEN</label>
+            <input placeholder="e.g. BONK" style="width:190px; background:#0a0b0e; border:1px solid #2c313a; border-radius:10px; padding:9px 12px; color:#eef1f5; font-family:inherit; font-size:13px; outline:none;">
+          </div>
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <label style="font-size:10px; letter-spacing:0.1em; color:#565d68; font-weight:600;">RESULT</label>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; width:130px; background:#0a0b0e; border:1px solid #2c313a; border-radius:10px; padding:9px 12px; font-size:13px; cursor:pointer;"><span>All</span><span style="font-size:9px; color:#8a919c;">▼</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <label style="font-size:10px; letter-spacing:0.1em; color:#565d68; font-weight:600;">FROM</label>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; width:150px; background:#0a0b0e; border:1px solid #2c313a; border-radius:10px; padding:9px 12px; font-family:'JetBrains Mono',monospace; font-size:13px; color:#565d68; cursor:pointer;"><span>mm/dd/yyyy</span><span>▦</span></div>
+          </div>
+          <div style="display:flex; flex-direction:column; gap:7px;">
+            <label style="font-size:10px; letter-spacing:0.1em; color:#565d68; font-weight:600;">TO</label>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px; width:150px; background:#0a0b0e; border:1px solid #2c313a; border-radius:10px; padding:9px 12px; font-family:'JetBrains Mono',monospace; font-size:13px; color:#565d68; cursor:pointer;"><span>mm/dd/yyyy</span><span>▦</span></div>
+          </div>
+          <div style="flex:1;"></div>
+          <button style="display:inline-flex; align-items:center; gap:6px; background:none; color:#f76b62; border:1px solid rgba(247,107,98,0.3); border-radius:10px; padding:9px 14px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:rgba(247,107,98,0.1);">✕ Clear</button>
+        </div>
+
+        <!-- stat tiles -->
+        <div style="display:grid; grid-template-columns:repeat(5,1fr); gap:14px; margin-top:18px;">
+          <sc-for list="{{ histStats }}" as="s" hint-placeholder-count="5">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:16px 17px;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <div style="width:30px; height:30px; border-radius:9px; background:{{ s.iconBg }}; display:flex; align-items:center; justify-content:center; font-size:15px;">{{ s.icon }}</div>
+                <div style="font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">{{ s.label }}</div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; margin-top:13px; color:{{ s.color }};">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- table -->
+        <div style="font-size:13px; color:#565d68; margin:22px 2px 11px;">Showing {{ histCount }} of {{ histCount }} trades</div>
+        <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:130px 1fr 120px 120px 110px 100px 110px 90px; gap:12px; padding:14px 20px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+            <div>DATE / TIME</div><div>TOKEN</div><div>BUY PRICE</div><div>SELL PRICE</div><div>PNL (SOL)</div><div>PNL (%)</div><div>DURATION</div><div>RESULT</div>
+          </div>
+          <sc-for list="{{ trades }}" as="t" hint-placeholder-count="6">
+            <div style="display:grid; grid-template-columns:130px 1fr 120px 120px 110px 100px 110px 90px; gap:12px; padding:15px 20px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c; line-height:1.5;">{{ t.date }}<br>{{ t.time }}</div>
+              <div style="font-weight:700; font-size:13px; letter-spacing:0.02em; text-decoration:underline; text-underline-offset:3px; text-decoration-color:#2c313a;">{{ t.token }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ t.buy }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ t.sell }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ t.color }};">{{ t.pnlSol }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ t.color }};">{{ t.pnlPct }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c;">{{ t.duration }}</div>
+              <div><span style="display:inline-block; font-size:10px; font-weight:700; letter-spacing:0.08em; padding:4px 11px; border-radius:7px; color:{{ t.badgeColor }}; background:{{ t.badgeBg }}; border:1px solid {{ t.badgeBorder }};">{{ t.result }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ MESSAGES VIEW ============ -->
+    <sc-if value="{{ isMessages }}" hint-placeholder-val="{{ false }}">
+    <!-- conversation list -->
+    <section style="width:330px; flex-shrink:0; border-right:1px solid #16191f; height:100vh; position:sticky; top:0; display:flex; flex-direction:column;">
+      <div style="padding:16px 18px 12px; border-bottom:1px solid #16191f;">
+        <div style="display:flex; align-items:center; justify-content:space-between;">
+          <div style="font-size:19px; font-weight:700; letter-spacing:-0.01em;">Messages</div>
+          <button style="width:34px; height:34px; border-radius:10px; background:{{ accent }}; color:#06210f; border:none; font-size:16px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center;" style-hover="filter:brightness(1.08);">✎</button>
+        </div>
+        <div style="display:flex; align-items:center; gap:9px; margin-top:12px; background:#101216; border:1px solid #21252c; border-radius:11px; padding:9px 12px;">
+          <span style="color:#565d68; font-size:13px;">⌕</span>
+          <input placeholder="Search messages" style="flex:1; min-width:0; background:none; border:none; outline:none; color:#eef1f5; font-family:inherit; font-size:13px;">
+        </div>
+      </div>
+      <div style="flex:1; overflow-y:auto;">
+        <sc-for list="{{ convos }}" as="c" hint-placeholder-count="6">
+          <div onClick="{{ c.onClick }}" style="display:flex; gap:12px; padding:13px 18px; cursor:pointer; border-left:2px solid {{ c.activeBar }}; background:{{ c.activeBg }};" style-hover="background:#101216;">
+            <div style="position:relative; flex-shrink:0;">
+              <div style="width:46px; height:46px; border-radius:50%; background:{{ c.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:15px;">{{ c.initials }}</div>
+              <sc-if value="{{ c.online }}" hint-placeholder-val="{{ true }}"><span style="position:absolute; right:1px; bottom:1px; width:11px; height:11px; border-radius:50%; background:#3ad29b; border:2px solid #0a0b0e;"></span></sc-if>
+            </div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <span style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.name }}</span>
+                <sc-if value="{{ c.verified }}" hint-placeholder-val="{{ true }}"><span style="width:13px; height:13px; flex-shrink:0; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span></sc-if>
+                <span style="margin-left:auto; font-size:11px; color:#565d68; flex-shrink:0;">{{ c.time }}</span>
+              </div>
+              <div style="display:flex; align-items:center; gap:8px; margin-top:3px;">
+                <span style="flex:1; min-width:0; font-size:13px; color:{{ c.previewColor }}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ c.preview }}</span>
+                <sc-if value="{{ c.unread }}" hint-placeholder-val="{{ false }}"><span style="flex-shrink:0; min-width:18px; height:18px; padding:0 5px; border-radius:999px; background:{{ accent }}; color:#06210f; font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; display:inline-flex; align-items:center; justify-content:center;">{{ c.unread }}</span></sc-if>
+              </div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- chat thread -->
+    <main style="flex:1; min-width:0; height:100vh; position:sticky; top:0; display:flex; flex-direction:column;">
+      <header style="display:flex; align-items:center; justify-content:space-between; gap:12px; padding:13px 22px; border-bottom:1px solid #16191f; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px);">
+        <div style="display:flex; align-items:center; gap:12px;">
+          <div style="position:relative;">
+            <div style="width:42px; height:42px; border-radius:50%; background:{{ activeChat.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:15px;">{{ activeChat.initials }}</div>
+            <span style="position:absolute; right:0; bottom:0; width:11px; height:11px; border-radius:50%; background:#3ad29b; border:2px solid #0a0b0e;"></span>
+          </div>
+          <div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <span style="font-size:15px; font-weight:600;">{{ activeChat.name }}</span>
+              <span style="width:14px; height:14px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span>
+            </div>
+            <div style="font-size:12px; color:#3ad29b; margin-top:2px;">Online · @{{ activeChat.handle }}</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <button style="background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:10px; padding:8px 13px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentBorder }};">⧉ Copy trades</button>
+          <button style="width:36px; height:36px; border-radius:10px; background:none; color:#8a919c; border:1px solid #21252c; font-size:15px; cursor:pointer;" style-hover="background:#14171c; color:#eef1f5;">⋯</button>
+        </div>
+      </header>
+
+      <div style="flex:1; overflow-y:auto; padding:22px; display:flex; flex-direction:column; gap:14px; background:#0a0b0e;">
+        <div style="text-align:center; font-size:11px; color:#3a4049; margin-bottom:4px;">Today</div>
+        <sc-for list="{{ messages }}" as="m" hint-placeholder-count="5">
+          <div style="display:flex; justify-content:{{ m.justify }};">
+            <div style="max-width:74%; display:flex; flex-direction:column; align-items:{{ m.align }};">
+              <sc-if value="{{ m.isTradeCard }}" hint-placeholder-val="{{ false }}">
+                <div style="border:1px solid #21252c; border-radius:15px; padding:13px 15px; background:#101216; min-width:230px;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-size:12px; color:#8a919c;">{{ m.tradeAction }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:14px; color:{{ m.tokenColor }};">${{ m.token }}</span>
+                  </div>
+                  <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:14px; margin-top:9px;">
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68;">{{ m.tradeSub }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:18px; font-weight:700; color:{{ m.pnlColor }};">{{ m.pnl }}</span>
+                  </div>
+                </div>
+              </sc-if>
+              <sc-if value="{{ m.isText }}" hint-placeholder-val="{{ true }}">
+                <div style="font-size:14px; line-height:1.5; padding:10px 14px; border-radius:{{ m.radius }}; background:{{ m.bubbleBg }}; color:{{ m.bubbleColor }};">{{ m.text }}</div>
+              </sc-if>
+              <span style="font-size:10px; color:#565d68; margin-top:5px; padding:0 4px;">{{ m.time }}</span>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <div style="padding:14px 22px 18px; border-top:1px solid #16191f;">
+        <div style="display:flex; align-items:center; gap:11px; background:#101216; border:1px solid #21252c; border-radius:14px; padding:8px 8px 8px 15px;">
+          <span style="color:#565d68; font-size:17px; cursor:pointer;" style-hover="color:#eef1f5;">＋</span>
+          <input placeholder="Message {{ activeChat.name }}…" style="flex:1; min-width:0; background:none; border:none; outline:none; color:#eef1f5; font-family:inherit; font-size:14px; padding:6px 0;">
+          <span style="color:#565d68; font-size:16px; cursor:pointer;" style-hover="color:#eef1f5;">☺</span>
+          <button style="width:38px; height:38px; border-radius:11px; background:{{ accent }}; color:#06210f; border:none; font-size:16px; cursor:pointer; display:flex; align-items:center; justify-content:center;" style-hover="filter:brightness(1.08);">➤</button>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ LIVE MARKET VIEW ============ -->
+    <sc-if value="{{ isMarket }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:16px 30px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div>
+            <div style="font-size:21px; font-weight:700; letter-spacing:-0.01em;">Live Market</div>
+            <div style="font-size:12px; color:#565d68; margin-top:3px;">Scanner running · 142 tokens tracked · refreshes every 30s</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:9px;">
+            <span style="display:inline-flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:0.1em; color:#3ad29b; background:rgba(58,210,155,0.10); border:1px solid rgba(58,210,155,0.28); border-radius:8px; padding:6px 11px;"><span style="width:6px; height:6px; border-radius:50%; background:#3ad29b; animation:orcaBlink 1.6s infinite;"></span>SCANNING</span>
+          </div>
+        </div>
+        <div style="display:flex; gap:9px; margin-top:15px;">
+          <sc-for list="{{ marketFilters }}" as="f" hint-placeholder-count="4">
+            <span style="font-size:12px; font-weight:600; padding:7px 13px; border-radius:9px; cursor:pointer; color:{{ f.color }}; background:{{ f.bg }}; border:1px solid {{ f.border }};">{{ f.label }}</span>
+          </sc-for>
+          <div style="flex:1;"></div>
+          <div style="display:flex; align-items:center; gap:8px; background:#101216; border:1px solid #21252c; border-radius:9px; padding:7px 12px;">
+            <span style="color:#565d68; font-size:12px;">⌕</span>
+            <input placeholder="Search token" style="width:120px; background:none; border:none; outline:none; color:#eef1f5; font-family:inherit; font-size:12px;">
+          </div>
+        </div>
+      </header>
+      <div style="padding:18px 30px 44px;">
+        <div style="overflow-x:auto;">
+        <div style="min-width:840px; border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:30px minmax(0,1.4fr) 1fr 0.9fr 1fr 1fr 120px 110px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+            <div>#</div><div>TOKEN</div><div>PRICE</div><div>24H</div><div>VOLUME</div><div>MARKET CAP</div><div>LAST 24H</div><div></div>
+          </div>
+          <sc-for list="{{ market }}" as="m" hint-placeholder-count="8">
+            <div style="display:grid; grid-template-columns:30px minmax(0,1.4fr) 1fr 0.9fr 1fr 1fr 120px 110px; gap:12px; padding:14px 20px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68;">{{ m.rank }}</div>
+              <div style="display:flex; align-items:center; gap:11px; min-width:0; overflow:hidden;">
+                <div style="width:34px; height:34px; border-radius:10px; flex-shrink:0; background:{{ m.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10px;">{{ m.tick }}</div>
+                <div style="min-width:0; overflow:hidden;"><div style="font-size:14px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ m.name }}</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">${{ m.tick }}</div></div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600;">{{ m.price }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; color:{{ m.chgColor }};">{{ m.chg }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ m.vol }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ m.mc }}</div>
+              <div style="display:flex; align-items:flex-end; gap:2px; height:30px; color:{{ m.chgColor }};">
+                <sc-for list="{{ m.bars }}" as="bar" hint-placeholder-count="20"><div style="flex:1; height:{{ bar }}%; background:currentColor; border-radius:1px; opacity:0.8;"></div></sc-for>
+              </div>
+              <div><button style="width:100%; background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:8px; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" style-hover="background:{{ accent }}; color:#06210f;">Trade</button></div>
+            </div>
+          </sc-for>
+        </div>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ LEADERBOARD VIEW ============ -->
+    <sc-if value="{{ isLeaderboard }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:16px 30px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div>
+            <div style="font-size:21px; font-weight:700; letter-spacing:-0.01em;">Leaderboard</div>
+            <div style="font-size:12px; color:#565d68; margin-top:3px;">Top performing bots · ranked by realized PnL</div>
+          </div>
+          <div style="display:flex; gap:6px;">
+            <sc-for list="{{ lbRanges }}" as="r" hint-placeholder-count="3">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; padding:6px 12px; border-radius:8px; cursor:pointer; color:{{ r.color }}; background:{{ r.bg }}; border:1px solid {{ r.border }};">{{ r.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </header>
+      <div style="max-width:980px; margin:0 auto; padding:22px 30px 48px;">
+        <!-- podium -->
+        <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; align-items:end;">
+          <sc-for list="{{ podium }}" as="p" hint-placeholder-count="3">
+            <div style="border:1px solid {{ p.cardBorder }}; border-radius:18px; background:{{ p.cardBg }}; padding:20px 18px; text-align:center; margin-top:{{ p.lift }};">
+              <div style="font-size:20px;">{{ p.medal }}</div>
+              <div style="width:56px; height:56px; border-radius:50%; margin:10px auto 0; background:{{ p.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:18px;">{{ p.initials }}</div>
+              <div style="display:flex; align-items:center; justify-content:center; gap:5px; margin-top:11px;"><span style="font-size:15px; font-weight:700;">{{ p.name }}</span><sc-if value="{{ p.verified }}" hint-placeholder-val="{{ true }}"><span style="width:14px; height:14px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span></sc-if></div>
+              <div style="font-size:12px; color:#565d68; margin-top:2px;">@{{ p.handle }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:#3ad29b; margin-top:12px;">{{ p.pnl }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68; margin-top:2px;">{{ p.winRate }} win · {{ p.trades }} trades</div>
+            </div>
+          </sc-for>
+        </div>
+        <!-- rest -->
+        <div style="margin-top:18px; border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:50px 1fr 110px 100px 130px 100px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+            <div>RANK</div><div>TRADER</div><div>WIN RATE</div><div>TRADES</div><div>PNL (SOL)</div><div></div>
+          </div>
+          <sc-for list="{{ leaderboard }}" as="l" hint-placeholder-count="7">
+            <div style="display:grid; grid-template-columns:50px 1fr 110px 100px 130px 100px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#8a919c;">{{ l.rank }}</div>
+              <div style="display:flex; align-items:center; gap:11px; min-width:0;">
+                <div style="width:34px; height:34px; border-radius:50%; flex-shrink:0; background:{{ l.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:13px;">{{ l.initials }}</div>
+                <div style="min-width:0;"><div style="display:flex; align-items:center; gap:5px;"><span style="font-size:14px; font-weight:600;">{{ l.name }}</span><sc-if value="{{ l.verified }}" hint-placeholder-val="{{ false }}"><span style="width:13px; height:13px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span></sc-if></div><div style="font-size:11px; color:#565d68;">@{{ l.handle }}</div></div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#c7ccd4;">{{ l.winRate }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8a919c;">{{ l.trades }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#3ad29b;">{{ l.pnl }}</div>
+              <div><button style="width:100%; background:none; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:7px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentSoft }};">Copy</button></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ TRADERS VIEW ============ -->
+    <sc-if value="{{ isTraders }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:16px 30px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div>
+            <div style="font-size:21px; font-weight:700; letter-spacing:-0.01em;">Traders</div>
+            <div style="font-size:12px; color:#565d68; margin-top:3px;">Discover and copy top OrcAgent traders</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:8px; background:#101216; border:1px solid #21252c; border-radius:9px; padding:7px 12px;">
+            <span style="color:#565d68; font-size:12px;">⌕</span>
+            <input placeholder="Search traders" style="width:150px; background:none; border:none; outline:none; color:#eef1f5; font-family:inherit; font-size:12px;">
+          </div>
+        </div>
+      </header>
+      <div style="padding:20px 30px 48px;">
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:16px;">
+          <sc-for list="{{ tradersList }}" as="t" hint-placeholder-count="6">
+            <div style="border:1px solid #16191f; border-radius:18px; background:#101216; padding:18px; display:flex; flex-direction:column;">
+              <div style="display:flex; align-items:center; gap:12px;">
+                <div style="position:relative;"><div style="width:48px; height:48px; border-radius:50%; background:{{ t.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:16px;">{{ t.initials }}</div><sc-if value="{{ t.online }}" hint-placeholder-val="{{ true }}"><span style="position:absolute; right:0; bottom:0; width:12px; height:12px; border-radius:50%; background:#3ad29b; border:2px solid #101216;"></span></sc-if></div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:5px;"><span style="font-size:15px; font-weight:600;">{{ t.name }}</span><sc-if value="{{ t.verified }}" hint-placeholder-val="{{ true }}"><span style="width:14px; height:14px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span></sc-if></div>
+                  <div style="font-size:12px; color:#565d68;">@{{ t.handle }}</div>
+                </div>
+              </div>
+              <p style="margin:13px 0 0; font-size:13px; line-height:1.5; color:#c7ccd4;">{{ t.bio }}</p>
+              <div style="display:flex; gap:1px; margin-top:15px; background:#16191f; border:1px solid #16191f; border-radius:12px; overflow:hidden;">
+                <div style="flex:1; background:#0d0f12; padding:10px 12px;"><div style="font-size:10px; color:#565d68;">30D PNL</div><div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:#3ad29b; margin-top:3px;">{{ t.pnl }}</div></div>
+                <div style="flex:1; background:#0d0f12; padding:10px 12px;"><div style="font-size:10px; color:#565d68;">WIN</div><div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; margin-top:3px;">{{ t.winRate }}</div></div>
+                <div style="flex:1; background:#0d0f12; padding:10px 12px;"><div style="font-size:10px; color:#565d68;">COPIERS</div><div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; margin-top:3px;">{{ t.copiers }}</div></div>
+              </div>
+              <div style="display:flex; gap:8px; margin-top:15px;">
+                <button style="flex:1; background:{{ accent }}; color:#06210f; border:none; border-radius:10px; padding:10px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;" style-hover="filter:brightness(1.08);">⧉ Copy trades</button>
+                <button style="background:none; color:#c7ccd4; border:1px solid #2c313a; border-radius:10px; padding:10px 14px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">{{ t.followLabel }}</button>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ NOTIFICATIONS VIEW ============ -->
+    <sc-if value="{{ isNotifications }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0; max-width:760px; border-right:1px solid #16191f;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:16px 26px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div>
+            <div style="font-size:20px; font-weight:600; letter-spacing:-0.01em;">Notifications</div>
+            <div style="font-size:12px; color:#565d68; margin-top:3px;">5 unread</div>
+          </div>
+          <span style="font-size:13px; color:{{ accent }}; cursor:pointer;">Mark all read</span>
+        </div>
+        <div style="display:flex; gap:26px; margin-top:15px;">
+          <sc-for list="{{ notifTabs }}" as="t" hint-placeholder-count="3">
+            <span style="font-size:14px; padding-bottom:11px; cursor:pointer; color:{{ t.color }}; font-weight:{{ t.weight }}; border-bottom:2px solid {{ t.border }};">{{ t.label }}</span>
+          </sc-for>
+        </div>
+      </header>
+      <sc-for list="{{ notifs }}" as="n" hint-placeholder-count="6">
+        <div style="display:flex; gap:14px; padding:16px 26px; border-bottom:1px solid #16191f; background:{{ n.unreadBg }};" style-hover="background:#0d0f12;">
+          <div style="width:40px; height:40px; border-radius:11px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:17px; color:{{ n.iconColor }}; background:{{ n.iconBg }};">{{ n.icon }}</div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:14px; line-height:1.5; color:#eef1f5;">{{ n.text }}</div>
+            <sc-if value="{{ n.detail }}" hint-placeholder-val="{{ false }}"><div style="font-family:'JetBrains Mono',monospace; font-size:12px; margin-top:6px; color:{{ n.detailColor }}; background:#101216; border:1px solid #21252c; border-radius:9px; padding:7px 11px; display:inline-block;">{{ n.detail }}</div></sc-if>
+            <div style="font-size:12px; color:#565d68; margin-top:7px;">{{ n.time }}</div>
+          </div>
+          <sc-if value="{{ n.unread }}" hint-placeholder-val="{{ false }}"><span style="width:8px; height:8px; border-radius:50%; background:{{ accent }}; flex-shrink:0; margin-top:5px;"></span></sc-if>
+        </div>
+      </sc-for>
+    </main>
+    </sc-if>
+
+    <!-- ============ PROFILE VIEW ============ -->
+    <sc-if value="{{ isProfile }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0;">
+      <div style="height:120px; background:linear-gradient(120deg,{{ accentSoft }},#101216 70%); border-bottom:1px solid #16191f;"></div>
+      <div style="max-width:920px; margin:0 auto; padding:0 30px 48px;">
+        <div style="display:flex; align-items:flex-end; justify-content:space-between; gap:16px; margin-top:-40px;">
+          <div style="display:flex; align-items:flex-end; gap:18px;">
+            <div style="width:96px; height:96px; border-radius:50%; background:#2b6cff; border:4px solid #0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:700; color:#fff; font-size:34px;">Y</div>
+            <div style="padding-bottom:6px;">
+              <div style="display:flex; align-items:center; gap:7px;"><span style="font-size:23px; font-weight:700;">You</span><span style="width:17px; height:17px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:10px; font-weight:700;">✓</span></div>
+              <div style="font-size:13px; color:#565d68; margin-top:3px;">@you · joined Jun 2026</div>
+            </div>
+          </div>
+          <div style="display:flex; gap:9px;">
+            <button onClick="{{ goSettings }}" style="background:none; color:#c7ccd4; border:1px solid #2c313a; border-radius:10px; padding:9px 15px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">Edit profile</button>
+            <button style="background:{{ accent }}; color:#06210f; border:none; border-radius:10px; padding:9px 16px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;" style-hover="filter:brightness(1.08);">Share</button>
+          </div>
+        </div>
+        <p style="margin:16px 0 0; font-size:14.5px; line-height:1.55; color:#c7ccd4; max-width:560px;">Autonomous momentum trader. Bot scans Solana every 30s for ≥5% breakouts, exits at TP +12% / SL -3% — fully hands-free. Following the orcas. 🐳</p>
+        <div style="display:flex; gap:22px; margin-top:14px; font-size:14px;">
+          <span><b style="font-weight:700;">128</b> <span style="color:#565d68;">Following</span></span>
+          <span><b style="font-weight:700;">2,941</b> <span style="color:#565d68;">Followers</span></span>
+          <span><b style="font-weight:700;">312</b> <span style="color:#565d68;">Copiers</span></span>
+        </div>
+        <!-- stat tiles -->
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:13px; margin-top:22px;">
+          <sc-for list="{{ profileStats }}" as="s" hint-placeholder-count="4">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:15px 17px;">
+              <div style="font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">{{ s.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:23px; font-weight:700; margin-top:9px; color:{{ s.color }};">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+        <!-- achievements -->
+        <div style="margin-top:24px; font-size:13px; font-weight:600; color:#8a919c; letter-spacing:0.04em;">ACHIEVEMENTS</div>
+        <div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:12px;">
+          <sc-for list="{{ achievements }}" as="a" hint-placeholder-count="5">
+            <div style="display:flex; align-items:center; gap:9px; border:1px solid {{ a.border }}; border-radius:12px; background:{{ a.bg }}; padding:11px 14px;">
+              <span style="font-size:18px;">{{ a.icon }}</span>
+              <div><div style="font-size:13px; font-weight:600; color:{{ a.color }};">{{ a.title }}</div><div style="font-size:11px; color:#565d68;">{{ a.desc }}</div></div>
+            </div>
+          </sc-for>
+        </div>
+        <!-- recent trades -->
+        <div style="margin-top:26px; font-size:13px; font-weight:600; color:#8a919c; letter-spacing:0.04em;">RECENT TRADES</div>
+        <div style="margin-top:12px; border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+          <sc-for list="{{ profileTrades }}" as="t" hint-placeholder-count="4">
+            <div style="display:flex; align-items:center; gap:13px; padding:13px 17px; border-bottom:1px solid #16191f;" style-hover="background:#14171c;">
+              <div style="width:34px; height:34px; border-radius:10px; flex-shrink:0; background:{{ t.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:10px;">{{ t.tick }}</div>
+              <div style="flex:1; min-width:0;"><div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600;">${{ t.tick }}</div><div style="font-size:11px; color:#565d68; margin-top:2px;">{{ t.sub }}</div></div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:{{ t.color2 }};">{{ t.pnl }}</div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ SETTINGS VIEW ============ -->
+    <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+    <main style="flex:1; min-width:0;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:16px 30px;">
+        <div style="font-size:21px; font-weight:700; letter-spacing:-0.01em;">Settings</div>
+        <div style="font-size:12px; color:#565d68; margin-top:3px;">Configure your bot, account and risk controls</div>
+      </header>
+      <div style="max-width:720px; margin:0 auto; padding:22px 30px 48px; display:flex; flex-direction:column; gap:18px;">
+
+        <!-- trading strategy -->
+        <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; gap:9px; font-size:14px; font-weight:600;"><span>⚡</span>Trading Strategy</div>
+          <div style="padding:6px 18px;">
+            <sc-for list="{{ strategyRows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:1px solid {{ r.divider }};">
+                <div style="min-width:0;"><div style="font-size:14px; font-weight:500;">{{ r.label }}</div><div style="font-size:12px; color:#565d68; margin-top:2px;">{{ r.desc }}</div></div>
+                <div style="display:flex; align-items:center; gap:8px; background:#0a0b0e; border:1px solid #2c313a; border-radius:10px; padding:8px 12px; flex-shrink:0;"><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:{{ accent }};">{{ r.value }}</span><span style="font-size:11px; color:#565d68;">{{ r.unit }}</span></div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- toggles -->
+        <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; gap:9px; font-size:14px; font-weight:600;"><span>🔔</span>Preferences</div>
+          <div style="padding:6px 18px;">
+            <sc-for list="{{ toggleRows }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:1px solid {{ r.divider }};">
+                <div style="min-width:0;"><div style="font-size:14px; font-weight:500;">{{ r.label }}</div><div style="font-size:12px; color:#565d68; margin-top:2px;">{{ r.desc }}</div></div>
+                <div onClick="{{ r.onToggle }}" style="width:44px; height:25px; border-radius:999px; flex-shrink:0; cursor:pointer; background:{{ r.trackBg }}; border:1px solid {{ r.trackBorder }}; position:relative; transition:background .15s;">
+                  <span style="position:absolute; top:2px; left:{{ r.knobLeft }}; width:19px; height:19px; border-radius:50%; background:{{ r.knobBg }}; transition:left .15s;"></span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- wallet / account -->
+        <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; gap:9px; font-size:14px; font-weight:600;"><span>🔑</span>Account &amp; Wallet</div>
+          <div style="padding:16px 18px; display:flex; flex-direction:column; gap:13px;">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
+              <div><div style="font-size:14px; font-weight:500;">Connected wallet</div><div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68; margin-top:3px;">Cdn8…eAM9</div></div>
+              <button style="background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:8px 13px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentBorder }};">Manage</button>
+            </div>
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:14px;">
+              <div><div style="font-size:14px; font-weight:500;">Export private key</div><div style="font-size:12px; color:#565d68; margin-top:3px;">Reveal your bot wallet key</div></div>
+              <button style="background:none; color:#c7ccd4; border:1px solid #2c313a; border-radius:9px; padding:8px 13px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">Reveal</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- danger -->
+        <div style="border:1px solid rgba(247,107,98,0.28); border-radius:18px; background:rgba(247,107,98,0.05); padding:16px 18px; display:flex; align-items:center; justify-content:space-between; gap:14px;">
+          <div><div style="font-size:14px; font-weight:600; color:#f76b62;">Stop bot &amp; close all positions</div><div style="font-size:12px; color:#8a919c; margin-top:3px;">Immediately exits every open trade at market.</div></div>
+          <button style="background:rgba(247,107,98,0.14); color:#f76b62; border:1px solid rgba(247,107,98,0.4); border-radius:10px; padding:10px 16px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;" style-hover="background:rgba(247,107,98,0.24);">Emergency stop</button>
+        </div>
+      </div>
+    </main>
+    </sc-if>
+
+    <!-- ============ CENTER ============ -->
+    <sc-if value="{{ feedArea }}" hint-placeholder-val="{{ true }}">
+    <main style="flex:1; min-width:0; max-width:640px; border-right:1px solid #16191f;">
+
+      <!-- ===== HOME / FEED VIEW ===== -->
+      <sc-if value="{{ isHome }}" hint-placeholder-val="{{ true }}">
+      <div>
+        <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:15px 22px 0;">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between;">
+            <div>
+              <div style="font-size:20px; font-weight:600; letter-spacing:-0.01em;">Home</div>
+              <div style="font-size:12px; color:#565d68; margin-top:3px;">347 traders online · scanner running</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:0.1em; color:#3ad29b;">
+              <span style="width:7px; height:7px; border-radius:50%; background:#3ad29b; animation:orcaBlink 1.6s infinite;"></span>LIVE
+            </div>
+          </div>
+          <div style="display:flex; gap:30px; margin-top:16px;">
+            <sc-for list="{{ tabs }}" as="t" hint-placeholder-count="3">
+              <button onClick="{{ t.onClick }}" style="background:none; border:none; cursor:pointer; font-family:inherit; font-size:14px; padding:0 0 13px; color:{{ t.color }}; font-weight:{{ t.weight }}; border-bottom:2px solid {{ t.border }};">{{ t.label }}</button>
+            </sc-for>
+          </div>
+        </header>
+
+        <!-- your bot status -->
+        <div style="margin:16px 22px; border:1px solid #21252c; border-radius:16px; padding:15px 17px; display:flex; align-items:center; justify-content:space-between; gap:14px; background:#101216;">
+          <div style="display:flex; align-items:center; gap:13px;">
+            <span style="width:9px; height:9px; border-radius:50%; background:#f7b955; box-shadow:0 0 0 4px rgba(247,185,85,0.14);"></span>
+            <div>
+              <div style="font-size:14px; font-weight:600;">Your bot is idle</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68; margin-top:3px;">2.41 SOL ready · 0/5 open · 68% win rate</div>
+            </div>
+          </div>
+          <button style="background:{{ accent }}; color:#08120f; border:none; border-radius:11px; padding:10px 16px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer; white-space:nowrap;" style-hover="filter:brightness(1.08);">▶ Start Trading</button>
+        </div>
+
+        <!-- composer -->
+        <div style="padding:15px 22px; border-bottom:1px solid #16191f; display:flex; gap:14px;">
+          <div style="width:44px; height:44px; border-radius:50%; flex-shrink:0; background:#2b6cff; display:flex; align-items:center; justify-content:center; font-weight:600; color:#fff; font-size:15px;">Y</div>
+          <div style="flex:1; min-width:0;">
+            <div style="font-size:17px; color:#565d68; padding:8px 0;">Share your last trade, @you…</div>
+            <div style="display:flex; align-items:center; gap:9px; margin-top:6px;">
+              <span style="font-size:12px; color:#8a919c; border:1px solid #21252c; border-radius:9px; padding:6px 11px;">＋ Chart</span>
+              <span style="font-size:12px; color:#8a919c; border:1px solid #21252c; border-radius:9px; padding:6px 11px;">＄ Tag token</span>
+              <div style="flex:1;"></div>
+              <button style="background:{{ accent }}; color:#08120f; border:none; border-radius:10px; padding:8px 18px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;">Post</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- feed -->
+        <sc-for list="{{ visible }}" as="post" hint-placeholder-count="5">
+          <article style="padding:18px 22px; border-bottom:1px solid #16191f; display:flex; gap:14px;" style-hover="background:#0d0f12;">
+            <div style="width:44px; height:44px; border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:15px; color:#0a0b0e; background:{{ post.color }};">{{ post.initials }}</div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:center; gap:6px; font-size:14px;">
+                <span style="font-weight:600; color:#eef1f5;">{{ post.name }}</span>
+                <sc-if value="{{ post.verified }}" hint-placeholder-val="{{ true }}">
+                  <span style="width:15px; height:15px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:9px; font-weight:700;">✓</span>
+                </sc-if>
+                <span style="color:#565d68;">@{{ post.handle }}</span>
+                <span style="color:#3a4049;">·</span>
+                <span style="color:#565d68;">{{ post.time }}</span>
+              </div>
+
+              <sc-if value="{{ post.isTrade }}" hint-placeholder-val="{{ true }}">
+                <div style="margin-top:12px; border:1px solid #21252c; border-radius:15px; padding:14px 15px; display:flex; justify-content:space-between; align-items:center; gap:16px; background:#101216;">
+                  <div style="min-width:0;">
+                    <div style="display:flex; align-items:center; gap:9px;">
+                      <span style="font-size:13px; color:#8a919c;">{{ post.action }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:15px; color:{{ post.tokenColor }};">${{ post.token }}</span>
+                      <span style="font-size:10px; font-weight:600; letter-spacing:0.06em; color:#8a919c; border:1px solid #21252c; border-radius:5px; padding:2px 6px;">{{ post.side }}</span>
+                    </div>
+                    <div style="margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68;">{{ post.entryLine }}</div>
+                    <sc-if value="{{ showSparklines }}" hint-placeholder-val="{{ true }}">
+                      <div style="margin-top:11px; display:flex; align-items:flex-end; gap:2px; height:34px; width:160px; color:{{ post.barColor }};">
+                        <sc-for list="{{ post.bars }}" as="bar" hint-placeholder-count="22"><div style="flex:1; height:{{ bar }}%; background:currentColor; border-radius:1px; opacity:0.82;"></div></sc-for>
+                      </div>
+                    </sc-if>
+                  </div>
+                  <div style="text-align:right; flex-shrink:0;">
+                    <div style="font-family:'JetBrains Mono',monospace; font-weight:700; font-size:23px; color:{{ post.pnlColor }};">{{ post.pnl }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:{{ post.pnlColor }}; margin-top:3px;">{{ post.sub }}</div>
+                  </div>
+                </div>
+              </sc-if>
+
+              <p style="margin:12px 0 0; font-size:14.5px; line-height:1.55; color:#c7ccd4;">{{ post.text }}</p>
+
+              <div style="display:flex; align-items:center; gap:24px; margin-top:14px; font-size:13px; color:#565d68;">
+                <span style="display:flex; align-items:center; gap:6px;" style-hover="color:#8a919c;">↩ {{ post.replies }}</span>
+                <span style="display:flex; align-items:center; gap:6px; color:{{ accent }}; font-weight:500;">⧉ Copy · {{ post.copies }}</span>
+                <span style="display:flex; align-items:center; gap:6px;" style-hover="color:#f76b62;">♡ {{ post.likes }}</span>
+                <span style="display:flex; align-items:center; gap:6px;" style-hover="color:#8a919c;">↗</span>
+              </div>
+            </div>
+          </article>
+        </sc-for>
+
+        <div style="padding:26px; text-align:center; font-size:13px; color:#3a4049;">You've reached the top of the feed · scanner refreshes every 30s</div>
+      </div>
+      </sc-if>
+
+      <!-- ===== WALLET VIEW ===== -->
+      <sc-if value="{{ isWallet }}" hint-placeholder-val="{{ false }}">
+      <div>
+        <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:15px 22px 16px;">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between;">
+            <div>
+              <div style="font-size:20px; font-weight:600; letter-spacing:-0.01em;">Wallet</div>
+              <div style="font-size:12px; color:#565d68; margin-top:3px;">Your dedicated trading wallet</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:0.08em; color:{{ accent }}; background:{{ accentSoft }}; border:1px solid {{ accentBorder }}; border-radius:8px; padding:6px 10px;">
+              <span style="width:7px; height:7px; border-radius:50%; background:{{ accent }};"></span>SOLANA · MAINNET
+            </div>
+          </div>
+        </header>
+
+        <!-- balance hero -->
+        <div style="margin:18px 22px 0; border:1px solid #21252c; border-radius:18px; padding:20px; background:linear-gradient(160deg,#11151a,#0e1013);">
+          <div style="font-size:11px; letter-spacing:0.12em; color:#565d68; font-weight:600;">TOTAL BALANCE</div>
+          <div style="display:flex; align-items:flex-end; gap:12px; margin-top:9px;">
+            <div style="font-family:'JetBrains Mono',monospace; font-size:40px; font-weight:700; line-height:1; letter-spacing:-0.01em;">{{ walletTotalSol }}<span style="font-size:18px; color:#565d68; font-weight:500; margin-left:8px;">SOL</span></div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; color:#3ad29b; padding-bottom:6px;">{{ walletChg }} today</div>
+          </div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:14px; color:#8a919c; margin-top:8px;">≈ {{ walletUsd }} USD</div>
+
+          <div style="display:flex; gap:9px; margin-top:18px;">
+            <button style="flex:1; background:{{ accent }}; color:#08120f; border:none; border-radius:12px; padding:12px; font-family:inherit; font-size:13px; font-weight:700; cursor:pointer;" style-hover="filter:brightness(1.08);">↓ Deposit</button>
+            <button style="flex:1; background:#0a0b0e; color:#eef1f5; border:1px solid #2c313a; border-radius:12px; padding:12px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">↑ Withdraw</button>
+            <button style="flex:1; background:#0a0b0e; color:#eef1f5; border:1px solid #2c313a; border-radius:12px; padding:12px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">↗ Send</button>
+            <button onClick="{{ openSwap }}" style="flex:1; background:#0a0b0e; color:#eef1f5; border:1px solid #2c313a; border-radius:12px; padding:12px; font-family:inherit; font-size:13px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">⇄ Swap</button>
+          </div>
+
+          <div style="display:flex; gap:1px; margin-top:18px; background:#21252c; border:1px solid #21252c; border-radius:12px; overflow:hidden;">
+            <div style="flex:1; background:#0d0f12; padding:12px 14px;">
+              <div style="font-size:11px; color:#565d68;">Available</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; margin-top:4px;">{{ walletAvail }} <span style="font-size:11px; color:#565d68;">SOL</span></div>
+            </div>
+            <div style="flex:1; background:#0d0f12; padding:12px 14px;">
+              <div style="font-size:11px; color:#565d68;">In open positions</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; margin-top:4px; color:{{ accent }};">{{ walletInPos }} <span style="font-size:11px; color:#565d68;">SOL</span></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- deposit address -->
+        <div style="margin:16px 22px 0; border:1px solid #16191f; border-radius:18px; padding:17px; background:#101216;">
+          <div style="font-size:11px; letter-spacing:0.1em; color:#565d68; font-weight:600;">DEPOSIT ADDRESS</div>
+          <div style="display:flex; align-items:center; gap:15px; margin-top:13px;">
+            <div style="width:74px; height:74px; flex-shrink:0; border-radius:12px; background:#eef1f5; background-image:repeating-linear-gradient(0deg,#0a0b0e 0 3px,transparent 3px 6px),repeating-linear-gradient(90deg,#0a0b0e 0 3px,transparent 3px 6px); background-size:6px 6px; border:4px solid #eef1f5;"></div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#c7ccd4; line-height:1.5; word-break:break-all;">{{ walletAddr }}</div>
+              <div style="display:flex; gap:8px; margin-top:11px;">
+                <button style="background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:7px 13px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentBorder }};">⧉ Copy address</button>
+                <button style="background:none; color:#8a919c; border:1px solid #2c313a; border-radius:9px; padding:7px 13px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:#14171c; color:#eef1f5;">View on Solscan ↗</button>
+              </div>
+            </div>
+          </div>
+          <div style="margin-top:13px; font-size:11px; color:#565d68; line-height:1.5; border-top:1px solid #16191f; padding-top:11px;">Send only SOL and SPL tokens to this address. This is a dedicated bot wallet — never store funds you can't afford to trade.</div>
+        </div>
+
+        <!-- holdings -->
+        <div style="margin:16px 22px 0;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px 11px;">
+            <div style="font-size:15px; font-weight:600;">Holdings</div>
+            <div style="font-size:12px; color:{{ accent }}; cursor:pointer;">Hide small balances</div>
+          </div>
+          <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+            <sc-for list="{{ holdings }}" as="h" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; gap:13px; padding:13px 16px; border-bottom:1px solid #16191f;" style-hover="background:#14171c;">
+                <div style="width:38px; height:38px; border-radius:50%; flex-shrink:0; background:{{ h.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:11px;">{{ h.tick }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:14px; font-weight:600;">{{ h.name }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68; margin-top:2px;">{{ h.amount }}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600;">{{ h.value }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:{{ h.chgColor }}; margin-top:2px;">{{ h.chg }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <!-- activity -->
+        <div style="margin:18px 22px 8px;">
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:0 2px 11px;">
+            <div style="font-size:15px; font-weight:600;">Recent activity</div>
+            <div style="font-size:12px; color:{{ accent }}; cursor:pointer;">View all →</div>
+          </div>
+          <div style="border:1px solid #16191f; border-radius:18px; background:#101216; padding:4px 16px;">
+            <sc-for list="{{ txns }}" as="x" hint-placeholder-count="5">
+              <div style="display:flex; align-items:center; gap:13px; padding:13px 0; border-bottom:1px solid {{ x.divider }};">
+                <div style="width:38px; height:38px; border-radius:11px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; color:{{ x.iconColor }}; background:{{ x.iconBg }};">{{ x.icon }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:14px; font-weight:600;">{{ x.type }}</div>
+                  <div style="font-size:12px; color:#565d68; margin-top:2px;">{{ x.sub }}</div>
+                </div>
+                <div style="text-align:right;">
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:600; color:{{ x.amtColor }};">{{ x.amt }}</div>
+                  <div style="font-size:11px; color:#565d68; margin-top:2px;">{{ x.time }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="padding:18px 26px 30px; text-align:center; font-size:12px; color:#3a4049;">Balances update every block · OrcAgent never holds custody of your keys</div>
+
+        <!-- ===== SWAP MODAL ===== -->
+        <sc-if value="{{ swapOpen }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ closeSwap }}" style="position:fixed; inset:0; z-index:60; background:rgba(6,7,9,0.72); backdrop-filter:blur(6px); display:flex; align-items:flex-start; justify-content:center; padding:64px 20px;">
+          <div onClick="{{ stop }}" style="width:420px; max-width:100%; background:#0e1116; border:1px solid #21252c; border-radius:22px; box-shadow:0 24px 70px rgba(0,0,0,0.6); overflow:hidden;">
+
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:18px 20px 14px;">
+              <div style="font-size:17px; font-weight:600;">Swap</div>
+              <div style="display:flex; align-items:center; gap:10px;">
+                <span style="color:#565d68; font-size:16px; cursor:pointer;" style-hover="color:#eef1f5;">⚙</span>
+                <span onClick="{{ closeSwap }}" style="color:#565d68; font-size:18px; cursor:pointer; line-height:1;" style-hover="color:#eef1f5;">✕</span>
+              </div>
+            </div>
+
+            <!-- swap body -->
+            <sc-if value="{{ swapPickerClosed }}" hint-placeholder-val="{{ true }}">
+            <div style="padding:0 16px 16px;">
+              <!-- FROM -->
+              <div style="border:1px solid #21252c; border-radius:16px; padding:14px 15px; background:#0a0b0e;">
+                <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; color:#565d68;">
+                  <span>You pay</span><span style="font-family:'JetBrains Mono',monospace;">Balance {{ fromTok.bal }}</span>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px;">
+                  <input value="0.5" style="flex:1; min-width:0; background:none; border:none; outline:none; color:#eef1f5; font-family:'JetBrains Mono',monospace; font-size:27px; font-weight:700;">
+                  <div onClick="{{ openPicker }}" style="display:flex; align-items:center; gap:8px; flex-shrink:0; background:#14171c; border:1px solid #2c313a; border-radius:999px; padding:6px 11px 6px 6px; cursor:pointer;" style-hover="background:#191d23;">
+                    <div style="width:26px; height:26px; border-radius:50%; background:{{ fromTok.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:9px;">{{ fromTok.tick }}</div>
+                    <span style="font-size:14px; font-weight:600;">{{ fromTok.tick }}</span>
+                    <span style="font-size:9px; color:#8a919c;">▼</span>
+                  </div>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68; margin-top:6px;">≈ {{ fromTok.usd }}</div>
+              </div>
+
+              <!-- switch -->
+              <div style="display:flex; justify-content:center; margin:-9px 0; position:relative; z-index:2;">
+                <div style="width:34px; height:34px; border-radius:11px; background:#0e1116; border:1px solid #2c313a; display:flex; align-items:center; justify-content:center; color:{{ accent }}; font-size:15px; cursor:pointer;" style-hover="background:#14171c;">↓</div>
+              </div>
+
+              <!-- TO -->
+              <div style="border:1px solid #21252c; border-radius:16px; padding:14px 15px; background:#0a0b0e;">
+                <div style="display:flex; align-items:center; justify-content:space-between; font-size:12px; color:#565d68;">
+                  <span>You receive</span><span style="font-family:'JetBrains Mono',monospace;">Balance {{ toTok.bal }}</span>
+                </div>
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:10px;">
+                  <div style="flex:1; min-width:0; color:#eef1f5; font-family:'JetBrains Mono',monospace; font-size:27px; font-weight:700;">{{ toAmount }}</div>
+                  <div onClick="{{ openPicker }}" style="display:flex; align-items:center; gap:8px; flex-shrink:0; background:{{ accentSoft }}; border:1px solid {{ accentBorder }}; border-radius:999px; padding:6px 11px 6px 6px; cursor:pointer;" style-hover="filter:brightness(1.1);">
+                    <div style="width:26px; height:26px; border-radius:50%; background:{{ toTok.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:9px;">{{ toTok.tick }}</div>
+                    <span style="font-size:14px; font-weight:600; color:{{ accent }};">{{ toTok.tick }}</span>
+                    <span style="font-size:9px; color:{{ accent }};">▼</span>
+                  </div>
+                </div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68; margin-top:6px;">≈ {{ toTok.usd }}</div>
+              </div>
+
+              <!-- rate -->
+              <div style="display:flex; align-items:center; justify-content:space-between; padding:13px 4px 4px; font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c;">
+                <span>1 {{ fromTok.tick }} ≈ {{ rate }} {{ toTok.tick }}</span>
+                <span style="color:#565d68;">Slippage 0.5% · Fee 0.25%</span>
+              </div>
+
+              <button style="width:100%; margin-top:12px; background:{{ accent }}; color:#06210f; border:none; border-radius:14px; padding:15px; font-family:inherit; font-size:15px; font-weight:700; cursor:pointer;" style-hover="filter:brightness(1.08);">Review swap</button>
+            </div>
+            </sc-if>
+
+            <!-- ===== TOKEN PICKER (the redesigned dropdown) ===== -->
+            <sc-if value="{{ swapPickerOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:0 12px 12px;">
+              <div style="display:flex; align-items:center; gap:9px; padding:0 4px 12px;">
+                <span onClick="{{ closePicker }}" style="color:#8a919c; font-size:16px; cursor:pointer;" style-hover="color:#eef1f5;">←</span>
+                <div style="flex:1; display:flex; align-items:center; gap:9px; background:#0a0b0e; border:1px solid #2c313a; border-radius:12px; padding:10px 13px;">
+                  <span style="color:#565d68; font-size:14px;">⌕</span>
+                  <input placeholder="Search name or paste address" style="flex:1; min-width:0; background:none; border:none; outline:none; color:#eef1f5; font-family:inherit; font-size:14px;">
+                </div>
+              </div>
+
+              <!-- quick picks -->
+              <div style="display:flex; flex-wrap:wrap; gap:7px; padding:0 4px 12px;">
+                <sc-for list="{{ quickTokens }}" as="q" hint-placeholder-count="4">
+                  <div style="display:flex; align-items:center; gap:7px; background:#14171c; border:1px solid #2c313a; border-radius:999px; padding:5px 12px 5px 5px; cursor:pointer;" style-hover="background:#191d23;">
+                    <div style="width:22px; height:22px; border-radius:50%; background:{{ q.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:8px;">{{ q.tick }}</div>
+                    <span style="font-size:13px; font-weight:600;">{{ q.tick }}</span>
+                  </div>
+                </sc-for>
+              </div>
+
+              <div style="font-size:11px; letter-spacing:0.08em; color:#565d68; font-weight:600; padding:0 8px 6px;">YOUR TOKENS</div>
+              <div style="max-height:280px; overflow-y:auto;">
+                <sc-for list="{{ swapTokens }}" as="tk" hint-placeholder-count="5">
+                  <div onClick="{{ tk.onSelect }}" style="display:flex; align-items:center; gap:12px; padding:10px 8px; border-radius:13px; cursor:pointer;" style-hover="background:#14171c;">
+                    <div style="width:38px; height:38px; border-radius:50%; flex-shrink:0; background:{{ tk.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:11px;">{{ tk.tick }}</div>
+                    <div style="flex:1; min-width:0;">
+                      <div style="display:flex; align-items:center; gap:7px;">
+                        <span style="font-size:14px; font-weight:600;">{{ tk.tick }}</span>
+                        <sc-if value="{{ tk.verified }}" hint-placeholder-val="{{ true }}"><span style="width:13px; height:13px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span></sc-if>
+                      </div>
+                      <div style="font-size:12px; color:#565d68; margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ tk.name }}</div>
+                    </div>
+                    <div style="text-align:right; flex-shrink:0;">
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600;">{{ tk.bal }}</div>
+                      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68; margin-top:2px;">{{ tk.usd }}</div>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </div>
+            </sc-if>
+
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+    </main>
+
+    <!-- ============ RIGHT RAIL ============ -->
+    <aside style="width:340px; flex-shrink:0; padding:16px 18px 40px; position:sticky; top:0; height:100vh; overflow-y:auto;">
+      <input placeholder="Search traders, tokens…" style="width:100%; background:#101216; border:1px solid #21252c; border-radius:13px; padding:11px 15px; color:#eef1f5; font-family:inherit; font-size:14px; outline:none; margin-bottom:16px;">
+
+      <div style="background:#101216; border:1px solid #16191f; border-radius:18px; padding:4px 0 8px; margin-bottom:16px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 17px 11px;">
+          <div style="font-size:16px; font-weight:600;">Live Market</div>
+          <div style="display:flex; align-items:center; gap:6px; font-size:10px; font-weight:600; letter-spacing:0.1em; color:#3ad29b;"><span style="width:6px; height:6px; border-radius:50%; background:#3ad29b; animation:orcaBlink 1.6s infinite;"></span>PUMPING</div>
+        </div>
+        <sc-for list="{{ movers }}" as="m" hint-placeholder-count="5">
+          <div style="display:flex; align-items:center; gap:12px; padding:9px 17px;" style-hover="background:#14171c;">
+            <div style="width:36px; height:36px; border-radius:10px; flex-shrink:0; background:{{ m.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-family:'JetBrains Mono',monospace; font-weight:700; font-size:11px;">{{ m.tick }}</div>
+            <div style="flex:1; min-width:0;">
+              <div style="font-size:14px; font-weight:600;">{{ m.name }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">{{ m.pair }}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:500;">{{ m.price }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:{{ m.chgColor }};">{{ m.chg }}</div>
+            </div>
+          </div>
+        </sc-for>
+        <div style="padding:11px 17px 6px; font-size:13px; color:{{ accent }}; cursor:pointer;">Show all markets →</div>
+      </div>
+
+      <div style="background:#101216; border:1px solid #16191f; border-radius:18px; padding:4px 0 8px; margin-bottom:16px;">
+        <div style="padding:15px 17px 11px; font-size:16px; font-weight:600;">Top Traders · Today</div>
+        <sc-for list="{{ traders }}" as="t" hint-placeholder-count="4">
+          <div style="display:flex; align-items:center; gap:11px; padding:9px 17px;" style-hover="background:#14171c;">
+            <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#565d68; width:14px; text-align:center;">{{ t.rank }}</span>
+            <div style="width:34px; height:34px; border-radius:50%; flex-shrink:0; background:{{ t.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:13px;">{{ t.initials }}</div>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:center; gap:5px;">
+                <span style="font-size:14px; font-weight:600;">{{ t.name }}</span>
+                <sc-if value="{{ t.verified }}" hint-placeholder-val="{{ true }}"><span style="width:13px; height:13px; border-radius:50%; background:{{ accent }}; color:#0a0b0e; display:inline-flex; align-items:center; justify-content:center; font-size:8px; font-weight:700;">✓</span></sc-if>
+              </div>
+              <div style="font-size:12px; color:#565d68;">@{{ t.handle }}</div>
+            </div>
+            <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600; color:#3ad29b;">{{ t.pnl }}</div>
+          </div>
+        </sc-for>
+        <div style="padding:11px 17px 6px; font-size:13px; color:{{ accent }}; cursor:pointer;">View leaderboard →</div>
+      </div>
+
+      <div style="background:#101216; border:1px solid #16191f; border-radius:18px; padding:15px 17px; margin-bottom:16px;">
+        <div style="font-size:13px; color:#565d68; margin-bottom:13px;">Platform · 24h</div>
+        <div style="display:flex; justify-content:space-between; gap:8px;">
+          <div><div style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700;">1,284</div><div style="font-size:11px; color:#565d68; margin-top:3px;">Trades</div></div>
+          <div><div style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700; color:#3ad29b;">+612</div><div style="font-size:11px; color:#565d68; margin-top:3px;">Net SOL</div></div>
+          <div><div style="font-family:'JetBrains Mono',monospace; font-size:19px; font-weight:700;">347</div><div style="font-size:11px; color:#565d68; margin-top:3px;">Online</div></div>
+        </div>
+      </div>
+
+      <div style="display:flex; flex-wrap:wrap; gap:8px 14px; font-size:12px; color:#565d68; padding:0 4px;">
+        <span style-hover="color:#8a919c;">About</span><span style-hover="color:#8a919c;">Docs</span><span style-hover="color:#8a919c;">Fees</span><span style-hover="color:#8a919c;">Security</span><span style-hover="color:#8a919c;">Terms</span>
+      </div>
+      <div style="margin-top:12px; padding:0 4px; font-size:11px; color:#3a4049; line-height:1.5;">OrcAgent is invite-only. Trade with a dedicated wallet. Crypto trading carries risk.</div>
+    </aside>
+    </sc-if>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#16e08e&quot;,&quot;options&quot;:[&quot;#16e08e&quot;,&quot;#35d4c4&quot;,&quot;#7c8cff&quot;,&quot;#f7b955&quot;],&quot;tsType&quot;:&quot;string&quot;},&quot;showSparklines&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;verifiedOnly&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;}}">
+class Component extends DCLogic {
+  state = { tab: 'For You', view: 'home', swapOpen: false, swapPicker: false };
+
+  hexToRgba(hex, a) {
+    const h = hex.replace('#', '');
+    const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  mkbars(trend, seed) {
+    let r = seed, v = 46;
+    const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+    const a = [];
+    for (let i = 0; i < 22; i++) {
+      v += Math.sin(i * 1.15 + seed) * 9 + (rnd() * 20 - 10) + trend * 1.7;
+      v = Math.max(16, Math.min(100, v));
+      a.push(Math.round(v));
+    }
+    return a;
+  }
+
+  feed() {
+    if (this._feed) return this._feed;
+    const up = '#3ad29b';
+    this._feed = [
+      { id: 1, name: 'Sol Whale', handle: 'solwhale', initials: 'SW', color: '#35d4c4', verified: true, time: '2m',
+        isTrade: true, action: 'Closed', token: 'WIF', tokenColor: '#35d4c4', side: 'LONG',
+        entryLine: 'Entry $1.62  →  Exit $1.92', pnl: '+18.4%', sub: '+0.42 SOL', pnlColor: up, barColor: up,
+        text: 'scanner caught the momentum at +5%, exited clean at TP. textbook auto-strategy run — I didn\u2019t touch a thing.',
+        bars: this.mkbars(2.2, 11), replies: 18, copies: 42, likes: 124 },
+      { id: 2, name: 'Degen Max', handle: 'degenmax', initials: 'DM', color: '#f7b955', verified: false, time: '6m',
+        isTrade: false, text: 'the orca scanner front-ran me on $MEW by 4 seconds. genuinely faster than my reflexes. starting to think the bot is the better trader.',
+        replies: 12, copies: 0, likes: 89 },
+      { id: 3, name: 'Pump Queen', handle: 'pumpqueen', initials: 'PQ', color: '#7c8cff', verified: true, time: '11m',
+        isTrade: true, action: 'Opened', token: 'POPCAT', tokenColor: '#f7b955', side: 'LONG · OPEN',
+        entryLine: 'Entry $0.39  ·  Live', pnl: '+6.2%', sub: 'unrealized', pnlColor: up, barColor: up,
+        text: 'auto-bought on a volume spike. TP locked at +12%, SL at -3%. riding it hands-free.',
+        bars: this.mkbars(1.4, 29), replies: 9, copies: 28, likes: 61 },
+      { id: 4, name: '0xHarper', handle: '0xharper', initials: 'HX', color: '#3ad29b', verified: false, time: '18m',
+        isTrade: true, action: 'Closed', token: 'PNUT', tokenColor: '#f76b62', side: 'STOP-LOSS',
+        entryLine: 'Entry $0.86  →  Exit $0.83', pnl: '-3.0%', sub: '-0.08 SOL', pnlColor: '#f76b62', barColor: '#f76b62',
+        text: 'stop-loss did its job. -3% beats -30%. discipline over hope, every single time.',
+        bars: this.mkbars(-2.4, 47), replies: 14, copies: 8, likes: 56 },
+      { id: 5, name: 'Luna R', handle: 'lunar', initials: 'LR', color: '#7c8cff', verified: false, time: '24m',
+        isTrade: false, text: 'hit 100 SOL all-time PnL today. three weeks on OrcAgent autopilot, never opened a single chart manually. the future is weird and I\u2019m here for it.',
+        replies: 47, copies: 0, likes: 312 },
+      { id: 6, name: '0xViper', handle: '0xviper', initials: 'VX', color: '#f76b62', verified: true, time: '31m',
+        isTrade: true, action: 'Closed', token: 'MOODENG', tokenColor: '#3ad29b', side: 'LONG',
+        entryLine: 'Entry $0.16  →  Exit $0.21', pnl: '+31.7%', sub: '+0.88 SOL', pnlColor: up, barColor: up,
+        text: 'best run this week. scanner nailed the entry before the candle even printed. this is the edge.',
+        bars: this.mkbars(3.1, 73), replies: 31, copies: 67, likes: 203 },
+    ];
+    return this._feed;
+  }
+
+  renderVals() {
+    const accent = this.props.accentColor || '#16e08e';
+    const showSparklines = this.props.showSparklines !== false;
+    const verifiedOnly = this.props.verifiedOnly === true;
+    const tab = this.state.tab;
+    const view = this.state.view;
+    const isHome = view === 'home';
+    const isWallet = view === 'wallet';
+    const isHistory = view === 'history';
+    const isMessages = view === 'messages';
+    const isMarket = view === 'market';
+    const isLeaderboard = view === 'leaderboard';
+    const isTraders = view === 'traders';
+    const isNotifications = view === 'notifications';
+    const isProfile = view === 'profile';
+    const isSettings = view === 'settings';
+    const notHistory = !isHistory;
+    const feedArea = isHome || isWallet;
+
+    const accentSoft = this.hexToRgba(accent, 0.10);
+    const accentBorder = this.hexToRgba(accent, 0.30);
+
+    const go = (v) => (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: v }); };
+    const navDefs = [
+      { label: 'Home', v: 'home' },
+      { label: 'Live Market', v: 'market' },
+      { label: 'Leaderboard', v: 'leaderboard' },
+      { label: 'Traders', v: 'traders' },
+      { label: 'Messages', v: 'messages', badge: '3' },
+      { label: 'Notifications', v: 'notifications', badge: '5' },
+      { label: 'Wallet', v: 'wallet' },
+      { label: 'History', v: 'history' },
+      { label: 'Profile', v: 'profile' },
+      { label: 'Settings', v: 'settings' },
+    ];
+    const navItems = navDefs.map(n => {
+      const active = view === n.v;
+      return {
+        label: n.label,
+        badge: n.badge || '',
+        dot: active && !n.badge,
+        onClick: go(n.v),
+        color: active ? '#eef1f5' : '#8a919c',
+        bg: active ? accentSoft : 'transparent',
+        weight: active ? 600 : 500,
+        hoverBg: active ? accentSoft : '#14171c',
+      };
+    });
+
+    const all = this.feed();
+    let visible = all;
+    if (tab === 'Following' || verifiedOnly) visible = all.filter(p => p.verified);
+    if (tab === 'Live Trades') visible = all.filter(p => p.isTrade);
+
+    const tabs = ['For You', 'Following', 'Live Trades'].map(label => ({
+      label,
+      active: label === tab,
+      color: label === tab ? '#eef1f5' : '#565d68',
+      weight: label === tab ? 600 : 500,
+      border: label === tab ? accent : 'transparent',
+      onClick: () => this.setState({ tab: label }),
+    }));
+
+    const movers = [
+      { tick: 'WIF', name: 'dogwifhat', pair: 'WIF / SOL', color: '#35d4c4', price: '$1.92', chg: '+12.4%', up: true },
+      { tick: 'MEW', name: 'cat in a dogs world', pair: 'MEW / SOL', color: '#7c8cff', price: '$0.0072', chg: '+21.0%', up: true },
+      { tick: 'MOO', name: 'Moo Deng', pair: 'MOODENG / SOL', color: '#3ad29b', price: '$0.21', chg: '+31.7%', up: true },
+      { tick: 'POP', name: 'Popcat', pair: 'POPCAT / SOL', color: '#f7b955', price: '$0.41', chg: '+8.7%', up: true },
+      { tick: 'PNT', name: 'Peanut', pair: 'PNUT / SOL', color: '#f76b62', price: '$0.83', chg: '-3.2%', up: false },
+    ].map(m => ({ ...m, chgColor: m.up ? '#3ad29b' : '#f76b62' }));
+
+    const traders = [
+      { rank: '1', name: 'Sol Whale', handle: 'solwhale', initials: 'SW', color: '#35d4c4', pnl: '+48.2', verified: true },
+      { rank: '2', name: 'Degen Max', handle: 'degenmax', initials: 'DM', color: '#f7b955', pnl: '+31.7', verified: false },
+      { rank: '3', name: 'Pump Queen', handle: 'pumpqueen', initials: 'PQ', color: '#7c8cff', pnl: '+27.4', verified: true },
+      { rank: '4', name: '0xViper', handle: '0xviper', initials: 'VX', color: '#f76b62', pnl: '+19.9', verified: true },
+    ].map(t => ({ ...t, pnl: t.pnl + ' SOL' }));
+
+    // ---- wallet ----
+    const greenSoft = 'rgba(58,210,155,0.14)';
+    const redSoft = 'rgba(247,107,98,0.14)';
+    const neutralSoft = 'rgba(138,145,156,0.12)';
+
+    const holdings = [
+      { tick: 'SOL', name: 'Solana', color: '#9b8cff', amount: '2.4100 SOL', value: '$413.20', chg: '+2.8%', chgColor: '#3ad29b', tradeAmt: '0.1', sellPct: '100%' },
+      { tick: 'USDC', name: 'USD Coin', color: '#2b6cff', amount: '48.00 USDC', value: '$48.00', chg: '0.0%', chgColor: '#565d68', tradeAmt: '0.1', sellPct: '100%' },
+      { tick: 'WIF', name: 'dogwifhat', color: '#35d4c4', amount: '128.4 WIF', value: '$246.50', chg: '+12.4%', chgColor: '#3ad29b', tradeAmt: '0.1', sellPct: '50%' },
+      { tick: 'POP', name: 'Popcat', color: '#f7b955', amount: '310.0 POP', value: '$127.10', chg: '+8.7%', chgColor: '#3ad29b', tradeAmt: '0.1', sellPct: '100%' },
+    ];
+
+    const txns = [
+      { type: 'Deposit', sub: 'External → Trading wallet', icon: '↓', iconColor: '#3ad29b', iconBg: greenSoft, amt: '+1.50 SOL', amtColor: '#3ad29b', time: '2h ago' },
+      { type: 'Sold $WIF', sub: 'Auto · take-profit +18.4%', icon: '↘', iconColor: '#3ad29b', iconBg: greenSoft, amt: '+0.42 SOL', amtColor: '#3ad29b', time: '3h ago' },
+      { type: 'Bought $WIF', sub: 'Auto · momentum breakout', icon: '↗', iconColor: '#8a919c', iconBg: neutralSoft, amt: '-0.40 SOL', amtColor: '#c7ccd4', time: '3h ago' },
+      { type: 'Withdraw', sub: 'Trading wallet → External', icon: '↑', iconColor: '#f76b62', iconBg: redSoft, amt: '-2.00 SOL', amtColor: '#f76b62', time: '1d ago' },
+      { type: 'Sold $PNUT', sub: 'Auto · stop-loss -3.0%', icon: '↘', iconColor: '#f76b62', iconBg: redSoft, amt: '-0.08 SOL', amtColor: '#f76b62', time: '1d ago' },
+    ].map((t, i, arr) => ({ ...t, divider: i === arr.length - 1 ? 'transparent' : '#16191f' }));
+
+    const up = '#3ad29b', down = '#f76b62';
+
+    // ---- messages ----
+    const activeConvo = this.state.convo || 'solwhale';
+    const rawConvos = [
+      { handle: 'solwhale', name: 'Sol Whale', initials: 'SW', color: '#35d4c4', verified: true, online: true, time: '2m', preview: 'sent you a trade · $WIF +18.4%', unread: '2' },
+      { handle: 'pumpqueen', name: 'Pump Queen', initials: 'PQ', color: '#7c8cff', verified: true, online: true, time: '14m', preview: 'you: nice, copying that setup', unread: '' },
+      { handle: 'degenmax', name: 'Degen Max', initials: 'DM', color: '#f7b955', verified: false, online: false, time: '1h', preview: 'the scanner is unreal lol', unread: '1' },
+      { handle: '0xviper', name: '0xViper', initials: 'VX', color: '#f76b62', verified: true, online: false, time: '3h', preview: 'you: gg on MOODENG 🐳', unread: '' },
+      { handle: 'lunar', name: 'Luna R', initials: 'LR', color: '#7c8cff', verified: false, online: true, time: '1d', preview: 'how do you set the TP %?', unread: '' },
+      { handle: '0xharper', name: '0xHarper', initials: 'HX', color: '#3ad29b', verified: false, online: false, time: '2d', preview: 'you: stop-loss saved me there', unread: '' },
+    ];
+    const convos = rawConvos.map(c => ({
+      ...c,
+      active: c.handle === activeConvo,
+      activeBg: c.handle === activeConvo ? '#101216' : 'transparent',
+      activeBar: c.handle === activeConvo ? accent : 'transparent',
+      previewColor: c.unread ? '#c7ccd4' : '#565d68',
+      onClick: () => this.setState({ convo: c.handle }),
+    }));
+    const activeChat = rawConvos.find(c => c.handle === activeConvo) || rawConvos[0];
+
+    const them = activeChat.color;
+    const mkText = (who, text, time) => ({
+      isText: true, text, time,
+      justify: who === 'me' ? 'flex-end' : 'flex-start',
+      align: who === 'me' ? 'flex-end' : 'flex-start',
+      radius: who === 'me' ? '15px 15px 4px 15px' : '15px 15px 15px 4px',
+      bubbleBg: who === 'me' ? accent : '#16191f',
+      bubbleColor: who === 'me' ? '#06210f' : '#eef1f5',
+    });
+    const messages = [
+      mkText('them', 'yo, the bot just closed WIF for me 👀', '14:02'),
+      { isTradeCard: true, justify: 'flex-start', align: 'flex-start', tradeAction: 'Closed', token: 'WIF', tokenColor: '#35d4c4', tradeSub: '$1.62 → $1.92', pnl: '+18.4%', pnlColor: up, time: '14:02' },
+      mkText('me', 'clean. that’s the momentum strat right?', '14:05'),
+      mkText('them', 'yep — 5% breakout trigger, TP +12 / SL -3. fully hands-free', '14:06'),
+      mkText('me', 'copying it now. lfg 🚀', '14:07'),
+    ];
+
+    // ---- live market ----
+    const marketFilters = ['🔥 Trending', 'Gainers', 'New', 'Volume'].map((label, i) => ({
+      label, active: i === 0,
+      color: i === 0 ? '#06210f' : '#8a919c',
+      bg: i === 0 ? accent : '#101216',
+      border: i === 0 ? accent : '#21252c',
+    }));
+    const mkb = (seed, trend) => this.mkbars(trend, seed).slice(0, 20);
+    const market = [
+      { tick: 'WIF', name: 'dogwifhat', color: '#35d4c4', price: '$1.92', chg: '+12.4%', vol: '$48.2M', mc: '$1.9B', up: true, seed: 11, trend: 2.2 },
+      { tick: 'MEW', name: 'cat in a dogs world', color: '#7c8cff', price: '$0.0072', chg: '+21.0%', vol: '$31.7M', mc: '$642M', up: true, seed: 29, trend: 2.8 },
+      { tick: 'MOO', name: 'Moo Deng', color: '#3ad29b', price: '$0.21', chg: '+31.7%', vol: '$22.4M', mc: '$210M', up: true, seed: 73, trend: 3.1 },
+      { tick: 'POP', name: 'Popcat', color: '#f7b955', price: '$0.41', chg: '+8.7%', vol: '$19.1M', mc: '$402M', up: true, seed: 41, trend: 1.4 },
+      { tick: 'BONK', name: 'Bonk', color: '#ff9b3d', price: '$0.000034', chg: '+4.2%', vol: '$54.0M', mc: '$2.4B', up: true, seed: 53, trend: 0.9 },
+      { tick: 'PNUT', name: 'Peanut', color: '#f76b62', price: '$0.83', chg: '-3.2%', vol: '$12.8M', mc: '$830M', up: false, seed: 47, trend: -2.4 },
+      { tick: 'GIGA', name: 'Gigachad', color: '#9b8cff', price: '$0.052', chg: '+14.9%', vol: '$9.4M', mc: '$520M', up: true, seed: 19, trend: 2.0 },
+      { tick: 'FWOG', name: 'Fwog', color: '#5ad6a0', price: '$0.018', chg: '-1.1%', vol: '$6.2M', mc: '$180M', up: false, seed: 67, trend: -0.8 },
+    ].map((m, i) => ({ ...m, rank: i + 1, chgColor: m.up ? up : down, bars: mkb(m.seed, m.trend) }));
+
+    // ---- leaderboard ----
+    const podium = [
+      { medal: '🥈', name: 'Pump Queen', handle: 'pumpqueen', initials: 'PQ', color: '#7c8cff', verified: true, pnl: '+38.4', winRate: '71%', trades: '142', lift: '20px', cardBg: '#101216', cardBorder: '#21252c' },
+      { medal: '🥇', name: 'Sol Whale', handle: 'solwhale', initials: 'SW', color: '#35d4c4', verified: true, pnl: '+48.2', winRate: '78%', trades: '203', lift: '0px', cardBg: 'linear-gradient(180deg,rgba(247,185,85,0.12),#101216 60%)', cardBorder: 'rgba(247,185,85,0.35)' },
+      { medal: '🥉', name: '0xViper', handle: '0xviper', initials: 'VX', color: '#f76b62', verified: true, pnl: '+31.7', winRate: '66%', trades: '178', lift: '32px', cardBg: '#101216', cardBorder: '#21252c' },
+    ];
+    const leaderboard = [
+      { rank: 4, name: 'Degen Max', handle: 'degenmax', initials: 'DM', color: '#f7b955', verified: false, winRate: '64%', trades: '156', pnl: '+27.4 SOL' },
+      { rank: 5, name: 'Luna R', handle: 'lunar', initials: 'LR', color: '#7c8cff', verified: false, winRate: '61%', trades: '98', pnl: '+19.9 SOL' },
+      { rank: 6, name: '0xHarper', handle: '0xharper', initials: 'HX', color: '#3ad29b', verified: false, winRate: '59%', trades: '134', pnl: '+16.2 SOL' },
+      { rank: 7, name: 'ApeKing', handle: 'apeking', initials: 'AK', color: '#ff9b3d', verified: true, winRate: '57%', trades: '210', pnl: '+14.8 SOL' },
+      { rank: 8, name: 'Mira', handle: 'mira', initials: 'MR', color: '#9b8cff', verified: false, winRate: '55%', trades: '76', pnl: '+11.3 SOL' },
+      { rank: 9, name: 'TunaBot', handle: 'tunabot', initials: 'TB', color: '#5ad6a0', verified: false, winRate: '53%', trades: '188', pnl: '+9.1 SOL' },
+      { rank: 10, name: 'Wave', handle: 'wave', initials: 'WV', color: '#2b6cff', verified: false, winRate: '52%', trades: '64', pnl: '+7.6 SOL' },
+    ];
+    const lbRanges = ['24H', '7D', '30D'].map((label, i) => ({
+      label, active: i === 1,
+      color: i === 1 ? '#06210f' : '#8a919c',
+      bg: i === 1 ? accent : '#101216',
+      border: i === 1 ? accent : '#21252c',
+    }));
+
+    // ---- traders ----
+    const tradersList = [
+      { name: 'Sol Whale', handle: 'solwhale', initials: 'SW', color: '#35d4c4', verified: true, online: true, bio: 'Momentum scalper. Bot does the work, I just watch the orcas swim.', pnl: '+48.2', winRate: '78%', copiers: '312', followLabel: 'Follow' },
+      { name: 'Pump Queen', handle: 'pumpqueen', initials: 'PQ', color: '#7c8cff', verified: true, online: true, bio: 'Volume-spike entries only. TP +12 / SL -3. No emotions, just signals.', pnl: '+38.4', winRate: '71%', copiers: '208', followLabel: 'Following' },
+      { name: 'Degen Max', handle: 'degenmax', initials: 'DM', color: '#f7b955', verified: false, online: false, bio: 'Full degen. The scanner is faster than my reflexes and I love it.', pnl: '+27.4', winRate: '64%', copiers: '156', followLabel: 'Follow' },
+      { name: '0xViper', handle: '0xviper', initials: 'VX', color: '#f76b62', verified: true, online: false, bio: 'Risk-managed snipes. Discipline over hope, every single trade.', pnl: '+31.7', winRate: '66%', copiers: '178', followLabel: 'Follow' },
+      { name: 'Luna R', handle: 'lunar', initials: 'LR', color: '#7c8cff', verified: false, online: true, bio: 'Three weeks on autopilot, never opened a chart manually. 🐳', pnl: '+19.9', winRate: '61%', copiers: '98', followLabel: 'Follow' },
+      { name: '0xHarper', handle: '0xharper', initials: 'HX', color: '#3ad29b', verified: false, online: false, bio: 'Stop-loss disciple. -3% beats -30% every time.', pnl: '+16.2', winRate: '59%', copiers: '134', followLabel: 'Follow' },
+    ].map(t => ({ ...t, pnl: t.pnl + ' SOL' }));
+
+    // ---- notifications ----
+    const notifTabs = ['All', 'Trades', 'Social'].map((label, i) => ({
+      label, color: i === 0 ? '#eef1f5' : '#565d68', weight: i === 0 ? 600 : 500, border: i === 0 ? accent : 'transparent',
+    }));
+    const notifs = [
+      { icon: '↘', iconColor: up, iconBg: 'rgba(58,210,155,0.14)', text: 'Your bot closed $WIF at take-profit.', detail: '+18.4% · +0.42 SOL', detailColor: up, time: '2m ago', unread: true },
+      { icon: '⧉', iconColor: accent, iconBg: accentSoft, text: 'Sol Whale started copying your trades.', detail: '', time: '18m ago', unread: true },
+      { icon: '↗', iconColor: '#8a919c', iconBg: 'rgba(138,145,156,0.12)', text: 'Your bot opened a position in $POPCAT.', detail: 'Entry $0.39 · TP +12% / SL -3%', detailColor: '#c7ccd4', time: '41m ago', unread: true },
+      { icon: '♡', iconColor: '#f76b62', iconBg: 'rgba(247,107,98,0.12)', text: 'Pump Queen and 23 others liked your trade.', detail: '', time: '1h ago', unread: true },
+      { icon: '↘', iconColor: down, iconBg: 'rgba(247,107,98,0.14)', text: 'Your bot hit stop-loss on $PNUT.', detail: '-3.0% · -0.08 SOL', detailColor: down, time: '3h ago', unread: true },
+      { icon: '🏆', iconColor: '#f7b955', iconBg: 'rgba(247,185,85,0.14)', text: 'You climbed to #12 on the weekly leaderboard.', detail: '', time: '5h ago', unread: false },
+      { icon: '💬', iconColor: accent, iconBg: accentSoft, text: 'Degen Max replied to your trade.', detail: '', time: '8h ago', unread: false },
+    ].map(n => ({ ...n, unreadBg: n.unread ? 'rgba(255,255,255,0.012)' : 'transparent' }));
+
+    // ---- profile ----
+    const profileStats = [
+      { label: 'ALL-TIME PNL', value: '+100.4', color: up },
+      { label: 'WIN RATE', value: '68%', color: '#eef1f5' },
+      { label: 'TRADES', value: '487', color: '#eef1f5' },
+      { label: 'BEST TRADE', value: '+2.1', color: up },
+    ];
+    const achievements = [
+      { icon: '🐳', title: 'Orca Club', desc: '100+ SOL profit', color: '#eef1f5', bg: accentSoft, border: accentBorder },
+      { icon: '🔥', title: 'Hot Streak', desc: '12 wins in a row', color: '#eef1f5', bg: 'rgba(247,185,85,0.10)', border: 'rgba(247,185,85,0.3)' },
+      { icon: '🎯', title: 'Sniper', desc: '70%+ win rate', color: '#eef1f5', bg: 'rgba(124,140,255,0.10)', border: 'rgba(124,140,255,0.3)' },
+      { icon: '⚡', title: 'Early Adopter', desc: 'Beta member', color: '#eef1f5', bg: 'rgba(58,210,155,0.10)', border: 'rgba(58,210,155,0.3)' },
+      { icon: '👥', title: 'Influencer', desc: '300+ copiers', color: '#eef1f5', bg: 'rgba(247,107,98,0.10)', border: 'rgba(247,107,98,0.3)' },
+    ];
+    const profileTrades = [
+      { tick: 'MOODENG', color: '#3ad29b', sub: 'Closed · LONG · 2h ago', pnl: '+31.7%', color2: up },
+      { tick: 'WIF', color: '#35d4c4', sub: 'Closed · LONG · 5h ago', pnl: '+18.4%', color2: up },
+      { tick: 'PNUT', color: '#f76b62', sub: 'Stop-loss · 1d ago', pnl: '-3.0%', color2: down },
+      { tick: 'POPCAT', color: '#f7b955', sub: 'Closed · LONG · 1d ago', pnl: '+6.2%', color2: up },
+    ];
+
+    // ---- settings ----
+    const strategyRows = [
+      { label: 'Breakout trigger', desc: 'Min % move to enter a position', value: '5', unit: '%' },
+      { label: 'Take profit', desc: 'Auto-sell when up this much', value: '12', unit: '%' },
+      { label: 'Stop loss', desc: 'Auto-sell when down this much', value: '3', unit: '%' },
+      { label: 'Max concurrent positions', desc: 'Open trades at once', value: '5', unit: '' },
+    ].map((r, i, a) => ({ ...r, divider: i === a.length - 1 ? 'transparent' : '#16191f' }));
+    const tog = this.state.toggles || { autostart: true, notifs: true, social: true, sound: false };
+    const toggleDefs = [
+      { key: 'autostart', label: 'Auto-start scanner', desc: 'Resume trading when you log in' },
+      { key: 'notifs', label: 'Trade notifications', desc: 'Alert on every open & close' },
+      { key: 'social', label: 'Public profile', desc: 'Let others copy your trades' },
+      { key: 'sound', label: 'Sound effects', desc: 'Play a chime on each fill' },
+    ];
+    const toggleRows = toggleDefs.map((t, i, a) => {
+      const on = !!tog[t.key];
+      return {
+        label: t.label, desc: t.desc,
+        divider: i === a.length - 1 ? 'transparent' : '#16191f',
+        trackBg: on ? accent : '#21252c',
+        trackBorder: on ? accent : '#2c313a',
+        knobBg: on ? '#06210f' : '#8a919c',
+        knobLeft: on ? '21px' : '2px',
+        onToggle: () => this.setState({ toggles: { ...tog, [t.key]: !on } }),
+      };
+    });
+
+    const histStats = [
+      { label: 'TOTAL TRADES', icon: '📊', iconBg: 'rgba(124,140,255,0.14)', value: '23', color: '#eef1f5' },
+      { label: 'WIN RATE', icon: '🎯', iconBg: 'rgba(53,212,196,0.14)', value: '43.5%', color: '#f76b62' },
+      { label: 'TOTAL PNL', icon: '💰', iconBg: 'rgba(247,185,85,0.14)', value: '-0.1172 SOL', color: '#f76b62' },
+      { label: 'BEST TRADE', icon: '🚀', iconBg: 'rgba(58,210,155,0.14)', value: '+0.0600 SOL', color: up },
+      { label: 'WORST TRADE', icon: '📉', iconBg: 'rgba(247,107,98,0.14)', value: '-0.1284 SOL', color: down },
+    ];
+
+    const histNav = [
+      { label: 'Dashboard', icon: '⊞', active: false, onClick: () => this.setState({ view: 'home' }) },
+      { label: 'History', icon: '🕑', active: true, onClick: () => this.setState({ view: 'history' }) },
+      { label: 'Leaderboard', icon: '🏆', active: false, onClick: () => {} },
+    ].map(n => ({
+      ...n,
+      color: n.active ? '#06210f' : '#c7ccd4',
+      bg: n.active ? accent : '#101216',
+      border: n.active ? accent : '#21252c',
+    }));
+
+    const rawTrades = [
+      { date: '2026-06-28', time: '09:45', token: 'AnsenMeme', buy: '$0.000335', sell: '$0.000358', pnlSol: '+0.0019', pnlPct: '+6.86%', duration: '4m 3s', win: true },
+      { date: '2026-06-24', time: '11:33', token: 'STARMIND', buy: '$0.000308', sell: '$0.000296', pnlSol: '-0.0011', pnlPct: '-3.77%', duration: '10m 4s', win: false },
+      { date: '2026-06-24', time: '11:23', token: 'PLUSH', buy: '$0.000171', sell: '$0.000155', pnlSol: '-0.0027', pnlPct: '-9.40%', duration: '0m 31s', win: false },
+      { date: '2026-06-24', time: '11:18', token: 'GTASOLANA', buy: '$0.000081', sell: '$0.000091', pnlSol: '+0.0036', pnlPct: '+12.55%', duration: '58m 48s', win: true },
+      { date: '2026-06-24', time: '09:59', token: 'FINE', buy: '$0.000177', sell: '$0.000166', pnlSol: '-0.0018', pnlPct: '-6.23%', duration: '2m 31s', win: false },
+      { date: '2026-06-23', time: '22:14', token: 'BONKAI', buy: '$0.000044', sell: '$0.000052', pnlSol: '+0.0029', pnlPct: '+9.80%', duration: '14m 12s', win: true },
+      { date: '2026-06-23', time: '20:41', token: 'WAGMI', buy: '$0.000210', sell: '$0.000189', pnlSol: '-0.0031', pnlPct: '-10.0%', duration: '1m 06s', win: false },
+    ];
+    const trades = rawTrades.map(t => ({
+      ...t,
+      color: t.win ? up : down,
+      result: t.win ? 'WIN' : 'LOSS',
+      badgeColor: t.win ? up : down,
+      badgeBg: t.win ? 'rgba(58,210,155,0.12)' : 'rgba(247,107,98,0.10)',
+      badgeBorder: t.win ? 'rgba(58,210,155,0.35)' : 'rgba(247,107,98,0.35)',
+    }));
+
+    const botPositions = [
+      { tick: 'WIF', color: '#35d4c4', status: 'TP +12% · open', pnl: '+8.4%', sol: '+0.21', pnlColor: up },
+      { tick: 'POP', color: '#f7b955', status: 'TP +12% · open', pnl: '+6.2%', sol: '+0.15', pnlColor: up },
+      { tick: 'PNUT', color: '#f76b62', status: 'SL -3% · open', pnl: '-1.8%', sol: '-0.04', pnlColor: down },
+    ];
+
+    const swapTokens = [
+      { tick: 'SOL', name: 'Solana', color: '#9b8cff', bal: '2.41', usd: '$413.20', verified: true },
+      { tick: 'USDC', name: 'USD Coin', color: '#2b6cff', bal: '48.00', usd: '$48.00', verified: true },
+      { tick: 'WIF', name: 'dogwifhat', color: '#35d4c4', bal: '128.4', usd: '$246.50', verified: true },
+      { tick: 'POP', name: 'Popcat', color: '#f7b955', bal: '310.0', usd: '$127.10', verified: true },
+      { tick: 'MOO', name: 'Moo Deng', color: '#3ad29b', bal: '0.00', usd: '$0.00', verified: false },
+      { tick: 'MEW', name: 'cat in a dogs world', color: '#7c8cff', bal: '0.00', usd: '$0.00', verified: false },
+    ].map(t => ({ ...t, onSelect: () => this.setState({ swapPicker: false }) }));
+    const quickTokens = swapTokens.slice(0, 4);
+
+    return {
+      accent, accentSoft, accentBorder,
+      showSparklines,
+      isHome, isWallet, isHistory, notHistory, isMessages, feedArea,
+      isMarket, isLeaderboard, isTraders, isNotifications, isProfile, isSettings,
+      navItems,
+      goSettings: go('settings'),
+      marketFilters, market,
+      podium, leaderboard, lbRanges,
+      tradersList,
+      notifTabs, notifs,
+      profileStats, achievements, profileTrades,
+      strategyRows, toggleRows,
+      goMessages: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: 'messages' }); },
+      messagesBg: isMessages ? accentSoft : 'transparent',
+      messagesColor: isMessages ? '#eef1f5' : '#8a919c',
+      messagesWeight: isMessages ? 600 : 500,
+      convos, activeChat, messages,
+      goHistory: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: 'history' }); },
+      historyBg: isHistory ? accentSoft : 'transparent',
+      historyColor: isHistory ? '#eef1f5' : '#8a919c',
+      historyWeight: isHistory ? 600 : 500,
+      histStats, trades, histCount: '23', histNav,
+      swapOpen: this.state.swapOpen,
+      swapPickerOpen: this.state.swapOpen && this.state.swapPicker,
+      swapPickerClosed: this.state.swapOpen && !this.state.swapPicker,
+      openSwap: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ swapOpen: true, swapPicker: false }); },
+      closeSwap: () => this.setState({ swapOpen: false, swapPicker: false }),
+      openPicker: () => this.setState({ swapPicker: true }),
+      closePicker: () => this.setState({ swapPicker: false }),
+      stop: (e) => { if (e && e.stopPropagation) e.stopPropagation(); },
+      fromTok: { tick: 'SOL', color: '#9b8cff', bal: '2.41', usd: '$85.60' },
+      toTok: { tick: 'WIF', color: '#35d4c4', bal: '128.4', usd: '$85.39' },
+      toAmount: '44.52',
+      rate: '89.04',
+      swapTokens, quickTokens,
+      botPositions,
+      botTotal: '+0.32 SOL',
+      botTotalColor: up,
+      botDotColor: up,
+      botDotGlow: 'rgba(58,210,155,0.18)',
+      goHome: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: 'home' }); },
+      goWallet: (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: 'wallet' }); },
+      homeBg: isHome ? accentSoft : 'transparent',
+      homeColor: isHome ? '#eef1f5' : '#8a919c',
+      homeWeight: isHome ? 600 : 500,
+      walletBg: isWallet ? accentSoft : 'transparent',
+      walletColor: isWallet ? '#eef1f5' : '#8a919c',
+      walletWeight: isWallet ? 600 : 500,
+      tabs, visible, movers, traders,
+      // wallet data
+      walletTotalSol: '4.87',
+      walletUsd: '$834.70',
+      walletChg: '+5.2%',
+      walletAvail: '2.41',
+      walletInPos: '2.46',
+      walletAddr: 'BM3A4wkpL8qNvR7tZ2cXe5sHgW1dKuPjF9YT8i',
+      holdings,
+      txns,
+    };
+  }
+}
+</script>
+</body>
+</html>

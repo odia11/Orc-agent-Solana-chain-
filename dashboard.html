@@ -422,8 +422,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 @keyframes badge-live{0%,100%{opacity:1}50%{opacity:.6}}
 .fc-entry-exit{font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fc-trade-right{display:flex;flex-direction:column;align-items:flex-end;gap:3px;flex-shrink:0}
-.fc-sparkline{display:none}
-.fc-spark-bar{display:none}
+.fc-sparkline{display:flex;align-items:flex-end;gap:2px;height:34px;width:160px;margin-top:11px;flex-shrink:0}
+.fc-spark-bar{display:block;flex:1;border-radius:1px;opacity:0.82;min-height:2px}
 .fc-pnl{font-family:\'JetBrains Mono\',monospace;font-size:23px;font-weight:700;line-height:1}
 .fc-pnl.pos{color:#3ad29b}
 .fc-pnl.neg{color:#f76b62}
@@ -2817,7 +2817,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .rs-search-input{width:100%!important;background:#16191f!important;border:1px solid var(--bg4)!important;border-radius:12px!important;padding:9px 14px 9px 34px!important;font-size:13px!important;font-family:'Geist',system-ui,sans-serif!important;color:var(--text)!important;outline:none;transition:border-color .15s}
 .rs-search-input::placeholder{color:#565d68}
 .rs-search-input:focus{border-color:#35d4c4!important}
-.rs-card{background:#101216;border:1px solid #21252c;border-radius:16px;padding:16px;overflow:hidden}
+.rs-card{background:#101216;border:1px solid #21252c;border-radius:18px;padding:16px;overflow:hidden}
 .rs-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .rs-card-title{font-size:14px;font-weight:700;color:var(--text)}
 .rs-card-viewall{font-size:12px;color:var(--accent);background:none;border:none;cursor:pointer;padding:0;text-decoration:none}
@@ -2843,6 +2843,24 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .rs-lb-name{font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .rs-lb-handle{font-size:11px;color:var(--muted)}
 .rs-lb-pnl{font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;flex-shrink:0}
+/* live pill */
+.rs-live-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;letter-spacing:.1em;color:#3ad29b}
+.rs-live-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;animation:orcaBlink 1.6s infinite;flex-shrink:0}
+/* platform stats card */
+.rs-stats-grid{display:flex;justify-content:space-between;gap:8px;margin-top:13px}
+.rs-stat-col{display:flex;flex-direction:column;gap:3px}
+.rs-stat-val{font-family:\'JetBrains Mono\',monospace;font-size:19px;font-weight:700;color:var(--text)}
+.rs-stat-val.pos{color:#3ad29b}
+.rs-stat-lbl{font-size:11px;color:var(--muted)}
+/* footer links */
+.rs-footer{padding:4px 2px 8px;display:flex;flex-direction:column;gap:10px}
+.rs-footer-links{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:var(--muted)}
+.rs-footer-links a{color:var(--muted);text-decoration:none;transition:color .15s}
+.rs-footer-links a:hover{color:#8a919c}
+.rs-footer-note{font-size:11px;color:#3a4049;line-height:1.5}
+/* right rail viewall link below card */
+.rs-card-viewall-row{padding:11px 0 2px;font-size:13px;color:var(--accent);cursor:pointer;text-decoration:none;display:block}
+.rs-card-viewall-row:hover{text-decoration:underline}
 @media(max-width:768px){#right-rail{display:none!important}}
 
 </style>
@@ -3489,11 +3507,26 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div class="feed-bot-dot" id="feed-bot-dot"></div>
       <div class="feed-bot-text-wrap">
         <div class="feed-bot-status-text" id="feed-bot-status-text">Your bot is idle</div>
-        <div class="feed-bot-sub">Configure strategy in Settings to auto-trade</div>
+        <div class="feed-bot-sub" id="feed-bot-sub">Configure strategy in Settings to auto-trade</div>
       </div>
     </div>
     <button class="feed-bot-btn" id="feed-trade-btn" onclick="_botToggle()">▶ Start Trading</button>
   </div>
+  <script>
+  (function(){
+    function _syncFeedBotSub(){
+      var src=document.getElementById('bot-stats');
+      var dst=document.getElementById('feed-bot-sub');
+      if(src&&dst&&src.textContent&&src.textContent!=='— SOL ready · 0/5 open · —% win rate'){
+        dst.textContent=src.textContent;
+      }
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+      setTimeout(_syncFeedBotSub,2000);
+      setInterval(_syncFeedBotSub,5000);
+    });
+  })();
+  </script>
 
   <!-- COMPOSER -->
   <div class="feed-composer" id="feed-composer" onclick="document.getElementById('postText').focus()">
@@ -3908,19 +3941,70 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="rs-card">
       <div class="rs-card-hdr">
         <span class="rs-card-title">Live Market</span>
-        <a class="rs-card-viewall" href="/live-market">Show all →</a>
+        <span class="rs-live-pill"><span class="rs-live-dot"></span>PUMPING</span>
       </div>
       <div id="rs-movers"><div class="fc-loading" style="padding:8px 0 0">Loading…</div></div>
+      <a class="rs-card-viewall-row" href="/live-market">Show all markets →</a>
     </div>
     <!-- Top Traders -->
     <div class="rs-card">
       <div class="rs-card-hdr">
         <span class="rs-card-title">Top Traders Today</span>
-        <a class="rs-card-viewall" href="/leaderboard">Leaderboard →</a>
       </div>
       <div id="rs-leaderboard"><div class="fc-loading" style="padding:8px 0 0">Loading…</div></div>
+      <a class="rs-card-viewall-row" href="/leaderboard">View leaderboard →</a>
+    </div>
+    <!-- Platform Stats -->
+    <div class="rs-card">
+      <div style="font-size:13px;color:var(--muted);margin-bottom:0">Platform · 24h</div>
+      <div class="rs-stats-grid">
+        <div class="rs-stat-col">
+          <div class="rs-stat-val" id="rs-stat-trades">—</div>
+          <div class="rs-stat-lbl">Trades</div>
+        </div>
+        <div class="rs-stat-col">
+          <div class="rs-stat-val pos" id="rs-stat-sol">—</div>
+          <div class="rs-stat-lbl">Net SOL</div>
+        </div>
+        <div class="rs-stat-col">
+          <div class="rs-stat-val" id="rs-stat-online">—</div>
+          <div class="rs-stat-lbl">Online</div>
+        </div>
+      </div>
+    </div>
+    <!-- Footer -->
+    <div class="rs-footer">
+      <div class="rs-footer-links">
+        <a href="/about">About</a>
+        <a href="/docs">Docs</a>
+        <a href="/fees">Fees</a>
+        <a href="/security">Security</a>
+        <a href="/terms">Terms</a>
+      </div>
+      <div class="rs-footer-note">OrcAgent is invite-only. Trade with a dedicated wallet. Crypto trading carries risk.</div>
     </div>
   </div>
+  <script>
+  (function(){
+    function _rsPopStats(d){
+      var t=document.getElementById('rs-stat-trades');
+      var s=document.getElementById('rs-stat-sol');
+      var o=document.getElementById('rs-stat-online');
+      if(t&&d.total_trades!=null) t.textContent=Number(d.total_trades).toLocaleString();
+      if(s&&d.net_sol!=null) s.textContent=(d.net_sol>=0?'+':'')+Number(d.net_sol).toLocaleString();
+      if(o&&d.active_traders!=null) o.textContent=Number(d.active_traders).toLocaleString();
+    }
+    function _rsFetchStats(){
+      fetch('/api/platform/stats').then(function(r){return r.json()}).then(function(d){
+        if(d&&d.ok) _rsPopStats(d);
+      }).catch(function(){});
+    }
+    document.addEventListener('DOMContentLoaded',function(){
+      _rsFetchStats();
+      setInterval(_rsFetchStats,60000);
+    });
+  })();
+  </script>
 
   <!-- ── MESSAGES (full-page sibling of .wrap) ── -->
   <div id="dash-messages" class="dash-section" style="display:none">
