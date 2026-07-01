@@ -158,17 +158,48 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   .st-content{padding:24px 24px 80px}
 }
 
-/* ── MOBILE ── */
-@media(max-width:767px){
-  #sidebar{display:none!important}
-  .st-content{padding:16px 16px 80px}
-  .st-grid-3{grid-template-columns:1fr}
-}
 /* ── MOBILE BACK BAR ── */
 .mobile-back-bar{display:none}
+
+/* ── MOBILE ── */
 @media(max-width:767px){
-  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
-  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  /* unlock page scroll — sidebar layout locks height:100vh */
+  html,body{height:auto}
+  #app{height:auto;overflow:visible;display:block}
+  .st-main{overflow-y:visible}
+
+  #sidebar{display:none!important}
+
+  /* content */
+  .st-content{padding:12px 12px 80px;max-width:100%}
+
+  /* hide desktop heading — back bar shows the title */
+  .st-hdr{display:none}
+
+  /* cards */
+  .st-card{border-radius:12px;padding:18px;margin-bottom:12px}
+
+  /* inputs — 16px prevents iOS auto-zoom on focus */
+  .st-input{width:100%;font-size:16px}
+
+  /* stack input+button rows vertically */
+  .st-input-row{flex-direction:column;gap:8px}
+  .st-input-row .st-btn{width:100%;padding:12px 20px}
+
+  /* 3-col grid → single column */
+  .st-grid-3{grid-template-columns:1fr}
+
+  /* toggle — 44×44 minimum touch target */
+  .st-toggle-row{padding:8px 0;min-height:44px}
+  .st-toggle-wrap{min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center}
+
+  /* full-width action buttons */
+  .st-btn-full{padding:14px 20px;font-size:15px}
+  .st-btn-emergency{padding:15px 20px;font-size:15px}
+
+  /* back bar */
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:0 16px;height:52px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:flex;align-items:center}
   .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
 }
 </style>
