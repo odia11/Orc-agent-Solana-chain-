@@ -274,6 +274,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 
 <script>
 var _myWallet      = {{ wallet|tojson }};
+var _csrfToken     = {{ csrf_token|tojson }};
 var _activeWallet  = null;
 var _pollTimer     = null;
 var _conversations = [];
@@ -390,7 +391,7 @@ async function _openThread(peerWallet) {
     +   '<div class="msgs-thread-name">'+_esc(_short(peerWallet))+'</div>'
     +   '<div class="msgs-thread-status"><span class="msgs-online-dot"></span>Online</div>'
     + '</div>'
-    + '<button class="msgs-copy-trades-btn" onclick="_copyTrades(\''+_esc(peerWallet)+'\')">'
+    + '<button class="msgs-copy-trades-btn" onclick="_copyTrades(this,\''+_esc(peerWallet)+'\')">'
     +   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
     +   'Copy Trades'
     + '</button>';
@@ -447,7 +448,7 @@ async function _sendMessage() {
   try {
     var r = await fetch('/api/messages/' + encodeURIComponent(_activeWallet), {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
       body: JSON.stringify({content: text})
     });
     var d = await r.json();
@@ -477,15 +478,31 @@ async function _sendMessage() {
 }
 
 /* ── COPY TRADES ── */
-function _copyTrades(wallet) {
-  fetch('/api/copy-trade', {
+function _copyTrades(btn, wallet) {
+  fetch('/api/copy-trade/toggle', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
     body: JSON.stringify({target_wallet: wallet})
   }).then(function(r){ return r.json(); }).then(function(d){
-    if (d.ok) alert('Now copying trades from ' + _short(wallet));
-    else alert(d.error || 'Failed to start copy trading.');
-  }).catch(function(){ alert('Could not connect.'); });
+    if (d.ok) {
+      var copying = d.copying;
+      if (btn) {
+        btn.textContent = copying ? 'Copying ✓' : 'Copy Trades';
+        btn.style.background = copying ? '#3ad29b' : '#f7b955';
+      }
+      _toast(copying ? 'Now copying trades from ' + _short(wallet) : 'Stopped copying ' + _short(wallet));
+    } else {
+      _toast(d.msg || d.error || 'Copy trade failed.');
+    }
+  }).catch(function(){ _toast('Could not connect.'); });
+}
+
+function _toast(msg) {
+  var t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#21252c;color:#eef1f5;padding:10px 18px;border-radius:10px;font-size:13px;z-index:9999;pointer-events:none;opacity:1;transition:opacity 0.4s';
+  document.body.appendChild(t);
+  setTimeout(function(){ t.style.opacity='0'; setTimeout(function(){ t.remove(); }, 400); }, 2500);
 }
 
 /* ── BACK (mobile) ── */

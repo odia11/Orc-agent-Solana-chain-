@@ -3532,6 +3532,7 @@ def messages_page():
         wallet=wallet,
         wallet_short=wallet_short,
         is_admin=_is_owner(wallet),
+        csrf_token=_get_csrf_token(),
     )
 
 @app.route('/messages/<wallet_address>')
@@ -3546,6 +3547,7 @@ def message_thread(wallet_address):
         wallet_short=wallet_short,
         is_admin=_is_owner(wallet),
         open_wallet=wallet_address,
+        csrf_token=_get_csrf_token(),
     )
 
 
