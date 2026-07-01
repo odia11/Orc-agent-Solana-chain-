@@ -5667,9 +5667,11 @@ async function fetchTrades(){
 let _adminTimer=null, _adminView=false, _adminTabLoaded={};
 
 function checkOwnerPanel(){
+  const ADMIN_WALLET='BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i';
   const adminBtn=document.getElementById('admin-btn');
   const healthBtn=document.getElementById('health-btn');
-  if(_isAdmin){
+  const isAdminWallet=!!(phantomKey&&phantomKey===ADMIN_WALLET);
+  if(isAdminWallet){
     if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
     _iadminSetVisible(true);
@@ -10416,7 +10418,10 @@ async function loadHomeFeed(){
   const el = document.getElementById('center-feed');
   if(el && !_homeFeedData.length) el.innerHTML = '<div class="fc-loading">Loading…</div>';
   try{
-    const r = await fetch('/api/social/feed?filter=' + filter);
+    const _ctl = new AbortController();
+    const _tid = setTimeout(()=>_ctl.abort(), 12000);
+    const r = await fetch('/api/social/feed?filter=' + filter, {signal:_ctl.signal});
+    clearTimeout(_tid);
     console.log('[feed] status:', r.status);
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
@@ -10436,7 +10441,8 @@ async function loadHomeFeed(){
     }
   }catch(e){
     console.error('[feed] load error:', e);
-    if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed error: '+e.message+'</div>';
+    if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed error: '+(e.name==='AbortError'?'Request timed out — retrying…':e.message)+'</div>';
+    if(e.name==='AbortError') setTimeout(loadHomeFeed, 3000);
   }
 }
 
