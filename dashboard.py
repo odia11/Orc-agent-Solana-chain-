@@ -914,6 +914,13 @@ def run_migrations():
         "ALTER TABLE user_tokens ADD COLUMN avg_price REAL NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN copy_amount REAL DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN bot_enabled INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN breakout_trigger REAL DEFAULT 3.0",
+        "ALTER TABLE users ADD COLUMN take_profit REAL DEFAULT 15.0",
+        "ALTER TABLE users ADD COLUMN stop_loss REAL DEFAULT 8.0",
+        "ALTER TABLE users ADD COLUMN max_positions INTEGER DEFAULT 3",
+        "ALTER TABLE users ADD COLUMN pref_notifications INTEGER DEFAULT 1",
+        "ALTER TABLE users ADD COLUMN pref_scam_filter INTEGER DEFAULT 1",
+        "ALTER TABLE users ADD COLUMN pref_sound_alerts INTEGER DEFAULT 0",
     ]:
         try:
             con.execute(sql)
@@ -4051,6 +4058,154 @@ def save_settings():
         'has_trading_key': final_has_key,
         'prompt_faceid': bool(private_key_raw and final_has_key),
     })
+
+# ── SETTINGS/GET + SETTINGS/SAVE (per-user strategy + prefs) ──
+@app.route('/api/settings/get', methods=['GET'])
+@rate_limit(60, 60)
+def settings_get():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            '''SELECT encrypted_private_key, breakout_trigger, take_profit,
+                      stop_loss, max_positions, pref_notifications,
+                      pref_scam_filter, pref_sound_alerts, bot_enabled
+               FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
+    finally:
+        conn.close()
+    us = get_user_state(wallet)
+    bot_running = bool(us.get('trader_running', False))
+    if not row:
+        return jsonify({'ok': True, 'has_trading_key': False,
+                        'breakout_trigger': 3.0, 'take_profit': 15.0,
+                        'stop_loss': 8.0, 'max_positions': 3,
+                        'pref_notifications': True, 'pref_scam_filter': True,
+                        'pref_sound_alerts': False, 'bot_running': bot_running})
+    return jsonify({
+        'ok': True,
+        'has_trading_key': bool(row[0]),
+        'breakout_trigger': row[1] if row[1] is not None else 3.0,
+        'take_profit':      row[2] if row[2] is not None else 15.0,
+        'stop_loss':        row[3] if row[3] is not None else 8.0,
+        'max_positions':    row[4] if row[4] is not None else 3,
+        'pref_notifications': bool(row[5] if row[5] is not None else 1),
+        'pref_scam_filter':   bool(row[6] if row[6] is not None else 1),
+        'pref_sound_alerts':  bool(row[7] if row[7] is not None else 0),
+        'bot_running': bot_running,
+    })
+
+@app.route('/api/settings/save', methods=['POST'])
+@rate_limit(20, 60)
+def settings_save():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    data = request.get_json(silent=True) or {}
+    updates = []
+    params = []
+    if 'breakout_trigger' in data:
+        try:
+            v = float(data['breakout_trigger'])
+            updates.append('breakout_trigger=?'); params.append(max(0.1, min(v, 100.0)))
+        except (ValueError, TypeError): pass
+    if 'take_profit' in data:
+        try:
+            v = float(data['take_profit'])
+            updates.append('take_profit=?'); params.append(max(0.1, min(v, 1000.0)))
+        except (ValueError, TypeError): pass
+    if 'stop_loss' in data:
+        try:
+            v = float(data['stop_loss'])
+            updates.append('stop_loss=?'); params.append(max(0.1, min(v, 100.0)))
+        except (ValueError, TypeError): pass
+    if 'max_positions' in data:
+        try:
+            v = int(data['max_positions'])
+            updates.append('max_positions=?'); params.append(max(1, min(v, 20)))
+        except (ValueError, TypeError): pass
+    if 'pref_notifications' in data:
+        updates.append('pref_notifications=?')
+        params.append(1 if data['pref_notifications'] else 0)
+    if 'pref_scam_filter' in data:
+        updates.append('pref_scam_filter=?')
+        params.append(1 if data['pref_scam_filter'] else 0)
+    if 'pref_sound_alerts' in data:
+        updates.append('pref_sound_alerts=?')
+        params.append(1 if data['pref_sound_alerts'] else 0)
+    if not updates:
+        return jsonify({'ok': True, 'msg': 'Nothing to update'})
+    params.append(wallet)
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        conn.execute(f'UPDATE users SET {", ".join(updates)} WHERE wallet_address=?', params)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+# ── WALLET KEY MANAGEMENT ──
+@app.route('/api/wallet/set-key', methods=['POST'])
+@rate_limit(5, 60)
+def wallet_set_key():
+    ip = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    data = request.get_json(silent=True) or {}
+    private_key_raw = data.get('private_key', '').strip()
+    if not private_key_raw:
+        return jsonify({'ok': False, 'msg': 'No key provided'})
+    if not is_valid_solana_private_key(private_key_raw):
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Invalid key format — paste the full base58 key from your wallet'})
+    try:
+        encrypted = encrypt_private_key(private_key_raw, wallet)
+        _verify = decrypt_private_key(encrypted, wallet)
+        if _verify != private_key_raw:
+            raise ValueError('Round-trip verify failed')
+        _verify = None
+        new_hash = hashlib.sha256(private_key_raw.encode()).hexdigest()
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Failed to encrypt private key'})
+    _log_security_event('key_saved', wallet)
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        conn.execute('UPDATE users SET encrypted_private_key=?, key_hash=? WHERE wallet_address=?',
+                     (encrypted, new_hash, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    get_user_state(wallet)['has_trading_key'] = True
+    add_user_log(wallet, 'Private key saved/updated')
+    return jsonify({'ok': True, 'has_trading_key': True})
+
+@app.route('/api/wallet/reveal-key', methods=['POST'])
+@rate_limit(3, 300)
+def wallet_reveal_key():
+    ip = request.remote_addr or '0.0.0.0'
+    wallet = _current_wallet()
+    if not wallet:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?',
+                           (wallet,)).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No private key saved'})
+    try:
+        raw = decrypt_private_key(row[0], wallet)
+    except Exception:
+        return jsonify({'ok': False, 'msg': 'Failed to decrypt key'})
+    _log_security_event('key_revealed', wallet)
+    return jsonify({'ok': True, 'private_key': raw})
 
 # ── USERNAME ──
 @app.route('/api/blacklist', methods=['GET'])

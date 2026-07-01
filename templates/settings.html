@@ -87,9 +87,15 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .st-wallet-btns{display:flex;gap:8px}
 .st-manage-btn{flex:1;padding:9px;background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s}
 .st-manage-btn:hover{opacity:.88}
+.st-reveal-btn{flex:1;padding:9px;background:transparent;color:var(--sub);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;font-family:var(--ui);cursor:pointer;transition:all .15s}
+.st-reveal-btn:hover{border-color:var(--muted);color:var(--text)}
+.st-reveal-btn:disabled{opacity:.4;cursor:not-allowed}
 .st-key-status{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .st-key-status.has-key{color:var(--green)}
 .st-key-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.st-reveal-area{display:none;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px 12px;margin-bottom:12px}
+.st-reveal-lbl{font-size:11px;color:var(--muted);margin-bottom:6px}
+.st-reveal-key{font-family:var(--mono);font-size:11px;color:var(--sub);word-break:break-all;line-height:1.55;user-select:all}
 
 /* ── EMERGENCY CARD ── */
 .st-card.emergency{border-color:#f76b62;background:rgba(247,107,98,.06)}
@@ -315,8 +321,14 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
           <span id="st-key-status-text">Checking…</span>
         </div>
 
+        <div class="st-reveal-area" id="reveal-area">
+          <div class="st-reveal-lbl">Private key — visible for <span id="reveal-countdown">10</span>s</div>
+          <div class="st-reveal-key" id="reveal-key-text"></div>
+        </div>
+
         <div class="st-wallet-btns">
           <button class="st-manage-btn" onclick="_openManage()">Manage</button>
+          <button class="st-reveal-btn" id="reveal-btn" onclick="_revealKey()">Reveal Key</button>
         </div>
       </div>
 
@@ -362,53 +374,46 @@ function _msg(id, txt, cls){
   el.textContent=txt;
 }
 
+/* ── init: load all settings from API ── */
+document.addEventListener('DOMContentLoaded', _initPage);
 
-/* ── load settings on init ── */
-document.addEventListener('DOMContentLoaded', function(){
-  _loadSettings();
-  _loadBotStatus();
-  _loadPrefs();
-});
-
-async function _loadSettings(){
+async function _initPage(){
   try{
-    var d=await fetch('/api/settings').then(function(r){return r.json();});
-    if(d.ok){
-      if(d.breakout_trigger!=null) document.getElementById('s-breakout').value=d.breakout_trigger;
-      if(d.take_profit!=null)      document.getElementById('s-tp').value=d.take_profit;
-      if(d.stop_loss!=null)        document.getElementById('s-sl').value=d.stop_loss;
-      if(d.max_positions!=null)    document.getElementById('s-maxpos').value=d.max_positions;
-      /* key status */
-      var stat=document.getElementById('st-key-status');
-      var txt=document.getElementById('st-key-status-text');
-      if(d.has_trading_key){
-        if(stat) stat.className='st-key-status has-key';
-        if(txt)  txt.textContent='Private key saved — ready to trade';
-      } else {
-        if(stat) stat.className='st-key-status';
-        if(txt)  txt.textContent='No private key — add one to enable trading';
-      }
-    }
+    var d=await fetch('/api/settings/get').then(function(r){return r.json();});
+    if(!d.ok) return;
+    /* strategy inputs */
+    if(d.breakout_trigger!=null) document.getElementById('s-breakout').value=d.breakout_trigger;
+    if(d.take_profit!=null)      document.getElementById('s-tp').value=d.take_profit;
+    if(d.stop_loss!=null)        document.getElementById('s-sl').value=d.stop_loss;
+    if(d.max_positions!=null)    document.getElementById('s-maxpos').value=d.max_positions;
+    /* key status */
+    _setKeyStatus(d.has_trading_key);
+    /* preference toggles */
+    var notifs=document.getElementById('pref-notifs');
+    var scam=document.getElementById('pref-scam');
+    var sound=document.getElementById('pref-sound');
+    if(notifs) notifs.checked=!!d.pref_notifications;
+    if(scam)   scam.checked  =!!d.pref_scam_filter;
+    if(sound)  sound.checked =!!d.pref_sound_alerts;
+    /* bot toggle — use live status endpoint for real-time accuracy */
+    try{
+      var bs=await fetch('/api/bot/status').then(function(r){return r.json();});
+      var el=document.getElementById('pref-autobot');
+      if(el) el.checked=!!(bs.running||bs.status==='running');
+    }catch(e){}
   }catch(e){}
 }
 
-async function _loadBotStatus(){
-  try{
-    var d=await fetch('/api/bot/status').then(function(r){return r.json();});
-    var el=document.getElementById('pref-autobot');
-    if(el) el.checked=!!(d.running||d.status==='running');
-  }catch(e){}
-}
-
-function _loadPrefs(){
-  try{
-    var n=localStorage.getItem('pref_notifications');
-    var sc=localStorage.getItem('pref_scam_filter');
-    var s=localStorage.getItem('pref_sound_alerts');
-    if(n!==null)  document.getElementById('pref-notifs').checked = n==='1';
-    if(sc!==null) document.getElementById('pref-scam').checked   = sc!=='0';
-    if(s!==null)  document.getElementById('pref-sound').checked  = s==='1';
-  }catch(e){}
+function _setKeyStatus(hasKey){
+  var stat=document.getElementById('st-key-status');
+  var txt=document.getElementById('st-key-status-text');
+  if(hasKey){
+    if(stat) stat.className='st-key-status has-key';
+    if(txt)  txt.textContent='Private key saved — ready to trade';
+  } else {
+    if(stat) stat.className='st-key-status';
+    if(txt)  txt.textContent='No private key — add one to enable trading';
+  }
 }
 
 /* ── strategy save ── */
@@ -416,18 +421,18 @@ async function _saveStrategy(){
   var btn=document.getElementById('strat-save-btn');
   btn.textContent='Saving…'; btn.disabled=true;
   try{
-    var d=await _post('/api/settings',{
+    var d=await _post('/api/settings/save',{
       breakout_trigger: parseFloat(document.getElementById('s-breakout').value)||3,
       take_profit:      parseFloat(document.getElementById('s-tp').value)||15,
       stop_loss:        parseFloat(document.getElementById('s-sl').value)||8,
       max_positions:    parseInt(document.getElementById('s-maxpos').value)||3
     });
     var msgEl=document.getElementById('strat-msg');
-    if(msgEl){msgEl.className='st-save-msg '+(d.ok?'ok':'err');msgEl.textContent=d.ok?'Saved':'Error: '+(d.msg||'failed');}
+    if(msgEl){msgEl.className='st-save-msg '+(d.ok?'ok':'err');msgEl.textContent=d.ok?'✓ Saved':'✗ '+(d.msg||'failed');}
     setTimeout(function(){if(msgEl)msgEl.textContent='';},3000);
   }catch(e){
     var msgEl=document.getElementById('strat-msg');
-    if(msgEl){msgEl.className='st-save-msg err';msgEl.textContent='Network error';}
+    if(msgEl){msgEl.className='st-save-msg err';msgEl.textContent='✗ Network error';}
   }finally{
     btn.textContent='Save'; btn.disabled=false;
   }
@@ -442,9 +447,11 @@ async function _onBotToggle(el){
   }catch(e){ el.checked=!running; }
 }
 
-/* ── preference toggles ── */
+/* ── preference toggles — auto-save to server ── */
 function _savePref(key, val){
-  try{ localStorage.setItem('pref_'+key, val?'1':'0'); }catch(e){}
+  var body={};
+  body['pref_'+key]=val;
+  _post('/api/settings/save', body).catch(function(){});
 }
 
 /* ── copy wallet ── */
@@ -477,10 +484,7 @@ async function _saveKey(){
     if(d.ok){
       _msg('manage-msg','✓ Key saved and encrypted.','ok');
       document.getElementById('manage-inp').value='';
-      var stat=document.getElementById('st-key-status');
-      var txt=document.getElementById('st-key-status-text');
-      if(stat) stat.className='st-key-status has-key';
-      if(txt)  txt.textContent='Private key saved — ready to trade';
+      _setKeyStatus(true);
       setTimeout(_closeManage, 1200);
     } else {
       _msg('manage-msg','✗ '+(d.msg||d.error||'Save failed.'),'err');
@@ -492,6 +496,49 @@ async function _saveKey(){
   }
 }
 
+/* ── reveal key (10-second timer) ── */
+var _revealTimer=null;
+async function _revealKey(){
+  var btn=document.getElementById('reveal-btn');
+  var area=document.getElementById('reveal-area');
+  var keyEl=document.getElementById('reveal-key-text');
+  var countdown=document.getElementById('reveal-countdown');
+  /* cancel any running reveal */
+  if(_revealTimer){clearInterval(_revealTimer);_revealTimer=null;area.style.display='none';keyEl.textContent='';btn.textContent='Reveal Key';btn.disabled=false;return;}
+  btn.disabled=true; btn.textContent='Loading…';
+  try{
+    var d=await _post('/api/wallet/reveal-key',{});
+    if(d.ok){
+      keyEl.style.color='';
+      keyEl.textContent=d.private_key;
+      area.style.display='block';
+      var secs=10;
+      countdown.textContent=secs;
+      btn.textContent='Hide';
+      btn.disabled=false;
+      _revealTimer=setInterval(function(){
+        secs--;
+        countdown.textContent=secs;
+        if(secs<=0){
+          clearInterval(_revealTimer); _revealTimer=null;
+          area.style.display='none';
+          keyEl.textContent='';
+          btn.textContent='Reveal Key';
+          btn.disabled=false;
+        }
+      },1000);
+    } else {
+      keyEl.style.color='var(--red)';
+      keyEl.textContent=d.msg||'Failed to reveal key';
+      area.style.display='block';
+      btn.disabled=false; btn.textContent='Reveal Key';
+      setTimeout(function(){area.style.display='none';keyEl.textContent='';},3000);
+    }
+  }catch(e){
+    btn.disabled=false; btn.textContent='Reveal Key';
+  }
+}
+
 /* ── emergency stop ── */
 async function _emergencyStop(){
   var btn=document.getElementById('emergency-btn');
@@ -500,7 +547,7 @@ async function _emergencyStop(){
   btn.textContent='Stopping…'; btn.disabled=true;
   try{
     var d=await _post('/api/bot/stop',{});
-    if(d.ok||d.stopped){
+    if(d.ok||d.stopped||d.status==='stopped'){
       if(msgEl){msgEl.className='st-save-msg ok';msgEl.textContent='✓ Bot stopped — all trading halted';}
       var tog=document.getElementById('pref-autobot');
       if(tog) tog.checked=false;
