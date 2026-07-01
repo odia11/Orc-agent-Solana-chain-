@@ -3055,13 +3055,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
 
     <div class="ob-step" id="step-1">
-      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.6rem">Step 2 — Enable Bot Trading</div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:.75rem;line-height:1.6;text-align:left">Paste your <strong style="color:var(--text)">dedicated trading wallet's</strong> private key. It is double-encrypted before storage and never shared.</p>
+      <div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:.6rem">Welcome to OrcAgent 🎉</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:.75rem;line-height:1.6;text-align:left">Paste your <strong style="color:var(--text)">dedicated trading wallet's</strong> private key to enable bot trading. It is double-encrypted before storage and never shared.</p>
       <div class="sg-warn">⚠ Never use your main wallet key — create a separate wallet just for the bot.</div>
       <textarea id="ob-privkey" rows="3" placeholder="Paste base58 private key…" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);outline:none;resize:none;margin-bottom:4px;box-sizing:border-box;line-height:1.5;transition:border-color .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"></textarea>
       <div id="ob-key-err" style="font-size:10px;color:var(--red);min-height:14px;margin-bottom:8px;text-align:left"></div>
       <button class="ob-btn" id="ob-save-key-btn" onclick="_obSaveKey()" style="background:var(--green);color:#fff;font-weight:900">Save Key &amp; Launch ▶</button>
-      <button class="ob-btn btn-skip" onclick="_obSkipKey()">Skip for now — add later in Settings</button>
+      <button class="ob-btn btn-skip" onclick="_obSkipKey()">Skip — trade manually</button>
     </div>
 
   </div>
@@ -3474,6 +3474,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           </div>
           <div class="sb-pnl neu" id="sb-pnl" style="display:none">&#8212;</div>
           <div class="sb-online-dot" id="sb-online-dot" style="display:none"></div>
+        </div>
+        <div style="text-align:center;padding:2px 12px 8px">
+          <button onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.reload())" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline;padding:4px 8px;font-family:var(--ui);transition:color .15s" onmouseenter="this.style.color='var(--text)'" onmouseleave="this.style.color='var(--muted)'">Disconnect</button>
         </div>
       </div>
 
@@ -4802,8 +4805,8 @@ async function connectWalletOnboard(type){
     if(r?.csrf_token) _csrfToken=r.csrf_token;
     settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false; _updateKeyStatus();
     if(r?.success){
-      if(r.has_trading_key){ await launchApp(); return; }
-      gotoSetupGuide(); return;
+      if(r.status==='new_user'){ gotoSetupGuide(); return; }
+      await launchApp(); return;
     }
   }catch(e){
     msgEl.textContent='Connection rejected or failed — please try again.';
@@ -6690,22 +6693,38 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── STARTUP: restore session ──
 (async function initApp(){
-  // If Flask session pre-populated phantomKey, go straight to launchApp — no extension
-  // re-detection needed, and avoids a redundant /api/wallet/set round-trip.
-  if(phantomKey){ await launchApp(); return; }
-
-  // Check if a wallet extension is already connected (dapp browsers, auto-connect extensions).
-  // Session state is server-side; no localStorage wallet key used.
+  // Check extension wallet before using session wallet
   const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected && window.solana?.publicKey;
   const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
   const _p = phantomReady ? window.solana : solflareReady ? window.solflare : null;
   const _n = phantomReady ? 'Phantom'    : solflareReady ? 'Solflare'      : null;
+
+  // If session wallet exists but doesn't match the connected extension wallet → clear session & reload
+  if(phantomKey && _p){
+    const _extPk = _p.publicKey.toString();
+    if(_extPk !== phantomKey){
+      await fetch('/api/logout',{method:'POST',credentials:'include'}).catch(()=>{});
+      window.location.reload();
+      return;
+    }
+  }
+
+  // If Flask session pre-populated phantomKey, go straight to launchApp — no extension
+  // re-detection needed, and avoids a redundant /api/wallet/set round-trip.
+  if(phantomKey){ await launchApp(); return; }
+
+  // Extension already connected with no session wallet — register it
   if(_p && _n){
     const _pk=_p.publicKey.toString();
     phantomKey=_pk; walletType=_n;
     const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})}).then(x=>x.json()).catch(()=>null);
     if(r?.csrf_token) _csrfToken=r.csrf_token;
-    if(r?.success){ window.location.href='/dashboard'; return; }
+    settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false;
+    if(r?.success){
+      if(r.status==='new_user'){ gotoSetupGuide(); return; }
+      await launchApp();
+      return;
+    }
     await launchApp();
     return;
   }
