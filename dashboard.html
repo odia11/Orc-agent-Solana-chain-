@@ -3519,8 +3519,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <div class="sb-pnl neu" id="sb-pnl" style="display:none">&#8212;</div>
           <div class="sb-online-dot" id="sb-online-dot" style="display:none"></div>
         </div>
-        <div style="text-align:center;padding:2px 12px 8px">
-          <button onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.reload())" style="background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;text-decoration:underline;padding:4px 8px;font-family:var(--ui);transition:color .15s" onmouseenter="this.style.color='var(--text)'" onmouseleave="this.style.color='var(--muted)'">Disconnect</button>
+        <div style="padding:8px 12px 10px">
+          <button onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')" style="width:100%;padding:10px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);transition:border-color .15s" onmouseenter="this.style.borderColor='#f76b62'" onmouseleave="this.style.borderColor='#21252c'">Disconnect Wallet</button>
         </div>
       </div>
 

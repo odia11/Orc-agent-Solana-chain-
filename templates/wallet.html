@@ -522,6 +522,20 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
       Settings
     </a>
   </nav>
+  <div style="padding:12px;border-top:1px solid var(--divider);margin-top:auto;flex-shrink:0">
+    {% if wallet_address %}
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;border:1px solid var(--divider);margin-bottom:8px;cursor:pointer" onclick="window.location='/profile'">
+      <div style="width:38px;height:38px;min-width:38px;border-radius:50%;background:#f7b955;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0a0b0e;flex-shrink:0">{{ wallet_address[:2] }}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">You</div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ wallet_address[:6] ~ '…' ~ wallet_address[-4:] }}</div>
+      </div>
+    </div>
+    <button onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')" style="width:100%;padding:10px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);transition:border-color .15s" onmouseenter="this.style.borderColor='#f76b62'" onmouseleave="this.style.borderColor='#21252c'">Disconnect Wallet</button>
+    {% else %}
+    <a href="/" style="display:block;padding:10px;border-radius:10px;background:#f7b955;color:#0a0b0e;font-size:13px;font-weight:600;text-align:center;text-decoration:none;font-family:var(--ui)">Connect Wallet</a>
+    {% endif %}
+  </div>
 </aside>
 
 <!-- ── CENTER COLUMN ── -->

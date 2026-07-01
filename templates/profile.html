@@ -266,6 +266,11 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
           <div class="sb-sol-label">SOL</div>
         </div>
       </div>
+      {% if session_wallet %}
+      <button onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')" style="margin-top:8px;width:100%;padding:10px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);transition:border-color .15s" onmouseenter="this.style.borderColor='#f76b62'" onmouseleave="this.style.borderColor='#21252c'">Disconnect Wallet</button>
+      {% else %}
+      <a href="/" style="margin-top:8px;display:block;padding:10px;border-radius:10px;background:#f7b955;color:#0a0b0e;font-size:13px;font-weight:600;text-align:center;text-decoration:none;font-family:var(--ui)">Connect Wallet</a>
+      {% endif %}
     </div>
   </aside>
 

@@ -2878,6 +2878,7 @@ def profile():
             'profile.html',
             wallet=wallet,
             wallet_short=wallet_short,
+            session_wallet=wallet,
             display_name=user['username'] or wallet_short,
             username=user['username'],
             avatar_url=user['avatar_url'],
