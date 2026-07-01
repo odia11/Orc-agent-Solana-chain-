@@ -2860,6 +2860,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
 /* Bottom nav — hidden on desktop, shown only on mobile */
 #mobile-nav{display:none}
+#mn-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:498;-webkit-tap-highlight-color:transparent}
+#mn-drawer{position:fixed;bottom:-100%;left:0;right:0;background:#101216;border-top:1px solid #16191f;border-radius:20px 20px 0 0;z-index:499;max-height:90vh;overflow-y:auto;transition:bottom .3s ease}
+#mn-drawer.open{bottom:0}
+#mn-overlay.open{display:block}
 
 @media(max-width:767px){
 
@@ -2881,12 +2885,17 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   }
   .mn-item.active,.mn-item:active{color:#f7b955}
   .mn-item svg{width:22px;height:22px;flex-shrink:0}
-  .mn-trade-pip{
-    width:44px;height:44px;border-radius:14px;
-    background:#f7b955;display:flex;align-items:center;justify-content:center;
-    margin-bottom:2px;
-  }
-  .mn-trade-pip svg{width:20px;height:20px;color:#0a0b0e}
+  /* ── Drawer ── */
+  .mn-drawer-handle{width:36px;height:4px;background:#21252c;border-radius:2px;margin:12px auto 8px}
+  .mn-drawer-cta{display:block;margin:0 16px 8px;background:#f7b955;color:#0a0b0e;border:none;border-radius:12px;padding:13px 0;font-size:14px;font-weight:700;font-family:'Geist',system-ui,sans-serif;cursor:pointer;width:calc(100% - 32px);text-align:center;transition:background .15s,opacity .15s;letter-spacing:.02em}
+  .mn-drawer-cta:active{opacity:.85}
+  .mn-drawer-nav{padding:4px 8px 16px}
+  .mn-drawer-item{display:flex;align-items:center;gap:14px;padding:13px 12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:500;color:#8a919c;cursor:pointer;text-decoration:none;border:none;background:transparent;width:100%;text-align:left;border-radius:11px;transition:background .15s,color .15s;-webkit-tap-highlight-color:transparent}
+  .mn-drawer-item:active{background:rgba(247,185,85,.1);color:#eef1f5}
+  .mn-drawer-item.active{background:rgba(247,185,85,.12);color:#eef1f5;font-weight:600}
+  .mn-drawer-item svg{width:18px;height:18px;flex-shrink:0;color:inherit}
+  .mn-drawer-badge{margin-left:auto;background:#f7b955;color:#0a0b0e;border-radius:8px;font-size:10px;font-weight:700;padding:2px 7px;font-family:'Geist',system-ui,sans-serif}
+  .mn-drawer-sep{height:1px;background:#16191f;margin:4px 12px}
 
   /* ── Hide left sidebar & desktop header ── */
   #sidebar{display:none!important}
@@ -11463,51 +11472,123 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- MOBILE BOTTOM NAV (visible <768px only) -->
 <nav id="mobile-nav" aria-label="Mobile navigation">
-  <!-- Home -->
   <a class="mn-item active" href="/" onclick="if(window._sbNav){_sbNav('dashboard');return false;}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     <span>Home</span>
   </a>
-  <!-- Market -->
   <a class="mn-item" href="/live-market">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
     <span>Market</span>
   </a>
-  <!-- Trade (centre CTA) -->
-  <button class="mn-item" onclick="_botToggle()" id="mn-trade-btn">
-    <div class="mn-trade-pip">
-      <svg viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-    </div>
-    <span id="mn-trade-label">Trade</span>
-  </button>
-  <!-- Messages -->
   <a class="mn-item" href="/messages">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
     <span>Messages</span>
   </a>
-  <!-- Profile -->
   <a class="mn-item" href="/profile">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
     <span>Profile</span>
   </a>
+  <button class="mn-item" onclick="_mnDrawerOpen()" aria-label="More navigation">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <span>More</span>
+  </button>
 </nav>
 
+<!-- MOBILE NAV OVERLAY -->
+<div id="mn-overlay" onclick="_mnDrawerClose()"></div>
+
+<!-- MOBILE NAV DRAWER -->
+<div id="mn-drawer" role="dialog" aria-label="Navigation menu">
+  <div class="mn-drawer-handle"></div>
+  <button class="mn-drawer-cta" id="mn-drawer-trade-btn" onclick="_mnDrawerClose();_botToggle()">&#9654; Start Trading</button>
+  <nav class="mn-drawer-nav">
+    <a class="mn-drawer-item" href="/" onclick="_mnDrawerClose();if(window._sbNav){event.preventDefault();_sbNav('dashboard');}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a class="mn-drawer-item" href="/live-market" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Live Market
+    </a>
+    <a class="mn-drawer-item" href="/leaderboard" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/></svg>
+      Leaderboard
+    </a>
+    <a class="mn-drawer-item" href="/traders" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Traders
+    </a>
+    <a class="mn-drawer-item" href="/messages" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Messages
+    </a>
+    <a class="mn-drawer-item" href="/community" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0"/></svg>
+      Community
+    </a>
+    <a class="mn-drawer-item" href="/notifications" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications
+      <span class="mn-drawer-badge" id="mn-notif-badge">5</span>
+    </a>
+    <a class="mn-drawer-item" href="/wallet" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg>
+      Wallet
+    </a>
+    <a class="mn-drawer-item" href="/profile" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profile
+    </a>
+    <div class="mn-drawer-sep"></div>
+    <a class="mn-drawer-item" href="/settings" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </a>
+    <button class="mn-drawer-item" onclick="_mnDrawerClose();openBlacklistModal()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+      Blacklist
+    </button>
+    <a class="mn-drawer-item" href="/history" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      History
+    </a>
+  </nav>
+</div>
+
 <script>
-/* Sync mobile Trade button with bot state */
-(function(){
-  var orig = window._botToggle;
-  function _syncMnBtn(){
-    var running = document.getElementById('feed-bot-btn') &&
-                  document.getElementById('feed-bot-btn').classList.contains('stop');
-    var pip   = document.querySelector('.mn-trade-pip');
-    var label = document.getElementById('mn-trade-label');
-    if(pip)   pip.style.background   = running ? '#ff4d6a' : '#f7b955';
-    if(label) label.textContent      = running ? 'Stop'    : 'Trade';
+/* Mobile nav drawer */
+function _mnDrawerOpen(){
+  var drawer  = document.getElementById('mn-drawer');
+  var overlay = document.getElementById('mn-overlay');
+  if(!drawer) return;
+  drawer.classList.add('open');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+  _syncMnDrawerBtn();
+}
+function _mnDrawerClose(){
+  var drawer  = document.getElementById('mn-drawer');
+  var overlay = document.getElementById('mn-overlay');
+  if(!drawer) return;
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+function _syncMnDrawerBtn(){
+  var running = !!(document.getElementById('feed-bot-btn') &&
+                   document.getElementById('feed-bot-btn').classList.contains('stop'));
+  var btn = document.getElementById('mn-drawer-trade-btn');
+  if(btn){
+    btn.innerHTML  = running ? '&#9646; Stop Trading' : '&#9654; Start Trading';
+    btn.style.background = running ? '#ff4d6a' : '#f7b955';
   }
-  document.addEventListener('DOMContentLoaded', function(){
-    setInterval(_syncMnBtn, 2000);
-  });
-})();
+}
+document.addEventListener('DOMContentLoaded', function(){
+  setInterval(_syncMnDrawerBtn, 2000);
+});
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') _mnDrawerClose();
+});
 </script>
 
 </body>
