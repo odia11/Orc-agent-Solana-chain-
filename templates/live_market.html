@@ -117,15 +117,22 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 }
 /* mobile */
 @media(max-width:767px){
+  html,body{overflow-x:hidden}
+  .lm-header{display:none!important}
+  .mobile-back-bar{height:52px}
+  .lm-tabs{top:52px}
   .lm-back{display:none!important}
   .col-hide{display:none}
-  .lm-table{min-width:0}
+  .lm-table-scroll{overflow-x:hidden}
+  .lm-table{min-width:0;table-layout:fixed;width:100%}
   .lm-table thead th{font-size:9px;padding:10px 8px;letter-spacing:.04em}
+  .lm-table thead th:last-child,.lm-table tbody td:last-child{width:56px}
   .lm-table tbody td{padding:0 8px;height:52px;font-size:12px}
   .lm-tok-logo,.lm-tok-logo-ph{width:30px;height:30px;font-size:9px}
-  .lm-tok-name{font-size:12px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lm-tok-cell{min-width:0}
+  .lm-tok-name{font-size:12px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .lm-tok-sym{font-size:10px}
-  .lm-btn-trade{padding:7px 12px;font-size:11px}
+  .lm-btn-trade{min-height:44px;min-width:44px;padding:0 10px;font-size:11px}
   .lm-drop-inner{flex-wrap:wrap;gap:6px;padding:8px 10px}
   .lm-scanning-pill{padding:4px 8px;font-size:9px}
   .lm-scanning-pill .lm-scan-label{display:none}

@@ -136,10 +136,28 @@ a.hdr-btn.active{border-color:var(--green);color:var(--green);background:rgba(0,
   /* Table: scrollable, reduced border-radius */
   .table-wrap{border-radius:10px}
   .hist-table{min-width:650px}
+  /* hide desktop header on mobile */
+  .header{display:none!important}
+  /* 44px tap targets */
+  a.hdr-btn,button.hdr-btn,.filter-clear{min-height:44px;display:inline-flex;align-items:center}
+  /* mobile inputs: prevent iOS auto-zoom */
+  .filter-input,.filter-select,.filter-date{font-size:16px}
+  html,body{overflow-x:hidden}
+}
+/* ── MOBILE BACK BAR ── */
+.mobile-back-bar{display:none}
+@media(max-width:768px){
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#0d1421;border-bottom:1px solid #1a2840}
+  .mobile-back-btn{color:#00ff88;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef6ff;font-family:inherit}
 }
 </style>
 </head>
 <body>
+<div class="mobile-back-bar">
+  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Trade History</span>
+</div>
 <div class="page-wrap">
 
   <!-- NAVBAR -->

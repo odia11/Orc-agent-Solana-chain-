@@ -447,19 +447,32 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 @media(max-width:1100px){#wlt-sb{width:200px;min-width:200px}}
 @media(max-width:900px){#wlt-sb{display:none}.rt-sidebar{display:none}}
 @media(max-width:600px){
-  html,body{height:auto;overflow:auto}
+  html,body{height:auto;overflow:auto;overflow-x:hidden}
   #app{display:block;height:auto;overflow:visible}
   .wlt-center{height:auto;overflow-y:visible}
   .wlt-hdr{padding:18px 16px 0}
   .wlt-content{padding:16px 14px 60px}
   .wlt-actions{gap:6px}
-  .wlt-btn{font-size:12px}
+  .wlt-btn{font-size:12px;min-height:44px}
   .tok-trade{display:none}
   .dep-body{flex-direction:column}
+  .dep-btn{min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+  .hide-small-btn{min-height:44px}
+}
+/* ── MOBILE BACK BAR ── */
+.wlt-mobile-hdr{display:none}
+@media(max-width:600px){
+  .wlt-mobile-hdr{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .wlt-mobile-back{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
+  .wlt-mobile-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
 }
 </style>
 </head>
 <body>
+<div class="wlt-mobile-hdr">
+  <button onclick="history.back()" class="wlt-mobile-back">← Back</button>
+  <span class="wlt-mobile-title">Wallet</span>
+</div>
 <div id="app">
 
 <!-- ── LEFT RAIL ── -->

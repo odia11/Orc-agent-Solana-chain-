@@ -211,7 +211,10 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:#555555;color:#ffffff}
 
   /* Action bar: stack buttons */
   #tok-trade-btns{flex-direction:column}
-  #tok-buy-btn,#tok-sell-btn{flex:none;width:100%}
+  #tok-buy-btn,#tok-sell-btn{flex:none;width:100%;min-height:44px}
+  /* 44px tap targets */
+  a.hdr-btn,button.hdr-btn{min-height:44px;display:inline-flex;align-items:center}
+  html,body{overflow-x:hidden}
 }
 </style>
 </head>

@@ -31,6 +31,12 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .cm-send:disabled{opacity:.5;cursor:default}
 
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+@media(max-width:767px){
+  html,body{overflow-x:hidden}
+  .cm-back{width:44px;height:44px}
+  .cm-send{min-height:44px;height:auto}
+  .cm-input{font-size:16px}
+}
 </style>
 </head>
 <body>
