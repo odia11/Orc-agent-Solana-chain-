@@ -88,7 +88,7 @@ def _refresh_session():
 
 # /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
 # cannot require a session-scoped CSRF token. Origin check still protects it.
-_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade', '/api/phantom/init', '/api/phantom/decrypt'})
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade', '/api/phantom/init', '/api/phantom/decrypt', '/api/wallet/send'})
 
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
@@ -4447,6 +4447,45 @@ def wallet_activity():
         })
     return jsonify({'ok': True, 'activity': activity})
 
+
+@app.route('/api/wallet/send', methods=['POST'])
+@rate_limit(3, 60)
+def wallet_send():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'error': 'Not logged in'}), 401
+    data      = request.get_json(silent=True) or {}
+    to_addr   = (data.get('to') or '').strip()
+    try:
+        amount = float(data.get('amount_sol', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'error': 'Invalid amount'})
+    if not is_valid_solana_address(to_addr):
+        return jsonify({'ok': False, 'error': 'Invalid destination address'})
+    if amount <= 0 or amount > 500:
+        return jsonify({'ok': False, 'error': 'Amount must be > 0 and ≤ 500 SOL'})
+    if to_addr == wallet:
+        return jsonify({'ok': False, 'error': 'Cannot send to yourself'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'error': 'No private key saved — add one in Settings first'})
+    try:
+        with _use_key(row[0], wallet) as raw_key:
+            sig = send_sol_fee(raw_key, to_addr, amount)
+    except Exception as e:
+        _log_security_event('send_failed', wallet, str(e)[:200])
+        return jsonify({'ok': False, 'error': f'Send failed: {str(e)[:120]}'}), 500
+    _log_security_event('sol_sent', wallet, f'to={to_addr[:8]}... amount={amount}')
+    add_user_log(wallet, f'Sent {amount} SOL to {to_addr[:8]}...')
+    return jsonify({'ok': True, 'signature': sig})
+
+
 # Two-entry RPC list for the frontend proxy endpoints:
 # SOLANA_RPC_URL (Railway env var) first; public mainnet-beta as fallback.
 _PROXY_RPCS = [u for u in [SOLANA_RPC_URL, SOLANA_RPC] if u]
@@ -5085,6 +5124,33 @@ def post_feed_reply():
     })
 
 # ── PROFILE ──
+@app.route('/api/me', methods=['GET'])
+@rate_limit(60, 60)
+def api_me():
+    """Lightweight current-user endpoint used by sidebar profile loaders."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT username, avatar_url FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    username   = row[0] if row else None
+    avatar_url = row[1] if row else None
+    us      = get_user_state(wallet)
+    balance = us.get('balance', 0.0)
+    return jsonify({
+        'ok':       True,
+        'wallet':   wallet,
+        'username': username or '',
+        'avatar':   avatar_url or '',
+        'balance':  balance,
+    })
+
+
 @app.route('/api/profile/me', methods=['GET'])
 @rate_limit(60, 60)
 def api_profile_me():
