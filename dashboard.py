@@ -3938,6 +3938,16 @@ def set_wallet():
     if address:
         if not is_valid_solana_address(address):
             return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
+        # Check if wallet already exists in DB before upsert
+        is_new_user = True
+        try:
+            _ck = sqlite3.connect(DB_FILE)
+            _ckc = _ck.cursor()
+            _ckc.execute('SELECT 1 FROM users WHERE wallet_address=?', (address,))
+            is_new_user = _ckc.fetchone() is None
+            _ck.close()
+        except Exception:
+            pass
         session.permanent = True
         session.modified  = True
         session['wallet'] = address
@@ -3962,15 +3972,23 @@ def set_wallet():
             pass
         us = get_user_state(address)
         us['has_trading_key'] = has_trading_key
+        user_status = 'new_user' if is_new_user else 'existing'
         return jsonify({'ok': True, 'success': True, 'redirect': '/dashboard',
                         'wallet': address, 'has_trading_key': has_trading_key,
-                        'is_admin': _is_owner(address), 'csrf_token': csrf_tok})
+                        'is_admin': _is_owner(address), 'csrf_token': csrf_tok,
+                        'status': user_status})
     else:
         prev = _current_wallet()
         session.pop('wallet', None)
         if prev:
             add_user_log(prev, 'Wallet disconnected')
     return jsonify({'ok': True, 'wallet': session.get('wallet', '')})
+
+@app.route('/api/logout', methods=['POST'])
+@csrf_exempt
+def logout():
+    session.clear()
+    return jsonify({'status': 'ok'})
 
 # ── SETTINGS ──
 @app.route('/api/settings', methods=['GET'])
