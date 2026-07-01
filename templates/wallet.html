@@ -9,218 +9,160 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0b0e;
-  --card:#101216;
+  --bg2:#101216;
+  --bg3:#16191f;
+  --bg4:#21252c;
   --border:#21252c;
   --divider:#16191f;
   --accent:#35d4c4;
-  --green:#00d084;
-  --red:#ff4757;
+  --amber:#f7b955;
+  --green:#3ad29b;
+  --red:#f76b62;
   --text:#eef1f5;
   --muted:#565d68;
   --sub:#8a919c;
   --mono:'JetBrains Mono',monospace;
   --ui:'Geist',sans-serif;
 }
-body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100vh}
 
-/* ── header ── */
-.hdr{
-  position:sticky;top:0;z-index:100;
-  background:rgba(10,11,14,.92);
-  backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);
-  border-bottom:1px solid var(--divider);
-  display:flex;align-items:center;justify-content:space-between;
-  padding:14px 20px;gap:12px;
+/* ── app shell ── */
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+#app{display:flex;height:100%;overflow:hidden}
+
+/* ── left rail ── */
+#wlt-sb{
+  width:260px;min-width:260px;height:100vh;
+  position:sticky;top:0;flex-shrink:0;
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--divider);
+  background:var(--bg2);
+  overflow-y:auto;
 }
-.hdr-left{display:flex;flex-direction:column;gap:2px}
-.hdr-title{font-size:16px;font-weight:600;color:var(--text)}
-.hdr-sub{font-size:11px;color:var(--muted)}
-.hdr-right{display:flex;align-items:center;gap:10px;flex-shrink:0}
-.hdr-back{font-size:13px;color:var(--muted);text-decoration:none}
-.hdr-back:hover{color:var(--text)}
+.sb-logo{padding:20px 18px 14px;display:flex;align-items:center;gap:10px;text-decoration:none}
+.sb-logo-shape{
+  width:30px;height:30px;min-width:30px;border-radius:8px;
+  background:var(--accent);flex-shrink:0;
+}
+.sb-logo-text{font-size:14px;font-weight:700;color:var(--text);letter-spacing:.02em}
+.sb-divider{margin:2px 16px 6px;border:none;border-top:1px solid var(--divider)}
+.sb-nav{padding:0 10px;display:flex;flex-direction:column;gap:2px}
+.sb-nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:9px;
+  font-size:13px;font-weight:500;color:var(--sub);
+  text-decoration:none;border:none;background:transparent;
+  width:100%;text-align:left;cursor:pointer;
+  transition:background .13s,color .13s;
+  white-space:nowrap;
+}
+.sb-nav-item:hover{background:var(--divider);color:var(--text)}
+.sb-nav-item.active{background:rgba(247,185,85,.1);color:var(--text);font-weight:600}
+.sb-nav-item.active::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--amber);margin-left:auto;flex-shrink:0}
+.sb-nav-icon{width:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+
+/* ── center column ── */
+.wlt-center{flex:1;min-width:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+
+/* ── center header ── */
+.wlt-hdr{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:28px 28px 0;flex-shrink:0;gap:16px;
+}
+.wlt-title{font-size:20px;font-weight:600;color:var(--text);margin-bottom:4px}
+.wlt-sub{font-size:13px;color:var(--muted)}
 .net-pill{
-  display:flex;align-items:center;gap:5px;
+  display:inline-flex;align-items:center;gap:6px;
   font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;
-  color:var(--accent);border:1px solid var(--accent);border-radius:20px;
-  padding:4px 11px;white-space:nowrap;
+  color:var(--green);border:1px solid rgba(58,210,155,.35);
+  border-radius:20px;padding:5px 12px;white-space:nowrap;flex-shrink:0;margin-top:4px;
 }
-.net-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.net-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
 
-/* ── layout ── */
-.app-body{display:flex;align-items:flex-start}
-.main-col{flex:1;min-width:0;padding-bottom:48px}
-.page{max-width:600px;margin:0 auto;padding:20px 16px 0;display:flex;flex-direction:column;gap:14px}
-
-/* ── right sidebar ── */
-.sidebar{
-  width:340px;flex-shrink:0;
-  position:sticky;top:0;height:100vh;overflow-y:auto;
-  padding:16px 18px;
-  border-left:1px solid var(--divider);
-}
-.sb-search{
-  width:100%;background:var(--card);border:1px solid var(--border);
-  border-radius:13px;padding:11px 15px;
-  color:var(--text);font-family:var(--ui);font-size:13px;outline:none;
-  margin-bottom:16px;display:block;
-}
-.sb-search::placeholder{color:var(--muted)}
-.sb-search:focus{border-color:var(--accent)}
-.sb-card{
-  background:var(--card);border:1px solid var(--divider);
-  border-radius:18px;padding:16px;
-}
-.sb-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
-.sb-card-title{font-size:13px;font-weight:600;color:var(--text)}
-.sb-live-dot{
-  width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;
-  animation:pulse 2s ease-in-out infinite;
-}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.sb-tok-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--divider)}
-.sb-tok-row:last-child{border-bottom:none}
-.sb-tok-init{
-  width:32px;height:32px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:11px;color:#fff;
-}
-.sb-tok-logo{width:32px;height:32px;border-radius:50%;flex-shrink:0;object-fit:cover}
-.sb-tok-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-tok-price{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px}
-.sb-tok-pct{font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0}
-.sb-footer{
-  display:block;text-align:center;margin-top:12px;padding:8px;
-  font-size:12px;color:var(--accent);text-decoration:none;
-  border:1px solid var(--divider);border-radius:10px;
-  transition:background .15s,border-color .15s;
-}
-.sb-footer:hover{background:var(--divider);border-color:var(--accent)}
-@media(max-width:960px){.sidebar{display:none}}
-
-/* ── trader row ── */
-.sb-tr-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid var(--divider)}
-.sb-tr-row:last-child{border-bottom:none}
-.sb-tr-rank{font-family:var(--mono);font-size:10px;color:var(--muted);width:14px;flex-shrink:0;text-align:center}
-.sb-tr-av{
-  width:30px;height:30px;border-radius:50%;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;
-  font-weight:700;font-size:11px;color:#fff;
-}
-.sb-tr-avimg{width:30px;height:30px;border-radius:50%;flex-shrink:0;object-fit:cover}
-.sb-tr-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-tr-handle{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sb-tr-pnl{font-family:var(--mono);font-size:12px;font-weight:700;color:var(--green);white-space:nowrap;flex-shrink:0}
-
-/* ── platform stats ── */
-.sb-stat-grid{display:flex;flex-direction:column;gap:2px}
-.sb-stat-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-bottom:1px solid var(--divider)}
-.sb-stat-row:last-child{border-bottom:none}
-.sb-stat-lbl{font-size:11px;color:var(--muted)}
-.sb-stat-val{font-family:var(--mono);font-size:19px;font-weight:700;color:var(--text)}
-
-/* ── hero card ── */
-.hero{
-  background:linear-gradient(160deg,#11151a 0%,#0e1013 100%);
-  border:1px solid var(--border);border-radius:18px;padding:24px 22px 20px;
-}
-.hero-label{font-size:10px;font-weight:600;letter-spacing:.14em;color:var(--muted);margin-bottom:12px}
-.hero-bal-row{display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;margin-bottom:4px}
-.hero-bal-num{font-family:var(--mono);font-size:40px;font-weight:700;line-height:1;color:var(--text)}
-.hero-bal-unit{font-family:var(--mono);font-size:17px;color:var(--muted);font-weight:400}
-.hero-today{font-family:var(--mono);font-size:13px;font-weight:600;display:none}
-.hero-usd{font-family:var(--mono);font-size:13px;color:var(--sub);margin-bottom:20px}
+/* ── content area ── */
+.wlt-content{padding:20px 28px 60px;display:flex;flex-direction:column;gap:14px;max-width:720px}
 
 /* ── action buttons ── */
-.actions{display:flex;gap:8px;margin-bottom:18px}
-.act-btn{
-  flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;
-  border-radius:12px;padding:11px 4px;cursor:pointer;
-  font-family:var(--ui);font-size:11px;font-weight:600;border:none;
-  transition:opacity .15s;
+.wlt-actions{display:flex;gap:8px}
+.wlt-btn{
+  flex:1;height:40px;border-radius:10px;
+  font-family:var(--ui);font-size:13px;font-weight:600;
+  cursor:pointer;transition:opacity .15s,border-color .15s,color .15s;
+  white-space:nowrap;
 }
-.act-btn:hover{opacity:.82}
-.act-primary{background:var(--accent);color:#06100f;border:1px solid var(--accent)}
-.act-secondary{background:var(--bg);color:var(--sub);border:1px solid var(--border)}
-.act-secondary:hover{border-color:var(--accent);color:var(--text);opacity:1}
-.act-icon{font-size:15px;line-height:1}
+.wlt-btn-primary{background:var(--amber);color:#0a0b0e;border:1px solid var(--amber)}
+.wlt-btn-primary:hover{opacity:.88}
+.wlt-btn-outline{background:transparent;color:var(--sub);border:1px solid #21252c}
+.wlt-btn-outline:hover{border-color:var(--accent);color:var(--text)}
 
-/* ── split cells ── */
-.split{display:flex;border:1px solid var(--border);border-radius:12px;overflow:hidden}
-.split-cell{flex:1;padding:12px 14px;background:#0d0f12}
-.split-cell+.split-cell{border-left:1px solid var(--border)}
-.split-lbl{font-size:10px;font-weight:500;color:var(--muted);letter-spacing:.06em;margin-bottom:5px}
-.split-val{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text)}
-
-/* ── portfolio PnL bar ── */
-.pnl-bar{
-  margin-top:12px;padding:10px 14px;
-  background:var(--divider);border:1px solid var(--border);border-radius:10px;
-  font-family:var(--mono);font-size:12px;
-  display:none;justify-content:space-between;align-items:center;
+/* ── balance card ── */
+.wlt-bal-card{
+  background:#101216;border:1px solid #16191f;
+  border-radius:14px;display:flex;overflow:hidden;
 }
+.wlt-bal-col{flex:1;padding:20px 22px}
+.wlt-bal-col+.wlt-bal-col{border-left:1px solid #16191f}
+.wlt-bal-lbl{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--muted);margin-bottom:10px;text-transform:uppercase}
+.wlt-bal-num{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--text);word-break:break-all}
 
 /* ── deposit card ── */
-.dep-card{background:var(--card);border:1px solid var(--divider);border-radius:18px;padding:17px}
+.dep-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:18px}
 .dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .dep-title{font-size:13px;font-weight:600;color:var(--text)}
 .dep-network{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.06em}
 .dep-body{display:flex;gap:14px;align-items:flex-start}
 .dep-qr{
-  width:74px;height:74px;flex-shrink:0;
-  background:var(--divider);border:1px solid var(--border);border-radius:10px;
-  display:flex;align-items:center;justify-content:center;padding:8px;
+  width:80px;height:80px;flex-shrink:0;
+  background:#16191f;border:1px solid #21252c;border-radius:10px;
+  display:flex;align-items:center;justify-content:center;padding:9px;
 }
-.dep-qr-grid{display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);gap:2px;width:100%;height:100%}
-.dep-qr-cell{border-radius:1px}
+.dep-qr-grid{display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(5,1fr);gap:2.5px;width:100%;height:100%}
+.dep-qr-cell{border-radius:1.5px}
 .dep-right{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px}
 .dep-addr{
   font-family:var(--mono);font-size:11px;color:var(--sub);
-  word-break:break-all;line-height:1.55;
-  background:var(--divider);border:1px solid var(--border);border-radius:8px;padding:8px 10px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:#16191f;border:1px solid #21252c;border-radius:8px;padding:9px 11px;
 }
 .dep-btns{display:flex;gap:7px}
 .dep-btn{
-  flex:1;padding:7px 0;border-radius:8px;cursor:pointer;
-  font-family:var(--ui);font-size:11px;font-weight:600;
-  text-align:center;text-decoration:none;display:inline-block;border:none;
-  transition:opacity .15s,border-color .15s,color .15s;
+  flex:1;padding:8px 0;border-radius:8px;cursor:pointer;
+  font-family:var(--ui);font-size:12px;font-weight:600;
+  text-align:center;text-decoration:none;display:inline-block;
+  transition:opacity .15s,border-color .15s,color .15s;border:none;
 }
-.dep-copy{background:var(--accent);color:#06100f}
+.dep-copy{background:var(--amber);color:#0a0b0e;border:1px solid var(--amber)!important}
 .dep-copy:hover{opacity:.85}
-.dep-scan{background:var(--bg);color:var(--sub);border:1px solid var(--border)}
-.dep-scan:hover{border-color:var(--accent);color:var(--accent)}
+.dep-scan{background:transparent;color:var(--sub);border:1px solid #21252c!important}
+.dep-scan:hover{border-color:var(--accent)!important;color:var(--accent)}
 
 /* ── holdings card ── */
-.holdings{background:var(--card);border:1px solid var(--divider);border-radius:18px;overflow:hidden}
+.holdings{background:#101216;border:1px solid #16191f;border-radius:14px;overflow:hidden}
 .holdings-hdr{
   display:flex;align-items:center;justify-content:space-between;
-  padding:15px 18px 13px;border-bottom:1px solid var(--divider);
+  padding:16px 18px 14px;border-bottom:1px solid #16191f;
 }
 .holdings-title{font-size:13px;font-weight:600;color:var(--text)}
 .hide-small-btn{
   background:none;border:none;cursor:pointer;
-  font-family:var(--ui);font-size:11px;font-weight:500;
+  font-family:var(--ui);font-size:12px;font-weight:500;
   color:var(--accent);padding:0;transition:opacity .15s;
 }
 .hide-small-btn:hover{opacity:.7}
 .tok-list{padding:0 18px}
 
 /* ── token row ── */
-.tok-row{
-  display:flex;align-items:center;gap:12px;
-  padding:12px 0;border-bottom:1px solid #16191f;
-}
+.tok-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #16191f}
 .tok-row:last-child{border-bottom:none}
-.tok-logo{width:38px;height:38px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.tok-logo{width:40px;height:40px;border-radius:50%;flex-shrink:0;object-fit:cover}
 .tok-init{
-  width:38px;height:38px;border-radius:50%;flex-shrink:0;
+  width:40px;height:40px;border-radius:50%;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
   font-family:var(--ui);font-weight:700;font-size:12px;color:#fff;
 }
 .tok-info{flex:1;min-width:0;cursor:pointer}
 .tok-name{font-size:14px;font-weight:700;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.tok-amount{font-family:var(--mono);font-size:12px;color:#565d68;margin-top:2px}
-.tok-val{text-align:right;flex-shrink:0;min-width:72px}
+.tok-amount{font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:2px}
+.tok-val{text-align:right;flex-shrink:0;min-width:80px}
 .tok-usd{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)}
 .tok-pct{font-family:var(--mono);font-size:11px;margin-top:2px}
 .tok-trade{display:flex;align-items:center;gap:5px;flex-shrink:0}
@@ -231,18 +173,18 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 }
 .w-inp:focus{border-color:var(--accent)}
 .w-buy-btn{
-  background:#0a2a1a;color:var(--green);border:1px solid #00d08430;
+  background:#0a2a1a;color:var(--green);border:1px solid rgba(58,210,155,.18);
   border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;
   cursor:pointer;font-family:var(--mono);white-space:nowrap;transition:background .15s,color .15s;
 }
 .w-buy-btn:hover{background:var(--green);color:#000}
 .w-buy-btn:disabled{opacity:.4;cursor:not-allowed}
 .w-sel{
-  background:#1a0a0a;color:var(--red);border:1px solid #ff475730;
+  background:#1a0a0a;color:var(--red);border:1px solid rgba(247,107,98,.18);
   border-radius:7px;padding:5px 7px;font-size:11px;font-family:var(--mono);cursor:pointer;outline:none;
 }
 .w-sell-btn{
-  background:#1a0a0a;color:var(--red);border:1px solid #ff475730;
+  background:#1a0a0a;color:var(--red);border:1px solid rgba(247,107,98,.18);
   border-radius:7px;padding:5px 11px;font-size:11px;font-weight:700;
   cursor:pointer;font-family:var(--mono);white-space:nowrap;transition:background .15s,color .15s;
 }
@@ -250,26 +192,84 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .w-sell-btn:disabled{opacity:.4;cursor:not-allowed}
 
 /* ── recent activity ── */
-.act-card{background:#101216;border:1px solid #16191f;border-radius:16px;overflow:hidden}
-.act-hdr{display:flex;align-items:center;justify-content:space-between;padding:15px 16px 13px;border-bottom:1px solid #16191f}
+.act-card{background:#101216;border:1px solid #16191f;border-radius:14px;overflow:hidden}
+.act-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 14px;border-bottom:1px solid #16191f}
 .act-title{font-size:13px;font-weight:600;color:var(--text)}
 .act-viewall{font-size:12px;color:var(--accent);text-decoration:none;transition:opacity .15s}
 .act-viewall:hover{opacity:.7}
-.act-row{display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid #16191f}
+.act-row{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #16191f}
 .act-row:last-child{border-bottom:none}
 .act-tile{
-  width:38px;height:38px;border-radius:10px;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;font-size:17px;font-weight:700;
+  width:40px;height:40px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;
 }
 .act-main{flex:1;min-width:0}
-.act-type{font-size:14px;font-weight:700;color:var(--text)}
-.act-sub{font-size:12px;color:#565d68;margin-top:2px;font-family:var(--mono)}
+.act-type{font-size:14px;font-weight:600;color:var(--text)}
+.act-sub{font-size:12px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
 .act-right{text-align:right;flex-shrink:0}
 .act-amt{font-family:var(--mono);font-size:13px;font-weight:700}
 .act-time{font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
 
-/* ── states ── */
+/* ── state msg ── */
 .state-msg{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
+
+/* ── right rail ── */
+.rt-sidebar{
+  width:340px;min-width:340px;flex-shrink:0;
+  height:100vh;overflow-y:auto;
+  padding:16px 18px;border-left:1px solid var(--divider);
+}
+.sb-search{
+  width:100%;background:#101216;border:1px solid #21252c;
+  border-radius:12px;padding:10px 14px;
+  color:var(--text);font-family:var(--ui);font-size:13px;outline:none;
+  margin-bottom:14px;display:block;
+}
+.sb-search::placeholder{color:var(--muted)}
+.sb-search:focus{border-color:var(--accent)}
+.sb-card{background:#101216;border:1px solid #16191f;border-radius:16px;padding:16px}
+.sb-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.sb-card-title{font-size:13px;font-weight:600;color:var(--text)}
+.sb-live-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.sb-tok-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #16191f}
+.sb-tok-row:last-child{border-bottom:none}
+.sb-tok-init{
+  width:30px;height:30px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:10px;color:#fff;
+}
+.sb-tok-logo{width:30px;height:30px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.sb-tok-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-tok-price{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:1px}
+.sb-tok-pct{font-family:var(--mono);font-size:11px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.sb-footer{
+  display:block;text-align:center;margin-top:12px;padding:8px;
+  font-size:12px;color:var(--accent);text-decoration:none;
+  border:1px solid #16191f;border-radius:9px;
+  transition:background .15s,border-color .15s;
+}
+.sb-footer:hover{background:#16191f;border-color:var(--accent)}
+.sb-tr-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #16191f}
+.sb-tr-row:last-child{border-bottom:none}
+.sb-tr-rank{font-family:var(--mono);font-size:10px;color:var(--muted);width:14px;flex-shrink:0;text-align:center}
+.sb-tr-av{
+  width:28px;height:28px;border-radius:50%;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:10px;color:#fff;
+}
+.sb-tr-avimg{width:28px;height:28px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.sb-tr-name{font-size:12px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-tr-handle{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sb-tr-pnl{font-family:var(--mono);font-size:12px;font-weight:700;white-space:nowrap;flex-shrink:0}
+.sb-stat-grid{display:flex;flex-direction:column}
+.sb-stat-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #16191f}
+.sb-stat-row:last-child{border-bottom:none}
+.sb-stat-lbl{font-size:11px;color:var(--muted)}
+.sb-stat-val{font-family:var(--mono);font-size:15px;font-weight:700;color:var(--text)}
 
 /* ── shared modal ── */
 .w-modal-back{
@@ -277,11 +277,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   z-index:500;align-items:center;justify-content:center;padding:20px;
 }
 .w-modal-box{
-  background:var(--card);border:1px solid var(--border);border-radius:18px;
+  background:#101216;border:1px solid #21252c;border-radius:18px;
   padding:22px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
   position:relative;
 }
-/* ── swap modal box ── */
 .swap-modal-box{
   background:#0e1116;border:1px solid #21252c;border-radius:22px;
   padding:22px 22px 24px;width:100%;max-width:420px;max-height:90vh;overflow-y:auto;
@@ -295,13 +294,13 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 .w-modal-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:16px}
 .w-modal-label{font-size:11px;color:var(--muted);margin-bottom:5px;letter-spacing:.04em}
 .w-modal-inp{
-  width:100%;background:var(--bg);border:1px solid var(--border);border-radius:8px;
+  width:100%;background:var(--bg);border:1px solid #21252c;border-radius:8px;
   color:var(--text);padding:9px 12px;font-size:13px;font-family:var(--mono);outline:none;margin-bottom:12px;
 }
 .w-modal-inp:focus{border-color:var(--accent)}
 .w-modal-addr{
   font-family:var(--mono);font-size:11px;color:var(--sub);word-break:break-all;
-  line-height:1.55;background:var(--divider);border:1px solid var(--border);
+  line-height:1.55;background:#16191f;border:1px solid #21252c;
   border-radius:8px;padding:10px 12px;margin-bottom:12px;
 }
 .w-modal-btns{display:flex;gap:8px;margin-top:4px}
@@ -310,10 +309,10 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   font-size:12px;font-weight:600;text-align:center;text-decoration:none;
   display:inline-block;transition:opacity .15s,border-color .15s,color .15s;
 }
-.w-modal-primary{background:var(--accent);color:#06100f;border:1px solid var(--accent)}
+.w-modal-primary{background:var(--amber);color:#0a0b0e;border:1px solid var(--amber)}
 .w-modal-primary:hover{opacity:.85}
-.w-modal-secondary{background:var(--bg);color:var(--sub);border:1px solid var(--border)}
-.w-modal-secondary:hover{border-color:var(--accent);color:var(--text)}
+.w-modal-secondary{background:transparent;color:var(--sub);border:1px solid #21252c}
+.w-modal-secondary:hover{border-color:var(--accent);color:var(--accent)}
 .w-modal-note{font-size:11px;color:var(--muted);line-height:1.5;margin-top:10px}
 .w-modal-qr{
   width:100%;aspect-ratio:1;max-width:160px;margin:0 auto 14px;
@@ -380,14 +379,12 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
 }
 .sw-review-btn{
   width:100%;padding:15px;border-radius:14px;border:none;cursor:pointer;
-  background:var(--accent);color:#06100f;
+  background:var(--accent);color:#0a0b0e;
   font-family:var(--ui);font-size:15px;font-weight:700;
   transition:opacity .15s;margin-top:4px;
 }
 .sw-review-btn:hover{opacity:.88}
 .sw-review-btn:disabled{opacity:.45;cursor:not-allowed}
-
-/* ── token picker overlay ── */
 .sw-picker{
   display:none;position:absolute;inset:0;
   background:#0e1116;border-radius:22px;
@@ -441,117 +438,156 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   z-index:9999;white-space:nowrap;pointer-events:none;transition:opacity .25s;
 }
 
-/* ── mobile ── */
-@media(max-width:480px){
-  .hero-bal-num{font-size:32px}
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+
+/* ── responsive ── */
+@media(max-width:1100px){#wlt-sb{width:200px;min-width:200px}}
+@media(max-width:900px){#wlt-sb{display:none}.rt-sidebar{display:none}}
+@media(max-width:600px){
+  html,body{height:auto;overflow:auto}
+  #app{display:block;height:auto;overflow:visible}
+  .wlt-center{height:auto;overflow-y:visible}
+  .wlt-hdr{padding:18px 16px 0}
+  .wlt-content{padding:16px 14px 60px}
+  .wlt-actions{gap:6px}
+  .wlt-btn{font-size:12px}
   .tok-trade{display:none}
-  .tok-val{min-width:60px}
-  .actions{gap:6px}
-  .act-btn{padding:9px 2px;font-size:10px}
   .dep-body{flex-direction:column}
 }
 </style>
 </head>
 <body>
+<div id="app">
 
-<header class="hdr">
-  <div class="hdr-left">
-    <div class="hdr-title">Wallet</div>
-    <div class="hdr-sub">Your dedicated trading wallet</div>
-  </div>
-  <div class="hdr-right">
-    <a href="/dashboard" class="hdr-back">← Back</a>
+<!-- ── LEFT RAIL ── -->
+<aside id="wlt-sb">
+  <a class="sb-logo" href="/">
+    <div class="sb-logo-shape"></div>
+    <span class="sb-logo-text">OrcAgent</span>
+  </a>
+  <hr class="sb-divider">
+  <nav class="sb-nav">
+    <a class="sb-nav-item" href="/">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+      Home
+    </a>
+    <a class="sb-nav-item" href="/live-market">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+      Live Market
+    </a>
+    <a class="sb-nav-item" href="/leaderboard">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/></svg></span>
+      Leaderboard
+    </a>
+    <a class="sb-nav-item" href="/traders">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+      Traders
+    </a>
+    <a class="sb-nav-item" href="/messages">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+      Messages
+    </a>
+    <a class="sb-nav-item active" href="/wallet">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h2"/></svg></span>
+      Wallet
+    </a>
+    <a class="sb-nav-item" href="/notifications">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+      Notifications
+    </a>
+    <a class="sb-nav-item" href="/profile">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+      Profile
+    </a>
+    <a class="sb-nav-item" href="/settings">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      Settings
+    </a>
+  </nav>
+</aside>
+
+<!-- ── CENTER COLUMN ── -->
+<div class="wlt-center">
+
+  <!-- header -->
+  <div class="wlt-hdr">
+    <div>
+      <div class="wlt-title">Wallet</div>
+      <div class="wlt-sub">Your dedicated trading wallet</div>
+    </div>
     <span class="net-pill"><span class="net-dot"></span>SOLANA · MAINNET</span>
   </div>
-</header>
 
-<div class="app-body">
-<div class="main-col">
-<div class="page">
+  <!-- scrollable content -->
+  <div class="wlt-content">
 
-  <!-- hero balance -->
-  <div class="hero">
-    <div class="hero-label">TOTAL BALANCE</div>
-    <div class="hero-bal-row">
-      <span class="hero-bal-num" id="sol">—</span>
-      <span class="hero-bal-unit">SOL</span>
-      <span class="hero-today" id="today-pct"></span>
-    </div>
-    <div class="hero-usd">≈ $<span id="usd">—</span> USD</div>
-
-    <div class="actions">
-      <button class="act-btn act-primary" onclick="_modalDeposit()">
-        <span class="act-icon">↓</span>Deposit
-      </button>
-      <button class="act-btn act-secondary" onclick="_modalWithdraw()">
-        <span class="act-icon">↑</span>Withdraw
-      </button>
-      <button class="act-btn act-secondary" onclick="_modalSend()">
-        <span class="act-icon">→</span>Send
-      </button>
-      <button class="act-btn act-secondary" onclick="openSwapModal()">
-        <span class="act-icon">⇄</span>Swap
-      </button>
+    <!-- action buttons -->
+    <div class="wlt-actions">
+      <button class="wlt-btn wlt-btn-primary" onclick="_modalDeposit()">↓ Deposit</button>
+      <button class="wlt-btn wlt-btn-outline" onclick="_modalWithdraw()">↑ Withdraw</button>
+      <button class="wlt-btn wlt-btn-outline" onclick="_modalSend()">→ Send</button>
+      <button class="wlt-btn wlt-btn-outline" onclick="openSwapModal()">⇄ Swap</button>
     </div>
 
-    <div class="split">
-      <div class="split-cell">
-        <div class="split-lbl">AVAILABLE</div>
-        <div class="split-val" id="avail">— SOL</div>
+    <!-- balance card -->
+    <div class="wlt-bal-card">
+      <div class="wlt-bal-col">
+        <div class="wlt-bal-lbl">Available</div>
+        <div class="wlt-bal-num" id="avail">— SOL</div>
       </div>
-      <div class="split-cell">
-        <div class="split-lbl">IN POSITIONS</div>
-        <div class="split-val" style="color:var(--accent)" id="inpos">0 SOL</div>
+      <div class="wlt-bal-col">
+        <div class="wlt-bal-lbl">In open positions</div>
+        <div class="wlt-bal-num" id="inpos">0 SOL</div>
       </div>
     </div>
 
-    <div class="pnl-bar" id="portfolio-pnl"></div>
-  </div>
-
-  <!-- deposit address card (always visible) -->
-  <div class="dep-card">
-    <div class="dep-header">
-      <span class="dep-title">Deposit Address</span>
-      <span class="dep-network">SPL · SOL</span>
-    </div>
-    <div class="dep-body">
-      <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-sm"></div></div>
-      <div class="dep-right">
-        <div class="dep-addr">{{ wallet_address }}</div>
-        <div class="dep-btns">
-          <button class="dep-btn dep-copy" onclick="_copyAddr()">Copy Address</button>
-          <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ wallet_address }}" target="_blank" rel="noopener">Solscan ↗</a>
+    <!-- deposit address card -->
+    <div class="dep-card">
+      <div class="dep-header">
+        <span class="dep-title">Deposit Address</span>
+        <span class="dep-network">SPL · SOL</span>
+      </div>
+      <div class="dep-body">
+        <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-sm"></div></div>
+        <div class="dep-right">
+          <div class="dep-addr">{{ wallet_address }}</div>
+          <div class="dep-btns">
+            <button class="dep-btn dep-copy" onclick="_copyAddr()">Copy Address</button>
+            <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ wallet_address }}" target="_blank" rel="noopener">View on Solscan ↗</a>
+          </div>
         </div>
       </div>
     </div>
-  </div>
 
-  <!-- holdings -->
-  <div class="holdings">
-    <div class="holdings-hdr">
-      <span class="holdings-title">Holdings</span>
-      <div style="display:flex;align-items:center;gap:12px">
-        <button class="hide-small-btn" id="hide-small-btn" onclick="_toggleHideSmall()">Hide small balances</button>
-        <button onclick="loadTokens(true)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0" title="Refresh">↻</button>
+    <!-- holdings -->
+    <div class="holdings">
+      <div class="holdings-hdr">
+        <span class="holdings-title">Holdings</span>
+        <div style="display:flex;align-items:center;gap:12px">
+          <button class="hide-small-btn" id="hide-small-btn" onclick="_toggleHideSmall()">Hide small balances</button>
+          <button onclick="loadTokens(true)" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0" title="Refresh">↻</button>
+        </div>
       </div>
+      <div class="tok-list" id="tokens"><div class="state-msg">Loading…</div></div>
     </div>
-    <div class="tok-list" id="tokens"><div class="state-msg">Loading…</div></div>
-  </div>
 
-  <!-- recent activity -->
-  <div class="act-card" style="margin-top:18px">
-    <div class="act-hdr">
-      <span class="act-title">Recent activity</span>
-      <a href="/history" class="act-viewall">View all →</a>
+    <!-- recent activity -->
+    <div class="act-card">
+      <div class="act-hdr">
+        <span class="act-title">Recent activity</span>
+        <a href="/history" class="act-viewall">View all →</a>
+      </div>
+      <div id="activity-list"><div class="state-msg">Loading…</div></div>
     </div>
-    <div id="activity-list"><div class="state-msg">Loading…</div></div>
-  </div>
 
-</div><!-- .page -->
-</div><!-- .main-col -->
+  </div><!-- .wlt-content -->
+</div><!-- .wlt-center -->
 
-<!-- right sidebar -->
-<aside class="sidebar">
+<!-- ── RIGHT RAIL ── -->
+<aside class="rt-sidebar">
   <input class="sb-search" type="text" placeholder="Search tokens…" oninput="_sbSearch(this.value)">
   <div class="sb-card">
     <div class="sb-card-hdr">
@@ -561,8 +597,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
     <div id="sb-market-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Loading…</div></div>
     <a class="sb-footer" href="/live-market">Show all markets →</a>
   </div>
-
-  <!-- top traders -->
   <div class="sb-card" style="margin-top:14px">
     <div class="sb-card-hdr">
       <span class="sb-card-title">Top Traders</span>
@@ -571,8 +605,6 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
     <div id="sb-traders-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Loading…</div></div>
     <a class="sb-footer" href="/leaderboard">Leaderboard →</a>
   </div>
-
-  <!-- platform 24h stats -->
   <div class="sb-card" style="margin-top:14px">
     <div class="sb-card-hdr">
       <span class="sb-card-title">Platform 24h</span>
@@ -581,7 +613,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
   </div>
 </aside>
 
-</div><!-- .app-body -->
+</div><!-- #app -->
+
+<!-- hidden balance elements (JS compatibility) -->
+<span id="sol" style="display:none">0</span>
+<span id="usd" style="display:none">0</span>
 
 <!-- shared modal -->
 <div class="w-modal-back" id="w-modal" onclick="if(event.target===this)_closeModal()">
@@ -654,7 +690,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ui);min-height:100
     <!-- confirm -->
     <button class="sw-review-btn" id="sw-confirm-btn" onclick="_execSwap()">Review swap</button>
 
-    <!-- token picker overlay (absolute, covers entire modal box) -->
+    <!-- token picker overlay -->
     <div class="sw-picker" id="sw-picker">
       <div style="display:flex;align-items:center;gap:12px">
         <button class="sw-picker-back" onclick="_swClosePicker()">←</button>
@@ -1374,23 +1410,6 @@ function loadTokens(bust){
       var amt=parseFloat(x.amount||0)
       if(avg>0&&cur>0&&amt>0){totalCost+=avg*amt;totalCur+=cur*amt;hasPnl=true}
     })
-    var ppEl=document.getElementById('portfolio-pnl')
-    if(ppEl&&hasPnl){
-      var pnlUsd=totalCur-totalCost
-      var pnlPct=totalCost>0?(pnlUsd/totalCost*100):0
-      var col=pnlUsd>=0?'#00d084':'#ff4757'
-      var sign=pnlUsd>=0?'+':''
-      ppEl.style.display='flex'
-      ppEl.innerHTML='<span style="color:var(--muted)">Portfolio PnL</span>'
-        +'<span style="color:'+col+';font-weight:600">'+sign+'$'+Math.abs(pnlUsd).toFixed(2)
-        +' <span style="opacity:.65">('+sign+pnlPct.toFixed(2)+'%)</span></span>'
-      var todayEl=document.getElementById('today-pct')
-      if(todayEl){
-        todayEl.textContent=(pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'% today'
-        todayEl.style.color=col
-        todayEl.style.display='inline'
-      }
-    }
 
     _allSpl=spl
     _renderHoldings(_hideSmall?spl.filter(function(x){return parseFloat(x.usd_value||x.value_usd||0)>=1}):spl)
