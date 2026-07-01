@@ -10,134 +10,135 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
+:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--text:#eef1f5;--muted:#565d68;--green:#3ad29b;--red:#ff4d6a}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{min-height:100vh;background:#07090f;color:#8892a4;font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
 
 /* header */
-.lm-header{position:sticky;top:0;z-index:30;background:#07090f;padding:0 16px;height:52px;display:flex;align-items:center;gap:12px;border-bottom:1px solid #ffffff08}
-.lm-header-title{font-size:14px;font-weight:700;color:#e8eaed;white-space:nowrap;display:flex;align-items:center;gap:5px;flex-shrink:0}
-.lm-header-title span{color:#00d084}
-.lm-search-wrap{position:relative;flex:1;max-width:300px}
-.lm-search{width:100%;background:transparent;border:none;border-bottom:1px solid #ffffff15;padding:6px 10px 6px 28px;color:#e8eaed;font-size:12px;font-family:'JetBrains Mono',monospace;outline:none}
-.lm-search::placeholder{color:#3a3f52}
-.lm-search-icon{position:absolute;left:8px;top:50%;transform:translateY(-50%);color:#3a3f52;pointer-events:none;font-size:13px}
+.lm-header{position:sticky;top:0;z-index:30;background:var(--bg);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bg3)}
+.lm-header-title{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.lm-search-wrap{position:relative;flex:1;max-width:280px}
+.lm-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:7px 12px 7px 32px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.lm-search:focus{border-color:var(--bg4)}
+.lm-search::placeholder{color:var(--muted)}
+.lm-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:14px}
 .lm-amount-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.lm-amount-label{font-size:10px;color:#3a3f52;white-space:nowrap;text-transform:uppercase;letter-spacing:1px}
-.lm-amount-input{width:68px;background:transparent;border:none;border-bottom:1px solid #ffffff15;padding:5px 6px;color:#e8eaed;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield}
+.lm-amount-label{font-size:10px;color:var(--muted);white-space:nowrap;text-transform:uppercase;letter-spacing:.08em}
+.lm-amount-input{width:68px;background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield;transition:border-color .15s}
+.lm-amount-input:focus{border-color:var(--accent)}
 .lm-amount-input::-webkit-inner-spin-button,.lm-amount-input::-webkit-outer-spin-button{-webkit-appearance:none}
-.lm-back{text-decoration:none;color:#3a3f52;font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
-.lm-back:hover{color:#8892a4}
+.lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
+.lm-back:hover{color:var(--text)}
+
+/* scanning pill */
+.lm-scanning-pill{display:flex;align-items:center;gap:5px;background:rgba(58,210,155,.1);border-radius:20px;padding:5px 11px;font-size:10px;font-weight:700;color:var(--green);letter-spacing:.06em;flex-shrink:0;white-space:nowrap}
+.lm-scan-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite;flex-shrink:0}
+@keyframes scanBlink{0%,100%{opacity:1}50%{opacity:.25}}
 
 /* tabs */
-.lm-tabs{display:flex;gap:0;padding:0 16px;background:#07090f;position:sticky;top:52px;z-index:20;border-bottom:1px solid #ffffff08}
-.lm-tab{padding:10px 18px;font-size:11px;font-weight:700;cursor:pointer;color:#3a3f52;background:none;border:none;border-bottom:2px solid transparent;transition:color .15s,border-color .15s;font-family:'JetBrains Mono',monospace;letter-spacing:1.5px;text-transform:uppercase;margin-bottom:-1px}
-.lm-tab:hover{color:#8892a4}
-.lm-tab.active{color:#e8eaed;border-bottom-color:#00d084}
+.lm-tabs{display:flex;gap:6px;padding:12px 16px;background:var(--bg);position:sticky;top:56px;z-index:20;border-bottom:1px solid var(--bg3);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
+.lm-tab{padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;flex-shrink:0}
+.lm-tab:hover{color:var(--text);border-color:var(--bg3)}
+.lm-tab.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
 
 /* table wrapper */
-.lm-table-wrap{overflow-x:auto;width:100%}
+.lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:hidden;margin:16px}
+.lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
 
 /* table */
-.lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:860px}
-.lm-table thead th{
-  padding:10px 12px;font-size:10px;font-weight:700;color:#3a3f52;
-  text-transform:uppercase;letter-spacing:2px;
-  border-bottom:1px solid #ffffff08;
-  white-space:nowrap;text-align:right;
-  background:#07090f
-}
-.lm-table thead th:first-child,.lm-table thead th:nth-child(2){text-align:left}
-.lm-table thead th:first-child{padding-left:16px}
+.lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:680px}
+.lm-table thead th{padding:12px 14px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--bg3);white-space:nowrap;text-align:right;background:var(--bg2)}
+.lm-table thead th:first-child{text-align:left;padding-left:16px}
 .lm-table thead th.th-act{text-align:center}
-.lm-table tbody tr{border-bottom:1px solid #ffffff06;transition:background .1s;cursor:pointer}
-.lm-table tbody tr:hover{background:#0d1020}
-.lm-table tbody td{
-  padding:0 12px;height:52px;font-size:13px;
-  white-space:nowrap;text-align:right;vertical-align:middle;color:#8892a4
-}
-.lm-table tbody td:first-child{text-align:left;color:#3a3f52;font-size:11px;padding-left:16px}
-.lm-table tbody td:nth-child(2){text-align:left;min-width:160px}
+.lm-table tbody tr{border-bottom:1px solid var(--bg3);transition:background .15s;cursor:pointer}
+.lm-table tbody tr:last-child{border-bottom:none}
+.lm-table tbody tr:hover{background:#14171c}
+.lm-table tbody td{padding:0 14px;height:60px;font-size:13px;white-space:nowrap;text-align:right;vertical-align:middle;color:var(--muted)}
+.lm-table tbody td:first-child{text-align:left;padding-left:16px}
+.lm-price-cell{color:var(--text);font-weight:700}
+.td-act{text-align:center}
 
 /* token cell */
 .lm-tok-cell{display:flex;align-items:center;gap:10px}
-.lm-tok-logo{width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0}
-.lm-tok-logo-ph{width:32px;height:32px;border-radius:50%;background:#0d1020;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#3a3f52;flex-shrink:0}
-.lm-tok-sym{font-size:13px;font-weight:700;color:#e8eaed}
-.lm-tok-name{font-size:10px;color:#3a3f52;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
-.lm-tok-chain{display:inline-block;font-size:9px;color:#00d084;border-radius:3px;padding:1px 4px;margin-top:2px;letter-spacing:.04em}
+.lm-tok-logo{width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
+.lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
+.lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* price change */
-.chg-up{color:#00d084;font-weight:700}
-.chg-dn{color:#ff4757;font-weight:700}
-.chg-fl{color:#3a3f52}
+.chg-up{color:var(--green);font-weight:700}
+.chg-dn{color:var(--red);font-weight:700}
+.chg-fl{color:var(--muted)}
 
-/* action buttons */
-.lm-btn-buy,.lm-btn-sell{
-  font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;
-  border-radius:6px;padding:5px 14px;cursor:pointer;
-  transition:background .15s,color .15s;white-space:nowrap
-}
-.lm-btn-buy{background:#0a2a1a;color:#00d084;border:1px solid #00d08440}
-.lm-btn-sell{background:#2a0a10;color:#ff4757;border:1px solid #ff475740}
-.lm-btn-buy:hover{background:#00d084;color:#000}
-.lm-btn-sell:hover{background:#ff4757;color:#fff}
-.lm-btn-buy:disabled,.lm-btn-sell:disabled{opacity:.35;cursor:default}
+/* trade button */
+.lm-btn-trade{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;transition:opacity .15s;background:var(--accent);color:#0a0b0e;white-space:nowrap}
+.lm-btn-trade:hover{opacity:.85}
+.lm-btn-trade:disabled{opacity:.35;cursor:default}
 
-/* buy dropdown row */
-.lm-drop-row td{padding:0;border-bottom:1px solid #ffffff08}
-.lm-drop-inner{display:flex;align-items:center;gap:8px;padding:10px 16px;background:#0d1020}
-.lm-drop-label{font-size:11px;color:#3a3f52;white-space:nowrap}
-.lm-drop-input{width:80px;background:transparent;border:none;border-bottom:1px solid #ffffff20;padding:5px 6px;color:#e8eaed;font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield}
-.lm-drop-input:focus{border-bottom-color:#00d084}
+/* inline trade dropdown */
+.lm-drop-row td{padding:0;border-bottom:1px solid var(--bg3)}
+.lm-drop-inner{display:flex;align-items:center;gap:8px;padding:10px 16px;background:var(--bg)}
+.lm-drop-label{font-size:11px;color:var(--muted);white-space:nowrap}
+.lm-drop-input{width:80px;background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield;transition:border-color .15s}
+.lm-drop-input:focus{border-color:var(--accent)}
 .lm-drop-input::-webkit-inner-spin-button,.lm-drop-input::-webkit-outer-spin-button{-webkit-appearance:none}
-.lm-drop-confirm{background:#0a2a1a;color:#00d084;border:1px solid #00d08440;border-radius:6px;padding:5px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:background .15s,color .15s}
-.lm-drop-confirm:hover{background:#00d084;color:#000}
+.lm-drop-confirm{background:var(--accent);color:#0a0b0e;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s}
+.lm-drop-confirm:hover{opacity:.85}
 .lm-drop-confirm:disabled{opacity:.35;cursor:default}
-.lm-drop-cancel{background:none;border:none;color:#3a3f52;font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;padding:5px 8px;transition:color .15s}
-.lm-drop-cancel:hover{color:#8892a4}
+.lm-drop-sell-btn{background:var(--bg4);color:var(--red);border:1px solid rgba(255,77,106,.25);border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.lm-drop-sell-btn:hover{background:rgba(255,77,106,.1)}
+.lm-drop-cancel{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;padding:5px 8px;transition:color .15s}
+.lm-drop-cancel:hover{color:var(--text)}
 
 /* row flash */
-@keyframes flashGreen{0%{background:#00d08418}100%{background:transparent}}
-@keyframes flashRed  {0%{background:#ff475718}100%{background:transparent}}
+@keyframes flashGreen{0%{background:rgba(58,210,155,.15)}100%{background:transparent}}
+@keyframes flashRed  {0%{background:rgba(255,77,106,.15)}100%{background:transparent}}
 .flash-green{animation:flashGreen 1.2s ease-out forwards}
 .flash-red  {animation:flashRed   1.2s ease-out forwards}
 
 /* status / loading */
-.lm-status-row td{text-align:center;padding:60px 20px;color:#3a3f52;font-size:13px}
-.lm-spinner-ring{width:24px;height:24px;border:2px solid #ffffff10;border-top-color:#00d084;border-radius:50%;margin:0 auto 10px;animation:spin .8s linear infinite;display:block}
+.lm-status-row td{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
+.lm-spinner-ring{width:24px;height:24px;border:2px solid var(--bg4);border-top-color:var(--accent);border-radius:50%;margin:0 auto 10px;animation:spin .8s linear infinite;display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
 /* token modal */
 #lm-token-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2000;align-items:center;justify-content:center;padding:16px}
-.lm-modal-card{background:#0d1020;border:1px solid #ffffff0d;border-radius:16px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative}
-.lm-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;color:#3a3f52;width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s;font-family:system-ui,sans-serif}
-.lm-modal-close:hover{color:#e8eaed}
+.lm-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative}
+.lm-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;color:var(--muted);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s;font-family:system-ui,sans-serif}
+.lm-modal-close:hover{color:var(--text)}
 @keyframes tcSpin{to{transform:rotate(360deg)}}
 
 /* mobile */
-@media(max-width:768px){
-  .lm-table{min-width:0;width:100%}
+@media(max-width:767px){
   .col-hide{display:none}
-  .lm-table thead th{font-size:9px;padding:8px 6px;letter-spacing:1px}
-  .lm-table tbody td{padding:0 6px;height:48px;font-size:12px}
-  .lm-table tbody td:first-child{display:none}
-  .lm-tok-logo,.lm-tok-logo-ph{width:24px;height:24px;font-size:8px}
-  .lm-tok-sym{font-size:11px}
-  .lm-tok-name,.lm-tok-chain{display:none}
-  .lm-btn-buy,.lm-btn-sell{font-size:10px;padding:3px 8px}
+  .lm-table{min-width:0}
+  .lm-table thead th{font-size:9px;padding:10px 8px;letter-spacing:.04em}
+  .lm-table tbody td{padding:0 8px;height:52px;font-size:12px}
+  .lm-tok-logo,.lm-tok-logo-ph{width:30px;height:30px;font-size:9px}
+  .lm-tok-name{font-size:12px;max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .lm-tok-sym{font-size:10px}
+  .lm-btn-trade{padding:7px 12px;font-size:11px}
   .lm-drop-inner{flex-wrap:wrap;gap:6px;padding:8px 10px}
+  .lm-scanning-pill{padding:4px 8px;font-size:9px}
+  .lm-scanning-pill .lm-scan-label{display:none}
+  .lm-amount-wrap{display:none}
+  .lm-table-wrap{margin:10px}
 }
 
 ::-webkit-scrollbar{height:4px;width:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#ffffff10;border-radius:4px}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
 </style>
 </head>
 <body>
 
 <header class="lm-header">
   <a class="lm-back" href="/">← Back</a>
-  <div class="lm-header-title"><span>⚡</span> Live Market</div>
+  <div class="lm-header-title">Live Market</div>
+  <div class="lm-scanning-pill">
+    <span class="lm-scan-dot"></span>
+    <span class="lm-scan-label">SCANNING</span>
+  </div>
   <div class="lm-search-wrap">
     <span class="lm-search-icon">⌕</span>
     <input class="lm-search" id="lm-search" type="text" placeholder="Search token…" autocomplete="off" oninput="_lmSearchDebounce(this.value)">
@@ -171,7 +172,7 @@ html,body{min-height:100vh;background:#07090f;color:#8892a4;font-family:'JetBrai
 var _activeTab   = 'trending';
 var _cache       = {};
 var _searchTimer = null;
-var _pairs       = [];   /* current rendered pairs, for row-level trade buttons */
+var _pairs       = [];
 
 /* ── tab switching ── */
 function _setTab(tab){
@@ -238,7 +239,6 @@ async function _fetchGainers(){
 }
 
 function _dedupeByAddress(pairs, iconMap){
-  /* keep the pair with highest liquidity.usd per unique base-token address */
   var best={};
   pairs.forEach(function(p){
     var addr = p.baseToken&&p.baseToken.address;
@@ -278,9 +278,8 @@ async function _doSearch(q){
   }catch(e){ _setError('Search failed'); }
 }
 
-/* thead HTML — defined once, prepended before every tbody write */
+/* thead — 13 columns */
 var _THEAD = '<thead><tr>'
-  +'<th style="padding-left:16px;width:36px">#</th>'
   +'<th>TOKEN</th>'
   +'<th class="col-hide">MCAP</th>'
   +'<th>PRICE</th>'
@@ -291,14 +290,13 @@ var _THEAD = '<thead><tr>'
   +'<th class="col-hide">5M</th>'
   +'<th class="col-hide">1H</th>'
   +'<th class="col-hide">6H</th>'
-  +'<th>24H</th>'
+  +'<th>24H%</th>'
   +'<th class="col-hide">LIQUIDITY</th>'
-  +'<th class="th-act">BUY</th>'
-  +'<th class="th-act">SELL</th>'
+  +'<th class="th-act">TRADE</th>'
   +'</tr></thead>';
 
 function _buildTable(tbodyRows){
-  return '<table class="lm-table">'+_THEAD+'<tbody id="lm-grid">'+tbodyRows+'</tbody></table>';
+  return '<div class="lm-table-scroll"><table class="lm-table">'+_THEAD+'<tbody id="lm-grid">'+tbodyRows+'</tbody></table></div>';
 }
 
 /* ── render table ── */
@@ -307,7 +305,7 @@ function _renderTable(pairs){
   _pairs = pairs;
   var wrap = document.getElementById('lm-table-wrap');
   if(!pairs.length){
-    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="15">No tokens found</td></tr>');
+    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found</td></tr>');
     return;
   }
   wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
@@ -322,7 +320,7 @@ function _chgCell(v, extra){
 
 function _rowHtml(p, idx){
   var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
-  var name = (p.baseToken&&p.baseToken.name)||'';
+  var name = (p.baseToken&&p.baseToken.name)||sym;
   var addr = (p.baseToken&&p.baseToken.address)||'';
   var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
 
@@ -331,32 +329,30 @@ function _rowHtml(p, idx){
       +'<div class="lm-tok-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
     : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
 
-  var price    = _fmtPrice(p.priceUsd);
-  var mcap     = _fmtNum(p.marketCap||null);
-  var vol      = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
-  var liq      = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
-  var txns     = p.txns&&p.txns.h24 ? (p.txns.h24.buys+p.txns.h24.sells).toLocaleString() : '—';
-  var traders  = p.txns&&p.txns.h24&&p.txns.h24.buyers!=null ? p.txns.h24.buyers.toLocaleString() : '—';
-  var age      = _fmtAge(p.pairCreatedAt);
+  var price   = _fmtPrice(p.priceUsd);
+  var mcap    = _fmtNum(p.marketCap||null);
+  var vol     = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var liq     = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+  var txns    = p.txns&&p.txns.h24 ? (p.txns.h24.buys+p.txns.h24.sells).toLocaleString() : '—';
+  var traders = p.txns&&p.txns.h24&&p.txns.h24.buyers!=null ? p.txns.h24.buyers.toLocaleString() : '—';
+  var age     = _fmtAge(p.pairCreatedAt);
 
   var safeSym  = _esc(sym).replace(/'/g,"\\'");
   var safeAddr = _esc(addr).replace(/'/g,"\\'");
   var safePair = _esc(p.pairAddress||'').replace(/'/g,"\\'");
 
   return '<tr id="lm-row-'+idx+'" onclick="_rowClick(event,\''+safeSym+'\')">'
-    +'<td>'+(idx+1)+'</td>'
     +'<td>'
       +'<div class="lm-tok-cell">'
         +logo
         +'<div>'
-          +'<div class="lm-tok-sym">'+_esc(sym)+'</div>'
           +'<div class="lm-tok-name">'+_esc(name)+'</div>'
-          +'<div class="lm-tok-chain">SOL</div>'
+          +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
         +'</div>'
       +'</div>'
     +'</td>'
     +'<td class="col-hide">'+mcap+'</td>'
-    +'<td style="color:#eef1f5;font-weight:700">'+price+'</td>'
+    +'<td class="lm-price-cell">'+price+'</td>'
     +'<td class="col-hide">'+age+'</td>'
     +'<td class="col-hide">'+txns+'</td>'
     +'<td class="col-hide">'+vol+'</td>'
@@ -366,26 +362,21 @@ function _rowHtml(p, idx){
     +_chgCell(p.priceChange&&p.priceChange.h6 !=null?p.priceChange.h6 :null,'col-hide')
     +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null,'')
     +'<td class="col-hide">'+liq+'</td>'
-    +'<td style="text-align:center">'
-      +'<button class="lm-btn-buy" onclick="event.stopPropagation();_openBuyDrop('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Buy</button>'
-    +'</td>'
-    +'<td style="text-align:center">'
-      +'<button class="lm-btn-sell" onclick="event.stopPropagation();_quickSell('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Sell</button>'
+    +'<td class="td-act">'
+      +'<button class="lm-btn-trade" onclick="event.stopPropagation();_openBuyDrop('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Trade</button>'
     +'</td>'
     +'</tr>';
 }
 
 function _rowClick(e, sym){
-  /* ignore clicks that originated from a button */
   if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
   showTokenCard(sym);
 }
 
-/* ── inline buy dropdown ── */
+/* ── inline trade dropdown ── */
 var _openDropIdx = -1;
 
 function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
-  /* toggle off if already open for this row */
   if(_openDropIdx === idx){ _closeBuyDrop(); return; }
   _closeBuyDrop();
   _openDropIdx = idx;
@@ -393,23 +384,26 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
   var dataRow = document.getElementById('lm-row-'+idx);
   if(!dataRow) return;
 
-  var dropId  = 'lm-drop-'+idx;
   var inputId = 'lm-drop-amt-'+idx;
+  var eSym  = _esc(sym).replace(/'/g,"\\'");
+  var ePair = _esc(pairAddr).replace(/'/g,"\\'");
+  var eAddr = _esc(tokenAddr).replace(/'/g,"\\'");
+
   var tr = document.createElement('tr');
-  tr.id = dropId;
+  tr.id = 'lm-drop-'+idx;
   tr.className = 'lm-drop-row';
-  tr.innerHTML = '<td colspan="15">'
+  tr.innerHTML = '<td colspan="13">'
     +'<div class="lm-drop-inner">'
-      +'<span class="lm-drop-label">Buy <strong style="color:#00ff88">$'+_esc(sym)+'</strong></span>'
-      +'<span class="lm-drop-label">SOL amount:</span>'
+      +'<span class="lm-drop-label">Trade <strong style="color:#f7b955">$'+_esc(sym)+'</strong></span>'
+      +'<span class="lm-drop-label">SOL:</span>'
       +'<input class="lm-drop-input" id="'+inputId+'" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
-      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" onclick="event.stopPropagation();_confirmBuy('+idx+',\''+_esc(sym).replace(/'/g,"\\'")+'\',\''+_esc(pairAddr).replace(/'/g,"\\'")+'\',\''+_esc(tokenAddr).replace(/'/g,"\\'")+'\')">Confirm Buy</button>'
-      +'<button class="lm-drop-cancel" onclick="event.stopPropagation();_closeBuyDrop()">✕ Cancel</button>'
+      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" onclick="event.stopPropagation();_confirmBuy('+idx+',\''+eSym+'\',\''+ePair+'\',\''+eAddr+'\')">Buy</button>'
+      +'<button class="lm-drop-sell-btn" id="lm-drop-sell-'+idx+'" onclick="event.stopPropagation();_quickSell('+idx+',\''+eSym+'\',\''+ePair+'\',\''+eAddr+'\',this)">Sell All</button>'
+      +'<button class="lm-drop-cancel" onclick="event.stopPropagation();_closeBuyDrop()">✕</button>'
     +'</div>'
     +'</td>';
 
   dataRow.insertAdjacentElement('afterend', tr);
-  /* auto-focus the amount input */
   setTimeout(function(){ var el=document.getElementById(inputId); if(el) el.focus(); }, 30);
 }
 
@@ -421,41 +415,31 @@ function _closeBuyDrop(){
 }
 
 async function _confirmBuy(idx, sym, pairAddr, tokenAddr){
-  var inputEl   = document.getElementById('lm-drop-amt-'+idx);
-  var confirmBtn= document.getElementById('lm-drop-confirm-'+idx);
-  var amount    = parseFloat(inputEl ? inputEl.value : '0.1');
+  var inputEl    = document.getElementById('lm-drop-amt-'+idx);
+  var confirmBtn = document.getElementById('lm-drop-confirm-'+idx);
+  var amount     = parseFloat(inputEl ? inputEl.value : '0.1');
   if(!amount || amount <= 0){ _toast('Enter a valid SOL amount', false); return; }
-
   if(confirmBtn){ confirmBtn.textContent='…'; confirmBtn.disabled=true; }
-
   var ok = await _doTrade(sym, pairAddr, 'buy', amount, tokenAddr);
   _closeBuyDrop();
-  if(ok){
-    _flashRow(idx, true);
-    _toast('✅ Bought $'+sym, true);
-  } else {
-    _flashRow(idx, false);
-  }
+  if(ok){ _flashRow(idx, true);  _toast('Bought $'+sym, true); }
+  else  { _flashRow(idx, false); }
 }
 
 async function _quickSell(idx, sym, pairAddr, tokenAddr, btn){
   var origHtml = btn ? btn.innerHTML : '';
   if(btn){ btn.innerHTML='…'; btn.disabled=true; }
-  _closeBuyDrop();
-
   var ok = await _doTrade(sym, pairAddr, 'sell', 0, tokenAddr);
   if(btn){ btn.innerHTML=origHtml; btn.disabled=false; }
-  if(ok){
-    _flashRow(idx, false);
-    _toast('🔴 Sold $'+sym, true);
-  }
+  _closeBuyDrop();
+  if(ok){ _flashRow(idx, false); _toast('Sold $'+sym, true); }
 }
 
-/* shared trade fetch — returns true on success */
+/* shared trade fetch */
 async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
   try{
-    var _cs=_lmClientSecret||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
-    var _csrf=(document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf||'';
+    var _cs   = _lmClientSecret||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
+    var _csrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf||'';
     var r = await fetch('/api/instant-trade',{
       method:'POST',
       credentials:'include',
@@ -469,10 +453,10 @@ async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
     });
     var d = await r.json();
     if(r.ok) return true;
-    _toast('❌ '+(d.error||d.message||'Trade failed'), false);
+    _toast((d.error||d.message||'Trade failed'), false);
     return false;
   }catch(e){
-    _toast('❌ Network error — trade not sent', false);
+    _toast('Network error — trade not sent', false);
     return false;
   }
 }
@@ -481,7 +465,7 @@ function _flashRow(idx, green){
   var row = document.getElementById('lm-row-'+idx);
   if(!row) return;
   row.classList.remove('flash-green','flash-red');
-  void row.offsetWidth; /* reflow to restart animation */
+  void row.offsetWidth;
   row.classList.add(green ? 'flash-green' : 'flash-red');
 }
 
@@ -491,26 +475,26 @@ async function showTokenCard(symbol){
   var body  = document.getElementById('lm-modal-body');
   modal.style.display = 'flex';
   body.innerHTML = '<div style="text-align:center;padding:48px 0">'
-    +'<div style="width:30px;height:30px;border:3px solid #1a2035;border-top-color:#35d4c4;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
-    +'<div style="color:#3d4b62;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
+    +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
+    +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
     +'</div>';
   try{
     var r = await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol));
     var d = await r.json();
     var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
     if(!p){
-      body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#3d4b62;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+      body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
       return;
     }
-    var sym  = (p.baseToken&&p.baseToken.symbol)||symbol;
-    var name = (p.baseToken&&p.baseToken.name)||'';
+    var sym    = (p.baseToken&&p.baseToken.symbol)||symbol;
+    var name   = (p.baseToken&&p.baseToken.name)||'';
     var imgUrl = p.info&&p.info.imageUrl?p.info.imageUrl:'';
-    var logo = imgUrl
-      ? '<img src="'+imgUrl+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover;margin-bottom:10px">'
-      : '<div style="width:56px;height:56px;border-radius:50%;background:#1a2035;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#3d4b62;margin:0 auto 10px;font-family:\'JetBrains Mono\',monospace">'+_esc(sym.slice(0,2))+'</div>';
-    var price = _fmtPrice(p.priceUsd);
-    var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
-    var chgColor = chg24!=null?(chg24>=0?'#35d4c4':'#f76b62'):'#3d4b62';
+    var logo   = imgUrl
+      ? '<img src="'+imgUrl+'" style="width:56px;height:56px;border-radius:14px;object-fit:cover;margin-bottom:10px">'
+      : '<div style="width:56px;height:56px;border-radius:14px;background:#21252c;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#565d68;margin:0 auto 10px;font-family:\'JetBrains Mono\',monospace">'+_esc(sym.slice(0,2))+'</div>';
+    var price    = _fmtPrice(p.priceUsd);
+    var chg24    = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
+    var chgColor = chg24!=null?(chg24>=0?'#3ad29b':'#ff4d6a'):'#565d68';
     var chgStr   = chg24!=null?(chg24>=0?'+':'')+chg24.toFixed(2)+'%':'—';
     var tfs = [
       {l:'5m',  v:p.priceChange&&p.priceChange.m5 !=null?p.priceChange.m5 :null},
@@ -519,24 +503,24 @@ async function showTokenCard(symbol){
       {l:'24h', v:chg24}
     ];
     var statsHtml = [
-      {l:'Volume 24h',  v:_fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null)},
-      {l:'Liquidity',   v:_fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null)},
-      {l:'Market Cap',  v:_fmtNum(p.marketCap||null)},
+      {l:'Volume 24h', v:_fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null)},
+      {l:'Liquidity',  v:_fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null)},
+      {l:'Market Cap', v:_fmtNum(p.marketCap||null)},
       {l:'Buys / Sells',v:p.txns&&p.txns.h24
-          ?'<span style="color:#35d4c4">'+p.txns.h24.buys+'</span><span style="color:#3d4b62"> / </span><span style="color:#f76b62">'+p.txns.h24.sells+'</span>'
+          ?'<span style="color:#3ad29b">'+p.txns.h24.buys+'</span><span style="color:#565d68"> / </span><span style="color:#ff4d6a">'+p.txns.h24.sells+'</span>'
           :'—'}
     ].map(function(s){
-      return '<div style="background:#1a2035;border-radius:10px;padding:10px">'
-        +'<div style="font-size:10px;color:#3d4b62;margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;font-family:\'JetBrains Mono\',monospace">'+s.l+'</div>'
+      return '<div style="background:#16191f;border-radius:10px;padding:10px">'
+        +'<div style="font-size:10px;color:#565d68;margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em;font-family:\'JetBrains Mono\',monospace">'+s.l+'</div>'
         +'<div style="font-size:13px;font-weight:600;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">'+s.v+'</div>'
         +'</div>';
     }).join('');
     var tfHtml = tfs.map(function(tf){
-      var bg  = tf.v!=null?(tf.v>=0?'rgba(53,212,196,.12)':'rgba(247,107,98,.12)'):'#1a2035';
-      var col = tf.v!=null?(tf.v>=0?'#35d4c4':'#f76b62'):'#3d4b62';
+      var bg  = tf.v!=null?(tf.v>=0?'rgba(58,210,155,.12)':'rgba(255,77,106,.12)'):'#16191f';
+      var col = tf.v!=null?(tf.v>=0?'#3ad29b':'#ff4d6a'):'#565d68';
       var vs  = tf.v!=null?(tf.v>=0?'+':'')+tf.v.toFixed(2)+'%':'—';
       return '<div style="flex:1;background:'+bg+';border-radius:8px;padding:8px;text-align:center">'
-        +'<div style="font-size:10px;color:#3d4b62;margin-bottom:3px;font-family:\'JetBrains Mono\',monospace">'+tf.l+'</div>'
+        +'<div style="font-size:10px;color:#565d68;margin-bottom:3px;font-family:\'JetBrains Mono\',monospace">'+tf.l+'</div>'
         +'<div style="font-size:11px;font-weight:600;color:'+col+';font-family:\'JetBrains Mono\',monospace">'+vs+'</div>'
         +'</div>';
     }).join('');
@@ -545,25 +529,25 @@ async function showTokenCard(symbol){
     var sAddr = _esc((p.baseToken&&p.baseToken.address)||'').replace(/'/g,"\\'");
     body.innerHTML =
       '<div style="text-align:center;padding-top:8px">'+logo
-      +'<div style="font-size:22px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$'+_esc(sym)+'</div>'
-      +'<div style="font-size:12px;color:#3d4b62;margin-bottom:14px;font-family:\'JetBrains Mono\',monospace">'+_esc(name)
-        +' <span style="background:rgba(53,212,196,.12);color:#35d4c4;font-size:10px;font-family:\'JetBrains Mono\',monospace;padding:2px 7px;border-radius:5px;margin-left:4px;vertical-align:middle">SOLANA</span>'
+      +'<div style="font-size:20px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">'+_esc(name||sym)+'</div>'
+      +'<div style="font-size:12px;color:#565d68;margin-bottom:4px;font-family:\'JetBrains Mono\',monospace">$'+_esc(sym)
+        +' <span style="background:rgba(58,210,155,.1);color:#3ad29b;font-size:10px;padding:2px 7px;border-radius:5px;margin-left:4px;vertical-align:middle">SOLANA</span>'
         +'</div>'
-      +'<div style="font-size:28px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace;margin-bottom:4px">'+price+'</div>'
-      +'<div style="font-size:15px;font-weight:600;color:'+chgColor+';margin-bottom:20px;font-family:\'JetBrains Mono\',monospace">'+chgStr+' (24h)</div>'
+      +'<div style="font-size:26px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace;margin-bottom:4px">'+price+'</div>'
+      +'<div style="font-size:14px;font-weight:600;color:'+chgColor+';margin-bottom:20px;font-family:\'JetBrains Mono\',monospace">'+chgStr+' (24h)</div>'
       +'</div>'
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+statsHtml+'</div>'
       +'<div style="display:flex;gap:6px;margin-bottom:16px">'+tfHtml+'</div>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-top:4px">'
         +'<button id="lm-buy-btn" onclick="executeTrade(\''+sSym+'\',\''+sPair+'\',\'buy\',document.getElementById(\'lm-trade-amount\').value,\''+sAddr+'\',this)"'
-          +' style="flex:1;background:#35d4c4;color:#0a0e1a;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">⚡ Buy</button>'
+          +' style="flex:1;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Buy</button>'
         +'<input id="lm-trade-amount" type="number" min="0.001" step="0.1" placeholder="SOL" value="0.1"'
-          +' style="width:76px;background:#1a2035;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;font-size:13px;font-family:\'JetBrains Mono\',monospace;text-align:center;outline:none;-moz-appearance:textfield" onclick="event.stopPropagation()">'
+          +' style="width:76px;background:#16191f;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;font-size:13px;font-family:\'JetBrains Mono\',monospace;text-align:center;outline:none;-moz-appearance:textfield" onclick="event.stopPropagation()">'
         +'<button id="lm-sell-btn" onclick="executeTrade(\''+sSym+'\',\''+sPair+'\',\'sell\',document.getElementById(\'lm-trade-amount\').value,\''+sAddr+'\',this)"'
-          +' style="flex:1;background:#ff4444;color:#fff;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Sell</button>'
+          +' style="flex:1;background:#ff4d6a;color:#fff;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Sell</button>'
       +'</div>';
   }catch(e){
-    body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#f76b62;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
+    body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
   }
 }
 
@@ -572,39 +556,37 @@ function _toast(msg, ok){
   var t = document.createElement('div');
   t.textContent = msg;
   t.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);'
-    +'background:'+(ok?'#0d2e1e':'#2e0d0d')+';color:'+(ok?'#35d4c4':'#ff6b6b')
-    +';border:1px solid '+(ok?'#35d4c433':'#ff444433')
-    +';border-radius:12px;padding:11px 20px;font-size:13px;font-weight:700;'
+    +'background:#101216;color:#eef1f5;border:1px solid #16191f;'
+    +'border-radius:12px;padding:11px 20px;font-size:13px;font-weight:700;'
     +'font-family:\'JetBrains Mono\',monospace;z-index:9999;pointer-events:none;'
     +'opacity:0;transition:opacity .2s,transform .2s;white-space:nowrap;box-shadow:0 4px 24px rgba(0,0,0,.5)';
   document.body.appendChild(t);
   requestAnimationFrame(function(){
-    t.style.opacity='1';t.style.transform='translateX(-50%) translateY(0)';
+    t.style.opacity='1'; t.style.transform='translateX(-50%) translateY(0)';
     setTimeout(function(){
-      t.style.opacity='0';t.style.transform='translateX(-50%) translateY(12px)';
-      setTimeout(function(){ t.remove(); },250);
-    },3000);
+      t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(12px)';
+      setTimeout(function(){ t.remove(); }, 250);
+    }, 3000);
   });
 }
 
-/* ── trade execution (modal buttons) ── */
+/* ── trade execution (modal) ── */
 async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, btn){
   var amount = parseFloat(amountStr);
-  if(!amount||amount<=0){ _toast('Enter a valid SOL amount',false); return; }
-  var origHtml = btn?btn.innerHTML:'';
-  var origBg   = btn?btn.style.background:'';
-  var spinColor = side==='buy'?'#0a0e1a':'#fff';
-  var spinner = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.25);border-top-color:'+spinColor+';border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>';
-  if(btn){ btn.innerHTML=spinner; btn.disabled=true; btn.style.opacity='1'; }
+  if(!amount||amount<=0){ _toast('Enter a valid SOL amount', false); return; }
+  var origHtml = btn ? btn.innerHTML : '';
+  var origBg   = btn ? btn.style.background : '';
+  var spinner  = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.25);border-top-color:rgba(0,0,0,.6);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>';
+  if(btn){ btn.innerHTML=spinner; btn.disabled=true; }
   var ok = await _doTrade(symbol, pairAddress, side, amount, tokenAddress);
   if(btn){ btn.innerHTML=origHtml; btn.disabled=false; btn.style.background=origBg; }
-  if(ok) _toast(side==='buy'?'✅ Buy order executed':'✅ Sold', true);
+  if(ok) _toast(side==='buy' ? 'Buy order executed' : 'Sold', true);
 }
 
 /* ── helpers ── */
 function _fmtPrice(p){
   if(!p) return '—';
-  p=parseFloat(p);
+  p = parseFloat(p);
   if(isNaN(p)||p<=0) return '—';
   if(p>=1) return '$'+p.toFixed(2);
   if(p>=0.0001) return '$'+p.toFixed(6);
@@ -621,32 +603,31 @@ function _fmtAge(ms){
   if(!ms) return '—';
   var diff = Date.now()-ms;
   var mins = Math.floor(diff/60000);
-  if(mins<1)   return '<1m';
-  if(mins<60)  return mins+'m';
+  if(mins<1)  return '<1m';
+  if(mins<60) return mins+'m';
   var hrs = Math.floor(mins/60);
-  if(hrs<24)   return hrs+'h';
+  if(hrs<24)  return hrs+'h';
   return Math.floor(hrs/24)+'d';
 }
 function _esc(s){
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 function _setLoading(){
-  document.getElementById('lm-table-wrap').innerHTML=
-    _buildTable('<tr class="lm-status-row"><td colspan="15"><span class="lm-spinner-ring"></span>Loading…</td></tr>');
+  document.getElementById('lm-table-wrap').innerHTML =
+    _buildTable('<tr class="lm-status-row"><td colspan="13"><span class="lm-spinner-ring"></span>Loading…</td></tr>');
 }
 function _setError(msg){
-  document.getElementById('lm-table-wrap').innerHTML=
-    _buildTable('<tr class="lm-status-row"><td colspan="15" style="color:#f76b62">'+msg+'</td></tr>');
+  document.getElementById('lm-table-wrap').innerHTML =
+    _buildTable('<tr class="lm-status-row"><td colspan="13" style="color:#ff4d6a">'+msg+'</td></tr>');
 }
 
-/* ── Auth headers (injected server-side, always available synchronously) ── */
-var _lmCsrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+/* ── auth headers ── */
+var _lmCsrf         = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
 var _lmClientSecret = (document.querySelector('meta[name="client-secret"]')||{}).content||'';
 
 /* ── init ── */
 _loadTab('trending');
 
-/* ── deep-link: /live-market?token=WIF opens the modal immediately ── */
 (function(){
   var _urlToken = new URLSearchParams(location.search).get('token');
   if(_urlToken) showTokenCard(_urlToken);
