@@ -544,10 +544,6 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
       <button class="wlt-btn wlt-btn-outline" onclick="_modalSend()">→ Send</button>
       <button class="wlt-btn wlt-btn-outline" onclick="openSwapModal()">⇄ Swap</button>
     </div>
-    <div class="wlt-actions" style="margin-top:0">
-      <button class="wlt-btn wlt-btn-outline" onclick="_modalRevealKey()" style="color:#f76b62;border-color:rgba(247,107,98,.3);font-size:12px">🔑 Reveal Private Key</button>
-    </div>
-
     <!-- balance card -->
     <div class="wlt-bal-card">
       <div class="wlt-bal-col">
@@ -1475,77 +1471,7 @@ async function _loadActivity(){
 }
 _loadActivity()
 
-// ── reveal private key ────────────────────────────────────
-var _revealTimer = null
 
-function _modalRevealKey(){
-  _showModal(
-    '<div class="w-modal-title">Reveal Private Key</div>'
-    +'<div style="background:rgba(247,107,98,.08);border:1px solid rgba(247,107,98,.25);border-radius:10px;padding:12px;margin-bottom:16px;font-size:12px;color:#f76b62;line-height:1.5">'
-      +'⚠️ Your private key gives full control of your wallet. Never share it with anyone.'
-    +'</div>'
-    +'<div class="w-modal-btns">'
-      +'<button class="w-modal-btn w-modal-secondary" onclick="_closeModal()">Cancel</button>'
-      +'<button class="w-modal-btn w-modal-primary" style="background:#f76b62;border-color:#f76b62" onclick="_doRevealKey()">Show Key</button>'
-    +'</div>'
-  )
-}
-
-function _doRevealKey(){
-  var bodyEl=document.getElementById('w-modal-body')
-  if(!bodyEl) return
-  bodyEl.innerHTML='<div class="w-modal-title">Fetching…</div>'
-  fetch('/api/wallet/reveal-key',{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'}})
-    .then(function(r){return r.json()})
-    .then(function(d){
-      if(!d.ok){
-        bodyEl.innerHTML='<div class="w-modal-title">Error</div><div style="color:#f76b62;font-size:13px;margin-top:8px">'+(d.msg||'Failed to reveal key')+'</div>'
-        return
-      }
-      var key=d.private_key
-      var secs=10
-      function render(s){
-        bodyEl.innerHTML=
-          '<div class="w-modal-title">Private Key</div>'
-          +'<div style="color:#f76b62;font-size:11px;margin-bottom:10px">Auto-hides in <strong id="rvl-cd">'+s+'</strong>s — do not share this key</div>'
-          +'<div id="rvl-key" style="font-family:var(--mono);font-size:11px;color:var(--text);word-break:break-all;background:#16191f;border:1px solid #21252c;border-radius:8px;padding:12px;margin-bottom:12px;line-height:1.7;user-select:all">'+key+'</div>'
-          +'<div class="w-modal-btns">'
-            +'<button class="w-modal-btn w-modal-secondary" onclick="_closeReveal()">Hide Now</button>'
-            +'<button class="w-modal-btn w-modal-primary" onclick="_copyRevealKey()">Copy</button>'
-          +'</div>'
-      }
-      render(secs)
-      if(_revealTimer) clearInterval(_revealTimer)
-      _revealTimer=setInterval(function(){
-        secs--
-        var cd=document.getElementById('rvl-cd')
-        if(cd) cd.textContent=secs
-        if(secs<=0){clearInterval(_revealTimer);_revealTimer=null;_closeReveal()}
-      },1000)
-    })
-    .catch(function(){
-      if(bodyEl) bodyEl.innerHTML='<div class="w-modal-title">Error</div><div style="color:#f76b62;font-size:13px;margin-top:8px">Network error</div>'
-    })
-}
-
-function _closeReveal(){
-  if(_revealTimer){clearInterval(_revealTimer);_revealTimer=null}
-  _closeModal()
-}
-
-function _copyRevealKey(){
-  var el=document.getElementById('rvl-key')
-  if(!el) return
-  navigator.clipboard.writeText(el.textContent).then(function(){
-    _wToast('Key copied',true)
-  }).catch(function(){
-    var ta=document.createElement('textarea')
-    ta.value=el.textContent;ta.style.cssText='position:fixed;opacity:0'
-    document.body.appendChild(ta);ta.select()
-    try{document.execCommand('copy');_wToast('Key copied',true)}catch(e){_wToast('Copy failed',false)}
-    document.body.removeChild(ta)
-  })
-}
 </script>
 </body>
 </html>

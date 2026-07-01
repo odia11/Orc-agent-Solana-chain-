@@ -87,15 +87,9 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .st-wallet-btns{display:flex;gap:8px}
 .st-manage-btn{flex:1;padding:9px;background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s}
 .st-manage-btn:hover{opacity:.88}
-.st-reveal-btn{flex:1;padding:9px;background:transparent;color:var(--sub);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;font-family:var(--ui);cursor:pointer;transition:all .15s}
-.st-reveal-btn:hover{border-color:var(--muted);color:var(--text)}
-.st-reveal-btn:disabled{opacity:.4;cursor:not-allowed}
 .st-key-status{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .st-key-status.has-key{color:var(--green)}
 .st-key-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
-.st-reveal-area{display:none;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px 12px;margin-bottom:12px}
-.st-reveal-lbl{font-size:11px;color:var(--muted);margin-bottom:6px}
-.st-reveal-key{font-family:var(--mono);font-size:11px;color:var(--sub);word-break:break-all;line-height:1.55;user-select:all}
 
 /* ── EMERGENCY CARD ── */
 .st-card.emergency{border-color:#f76b62;background:rgba(247,107,98,.06)}
@@ -152,7 +146,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   .pf-mobile-title{font-size:16px;font-weight:600;color:var(--text)}
   .modal-inp{font-size:16px}
   /* 44px tap targets */
-  .st-save-btn,.st-manage-btn,.st-reveal-btn,.st-emergency-btn{min-height:44px}
+  .st-save-btn,.st-manage-btn,.st-emergency-btn{min-height:44px}
   .modal-btn{min-height:44px}
   html,body{overflow-x:hidden}
 }
@@ -325,14 +319,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
           <span id="st-key-status-text">Checking…</span>
         </div>
 
-        <div class="st-reveal-area" id="reveal-area">
-          <div class="st-reveal-lbl">Private key — visible for <span id="reveal-countdown">10</span>s</div>
-          <div class="st-reveal-key" id="reveal-key-text"></div>
-        </div>
-
         <div class="st-wallet-btns">
           <button class="st-manage-btn" onclick="_openManage()">Manage</button>
-          <button class="st-reveal-btn" id="reveal-btn" onclick="_revealKey()">Reveal Key</button>
         </div>
       </div>
 
@@ -497,49 +485,6 @@ async function _saveKey(){
     _msg('manage-msg','✗ Network error.','err');
   }finally{
     btn.textContent='Save'; btn.disabled=false;
-  }
-}
-
-/* ── reveal key (10-second timer) ── */
-var _revealTimer=null;
-async function _revealKey(){
-  var btn=document.getElementById('reveal-btn');
-  var area=document.getElementById('reveal-area');
-  var keyEl=document.getElementById('reveal-key-text');
-  var countdown=document.getElementById('reveal-countdown');
-  /* cancel any running reveal */
-  if(_revealTimer){clearInterval(_revealTimer);_revealTimer=null;area.style.display='none';keyEl.textContent='';btn.textContent='Reveal Key';btn.disabled=false;return;}
-  btn.disabled=true; btn.textContent='Loading…';
-  try{
-    var d=await _post('/api/wallet/reveal-key',{});
-    if(d.ok){
-      keyEl.style.color='';
-      keyEl.textContent=d.private_key;
-      area.style.display='block';
-      var secs=10;
-      countdown.textContent=secs;
-      btn.textContent='Hide';
-      btn.disabled=false;
-      _revealTimer=setInterval(function(){
-        secs--;
-        countdown.textContent=secs;
-        if(secs<=0){
-          clearInterval(_revealTimer); _revealTimer=null;
-          area.style.display='none';
-          keyEl.textContent='';
-          btn.textContent='Reveal Key';
-          btn.disabled=false;
-        }
-      },1000);
-    } else {
-      keyEl.style.color='var(--red)';
-      keyEl.textContent=d.msg||'Failed to reveal key';
-      area.style.display='block';
-      btn.disabled=false; btn.textContent='Reveal Key';
-      setTimeout(function(){area.style.display='none';keyEl.textContent='';},3000);
-    }
-  }catch(e){
-    btn.disabled=false; btn.textContent='Reveal Key';
   }
 }
 
