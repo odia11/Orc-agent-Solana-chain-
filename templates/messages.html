@@ -4,78 +4,122 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
 <title>Messages — OrcAgent</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
+  --accent:#f7b955;--text:#eef1f5;--muted:#565d68;
+  --border:#16191f;--border2:#21252c;
+}
 
-/* ── NAV ── */
-.msgs-nav{height:60px;display:flex;align-items:center;justify-content:space-between;padding:0 20px;border-bottom:1px solid #16191f;flex-shrink:0}
-.msgs-nav-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:#eef1f5}
-.msgs-nav-logo{width:32px;height:32px;background:#3ad29b;border-radius:9px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.msgs-nav-logo::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
-.msgs-nav-name{font-size:16px;font-weight:700;letter-spacing:-0.02em}
-.msgs-nav-right{display:flex;align-items:center;gap:6px}
-.msgs-nav-link{font-size:13px;color:#8a919c;text-decoration:none;padding:6px 10px;border-radius:8px;transition:color .15s,background .15s}
-.msgs-nav-link:hover{color:#eef1f5;background:#14171c}
-.msgs-nav-pill{display:flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:20px;padding:5px 12px;font-size:11px;font-family:'JetBrains Mono',monospace;color:#8a919c}
-.msgs-nav-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+/* ── SIDEBAR (mirrors dashboard) ── */
+#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid #16191f;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-track{background:transparent}
+#sidebar::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+.sb-logo{padding:20px 20px 14px;flex-shrink:0}
+.sb-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sb-logo-shape{width:36px;height:36px;min-width:36px;background:#f7b955;border-radius:11px;display:flex;align-items:center;justify-content:center}
+.sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
+.sb-logo-text{font-family:'Geist',system-ui,sans-serif;font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.sb-beta-badge{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:600;letter-spacing:.14em;color:#f7b955;background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.3);border-radius:7px;padding:5px 9px}
+.sb-beta-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#f7b955;flex-shrink:0}
+.sb-nav{flex:1;padding:8px 12px;display:flex;flex-direction:column;gap:1px}
+.sb-nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:500;color:#8a919c;cursor:pointer;transition:background .15s,color .15s;text-decoration:none;border:none;background:transparent;width:100%;text-align:left;border-radius:11px;box-sizing:border-box;position:relative}
+.sb-nav-item:hover{background:#14171c;color:#eef1f5}
+.sb-nav-item.active{background:rgba(247,185,85,.12);color:#eef1f5;font-weight:600}
+.sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:#f7b955}
+.sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.sb-nav-badge{margin-left:auto;background:#f7b955;color:#0a0b0e;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
+.sb-bottom{padding:12px;border-top:1px solid var(--bg3);flex-shrink:0;margin-top:auto}
+.sb-user-card{display:flex;align-items:center;gap:11px;padding:10px;border-radius:14px;background:transparent;border:1px solid #16191f;cursor:pointer;transition:background .15s}
+.sb-user-card:hover{background:#101216}
+.sb-avatar{width:40px;height:40px;min-width:40px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0;overflow:hidden;position:relative}
+.sb-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.sb-user-info{flex:1;min-width:0}
+.sb-user-name{font-size:14px;font-weight:600;color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-handle{font-size:12px;color:#565d68;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.sb-sol-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.sb-sol{font-size:13px;font-weight:700;color:#eef1f5;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.sb-sol-label{font-size:10px;color:#565d68;font-family:'JetBrains Mono',monospace}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 
-/* ── TWO-PANEL LAYOUT ── */
-.msgs-layout{display:flex;height:calc(100vh - 60px)}
+/* ── APP SHELL ── */
+#app{display:flex;height:100vh;overflow:hidden}
+.msgs-main{flex:1;display:flex;min-width:0}
 
-/* ── LEFT PANEL ── */
-.msgs-left{width:320px;border-right:1px solid #16191f;overflow-y:auto;flex-shrink:0;display:flex;flex-direction:column}
-.msgs-left-hdr{padding:16px 20px;border-bottom:1px solid #16191f;flex-shrink:0}
-.msgs-left-title{font-size:18px;font-weight:600;color:#eef1f5}
-.conv-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #16191f;cursor:pointer;transition:background .12s}
-.conv-row:hover{background:#14171c}
+/* ── CONVERSATION LIST (300px left pane) ── */
+.msgs-left{width:300px;min-width:300px;border-right:1px solid #16191f;display:flex;flex-direction:column;height:100vh;flex-shrink:0;background:#0a0b0e}
+.msgs-left-hdr{padding:16px 16px 12px;border-bottom:1px solid #16191f;flex-shrink:0}
+.msgs-left-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.msgs-left-title{font-size:16px;font-weight:700;color:#eef1f5}
+.msgs-new-btn{background:#f7b955;color:#0a0b0e;border:none;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.msgs-new-btn:hover{opacity:.85}
+.msgs-search-wrap{position:relative}
+.msgs-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#565d68;pointer-events:none}
+.msgs-search{width:100%;background:#101216;border:1px solid #21252c;border-radius:11px;padding:9px 13px 9px 36px;color:#eef1f5;font-size:13px;font-family:'Geist',system-ui,sans-serif;outline:none;transition:border-color .15s}
+.msgs-search::placeholder{color:#565d68}
+.msgs-search:focus{border-color:rgba(247,185,85,.4)}
+#newMsgBar{display:none;padding:12px 16px;border-bottom:1px solid #16191f}
+.new-msg-input{width:100%;background:#101216;border:1px solid #21252c;border-radius:10px;padding:10px 12px;color:#eef1f5;font-size:13px;font-family:'Geist',system-ui,sans-serif;outline:none;transition:border-color .15s}
+.new-msg-input::placeholder{color:#565d68}
+.new-msg-input:focus{border-color:rgba(247,185,85,.4)}
+.conv-list{flex:1;overflow-y:auto}
+.conv-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s}
+.conv-row:hover{background:#0e1014}
 .conv-row.active{background:#101216}
-.conv-avatar{width:40px;height:40px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff}
+.conv-avatar{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff}
 .conv-info{flex:1;min-width:0}
 .conv-name{font-size:14px;font-weight:600;color:#eef1f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.conv-preview{font-size:13px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.conv-preview{font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
 .conv-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
 .conv-time{font-size:11px;color:#565d68;white-space:nowrap}
-.conv-badge{background:#3ad29b;color:#08120f;border-radius:999px;font-size:11px;font-weight:700;padding:1px 7px}
+.conv-badge{background:#f7b955;color:#0a0b0e;border-radius:999px;font-size:10px;font-weight:700;padding:2px 7px}
 .msgs-left-empty{padding:48px 20px;text-align:center;color:#565d68;font-size:13px;line-height:1.7}
 
-/* ── RIGHT PANEL ── */
-.msgs-right{flex:1;display:flex;flex-direction:column;min-width:0}
-.msgs-placeholder{flex:1;display:flex;align-items:center;justify-content:center;color:#565d68;font-size:14px}
+/* ── CHAT THREAD (flex:1 right pane) ── */
+.msgs-right{flex:1;display:flex;flex-direction:column;min-width:0;height:100vh}
+.msgs-placeholder{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:#565d68}
+.msgs-placeholder-icon{opacity:.25}
+.msgs-placeholder-text{font-size:14px}
 .msgs-thread{flex:1;display:flex;flex-direction:column;min-height:0}
 
 /* thread header */
-.msgs-thread-hdr{padding:14px 20px;border-bottom:1px solid #16191f;display:flex;align-items:center;gap:12px;flex-shrink:0}
-.msgs-thread-avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
-.msgs-thread-name{font-size:14px;font-weight:600;color:#eef1f5}
-.msgs-thread-addr{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace;margin-top:2px}
+.msgs-thread-hdr{padding:14px 20px;border-bottom:1px solid #16191f;display:flex;align-items:center;gap:12px;flex-shrink:0;background:#0a0b0e}
+.msgs-back{display:none;align-items:center;gap:5px;background:transparent;border:none;color:#8a919c;font-size:14px;cursor:pointer;padding:0 8px 0 0;font-family:'Geist',system-ui,sans-serif;transition:color .15s;flex-shrink:0}
+.msgs-back:hover{color:#eef1f5}
+.msgs-thread-avatar{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff}
+.msgs-thread-meta{flex:1;min-width:0}
+.msgs-thread-name{font-size:14px;font-weight:700;color:#eef1f5}
+.msgs-thread-status{font-size:11px;color:#565d68;margin-top:2px;display:flex;align-items:center;gap:5px}
+.msgs-online-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+.msgs-copy-trades-btn{background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.25);border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;color:#f7b955;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s;white-space:nowrap;flex-shrink:0}
+.msgs-copy-trades-btn:hover{background:rgba(247,185,85,.18)}
 
 /* messages area */
 .msgs-area{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-height:0}
 .msg-wrap{display:flex;flex-direction:column}
 .msg-wrap.mine{align-items:flex-end}
 .msg-wrap.theirs{align-items:flex-start}
-.msg-bubble{padding:10px 14px;max-width:70%;word-break:break-word;font-size:14px;line-height:1.5}
-.msg-wrap.mine   .msg-bubble{background:#3ad29b;color:#08120f;border-radius:18px 18px 4px 18px}
-.msg-wrap.theirs .msg-bubble{background:#16191f;color:#eef1f5;border-radius:18px 18px 18px 4px}
+.msg-bubble{padding:10px 15px;max-width:72%;word-break:break-word;font-size:14px;line-height:1.5}
+.msg-wrap.mine   .msg-bubble{background:#f7b955;color:#0a0b0e;border-radius:18px 18px 4px 18px;font-weight:500}
+.msg-wrap.theirs .msg-bubble{background:#101216;color:#eef1f5;border:1px solid #16191f;border-radius:18px 18px 18px 4px}
 .msg-time{font-size:11px;color:#565d68;margin-top:3px;padding:0 2px}
 .msgs-area-empty{text-align:center;color:#565d68;font-size:13px;padding:40px 0;margin:auto}
 
-/* input bar */
-.msgs-input-bar{border-top:1px solid #16191f;padding:12px 16px;display:flex;gap:10px;flex-shrink:0}
+/* composer */
+.msgs-input-bar{border-top:1px solid #16191f;padding:12px 16px;display:flex;gap:10px;flex-shrink:0;background:#0a0b0e}
 .msgs-input{flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5;font-size:14px;font-family:'Geist',system-ui,sans-serif;outline:none;transition:border-color .15s}
 .msgs-input::placeholder{color:#565d68}
-.msgs-input:focus{border-color:#3ad29b}
-.msgs-send{background:#3ad29b;color:#08120f;border:none;border-radius:11px;padding:11px 18px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s;flex-shrink:0}
+.msgs-input:focus{border-color:rgba(247,185,85,.4)}
+.msgs-send{background:#f7b955;color:#0a0b0e;border:none;border-radius:11px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s;flex-shrink:0}
 .msgs-send:hover{opacity:.88}
 .msgs-send:disabled{opacity:.4;cursor:not-allowed}
-
-/* back button (visible on mobile only) */
-.msgs-back{display:none;align-items:center;gap:5px;background:transparent;border:none;color:#8a919c;font-size:14px;cursor:pointer;padding:0 8px 0 0;font-family:'Geist',system-ui,sans-serif;transition:color .15s;flex-shrink:0}
-.msgs-back:hover{color:#eef1f5}
 
 /* scrollbar */
 ::-webkit-scrollbar{width:4px}
@@ -84,79 +128,154 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 ::-webkit-scrollbar-thumb:hover{background:#2d333c}
 *{scrollbar-width:thin;scrollbar-color:#21252c transparent}
 
-@media(max-width:768px){
-  /* default: only list visible */
-  .msgs-left{width:100%;border-right:none}
+/* ── MOBILE (<768px): single-pane ── */
+@media(max-width:767px){
+  #sidebar{display:none!important}
+  .msgs-left{width:100%;min-width:0;border-right:none}
   .msgs-right{display:none}
-  /* thread open: swap panels */
-  .msgs-layout.thread-open .msgs-left{display:none}
-  .msgs-layout.thread-open .msgs-right{display:flex}
-  /* back button visible */
+  .msgs-main.thread-open .msgs-left{display:none}
+  .msgs-main.thread-open .msgs-right{display:flex}
   .msgs-back{display:flex}
-  /* input stays above keyboard */
-  .msgs-input-bar{position:sticky;bottom:0;background:#0a0b0e}
+  .msgs-input-bar{position:sticky;bottom:0}
+}
+
+/* ── TABLET (768–1024px): hide sidebar ── */
+@media(max-width:1024px) and (min-width:768px){
+  #sidebar{display:none!important}
 }
 </style>
 </head>
 <body>
+<div id="app">
 
-<!-- NAV -->
-<nav class="msgs-nav">
-  <a class="msgs-nav-brand" href="/">
-    <div class="msgs-nav-logo"></div>
-    <span class="msgs-nav-name">OrcAgent</span>
-  </a>
-  <div class="msgs-nav-right">
-    <a href="/" class="msgs-nav-link">Dashboard</a>
-    <a href="/wallet" class="msgs-nav-link">Wallet</a>
-    {% if wallet %}
-    <div class="msgs-nav-pill">
-      <div class="msgs-nav-dot"></div>
-      <span>{{ wallet_short }}</span>
+  <!-- SIDEBAR (exact structure from dashboard) -->
+  <aside id="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-row">
+        <div class="sb-logo-shape"></div>
+        <span class="sb-logo-text">OrcAgent</span>
+      </div>
+      <div class="sb-beta-badge">INVITE-ONLY · BETA</div>
     </div>
-    {% endif %}
-  </div>
-</nav>
 
-<!-- TWO-PANEL LAYOUT -->
-<div class="msgs-layout">
+    <nav class="sb-nav">
+      <a class="sb-nav-item" href="/">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+        Home
+      </a>
+      <a class="sb-nav-item" href="/live-market">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+        Live Market
+      </a>
+      <a class="sb-nav-item" href="/leaderboard">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/></svg></span>
+        Leaderboard
+      </a>
+      <a class="sb-nav-item" href="/traders">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        Traders
+      </a>
+      <a class="sb-nav-item active" href="/messages">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+        Messages
+        <span class="sb-nav-badge" id="sb-msg-badge" style="display:none"></span>
+      </a>
+      <a class="sb-nav-item" href="/community">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0"/></svg></span>
+        Community
+      </a>
+      <a class="sb-nav-item" href="/notifications">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+        Notifications
+      </a>
+      <a class="sb-nav-item" href="/wallet">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
+        Wallet
+      </a>
+      <a class="sb-nav-item" href="/profile">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+        Profile
+      </a>
+      <a class="sb-nav-item" href="/settings">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        Settings
+      </a>
+    </nav>
 
-  <!-- LEFT: Conversation list -->
-  <div class="msgs-left" id="msgs-left">
-    <div class="msgs-left-hdr">
-      <div class="msgs-left-title">Messages</div>
-      <button onclick="document.getElementById('newMsgBar').style.display='block';document.getElementById('searchUser').focus()" style="background:#3ad29b;color:#08120f;border:none;border-radius:10px;padding:8px 14px;font-weight:700;cursor:pointer;font-size:13px">+ New</button>
+    <div class="sb-bottom">
+      <div class="sb-user-card" id="sb-user-card">
+        <div class="sb-avatar" id="sb-avatar">
+          <img id="sb-avatar-img" alt="" style="display:none" onerror="this.style.display='none'">
+          <span id="sb-avatar-ini">?</span>
+        </div>
+        <div class="sb-user-info">
+          <div class="sb-user-name" id="sb-user-name">You</div>
+          <div class="sb-handle" id="sb-handle">@—</div>
+        </div>
+        <div class="sb-sol-wrap">
+          <div class="sb-sol" id="sb-sol">—</div>
+          <div class="sb-sol-label">SOL</div>
+        </div>
+      </div>
     </div>
-    <div id="newMsgBar" style="display:none;padding:12px;border-bottom:1px solid #16191f">
-      <input id="searchUser" placeholder="Search username..." style="width:100%;background:#101216;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5" oninput="searchUsers(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('newMsgBar').style.display='none'}">
-      <div id="searchResults" style="margin-top:8px"></div>
-    </div>
-    <div id="conv-list"><div class="msgs-left-empty">Loading…</div></div>
-  </div>
+  </aside>
 
-  <!-- RIGHT: Thread -->
-  <div class="msgs-right" id="msgs-right">
+  <!-- MESSAGES MAIN: two-pane -->
+  <div class="msgs-main" id="msgs-main">
 
-    <div class="msgs-placeholder" id="msgs-placeholder">Select a conversation to start messaging</div>
+    <!-- LEFT PANE: Conversation list -->
+    <div class="msgs-left" id="msgs-left">
+      <div class="msgs-left-hdr">
+        <div class="msgs-left-title-row">
+          <div class="msgs-left-title">Messages</div>
+          <button class="msgs-new-btn" onclick="document.getElementById('newMsgBar').style.display='block';document.getElementById('searchUser').focus()">+ New</button>
+        </div>
+        <div class="msgs-search-wrap">
+          <svg class="msgs-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+          <input class="msgs-search" id="msgs-search" placeholder="Search conversations…" oninput="_filterConvs(this.value)">
+        </div>
+      </div>
 
-    <div class="msgs-thread" id="msgs-thread" style="display:none">
-      <div class="msgs-thread-hdr" id="msgs-thread-hdr"></div>
-      <div class="msgs-area" id="msgs-area"></div>
-      <div class="msgs-input-bar">
-        <input class="msgs-input" id="msgs-input" type="text"
-               placeholder="Write a message…" maxlength="2000"
-               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_sendMessage();}">
-        <button class="msgs-send" id="msgs-send" onclick="_sendMessage()">Send</button>
+      <!-- New message user-search bar -->
+      <div id="newMsgBar">
+        <input id="searchUser" class="new-msg-input" placeholder="Search username or address…" oninput="searchUsers(this.value)" onkeydown="if(event.key==='Escape'){document.getElementById('newMsgBar').style.display='none'}">
+        <div id="searchResults" style="margin-top:8px"></div>
+      </div>
+
+      <div class="conv-list" id="conv-list">
+        <div class="msgs-left-empty">Loading…</div>
       </div>
     </div>
 
+    <!-- RIGHT PANE: Chat thread -->
+    <div class="msgs-right" id="msgs-right">
+
+      <div class="msgs-placeholder" id="msgs-placeholder">
+        <div class="msgs-placeholder-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <div class="msgs-placeholder-text">Select a conversation to start messaging</div>
+      </div>
+
+      <div class="msgs-thread" id="msgs-thread" style="display:none">
+        <div class="msgs-thread-hdr" id="msgs-thread-hdr"></div>
+        <div class="msgs-area" id="msgs-area"></div>
+        <div class="msgs-input-bar">
+          <input class="msgs-input" id="msgs-input" type="text"
+                 placeholder="Write a message…" maxlength="2000"
+                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_sendMessage();}">
+          <button class="msgs-send" id="msgs-send" onclick="_sendMessage()">Send</button>
+        </div>
+      </div>
+
+    </div>
   </div>
 </div>
 
 <script>
-var _myWallet     = {{ wallet|tojson }};
-var _activeWallet = null;
-var _pollTimer    = null;
+var _myWallet      = {{ wallet|tojson }};
+var _activeWallet  = null;
+var _pollTimer     = null;
 var _conversations = [];
 
 /* ── HELPERS ── */
@@ -189,7 +308,7 @@ function _esc(s) {
 
 function _scrollToBottom() {
   var area = document.getElementById('msgs-area');
-  if (area) { area.scrollTop = area.scrollHeight; }
+  if (area) area.scrollTop = area.scrollHeight;
 }
 
 /* ── CONVERSATIONS ── */
@@ -197,23 +316,39 @@ async function loadConversations() {
   try {
     var r = await fetch('/api/messages/conversations');
     var d = await r.json();
-    if (d.ok) { _conversations = d.conversations || []; _renderConvList(); }
-    else { document.getElementById('conv-list').innerHTML = '<div class="msgs-left-empty">Failed to load.</div>'; }
+    if (d.ok) {
+      _conversations = d.conversations || [];
+      _renderConvList();
+      /* show unread badge in sidebar if any */
+      var total = _conversations.reduce(function(n,c){ return n + (c.unread_count||0); }, 0);
+      var badge = document.getElementById('sb-msg-badge');
+      if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
+    } else {
+      document.getElementById('conv-list').innerHTML = '<div class="msgs-left-empty">Failed to load.</div>';
+    }
   } catch(e) {
     document.getElementById('conv-list').innerHTML = '<div class="msgs-left-empty">Could not connect.</div>';
   }
 }
 
+function _filterConvs(q) {
+  var rows = document.querySelectorAll('#conv-list .conv-row');
+  rows.forEach(function(row) {
+    var text = row.textContent.toLowerCase();
+    row.style.display = (!q || text.indexOf(q.toLowerCase()) >= 0) ? '' : 'none';
+  });
+}
+
 function _renderConvList() {
   var el = document.getElementById('conv-list');
   if (!_conversations.length) {
-    el.innerHTML = '<div class="msgs-left-empty">No conversations yet.<br>Send a message to start one.</div>';
+    el.innerHTML = '<div class="msgs-left-empty">No conversations yet.<br>Press <strong style="color:#f7b955">+ New</strong> to start one.</div>';
     return;
   }
   el.innerHTML = _conversations.map(function(c) {
-    var peer  = c.peer_wallet || '';
-    var color = _avatarColor(peer);
-    var ini   = (peer[0] || '?').toUpperCase();
+    var peer   = c.peer_wallet || '';
+    var color  = _avatarColor(peer);
+    var ini    = (peer[0] || '?').toUpperCase();
     var active = peer === _activeWallet ? ' active' : '';
     var badge  = (c.unread_count > 0)
       ? '<span class="conv-badge">'+c.unread_count+'</span>' : '';
@@ -236,31 +371,33 @@ async function _openThread(peerWallet) {
   _activeWallet = peerWallet;
   _renderConvList();
 
-  /* show thread, hide placeholder */
   document.getElementById('msgs-placeholder').style.display = 'none';
   var thread = document.getElementById('msgs-thread');
   thread.style.display = 'flex';
 
-  /* mobile: show thread, hide list */
-  if (window.innerWidth <= 768) {
-    document.querySelector('.msgs-layout').classList.add('thread-open');
+  /* mobile: swap panels */
+  if (window.innerWidth <= 767) {
+    document.getElementById('msgs-main').classList.add('thread-open');
   }
 
-  /* thread header */
   var color = _avatarColor(peerWallet);
   var ini   = (peerWallet[0] || '?').toUpperCase();
+
   document.getElementById('msgs-thread-hdr').innerHTML =
     '<button class="msgs-back" onclick="_backToList()">← Back</button>'
     + '<div class="msgs-thread-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
-    + '<div>'
+    + '<div class="msgs-thread-meta">'
     +   '<div class="msgs-thread-name">'+_esc(_short(peerWallet))+'</div>'
-    +   '<div class="msgs-thread-addr">'+_esc(peerWallet)+'</div>'
-    + '</div>';
+    +   '<div class="msgs-thread-status"><span class="msgs-online-dot"></span>Online</div>'
+    + '</div>'
+    + '<button class="msgs-copy-trades-btn" onclick="_copyTrades(\''+_esc(peerWallet)+'\')">'
+    +   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
+    +   'Copy Trades'
+    + '</button>';
 
   document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
   await loadThread(peerWallet);
 
-  /* (re)start poll */
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(function() {
     if (_activeWallet) loadThread(_activeWallet);
@@ -293,7 +430,6 @@ function _renderMessages(msgs) {
       + '</div>';
   }).join('');
   if (atBottom || msgs.length <= 30) _scrollToBottom();
-  /* clear unread badge for this conversation */
   var conv = _conversations.find(function(c){ return c.peer_wallet === _activeWallet; });
   if (conv && conv.unread_count > 0) { conv.unread_count = 0; _renderConvList(); }
 }
@@ -316,9 +452,7 @@ async function _sendMessage() {
     });
     var d = await r.json();
     if (d.ok && d.message) {
-      /* append bubble immediately without waiting for poll */
-      var area = document.getElementById('msgs-area');
-      /* remove empty state if present */
+      var area  = document.getElementById('msgs-area');
       var empty = area.querySelector('.msgs-area-empty');
       if (empty) empty.remove();
       var div = document.createElement('div');
@@ -327,13 +461,12 @@ async function _sendMessage() {
         + '<span class="msg-time">now</span>';
       area.appendChild(div);
       _scrollToBottom();
-      /* update conversation preview */
       var conv = _conversations.find(function(c){ return c.peer_wallet === _activeWallet; });
       if (conv) { conv.last_message = text; conv.timestamp = d.message.created_at; }
       else { _conversations.unshift({peer_wallet:_activeWallet, last_message:text, timestamp:d.message.created_at, unread_count:0}); }
       _renderConvList();
     } else {
-      input.value = text;  /* restore on server error */
+      input.value = text;
     }
   } catch(e) {
     input.value = text;
@@ -343,40 +476,74 @@ async function _sendMessage() {
   input.focus();
 }
 
+/* ── COPY TRADES ── */
+function _copyTrades(wallet) {
+  fetch('/api/copy-trade', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({target_wallet: wallet})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d.ok) alert('Now copying trades from ' + _short(wallet));
+    else alert(d.error || 'Failed to start copy trading.');
+  }).catch(function(){ alert('Could not connect.'); });
+}
+
 /* ── BACK (mobile) ── */
 function _backToList() {
-  document.querySelector('.msgs-layout').classList.remove('thread-open');
+  document.getElementById('msgs-main').classList.remove('thread-open');
 }
 
-var _searchTimer=null;
-function searchUsers(q){
+/* ── USER SEARCH ── */
+var _searchTimer = null;
+function searchUsers(q) {
   clearTimeout(_searchTimer);
-  const el=document.getElementById('searchResults');
-  if(!q.trim()){el.innerHTML='';return;}
-  _searchTimer=setTimeout(function(){
-    fetch('/api/users/search?q='+encodeURIComponent(q))
-      .then(r=>r.json())
-      .then(function(d){
-        const users=d.users||d||[];
-        if(!users.length){el.innerHTML='<div style="color:#565d68;font-size:12px;padding:6px">No users found</div>';return;}
-        el.innerHTML=users.map(function(u){
-          var w=u.wallet_address||u.wallet||'';
-          var name=u.username||w.slice(0,8)+'...';
-          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread(\''+w+'\')" style="padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div style="width:30px;height:30px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">'+name[0].toUpperCase()+'</div><div style="font-size:13px;font-weight:600">'+name+'</div></div>';
+  var el = document.getElementById('searchResults');
+  if (!q.trim()) { el.innerHTML = ''; return; }
+  _searchTimer = setTimeout(function() {
+    fetch('/api/users/search?q=' + encodeURIComponent(q))
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        var users = d.users || d || [];
+        if (!users.length) {
+          el.innerHTML = '<div style="color:#565d68;font-size:12px;padding:6px 2px">No users found</div>';
+          return;
+        }
+        el.innerHTML = users.map(function(u) {
+          var w    = u.wallet_address || u.wallet || '';
+          var name = u.username || _short(w);
+          var col  = _avatarColor(w);
+          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread(\''+_esc(w)+'\')"'
+            + ' style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-radius:9px;cursor:pointer"'
+            + ' onmouseover="this.style.background=\'#101216\'" onmouseout="this.style.background=\'\'">'
+            + '<div style="width:30px;height:30px;border-radius:50%;background:'+col+';color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">'
+            +   name[0].toUpperCase()
+            + '</div>'
+            + '<div style="font-size:13px;font-weight:600;color:#eef1f5">'+_esc(name)+'</div>'
+            + '</div>';
         }).join('');
-      }).catch(function(){el.innerHTML='';});
-  },300);
+      }).catch(function(){ el.innerHTML = ''; });
+  }, 300);
 }
 
-document.getElementById('searchUser').addEventListener('input',function(){
-  if(this.value.length<2) return
-  fetch('/api/user/find?q='+encodeURIComponent(this.value))
-  .then(r=>r.json()).then(d=>{
-    document.getElementById('searchResults').innerHTML=d.wallet?
-    `<div onclick="window.location='/messages/${d.wallet}'" style="padding:10px;background:#101216;border-radius:8px;cursor:pointer">${d.wallet.slice(0,12)}...</div>`
-    :'<div style="color:#565d68;font-size:13px">No user found</div>'
-  })
-})
+/* ── SIDEBAR PROFILE ── */
+(function _loadSbProfile() {
+  fetch('/api/me').then(function(r){ return r.json(); }).then(function(d) {
+    if (!d.ok && !d.wallet) return;
+    var w = d.wallet || '';
+    var ini = document.getElementById('sb-avatar-ini');
+    var name = document.getElementById('sb-user-name');
+    var handle = document.getElementById('sb-handle');
+    var sol = document.getElementById('sb-sol');
+    if (ini) ini.textContent = (d.username || w)[0].toUpperCase();
+    if (name) name.textContent = d.username || _short(w);
+    if (handle) handle.textContent = d.username ? '@'+d.username : _short(w);
+    if (sol && d.balance != null) sol.textContent = parseFloat(d.balance).toFixed(3);
+    if (d.avatar) {
+      var img = document.getElementById('sb-avatar-img');
+      if (img) { img.src = d.avatar; img.style.display = ''; }
+    }
+  }).catch(function(){});
+})();
 
 /* ── INIT ── */
 loadConversations();
