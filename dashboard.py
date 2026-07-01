@@ -4162,6 +4162,7 @@ def settings_save():
 
 # ── WALLET KEY MANAGEMENT ──
 @app.route('/api/wallet/set-key', methods=['POST'])
+@csrf_exempt
 @rate_limit(5, 60)
 def wallet_set_key():
     ip = request.remote_addr or '0.0.0.0'

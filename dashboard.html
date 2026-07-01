@@ -3055,28 +3055,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
 
     <div class="ob-step" id="step-1">
-      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:.85rem">Step 2 — Setup Guide</div>
-      <div class="sg-list">
-        <div class="sg-item">
-          <div class="sg-num">1</div>
-          <div><span class="sg-label">Create a dedicated trading wallet</span>Never use your main wallet. Make a separate one in Phantom or Solflare just for the bot.</div>
-        </div>
-        <div class="sg-item">
-          <div class="sg-num">2</div>
-          <div><span class="sg-label">Fund it with SOL</span>Send at least 0.1 SOL to the trading wallet. The bot trades directly with SOL.</div>
-        </div>
-        <div class="sg-item">
-          <div class="sg-num">3</div>
-          <div><span class="sg-label">Add your trading key in Settings</span>Open ⚙ Settings and paste the private key of the trading wallet. It is double-encrypted before storage.</div>
-        </div>
-        <div class="sg-item">
-          <div class="sg-num">4</div>
-          <div><span class="sg-label">Start Trading</span>Hit the START TRADING button. The bot scans every 30s for ≥5% momentum and exits at TP +12% or SL -3% — 100% of position every time.</div>
-        </div>
-      </div>
-      <div class="sg-warn">⚠ Only paste the private key of a dedicated trading wallet — never your main wallet's key.</div>
-      <button class="ob-btn" id="ob-launch-btn" style="background:var(--green);color:#ffffff;font-weight:900" onclick="_launchWithTimeout()">Launch OrcAgent ▶</button>
-      <button class="ob-btn btn-skip" onclick="currentStep=0;showStep(0)">← Back</button>
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:.6rem">Step 2 — Enable Bot Trading</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:.75rem;line-height:1.6;text-align:left">Paste your <strong style="color:var(--text)">dedicated trading wallet's</strong> private key. It is double-encrypted before storage and never shared.</p>
+      <div class="sg-warn">⚠ Never use your main wallet key — create a separate wallet just for the bot.</div>
+      <textarea id="ob-privkey" rows="3" placeholder="Paste base58 private key…" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--text);outline:none;resize:none;margin-bottom:4px;box-sizing:border-box;line-height:1.5;transition:border-color .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"></textarea>
+      <div id="ob-key-err" style="font-size:10px;color:var(--red);min-height:14px;margin-bottom:8px;text-align:left"></div>
+      <button class="ob-btn" id="ob-save-key-btn" onclick="_obSaveKey()" style="background:var(--green);color:#fff;font-weight:900">Save Key &amp; Launch ▶</button>
+      <button class="ob-btn btn-skip" onclick="_obSkipKey()">Skip for now — add later in Settings</button>
     </div>
 
   </div>
@@ -3580,6 +3565,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- ── MESSAGES VIEW ── -->
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main" class="dash-section" style="display:block !important">
+
+  <!-- ⚠ No-key banner: shown when wallet connected but no private key saved -->
+  <div id="welcome-banner" class="welcome-banner hide" style="margin:12px 20px 0;border-radius:10px;background:rgba(247,185,85,.07);border:1px solid rgba(247,185,85,.25);color:var(--text)">
+    <span style="font-size:16px;flex-shrink:0;line-height:1.4">⚠️</span>
+    <div style="flex:1;line-height:1.55">
+      <strong>Add a private key to enable bot trading</strong><br>
+      <span style="color:var(--muted)">Open <button onclick="openSettings()" style="background:none;border:none;color:var(--accent);cursor:pointer;font-size:11px;padding:0;font-family:inherit;text-decoration:underline;text-underline-offset:2px">⚙ Settings</button> and paste your trading wallet's private key so the bot can execute trades.</span>
+    </div>
+    <button onclick="dismissWelcome()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;line-height:1;flex-shrink:0;align-self:flex-start" title="Dismiss">✕</button>
+  </div>
 
   <!-- FEED STICKY HEADER — backdrop-filter blur, title 20px/600, LIVE dot right -->
   <div class="feed-hdr">
@@ -4806,7 +4801,10 @@ async function connectWalletOnboard(type){
     const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).then(x=>x.json()).catch(()=>null);
     if(r?.csrf_token) _csrfToken=r.csrf_token;
     settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false; _updateKeyStatus();
-    if(r?.success){ window.location.href='/dashboard'; return; }
+    if(r?.success){
+      if(r.has_trading_key){ await launchApp(); return; }
+      gotoSetupGuide(); return;
+    }
   }catch(e){
     msgEl.textContent='Connection rejected or failed — please try again.';
     msgEl.style.display='block';
@@ -4824,6 +4822,40 @@ function resetWallet(){
   const cb=document.getElementById('step1-continue-btn');
   cb.disabled=true; cb.style.cssText='background:var(--border2);color:var(--muted);cursor:not-allowed;opacity:.5';
   document.getElementById('wallet-back-btn').style.display='none';
+}
+
+// ── ONBOARDING: key entry step ──
+async function _obSaveKey(){
+  const ta=document.getElementById('ob-privkey');
+  const errEl=document.getElementById('ob-key-err');
+  const btn=document.getElementById('ob-save-key-btn');
+  const key=(ta?ta.value:'').trim();
+  if(!key){ if(errEl) errEl.textContent='Please paste your private key.'; return; }
+  if(errEl) errEl.textContent='';
+  const origText=btn.textContent; btn.textContent='Saving…'; btn.disabled=true;
+  try{
+    const r=await fetch('/api/wallet/set-key',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      body:JSON.stringify({private_key:key})
+    }).then(x=>x.json()).catch(()=>null);
+    if(r?.ok){
+      settingsHasKey=true; _updateKeyStatus();
+      await launchApp();
+    } else {
+      if(errEl) errEl.textContent=r?.msg||'Invalid key — check format and try again.';
+      btn.textContent=origText; btn.disabled=false;
+    }
+  }catch(e){
+    if(errEl) errEl.textContent='Network error — please try again.';
+    btn.textContent=origText; btn.disabled=false;
+  }
+}
+
+function _obSkipKey(){
+  launchApp();
+  setTimeout(function(){ _checkWelcomeBanner(); }, 400);
 }
 
 function skipToApp(){
@@ -6678,8 +6710,8 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
     return;
   }
 
-  // No wallet detected — launchApp restores from Flask session cookie or shows connect screen
-  await launchApp();
+  // No wallet detected — leave onboarding visible so user can connect
+  // (skipToApp() is still available for browse-without-connecting)
 })();
 
 // ── SETTINGS MODAL ──
