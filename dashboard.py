@@ -90,6 +90,13 @@ def _refresh_session():
 # cannot require a session-scoped CSRF token. Origin check still protects it.
 _CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade', '/api/phantom/init', '/api/phantom/decrypt', '/api/wallet/send'})
 
+def csrf_exempt(f):
+    """Decorator: mark a view function as exempt from CSRF token validation.
+    Origin and client-secret checks in _csrf_check() still apply.
+    Use on API routes whose callers cannot forward the session CSRF token."""
+    f._csrf_exempt = True
+    return f
+
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
     if 'csrf_token' not in session:
@@ -111,6 +118,10 @@ def _csrf_check():
     # These routes either bootstrap auth (no session yet) or handle their own
     # auth/CORS (instant-trade has its own CORS after_request + session wallet check).
     if request.path in _CSRF_EXEMPT_PATHS:
+        return None
+    # Function-level exemption via @csrf_exempt decorator
+    _ep = app.view_functions.get(request.endpoint)
+    if _ep and getattr(_ep, '_csrf_exempt', False):
         return None
     # ── 0. Shared client secret (only enforced if X_CLIENT_SECRET is configured) ──
     if X_CLIENT_SECRET:
@@ -3226,6 +3237,7 @@ def api_copy_trade_stop():
 
 
 @app.route('/api/copy-trade/toggle', methods=['POST'])
+@csrf_exempt
 @rate_limit(20, 60)
 def api_copy_trade_toggle():
     wallet = _current_wallet()
@@ -4061,6 +4073,7 @@ def save_settings():
 
 # ── SETTINGS/GET + SETTINGS/SAVE (per-user strategy + prefs) ──
 @app.route('/api/settings/get', methods=['GET'])
+@csrf_exempt
 @rate_limit(60, 60)
 def settings_get():
     wallet = _current_wallet()
@@ -4097,6 +4110,7 @@ def settings_get():
     })
 
 @app.route('/api/settings/save', methods=['POST'])
+@csrf_exempt
 @rate_limit(20, 60)
 def settings_save():
     wallet = _current_wallet()
@@ -4449,6 +4463,7 @@ def wallet_activity():
 
 
 @app.route('/api/wallet/send', methods=['POST'])
+@csrf_exempt
 @rate_limit(3, 60)
 def wallet_send():
     wallet = _current_wallet()
@@ -4969,6 +4984,7 @@ def feed_post_delete(post_id):
         conn.close()
 
 @app.route('/api/post/<int:post_id>/edit', methods=['POST'])
+@csrf_exempt
 @rate_limit(20, 60)
 def feed_post_edit(post_id):
     wallet = _current_wallet()
@@ -4994,6 +5010,7 @@ def feed_post_edit(post_id):
         conn.close()
 
 @app.route('/api/post/<int:post_id>/delete', methods=['POST'])
+@csrf_exempt
 @rate_limit(20, 60)
 def feed_post_delete_v2(post_id):
     wallet = _current_wallet()
@@ -5419,6 +5436,7 @@ def toggle_follow(target_id: int):
 
 
 @app.route('/api/follow/toggle', methods=['POST'])
+@csrf_exempt
 @rate_limit(60, 60)
 def follow_toggle_by_wallet():
     """Wallet-address-based follow toggle used by traders.html."""
