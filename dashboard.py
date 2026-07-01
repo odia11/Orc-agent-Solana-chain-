@@ -3521,6 +3521,21 @@ def wallet_page():
         return f'<h1>Wallet Error: {str(e)}</h1>', 500
 
 
+@app.route('/settings')
+def settings_page():
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/')
+    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    return render_template(
+        'settings.html',
+        wallet=wallet,
+        wallet_short=wallet_short,
+        is_admin=_is_owner(wallet),
+        csrf_token=_get_csrf_token(),
+    )
+
+
 @app.route('/messages')
 def messages_page():
     wallet = _current_wallet()
