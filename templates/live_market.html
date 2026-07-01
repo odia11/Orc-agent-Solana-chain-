@@ -122,22 +122,36 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   .mobile-back-bar{height:52px}
   .lm-tabs{top:52px}
   .lm-back{display:none!important}
+  .lm-amount-wrap{display:none}
+  .lm-table-wrap{margin:8px}
   .col-hide{display:none}
+  /* Fixed column widths — TOKEN gets remaining space */
   .lm-table-scroll{overflow-x:hidden}
   .lm-table{min-width:0;table-layout:fixed;width:100%}
-  .lm-table thead th{font-size:9px;padding:10px 8px;letter-spacing:.04em}
-  .lm-table thead th:last-child,.lm-table tbody td:last-child{width:56px}
-  .lm-table tbody td{padding:0 8px;height:52px;font-size:12px}
-  .lm-tok-logo,.lm-tok-logo-ph{width:30px;height:30px;font-size:9px}
-  .lm-tok-cell{min-width:0}
-  .lm-tok-name{font-size:12px;max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-  .lm-tok-sym{font-size:10px}
-  .lm-btn-trade{min-height:44px;min-width:44px;padding:0 10px;font-size:11px}
+  .th-price,.lm-price-cell{width:84px}
+  .th-chg24,.td-chg24{width:70px}
+  .th-act,.td-act{width:72px}
+  /* Header cells */
+  .lm-table thead th{font-size:9px;padding:8px 5px;letter-spacing:.03em;white-space:nowrap;overflow:hidden;text-align:right}
+  .lm-table thead th:first-child{text-align:left;padding-left:8px}
+  /* Body cells — each clips its own text */
+  .lm-table tbody td{padding:0 5px;height:56px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;text-align:right;vertical-align:middle}
+  .lm-table tbody td:first-child{padding-left:8px;text-align:left}
+  /* Token cell: logo left + name/sym column right */
+  .lm-tok-cell{display:flex;align-items:center;gap:6px;overflow:hidden;min-width:0}
+  .lm-tok-logo,.lm-tok-logo-ph{width:32px;height:32px;font-size:9px;flex-shrink:0;border-radius:8px}
+  .lm-tok-cell>div{overflow:hidden;min-width:0;display:flex;flex-direction:column;gap:1px}
+  .lm-tok-name{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;display:block}
+  .lm-tok-sym{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
+  /* Price cell */
+  .lm-price-cell{font-size:11px;font-weight:700;color:var(--text);text-align:right}
+  /* 24H% cell */
+  .td-chg24{font-size:12px;font-weight:700;text-align:right}
+  /* Trade button */
+  .lm-btn-trade{min-height:44px;width:60px;padding:0;font-size:11px;font-weight:700;border-radius:10px}
+  /* Dropdown */
   .lm-drop-inner{flex-wrap:wrap;gap:6px;padding:8px 10px}
-  .lm-scanning-pill{padding:4px 8px;font-size:9px}
   .lm-scanning-pill .lm-scan-label{display:none}
-  .lm-amount-wrap{display:none}
-  .lm-table-wrap{margin:10px}
 }
 
 ::-webkit-scrollbar{height:4px;width:4px}
@@ -302,7 +316,7 @@ async function _doSearch(q){
 var _THEAD = '<thead><tr>'
   +'<th>TOKEN</th>'
   +'<th class="col-hide">MCAP</th>'
-  +'<th>PRICE</th>'
+  +'<th class="th-price">PRICE</th>'
   +'<th class="col-hide">AGE</th>'
   +'<th class="col-hide">TXNS</th>'
   +'<th class="col-hide">VOLUME</th>'
@@ -310,7 +324,7 @@ var _THEAD = '<thead><tr>'
   +'<th class="col-hide">5M</th>'
   +'<th class="col-hide">1H</th>'
   +'<th class="col-hide">6H</th>'
-  +'<th>24H%</th>'
+  +'<th class="th-chg24">24H%</th>'
   +'<th class="col-hide">LIQUIDITY</th>'
   +'<th class="th-act">TRADE</th>'
   +'</tr></thead>';
@@ -380,7 +394,7 @@ function _rowHtml(p, idx){
     +_chgCell(p.priceChange&&p.priceChange.m5 !=null?p.priceChange.m5 :null,'col-hide')
     +_chgCell(p.priceChange&&p.priceChange.h1 !=null?p.priceChange.h1 :null,'col-hide')
     +_chgCell(p.priceChange&&p.priceChange.h6 !=null?p.priceChange.h6 :null,'col-hide')
-    +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null,'')
+    +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null,'td-chg24')
     +'<td class="col-hide">'+liq+'</td>'
     +'<td class="td-act">'
       +'<button class="lm-btn-trade" onclick="event.stopPropagation();_openBuyDrop('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Trade</button>'
