@@ -180,6 +180,7 @@ SOLANA_RPC_URL   = os.environ.get('SOLANA_RPC_URL', '')   # set in Railway — o
 HELIUS_RPC       = os.environ.get('HELIUS_RPC', '')        # full Helius URL e.g. https://mainnet.helius-rpc.com/?api-key=xxx
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
+ADMIN_WALLET     = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
@@ -4749,6 +4750,54 @@ def feed_post_delete(post_id):
         if not row:
             return jsonify({'ok': False, 'msg': 'Post not found'}), 404
         if row[0] != wallet:
+            return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+        conn.execute('DELETE FROM feed_posts WHERE id=?', (post_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+@app.route('/api/post/<int:post_id>/edit', methods=['POST'])
+@rate_limit(20, 60)
+def feed_post_edit(post_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    content = _sanitize(str(body.get('content', '')))
+    if not content:
+        return jsonify({'ok': False, 'msg': 'Content cannot be empty'}), 400
+    if len(content) > 500:
+        return jsonify({'ok': False, 'msg': 'Too long (max 500 chars)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT wallet FROM feed_posts WHERE id=?', (post_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+        if row[0] != wallet:
+            return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+        conn.execute('UPDATE feed_posts SET content=? WHERE id=?', (content, post_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+@app.route('/api/post/<int:post_id>/delete', methods=['POST'])
+@rate_limit(20, 60)
+def feed_post_delete_v2(post_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    is_admin = (
+        _is_owner(wallet)
+        or hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode())
+    )
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT wallet FROM feed_posts WHERE id=?', (post_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+        if row[0] != wallet and not is_admin:
             return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
         conn.execute('DELETE FROM feed_posts WHERE id=?', (post_id,))
         conn.commit()

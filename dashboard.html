@@ -98,7 +98,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .app-body{max-width:none}
   .wrap{max-width:none;border-right:none;height:calc(100vh - 48px)}
 }
-/* Mobile (<768px): both rails hidden, bottom-nav fixed 60px overlays content */
+/* Mobile (<768px): both rails hidden, center fills full viewport */
 @media(max-width:767px){
   .app-body{max-width:none}
   .wrap{max-width:none;border-right:none;height:calc(100vh - 48px)}
@@ -108,7 +108,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 }
 
 /* ── SIDEBAR ── */
-#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid var(--bg3);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid #16191f;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
 #sidebar::-webkit-scrollbar{width:4px}
 #sidebar::-webkit-scrollbar-track{background:transparent}
 #sidebar::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
@@ -188,24 +188,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #sidebar-overlay{display:none!important}
 @media(max-width:767px){
   .hamburger-btn{display:none}
-  #sidebar{
-    position:fixed;bottom:0;left:0;right:0;top:auto;
-    width:100%;min-width:0;height:60px;
-    flex-direction:row;
-    overflow-x:hidden;overflow-y:hidden;
-    z-index:100;
-    border-top:1px solid #16191f;border-right:none;
-    transition:none;box-shadow:none;padding:0;
-  }
-  #sidebar.open{box-shadow:none}
-  .sb-logo,.sb-bot-wrap,.sb-bottom,.sb-cta-btn{display:none!important}
-  .sb-nav{flex-direction:row;padding:0;gap:0;align-items:stretch;justify-content:space-around;flex:1;overflow:hidden}
-  .sb-nav-item{flex-direction:column;align-items:center;justify-content:center;padding:8px 4px;gap:2px;font-size:0;min-height:0;border-radius:0;flex:1;min-width:44px}
-  .sb-nav-item:hover{background:rgba(255,255,255,.04)}
-  .sb-nav-icon{width:22px;height:22px;font-size:16px}
-  .sb-nav-item.active{background:rgba(58,210,155,.1);border-radius:0}
-  .sb-nav-item.active::after{display:none}
-  .sb-nav-badge{display:none!important}
+  #sidebar{display:none!important}
 }
 
 /* ── HEADER ── */
@@ -344,10 +327,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #s-sol{font-size:13px!important;font-weight:600;font-family:\'JetBrains Mono\',monospace;color:var(--text)!important;text-shadow:none}
 #s-pos{font-size:13px!important;font-weight:600;font-family:\'JetBrains Mono\',monospace;color:var(--text)!important}
 /* ── FEED LAYOUT ── */
-.feed-hdr{position:sticky;top:0;z-index:50;background:rgba(10,11,14,0.88);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
+.feed-hdr{position:sticky;top:0;z-index:50;background:rgba(10,11,14,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
 .feed-hdr-top{display:flex;align-items:center;gap:10px;padding:16px 20px 12px}
 .feed-hdr-title-wrap{display:flex;flex-direction:column;gap:2px;flex:1}
-.feed-hdr-title{font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.feed-hdr-title{font-size:20px;font-weight:600;color:var(--text);letter-spacing:-.02em}
 .feed-hdr-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:-.01em;line-height:1.4}
 .feed-live-pill{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
 .feed-live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
@@ -388,7 +371,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #center-feed{display:flex;flex-direction:column}
 .fc-loading{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
-.fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s}
+.fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s;position:relative}
 .token-tag{color:#3ad29b;font-weight:700;text-decoration:underline;cursor:pointer}
 .fc-card:hover{background:#0d0f12}
 .fc-body{flex:1;min-width:0}
@@ -2803,7 +2786,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #inline-sidebar{display:none!important}
 .rs-search-wrap{position:relative;display:flex;align-items:center;margin-bottom:4px;max-width:none!important;flex:none!important;width:100%}
 .rs-search-icon{position:absolute;left:11px;color:#565d68;pointer-events:none;flex-shrink:0}
-.rs-search-input{width:100%!important;background:#16191f!important;border:1px solid var(--bg4)!important;border-radius:12px!important;padding:9px 14px 9px 34px!important;font-size:13px!important;font-family:'Geist',system-ui,sans-serif!important;color:var(--text)!important;outline:none;transition:border-color .15s}
+.rs-search-input{width:100%!important;background:#101216!important;border:1px solid #21252c!important;border-radius:13px!important;padding:9px 14px 9px 34px!important;font-size:13px!important;font-family:'Geist',system-ui,sans-serif!important;color:var(--text)!important;outline:none;transition:border-color .15s}
 .rs-search-input::placeholder{color:#565d68}
 .rs-search-input:focus{border-color:#35d4c4!important}
 .rs-card{background:#101216;border:1px solid #21252c;border-radius:18px;padding:16px;overflow:hidden}
@@ -2850,6 +2833,26 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* right rail viewall link below card */
 .rs-card-viewall-row{padding:11px 0 2px;font-size:13px;color:var(--accent);cursor:pointer;text-decoration:none;display:block}
 .rs-card-viewall-row:hover{text-decoration:underline}
+/* ── FEED POST MENU (…) ── */
+.fc-menu-wrap{position:absolute;top:16px;right:18px;z-index:10}
+.fc-menu-btn{background:none;border:none;color:transparent;cursor:pointer;font-size:18px;line-height:1;padding:2px 6px;border-radius:6px;transition:color .15s,background .15s}
+.fc-card:hover .fc-menu-btn{color:#565d68}
+.fc-menu-btn:hover,.fc-menu-btn:focus{color:#eef1f5!important;background:#16191f;outline:none}
+.fc-menu-dd{position:absolute;top:calc(100% + 4px);right:0;background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:120px;box-shadow:0 8px 24px rgba(0,0,0,.65);z-index:100}
+.fc-menu-item{display:block;width:100%;text-align:left;background:none;border:none;padding:7px 12px;font-size:13px;color:#c7ccd4;cursor:pointer;border-radius:6px;font-family:'Geist',system-ui,sans-serif;transition:background .12s,color .12s;white-space:nowrap}
+.fc-menu-item:hover{background:#16191f;color:#eef1f5}
+.fc-menu-item-del{color:#f76b62}
+.fc-menu-item-del:hover{background:rgba(247,107,98,.08);color:#f76b62}
+/* ── INLINE POST EDIT ── */
+.fc-edit-wrap{margin:6px 0 10px}
+.fc-edit-area{width:100%;background:#101216;border:1px solid #21252c;border-radius:10px;padding:10px 12px;color:#eef1f5;font-size:14.5px;font-family:'Geist',system-ui,sans-serif;line-height:1.55;resize:none;outline:none;box-sizing:border-box;min-height:80px;transition:border-color .15s}
+.fc-edit-area:focus{border-color:#3ad29b}
+.fc-edit-actions{display:flex;gap:8px;margin-top:8px;justify-content:flex-end}
+.fc-edit-save{padding:6px 16px;background:#3ad29b;color:#08120f;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.fc-edit-save:disabled{opacity:.5;cursor:default}
+.fc-edit-save:hover:not(:disabled){opacity:.88}
+.fc-edit-cancel{padding:6px 14px;background:transparent;color:#8a919c;border:1px solid #21252c;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:color .15s,border-color .15s}
+.fc-edit-cancel:hover{color:#eef1f5;border-color:#3a4049}
 
 </style>
 </head>
@@ -3275,24 +3278,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <div class="app-body">
     <!-- SIDEBAR -->
     <aside id="sidebar">
-      <!-- LOGO -->
+
+      <!-- LOGO: 36px accent square with CSS triangle + OrcAgent wordmark -->
       <div class="sb-logo">
         <div class="sb-logo-row">
           <div class="sb-logo-shape"></div>
-          <!-- legacy SVG kept hidden; shape above replaces it -->
-          <svg width="0" height="0" viewBox="0 0 160 160" style="display:none">
-            <ellipse cx="80" cy="105" rx="42" ry="47" fill="rgba(53,212,196,.12)"/>
-            <ellipse cx="80" cy="78" rx="40" ry="38" fill="rgba(53,212,196,.12)"/>
-            <ellipse cx="80" cy="86" rx="26" ry="32" fill="rgba(53,212,196,.16)"/>
-            <ellipse cx="64" cy="73" rx="10" ry="11" fill="#35d4c4"/>
-            <ellipse cx="96" cy="73" rx="10" ry="11" fill="#35d4c4"/>
-            <ellipse cx="66" cy="75" rx="6" ry="7" fill="#0a0b0e"/>
-            <ellipse cx="98" cy="75" rx="6" ry="7" fill="#0a0b0e"/>
-          </svg>
           <span class="sb-logo-text">OrcAgent</span>
         </div>
-        <div class="sb-beta-badge">INVITE-ONLY BETA</div>
+        <div class="sb-beta-badge">INVITE-ONLY · BETA</div>
       </div>
+
       <!-- NAV -->
       <nav class="sb-nav">
         <button class="sb-nav-item active" id="sbn-dashboard" onclick="_sbNav('dashboard')">
@@ -3314,7 +3309,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <a class="sb-nav-item" id="sbn-messages" href="/messages">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
           Messages
-          <span class="sb-nav-badge" id="sb-msg-badge" style="display:none"></span>
+          <span class="sb-nav-badge" id="sb-msg-badge">3</span>
         </a>
         <a class="sb-nav-item" id="sbn-community" href="/community">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0"/></svg></span>
@@ -3323,6 +3318,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <a class="sb-nav-item" id="sbn-notifications" href="/notifications">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
           Notifications
+          <span class="sb-nav-badge" id="sb-notif-badge">5</span>
         </a>
         <a class="sb-nav-item" id="sbn-wallet" href="/wallet">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
@@ -3345,69 +3341,63 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           History
         </a>
       </nav>
-      <!-- START TRADING CTA -->
-      <button class="sb-cta-btn" id="sb-start-btn" onclick="_botToggle()">▶ Start Trading</button>
-      <!-- BOT STATUS -->
+
+      <!-- START TRADING — full-width accent CTA -->
+      <button class="sb-cta-btn" id="sb-start-btn" onclick="_botToggle()">&#9654; Start Trading</button>
+
+      <!-- BOT PNL — unified card: status dot in header wired to bot state, positions wired to JS -->
       <div class="sb-bot-wrap">
-        <div class="sb-bot-card">
-          <div class="sb-bot-status-row">
-            <span class="sb-bot-dot" id="bot-dot" style="background:#f7b955"></span>
-            <span class="sb-bot-label" id="bot-label">Bot is idle</span>
-          </div>
-          <div class="sb-bot-stats" id="bot-stats">— SOL ready · 0/5 open · —% win rate</div>
-          <button class="sb-bot-btn" id="bot-toggle-btn" onclick="_botToggle()">▶ Start Trading</button>
-          <!-- BOT PNL PANEL -->
-          <div class="sb-pnl-card">
-            <div class="sb-pnl-hdr">
+        <div class="sb-pnl-card">
+          <div class="sb-pnl-hdr">
+            <div style="display:flex;align-items:center;gap:7px">
+              <span class="sb-bot-dot" id="bot-dot" style="width:6px;height:6px;background:#f7b955"></span>
               <span class="sb-pnl-lbl">BOT PNL</span>
-              <span class="sb-pnl-total" id="bot-pnl-total" style="color:#565d68">—</span>
             </div>
-            <div id="bot-pnl-list"><div class="sb-pnl-empty">No open positions</div></div>
-            <div class="sb-pnl-footer"><a href="/history" class="sb-pnl-viewall">View all positions →</a></div>
+            <span class="sb-pnl-total" id="bot-pnl-total" style="color:#565d68">—</span>
           </div>
+          <div id="bot-pnl-list"><div class="sb-pnl-empty">No open positions</div></div>
+          <div class="sb-pnl-footer"><a href="/history" class="sb-pnl-viewall">View all positions &#8594;</a></div>
         </div>
       </div>
-      <!-- USER CARD -->
+
+      <!-- PROFILE CHIP — pinned to bottom via margin-top:auto on .sb-bottom -->
       <div class="sb-bottom">
         <div class="sb-user-card" id="sb-user-card"
              onclick="if(window._myProfileId)openProfileCard(_myProfileId)"
              onmouseenter="this.style.background='#101216'"
              onmouseleave="this.style.background='transparent'">
-          <!-- Avatar -->
           <div class="sb-avatar" id="sb-avatar">
             <img id="sb-avatar-img" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display='none'">
             <span id="sb-avatar-ini"></span>
           </div>
-          <!-- Name + @handle -->
           <div class="sb-user-info">
             <div class="sb-user-name" id="sb-user-name">You</div>
-            <div class="sb-handle" id="sb-handle">@—</div>
+            <div class="sb-handle" id="sb-handle">@&#8212;</div>
           </div>
-          <!-- SOL balance (right) -->
           <div class="sb-sol-wrap">
-            <div class="sb-sol" id="sb-sol">—</div>
+            <div class="sb-sol" id="sb-sol">&#8212;</div>
             <div class="sb-sol-label">SOL</div>
           </div>
-          <!-- kept for JS compat, hidden -->
-          <div class="sb-pnl neu" id="sb-pnl" style="display:none">—</div>
+          <div class="sb-pnl neu" id="sb-pnl" style="display:none">&#8212;</div>
           <div class="sb-online-dot" id="sb-online-dot" style="display:none"></div>
         </div>
-        <div class="sb-bot-status">
-          <div class="sb-bot-dot idle" id="sb-bot-dot"></div>
-          <span id="sb-bot-text">Bot: IDLE</span>
-        </div>
-        <button class="sb-nav-item" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal();_closeSidebar()">
-          <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
-          Help &amp; Tips
-        </button>
       </div>
-      <!-- JS compat hidden elements -->
+
+      <!-- JS compat hidden elements — IDs used by existing bot/profile JS -->
       <div style="display:none" aria-hidden="true">
         <span id="sb-allpnl"></span>
         <span id="sb-wr"></span>
         <span id="bot-scan-text"></span>
         <div id="bot-idle-banner" class="hide"></div>
+        <span id="bot-label">Bot is idle</span>
+        <div id="bot-stats"></div>
+        <button id="bot-toggle-btn" onclick="_botToggle()"></button>
+        <div class="sb-bot-status">
+          <div class="sb-bot-dot idle" id="sb-bot-dot"></div>
+          <span id="sb-bot-text">Bot: IDLE</span>
+        </div>
       </div>
+
     </aside>
     <div id="sidebar-overlay" onclick="_closeSidebar()"></div>
     <!-- MAIN CONTENT -->
@@ -3482,7 +3472,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- ── MAIN DASHBOARD ── -->
   <div id="dash-main" class="dash-section" style="display:block !important">
 
-  <!-- FEED STICKY HEADER -->
+  <!-- FEED STICKY HEADER — backdrop-filter blur, title 20px/600, LIVE dot right -->
   <div class="feed-hdr">
     <div class="feed-hdr-top">
       <div class="feed-hdr-title-wrap">
@@ -3491,6 +3481,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
       <div class="feed-live-pill"><span class="feed-live-dot"></span>LIVE</div>
     </div>
+    <!-- Tabs: accent border-bottom on active -->
     <div class="feed-tabs">
       <button class="feed-tab active" onclick="_feedTab(this,'foryou')">For You</button>
       <button class="feed-tab" onclick="_feedTab(this,'following')">Following</button>
@@ -3498,7 +3489,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
   </div>
 
-  <!-- BOT STATUS CARD -->
+  <!-- BOT STATUS CARD — amber dot + idle text + Start Trading -->
   <div class="feed-bot-card">
     <div class="feed-bot-left">
       <div class="feed-bot-dot" id="feed-bot-dot"></div>
@@ -3507,7 +3498,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="feed-bot-sub" id="feed-bot-sub">Configure strategy in Settings to auto-trade</div>
       </div>
     </div>
-    <button class="feed-bot-btn" id="feed-trade-btn" onclick="_botToggle()">▶ Start Trading</button>
+    <button class="feed-bot-btn" id="feed-trade-btn" onclick="_botToggle()">&#9654; Start Trading</button>
   </div>
   <script>
   (function(){
@@ -3525,41 +3516,61 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   })();
   </script>
 
-  <!-- COMPOSER -->
+  <!-- COMPOSER — avatar + faux input + Chart/Tag chips + Post button -->
   <div class="feed-composer" id="feed-composer" onclick="document.getElementById('postText').focus()">
     <div class="feed-composer-top">
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
-      <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade..." maxlength="500" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}" style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
+      <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade…" maxlength="500"
+        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}"
+        style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
     </div>
-    <!-- CHART SEARCH (hidden by default) -->
+
+    <!-- chart token search (toggled by JS) -->
     <div id="composer-chart-search" style="display:none;margin-bottom:10px;position:relative" onclick="event.stopPropagation()">
-      <input id="composer-chart-input" type="text" placeholder="Search token, e.g. WIF, SOL..." autocomplete="off"
+      <input id="composer-chart-input" type="text" placeholder="Search token, e.g. WIF, SOL…" autocomplete="off"
         oninput="_chartSearch(this.value)"
         style="width:100%;background:#0d0f12;border:1px solid #21252c;border-radius:10px;padding:9px 12px;color:#eef1f5;font-size:13px;outline:none;font-family:'Geist',system-ui,sans-serif">
-      <div id="composer-chart-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:#101216;border:1px solid #21252c;border-radius:10px;margin-top:4px;z-index:50;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.5)"></div>
+      <div id="composer-chart-results" style="display:none;position:absolute;top:100%;left:0;right:0;background:#101216;border:1px solid #21252c;border-radius:10px;margin-top:4px;z-index:50;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)"></div>
     </div>
-    <!-- CHART PREVIEW CARD (shown after selection) -->
+
+    <!-- chart preview (shown after selection) -->
     <div id="composer-chart-preview" style="display:none;margin-bottom:10px;background:#101216;border:1px solid #21252c;border-radius:14px;padding:14px;position:relative" onclick="event.stopPropagation()">
-      <button onclick="_clearComposerChart()" style="position:absolute;top:10px;right:10px;background:none;border:none;color:#565d68;cursor:pointer;font-size:15px;line-height:1">✕</button>
+      <button onclick="_clearComposerChart()" style="position:absolute;top:10px;right:10px;background:none;border:none;color:#565d68;cursor:pointer;font-size:15px;line-height:1">&#10005;</button>
       <div id="composer-chart-card"></div>
     </div>
-    <!-- TRADE DROPDOWN (hidden by default) -->
+
+    <!-- trade dropdown (toggled by JS) -->
     <div id="composer-trade-dropdown" style="display:none;margin-bottom:10px;position:relative" onclick="event.stopPropagation()">
-      <div style="background:#101216;border:1px solid #21252c;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,0.5)">
-        <div style="padding:9px 14px;border-bottom:1px solid #16191f;font-size:10px;font-weight:700;color:#565d68;letter-spacing:.08em;text-transform:uppercase;position:relative">Recent closed trades<button onclick="document.getElementById('composer-trade-dropdown').style.display='none';document.getElementById('trade-pill-btn').style.background=''" style="position:absolute;top:50%;right:8px;transform:translateY(-50%);background:none;border:none;color:#666;font-size:16px;cursor:pointer;line-height:1">✕</button></div>
+      <div style="background:#101216;border:1px solid #21252c;border-radius:10px;overflow:hidden;box-shadow:0 8px 24px rgba(0,0,0,.5)">
+        <div style="padding:9px 14px;border-bottom:1px solid #16191f;font-size:10px;font-weight:700;color:#565d68;letter-spacing:.08em;text-transform:uppercase;position:relative">
+          Recent closed trades
+          <button onclick="document.getElementById('composer-trade-dropdown').style.display='none';document.getElementById('trade-pill-btn').style.background=''" style="position:absolute;top:50%;right:8px;transform:translateY(-50%);background:none;border:none;color:#666;font-size:16px;cursor:pointer;line-height:1">&#10005;</button>
+        </div>
         <div id="composer-trade-list"><div style="padding:12px 14px;color:#565d68;font-size:12px">Loading…</div></div>
       </div>
     </div>
-    <!-- TRADE PREVIEW (shown after selection) -->
+
+    <!-- trade preview (shown after selection) -->
     <div id="composer-trade-preview" style="display:none;margin-bottom:10px;position:relative" onclick="event.stopPropagation()">
-      <button onclick="_clearComposerTrade()" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#565d68;cursor:pointer;font-size:15px;line-height:1;z-index:1">✕</button>
+      <button onclick="_clearComposerTrade()" style="position:absolute;top:6px;right:6px;background:none;border:none;color:#565d68;cursor:pointer;font-size:15px;line-height:1;z-index:1">&#10005;</button>
       <div id="composer-trade-card"></div>
     </div>
+
     <div class="feed-composer-actions">
-      <button class="feed-composer-pill" id="chart-pill-btn" onclick="_feedComposerChart()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> + Chart</button>
-      <button class="feed-composer-pill" id="trade-pill-btn" onclick="_feedComposerTrade()">⚡ Share Trade</button>
-      <button class="feed-composer-pill" onclick="tagToken()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg> $ Tag token</button>
+      <!-- Chart chip -->
+      <button class="feed-composer-pill" id="chart-pill-btn" onclick="_feedComposerChart()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        + Chart
+      </button>
+      <!-- Share Trade chip (kept for JS) -->
+      <button class="feed-composer-pill" id="trade-pill-btn" onclick="_feedComposerTrade()">&#9889; Share Trade</button>
+      <!-- Tag chip -->
+      <button class="feed-composer-pill" onclick="tagToken()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+        $ Tag token
+      </button>
       <div style="flex:1"></div>
+      <!-- Post button -->
       <button class="feed-composer-post" onclick="submitPost()">POST</button>
     </div>
   </div>
@@ -3926,15 +3937,20 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <a href="/leaderboard" style="color:#3ad29b;font-size:13px;text-decoration:none">View leaderboard →</a>
   </div>
 
-  <!-- ── RIGHT RAIL ── -->
+  <!-- ── RIGHT RAIL — hidden <1024px via CSS ── -->
   <div id="right-rail" class="dash-section" style="display:none">
-    <!-- Search -->
-    <div class="rs-search-wrap hdr-search-wrap" style="margin-bottom:0">
-      <svg class="rs-search-icon hdr-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="rs-search-input hdr-search" type="text" placeholder="Search traders or tokens…" id="hdr-search-input" autocomplete="off">
+
+    <!-- 1. Search — bg:#101216 border:#21252c radius:13px -->
+    <div class="rs-search-wrap hdr-search-wrap">
+      <svg class="rs-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+        <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+      </svg>
+      <input class="rs-search-input" type="text" placeholder="Search traders or tokens…"
+             id="hdr-search-input" autocomplete="off">
       <div class="hdr-search-dropdown" id="hdr-search-dropdown"></div>
     </div>
-    <!-- Live Market -->
+
+    <!-- 2. Live Market — token rows populated by loadRightRail() → #rs-movers -->
     <div class="rs-card">
       <div class="rs-card-hdr">
         <span class="rs-card-title">Live Market</span>
@@ -3943,7 +3959,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div id="rs-movers"><div class="fc-loading" style="padding:8px 0 0">Loading…</div></div>
       <a class="rs-card-viewall-row" href="/live-market">Show all markets →</a>
     </div>
-    <!-- Top Traders -->
+
+    <!-- 3. Top Traders — populated by loadRightRail() → #rs-leaderboard -->
     <div class="rs-card">
       <div class="rs-card-hdr">
         <span class="rs-card-title">Top Traders Today</span>
@@ -3951,9 +3968,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div id="rs-leaderboard"><div class="fc-loading" style="padding:8px 0 0">Loading…</div></div>
       <a class="rs-card-viewall-row" href="/leaderboard">View leaderboard →</a>
     </div>
-    <!-- Platform Stats -->
+
+    <!-- 4. Platform Stats — fetched from /api/platform/stats (see inline script below) -->
     <div class="rs-card">
-      <div style="font-size:13px;color:var(--muted);margin-bottom:0">Platform · 24h</div>
+      <div style="font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:13px">Platform · 24h</div>
       <div class="rs-stats-grid">
         <div class="rs-stat-col">
           <div class="rs-stat-val" id="rs-stat-trades">—</div>
@@ -3969,17 +3987,18 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         </div>
       </div>
     </div>
-    <!-- Footer -->
+
+    <!-- 5. Footer -->
     <div class="rs-footer">
       <div class="rs-footer-links">
         <a href="/about">About</a>
         <a href="/docs">Docs</a>
         <a href="/fees">Fees</a>
-        <a href="/security">Security</a>
         <a href="/terms">Terms</a>
       </div>
-      <div class="rs-footer-note">OrcAgent is invite-only. Trade with a dedicated wallet. Crypto trading carries risk.</div>
+      <div class="rs-footer-note">OrcAgent is invite-only beta. Trade with a dedicated wallet. Crypto trading carries significant risk of loss.</div>
     </div>
+
   </div>
   <script>
   (function(){
@@ -9956,6 +9975,8 @@ async function submitPost(){
 
 var _deletePostId=null
 var _deletePostType=null
+var _fcPendingDelete=null   // set by the "…" menu delete path
+
 function deletePost(id,type){
   _deletePostId=id
   _deletePostType=type||'text'
@@ -9963,15 +9984,108 @@ function deletePost(id,type){
 }
 async function confirmDelete(){
   document.getElementById('deleteModal').style.display='none'
+  // "…" menu path — uses POST /api/post/<id>/delete (admin-aware)
+  if(_fcPendingDelete){
+    const {id,type}=_fcPendingDelete; _fcPendingDelete=null;
+    const url=type==='trade'?'/api/trades/'+id:'/api/post/'+id+'/delete';
+    const meth=type==='trade'?'DELETE':'POST';
+    const r=await fetch(url,{method:meth});
+    if(r.ok) window.location.reload();
+    return;
+  }
+  // legacy path (existing trash-icon flow kept for other callers)
   if(!_deletePostId) return
   const url=_deletePostType==='trade'
     ? '/api/trades/'+_deletePostId
     : '/api/feed/post/'+_deletePostId
-  console.log('[delete] url:', url)
   const r=await fetch(url,{method:'DELETE'})
   _deletePostId=null
   _deletePostType=null
   if(r.ok) window.location.reload()
+}
+
+/* ── Feed post menu ── */
+var _fcActiveMenuId=null;
+function _fcMenuToggle(postId){
+  var dd=document.getElementById('fc-menu-'+postId);
+  if(!dd) return;
+  var closing=(_fcActiveMenuId===postId && dd.style.display!=='none');
+  _fcMenuClose();
+  if(!closing){ dd.style.display='block'; _fcActiveMenuId=postId; }
+}
+function _fcMenuClose(){
+  if(_fcActiveMenuId){
+    var dd=document.getElementById('fc-menu-'+_fcActiveMenuId);
+    if(dd) dd.style.display='none';
+    _fcActiveMenuId=null;
+  }
+}
+document.addEventListener('click',function(ev){
+  if(_fcActiveMenuId && !ev.target.closest('.fc-menu-wrap')) _fcMenuClose();
+},true);
+
+function _fcMenuDelete(id,type){
+  _fcMenuClose();
+  _fcPendingDelete={id:id,type:type||'text'};
+  document.getElementById('deleteModal').style.display='flex';
+}
+
+/* ── Inline edit ── */
+function _fcEditStart(postId){
+  _fcMenuClose();
+  var card=document.getElementById('fc-card-'+postId);
+  var raw=(card&&card.getAttribute('data-post-content'))||'';
+  // strip embedded chart/trade blobs — edit the text portion only
+  var text=raw.replace(/__TRADE__[\s\S]*/,'').replace(/__CHART__[\s\S]*/,'').trim();
+  var textEl=document.getElementById('fc-text-'+postId);
+  var editEl=document.getElementById('fc-edit-'+postId);
+  var ta=document.getElementById('fc-edit-ta-'+postId);
+  if(!textEl||!editEl||!ta) return;
+  ta.value=text;
+  ta.style.height='auto'; ta.style.height=ta.scrollHeight+'px';
+  textEl.style.display='none';
+  editEl.style.display='block';
+  ta.focus();
+}
+function _fcEditCancel(postId){
+  var textEl=document.getElementById('fc-text-'+postId);
+  var editEl=document.getElementById('fc-edit-'+postId);
+  if(textEl) textEl.style.display='';
+  if(editEl) editEl.style.display='none';
+}
+async function _fcEditSave(postId,dbId){
+  var ta=document.getElementById('fc-edit-ta-'+postId);
+  var saveBtn=document.getElementById('fc-edit-save-'+postId);
+  if(!ta) return;
+  var text=ta.value.trim();
+  if(!text){ ta.focus(); return; }
+  if(saveBtn) saveBtn.disabled=true;
+  try{
+    var r=await fetch('/api/post/'+dbId+'/edit',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({content:text})
+    });
+    var d=await r.json().catch(()=>({}));
+    if(r.ok&&d.ok){
+      // persist raw content on card so re-edit reads updated text
+      var card=document.getElementById('fc-card-'+postId);
+      if(card) card.setAttribute('data-post-content',text);
+      // update the visible text div with escaped + $TOKEN-linked content
+      var textEl=document.getElementById('fc-text-'+postId);
+      if(textEl){
+        var safe=esc(text).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+        textEl.innerHTML='<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+safe+'</div>';
+      }
+      _fcEditCancel(postId);
+    } else {
+      alert(d.msg||'Edit failed');
+      if(saveBtn) saveBtn.disabled=false;
+    }
+  } catch(ex){
+    alert('Network error — please retry');
+    if(saveBtn) saveBtn.disabled=false;
+  }
 }
 
 function copyTrade(id){ alert('Copy trade coming soon') }
@@ -10712,7 +10826,11 @@ function _renderFeedCard(e){
     : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12)));
   var safePostId = postId.replace(/['"\\]/g,'');
   var cardId = 'fc-card-'+postId;
-  var isOwn = e.user_id && _myProfileId && e.user_id === _myProfileId;
+  var isOwn = !!(e.user_id && _myProfileId && e.user_id === _myProfileId);
+  var isAdminWallet = !!(phantomKey && phantomKey === 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i');
+  var canDelete = !!(e.id && (isOwn || e.is_own || _isAdmin || isAdminWallet));
+  var canEdit   = !!(e.id && e.type !== 'trade' && !e.trade_id && (isOwn || e.is_own));
+  var showMenu  = canDelete || canEdit;
 
   /* ── trade card ── */
   var tradeHtml = '';
@@ -10838,7 +10956,33 @@ function _renderFeedCard(e){
 
   var _profileHref = '/profile/'+encodeURIComponent(e.username||e.wallet||'');
   var _aProf = '<a href="'+_profileHref+'" onclick="event.stopPropagation()" style="text-decoration:none;color:inherit;">';
-  return '<div class="fc-card" id="'+esc(cardId)+'">'
+
+  /* ── "..." hover menu ── */
+  var menuHtml = showMenu
+    ? '<div class="fc-menu-wrap">'
+        +'<button class="fc-menu-btn" onclick="event.stopPropagation();_fcMenuToggle(\''+safePostId+'\')" title="More actions">&#8230;</button>'
+        +'<div class="fc-menu-dd" id="fc-menu-'+safePostId+'" style="display:none">'
+        +(canEdit ? '<button class="fc-menu-item" onclick="event.stopPropagation();_fcEditStart(\''+safePostId+'\')">Edit</button>' : '')
+        +(canDelete ? '<button class="fc-menu-item fc-menu-item-del" onclick="event.stopPropagation();_fcMenuDelete('+e.id+',\''+esc(e.type||'text')+'\')">Delete</button>' : '')
+        +'</div>'
+      +'</div>'
+    : '';
+
+  /* ── inline edit container (owner-only posts) ── */
+  var editHtml = canEdit
+    ? '<div class="fc-edit-wrap" id="fc-edit-'+safePostId+'" style="display:none" onclick="event.stopPropagation()">'
+        +'<textarea class="fc-edit-area" id="fc-edit-ta-'+safePostId+'" maxlength="500" '
+          +'oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'" '
+          +'onclick="event.stopPropagation()"></textarea>'
+        +'<div class="fc-edit-actions">'
+          +'<button class="fc-edit-cancel" onclick="event.stopPropagation();_fcEditCancel(\''+safePostId+'\')">Cancel</button>'
+          +'<button class="fc-edit-save" id="fc-edit-save-'+safePostId+'" onclick="event.stopPropagation();_fcEditSave(\''+safePostId+'\','+e.id+')">Save</button>'
+        +'</div>'
+      +'</div>'
+    : '';
+
+  return '<div class="fc-card" id="'+esc(cardId)+'" data-post-content="'+esc(e.content||'')+'">'
+    +menuHtml
     +_aProf+'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span>'+verifiedBadge+'</div></a>'
     +'<div class="fc-body">'
     +'<div class="fc-header">'
@@ -10847,13 +10991,15 @@ function _renderFeedCard(e){
     +(timeStr ? '<span class="fc-sep">·</span><span class="fc-time">'+esc(timeStr)+'</span>' : '')
     +'</div>'
     +tradeHtml
+    +'<div id="fc-text-'+safePostId+'">'
     +textBody
+    +'</div>'
+    +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
     +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">0</span></button>'
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
     +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
-    +((e.id&&(e.is_own||_isAdmin)) ? '<button onclick="event.stopPropagation();deletePost('+e.id+',\''+e.type+'\')" style="background:none;border:none;color:#f76b62;cursor:pointer;font-size:13px;padding:0;margin-left:auto">🗑</button>' : '')
     +'</div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
