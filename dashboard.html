@@ -18,12 +18,12 @@
 img{max-width:100%;height:auto}
 :root{
   --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
-  --green:#35d4c4;--green2:#35d4c4;--accent:#35d4c4;
+  --green:#3ad29b;--green2:#3ad29b;--accent:#f7b955;
   --red:#ff4d6a;--yellow:#f5a623;--blue:#4fc3f7;--purple:#ce93d8;
   --text:#eef1f5;--muted:#565d68;--dim:#565d68;
   --border:#16191f;--border2:#21252c;
   --shadow-card:0 2px 12px rgba(0,0,0,.5);--card-radius:16px;
-  --glass-border:#21252c;--green-glow:rgba(53,212,196,.15);
+  --glass-border:#21252c;--green-glow:rgba(247,185,85,.15);
 }
 html,body{height:100%;overflow:hidden;background:var(--bg);font-family:'Geist',system-ui,sans-serif;color:var(--text);font-size:15px;line-height:1.5;letter-spacing:-0.01em;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility}
 body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;background:var(--bg3);z-index:9999;pointer-events:none}
@@ -114,22 +114,22 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #sidebar::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
 .sb-logo{padding:20px 20px 14px;flex-shrink:0}
 .sb-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
-.sb-logo-shape{width:36px;height:36px;min-width:36px;background:#3ad29b;border-radius:11px;display:flex;align-items:center;justify-content:center}
+.sb-logo-shape{width:36px;height:36px;min-width:36px;background:#f7b955;border-radius:11px;display:flex;align-items:center;justify-content:center}
 .sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
 .sb-logo-text{font-family:'Geist',system-ui,sans-serif;font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
-.sb-beta-badge{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:600;letter-spacing:.14em;color:#3ad29b;background:rgba(58,210,155,.1);border:1px solid rgba(58,210,155,.3);border-radius:7px;padding:5px 9px}
-.sb-beta-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+.sb-beta-badge{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:600;letter-spacing:.14em;color:#f7b955;background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.3);border-radius:7px;padding:5px 9px}
+.sb-beta-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#f7b955;flex-shrink:0}
 .sb-nav{flex:1;padding:8px 12px;display:flex;flex-direction:column;gap:1px}
 .sb-nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:500;color:#8a919c;cursor:pointer;transition:background .15s,color .15s;text-decoration:none;border:none;background:transparent;width:100%;text-align:left;border-radius:11px;box-sizing:border-box;position:relative}
 .sb-nav-item:hover{background:#14171c;color:#eef1f5}
-.sb-nav-item.active{background:rgba(58,210,155,.1);color:#eef1f5;font-weight:600;border-radius:11px}
-.sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+.sb-nav-item.active{background:rgba(247,185,85,.12);color:#eef1f5;font-weight:600;border-radius:11px}
+.sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:#f7b955;flex-shrink:0}
 .sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
-.sb-nav-badge{margin-left:auto;background:#3ad29b;color:#08120f;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
+.sb-nav-badge{margin-left:auto;background:#f7b955;color:#0a0b0e;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
 
-.sb-cta-btn{display:block;width:calc(100% - 24px);margin:4px 12px 0;padding:13px;background:#35d4c4;color:#06100f;border:none;border-radius:13px;font-family:'Geist',system-ui,sans-serif;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s,background .2s;text-align:center}
+.sb-cta-btn{display:block;width:calc(100% - 24px);margin:4px 12px 0;padding:13px;background:#f7b955;color:#0a0b0e;border:none;border-radius:13px;font-family:'Geist',system-ui,sans-serif;font-size:15px;font-weight:700;cursor:pointer;letter-spacing:.01em;transition:opacity .15s,background .2s;text-align:center}
 .sb-cta-btn:hover{opacity:.88}
-.sb-cta-btn.stop{background:#1a2a22;color:#3ad29b;border:1px solid rgba(58,210,155,.2)}
+.sb-cta-btn.stop{background:#201a0a;color:#f7b955;border:1px solid rgba(247,185,85,.2)}
 .sb-cta-btn.stop:hover{background:#1f3328}
 /* ── bot status card ── */
 .sb-bot-wrap{padding:10px 12px 4px;flex-shrink:0}
@@ -145,8 +145,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   transition:background .15s,color .15s,border-color .15s;
 }
 .sb-bot-btn:hover{background:#14171c;color:#eef1f5;border-color:#21252c}
-.sb-bot-btn.running{background:rgba(58,210,155,.08);color:#3ad29b;border-color:rgba(58,210,155,.25)}
-.sb-bot-btn.running:hover{background:rgba(58,210,155,.14)}
+.sb-bot-btn.running{background:rgba(247,185,85,.08);color:#f7b955;border-color:rgba(247,185,85,.25)}
+.sb-bot-btn.running:hover{background:rgba(247,185,85,.14)}
 .sb-pnl-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:12px;margin-top:8px}
 .sb-pnl-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
 .sb-pnl-lbl{font-size:10px;font-weight:700;color:#565d68;letter-spacing:.1em}
@@ -161,7 +161,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-pnl-sol{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:10px;color:#565d68;margin-top:1px}
 .sb-pnl-empty{font-size:11px;color:#565d68;text-align:center;padding:8px 0}
 .sb-pnl-footer{margin-top:10px;text-align:center}
-.sb-pnl-viewall{font-size:11px;color:#35d4c4;text-decoration:none;font-weight:600}
+.sb-pnl-viewall{font-size:11px;color:#f7b955;text-decoration:none;font-weight:600}
 .sb-pnl-viewall:hover{text-decoration:underline}
 
 .sb-bottom{padding:12px;border-top:1px solid var(--bg3);flex-shrink:0;margin-top:auto}
@@ -342,7 +342,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-bot-card{margin:16px 22px 0;background:#101216;border:1px solid #21252c;border-radius:16px;padding:15px 17px;display:flex;align-items:center;justify-content:space-between;gap:14px}
 .feed-bot-left{display:flex;align-items:center;gap:10px;flex:1;min-width:0}
 .feed-bot-dot{width:9px;height:9px;min-width:9px;border-radius:50%;background:#f7b955;box-shadow:0 0 0 4px rgba(247,185,85,.14);flex-shrink:0;transition:background .3s,box-shadow .3s}
-.feed-bot-dot.running{background:var(--accent);box-shadow:0 0 0 4px rgba(53,212,196,.14);animation:orcaBlink 1.2s infinite}
+.feed-bot-dot.running{background:var(--accent);box-shadow:0 0 0 4px rgba(247,185,85,.14);animation:orcaBlink 1.2s infinite}
 .feed-bot-text-wrap{display:flex;flex-direction:column;gap:3px;min-width:0}
 .feed-bot-status-text{font-size:14px;font-weight:600;color:var(--text)}
 .feed-bot-sub{font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -350,7 +350,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-bot-stat{display:flex;flex-direction:column;align-items:center;gap:1px}
 .feed-bot-stat-lbl{font-size:9px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
 .feed-bot-stat-val{font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:600;color:var(--text)}
-.feed-bot-btn{padding:10px 16px;background:#3ad29b;color:#08120f;border:none;border-radius:11px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s;flex-shrink:0}
+.feed-bot-btn{padding:10px 16px;background:#f7b955;color:#0a0b0e;border:none;border-radius:11px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:700;cursor:pointer;white-space:nowrap;transition:opacity .15s;flex-shrink:0}
 .feed-bot-btn:hover:not(:disabled){opacity:.88}
 .feed-bot-btn:disabled{opacity:.4;cursor:not-allowed}
 .feed-bot-btn.stop{background:var(--red);color:#fff}
@@ -364,7 +364,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-composer-actions{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--bg3)}
 .feed-composer-pill{display:flex;align-items:center;gap:5px;padding:6px 11px;background:transparent;border:1px solid #21252c;border-radius:9px;font-size:12px;font-weight:500;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,border-color .15s}
 .feed-composer-pill:hover{background:#16191f;border-color:#2d333c;color:#eef1f5}
-.feed-composer-post{padding:8px 18px;background:#3ad29b;color:#08120f;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.feed-composer-post{padding:8px 18px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .feed-composer-post:hover{opacity:.88}
 @media(max-width:600px){.feed-bot-card{margin:12px 12px 0;gap:10px}}
 /* ── FEED CARDS ── */
@@ -372,7 +372,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-loading{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s;position:relative}
-.token-tag{color:#3ad29b;font-weight:700;text-decoration:underline;cursor:pointer}
+.token-tag{color:#f7b955;font-weight:700;text-decoration:underline;cursor:pointer}
 .fc-card:hover{background:#0d0f12}
 .fc-body{flex:1;min-width:0}
 .fc-header{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
@@ -388,7 +388,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-trade-token-row{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
 .fc-token-name{font-family:\'JetBrains Mono\',monospace;font-size:15px;font-weight:700}
 .fc-trade-badge{font-size:10px;font-weight:600;border:1px solid #21252c;border-radius:5px;padding:2px 6px;flex-shrink:0}
-.fc-trade-badge.long{color:#3ad29b;border-color:rgba(58,210,155,.3)}
+.fc-trade-badge.long{color:#f7b955;border-color:rgba(247,185,85,.3)}
 .fc-trade-badge.stop-loss{color:#f76b62;border-color:rgba(247,107,98,.3)}
 .fc-trade-badge.live{color:#f7b955;border-color:rgba(247,185,85,.3);animation:badge-live 1.8s ease-in-out infinite}
 @keyframes badge-live{0%,100%{opacity:1}50%{opacity:.6}}
@@ -408,8 +408,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-action:hover{color:#eef1f5}
 .fc-action.liked{color:var(--red)!important}
 .fc-action.liked:hover{color:var(--red)!important}
-.fc-action.copy{color:#3ad29b!important}
-.fc-action.copied{color:#3ad29b!important;cursor:default}
+.fc-action.copy{color:#f7b955!important}
+.fc-action.copied{color:#f7b955!important;cursor:default}
 .fc-reply-box{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .2s ease,padding .2s ease}
 .fc-reply-box.open{max-height:120px;padding:0 22px 14px}
 .fc-reply-inner{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--bg3)}
@@ -2788,7 +2788,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .rs-search-icon{position:absolute;left:11px;color:#565d68;pointer-events:none;flex-shrink:0}
 .rs-search-input{width:100%!important;background:#101216!important;border:1px solid #21252c!important;border-radius:13px!important;padding:9px 14px 9px 34px!important;font-size:13px!important;font-family:'Geist',system-ui,sans-serif!important;color:var(--text)!important;outline:none;transition:border-color .15s}
 .rs-search-input::placeholder{color:#565d68}
-.rs-search-input:focus{border-color:#35d4c4!important}
+.rs-search-input:focus{border-color:#f7b955!important}
 .rs-card{background:#101216;border:1px solid #21252c;border-radius:18px;padding:16px;overflow:hidden}
 .rs-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .rs-card-title{font-size:14px;font-weight:700;color:var(--text)}
@@ -2816,8 +2816,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .rs-lb-handle{font-size:11px;color:var(--muted)}
 .rs-lb-pnl{font-family:\'JetBrains Mono\',monospace;font-size:12px;font-weight:700;flex-shrink:0}
 /* live pill */
-.rs-live-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;letter-spacing:.1em;color:#3ad29b}
-.rs-live-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;animation:orcaBlink 1.6s infinite;flex-shrink:0}
+.rs-live-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:600;letter-spacing:.1em;color:#f7b955}
+.rs-live-dot{width:6px;height:6px;border-radius:50%;background:#f7b955;animation:orcaBlink 1.6s infinite;flex-shrink:0}
 /* platform stats card */
 .rs-stats-grid{display:flex;justify-content:space-between;gap:8px;margin-top:13px}
 .rs-stat-col{display:flex;flex-direction:column;gap:3px}
@@ -2846,9 +2846,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* ── INLINE POST EDIT ── */
 .fc-edit-wrap{margin:6px 0 10px}
 .fc-edit-area{width:100%;background:#101216;border:1px solid #21252c;border-radius:10px;padding:10px 12px;color:#eef1f5;font-size:14.5px;font-family:'Geist',system-ui,sans-serif;line-height:1.55;resize:none;outline:none;box-sizing:border-box;min-height:80px;transition:border-color .15s}
-.fc-edit-area:focus{border-color:#3ad29b}
+.fc-edit-area:focus{border-color:#f7b955}
 .fc-edit-actions{display:flex;gap:8px;margin-top:8px;justify-content:flex-end}
-.fc-edit-save{padding:6px 16px;background:#3ad29b;color:#08120f;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.fc-edit-save{padding:6px 16px;background:#f7b955;color:#0a0b0e;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .fc-edit-save:disabled{opacity:.5;cursor:default}
 .fc-edit-save:hover:not(:disabled){opacity:.88}
 .fc-edit-cancel{padding:6px 14px;background:transparent;color:#8a919c;border:1px solid #21252c;border-radius:8px;font-size:13px;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:color .15s,border-color .15s}
@@ -3044,7 +3044,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <button class="s-save" id="s-save-btn" onclick="saveSettings()" disabled>SAVE SETTINGS</button>
 
     <!-- Face ID setup prompt — revealed after private key is saved -->
-    <div id="s-faceid-prompt" style="display:none;margin-top:14px;padding:14px 16px;background:rgba(53,212,196,.07);border:1px solid rgba(53,212,196,.22);border-radius:10px">
+    <div id="s-faceid-prompt" style="display:none;margin-top:14px;padding:14px 16px;background:rgba(247,185,85,.07);border:1px solid rgba(247,185,85,.22);border-radius:10px">
       <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Login faster with Face ID?</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">Next time, just scan your face — no wallet needed.</div>
       <div style="display:flex;gap:8px">
@@ -3929,12 +3929,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   <!-- INLINE RIGHT SIDEBAR -->
   <div id="inline-sidebar" style="width:280px;border-left:1px solid #16191f;padding:16px;flex-shrink:0">
-    <div style="font-size:16px;font-weight:600;margin-bottom:12px">Live Market <span style="color:#3ad29b;font-size:11px;font-weight:600;background:rgba(58,210,155,0.1);padding:3px 8px;border-radius:6px">● PUMPING</span></div>
+    <div style="font-size:16px;font-weight:600;margin-bottom:12px">Live Market <span style="color:#f7b955;font-size:11px;font-weight:600;background:rgba(247,185,85,0.1);padding:3px 8px;border-radius:6px">● PUMPING</span></div>
     <div id="sidebar-market"></div>
-    <a href="/live-market" style="color:#3ad29b;font-size:13px;text-decoration:none">Show all markets →</a>
+    <a href="/live-market" style="color:#f7b955;font-size:13px;text-decoration:none">Show all markets →</a>
     <div style="font-size:16px;font-weight:600;margin:20px 0 12px">Top Traders - Today</div>
     <div id="sidebar-traders"></div>
-    <a href="/leaderboard" style="color:#3ad29b;font-size:13px;text-decoration:none">View leaderboard →</a>
+    <a href="/leaderboard" style="color:#f7b955;font-size:13px;text-decoration:none">View leaderboard →</a>
   </div>
 
   <!-- ── RIGHT RAIL — hidden <1024px via CSS ── -->
@@ -7132,7 +7132,7 @@ function _sbUpdateUser(profileData){
     } else {
       var _ini=((uname||phantomKey||'?')[0]||'?').toUpperCase();
       _ca.textContent=_ini;
-      _ca.style.cssText='width:44px;height:44px;border-radius:50%;background:#35d4c4;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#000;flex-shrink:0';
+      _ca.style.cssText='width:44px;height:44px;border-radius:50%;background:#f7b955;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#0a0b0e;flex-shrink:0';
     }
   }
   const pnlEl=document.getElementById('sb-pnl');
@@ -9922,7 +9922,7 @@ function tagToken(){
           const el=document.getElementById('tokenResults')
           el.innerHTML=d.length?d.map(t=>`
           <div onclick="selectToken('${t.symbol}')" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;background:#0a0b0e;margin-top:4px">
-            <span style="color:#3ad29b;font-weight:700">$${t.symbol}</span>
+            <span style="color:#f7b955;font-weight:700">$${t.symbol}</span>
           </div>`).join(''):'<div style="color:#565d68;padding:10px">No tokens found</div>'
         })
       })
@@ -9936,7 +9936,7 @@ function searchToken(q){
   .then(r=>r.json()).then(d=>{
     document.getElementById('tokenResults').innerHTML=d.length?
     d.map(t=>`<div onclick="selectToken('${t.symbol}','${t.mint}')" style="padding:10px;cursor:pointer;border-bottom:1px solid #16191f">
-      <div style="color:#3ad29b;font-weight:700">$${t.symbol}</div>
+      <div style="color:#f7b955;font-weight:700">$${t.symbol}</div>
       <div style="color:#565d68;font-size:11px;font-family:monospace">${t.mint}</div>
     </div>`).join('')
     :'<div style="color:#565d68;padding:10px">No tokens found</div>'
@@ -10179,7 +10179,7 @@ function _renderTradeTerminalCard(t){
     +dur
     +'</div>'
     +'<div style="color:#8a919c;font-size:11px;margin-bottom:5px">$'+esc(String(t.entry_price||entryN||'—'))+' → $'+esc(String(t.exit_price||exitN||'—'))+'</div>'
-    +'<div style="color:#35d4c4;font-size:12px;font-weight:600">'+solStr+'</div>'
+    +'<div style="color:#f7b955;font-size:12px;font-weight:600">'+solStr+'</div>'
     +amtStr
     +'</div>'
     +'<div style="font-size:26px;font-weight:700;color:'+pctCol+';line-height:1;text-align:right;padding-left:14px;align-self:center">'+pctStr+'</div>'
@@ -10338,7 +10338,7 @@ function _attachChartEmbed(idx){
     pairAddress: p.pairAddress||''
   };
   document.getElementById('composer-chart-search').style.display = 'none';
-  document.getElementById('chart-pill-btn').style.background = '#3ad29b22';
+  document.getElementById('chart-pill-btn').style.background = '#f7b95522';
   _renderComposerChartPreview();
 }
 
@@ -10519,7 +10519,7 @@ function loadInlineSidebar(){
     el.innerHTML=d.slice(0,4).map((t,i)=>`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #16191f">
       <span style="color:#565d68;font-size:13px;width:16px">${i+1}</span>
-      <div style="width:36px;height:36px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${(t.username||t.wallet||'?').slice(0,2).toUpperCase()}</div>
+      <div style="width:36px;height:36px;border-radius:50%;background:#f7b955;color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${(t.username||t.wallet||'?').slice(0,2).toUpperCase()}</div>
       <div style="flex:1"><div style="font-weight:600;font-size:13px">${t.username||t.wallet?.slice(0,8)}</div>
       <div style="color:#565d68;font-size:11px">@${t.username||t.wallet?.slice(0,8)}</div></div>
       <div style="color:#3ad29b;font-family:monospace;font-size:13px;font-weight:700">+${(t.total_pnl_sol||0).toFixed(1)} SOL</div>
@@ -10564,7 +10564,7 @@ function _ccDrawSparkline(lineEl, pts){
     return x.toFixed(1)+','+y.toFixed(1);
   }).join(' ');
   lineEl.setAttribute('points', points);
-  lineEl.setAttribute('stroke', pts[pts.length-1] >= pts[0] ? '#35d4c4' : '#f76b62');
+  lineEl.setAttribute('stroke', pts[pts.length-1] >= pts[0] ? '#f7b955' : '#f76b62');
 }
 
 async function _liveChartPoll(cardEl, pairAddress, symbol){
@@ -10710,7 +10710,7 @@ async function showTokenCard(symbol){
     if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No Solana pair found for <b style="color:#eef1f5">$'+symbol+'</b></div>';return}
     const fmt=n=>n==null?'—':parseFloat(n)<0.0001?'$'+parseFloat(n).toExponential(3):'$'+parseFloat(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})
     const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString()
-    const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#35d4c4':'#f76b62',bg=n>=0?'rgba(53,212,196,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:\'JetBrains Mono\',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
+    const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#3ad29b':'#f76b62',bg=n>=0?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:\'JetBrains Mono\',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
     const ch24=parseFloat(p.priceChange?.h24||0)
     const _links=[...(p.info?.socials||[]),...(p.info?.websites||[]).map(function(w){return{type:'website',url:w.url}}),...(p.info?.links||[])];
     const _li=function(l){var t=(l.type||'').toLowerCase(),u=(l.url||'').toLowerCase();if(t==='twitter'||u.indexOf('twitter.com')>=0||u.indexOf('x.com')>=0)return'\u{1F426}';if(t==='telegram'||u.indexOf('t.me/')>=0)return'✈️';if(t==='discord'||u.indexOf('discord')>=0)return'\u{1F4AC}';return'\u{1F310}';};
@@ -10720,30 +10720,30 @@ async function showTokenCard(symbol){
     body.innerHTML=`
       ${p.info?.header?`<img src="${p.info.header}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:block" onerror="this.style.display='none'">` : ''}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#35d4c4;font-size:15px">${symbol.slice(0,2)}</div>'}
+        ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#f7b955;font-size:15px">${symbol.slice(0,2)}</div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${p.baseToken?.symbol||symbol}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px">
             <span style="font-size:12px;color:#565d68">${p.baseToken?.name||''}</span>
-            <span style="background:rgba(53,212,196,0.12);color:#35d4c4;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
-            ${p.dexId?`<span style="background:#1a1f2e;border:1px solid #21252c;color:#35d4c4;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.04em">${p.dexId.toUpperCase()}</span>`:''}
+            <span style="background:rgba(247,185,85,0.12);color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
+            ${p.dexId?`<span style="background:#1a1f2e;border:1px solid #21252c;color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.04em">${p.dexId.toUpperCase()}</span>`:''}
             ${(p.labels||[]).map(lb=>`<span style="background:#1a1f2e;border:1px solid #21252c;color:#8a919c;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">${lb}</span>`).join('')}
           </div>
         </div>
       </div>
       <div style="font-size:34px;font-weight:700;font-family:\'JetBrains Mono\',monospace;color:#eef1f5;margin-bottom:4px">${fmtTokenPrice(p.priceUsd)}</div>
-      <div style="font-size:15px;font-weight:700;color:${ch24>=0?'#35d4c4':'#f76b62'};margin-bottom:16px">${ch24>=0?'+':''}${ch24.toFixed(2)}% <span style="color:#565d68;font-size:12px;font-weight:400">(24h)</span></div>
+      <div style="font-size:15px;font-weight:700;color:${ch24>=0?'#3ad29b':'#f76b62'};margin-bottom:16px">${ch24>=0?'+':''}${ch24.toFixed(2)}% <span style="color:#565d68;font-size:12px;font-weight:400">(24h)</span></div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">24h Volume</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.volume?.h24)}</div></div>
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Liquidity</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.liquidity?.usd)}</div></div>
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Market Cap</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.marketCap)}</div></div>
         <div style="background:#161b22;border-radius:10px;padding:10px 12px"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">FDV</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:#eef1f5">${fmtBig(p.fdv)}</div></div>
-        <div style="background:#161b22;border-radius:10px;padding:10px 12px;grid-column:span 2"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Buys / Sells (24h)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700"><span style="color:#35d4c4">${p.txns?.h24?.buys||0}</span><span style="color:#565d68"> / </span><span style="color:#f76b62">${p.txns?.h24?.sells||0}</span></div></div>
+        <div style="background:#161b22;border-radius:10px;padding:10px 12px;grid-column:span 2"><div style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px">Buys / Sells (24h)</div><div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700"><span style="color:#f7b955">${p.txns?.h24?.buys||0}</span><span style="color:#565d68"> / </span><span style="color:#f76b62">${p.txns?.h24?.sells||0}</span></div></div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
         ${pctBadge(p.priceChange?.m5,'5m')}${pctBadge(p.priceChange?.h1,'1h')}${pctBadge(p.priceChange?.h6,'6h')}${pctBadge(p.priceChange?.h24,'24h')}
       </div>
-      ${_links.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${_links.slice(0,6).map(function(l){return '<a href="'+l.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#1a1f2e;border:1px solid #21252c;border-radius:20px;padding:4px 10px;font-size:11px;color:#adb5bd;text-decoration:none" onmouseover="this.style.color=\'#35d4c4\';this.style.borderColor=\'#35d4c4\'" onmouseout="this.style.color=\'#adb5bd\';this.style.borderColor=\'#21252c\'">'+_li(l)+' '+_lbl(l)+'</a>';}).join('')}</div>`:''}
+      ${_links.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${_links.slice(0,6).map(function(l){return '<a href="'+l.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#1a1f2e;border:1px solid #21252c;border-radius:20px;padding:4px 10px;font-size:11px;color:#adb5bd;text-decoration:none" onmouseover="this.style.color=\'#f7b955\';this.style.borderColor=\'#f7b955\'" onmouseout="this.style.color=\'#adb5bd\';this.style.borderColor=\'#21252c\'">'+_li(l)+' '+_lbl(l)+'</a>';}).join('')}</div>`:''}
       ${_addr?`<div style="display:flex;align-items:center;gap:8px;background:#161b22;border-radius:10px;padding:8px 12px;margin-bottom:4px"><span style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0">Pair</span><span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8a919c;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_addrShort}</span><button onclick="navigator.clipboard.writeText('${_addr}').then(function(){this.textContent='✓';var b=this;setTimeout(function(){b.textContent='⧉'},1500)}.bind(this)).catch(function(){})" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:13px;padding:2px 6px;flex-shrink:0">⧉</button></div>`:''}
       `
   }catch(e){
@@ -10756,22 +10756,22 @@ async function showTokenCard(symbol){
 function renderPost(item){
   const init=(item.username||item.wallet||'?').slice(0,2).toUpperCase()
   const name=item.username||item.wallet?.slice(0,8)||'Unknown'
-  const content=item.content?item.content.replace(/\$([A-Z0-9]+)/g,'<span onclick="showTokenCard(\'$1\')" style="color:#3ad29b;cursor:pointer;font-weight:700;text-decoration:underline">$$$1</span>'):''
+  const content=item.content?item.content.replace(/\$([A-Z0-9]+)/g,'<span onclick="showTokenCard(\'$1\')" style="color:#f7b955;cursor:pointer;font-weight:700;text-decoration:underline">$$$1</span>'):''
   const text=content?`<div style="margin-top:8px;color:#c7ccd4;font-size:14.5px">${content}</div>`:''
   const pct=(item.pnl_pct||0)
   const col=pct>=0?'#3ad29b':'#f76b62'
   const trade=item.symbol?`<div style="margin-top:10px;background:#101216;border:1px solid #21252c;border-radius:15px;padding:14px;display:flex;justify-content:space-between">
-    <span style="color:#3ad29b;font-weight:700;font-family:monospace">$${item.symbol}</span>
+    <span style="color:#f7b955;font-weight:700;font-family:monospace">$${item.symbol}</span>
     <span style="font-size:22px;font-weight:700;font-family:monospace;color:${col}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
   </div>`:''
   const actions=`<div style="display:flex;gap:24px;margin-top:12px;font-size:13px;color:#565d68">
     <button onclick="replyPost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">↩ <span>${item.replies||0}</span></button>
-    <button onclick="copyTrade(${item.id})" style="background:none;border:none;color:#3ad29b;cursor:pointer;display:flex;align-items:center;gap:6px">⧉ Copy <span>${item.copies||0}</span></button>
+    <button onclick="copyTrade(${item.id})" style="background:none;border:none;color:#f7b955;cursor:pointer;display:flex;align-items:center;gap:6px">⧉ Copy <span>${item.copies||0}</span></button>
     <button onclick="likePost(${item.id},this)" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">♡ <span>${item.likes||0}</span></button>
     ${(item.is_own||_isAdmin)?`<button onclick="deletePost(${item.id},'${item.type}')" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:14px;margin-left:auto" title="Delete">🗑</button>`:''}
   </div>`
   return `<article style="padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px">
-    <div style="width:44px;height:44px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${init}</div>
+    <div style="width:44px;height:44px;border-radius:50%;background:#f7b955;color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${init}</div>
     <div style="flex:1">
       <div style="font-weight:600">${name} <span style="color:#565d68;font-size:13px">· ${item.created_at||''}</span></div>
       ${text}${trade}
@@ -10811,7 +10811,7 @@ function _renderFeedCard(e){
   var bg = (typeof _lbAvatarColor==='function') ? _lbAvatarColor(e.username||e.wallet||'?') : '#21252c';
   var ini = (e.username||e.wallet||'?')[0].toUpperCase();
   var imgHtml = e.avatar_url ? '<img src="'+esc(e.avatar_url)+'" alt="" loading="lazy" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">' : '';
-  var verifiedBadge = e.verified ? '<span style="position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;background:#3ad29b;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#08120f;border:1.5px solid #0a0b0e;font-weight:700">✓</span>' : '';
+  var verifiedBadge = e.verified ? '<span style="position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;background:#f7b955;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:8px;color:#0a0b0e;border:1.5px solid #0a0b0e;font-weight:700">✓</span>' : '';
 
   /* ── header ── */
   var handle = '@'+(e.wallet ? e.wallet.slice(0,6)+'…'+e.wallet.slice(-4) : 'unknown');
@@ -10898,18 +10898,18 @@ function _renderFeedCard(e){
           +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
           +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.45),rgba(16,18,22,0.97))"></div>'
           +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 12px">'
-          +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#35d4c4;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+esc((_c.symbol||'??').slice(0,2).toUpperCase())+'</div>'
+          +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#f7b955;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+esc((_c.symbol||'??').slice(0,2).toUpperCase())+'</div>'
           +'<div style="font-size:20px;font-weight:700;color:#eef1f5;letter-spacing:-.01em;margin-bottom:5px">$'+esc(_c.symbol||'')+'</div>'
-          +'<span style="background:rgba(53,212,196,0.15);color:#35d4c4;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">SOL</span>'
+          +'<span style="background:rgba(247,185,85,0.15);color:#f7b955;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">SOL</span>'
           +'</div>'
           +'</div>'
           +'<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none" style="display:block;background:#101216">'
           +'<defs><linearGradient id="'+_gradId+'" x1="0" y1="0" x2="0" y2="1">'
-          +'<stop offset="0%" stop-color="#35d4c4" stop-opacity="0.3"/>'
-          +'<stop offset="100%" stop-color="#35d4c4" stop-opacity="0"/>'
+          +'<stop offset="0%" stop-color="#f7b955" stop-opacity="0.3"/>'
+          +'<stop offset="100%" stop-color="#f7b955" stop-opacity="0"/>'
           +'</linearGradient></defs>'
           +'<path data-cc="fill" d="" fill="url(#'+_gradId+')" stroke="none"/>'
-          +'<path data-cc="line" d="" fill="none" stroke="#35d4c4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
+          +'<path data-cc="line" d="" fill="none" stroke="#f7b955" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
           +'</svg>'
           +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0;padding:10px 16px 8px;border-top:1px solid #1a1e28">'
           +'<div>'
@@ -10927,11 +10927,11 @@ function _renderFeedCard(e){
           +'</div>'
           +'<div style="padding:0 16px 14px">'
           +'<div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:10px">'
-          +'<span style="color:#3ad29b;font-weight:600">B <span data-cc="buys">'+_initBuys+'</span></span>'
+          +'<span style="color:#f7b955;font-weight:600">B <span data-cc="buys">'+_initBuys+'</span></span>'
           +'<span style="color:#f76b62;font-weight:600"><span data-cc="sells">'+_initSells+'</span> S</span>'
           +'</div>'
           +'<div style="height:4px;border-radius:2px;background:#f76b62;overflow:hidden">'
-          +'<div data-cc="buysbar" style="height:100%;background:#3ad29b;border-radius:2px;transition:width .6s ease;width:'+_initBuysPct+'%"></div>'
+          +'<div data-cc="buysbar" style="height:100%;background:#f7b955;border-radius:2px;transition:width .6s ease;width:'+_initBuysPct+'%"></div>'
           +'</div>'
           +'</div>'
           +'</div>';
