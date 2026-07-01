@@ -4199,6 +4199,7 @@ def wallet_set_key():
     return jsonify({'ok': True, 'has_trading_key': True})
 
 @app.route('/api/wallet/reveal-key', methods=['POST'])
+@csrf_exempt
 @rate_limit(3, 300)
 def wallet_reveal_key():
     ip = request.remote_addr or '0.0.0.0'
