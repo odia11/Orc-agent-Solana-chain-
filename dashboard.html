@@ -93,10 +93,54 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .app-body{display:flex;flex:1;min-height:0;overflow:hidden;width:100%;max-width:1320px;margin:0 auto}
 /* Center column: flex:1, capped 640px, right divider, own scroll */
 .wrap{flex:1;min-width:0;max-width:640px;margin:0;padding:20px;overflow-y:auto;height:100vh;box-sizing:border-box;border-right:1px solid #16191f}
+/* ── RIGHT DISCOVERY RAIL ── */
+#right-rail{width:340px;flex-shrink:0;padding:16px 18px 40px;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:0}
+#right-rail::-webkit-scrollbar{width:4px}
+#right-rail::-webkit-scrollbar-track{background:transparent}
+#right-rail::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+.rr-search{width:100%;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:14px;outline:none;margin-bottom:16px}
+.rr-search::placeholder{color:#565d68}
+.rr-card{background:#101216;border:1px solid #16191f;border-radius:18px;overflow:hidden;margin-bottom:16px}
+.rr-card-top{display:flex;align-items:center;justify-content:space-between;padding:15px 17px 11px}
+.rr-card-title{font-size:16px;font-weight:600;color:#eef1f5}
+.rr-pumping{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;letter-spacing:0.1em;color:#3ad29b}
+.rr-pumping-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;animation:orcaBlink 1.6s infinite}
+.rr-market-row{display:flex;align-items:center;gap:12px;padding:9px 17px;cursor:pointer;transition:background .12s}
+.rr-market-row:hover{background:#14171c}
+.rr-tok-chip{width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;color:#0a0b0e}
+.rr-tok-info{flex:1;min-width:0}
+.rr-tok-name{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rr-tok-pair{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68}
+.rr-tok-right{text-align:right;flex-shrink:0}
+.rr-tok-price{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:500}
+.rr-tok-chg{font-family:'JetBrains Mono',monospace;font-size:12px}
+.rr-card-link{display:block;padding:11px 17px 6px;font-size:13px;color:#f7b955;cursor:pointer;text-decoration:none}
+.rr-card-link:hover{text-decoration:underline}
+.rr-trader-row{display:flex;align-items:center;gap:11px;padding:9px 17px;cursor:pointer;transition:background .12s}
+.rr-trader-row:hover{background:#14171c}
+.rr-trader-rank{font-family:'JetBrains Mono',monospace;font-size:13px;color:#565d68;width:14px;text-align:center;flex-shrink:0}
+.rr-trader-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#0a0b0e}
+.rr-trader-info{flex:1;min-width:0}
+.rr-trader-name{font-size:14px;font-weight:600;display:flex;align-items:center;gap:5px}
+.rr-trader-handle{font-size:12px;color:#565d68}
+.rr-trader-pnl{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:600;color:#3ad29b;flex-shrink:0}
+.rr-verified{width:13px;height:13px;border-radius:50%;background:#f7b955;color:#0a0b0e;display:inline-flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;flex-shrink:0}
+.rr-stats-card{background:#101216;border:1px solid #16191f;border-radius:18px;padding:15px 17px;margin-bottom:16px}
+.rr-stats-lbl{font-size:13px;color:#565d68;margin-bottom:13px}
+.rr-stats-row{display:flex;justify-content:space-between;gap:8px}
+.rr-stat-val{font-family:'JetBrains Mono',monospace;font-size:19px;font-weight:700;display:block}
+.rr-stat-val.pos{color:#3ad29b}
+.rr-stat-sub{font-size:11px;color:#565d68;margin-top:3px}
+.rr-footer{display:flex;flex-wrap:wrap;gap:8px 14px;font-size:12px;color:#565d68;padding:0 4px;margin-bottom:12px}
+.rr-footer a{color:#565d68;text-decoration:none;cursor:pointer}
+.rr-footer a:hover{color:#8a919c}
+.rr-note{padding:0 4px;font-size:11px;color:#3a4049;line-height:1.5}
+.rr-empty{padding:12px 17px;font-size:12px;color:#565d68}
 /* Tablet (768–1024px): right rail hidden, center fills remaining space */
 @media(max-width:1024px){
   .app-body{max-width:none}
   .wrap{max-width:none;border-right:none;height:calc(100vh - 48px)}
+  #right-rail{display:none!important}
 }
 /* Mobile (<768px): both rails hidden, center fills full viewport */
 @media(max-width:767px){
@@ -4229,6 +4273,56 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     </div>
   </div><!-- /dash-wallet -->
 
+  <!-- ── RIGHT DISCOVERY RAIL ── -->
+  <aside id="right-rail">
+    <input class="rr-search" id="rr-search-input" placeholder="Search traders, tokens…"
+      oninput="_rrSearch(this.value)" autocomplete="off">
+
+    <!-- Live Market card -->
+    <div class="rr-card">
+      <div class="rr-card-top">
+        <div class="rr-card-title">Live Market</div>
+        <div class="rr-pumping"><span class="rr-pumping-dot"></span>PUMPING</div>
+      </div>
+      <div id="rr-market-list"><div class="rr-empty">Loading…</div></div>
+      <a href="/live-market" class="rr-card-link">Show all markets →</a>
+    </div>
+
+    <!-- Top Traders card -->
+    <div class="rr-card">
+      <div class="rr-card-top" style="padding-bottom:11px">
+        <div class="rr-card-title">Top Traders · Today</div>
+      </div>
+      <div id="rr-traders-list"><div class="rr-empty">Loading…</div></div>
+      <a href="/leaderboard" class="rr-card-link">View leaderboard →</a>
+    </div>
+
+    <!-- Platform stats card -->
+    <div class="rr-stats-card">
+      <div class="rr-stats-lbl">Platform · 24h</div>
+      <div class="rr-stats-row">
+        <div>
+          <span class="rr-stat-val" id="rr-stat-trades">—</span>
+          <div class="rr-stat-sub">Trades</div>
+        </div>
+        <div>
+          <span class="rr-stat-val pos" id="rr-stat-pnl">—</span>
+          <div class="rr-stat-sub">Net SOL</div>
+        </div>
+        <div>
+          <span class="rr-stat-val" id="rr-stat-online">—</span>
+          <div class="rr-stat-sub">Online</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="rr-footer">
+      <a href="/about">About</a><a href="/docs">Docs</a><a href="/fees">Fees</a><a href="/security">Security</a><a href="/terms">Terms</a>
+    </div>
+    <div class="rr-note">OrcAgent is invite-only. Trade with a dedicated wallet. Crypto trading carries risk.</div>
+  </aside>
+
   <!-- JS compat hidden elements (critical IDs accessed without null checks) -->
   <div style="display:none" aria-hidden="true">
     <span id="s-sol">0</span>
@@ -4942,6 +5036,7 @@ async function launchApp(){
   dmFetchUnread();
   fetchPumpScanner();
   loadHomeFeed();
+  _loadRightRail();
   const _pendingProfile = sessionStorage.getItem('openProfile');
   if(_pendingProfile){
     sessionStorage.removeItem('openProfile');
@@ -4949,6 +5044,87 @@ async function launchApp(){
     if(_pid) setTimeout(() => openProfileCard(_pid), 400);
   }
 }
+
+// ── RIGHT DISCOVERY RAIL ────────────────────────────────────────────────────
+const _RR_COLORS = ['#35d4c4','#7c8cff','#f7b955','#3ad29b','#f76b62','#2b6cff'];
+function _rrColor(str){ var n=0; for(var i=0;i<(str||'').length;i++) n=(n*31+str.charCodeAt(i))>>>0; return _RR_COLORS[n%_RR_COLORS.length]; }
+function _rrPrice(p){ if(!p) return '—'; var n=parseFloat(p); if(isNaN(n)) return '—'; return n<0.001?'$'+n.toFixed(8).replace(/\.?0+$/,''):n<1?'$'+n.toFixed(6):'$'+n.toFixed(4); }
+
+async function _loadRightRail(){
+  _loadRrMarket();
+  _loadRrTraders();
+  _loadRrStats();
+  setInterval(_loadRrMarket, 30000);
+  setInterval(_loadRrStats,  60000);
+}
+
+async function _loadRrMarket(){
+  var el=document.getElementById('rr-market-list'); if(!el) return;
+  try{
+    var d=await fetch('/api/market/top').then(function(r){return r.json();}).catch(function(){return null;});
+    var toks=(d&&d.tokens)||[];
+    if(!toks.length){ el.innerHTML='<div class="rr-empty">No market data</div>'; return; }
+    el.innerHTML=toks.slice(0,5).map(function(t){
+      var chg=parseFloat(t.price_change_24h||0);
+      var col=chg>=0?'#3ad29b':'#f76b62';
+      var tick=(t.symbol||t.ticker||'?').toUpperCase().slice(0,5);
+      var bg=_rrColor(tick);
+      var pr=_rrPrice(t.price||t.price_usd);
+      return '<div class="rr-market-row" onclick="window.location=\'/live-market\'">'
+        +'<div class="rr-tok-chip" style="background:'+bg+'">'+tick.slice(0,3)+'</div>'
+        +'<div class="rr-tok-info"><div class="rr-tok-name">'+esc(t.name||tick)+'</div>'
+        +'<div class="rr-tok-pair">'+tick+' / SOL</div></div>'
+        +'<div class="rr-tok-right"><div class="rr-tok-price">'+pr+'</div>'
+        +'<div class="rr-tok-chg" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(1)+'%</div></div>'
+        +'</div>';
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="rr-empty">—</div>'; }
+}
+
+async function _loadRrTraders(){
+  var el=document.getElementById('rr-traders-list'); if(!el) return;
+  try{
+    var d=await fetch('/api/leaderboard').then(function(r){return r.json();}).catch(function(){return null;});
+    if(!d||!d.length){ el.innerHTML='<div class="rr-empty">No data yet today</div>'; return; }
+    el.innerHTML=d.slice(0,4).map(function(t){
+      var ini=(t.username||t.wallet_address||'?')[0].toUpperCase();
+      var bg=_rrColor(t.username||t.wallet_address||'?');
+      var pnl=(t.total_pnl>=0?'+':'')+t.total_pnl.toFixed(3)+' SOL';
+      var badge=t.badges&&t.badges.includes('verified')?'<span class="rr-verified">✓</span>':'';
+      return '<div class="rr-trader-row" onclick="openProfileCard('+t.user_id+')">'
+        +'<span class="rr-trader-rank">'+t.rank+'</span>'
+        +'<div class="rr-trader-av" style="background:'+bg+'">'+ini+'</div>'
+        +'<div class="rr-trader-info">'
+        +'<div class="rr-trader-name">'+esc(t.username||ini)+badge+'</div>'
+        +'<div class="rr-trader-handle">@'+(t.username||t.wallet_address.slice(0,6))+'</div>'
+        +'</div>'
+        +'<div class="rr-trader-pnl">'+pnl+'</div>'
+        +'</div>';
+    }).join('');
+  }catch(e){ el.innerHTML='<div class="rr-empty">—</div>'; }
+}
+
+async function _loadRrStats(){
+  try{
+    var d=await fetch('/api/platform/stats').then(function(r){return r.json();}).catch(function(){return null;});
+    if(!d||!d.ok) return;
+    var t=document.getElementById('rr-stat-trades'); if(t) t.textContent=(d.trades_today||0).toLocaleString();
+    var p=document.getElementById('rr-stat-pnl');
+    if(p){ var pv=d.net_pnl_today||0; p.textContent=(pv>=0?'+':'')+pv.toFixed(1); p.className='rr-stat-val'+(pv>=0?' pos':' neg'); }
+    var o=document.getElementById('rr-stat-online'); if(o) o.textContent=(d.active_traders||0).toLocaleString();
+  }catch(e){}
+}
+
+function _rrSearch(q){
+  if(!q||q.length<2) return;
+  window.location='/live-market?q='+encodeURIComponent(q);
+}
+
+function _rrSetVisible(show){
+  var rr=document.getElementById('right-rail');
+  if(rr) rr.style.display=show?'flex':'none';
+}
+var loadRightRail=_loadRightRail;
 
 // ── LAUNCH WITH 5s TIMEOUT (prevents button getting stuck) ─────────────────
 async function _launchWithTimeout(){
@@ -8992,6 +9168,7 @@ function openMessagesView(){
   _sbSetActive('sbn-messages');
   const btn=document.getElementById('messages-btn');
   if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(0,0,0,.08)';}
+  _rrSetVisible(false);
   _dmSetUnreadBadge(0);
   dmLoadConversations();
   _dmRefreshTimer=setInterval(_dmAutoRefresh,5000);
@@ -9023,6 +9200,7 @@ function closeMessagesView(){
   const sd=document.getElementById('dm-search-results');
   if(si) si.value='';
   if(sd){sd.style.display='none';sd.innerHTML='';}
+  _rrSetVisible(true);
 }
 
 function _hideAllViews(){
@@ -9047,6 +9225,7 @@ function openCommunityView(){
   _gcCommEl.style.display='flex';
   _fadeIn(_gcCommEl);
   _sbSetActive('sbn-community');
+  _rrSetVisible(false);
   gcFetch(true);
   _gcTimer=setInterval(gcFetch,3000);
 }
@@ -9067,6 +9246,7 @@ function closeCommunityView(){
   document.getElementById('dash-traders').style.display='none';
   document.getElementById('dash-admin').style.display='none';
   _sbSetActive('sbn-dashboard');
+  _rrSetVisible(true);
 }
 
 function _gcRelTime(ts){
