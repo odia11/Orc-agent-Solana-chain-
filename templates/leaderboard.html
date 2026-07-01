@@ -11,7 +11,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;--bg4:#16191f;
-  --accent:#35d4c4;--accent-dim:rgba(53,212,196,.12);--accent-border:rgba(53,212,196,.25);
+  --accent:#f7b955;--accent-dim:rgba(247,185,85,.12);--accent-border:rgba(247,185,85,.25);
   --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
   --green:#3ad29b;--red:#f76b62;
   --gold:#f7b955;--silver:#c8c8d4;--bronze:#cd8c52;
@@ -31,7 +31,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 }
 .nav-left{display:flex;align-items:center;gap:14px;text-decoration:none;flex-shrink:0}
 .nav-logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #06100f}
+.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
 .nav-brand{font-family:var(--ui);font-size:18px;font-weight:700;color:var(--text);letter-spacing:.04em;line-height:1}
 .nav-tag{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
 .nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
@@ -39,7 +39,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .wallet-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
 .nav-btn{display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;font-family:var(--ui);font-size:12px;font-weight:600;text-decoration:none;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
 .nav-btn:hover{border-color:#35353d;color:var(--text)}
-.nav-btn.active{background:var(--accent);color:#06100f;border-color:var(--accent)}
+.nav-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accent)}
 
 /* ── BODY ── */
 .page{max-width:1180px;margin:0 auto;padding:30px 28px 60px}
@@ -120,7 +120,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .td-wr.neg{color:var(--red)}
 .td-num{font-family:var(--mono);font-size:13px;color:var(--sub)}
 .td-best{font-family:var(--mono);font-size:13px;color:var(--green)}
-.row-me td{background:rgba(53,212,196,.04)}
+.row-me td{background:rgba(247,185,85,.04)}
 .row-gold td{background:rgba(247,185,85,.03)}
 .row-silver td{background:rgba(200,200,212,.02)}
 .row-bronze td{background:rgba(205,140,82,.02)}

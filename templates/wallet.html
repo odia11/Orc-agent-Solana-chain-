@@ -14,7 +14,7 @@
   --bg4:#21252c;
   --border:#21252c;
   --divider:#16191f;
-  --accent:#35d4c4;
+  --accent:#f7b955;
   --amber:#f7b955;
   --green:#3ad29b;
   --red:#f76b62;
@@ -35,14 +35,16 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
   position:sticky;top:0;flex-shrink:0;
   display:flex;flex-direction:column;
   border-right:1px solid var(--divider);
-  background:var(--bg2);
+  background:var(--bg);
   overflow-y:auto;
 }
 .sb-logo{padding:20px 18px 14px;display:flex;align-items:center;gap:10px;text-decoration:none}
 .sb-logo-shape{
-  width:30px;height:30px;min-width:30px;border-radius:8px;
+  width:36px;height:36px;min-width:36px;border-radius:11px;
   background:var(--accent);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
 }
+.sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
 .sb-logo-text{font-size:14px;font-weight:700;color:var(--text);letter-spacing:.02em}
 .sb-divider{margin:2px 16px 6px;border:none;border-top:1px solid var(--divider)}
 .sb-nav{padding:0 10px;display:flex;flex-direction:column;gap:2px}
@@ -363,7 +365,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
   color:var(--muted);border-radius:6px;padding:3px 7px;
   font-size:10px;font-weight:600;font-family:var(--mono);cursor:pointer;transition:all .15s;
 }
-.sw-pct-btn:hover{background:rgba(53,212,196,.12);border-color:rgba(53,212,196,.3);color:var(--accent)}
+.sw-pct-btn:hover{background:rgba(247,185,85,.12);border-color:rgba(247,185,85,.3);color:var(--accent)}
 .sw-switch-wrap{display:flex;justify-content:center;margin:8px 0;position:relative;z-index:1}
 .sw-switch-btn{
   width:34px;height:34px;border-radius:50%;
@@ -653,7 +655,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
     <div class="sw-panel">
       <div class="sw-panel-top">
         <span class="sw-panel-lbl">YOU PAY</span>
-        <span class="sw-panel-bal" id="sw-from-bal" style="display:flex;align-items:center;gap:5px">Balance: <span onclick="_swSetMax()" style="cursor:pointer;text-decoration:underline dotted;color:#35d4c4">—</span><button onclick="_swSetMax()" style="background:none;border:none;color:#35d4c4;font-size:11px;cursor:pointer;font-weight:700;padding:0;line-height:1">MAX</button></span>
+        <span class="sw-panel-bal" id="sw-from-bal" style="display:flex;align-items:center;gap:5px">Balance: <span onclick="_swSetMax()" style="cursor:pointer;text-decoration:underline dotted;color:#f7b955">—</span><button onclick="_swSetMax()" style="background:none;border:none;color:#f7b955;font-size:11px;cursor:pointer;font-weight:700;padding:0;line-height:1">MAX</button></span>
       </div>
       <div class="sw-panel-mid">
         <input class="sw-amt-inp" id="sw-amt-inp" type="number" placeholder="0" min="0" step="any" oninput="_swUpdateEst()">
@@ -751,7 +753,7 @@ function _qrPattern(seed, size){
   bits.forEach(function(on){
     var c=document.createElement('div')
     c.className='dep-qr-cell'
-    c.style.background=on?'#35d4c4':'#1a1f26'
+    c.style.background=on?'#f7b955':'#1a1f26'
     g.appendChild(c)
   })
 })()
@@ -784,7 +786,7 @@ function _modalDeposit(){
   var addr=_walletAddr
   var bits=_qrPattern(_hash(addr),7)
   var cells=bits.map(function(on){
-    return '<div class="w-modal-qr-cell" style="background:'+(on?'#35d4c4':'#16191f')+'"></div>'
+    return '<div class="w-modal-qr-cell" style="background:'+(on?'#f7b955':'#16191f')+'"></div>'
   }).join('')
   _showModal(
     '<div class="w-modal-title">Receive SOL / Tokens</div>'
