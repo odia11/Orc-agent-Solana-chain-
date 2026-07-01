@@ -6,113 +6,105 @@
 <meta name="csrf-token" content="{{ csrf_token }}">
 <meta name="client-secret" content="{{ client_secret }}">
 <title>Traders — OrcAgent</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#0a0b0e;
-  --card:#101216;
-  --card2:#14171c;
-  --border:#21252c;
-  --border2:#16191f;
-  --accent:#35d4c4;
-  --accent-dim:rgba(53,212,196,.09);
-  --accent-glow:rgba(53,212,196,.18);
-  --accent-border:rgba(53,212,196,.22);
-  --text:#eef1f5;
-  --muted:#565d68;
-  --sub:#8a919c;
-  --green:#3ad29b;
-  --red:#f76b62;
-  --gold:#f7b955;
-  --mono:'JetBrains Mono',monospace;
-  --ui:'Geist',system-ui,sans-serif;
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
+  --accent:#f7b955;--accent-dim:rgba(247,185,85,.1);--accent-border:rgba(247,185,85,.28);
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --green:#3ad29b;--red:#ff4d6a;
+  --border:#16191f;--border2:#21252c;
+  --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,sans-serif;
 }
-html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
 
-/* ─── NAVBAR ─────────────────────────────── */
-.nav{
-  position:sticky;top:0;z-index:100;
-  display:flex;align-items:center;justify-content:space-between;
-  height:56px;padding:0 28px;gap:12px;
-  background:rgba(10,11,14,.88);
-  backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);
-  border-bottom:1px solid var(--border2);
-}
-.nav-brand{display:flex;align-items:center;gap:12px;text-decoration:none;flex-shrink:0}
-.nav-mark{width:32px;height:32px;border-radius:9px;background:var(--accent);display:grid;place-items:center;flex-shrink:0}
-.nav-mark::after{content:'';width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:10px solid #06100f}
-.nav-wordmark{font-size:16px;font-weight:700;letter-spacing:.05em;color:var(--text)}
-.nav-sub{font-size:9px;color:var(--muted);letter-spacing:.07em;margin-top:1px}
-.nav-links{display:flex;align-items:center;gap:4px;flex:1;padding:0 20px}
-.nav-link{font-size:12px;font-weight:500;color:var(--muted);text-decoration:none;padding:6px 12px;border-radius:8px;transition:color .15s,background .15s}
-.nav-link:hover{color:var(--text);background:rgba(255,255,255,.04)}
-.nav-link.active{color:var(--accent)}
-.nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.nav-pill{display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 12px;font-family:var(--mono);font-size:10px;color:var(--sub)}
-.nav-dot{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0;animation:pulse 2s infinite}
+/* ── SIDEBAR (mirrors dashboard) ── */
+#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid #16191f;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar::-webkit-scrollbar{width:4px}
+#sidebar::-webkit-scrollbar-track{background:transparent}
+#sidebar::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+.sb-logo{padding:20px 20px 14px;flex-shrink:0}
+.sb-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sb-logo-shape{width:36px;height:36px;min-width:36px;background:#f7b955;border-radius:11px;display:flex;align-items:center;justify-content:center}
+.sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
+.sb-logo-text{font-family:var(--ui);font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.sb-beta-badge{display:inline-flex;align-items:center;gap:7px;font-size:10px;font-weight:600;letter-spacing:.14em;color:#f7b955;background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.3);border-radius:7px;padding:5px 9px}
+.sb-beta-badge::before{content:'';width:5px;height:5px;border-radius:50%;background:#f7b955;flex-shrink:0}
+.sb-nav{flex:1;padding:8px 12px;display:flex;flex-direction:column;gap:1px}
+.sb-nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;font-family:var(--ui);font-size:14px;font-weight:500;color:#8a919c;transition:background .15s,color .15s;text-decoration:none;border:none;background:transparent;width:100%;text-align:left;border-radius:11px;box-sizing:border-box;position:relative;cursor:pointer}
+.sb-nav-item:hover{background:#14171c;color:#eef1f5}
+.sb-nav-item.active{background:rgba(247,185,85,.12);color:#eef1f5;font-weight:600}
+.sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:#f7b955}
+.sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.sb-nav-badge{margin-left:auto;background:#f7b955;color:#0a0b0e;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
+.sb-bottom{padding:12px;border-top:1px solid var(--bg3);flex-shrink:0;margin-top:auto}
+.sb-user-card{display:flex;align-items:center;gap:11px;padding:10px;border-radius:14px;background:transparent;border:1px solid #16191f;cursor:pointer;transition:background .15s}
+.sb-user-card:hover{background:#101216}
+.sb-avatar{width:40px;height:40px;min-width:40px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0;overflow:hidden;position:relative}
+.sb-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.sb-user-info{flex:1;min-width:0}
+.sb-user-name{font-size:14px;font-weight:600;color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-handle{font-size:12px;color:#565d68;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.sb-sol-wrap{display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex-shrink:0}
+.sb-sol{font-size:13px;font-weight:700;color:#eef1f5;font-family:var(--mono);white-space:nowrap}
+.sb-sol-label{font-size:10px;color:#565d68;font-family:var(--mono)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.2}}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 
-/* ─── PAGE ───────────────────────────────── */
-.page{max-width:1200px;margin:0 auto;padding:32px 28px 80px}
+/* ── APP SHELL ── */
+#app{display:flex;height:100vh;overflow:hidden}
+.main{flex:1;overflow-y:auto;min-width:0}
 
-/* ─── TOOLBAR ─────────────────────────────── */
-.toolbar{display:flex;align-items:center;gap:10px;margin-bottom:24px;flex-wrap:wrap}
-.toolbar-left{display:flex;align-items:center;gap:8px;flex:1;min-width:0}
+/* ── PAGE ── */
+.page{max-width:1160px;margin:0 auto;padding:28px 28px 80px}
+
+/* ── TOOLBAR ── */
+.toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:24px;flex-wrap:wrap}
+.toolbar-left{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.page-title{font-size:20px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin-right:4px}
+.tabs{display:flex;background:var(--bg2);border:1px solid var(--border2);border-radius:11px;padding:3px;gap:2px}
+.tab{font-size:12px;font-weight:600;color:var(--muted);padding:6px 14px;border-radius:8px;border:none;background:none;cursor:pointer;transition:color .15s,background .15s;white-space:nowrap;font-family:var(--ui)}
+.tab:hover{color:var(--text)}
+.tab.active{background:var(--accent);color:#0a0b0e}
+.toolbar-right{display:flex;align-items:center;gap:10px}
+.count-badge{font-family:var(--mono);font-size:11px;color:var(--muted);white-space:nowrap}
+.count-badge strong{color:var(--sub)}
 
 /* search */
-.search-wrap{position:relative;width:220px;flex-shrink:0}
+.search-wrap{position:relative;width:240px}
 .search-inp{
-  width:100%;background:var(--card);border:1px solid var(--border);border-radius:10px;
-  padding:8px 12px 8px 34px;font-size:12px;font-family:var(--ui);color:var(--text);
+  width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:13px;
+  padding:9px 14px 9px 36px;font-size:13px;font-family:var(--ui);color:var(--text);
   outline:none;transition:border-color .15s;
 }
 .search-inp::placeholder{color:var(--muted)}
-.search-inp:focus{border-color:var(--accent)}
-.search-ico{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:14px;pointer-events:none;line-height:1}
+.search-inp:focus{border-color:rgba(247,185,85,.4)}
+.search-ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none}
 
-/* filter tabs */
-.tabs{display:flex;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:3px;gap:2px}
-.tab{font-size:12px;font-weight:600;color:var(--muted);padding:6px 14px;border-radius:7px;border:none;background:none;cursor:pointer;transition:color .15s,background .15s;white-space:nowrap}
-.tab:hover{color:var(--text)}
-.tab.active{background:var(--accent);color:#06100f}
+/* ── GRID: 3 cols desktop, 2 tablet, 1 mobile ── */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
 
-/* count badge */
-.count-badge{font-family:var(--mono);font-size:11px;color:var(--muted);margin-left:auto;white-space:nowrap}
-.count-badge strong{color:var(--sub)}
-
-/* ─── GRID ─────────────────────────────────── */
-.grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(300px,1fr));
-  gap:14px;
-}
-
-/* ─── CARD ─────────────────────────────────── */
+/* ── CARD ── */
 .card{
-  background:var(--card);border:1px solid var(--border2);border-radius:16px;
-  padding:20px;display:flex;flex-direction:column;gap:16px;
-  transition:border-color .2s,box-shadow .2s;
-  position:relative;overflow:hidden;cursor:pointer;
+  background:var(--bg2);border:1px solid var(--border);border-radius:16px;
+  padding:20px;display:flex;flex-direction:column;gap:0;
+  transition:border-color .2s,box-shadow .2s;position:relative;overflow:hidden;
 }
-.card::before{
-  content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none;
-  background:linear-gradient(135deg,rgba(255,255,255,.015) 0%,transparent 60%);
-}
-.card:hover{border-color:var(--border);box-shadow:0 4px 24px rgba(0,0,0,.4)}
-/* Invisible full-card link sits at z-index 1; interactive elements override at z-index 2 */
+.card:hover{border-color:var(--border2);box-shadow:0 4px 24px rgba(0,0,0,.4)}
 .card-link{position:absolute;inset:0;z-index:1;border-radius:16px}
-.card-footer,.rank-pip{position:relative;z-index:2}
-.card.is-me{border-color:var(--accent-border);background:linear-gradient(135deg,rgba(53,212,196,.04),var(--card))}
+.card-body{position:relative;z-index:2;display:flex;flex-direction:column;gap:16px}
+.card.is-me{border-color:var(--accent-border);background:linear-gradient(135deg,var(--accent-dim),var(--bg2))}
 .card.top-1{border-color:rgba(247,185,85,.35)}
 .card.top-2{border-color:rgba(180,180,200,.22)}
 .card.top-3{border-color:rgba(205,140,82,.22)}
 
-/* rank badge */
+/* rank pip */
 .rank-pip{
-  position:absolute;top:14px;right:14px;
+  position:absolute;top:14px;right:14px;z-index:2;
   font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.04em;
   padding:3px 7px;border-radius:6px;border:1px solid transparent;
   color:var(--muted);background:transparent;
@@ -121,87 +113,94 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .rank-pip.silver{color:#b8b8c8;background:rgba(184,184,200,.08);border-color:rgba(184,184,200,.20)}
 .rank-pip.bronze{color:#cd8c52;background:rgba(205,140,82,.08);border-color:rgba(205,140,82,.22)}
 
-/* ── identity row ── */
-.ident{display:flex;align-items:center;gap:12px}
+/* ── identity ── */
+.ident{display:flex;align-items:flex-start;gap:12px}
+.avatar-wrap{position:relative;flex-shrink:0}
 .avatar{
-  width:46px;height:46px;border-radius:13px;flex-shrink:0;overflow:hidden;
-  background:var(--card2);border:1px solid var(--border);
-  display:grid;place-items:center;font-size:20px;
+  width:48px;height:48px;border-radius:50%;overflow:hidden;
+  background:var(--bg3);border:2px solid var(--border2);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:700;color:#fff;
+  font-family:var(--ui);
 }
-.avatar img{width:100%;height:100%;object-fit:cover}
+.avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.avatar-online{
+  position:absolute;bottom:1px;right:1px;
+  width:10px;height:10px;border-radius:50%;
+  background:#3ad29b;border:2px solid var(--bg2);
+}
 .ident-info{min-width:0;flex:1}
-.username{font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding-right:32px}
+.username-row{display:flex;align-items:center;gap:6px;padding-right:28px;flex-wrap:wrap}
+.username{font-weight:700;font-size:14px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .username.is-me{color:var(--accent)}
-.me-tag{font-size:9px;font-weight:600;color:var(--accent);background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:1px 6px;margin-left:4px;vertical-align:middle}
-.wallet-addr{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px}
-.badges{display:flex;gap:3px;margin-top:4px}
-.badge{font-size:13px;line-height:1}
+.me-tag{font-size:9px;font-weight:700;color:var(--accent);background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:1px 6px;white-space:nowrap}
+.verified-badge{
+  width:16px;height:16px;border-radius:50%;background:var(--accent);
+  display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.wallet-addr{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.trader-bio{font-size:13px;color:var(--sub);margin-top:8px;line-height:1.5;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 
 /* ── stats row ── */
 .stats{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
-.stat{background:var(--card2);border-radius:10px;padding:10px 12px}
-.stat-label{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;margin-bottom:4px}
+.stat{background:var(--bg3);border-radius:10px;padding:10px 12px}
+.stat-label{font-size:9px;font-weight:700;color:var(--muted);letter-spacing:.12em;text-transform:uppercase;margin-bottom:5px}
 .stat-value{font-family:var(--mono);font-size:16px;font-weight:700;line-height:1;color:var(--text)}
-.stat-unit{font-size:9px;font-weight:400;color:var(--muted);margin-left:2px}
-.pos{color:var(--green)}
-.neg{color:var(--red)}
+.stat-unit{font-size:9px;font-weight:400;color:var(--muted);margin-left:1px}
+.stat-value.pos{color:#3ad29b}
+.stat-value.neg{color:#ff4d6a}
+.stat-value.acc{color:#f7b955}
 
-/* ── best call ── */
-.best-call{
-  display:flex;align-items:center;justify-content:space-between;
-  background:var(--card2);border-radius:10px;padding:10px 14px;
-  border-left:3px solid var(--accent);
+/* ── card actions ── */
+.card-actions{display:flex;flex-direction:column;gap:7px;padding-top:14px;border-top:1px solid var(--border)}
+.btn-copy-full{
+  width:100%;padding:10px 14px;background:#f7b955;color:#0a0b0e;
+  border:none;border-radius:11px;font-size:13px;font-weight:700;
+  font-family:var(--ui);cursor:pointer;transition:opacity .15s;
+  display:flex;align-items:center;justify-content:center;gap:6px;
 }
-.best-call-lbl{font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
-.best-call-val{display:flex;align-items:center;gap:8px;margin-top:3px}
-.best-token{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--text)}
-.best-pct{font-family:var(--mono);font-size:13px;font-weight:700}
-.best-call-empty{font-size:11px;color:var(--muted);margin-top:2px}
-
-/* ── footer ── */
-.card-footer{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--border2);padding-top:14px}
-.followers{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--muted)}
-.followers-n{font-family:var(--mono);font-weight:700;color:var(--sub)}
-.btn-row{display:flex;gap:6px}
-.btn{
-  font-size:11px;font-weight:700;font-family:var(--ui);
-  padding:6px 12px;border-radius:8px;border:1px solid var(--border);
-  background:transparent;color:var(--sub);cursor:pointer;
-  transition:all .15s;white-space:nowrap;
+.btn-copy-full:hover{opacity:.88}
+.btn-copy-full.copying{background:rgba(247,185,85,.14);color:#f7b955;border:1px solid rgba(247,185,85,.3)}
+.btn-copy-full:disabled{opacity:.4;cursor:not-allowed}
+.btn-follow-outline{
+  width:100%;padding:9px 14px;background:transparent;color:var(--sub);
+  border:1px solid var(--border2);border-radius:11px;font-size:13px;font-weight:600;
+  font-family:var(--ui);cursor:pointer;transition:all .15s;
 }
-.btn:hover{border-color:var(--sub);color:var(--text)}
-.btn-follow{border-color:var(--accent-border);color:var(--accent)}
-.btn-follow:hover{background:var(--accent-dim)}
-.btn-follow.following{background:var(--accent-dim);border-color:var(--accent);color:var(--accent)}
-.btn-copy{border-color:var(--border)}
-.btn-copy.copying{background:rgba(53,212,196,.12);border-color:var(--accent);color:var(--accent)}
-.btn:disabled{opacity:.4;cursor:not-allowed}
+.btn-follow-outline:hover{border-color:var(--muted);color:var(--text)}
+.btn-follow-outline.following{background:var(--accent-dim);border-color:var(--accent-border);color:#f7b955;font-weight:700}
+.btn-follow-outline:disabled{opacity:.4;cursor:not-allowed}
+.btn-my-profile{
+  width:100%;padding:10px 14px;background:transparent;color:var(--sub);
+  border:1px solid var(--border2);border-radius:11px;font-size:13px;font-weight:600;
+  font-family:var(--ui);cursor:pointer;text-decoration:none;text-align:center;
+  display:block;transition:border-color .15s,color .15s;
+}
+.btn-my-profile:hover{border-color:var(--muted);color:var(--text)}
 
-/* ─── EMPTY ─────────────────────────────── */
-.empty{text-align:center;padding:80px 24px;border:1px solid var(--border2);border-radius:16px;background:var(--card)}
+/* ── empty ── */
+.empty{text-align:center;padding:80px 24px;border:1px solid var(--border);border-radius:16px;background:var(--bg2)}
 .empty-icon{font-size:40px;margin-bottom:16px}
 .empty-title{font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px}
 .empty-sub{font-size:13px;color:var(--muted)}
 
-/* ─── COPY MODAL ────────────────────────── */
+/* ── COPY MODAL ── */
 .modal-backdrop{
   display:none;position:fixed;inset:0;z-index:300;
-  background:rgba(0,0,0,.72);
-  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+  background:rgba(0,0,0,.72);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
   align-items:center;justify-content:center;padding:20px;
 }
 .modal-backdrop.open{display:flex}
 .modal{
-  background:var(--card);border:1px solid var(--border);border-radius:18px;
+  background:var(--bg2);border:1px solid var(--border2);border-radius:18px;
   padding:28px 24px 24px;width:100%;max-width:380px;
-  box-shadow:0 24px 60px rgba(0,0,0,.6);
-  display:flex;flex-direction:column;gap:20px;
+  box-shadow:0 24px 60px rgba(0,0,0,.6);display:flex;flex-direction:column;gap:20px;
   animation:modal-in .18s ease;
 }
 @keyframes modal-in{from{opacity:0;transform:scale(.96)}to{opacity:1;transform:scale(1)}}
 .modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .modal-title{font-size:16px;font-weight:700;color:var(--text)}
-.modal-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0;flex-shrink:0;margin-top:-2px}
+.modal-close{background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1;padding:0;flex-shrink:0;margin-top:-2px;transition:color .15s}
 .modal-close:hover{color:var(--text)}
 .modal-desc{font-size:13px;color:var(--sub);line-height:1.55}
 .modal-desc strong{color:var(--text)}
@@ -209,220 +208,276 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .modal-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.08em;text-transform:uppercase}
 .modal-inp-wrap{position:relative}
 .modal-inp{
-  width:100%;background:var(--card2);border:1px solid var(--border);border-radius:10px;
+  width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;
   padding:10px 44px 10px 14px;font-size:15px;font-family:var(--mono);font-weight:700;
   color:var(--text);outline:none;transition:border-color .15s;
 }
-.modal-inp:focus{border-color:var(--accent)}
+.modal-inp:focus{border-color:rgba(247,185,85,.4)}
 .modal-inp-unit{position:absolute;right:14px;top:50%;transform:translateY(-50%);font-size:12px;color:var(--muted);pointer-events:none;font-family:var(--mono)}
 .modal-hint{font-size:11px;color:var(--muted)}
 .modal-actions{display:flex;gap:8px}
 .modal-btn{
   flex:1;padding:11px;border-radius:10px;font-size:13px;font-weight:700;
-  font-family:var(--ui);cursor:pointer;border:1px solid var(--border);
+  font-family:var(--ui);cursor:pointer;border:1px solid var(--border2);
   background:transparent;color:var(--sub);transition:all .15s;
 }
-.modal-btn:hover{border-color:var(--sub);color:var(--text)}
-.modal-btn.primary{background:var(--accent);border-color:var(--accent);color:#06100f}
+.modal-btn:hover{border-color:var(--muted);color:var(--text)}
+.modal-btn.primary{background:#f7b955;border-color:#f7b955;color:#0a0b0e}
 .modal-btn.primary:hover{opacity:.9}
 .modal-btn.primary:disabled{opacity:.5;cursor:not-allowed}
-.modal-btn.danger{border-color:rgba(247,107,98,.4);color:var(--red)}
-.modal-btn.danger:hover{background:rgba(247,107,98,.08)}
+.modal-btn.danger{border-color:rgba(255,77,106,.4);color:#ff4d6a}
+.modal-btn.danger:hover{background:rgba(255,77,106,.08)}
 
-/* ─── TOAST ─────────────────────────────── */
+/* ── TOAST ── */
 .toast{
   position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);
-  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  background:var(--bg2);border:1px solid var(--border2);border-radius:10px;
   padding:10px 18px;font-size:12px;color:var(--text);
-  opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:200;
+  opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:400;
   white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5);
 }
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
-.toast.ok{border-color:var(--accent-border);color:var(--accent)}
-.toast.err{border-color:rgba(247,107,98,.3);color:var(--red)}
+.toast.ok{border-color:rgba(247,185,85,.35);color:#f7b955}
+.toast.err{border-color:rgba(255,77,106,.3);color:#ff4d6a}
 
-/* ─── SCROLLBAR ───────────────────────── */
+/* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+*{scrollbar-width:thin;scrollbar-color:#21252c transparent}
 
-/* ─── MOBILE ──────────────────────────── */
-@media(max-width:900px){
-  .nav-links{display:none}
-  .nav{padding:0 16px}
-  .page{padding:20px 12px 80px}
-  .toolbar{flex-direction:column;align-items:stretch;gap:10px}
-  .toolbar-left{flex-direction:column;align-items:stretch}
-  .search-wrap{width:100%}
-  .grid{grid-template-columns:1fr}
-  .stats{grid-template-columns:1fr 1fr 1fr}
+/* ── TABLET (768-1024px) ── */
+@media(max-width:1024px){
+  #sidebar{display:none!important}
+  .grid{grid-template-columns:repeat(2,1fr)}
+  .page{padding:20px 16px 80px}
 }
-@media(max-width:480px){
-  .stats{grid-template-columns:1fr 1fr}
-  .stat:last-child{display:none}
-  .nav-pill{display:none}
+
+/* ── MOBILE (<768px) ── */
+@media(max-width:767px){
+  #sidebar{display:none!important}
+  .grid{grid-template-columns:1fr}
+  .page{padding:16px 12px 80px}
+  .search-wrap{width:100%}
+  .toolbar{flex-direction:column;align-items:stretch}
+  .toolbar-right{flex-direction:column;align-items:stretch}
 }
 </style>
 </head>
 <body>
+<div id="app">
 
-<!-- NAVBAR -->
-<nav class="nav">
-  <a class="nav-brand" href="/">
-    <div class="nav-mark"></div>
-    <div>
-      <div class="nav-wordmark">ORCAGENT</div>
-      <div class="nav-sub">SOLANA SMART SCALPER V4</div>
-    </div>
-  </a>
-  <div class="nav-links">
-    <a class="nav-link" href="/">Dashboard</a>
-    <a class="nav-link" href="/live-market">Live Market</a>
-    <a class="nav-link active" href="/traders">Traders</a>
-    <a class="nav-link" href="/leaderboard">Leaderboard</a>
-    <a class="nav-link" href="/history">History</a>
-  </div>
-  <div class="nav-right">
-    {% if wallet_short %}
-    <div class="nav-pill"><div class="nav-dot"></div><span>{{ wallet_short }}</span></div>
-    {% endif %}
-  </div>
-</nav>
-
-<!-- PAGE -->
-<div class="page">
-
-  <!-- TOOLBAR -->
-  <div class="toolbar">
-    <div class="toolbar-left">
-      <div class="search-wrap">
-        <span class="search-ico">⌕</span>
-        <input class="search-inp" id="search" type="text"
-               placeholder="Search username or wallet…"
-               oninput="_applyFilters()" autocomplete="off">
+  <!-- SIDEBAR (mirrors dashboard) -->
+  <aside id="sidebar">
+    <div class="sb-logo">
+      <div class="sb-logo-row">
+        <div class="sb-logo-shape"></div>
+        <span class="sb-logo-text">OrcAgent</span>
       </div>
-      <div class="tabs">
-        <button class="tab active" data-tab="all"       onclick="_setTab(this)">All</button>
-        <button class="tab"        data-tab="following" onclick="_setTab(this)">Following</button>
-        <button class="tab"        data-tab="week"      onclick="_setTab(this)">Top Week</button>
-      </div>
+      <div class="sb-beta-badge">INVITE-ONLY · BETA</div>
     </div>
-    <div class="count-badge" id="count-badge">
-      Showing <strong id="visible-count">{{ entries|length }}</strong> of {{ entries|length }} traders
-    </div>
-  </div>
 
-  {% if entries %}
-  <div class="grid" id="grid">
-    {% for e in entries %}
-    <div class="card{% if e.is_me %} is-me{% endif %}{% if e.rank == 1 %} top-1{% elif e.rank == 2 %} top-2{% elif e.rank == 3 %} top-3{% endif %}"
-         data-rank="{{ e.rank }}"
-         data-pnl="{{ e.total_pnl }}"
-         data-week="{{ e.week_pnl }}"
-         data-following="{{ '1' if e.is_following else '0' }}"
-         data-name="{{ (e.username|lower) }}{{ (e.wallet_short|lower) }}">
+    <nav class="sb-nav">
+      <a class="sb-nav-item" href="/">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+        Home
+      </a>
+      <a class="sb-nav-item" href="/live-market">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+        Live Market
+      </a>
+      <a class="sb-nav-item" href="/leaderboard">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/></svg></span>
+        Leaderboard
+      </a>
+      <a class="sb-nav-item active" href="/traders">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+        Traders
+      </a>
+      <a class="sb-nav-item" href="/messages">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
+        Messages
+      </a>
+      <a class="sb-nav-item" href="/community">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0"/></svg></span>
+        Community
+      </a>
+      <a class="sb-nav-item" href="/notifications">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
+        Notifications
+      </a>
+      <a class="sb-nav-item" href="/wallet">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
+        Wallet
+      </a>
+      <a class="sb-nav-item" href="/profile">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
+        Profile
+      </a>
+      <a class="sb-nav-item" href="/settings">
+        <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+        Settings
+      </a>
+    </nav>
 
-      <a class="card-link" href="/profile/{{ e.wallet }}" aria-label="View {{ e.username }}'s profile"></a>
-
-      {%- if e.rank == 1 %}<span class="rank-pip gold">#1</span>
-      {%- elif e.rank == 2 %}<span class="rank-pip silver">#2</span>
-      {%- elif e.rank == 3 %}<span class="rank-pip bronze">#3</span>
-      {%- else %}<span class="rank-pip">#{{ e.rank }}</span>
-      {%- endif %}
-
-      <!-- identity -->
-      <div class="ident">
-        <div class="avatar">
-          {% if e.avatar_url %}<img src="{{ e.avatar_url }}" alt="" loading="lazy">
-          {% else %}🐳{% endif %}
+    <div class="sb-bottom">
+      <div class="sb-user-card" id="sb-user-card">
+        <div class="sb-avatar" id="sb-avatar">
+          <img id="sb-avatar-img" alt="" style="display:none" onerror="this.style.display='none'">
+          <span id="sb-avatar-ini">?</span>
         </div>
-        <div class="ident-info">
-          <div class="username{% if e.is_me %} is-me{% endif %}">
-            {{ e.username }}{% if e.is_me %}<span class="me-tag">YOU</span>{% endif %}
-          </div>
-          <div class="wallet-addr">{{ e.wallet_short }}</div>
-          {% if e.badges %}
-          <div class="badges">{% for b in e.badges[:4] %}<span class="badge">{{ b }}</span>{% endfor %}</div>
-          {% endif %}
+        <div class="sb-user-info">
+          <div class="sb-user-name" id="sb-user-name">You</div>
+          <div class="sb-handle" id="sb-handle">@—</div>
+        </div>
+        <div class="sb-sol-wrap">
+          <div class="sb-sol" id="sb-sol">—</div>
+          <div class="sb-sol-label">SOL</div>
         </div>
       </div>
+    </div>
+  </aside>
 
-      <!-- stats -->
-      <div class="stats">
-        <div class="stat">
-          <div class="stat-label">Total PnL</div>
-          <div class="stat-value {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
-            {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.3f'|format(e.total_pnl) }}<span class="stat-unit">SOL</span>
+  <!-- MAIN -->
+  <div class="main">
+    <div class="page">
+
+      <!-- TOOLBAR -->
+      <div class="toolbar">
+        <div class="toolbar-left">
+          <span class="page-title">Traders</span>
+          <div class="tabs">
+            <button class="tab active" data-tab="all"       onclick="_setTab(this)">All</button>
+            <button class="tab"        data-tab="following" onclick="_setTab(this)">Following</button>
+            <button class="tab"        data-tab="week"      onclick="_setTab(this)">Top Week</button>
           </div>
         </div>
-        <div class="stat">
-          <div class="stat-label">Win Rate</div>
-          <div class="stat-value {{ 'pos' if e.win_rate >= 50 else 'neg' }}">
-            {{ '%.0f'|format(e.win_rate) }}<span class="stat-unit">%</span>
+        <div class="toolbar-right">
+          <div class="count-badge" id="count-badge">
+            <strong id="visible-count">{{ entries|length }}</strong> of {{ entries|length }} traders
           </div>
-        </div>
-        <div class="stat">
-          <div class="stat-label">Trades</div>
-          <div class="stat-value">{{ e.trade_count }}</div>
+          <div class="search-wrap">
+            <svg class="search-ico" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            <input class="search-inp" id="search" type="text"
+                   placeholder="Search username or wallet…"
+                   oninput="_applyFilters()" autocomplete="off">
+          </div>
         </div>
       </div>
 
-      <!-- best call -->
-      <div class="best-call">
-        <div>
-          <div class="best-call-lbl">Best Call</div>
-          {% if e.best_token %}
-          <div class="best-call-val">
-            <span class="best-token">{{ e.best_token }}</span>
-            <span class="best-pct {{ 'pos' if e.best_trade_pct >= 0 else 'neg' }}">
-              {{ '+' if e.best_trade_pct >= 0 else '' }}{{ '%.1f'|format(e.best_trade_pct) }}%
-            </span>
-          </div>
-          {% else %}
-          <div class="best-call-empty">No closed trades yet</div>
-          {% endif %}
+      {% if entries %}
+      <div class="grid" id="grid">
+        {% for e in entries %}
+        <div class="card{% if e.is_me %} is-me{% endif %}{% if e.rank == 1 %} top-1{% elif e.rank == 2 %} top-2{% elif e.rank == 3 %} top-3{% endif %}"
+             data-rank="{{ e.rank }}"
+             data-pnl="{{ e.total_pnl }}"
+             data-week="{{ e.week_pnl }}"
+             data-following="{{ '1' if e.is_following else '0' }}"
+             data-name="{{ (e.username|lower) }}{{ (e.wallet_short|lower) }}">
+
+          <a class="card-link" href="/profile/{{ e.wallet }}" aria-label="View {{ e.username }}'s profile"></a>
+
+          {%- if e.rank == 1 %}<span class="rank-pip gold">#1</span>
+          {%- elif e.rank == 2 %}<span class="rank-pip silver">#2</span>
+          {%- elif e.rank == 3 %}<span class="rank-pip bronze">#3</span>
+          {%- else %}<span class="rank-pip">#{{ e.rank }}</span>
+          {%- endif %}
+
+          <div class="card-body">
+
+            <!-- IDENTITY -->
+            <div class="ident">
+              <div class="avatar-wrap">
+                <div class="avatar"
+                     data-ini="{{ (e.username or e.wallet_short)[:1]|upper }}"
+                     data-seed="{{ e.username or e.wallet_short }}">
+                  {% if e.avatar_url %}
+                  <img src="{{ e.avatar_url }}" alt="" loading="lazy"
+                       onerror="this.style.display='none'">
+                  {% endif %}
+                  <span class="avatar-ini">{{ (e.username or e.wallet_short)[:1]|upper }}</span>
+                </div>
+                {% if e.is_online|default(false) %}
+                <div class="avatar-online"></div>
+                {% endif %}
+              </div>
+              <div class="ident-info">
+                <div class="username-row">
+                  <span class="username{% if e.is_me %} is-me{% endif %}">{{ e.username }}</span>
+                  {% if e.is_me %}<span class="me-tag">YOU</span>{% endif %}
+                  {% if e.is_verified|default(false) %}
+                  <span class="verified-badge" title="Verified">
+                    <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="#0a0b0e" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  </span>
+                  {% endif %}
+                </div>
+                <div class="wallet-addr">{{ e.wallet_short }}</div>
+                {% if e.bio %}
+                <div class="trader-bio">{{ e.bio }}</div>
+                {% endif %}
+              </div>
+            </div>
+
+            <!-- STATS: 30D PNL / WIN / COPIERS -->
+            <div class="stats">
+              <div class="stat">
+                <div class="stat-label">30D PNL</div>
+                <div class="stat-value acc">
+                  {{ '+' if (e.month_pnl|default(e.total_pnl)) >= 0 else '' }}{{ '%.2f'|format(e.month_pnl|default(e.total_pnl)) }}<span class="stat-unit">SOL</span>
+                </div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">WIN</div>
+                <div class="stat-value {{ 'pos' if e.win_rate >= 50 else 'neg' }}">
+                  {{ '%.0f'|format(e.win_rate) }}<span class="stat-unit">%</span>
+                </div>
+              </div>
+              <div class="stat">
+                <div class="stat-label">COPIERS</div>
+                <div class="stat-value">{{ e.copier_count|default(0) }}</div>
+              </div>
+            </div>
+
+            <!-- ACTIONS -->
+            <div class="card-actions">
+              {% if not e.is_me %}
+              <button class="btn-copy-full{% if e.is_copying %} copying{% endif %}"
+                      id="copy-{{ e.user_id }}"
+                      onclick="_openCopyModal('{{ e.wallet }}','{{ e.username|replace("'","\\'") }}',{{ e.user_id }},this)">
+                {% if e.is_copying %}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                Copying Trades
+                {% else %}
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                Copy Trades
+                {% endif %}
+              </button>
+              <button class="btn-follow-outline{% if e.is_following %} following{% endif %}"
+                      id="follow-{{ e.user_id }}"
+                      onclick="_toggleFollow('{{ e.wallet }}', this)"
+                      {% if not logged_in %}title="Connect wallet to follow"{% endif %}>
+                {{ '✓ Following' if e.is_following else '+ Follow' }}
+              </button>
+              {% else %}
+              <a href="/profile" class="btn-my-profile">My Profile</a>
+              {% endif %}
+            </div>
+
+          </div><!-- /card-body -->
         </div>
+        {% endfor %}
       </div>
 
-      <!-- footer -->
-      <div class="card-footer">
-        <div class="followers">
-          <span>👥</span>
-          <span class="followers-n">{{ e.follower_count }}</span>
-          <span>follower{{ 's' if e.follower_count != 1 else '' }}</span>
-        </div>
-        <div class="btn-row">
-          {% if not e.is_me %}
-          <button class="btn btn-follow{% if e.is_following %} following{% endif %}"
-                  id="follow-{{ e.user_id }}"
-                  onclick="_toggleFollow('{{ e.wallet }}', this)"
-                  {% if not logged_in %}title="Connect wallet to follow"{% endif %}>
-            {{ '✓ Following' if e.is_following else '+ Follow' }}
-          </button>
-          <button class="btn btn-copy{% if e.is_copying %} copying{% endif %}"
-                  id="copy-{{ e.user_id }}"
-                  onclick="_openCopyModal('{{ e.wallet }}','{{ e.username|replace("'","\\'") }}',{{ e.user_id }},this)"
-                  {% if not logged_in %}title="Connect wallet to copy"{% endif %}>
-            {{ '✓ Copying' if e.is_copying else 'Copy' }}
-          </button>
-          {% else %}
-          <a href="/profile" class="btn" style="text-decoration:none">My Profile</a>
-          {% endif %}
-        </div>
+      {% else %}
+      <div class="empty">
+        <div class="empty-icon">🐋</div>
+        <div class="empty-title">No traders yet</div>
+        <div class="empty-sub">Complete a trade and you'll appear here.</div>
       </div>
+      {% endif %}
 
     </div>
-    {% endfor %}
   </div>
-
-  {% else %}
-  <div class="empty">
-    <div class="empty-icon">🐋</div>
-    <div class="empty-title">No traders yet</div>
-    <div class="empty-sub">Complete a trade and you'll appear here.</div>
-  </div>
-  {% endif %}
-
 </div>
 
 <!-- COPY MODAL -->
@@ -439,17 +494,14 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
       <label class="modal-label" for="modal-sol-inp">Amount per trade</label>
       <div class="modal-inp-wrap">
         <input class="modal-inp" id="modal-sol-inp" type="number"
-               min="0.01" max="100" step="0.01" value="0.1"
-               placeholder="0.1">
+               min="0.01" max="100" step="0.01" value="0.1" placeholder="0.1">
         <span class="modal-inp-unit">SOL</span>
       </div>
       <div class="modal-hint" id="modal-hint">Each mirrored trade will spend this amount of SOL.</div>
     </div>
     <div class="modal-actions">
       <button class="modal-btn" onclick="_closeCopyModal()">Cancel</button>
-      <button class="modal-btn primary" id="modal-confirm-btn" onclick="_confirmCopy()">
-        Start Copying
-      </button>
+      <button class="modal-btn primary" id="modal-confirm-btn" onclick="_confirmCopy()">Start Copying</button>
     </div>
   </div>
 </div>
@@ -470,10 +522,25 @@ function _apiHeaders(){
   return h;
 }
 
-/* ── Copy modal state ─────────────────── */
-var _copyModal = { wallet: null, userId: null, btn: null, stopping: false };
+/* ── Avatar colours ── */
+var _PALETTE = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6','#f97316','#a855f7','#06b6d4','#84cc16'];
+function _avatarColor(s){
+  var h = 0;
+  for(var i=0;i<(s||'').length;i++) h=(h*31+(s.charCodeAt(i)|0))|0;
+  return _PALETTE[Math.abs(h)%_PALETTE.length];
+}
+document.querySelectorAll('.avatar').forEach(function(el){
+  var seed = el.dataset.seed || '';
+  el.style.background = _avatarColor(seed);
+  /* hide text initial if a real img loaded */
+  var img = el.querySelector('img');
+  if(img){ img.addEventListener('load', function(){ el.querySelector('.avatar-ini').style.display='none'; }); }
+});
 
-/* ── Filter / search ───────────────────── */
+/* ── Copy modal state ── */
+var _copyModal = { wallet:null, userId:null, btn:null, stopping:false };
+
+/* ── Filter / search ── */
 function _setTab(btn){
   _activeTab = btn.dataset.tab;
   document.querySelectorAll('.tab').forEach(function(b){ b.classList.remove('active'); });
@@ -484,16 +551,13 @@ function _setTab(btn){
 function _applyFilters(){
   var q = (document.getElementById('search').value || '').toLowerCase().trim();
   var visible = 0;
-
-  /* when switching to Top Week tab, re-sort grid by week_pnl */
   if(_activeTab === 'week'){
     var sorted = _allCards.slice().sort(function(a,b){
-      return parseFloat(b.dataset.week||0) - parseFloat(a.dataset.week||0);
+      return parseFloat(b.dataset.week||0)-parseFloat(a.dataset.week||0);
     });
     var grid = document.getElementById('grid');
     sorted.forEach(function(c){ grid.appendChild(c); });
   }
-
   _allCards.forEach(function(card){
     var matchTab = true;
     if(_activeTab === 'following') matchTab = card.dataset.following === '1';
@@ -502,66 +566,55 @@ function _applyFilters(){
     card.style.display = show ? '' : 'none';
     if(show) visible++;
   });
-
   document.getElementById('visible-count').textContent = visible;
 }
 
-/* ── Follow toggle ─────────────────────── */
+/* ── Follow toggle ── */
 function _toggleFollow(wallet, btn){
-  if(!_loggedIn){ _toast('Connect your wallet to follow traders', 'err'); return; }
+  if(!_loggedIn){ _toast('Connect your wallet to follow traders','err'); return; }
   btn.disabled = true;
-  fetch('/api/follow/toggle', {
-    method:'POST', credentials:'include',
+  fetch('/api/follow/toggle',{
+    method:'POST',credentials:'include',
     headers:_apiHeaders(),
-    body: JSON.stringify({ wallet: wallet })
+    body:JSON.stringify({wallet:wallet})
   })
   .then(function(r){ return r.json(); })
   .then(function(d){
     btn.disabled = false;
-    if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
+    if(!d.ok){ _toast(d.msg||'Error','err'); return; }
     var isNow = d.following;
     btn.textContent = isNow ? '✓ Following' : '+ Follow';
     btn.classList.toggle('following', isNow);
     var card = btn.closest('.card');
     if(card) card.dataset.following = isNow ? '1' : '0';
-    var fEl = card ? card.querySelector('.followers-n') : null;
-    if(fEl){
-      var cur = parseInt(fEl.textContent || '0', 10);
-      fEl.textContent = isNow ? cur + 1 : Math.max(0, cur - 1);
-    }
-    _toast(isNow ? 'Following' : 'Unfollowed', 'ok');
+    _toast(isNow ? 'Following' : 'Unfollowed','ok');
   })
-  .catch(function(){ btn.disabled = false; _toast('Network error', 'err'); });
+  .catch(function(){ btn.disabled=false; _toast('Network error','err'); });
 }
 
-/* ── Copy trade modal ──────────────────── */
+/* ── Copy trade modal ── */
 function _openCopyModal(wallet, username, userId, btn){
-  if(!_loggedIn){ _toast('Connect your wallet to copy trades', 'err'); return; }
+  if(!_loggedIn){ _toast('Connect your wallet to copy trades','err'); return; }
   var isCopying = btn.classList.contains('copying');
-  _copyModal = { wallet: wallet, userId: userId, btn: btn, stopping: isCopying };
-
+  _copyModal = {wallet:wallet, userId:userId, btn:btn, stopping:isCopying};
   document.getElementById('modal-username').textContent = username;
-  var confirmBtn = document.getElementById('modal-confirm-btn');
-  var amountField = document.getElementById('modal-amount-field');
-  var hint = document.getElementById('modal-hint');
-
+  var confirmBtn    = document.getElementById('modal-confirm-btn');
+  var amountField   = document.getElementById('modal-amount-field');
   if(isCopying){
-    /* already copying — show stop confirmation */
     document.getElementById('modal-desc').innerHTML =
-      'Stop copying <strong>' + username + '</strong>? No new trades will be mirrored.';
+      'Stop copying <strong>'+username+'</strong>? No new trades will be mirrored.';
     amountField.style.display = 'none';
     confirmBtn.textContent = 'Stop Copying';
-    confirmBtn.className = 'modal-btn danger';
+    confirmBtn.className   = 'modal-btn danger';
   } else {
     document.getElementById('modal-desc').innerHTML =
-      'When <strong>' + username + '</strong> opens a trade, you automatically mirror it with the amount below.';
+      'When <strong>'+username+'</strong> opens a trade, you automatically mirror it with the amount below.';
     amountField.style.display = '';
     document.getElementById('modal-sol-inp').value = '0.1';
+    document.getElementById('modal-hint').textContent = 'Each mirrored trade will spend this amount of SOL.';
     confirmBtn.textContent = 'Start Copying';
-    confirmBtn.className = 'modal-btn primary';
-    hint.textContent = 'Each mirrored trade will spend this amount of SOL.';
+    confirmBtn.className   = 'modal-btn primary';
   }
-
   document.getElementById('copy-modal-backdrop').classList.add('open');
   if(!isCopying) document.getElementById('modal-sol-inp').focus();
 }
@@ -575,65 +628,85 @@ function _confirmCopy(){
   var confirmBtn = document.getElementById('modal-confirm-btn');
   confirmBtn.disabled = true;
   var m = _copyModal;
-
   if(m.stopping){
-    fetch('/api/copy-trade/toggle', {
-      method:'POST', credentials:'include',
+    fetch('/api/copy-trade/toggle',{
+      method:'POST',credentials:'include',
       headers:_apiHeaders(),
-      body: JSON.stringify({ wallet: m.wallet })
+      body:JSON.stringify({wallet:m.wallet})
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
       confirmBtn.disabled = false;
-      if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
+      if(!d.ok){ _toast(d.msg||'Error','err'); return; }
       document.getElementById('copy-modal-backdrop').classList.remove('open');
-      m.btn.textContent = 'Copy';
+      m.btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Copy Trades';
       m.btn.classList.remove('copying');
-      _toast('Copy trading stopped', 'ok');
+      _toast('Copy trading stopped','ok');
     })
-    .catch(function(){ confirmBtn.disabled = false; _toast('Network error', 'err'); });
+    .catch(function(){ confirmBtn.disabled=false; _toast('Network error','err'); });
   } else {
     var raw = parseFloat(document.getElementById('modal-sol-inp').value);
-    if(!raw || raw < 0.01 || raw > 100){
-      _toast('Enter a valid amount (0.01 – 100 SOL)', 'err');
+    if(!raw||raw<0.01||raw>100){
+      _toast('Enter a valid amount (0.01 – 100 SOL)','err');
       confirmBtn.disabled = false;
       return;
     }
-    fetch('/api/copy-trade/toggle', {
-      method:'POST', credentials:'include',
+    fetch('/api/copy-trade/toggle',{
+      method:'POST',credentials:'include',
       headers:_apiHeaders(),
-      body: JSON.stringify({ wallet: m.wallet, sol_amount: raw })
+      body:JSON.stringify({wallet:m.wallet, sol_amount:raw})
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
       confirmBtn.disabled = false;
-      if(!d.ok){ _toast(d.msg || 'Error', 'err'); return; }
+      if(!d.ok){ _toast(d.msg||'Error','err'); return; }
       document.getElementById('copy-modal-backdrop').classList.remove('open');
-      document.querySelectorAll('.btn-copy.copying').forEach(function(b){
-        b.textContent = 'Copy'; b.classList.remove('copying');
+      document.querySelectorAll('.btn-copy-full.copying').forEach(function(b){
+        b.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Copy Trades';
+        b.classList.remove('copying');
       });
-      m.btn.textContent = '✓ Copying';
+      m.btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copying Trades';
       m.btn.classList.add('copying');
-      _toast('Now copying — ' + raw + ' SOL per trade', 'ok');
+      _toast('Now copying — '+raw+' SOL per trade','ok');
     })
-    .catch(function(){ confirmBtn.disabled = false; _toast('Network error', 'err'); });
+    .catch(function(){ confirmBtn.disabled=false; _toast('Network error','err'); });
   }
 }
 
-/* close modal on Escape */
-document.addEventListener('keydown', function(e){
-  if(e.key === 'Escape') document.getElementById('copy-modal-backdrop').classList.remove('open');
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape') document.getElementById('copy-modal-backdrop').classList.remove('open');
 });
 
-/* ── Toast ──────────────────────────────── */
+/* ── Toast ── */
 var _toastTimer;
-function _toast(msg, type){
+function _toast(msg,type){
   var el = document.getElementById('toast');
   el.textContent = msg;
-  el.className = 'toast show ' + (type || '');
+  el.className = 'toast show '+(type||'');
   clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(function(){ el.className = 'toast'; }, 2600);
+  _toastTimer = setTimeout(function(){ el.className='toast'; },2600);
 }
+
+/* ── Sidebar profile ── */
+(function(){
+  fetch('/api/me').then(function(r){ return r.json(); }).then(function(d){
+    if(!d.ok && !d.wallet) return;
+    var w = d.wallet||'';
+    function _s(s){ return s?s.slice(0,4)+'…'+s.slice(-4):''; }
+    var ini  = document.getElementById('sb-avatar-ini');
+    var name = document.getElementById('sb-user-name');
+    var hdl  = document.getElementById('sb-handle');
+    var sol  = document.getElementById('sb-sol');
+    if(ini)  ini.textContent  = (d.username||w)[0].toUpperCase();
+    if(name) name.textContent = d.username||_s(w);
+    if(hdl)  hdl.textContent  = d.username?'@'+d.username:_s(w);
+    if(sol&&d.balance!=null) sol.textContent = parseFloat(d.balance).toFixed(3);
+    if(d.avatar){
+      var img = document.getElementById('sb-avatar-img');
+      if(img){ img.src=d.avatar; img.style.display=''; }
+    }
+  }).catch(function(){});
+})();
 </script>
 </body>
 </html>
