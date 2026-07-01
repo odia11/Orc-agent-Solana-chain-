@@ -87,39 +87,37 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .st-wallet-btns{display:flex;gap:8px}
 .st-manage-btn{flex:1;padding:9px;background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s}
 .st-manage-btn:hover{opacity:.88}
-.st-reveal-btn{flex:1;padding:9px;background:transparent;color:var(--sub);border:1px solid var(--border2);border-radius:9px;font-size:13px;font-weight:600;font-family:var(--ui);cursor:pointer;transition:border-color .15s,color .15s}
-.st-reveal-btn:hover{border-color:var(--muted);color:var(--text)}
 .st-key-status{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px}
 .st-key-status.has-key{color:var(--green)}
 .st-key-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
 
+/* ── EMERGENCY CARD ── */
+.st-card.emergency{border-color:#f76b62;background:rgba(247,107,98,.06)}
+.st-card.emergency .st-card-hdr{color:#f76b62}
+.st-emergency-desc{font-size:13px;color:#f76b62;opacity:.8;margin-bottom:16px;line-height:1.55}
+.st-emergency-btn{width:100%;padding:11px;background:#f76b62;color:#fff;border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s}
+.st-emergency-btn:hover{opacity:.88}
+.st-emergency-btn:disabled{opacity:.45;cursor:not-allowed}
+
 /* ── MODAL ── */
 .modal-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:500;align-items:center;justify-content:center;padding:20px}
-.modal-box{background:var(--bg2);border:1px solid var(--border2);border-radius:16px;padding:24px;width:100%;max-width:400px;position:relative}
+.modal-box{background:#101216;border:1px solid var(--border2);border-radius:16px;padding:24px;width:100%;max-width:400px;position:relative}
 .modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px;transition:color .15s}
 .modal-close:hover{color:var(--text)}
-.modal-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:6px}
-.modal-desc{font-size:12px;color:var(--muted);margin-bottom:18px;line-height:1.5}
-.modal-label{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.07em;margin-bottom:6px}
-.modal-inp-wrap{position:relative;margin-bottom:14px}
-.modal-inp{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:var(--mono);font-size:13px;padding:10px 42px 10px 12px;outline:none;transition:border-color .15s}
-.modal-inp:focus{border-color:rgba(247,185,85,.4)}
-.modal-vis{position:absolute;right:11px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px;transition:color .15s;line-height:1}
-.modal-vis:hover{color:var(--text)}
-.modal-note{background:var(--bg);border:1px solid var(--border2);border-left:3px solid var(--accent);border-radius:8px;padding:10px 12px;font-size:11px;color:var(--sub);line-height:1.6;margin-bottom:16px}
+.modal-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px}
+.modal-textarea{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:var(--mono);font-size:13px;padding:12px;outline:none;transition:border-color .15s;resize:none;height:96px;line-height:1.5;margin-bottom:14px;display:block}
+.modal-textarea:focus{border-color:rgba(247,185,85,.4)}
+.modal-textarea::placeholder{color:var(--muted)}
 .modal-btns{display:flex;gap:8px}
-.modal-btn{flex:1;padding:10px;border-radius:9px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:all .15s;text-align:center}
-.modal-cancel{background:transparent;color:var(--sub);border:1px solid var(--border2)}
-.modal-cancel:hover{border-color:var(--muted);color:var(--text)}
-.modal-save{background:var(--accent);color:#0a0b0e;border:1px solid var(--accent)}
+.modal-btn{flex:1;padding:10px;border-radius:9px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:all .15s;text-align:center;border:none}
+.modal-cancel{background:transparent;color:var(--sub);border:1px solid var(--border2)!important}
+.modal-cancel:hover{border-color:var(--muted)!important;color:var(--text)}
+.modal-save{background:var(--accent);color:#0a0b0e}
 .modal-save:hover{opacity:.88}
 .modal-save:disabled{opacity:.45;cursor:not-allowed}
 .modal-msg{font-size:12px;min-height:16px;margin-top:10px}
 .modal-msg.ok{color:var(--green)}
 .modal-msg.err{color:var(--red)}
-
-/* ── REVEAL MODAL ── */
-.reveal-key-box{background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:12px;margin-bottom:14px;font-family:var(--mono);font-size:12px;color:var(--accent);word-break:break-all;line-height:1.6;min-height:48px;letter-spacing:.02em}
 
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:3px;height:3px}
@@ -197,15 +195,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       </a>
     </nav>
 
-    <div class="sb-bottom">
-      <div class="sb-user">
-        <div class="sb-av">
-          <img id="sb-av-img" alt="" style="display:none" onerror="this.style.display='none'">
-          <span id="sb-av-ini">?</span>
-        </div>
-        <div class="sb-user-name" id="sb-user-name">You</div>
-      </div>
-    </div>
   </aside>
 
   <!-- ── MAIN ── -->
@@ -328,8 +317,15 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
         <div class="st-wallet-btns">
           <button class="st-manage-btn" onclick="_openManage()">Manage</button>
-          <button class="st-reveal-btn" onclick="_openReveal()">Reveal</button>
         </div>
+      </div>
+
+      <!-- ── CARD 4: Emergency Stop ── -->
+      <div class="st-card emergency">
+        <div class="st-card-hdr">🛑 Emergency Stop</div>
+        <div class="st-emergency-desc">Immediately halt all bot activity and cancel open scans. Existing positions are not auto-closed — manage them manually.</div>
+        <button class="st-emergency-btn" id="emergency-btn" onclick="_emergencyStop()">Emergency Stop</button>
+        <div class="st-save-msg" id="emergency-msg" style="margin-top:8px"></div>
       </div>
 
     </div><!-- /st-content -->
@@ -340,32 +336,13 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 <div class="modal-back" id="manage-modal" onclick="if(event.target===this)_closeManage()">
   <div class="modal-box">
     <button class="modal-close" onclick="_closeManage()">✕</button>
-    <div class="modal-title">Private Key</div>
-    <div class="modal-desc">Your key is double-encrypted before storage and never exposed in logs.</div>
-    <div class="modal-label">PRIVATE KEY</div>
-    <div class="modal-inp-wrap">
-      <input id="manage-inp" class="modal-inp" type="password" placeholder="Base58 private key…" autocomplete="new-password">
-      <button class="modal-vis" id="manage-vis" onclick="_toggleManageVis()">👁</button>
-    </div>
-    <div class="modal-note">🔒 Double-encrypted · Never logged · Only decrypted at trade time<br>⚠ Use a dedicated trading wallet — not your main wallet</div>
+    <div class="modal-title">Enter Private Key</div>
+    <textarea id="manage-inp" class="modal-textarea" placeholder="Paste your base58 private key here…" autocomplete="new-password" spellcheck="false"></textarea>
     <div class="modal-btns">
       <button class="modal-btn modal-cancel" onclick="_closeManage()">Cancel</button>
-      <button class="modal-btn modal-save" id="manage-save-btn" onclick="_saveKey()">Save Key</button>
+      <button class="modal-btn modal-save" id="manage-save-btn" onclick="_saveKey()">Save</button>
     </div>
     <div class="modal-msg" id="manage-msg"></div>
-  </div>
-</div>
-
-<!-- ── REVEAL MODAL ── -->
-<div class="modal-back" id="reveal-modal" onclick="if(event.target===this)_closeReveal()">
-  <div class="modal-box">
-    <button class="modal-close" onclick="_closeReveal()">✕</button>
-    <div class="modal-title">Reveal Key</div>
-    <div class="modal-desc" id="reveal-desc">Decrypting…</div>
-    <div class="reveal-key-box" id="reveal-key-box" style="display:none"></div>
-    <div class="modal-btns" style="margin-top:14px">
-      <button class="modal-btn modal-cancel" onclick="_closeReveal()">Close</button>
-    </div>
   </div>
 </div>
 
@@ -385,15 +362,6 @@ function _msg(id, txt, cls){
   el.textContent=txt;
 }
 
-/* ── sidebar user ── */
-fetch('/api/me').then(function(r){return r.json();}).then(function(d){
-  var w=d.wallet||_wallet||'';
-  var ini=document.getElementById('sb-av-ini');
-  var name=document.getElementById('sb-user-name');
-  if(ini) ini.textContent=(d.username||w||'?')[0].toUpperCase();
-  if(name) name.textContent=d.username||(w.slice(0,4)+'…'+w.slice(-4));
-  if(d.avatar){var img=document.getElementById('sb-av-img');if(img){img.src=d.avatar;img.style.display='';}}
-}).catch(function(){});
 
 /* ── load settings on init ── */
 document.addEventListener('DOMContentLoaded', function(){
@@ -490,8 +458,6 @@ function _copyWallet(){
 /* ── manage modal ── */
 function _openManage(){
   document.getElementById('manage-inp').value='';
-  document.getElementById('manage-inp').type='password';
-  document.getElementById('manage-vis').textContent='👁';
   _msg('manage-msg','','');
   document.getElementById('manage-modal').style.display='flex';
   setTimeout(function(){document.getElementById('manage-inp').focus();},60);
@@ -500,12 +466,6 @@ function _closeManage(){
   document.getElementById('manage-modal').style.display='none';
   document.getElementById('manage-inp').value='';
 }
-function _toggleManageVis(){
-  var inp=document.getElementById('manage-inp');
-  var btn=document.getElementById('manage-vis');
-  inp.type=inp.type==='password'?'text':'password';
-  btn.textContent=inp.type==='password'?'👁':'🙈';
-}
 async function _saveKey(){
   var key=document.getElementById('manage-inp').value.trim();
   var btn=document.getElementById('manage-save-btn');
@@ -513,11 +473,10 @@ async function _saveKey(){
   if(key.length<40){_msg('manage-msg','Key looks too short — paste the full base58 key.','err');return;}
   btn.textContent='Saving…'; btn.disabled=true;
   try{
-    var d=await _post('/api/settings',{private_key:key});
+    var d=await _post('/api/wallet/set-key',{private_key:key});
     if(d.ok){
       _msg('manage-msg','✓ Key saved and encrypted.','ok');
       document.getElementById('manage-inp').value='';
-      /* update key status in card 3 */
       var stat=document.getElementById('st-key-status');
       var txt=document.getElementById('st-key-status-text');
       if(stat) stat.className='st-key-status has-key';
@@ -529,27 +488,35 @@ async function _saveKey(){
   }catch(e){
     _msg('manage-msg','✗ Network error.','err');
   }finally{
-    btn.textContent='Save Key'; btn.disabled=false;
+    btn.textContent='Save'; btn.disabled=false;
   }
 }
 
-/* ── reveal modal ── */
-function _openReveal(){
-  var desc=document.getElementById('reveal-desc');
-  var box=document.getElementById('reveal-key-box');
-  if(desc) desc.textContent='For security, your private key is stored encrypted and cannot be read back from the server. To replace it, close this and use Manage.';
-  if(box) box.style.display='none';
-  document.getElementById('reveal-modal').style.display='flex';
-}
-function _closeReveal(){
-  document.getElementById('reveal-modal').style.display='none';
-  var box=document.getElementById('reveal-key-box');
-  if(box){box.textContent='';box.style.display='none';}
+/* ── emergency stop ── */
+async function _emergencyStop(){
+  var btn=document.getElementById('emergency-btn');
+  var msgEl=document.getElementById('emergency-msg');
+  if(!confirm('Emergency stop: halt all bot activity immediately?')) return;
+  btn.textContent='Stopping…'; btn.disabled=true;
+  try{
+    var d=await _post('/api/bot/stop',{});
+    if(d.ok||d.stopped){
+      if(msgEl){msgEl.className='st-save-msg ok';msgEl.textContent='✓ Bot stopped — all trading halted';}
+      var tog=document.getElementById('pref-autobot');
+      if(tog) tog.checked=false;
+    } else {
+      if(msgEl){msgEl.className='st-save-msg err';msgEl.textContent='✗ '+(d.error||d.msg||'Stop failed');}
+    }
+  }catch(e){
+    if(msgEl){msgEl.className='st-save-msg err';msgEl.textContent='✗ Network error';}
+  }finally{
+    btn.textContent='Emergency Stop'; btn.disabled=false;
+  }
 }
 
 /* ── escape to close modals ── */
 document.addEventListener('keydown',function(e){
-  if(e.key==='Escape'){_closeManage();_closeReveal();}
+  if(e.key==='Escape') _closeManage();
 });
 </script>
 </body>
