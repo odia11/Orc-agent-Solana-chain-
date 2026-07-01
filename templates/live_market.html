@@ -108,8 +108,16 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-modal-close:hover{color:var(--text)}
 @keyframes tcSpin{to{transform:rotate(360deg)}}
 
+/* ── MOBILE BACK BAR ── */
+.mobile-back-bar{display:none}
+@media(max-width:767px){
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
+}
 /* mobile */
 @media(max-width:767px){
+  .lm-back{display:none!important}
   .col-hide{display:none}
   .lm-table{min-width:0}
   .lm-table thead th{font-size:9px;padding:10px 8px;letter-spacing:.04em}
@@ -131,6 +139,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 </style>
 </head>
 <body>
+
+<div class="mobile-back-bar">
+  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Live Market</span>
+</div>
 
 <header class="lm-header">
   <a class="lm-back" href="/">← Back</a>

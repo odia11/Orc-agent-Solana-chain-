@@ -50,9 +50,21 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+/* ── MOBILE BACK BAR ── */
+.mobile-back-bar{display:none}
+@media(max-width:767px){
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
+}
 </style>
 </head>
 <body>
+
+<div class="mobile-back-bar">
+  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Notifications</span>
+</div>
 
 <div id="notifs" style="padding:16px;display:flex;flex-direction:column;gap:8px">
   <p style="color:#565d68">Loading...</p>
