@@ -3479,7 +3479,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <a class="sb-nav-item" id="sbn-notifications" href="/notifications">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
           Notifications
-          <span class="sb-nav-badge" id="sb-notif-badge">5</span>
         </a>
         <a class="sb-nav-item" id="sbn-wallet" href="/wallet" onclick="if(checkGuest()){event.preventDefault();}">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
@@ -9943,7 +9942,8 @@ async function dmFetchUnread(){
 
 function _dmSetUnreadBadge(n){
   [document.getElementById('nav-msg-badge'),
-   document.getElementById('sb-msg-badge')].forEach(el=>{
+   document.getElementById('sb-msg-badge'),
+   document.getElementById('mn-msg-badge')].forEach(el=>{
     if(!el) return;
     el.textContent=n>99?'99+':n||'';
     el.style.display=n>0?'inline-block':'none';
@@ -11874,6 +11874,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <a class="mn-drawer-item" href="/messages" onclick="_mnDrawerClose()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
       Messages
+      <span class="mn-drawer-badge" id="mn-msg-badge" style="display:none"></span>
     </a>
     <a class="mn-drawer-item" href="/community" onclick="_mnDrawerClose()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 20h5v-2a3 3 0 0 0-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 0 1 5.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 0 1 9.288 0"/></svg>
@@ -11882,7 +11883,6 @@ document.addEventListener('DOMContentLoaded', function() {
     <a class="mn-drawer-item" href="/notifications" onclick="_mnDrawerClose()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
       Notifications
-      <span class="mn-drawer-badge" id="mn-notif-badge">5</span>
     </a>
     <a class="mn-drawer-item" href="/wallet" onclick="_mnDrawerClose()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg>
