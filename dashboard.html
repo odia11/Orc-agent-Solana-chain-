@@ -3011,7 +3011,17 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 </style>
 </head>
 <body>
-<script>document.addEventListener('DOMContentLoaded',function(){var p=new URLSearchParams(window.location.search).get('action');if(p==='deposit'&&typeof openDepositModal==='function')openDepositModal();if(p==='withdraw'&&typeof openWithdrawModal==='function')openWithdrawModal();})</script>
+<script>document.addEventListener('DOMContentLoaded',function(){
+  var _qs=new URLSearchParams(window.location.search);
+  var p=_qs.get('action');
+  if(p==='deposit'&&typeof openDepositModal==='function')openDepositModal();
+  if(p==='withdraw'&&typeof openWithdrawModal==='function')openWithdrawModal();
+  if(_qs.get('connect')==='1'){
+    var sub=document.querySelector('.ob-sub');
+    if(sub) sub.textContent='Connect your wallet to access this feature.';
+    window.history.replaceState(null,'','/');
+  }
+})</script>
 
 <!-- UPDATE BANNER -->
 <div id="update-banner">
@@ -3471,7 +3481,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           Notifications
           <span class="sb-nav-badge" id="sb-notif-badge">5</span>
         </a>
-        <a class="sb-nav-item" id="sbn-wallet" href="/wallet">
+        <a class="sb-nav-item" id="sbn-wallet" href="/wallet" onclick="if(checkGuest()){event.preventDefault();}">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
           Wallet
         </a>
@@ -3479,11 +3489,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
           Profile
         </a>
-        <a class="sb-nav-item" id="sbn-settings" href="/settings">
+        <a class="sb-nav-item" id="sbn-settings" href="/settings" onclick="if(checkGuest()){event.preventDefault();}">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
           Settings
         </a>
-        <a class="sb-nav-item" id="sb-admin-link" href="/admin" style="display:none;color:var(--accent)">
+        <a class="sb-nav-item" id="sb-admin-link" href="/admin" style="display:none;color:var(--accent)" onclick="if(checkGuest()){event.preventDefault();}">
           <span class="sb-nav-icon">👑</span>
           Admin Console
         </a>
@@ -5045,6 +5055,7 @@ async function launchApp(){
   }
 
   // ── 2. Show dashboard ──────────────────────────────────────────
+  if(phantomKey) guestMode = false;
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
   const _spos=document.getElementById('s-pos'); if(_spos) _spos.textContent='0/5';
@@ -9882,6 +9893,7 @@ async function _dmAutoRefresh(){
 }
 
 async function dmFetchUnread(){
+  if(!phantomKey) return;
   try{
     const [r1,r2]=await Promise.all([
       fetch('/api/messages/unread').then(x=>x.json()).catch(()=>({ok:false,unread:0})),

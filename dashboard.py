@@ -3574,7 +3574,7 @@ def wallet_page():
     try:
         if 'wallet' not in session:
             print('[wallet] no wallet in session, redirecting', flush=True)
-            return redirect('/?next=wallet')
+            return redirect('/?connect=1')
         wallet_address = session['wallet']
         wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else ''
         print(f'[wallet] rendering template for {wallet_address}', flush=True)
@@ -3593,7 +3593,7 @@ def wallet_page():
 def settings_page():
     wallet = _current_wallet()
     if not wallet:
-        return redirect('/')
+        return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
     return render_template(
         'settings.html',
@@ -3687,7 +3687,7 @@ def admin_page():
 def messages_page():
     wallet = _current_wallet()
     if not wallet:
-        return redirect('/')
+        return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
     return render_template(
         'messages.html',
@@ -3700,7 +3700,7 @@ def messages_page():
 @app.route('/messages/<wallet_address>')
 def message_thread(wallet_address):
     if 'wallet' not in session:
-        return redirect('/')
+        return redirect('/?connect=1')
     wallet = session['wallet']
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
     return render_template(
