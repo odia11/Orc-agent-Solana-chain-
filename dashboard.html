@@ -3457,7 +3457,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
           Traders
         </a>
-        <a class="sb-nav-item" id="sbn-messages" href="/messages">
+        <a class="sb-nav-item" id="sbn-messages" href="/messages" onclick="if(checkGuest()){event.preventDefault();}">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></span>
           Messages
           <span class="sb-nav-badge" id="sb-msg-badge">3</span>
@@ -3498,7 +3498,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </nav>
 
       <!-- START TRADING — full-width accent CTA -->
-      <button class="sb-cta-btn" id="sb-start-btn" onclick="_botToggle()">&#9654; Start Trading</button>
+      <button class="sb-cta-btn" id="sb-start-btn" onclick="if(checkGuest())return;_botToggle()">&#9654; Start Trading</button>
 
       <!-- BOT PNL — unified card: status dot in header wired to bot state, positions wired to JS -->
       <div class="sb-bot-wrap">
@@ -3649,7 +3649,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="feed-bot-sub" id="feed-bot-sub">Configure strategy in Settings to auto-trade</div>
       </div>
     </div>
-    <button class="feed-bot-btn" id="feed-trade-btn" onclick="_botToggle()">&#9654; Start Trading</button>
+    <button class="feed-bot-btn" id="feed-trade-btn" onclick="if(checkGuest())return;_botToggle()">&#9654; Start Trading</button>
   </div>
   <script>
   (function(){
@@ -3722,7 +3722,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </button>
       <div style="flex:1"></div>
       <!-- Post button -->
-      <button class="feed-composer-post" onclick="submitPost()">POST</button>
+      <button class="feed-composer-post" onclick="if(checkGuest())return;submitPost()">POST</button>
     </div>
   </div>
 
@@ -5005,6 +5005,23 @@ function _guestConnect(){
   if(ob) ob.classList.remove('hide');
   currentStep=0; showStep(0);
 }
+function checkGuest(){
+  if(!guestMode) return false;
+  _showGuestWall();
+  return true;
+}
+function _showGuestWall(){
+  var m=document.getElementById('guest-wall-modal');
+  if(m) m.style.display='flex';
+}
+function _closeGuestWall(){
+  var m=document.getElementById('guest-wall-modal');
+  if(m) m.style.display='none';
+}
+function _guestWallConnect(){
+  _closeGuestWall();
+  _guestConnect();
+}
 
 async function launchApp(){
   // ── 1. Verify / silently restore server-side session ────────────
@@ -5996,6 +6013,7 @@ function _stopCopyingConfirm(){
 }
 
 async function _tpcStartCopy(wallet, username){
+  if(checkGuest()) return;
   const r=await fetch('/api/copy-trade',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({target_wallet:wallet})}).then(r=>r.json()).catch(()=>null);
   if(r?.ok){
     _copySource=wallet;
@@ -7786,6 +7804,7 @@ function _tvAvatarHtml(e){
 }
 
 async function _tvFollowToggle(btn, key, userId, username){
+  if(checkGuest()) return;
   const wasFollowing=_tvFollowed.has(key);
   if(wasFollowing){
     _tvFollowed.delete(key);
@@ -8034,6 +8053,7 @@ async function _tpcSendSol(amountSol, recipientFullWallet) {
 }
 
 async function _tpcToggleFollow(userId, followKey){
+  if(checkGuest()) return;
   const btn=document.getElementById('tpc-follow-btn');
   if(!btn||btn.disabled) return;
 
@@ -11873,6 +11893,17 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') _mnDrawerClose();
 });
 </script>
+
+<!-- GUEST WALL MODAL -->
+<div id="guest-wall-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#101216;border:1px solid #21252c;border-radius:16px;padding:24px;max-width:320px;width:100%;text-align:center">
+    <div style="font-size:28px;margin-bottom:12px">🔒</div>
+    <div style="font-size:17px;font-weight:700;margin-bottom:8px;color:#eef1f5;font-family:'Geist',system-ui,sans-serif">Connect your wallet</div>
+    <div style="font-size:13px;color:#565d68;margin-bottom:20px;line-height:1.5;font-family:'Geist',system-ui,sans-serif">You need a wallet to use this feature</div>
+    <button onclick="_guestWallConnect()" style="width:100%;padding:11px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;font-family:'Geist',system-ui,sans-serif">Connect Wallet</button>
+    <button onclick="_closeGuestWall()" style="background:none;border:none;color:#565d68;font-size:13px;cursor:pointer;font-family:'Geist',system-ui,sans-serif;padding:4px 0">Continue browsing</button>
+  </div>
+</div>
 
 </body>
 </html>
