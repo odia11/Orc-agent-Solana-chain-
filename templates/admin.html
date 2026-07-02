@@ -509,11 +509,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
       <div class="sec-hdr">
         <div class="sec-title">Posts — Review Queue</div>
-        <div class="sec-count">{{ posts|length }} posts</div>
+        <div class="sec-count" id="mod-posts-count">{{ posts|length }} posts</div>
       </div>
       <div class="tbl-wrap" style="margin-bottom:24px">
         <div class="tbl">
           <div class="tbl-hdr col-posts"><div>Content</div><div>Author</div><div>Time</div><div></div></div>
+          <div id="mod-posts-live">
           {% if posts %}
             {% for p in posts %}
             <div class="tbl-row col-posts" id="post-row-{{ p.id }}">
@@ -526,6 +527,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           {% else %}
             <div class="tbl-empty">No posts to review</div>
           {% endif %}
+          </div>
         </div>
       </div>
 
@@ -739,16 +741,20 @@ function filterUsers() { renderUsers(); }
 // ══════════════════ TRADES ══════════════════
 async function loadTrades() {
   document.getElementById('tr-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
-  var r = await _a('/api/admin/fees');
-  _allTrades = (r?.transactions || []);
+  var r = await _a('/api/admin/trades');
+  _allTrades = (r?.trades || []);
   renderTrades();
 }
 function renderTrades() {
   var q = (document.getElementById('tr-search')?.value || '').toLowerCase();
   var st = document.getElementById('tr-status')?.value || 'all';
   var filtered = _allTrades.filter(t => {
-    if (q && !(t.wallet||'').toLowerCase().includes(q) && !(t.token||'').toLowerCase().includes(q)) return false;
-    if (st !== 'all' && t.status !== st) return false;
+    if (q && !(t.wallet_full||t.wallet||'').toLowerCase().includes(q) && !(t.token||'').toLowerCase().includes(q)) return false;
+    if (st !== 'all') {
+      var ok = (t.pnl >= 0);
+      if (st === 'ok' && !ok) return false;
+      if (st === 'failed' && ok) return false;
+    }
     return true;
   });
   document.getElementById('tr-count').textContent = filtered.length + ' / ' + _allTrades.length + ' trades';
@@ -757,13 +763,14 @@ function renderTrades() {
     return;
   }
   document.getElementById('tr-body').innerHTML = filtered.map(t => {
+    var pnlCls = (t.pnl >= 0) ? 'pos' : 'neg';
     return '<div class="tbl-row col-trades">' +
-      '<div class="mono-sm">' + _short(t.wallet||'') + '</div>' +
+      '<div class="mono-sm">' + _short(t.wallet_full||t.wallet||'') + '</div>' +
       '<div class="mono-sm">' + (t.token||'—') + '</div>' +
-      '<div class="mono">' + _fmt(t.gross||0) + '</div>' +
-      '<div class="mono pos">' + _fmt(t.fee||0) + '</div>' +
-      _statusTag(t.status||'ok') +
-      '<div class="mono-sm">' + ((t.ts||'').slice(0,16)||'—') + '</div>' +
+      '<div class="mono">' + _fmt(t.amount||0) + '</div>' +
+      '<div class="mono ' + pnlCls + '">' + (t.pnl >= 0 ? '+' : '') + _fmt(t.pnl||0) + '</div>' +
+      '<span class="tag ' + (t.pnl >= 0 ? 'tag-green' : 'tag-red') + '">' + (t.pnl >= 0 ? 'profit' : 'loss') + '</span>' +
+      '<div class="mono-sm">' + (t.ts||'—') + '</div>' +
       '</div>';
   }).join('');
 }
@@ -772,14 +779,12 @@ function filterTrades() { renderTrades(); }
 // ══════════════════ REVENUE ══════════════════
 async function loadRevenue() {
   document.getElementById('rev-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
-  var [fees, feeStats] = await Promise.all([_a('/api/admin/fees'), _a('/api/admin/fee-stats')]);
-  if (feeStats) {
-    document.getElementById('rev-today').textContent = _fmt(feeStats.today) + ' SOL';
-    document.getElementById('rev-total').textContent = _fmt(feeStats.collected) + ' SOL';
-    document.getElementById('rev-pending').textContent = _fmt(feeStats.pending) + ' SOL';
-  }
-  if (fees) {
-    var txs = fees.transactions || [];
+  var r = await _a('/api/admin/revenue');
+  if (r?.ok) {
+    document.getElementById('rev-today').textContent   = _fmt(r.today) + ' SOL';
+    document.getElementById('rev-total').textContent   = _fmt(r.collected) + ' SOL';
+    document.getElementById('rev-pending').textContent = _fmt((r.pending||0) + (r.failed||0)) + ' SOL';
+    var txs = r.transactions || [];
     _allRevTx = txs;
     document.getElementById('rev-tx-count').textContent = txs.length + ' transactions';
     document.getElementById('rev-body').innerHTML = txs.length
@@ -856,12 +861,27 @@ async function loadSystem() {
 
 // ══════════════════ MODERATION ══════════════════
 async function loadModeration() {
-  var bans = await _a('/api/admin/bans');
+  var [bans, posts] = await Promise.all([_a('/api/admin/bans'), _a('/api/admin/posts')]);
   _renderBans(bans, 'mod-ban-body', 'mod-ban-count');
   if (bans) {
-    document.getElementById('mod-bans-count').textContent  = (bans.bans||[]).length;
-    document.getElementById('mod-rl-count').textContent    = bans.rl_bucket_count ?? '—';
-    document.getElementById('mod-wl-count').textContent    = (bans.whitelisted_ips||[]).length;
+    document.getElementById('mod-bans-count').textContent = (bans.bans||[]).length;
+    document.getElementById('mod-rl-count').textContent   = bans.rl_bucket_count ?? '—';
+    document.getElementById('mod-wl-count').textContent   = (bans.whitelisted_ips||[]).length;
+  }
+  if (posts?.posts) {
+    document.getElementById('mod-posts-count').textContent = posts.total ?? posts.posts.length;
+    var postsBody = document.getElementById('mod-posts-live');
+    if (postsBody) {
+      postsBody.innerHTML = posts.posts.length
+        ? posts.posts.map(p =>
+            '<div class="tbl-row col-posts" id="post-row-' + p.id + '">' +
+            '<div style="font-size:12px;color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (p.content||'').replace(/"/g,'&quot;') + '">' + (p.content||'') + '</div>' +
+            '<div class="mono-sm">' + (p.author||p.wallet||'—') + '</div>' +
+            '<div class="mono-sm">' + (p.ts||'—') + '</div>' +
+            '<div><button class="btn btn-danger" data-post-id="' + p.id + '" onclick="deletePost(this)">Delete</button></div>' +
+            '</div>').join('')
+        : '<div class="tbl-empty">No posts</div>';
+    }
   }
 }
 
@@ -885,7 +905,7 @@ function _renderBans(bans, bodyId, countId) {
 // ══════════════════ ACTIONS ══════════════════
 async function banUserWallet(wallet, rowId) {
   if (!confirm('Ban wallet ' + _short(wallet) + '?\nThis permanently removes their account and posts.')) return;
-  var r = await fetch('/api/admin/user/ban', {
+  var r = await fetch('/api/admin/ban', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json'},
     body: JSON.stringify({wallet})
@@ -937,7 +957,11 @@ async function clearAllBans() {
 async function deletePost(btn) {
   var id = btn.dataset.postId;
   if (!confirm('Delete this post?')) return;
-  var r = await fetch('/api/post/' + id + '/delete', {method:'POST', credentials:'include'}).then(r => r.json()).catch(() => null);
+  var r = await fetch('/api/admin/post/delete', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({post_id: parseInt(id, 10)})
+  }).then(r => r.json()).catch(() => null);
   if (r?.ok) {
     toast('✓ Post deleted', true);
     var row = document.getElementById('post-row-' + id);
@@ -945,8 +969,22 @@ async function deletePost(btn) {
   } else toast('Error: ' + (r?.msg || 'Failed'), false);
 }
 
+// ── AUTO-REFRESH every 30s ──
+var _refreshTimer = null;
+function _startAutoRefresh() {
+  if (_refreshTimer) clearInterval(_refreshTimer);
+  _refreshTimer = setInterval(function() {
+    var active = document.querySelector('.view.active');
+    if (!active) return;
+    var name = active.id.replace('view-', '');
+    _loaded[name] = false;
+    loadView(name);
+  }, 30000);
+}
+
 // ── INIT ──
 loadView('overview');
+_startAutoRefresh();
 </script>
 </body>
 </html>

@@ -9527,6 +9527,163 @@ def admin_ban_user():
         conn.close()
 
 
+@app.route('/api/admin/ban', methods=['POST'])
+@csrf_exempt
+def admin_ban_v2():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    target = (request.get_json(silent=True) or {}).get('wallet', '').strip()
+    if not target:
+        return jsonify({'ok': False, 'msg': 'Missing wallet'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('DELETE FROM users WHERE wallet_address=?', (target,))
+        conn.execute('DELETE FROM feed_posts WHERE wallet=?', (target,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/post/delete', methods=['POST'])
+@csrf_exempt
+def admin_delete_post():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    post_id = (request.get_json(silent=True) or {}).get('post_id')
+    if not post_id:
+        return jsonify({'ok': False, 'msg': 'Missing post_id'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT id FROM feed_posts WHERE id=?', (post_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+        conn.execute('DELETE FROM feed_posts WHERE id=?', (post_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/trades')
+@csrf_exempt
+@rate_limit(20, 60)
+def admin_trades():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            SELECT t.id, u.wallet_address, t.token, t.entry_price, t.exit_price,
+                   t.amount, t.pnl, t.fee_amount, t.timestamp
+            FROM trades t
+            LEFT JOIN users u ON t.user_id = u.id
+            ORDER BY t.timestamp DESC LIMIT 200
+        ''')
+        rows = c.fetchall()
+        conn.close()
+        trades = []
+        for r in rows:
+            w = r[1] or ''
+            trades.append({
+                'id':          r[0],
+                'wallet':      (w[:4] + '…' + w[-4:]) if len(w) >= 8 else w,
+                'wallet_full': w,
+                'token':       r[2] or '—',
+                'entry':       round(r[3] or 0, 6),
+                'exit':        round(r[4] or 0, 6),
+                'amount':      round(r[5] or 0, 4),
+                'pnl':         round(r[6] or 0, 4),
+                'fee':         round(r[7] or 0, 4),
+                'ts':          (r[8] or '')[:16],
+            })
+        return jsonify({'ok': True, 'trades': trades, 'total': len(trades)})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/posts')
+@csrf_exempt
+@rate_limit(20, 60)
+def admin_posts():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            SELECT fp.id, fp.wallet, fp.content, fp.created_at, u.username
+            FROM feed_posts fp
+            LEFT JOIN users u ON fp.wallet = u.wallet_address
+            ORDER BY fp.created_at DESC LIMIT 100
+        ''')
+        rows = c.fetchall()
+        conn.close()
+        posts = []
+        for r in rows:
+            w = r[1] or ''
+            posts.append({
+                'id':      r[0],
+                'wallet':  (w[:4] + '…' + w[-4:]) if len(w) >= 8 else w,
+                'wallet_full': w,
+                'content': r[2] or '',
+                'ts':      (r[3] or '')[:16],
+                'author':  r[4] or ((w[:6] + '…' + w[-4:]) if len(w) >= 10 else w),
+            })
+        return jsonify({'ok': True, 'posts': posts, 'total': len(posts)})
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
+@app.route('/api/admin/revenue')
+@csrf_exempt
+@rate_limit(20, 60)
+def admin_revenue():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        ok_f = "(status IS NULL OR status='ok') AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')"
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_f}')
+        collected = round(float(c.fetchone()[0] or 0), 4)
+        c.execute(f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_f} AND timestamp LIKE ?', (today + '%',))
+        today_sol = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE status="failed" OR fee_tx LIKE "FAILED:%"')
+        failed = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('''SELECT COALESCE(SUM(t.pnl * 0.05), 0) FROM trades t
+                     WHERE t.pnl > 0 AND (t.fee_paid IS NULL OR t.fee_paid = 0)''')
+        pending = round(float(c.fetchone()[0] or 0), 4)
+        c.execute('''SELECT user_wallet, token, gross_profit, fee_amount, fee_tx, timestamp, status
+                     FROM fees ORDER BY timestamp DESC LIMIT 200''')
+        txs = []
+        for r in c.fetchall():
+            w = r[0] or ''
+            status = r[6] or ('failed' if str(r[4] or '').startswith('FAILED:') else 'ok')
+            txs.append({
+                'wallet': (w[:4] + '…' + w[-4:]) if len(w) >= 8 else w,
+                'token':  r[1], 'gross': round(r[2] or 0, 4),
+                'fee':    round(r[3] or 0, 4), 'tx': r[4],
+                'ts':     (r[5] or '')[:16], 'status': status,
+            })
+        conn.close()
+        return jsonify({
+            'ok': True,
+            'collected': collected, 'today': today_sol,
+            'failed': failed, 'pending': pending,
+            'transactions': txs,
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'error': str(e)}), 500
+
+
 @app.route('/api/admin/clear_ratelimit', methods=['POST'])
 @rate_limit(10, 60)
 def admin_clear_ratelimit():
