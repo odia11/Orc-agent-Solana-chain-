@@ -175,6 +175,29 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .filter-select{background:var(--bg2);border:1px solid var(--bg4);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--text);font-family:'Geist',system-ui,sans-serif;outline:none;cursor:pointer}
 .filter-select option{background:var(--bg2)}
 
+/* ── SETTINGS ── */
+.stg-field{display:flex;flex-direction:column;gap:6px}
+.stg-lbl{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.05em;text-transform:uppercase}
+.stg-input-wrap{display:flex;align-items:center;background:var(--bg);border:1px solid #21252c;border-radius:9px;overflow:hidden;transition:border-color .14s}
+.stg-input-wrap:focus-within{border-color:var(--amber)}
+.stg-input{flex:1;background:transparent;border:none;outline:none;padding:10px 12px;font-family:'JetBrains Mono',monospace;font-size:14px;font-weight:500;color:var(--amber);min-width:0}
+.stg-unit{padding:0 12px 0 4px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);flex-shrink:0}
+.stg-toggle-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--bg3)}
+.stg-toggle-row:last-child{border-bottom:none}
+.stg-toggle-info{flex:1;min-width:0}
+.stg-toggle-name{font-size:13px;font-weight:500;color:var(--text)}
+.stg-toggle-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.stg-toggle{width:42px;height:24px;border-radius:12px;border:none;background:#21252c;position:relative;cursor:pointer;transition:background .2s;flex-shrink:0;padding:0}
+.stg-toggle.on{background:var(--accent)}
+.stg-toggle-knob{position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s;display:block}
+.stg-toggle.on .stg-toggle-knob{transform:translateX(18px)}
+.admin-member-row{display:flex;align-items:center;gap:11px;padding:11px 0;border-bottom:1px solid var(--bg3)}
+.admin-member-row:last-child{border-bottom:none}
+.admin-member-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--bg)}
+.admin-member-info{flex:1;min-width:0}
+.admin-member-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.admin-member-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+
 /* ── MISC ── */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
 .card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:18px}
@@ -217,9 +240,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <span class="nav-icon">⚑</span>Moderation<span class="nav-dot"></span>
     </button>
     <div class="sb-sep"></div>
-    <a href="/settings" class="nav-btn">
-      <span class="nav-icon">⚙</span>Settings
-    </a>
+    <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
+      <span class="nav-icon">⚙</span>Settings<span class="nav-dot"></span>
+    </button>
     <a href="/" class="nav-btn">
       <span class="nav-icon">⌂</span>Dashboard
     </a>
@@ -562,6 +585,135 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       </div>
     </div>
 
+    <!-- ══════════ VIEW: SETTINGS ══════════ -->
+    <div class="view" id="view-settings">
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start">
+
+        <!-- Card 1: Platform limits -->
+        <div class="card" style="padding:22px 22px 24px">
+          <div class="card-title" style="font-size:15px;margin-bottom:20px">⚡ Platform limits</div>
+          <div style="display:flex;flex-direction:column;gap:16px">
+
+            <div class="stg-field">
+              <label class="stg-lbl">Max positions per user</label>
+              <div class="stg-input-wrap">
+                <input class="stg-input" id="stg-max-pos" type="number" value="5" min="1" max="50">
+              </div>
+            </div>
+
+            <div class="stg-field">
+              <label class="stg-lbl">Platform fee</label>
+              <div class="stg-input-wrap">
+                <input class="stg-input" id="stg-fee" type="number" value="0.25" min="0" max="10" step="0.01">
+                <span class="stg-unit">%</span>
+              </div>
+            </div>
+
+            <div class="stg-field">
+              <label class="stg-lbl">Min deposit</label>
+              <div class="stg-input-wrap">
+                <input class="stg-input" id="stg-min-dep" type="number" value="0.1" min="0" step="0.01">
+                <span class="stg-unit">SOL</span>
+              </div>
+            </div>
+
+            <div class="stg-field">
+              <label class="stg-lbl">Rate limit</label>
+              <div class="stg-input-wrap">
+                <input class="stg-input" id="stg-rate" type="number" value="20" min="1">
+                <span class="stg-unit">/min</span>
+              </div>
+            </div>
+
+            <button class="btn btn-primary" style="margin-top:4px;width:100%" onclick="savePlatformLimits()">Save changes</button>
+          </div>
+        </div>
+
+        <!-- Card 2: Feature flags -->
+        <div class="card" style="padding:22px 22px 24px">
+          <div class="card-title" style="font-size:15px;margin-bottom:20px">🚩 Feature flags</div>
+          <div style="display:flex;flex-direction:column;gap:4px">
+
+            <div class="stg-toggle-row" id="flag-signups">
+              <div class="stg-toggle-info">
+                <div class="stg-toggle-name">Accept new signups</div>
+                <div class="stg-toggle-sub">Allow new wallet registrations</div>
+              </div>
+              <button class="stg-toggle on" onclick="toggleFlag(this,'signups')">
+                <span class="stg-toggle-knob"></span>
+              </button>
+            </div>
+
+            <div class="stg-toggle-row" id="flag-autoflag">
+              <div class="stg-toggle-info">
+                <div class="stg-toggle-name">Auto-flag engine</div>
+                <div class="stg-toggle-sub">Automatically flag suspicious activity</div>
+              </div>
+              <button class="stg-toggle on" onclick="toggleFlag(this,'autoflag')">
+                <span class="stg-toggle-knob"></span>
+              </button>
+            </div>
+
+            <div class="stg-toggle-row" id="flag-copytrading">
+              <div class="stg-toggle-info">
+                <div class="stg-toggle-name">Copy trading</div>
+                <div class="stg-toggle-sub">Enable social copy-trade features</div>
+              </div>
+              <button class="stg-toggle on" onclick="toggleFlag(this,'copytrading')">
+                <span class="stg-toggle-knob"></span>
+              </button>
+            </div>
+
+            <div class="stg-toggle-row" id="flag-maintenance">
+              <div class="stg-toggle-info">
+                <div class="stg-toggle-name">Maintenance mode</div>
+                <div class="stg-toggle-sub">Show maintenance page to all users</div>
+              </div>
+              <button class="stg-toggle" onclick="toggleFlag(this,'maintenance')">
+                <span class="stg-toggle-knob"></span>
+              </button>
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Card 3: Admin access -->
+        <div class="card" style="padding:22px 22px 24px">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+            <div class="card-title" style="font-size:15px;margin-bottom:0">👤 Admin access</div>
+            <button class="btn btn-amber" onclick="inviteAdmin()" style="font-size:12px;padding:6px 12px">+ Invite</button>
+          </div>
+          <div style="display:flex;flex-direction:column;gap:3px" id="admin-access-list">
+            <div class="admin-member-row">
+              <div class="admin-member-av" style="background:var(--accent)">BM</div>
+              <div class="admin-member-info">
+                <div class="admin-member-name">BM3A4w…T8i</div>
+                <div class="admin-member-sub">Owner wallet</div>
+              </div>
+              <span class="tag tag-amber" style="background:rgba(247,185,85,.15);color:var(--amber);flex-shrink:0">Super-admin</span>
+            </div>
+            <div class="admin-member-row">
+              <div class="admin-member-av" style="background:#7c8cff">MO</div>
+              <div class="admin-member-info">
+                <div class="admin-member-name">Moderator #1</div>
+                <div class="admin-member-sub">mod…0000</div>
+              </div>
+              <span class="tag tag-green" style="flex-shrink:0">Moderator</span>
+            </div>
+            <div class="admin-member-row">
+              <div class="admin-member-av" style="background:#565d68">AN</div>
+              <div class="admin-member-info">
+                <div class="admin-member-name">Analyst #1</div>
+                <div class="admin-member-sub">ana…0000</div>
+              </div>
+              <span class="tag tag-muted" style="flex-shrink:0">Analyst</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
   </div><!-- /views -->
 </main>
 </div>
@@ -574,7 +726,7 @@ var _loaded = {};
 var _allUsers = [], _allTrades = [], _allRevTx = [];
 
 // ── VIEW SWITCHING ──
-var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation'};
+var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',settings:'Settings'};
 function showView(name) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
@@ -883,6 +1035,40 @@ async function loadModeration() {
         : '<div class="tbl-empty">No posts</div>';
     }
   }
+}
+
+// ══════════════════ SETTINGS ══════════════════
+function toggleFlag(btn, flag) {
+  btn.classList.toggle('on');
+  var on = btn.classList.contains('on');
+  toast((on ? '✓ ' : '✗ ') + flag + ' ' + (on ? 'enabled' : 'disabled'), on);
+}
+function savePlatformLimits() {
+  var maxPos  = document.getElementById('stg-max-pos')?.value;
+  var fee     = document.getElementById('stg-fee')?.value;
+  var minDep  = document.getElementById('stg-min-dep')?.value;
+  var rate    = document.getElementById('stg-rate')?.value;
+  toast('✓ Limits saved (max pos: ' + maxPos + ', fee: ' + fee + '%, min dep: ' + minDep + ' SOL, rate: ' + rate + '/min)', true);
+}
+function inviteAdmin() {
+  var wallet = prompt('Enter wallet address to invite:');
+  if (!wallet || wallet.length < 32) { toast('Invalid wallet address', false); return; }
+  var role = prompt('Role? (Moderator / Analyst)') || 'Moderator';
+  var list = document.getElementById('admin-access-list');
+  if (!list) return;
+  var ini = wallet.slice(0,2).toUpperCase();
+  var tagCls = role === 'Moderator' ? 'tag-green' : 'tag-muted';
+  var row = document.createElement('div');
+  row.className = 'admin-member-row';
+  row.innerHTML =
+    '<div class="admin-member-av" style="background:#565d68">' + ini + '</div>' +
+    '<div class="admin-member-info">' +
+      '<div class="admin-member-name">' + wallet.slice(0,6) + '…' + wallet.slice(-4) + '</div>' +
+      '<div class="admin-member-sub">Invited</div>' +
+    '</div>' +
+    '<span class="tag ' + tagCls + '" style="flex-shrink:0">' + role + '</span>';
+  list.appendChild(row);
+  toast('✓ Invited ' + wallet.slice(0,8) + '… as ' + role, true);
 }
 
 function _renderBans(bans, bodyId, countId) {
