@@ -6651,6 +6651,44 @@ def delete_dm(message_id):
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/messages/<int:message_id>', methods=['PUT'])
+@rate_limit(30, 60)
+def edit_dm(message_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    body = request.get_json(silent=True) or {}
+    text = _sanitize(str(body.get('message', '')))
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+    if len(text) > 500:
+        return jsonify({'ok': False, 'msg': 'Message too long (max 500 characters)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT sender_id FROM direct_messages WHERE id=?', (message_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Message not found'}), 404
+        if row[0] != me:
+            return jsonify({'ok': False, 'msg': 'Not your message'}), 403
+        conn.execute(
+            'UPDATE direct_messages SET message=?, edited_at=CURRENT_TIMESTAMP WHERE id=?',
+            (text, message_id)
+        )
+        conn.commit()
+        edited_at = conn.execute(
+            'SELECT edited_at FROM direct_messages WHERE id=?', (message_id,)
+        ).fetchone()[0]
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'message': text, 'edited_at': edited_at})
+
 @app.route('/api/chat', methods=['GET'])
 @rate_limit(60, 60)
 def get_group_chat():
