@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body { background: #0a0b0e; -webkit-font-smoothing: antialiased; text-rendering: optimizeLegibility; }
+  ::-webkit-scrollbar { width: 9px; height: 9px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #21252c; border-radius: 5px; border: 2px solid #0a0b0e; }
+  ::-webkit-scrollbar-thumb:hover { background: #2c313a; }
+  input::placeholder { color: #565d68; }
+  @keyframes orcaBlink { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+</style>
+</helmet>
+
+<div data-screen-label="OrcAgent Admin" style="display:flex; justify-content:center; min-height:100vh; background:#0a0b0e; color:#eef1f5; font-family:'Geist', sans-serif;">
+  <div style="display:flex; width:100%; max-width:1440px;">
+
+    <!-- ============ SIDEBAR ============ -->
+    <aside style="width:250px; flex-shrink:0; border-right:1px solid #16191f; padding:18px 14px 16px; display:flex; flex-direction:column; position:sticky; top:0; height:100vh; overflow-y:auto;">
+      <div style="display:flex; align-items:center; gap:11px; padding:4px 8px;">
+        <div style="width:36px; height:36px; border-radius:11px; background:{{ accent }}; display:flex; align-items:center; justify-content:center;">
+          <div style="width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-bottom:13px solid #0a0b0e;"></div>
+        </div>
+        <div>
+          <div style="font-size:17px; font-weight:700; letter-spacing:-0.02em; line-height:1;">OrcAgent</div>
+          <div style="font-size:10px; font-weight:600; letter-spacing:0.14em; color:{{ accent }}; margin-top:3px;">ADMIN CONSOLE</div>
+        </div>
+      </div>
+
+      <nav style="display:flex; flex-direction:column; gap:2px; margin-top:20px;">
+        <sc-for list="{{ navItems }}" as="n" hint-placeholder-count="7">
+          <a href="#" onClick="{{ n.onClick }}" style="display:flex; align-items:center; justify-content:space-between; padding:11px 12px; border-radius:11px; text-decoration:none; font-size:14.5px; font-weight:{{ n.weight }}; color:{{ n.color }}; background:{{ n.bg }}; cursor:pointer;" style-hover="background:{{ n.hoverBg }};">
+            <span style="display:flex; align-items:center; gap:11px;"><span style="width:18px; text-align:center; font-size:14px;">{{ n.icon }}</span>{{ n.label }}</span>
+            <sc-if value="{{ n.badge }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:700; color:#0a0b0e; background:{{ n.badgeColor }}; border-radius:999px; padding:1px 7px;">{{ n.badge }}</span></sc-if>
+          </a>
+        </sc-for>
+      </nav>
+
+      <div style="margin-top:auto; border:1px solid #16191f; border-radius:14px; background:#101216; padding:13px;">
+        <div style="display:flex; align-items:center; gap:8px; font-size:11px; font-weight:600; letter-spacing:0.06em; color:#3ad29b;"><span style="width:6px; height:6px; border-radius:50%; background:#3ad29b; animation:orcaBlink 1.6s infinite;"></span>ALL SYSTEMS OPERATIONAL</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68; margin-top:8px; line-height:1.6;">Scanner · 42ms<br>RPC · healthy<br>Queue · 0 backlog</div>
+      </div>
+
+      <div style="margin-top:12px; display:flex; align-items:center; gap:11px; padding:8px 6px;">
+        <div style="width:36px; height:36px; border-radius:50%; flex-shrink:0; background:#f76b62; display:flex; align-items:center; justify-content:center; font-weight:700; color:#0a0b0e; font-size:13px;">AD</div>
+        <div style="flex:1; min-width:0;">
+          <div style="font-size:13px; font-weight:600;">Admin</div>
+          <div style="font-size:11px; color:#565d68;">Super-admin</div>
+        </div>
+        <span style="color:#565d68; font-size:15px; cursor:pointer;" style-hover="color:#eef1f5;">⎋</span>
+      </div>
+    </aside>
+
+    <!-- ============ MAIN ============ -->
+    <main style="flex:1; min-width:0;">
+      <header style="position:sticky; top:0; z-index:20; background:rgba(10,11,14,0.82); backdrop-filter:blur(14px); border-bottom:1px solid #16191f; padding:16px 30px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; gap:16px;">
+          <div>
+            <div style="font-size:21px; font-weight:700; letter-spacing:-0.01em;">{{ pageTitle }}</div>
+            <div style="font-size:12px; color:#565d68; margin-top:3px;">{{ pageSub }}</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:9px;">
+            <div style="display:flex; align-items:center; gap:8px; background:#101216; border:1px solid #21252c; border-radius:10px; padding:8px 12px;">
+              <span style="color:#565d68; font-size:13px;">⌕</span>
+              <input placeholder="Search wallet, tx, user…" style="width:190px; background:none; border:none; outline:none; color:#eef1f5; font-family:inherit; font-size:13px;">
+            </div>
+            <sc-for list="{{ ranges }}" as="r" hint-placeholder-count="3">
+              <span style="font-family:'JetBrains Mono',monospace; font-size:11px; font-weight:600; padding:8px 12px; border-radius:9px; cursor:pointer; color:{{ r.color }}; background:{{ r.bg }}; border:1px solid {{ r.border }};">{{ r.label }}</span>
+            </sc-for>
+          </div>
+        </div>
+      </header>
+
+      <!-- ===== OVERVIEW ===== -->
+      <sc-if value="{{ isOverview }}" hint-placeholder-val="{{ true }}">
+      <div style="padding:20px 30px 44px;">
+
+        <!-- KPI cards -->
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+          <sc-for list="{{ kpis }}" as="k" hint-placeholder-count="4">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:17px 18px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="width:32px; height:32px; border-radius:9px; background:{{ k.iconBg }}; display:flex; align-items:center; justify-content:center; font-size:16px;">{{ k.icon }}</div>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ k.deltaColor }};">{{ k.delta }}</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:27px; font-weight:700; margin-top:14px; letter-spacing:-0.01em;">{{ k.value }}</div>
+              <div style="font-size:12px; color:#565d68; margin-top:4px;">{{ k.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <!-- revenue + breakdown -->
+        <div style="display:grid; grid-template-columns:1.75fr 1fr; gap:14px; margin-top:14px;">
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:18px 20px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div>
+                <div style="font-size:14px; font-weight:600;">Platform revenue</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#565d68; margin-top:4px;">Trading fees · 0.25% per fill</div>
+              </div>
+              <div style="text-align:right;">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:22px; font-weight:700; color:{{ accent }};">1,284 SOL</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#3ad29b; margin-top:2px;">+18.2% vs prev</div>
+              </div>
+            </div>
+            <div style="display:flex; align-items:flex-end; gap:5px; height:150px; margin-top:20px;">
+              <sc-for list="{{ revBars }}" as="b" hint-placeholder-count="14">
+                <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%; gap:5px;">
+                  <div style="height:{{ b.h }}%; background:{{ b.color }}; border-radius:3px 3px 0 0;"></div>
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#3a4049; text-align:center;">{{ b.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:18px 20px;">
+            <div style="font-size:14px; font-weight:600;">Fee breakdown</div>
+            <div style="margin-top:16px; display:flex; flex-direction:column; gap:15px;">
+              <sc-for list="{{ feeBreak }}" as="f" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px;">
+                    <span style="color:#c7ccd4; white-space:nowrap;">{{ f.label }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace; font-weight:600; white-space:nowrap; flex-shrink:0;">{{ f.value }}</span>
+                  </div>
+                  <div style="height:7px; border-radius:999px; background:#16191f; margin-top:7px; overflow:hidden;">
+                    <div style="height:100%; width:{{ f.pct }}; background:{{ f.color }}; border-radius:999px;"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <!-- live bot activity + alerts -->
+        <div style="display:grid; grid-template-columns:1.75fr 1fr; gap:14px; margin-top:14px;">
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+            <div style="display:flex; align-items:center; justify-content:space-between; padding:15px 18px; border-bottom:1px solid #16191f;">
+              <div style="font-size:14px; font-weight:600;">Live bot activity</div>
+              <div style="display:flex; align-items:center; gap:7px; font-size:10px; font-weight:600; letter-spacing:0.1em; color:#3ad29b;"><span style="width:6px; height:6px; border-radius:50%; background:#3ad29b; animation:orcaBlink 1.6s infinite;"></span>STREAMING</div>
+            </div>
+            <div style="display:grid; grid-template-columns:1fr 90px 1fr 100px 90px; gap:12px; padding:11px 18px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+              <div>USER</div><div>ACTION</div><div>TOKEN</div><div>SIZE</div><div>PNL</div>
+            </div>
+            <sc-for list="{{ liveTrades }}" as="t" hint-placeholder-count="6">
+              <div style="display:grid; grid-template-columns:1fr 90px 1fr 100px 90px; gap:12px; padding:12px 18px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ t.user }}</div>
+                <div><span style="font-size:10px; font-weight:700; letter-spacing:0.04em; padding:3px 8px; border-radius:6px; color:{{ t.actionColor }}; background:{{ t.actionBg }};">{{ t.action }}</span></div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;">${{ t.token }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c;">{{ t.size }}</div>
+                <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ t.pnlColor }};">{{ t.pnl }}</div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+            <div style="padding:15px 18px; border-bottom:1px solid #16191f; font-size:14px; font-weight:600;">Alerts</div>
+            <sc-for list="{{ alerts }}" as="a" hint-placeholder-count="4">
+              <div style="display:flex; gap:11px; padding:13px 18px; border-bottom:1px solid #16191f;">
+                <div style="width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px; color:{{ a.color }}; background:{{ a.bg }};">{{ a.icon }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:13px; color:#eef1f5; line-height:1.4;">{{ a.text }}</div>
+                  <div style="font-size:11px; color:#565d68; margin-top:3px;">{{ a.time }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== USERS ===== -->
+      <sc-if value="{{ isUsers }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:20px 30px 44px;">
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+          <sc-for list="{{ userStats }}" as="s" hint-placeholder-count="4">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:16px 18px;">
+              <div style="font-size:11px; letter-spacing:0.06em; color:#565d68; font-weight:600;">{{ s.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; margin-top:9px; color:{{ s.color }};">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:9px; margin-top:18px;">
+          <sc-for list="{{ userFilters }}" as="f" hint-placeholder-count="4">
+            <span style="font-size:12px; font-weight:600; padding:7px 13px; border-radius:9px; cursor:pointer; color:{{ f.color }}; background:{{ f.bg }}; border:1px solid {{ f.border }};">{{ f.label }}</span>
+          </sc-for>
+          <div style="flex:1;"></div>
+          <button style="background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:8px 14px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentBorder }};">⬇ Export CSV</button>
+        </div>
+
+        <div style="margin-top:13px; overflow-x:auto;">
+        <div style="min-width:880px; border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:minmax(0,1.3fr) 110px 120px 110px 120px 110px 110px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+            <div>USER / WALLET</div><div>STATUS</div><div>BALANCE</div><div>TRADES</div><div>ALL-TIME PNL</div><div>JOINED</div><div></div>
+          </div>
+          <sc-for list="{{ users }}" as="u" hint-placeholder-count="8">
+            <div style="display:grid; grid-template-columns:minmax(0,1.3fr) 110px 120px 110px 120px 110px 110px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+              <div style="display:flex; align-items:center; gap:11px; min-width:0; overflow:hidden;">
+                <div style="width:34px; height:34px; border-radius:50%; flex-shrink:0; background:{{ u.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:600; font-size:13px;">{{ u.initials }}</div>
+                <div style="min-width:0; overflow:hidden;">
+                  <div style="font-size:13px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ u.name }}</div>
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">{{ u.wallet }}</div>
+                </div>
+              </div>
+              <div><span style="font-size:10px; font-weight:700; letter-spacing:0.04em; padding:4px 9px; border-radius:6px; color:{{ u.statusColor }}; background:{{ u.statusBg }};">{{ u.status }}</span></div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ u.balance }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c;">{{ u.trades }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ u.pnlColor }};">{{ u.pnl }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">{{ u.joined }}</div>
+              <div style="display:flex; gap:6px; justify-content:flex-end;">
+                <span style="font-size:12px; color:#8a919c; cursor:pointer;" style-hover="color:#eef1f5;">View</span>
+                <span style="font-size:12px; color:#f76b62; cursor:pointer;" style-hover="filter:brightness(1.2);">Ban</span>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== SYSTEM ===== -->
+      <sc-if value="{{ isSystem }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:20px 30px 44px;">
+        <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:14px;">
+          <sc-for list="{{ services }}" as="s" hint-placeholder-count="6">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:17px 18px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="font-size:14px; font-weight:600;">{{ s.name }}</div>
+                <span style="display:inline-flex; align-items:center; gap:6px; font-size:10px; font-weight:700; letter-spacing:0.06em; color:{{ s.statusColor }}; background:{{ s.statusBg }}; border-radius:7px; padding:4px 9px;"><span style="width:6px; height:6px; border-radius:50%; background:{{ s.statusColor }};"></span>{{ s.status }}</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:26px; font-weight:700; margin-top:14px; color:{{ s.metricColor }};">{{ s.metric }}</div>
+              <div style="font-size:12px; color:#565d68; margin-top:4px;">{{ s.metricLabel }}</div>
+              <div style="display:flex; align-items:flex-end; gap:2px; height:34px; margin-top:14px; color:{{ s.metricColor }};">
+                <sc-for list="{{ s.bars }}" as="bar" hint-placeholder-count="22"><div style="flex:1; height:{{ bar }}%; background:currentColor; border-radius:1px; opacity:0.7;"></div></sc-for>
+              </div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden; margin-top:14px;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; justify-content:space-between;">
+            <div style="font-size:14px; font-weight:600;">Event log</div>
+            <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">last 200 events</span>
+          </div>
+          <sc-for list="{{ logs }}" as="l" hint-placeholder-count="7">
+            <div style="display:flex; align-items:center; gap:14px; padding:11px 18px; border-bottom:1px solid #16191f; font-family:'JetBrains Mono',monospace; font-size:12px;">
+              <span style="color:#3a4049; flex-shrink:0;">{{ l.time }}</span>
+              <span style="font-weight:700; flex-shrink:0; width:56px; color:{{ l.levelColor }};">{{ l.level }}</span>
+              <span style="color:#c7ccd4; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ l.msg }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== TRADES ===== -->
+      <sc-if value="{{ isTrades }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:20px 30px 44px;">
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+          <sc-for list="{{ tradeStats }}" as="s" hint-placeholder-count="4">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:16px 18px;">
+              <div style="font-size:11px; letter-spacing:0.06em; color:#565d68; font-weight:600;">{{ s.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; margin-top:9px; color:{{ s.color }};">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:9px; margin-top:18px;">
+          <div style="display:flex; align-items:center; gap:7px; font-size:11px; font-weight:600; letter-spacing:0.1em; color:#3ad29b; margin-right:6px;"><span style="width:6px; height:6px; border-radius:50%; background:#3ad29b; animation:orcaBlink 1.6s infinite;"></span>LIVE</div>
+          <sc-for list="{{ tradeFilters }}" as="f" hint-placeholder-count="5">
+            <span style="font-size:12px; font-weight:600; padding:7px 13px; border-radius:9px; cursor:pointer; color:{{ f.color }}; background:{{ f.bg }}; border:1px solid {{ f.border }};">{{ f.label }}</span>
+          </sc-for>
+          <div style="flex:1;"></div>
+          <button style="background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:8px 14px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentBorder }};">⬇ Export</button>
+        </div>
+
+        <div style="margin-top:13px; overflow-x:auto;">
+        <div style="min-width:920px; border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+          <div style="display:grid; grid-template-columns:90px minmax(0,1fr) 1fr 80px 110px 110px 90px 100px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+            <div>TIME</div><div>USER</div><div>TOKEN</div><div>SIDE</div><div>ENTRY</div><div>EXIT</div><div>SIZE</div><div>PNL</div>
+          </div>
+          <sc-for list="{{ tradeRows }}" as="t" hint-placeholder-count="8">
+            <div style="display:grid; grid-template-columns:90px minmax(0,1fr) 1fr 80px 110px 110px 90px 100px; gap:12px; padding:13px 20px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">{{ t.time }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{{ t.user }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:600;">${{ t.token }}</div>
+              <div><span style="font-size:10px; font-weight:700; letter-spacing:0.04em; padding:3px 8px; border-radius:6px; color:{{ t.sideColor }}; background:{{ t.sideBg }};">{{ t.side }}</span></div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ t.entry }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#c7ccd4;">{{ t.exit }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c;">{{ t.size }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ t.pnlColor }};">{{ t.pnl }}</div>
+            </div>
+          </sc-for>
+        </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== REVENUE ===== -->
+      <sc-if value="{{ isRevenue }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:20px 30px 44px;">
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+          <sc-for list="{{ revKpis }}" as="k" hint-placeholder-count="4">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:17px 18px;">
+              <div style="display:flex; align-items:center; justify-content:space-between;">
+                <div style="width:32px; height:32px; border-radius:9px; background:{{ k.iconBg }}; display:flex; align-items:center; justify-content:center; font-size:16px;">{{ k.icon }}</div>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:12px; font-weight:700; color:{{ k.deltaColor }};">{{ k.delta }}</span>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; margin-top:14px; letter-spacing:-0.01em;">{{ k.value }}</div>
+              <div style="font-size:12px; color:#565d68; margin-top:4px;">{{ k.label }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.75fr 1fr; gap:14px; margin-top:14px;">
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:18px 20px;">
+            <div style="display:flex; align-items:center; justify-content:space-between;">
+              <div style="font-size:14px; font-weight:600;">Fee revenue · 14 days</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#3ad29b;">+18.2% vs prev</div>
+            </div>
+            <div style="display:flex; align-items:flex-end; gap:5px; height:170px; margin-top:20px;">
+              <sc-for list="{{ revTrend }}" as="b" hint-placeholder-count="14">
+                <div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%; gap:5px;">
+                  <div style="height:{{ b.h }}%; background:{{ b.color }}; border-radius:3px 3px 0 0;"></div>
+                  <div style="font-family:'JetBrains Mono',monospace; font-size:9px; color:#3a4049; text-align:center;">{{ b.label }}</div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:18px 20px;">
+            <div style="font-size:14px; font-weight:600;">Revenue by source</div>
+            <div style="margin-top:16px; display:flex; flex-direction:column; gap:15px;">
+              <sc-for list="{{ revSource }}" as="f" hint-placeholder-count="4">
+                <div>
+                  <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; font-size:13px;">
+                    <span style="color:#c7ccd4; white-space:nowrap;">{{ f.label }}</span>
+                    <span style="font-family:'JetBrains Mono',monospace; font-weight:600; white-space:nowrap; flex-shrink:0;">{{ f.value }}</span>
+                  </div>
+                  <div style="height:7px; border-radius:999px; background:#16191f; margin-top:7px; overflow:hidden;">
+                    <div style="height:100%; width:{{ f.pct }}; background:{{ f.color }}; border-radius:999px;"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+
+        <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden; margin-top:14px;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; font-size:14px; font-weight:600;">Treasury flow</div>
+          <div style="display:grid; grid-template-columns:130px minmax(0,1fr) 120px 130px 110px; gap:12px; padding:11px 18px; border-bottom:1px solid #16191f; font-size:10px; letter-spacing:0.08em; color:#565d68; font-weight:600;">
+            <div>TIME</div><div>DESCRIPTION</div><div>WALLET</div><div>AMOUNT</div><div>STATUS</div>
+          </div>
+          <sc-for list="{{ payouts }}" as="p" hint-placeholder-count="4">
+            <div style="display:grid; grid-template-columns:130px minmax(0,1fr) 120px 130px 110px; gap:12px; padding:13px 18px; border-bottom:1px solid #16191f; align-items:center;" style-hover="background:#14171c;">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#565d68;">{{ p.time }}</div>
+              <div style="font-size:13px; color:#c7ccd4;">{{ p.dest }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8a919c;">{{ p.wallet }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:700; color:{{ p.amountColor }};">{{ p.amount }}</div>
+              <div><span style="font-size:10px; font-weight:700; letter-spacing:0.04em; padding:4px 9px; border-radius:6px; color:{{ p.statusColor }}; background:{{ p.statusBg }};">{{ p.status }}</span></div>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== MODERATION ===== -->
+      <sc-if value="{{ isModeration }}" hint-placeholder-val="{{ false }}">
+      <div style="padding:20px 30px 44px;">
+        <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:14px;">
+          <sc-for list="{{ modStats }}" as="s" hint-placeholder-count="4">
+            <div style="border:1px solid #16191f; border-radius:16px; background:#101216; padding:16px 18px;">
+              <div style="font-size:11px; letter-spacing:0.06em; color:#565d68; font-weight:600;">{{ s.label }}</div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:24px; font-weight:700; margin-top:9px; color:{{ s.color }};">{{ s.value }}</div>
+            </div>
+          </sc-for>
+        </div>
+
+        <div style="display:grid; grid-template-columns:1.55fr 1fr; gap:14px; margin-top:14px;">
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+            <div style="padding:15px 18px; border-bottom:1px solid #16191f; font-size:14px; font-weight:600;">Open cases</div>
+            <sc-for list="{{ cases }}" as="c" hint-placeholder-count="3">
+              <div style="display:flex; align-items:center; gap:13px; padding:15px 18px; border-bottom:1px solid #16191f;" style-hover="background:#14171c;">
+                <div style="width:40px; height:40px; border-radius:11px; flex-shrink:0; background:{{ c.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;">{{ c.initials }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="display:flex; align-items:center; gap:8px;">
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:13px; font-weight:600;">{{ c.wallet }}</span>
+                    <span style="font-size:10px; font-weight:700; letter-spacing:0.04em; padding:2px 7px; border-radius:6px; color:{{ c.sevColor }}; background:{{ c.sevBg }};">{{ c.sev }}</span>
+                  </div>
+                  <div style="font-size:12px; color:#8a919c; margin-top:4px;">{{ c.reason }} · {{ c.time }}</div>
+                </div>
+                <div style="display:flex; gap:7px; flex-shrink:0;">
+                  <button style="background:none; color:#c7ccd4; border:1px solid #2c313a; border-radius:9px; padding:7px 12px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:#14171c;">Review</button>
+                  <button style="background:rgba(247,107,98,0.14); color:#f76b62; border:1px solid rgba(247,107,98,0.35); border-radius:9px; padding:7px 12px; font-family:inherit; font-size:12px; font-weight:700; cursor:pointer;" style-hover="background:rgba(247,107,98,0.24);">Ban</button>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+
+          <div style="border:1px solid #16191f; border-radius:16px; background:#101216; overflow:hidden;">
+            <div style="padding:15px 18px; border-bottom:1px solid #16191f; font-size:14px; font-weight:600;">Review queue</div>
+            <sc-for list="{{ modQueue }}" as="q" hint-placeholder-count="3">
+              <div style="display:flex; gap:11px; padding:13px 18px; border-bottom:1px solid #16191f;">
+                <div style="width:30px; height:30px; border-radius:9px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:14px; color:{{ q.color }}; background:{{ q.bg }};">{{ q.icon }}</div>
+                <div style="flex:1; min-width:0;">
+                  <div style="font-size:13px; color:#eef1f5; line-height:1.4;">{{ q.text }}</div>
+                  <div style="font-size:11px; color:#565d68; margin-top:3px;">{{ q.time }}</div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== SETTINGS ===== -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="max-width:760px; padding:20px 30px 44px; display:flex; flex-direction:column; gap:16px;">
+        <sc-for list="{{ settingGroups }}" as="g" hint-placeholder-count="1">
+          <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+            <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; gap:9px; font-size:14px; font-weight:600;"><span>{{ g.icon }}</span>{{ g.title }}</div>
+            <div style="padding:6px 18px;">
+              <sc-for list="{{ g.rows }}" as="r" hint-placeholder-count="4">
+                <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:1px solid {{ r.divider }};">
+                  <div style="min-width:0;"><div style="font-size:14px; font-weight:500;">{{ r.label }}</div><div style="font-size:12px; color:#565d68; margin-top:2px;">{{ r.desc }}</div></div>
+                  <div style="display:flex; align-items:center; gap:8px; background:#0a0b0e; border:1px solid #2c313a; border-radius:10px; padding:8px 12px; flex-shrink:0;"><span style="font-family:'JetBrains Mono',monospace; font-size:14px; font-weight:700; color:{{ accent }};">{{ r.value }}</span><span style="font-size:11px; color:#565d68;">{{ r.unit }}</span></div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-for>
+
+        <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; gap:9px; font-size:14px; font-weight:600;"><span>🎛</span>Feature flags</div>
+          <div style="padding:6px 18px;">
+            <sc-for list="{{ settingsToggles }}" as="r" hint-placeholder-count="4">
+              <div style="display:flex; align-items:center; justify-content:space-between; gap:16px; padding:14px 0; border-bottom:1px solid {{ r.divider }};">
+                <div style="min-width:0;"><div style="font-size:14px; font-weight:500;">{{ r.label }}</div><div style="font-size:12px; color:#565d68; margin-top:2px;">{{ r.desc }}</div></div>
+                <div onClick="{{ r.onToggle }}" style="width:44px; height:25px; border-radius:999px; flex-shrink:0; cursor:pointer; background:{{ r.trackBg }}; border:1px solid {{ r.trackBorder }}; position:relative;">
+                  <span style="position:absolute; top:2px; left:{{ r.knobLeft }}; width:19px; height:19px; border-radius:50%; background:{{ r.knobBg }}; transition:left .15s;"></span>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </div>
+
+        <div style="border:1px solid #16191f; border-radius:18px; background:#101216; overflow:hidden;">
+          <div style="padding:15px 18px; border-bottom:1px solid #16191f; display:flex; align-items:center; justify-content:space-between; font-size:14px; font-weight:600;"><span style="display:flex; align-items:center; gap:9px;"><span>👤</span>Admin access</span><button style="background:{{ accentSoft }}; color:{{ accent }}; border:1px solid {{ accentBorder }}; border-radius:9px; padding:7px 12px; font-family:inherit; font-size:12px; font-weight:600; cursor:pointer;" style-hover="background:{{ accentBorder }};">+ Invite</button></div>
+          <sc-for list="{{ admins }}" as="a" hint-placeholder-count="3">
+            <div style="display:flex; align-items:center; gap:12px; padding:13px 18px; border-bottom:1px solid #16191f;" style-hover="background:#14171c;">
+              <div style="width:36px; height:36px; border-radius:50%; flex-shrink:0; background:{{ a.color }}; color:#0a0b0e; display:flex; align-items:center; justify-content:center; font-weight:700; font-size:13px;">{{ a.initials }}</div>
+              <div style="flex:1; min-width:0;"><div style="font-size:14px; font-weight:600;">{{ a.name }}</div></div>
+              <span style="font-size:11px; font-weight:700; letter-spacing:0.04em; color:{{ a.roleColor }};">{{ a.role }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+    </main>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;accentColor&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#16e08e&quot;,&quot;options&quot;:[&quot;#16e08e&quot;,&quot;#35d4c4&quot;,&quot;#7c8cff&quot;,&quot;#f7b955&quot;],&quot;tsType&quot;:&quot;string&quot;}}">
+class Component extends DCLogic {
+  state = { view: 'overview' };
+
+  hexToRgba(hex, a) {
+    const h = hex.replace('#', '');
+    const n = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const r = parseInt(n.slice(0, 2), 16), g = parseInt(n.slice(2, 4), 16), b = parseInt(n.slice(4, 6), 16);
+    return `rgba(${r},${g},${b},${a})`;
+  }
+
+  bars(seed, trend) {
+    let r = seed, v = 50; const out = [];
+    const rnd = () => { r = (r * 9301 + 49297) % 233280; return r / 233280; };
+    for (let i = 0; i < 22; i++) { v += Math.sin(i * 1.1 + seed) * 8 + (rnd() * 18 - 9) + trend; v = Math.max(16, Math.min(100, v)); out.push(Math.round(v)); }
+    return out;
+  }
+
+  renderVals() {
+    const accent = this.props.accentColor || '#16e08e';
+    const accentSoft = this.hexToRgba(accent, 0.10);
+    const accentBorder = this.hexToRgba(accent, 0.30);
+    const up = '#3ad29b', down = '#f76b62', warn = '#f7b955';
+    const view = this.state.view;
+
+    const go = (v) => (e) => { if (e && e.preventDefault) e.preventDefault(); this.setState({ view: v }); };
+    const navDefs = [
+      { label: 'Overview', v: 'overview', icon: '▦' },
+      { label: 'Users', v: 'users', icon: '👥' },
+      { label: 'Trades', v: 'trades', icon: '⇄' },
+      { label: 'Revenue', v: 'revenue', icon: '◈' },
+      { label: 'System', v: 'system', icon: '⚙', badge: '2', badgeColor: warn },
+      { label: 'Moderation', v: 'moderation', icon: '🛡', badge: '3', badgeColor: down },
+      { label: 'Settings', v: 'settings', icon: '⚡' },
+    ];
+    const navItems = navDefs.map(n => {
+      const isActive = view === n.v;
+      return {
+        label: n.label, icon: n.icon, onClick: go(n.v),
+        badge: n.badge || '', badgeColor: n.badgeColor || accent,
+        color: isActive ? '#eef1f5' : '#8a919c',
+        bg: isActive ? accentSoft : 'transparent',
+        weight: isActive ? 600 : 500,
+        hoverBg: isActive ? accentSoft : '#14171c',
+      };
+    });
+
+    const ranges = ['24H', '7D', '30D'].map((label, i) => ({
+      label, color: i === 1 ? '#06210f' : '#8a919c', bg: i === 1 ? accent : '#101216', border: i === 1 ? accent : '#21252c',
+    }));
+
+    const titles = {
+      overview: ['Overview', 'Platform health, revenue and live activity'],
+      users: ['Users', '8,412 registered wallets · 347 online now'],
+      trades: ['Trades', 'Live and historical trade monitoring'],
+      revenue: ['Revenue', 'Fees, treasury and payouts'],
+      system: ['System', 'Infrastructure status and event log'],
+      moderation: ['Moderation', '3 items need review'],
+      settings: ['Settings', 'Platform configuration and access'],
+    };
+    const [pageTitle, pageSub] = titles[view] || titles.overview;
+
+    const isOverview = view === 'overview';
+    const isUsers = view === 'users';
+    const isSystem = view === 'system';
+    const isTrades = view === 'trades';
+    const isRevenue = view === 'revenue';
+    const isModeration = view === 'moderation';
+    const isSettings = view === 'settings';
+
+    // KPIs
+    const kpis = [
+      { icon: '👥', iconBg: 'rgba(124,140,255,0.14)', value: '8,412', label: 'Total users', delta: '+214', deltaColor: up },
+      { icon: '🟢', iconBg: 'rgba(58,210,155,0.14)', value: '347', label: 'Active bots now', delta: '+12%', deltaColor: up },
+      { icon: '⇄', iconBg: 'rgba(22,224,142,0.14)', value: '1,284', label: 'Trades (24h)', delta: '+8.4%', deltaColor: up },
+      { icon: '◈', iconBg: 'rgba(247,185,85,0.14)', value: '312 SOL', label: 'Fees (24h)', delta: '+18%', deltaColor: up },
+    ];
+
+    // revenue bars (14 days)
+    const revSeed = [40, 52, 47, 61, 55, 70, 66, 78, 72, 84, 80, 92, 88, 100];
+    const revBars = revSeed.map((h, i) => ({
+      h, label: i % 2 === 0 ? ('' + (i + 1)) : '',
+      color: i === revSeed.length - 1 ? accent : this.hexToRgba(accent, 0.42),
+    }));
+
+    const feeBreak = [
+      { label: 'Auto trades', value: '842 SOL', pct: '66%', color: accent },
+      { label: 'Copy trades', value: '286 SOL', pct: '22%', color: '#7c8cff' },
+      { label: 'Swaps', value: '109 SOL', pct: '9%', color: warn },
+      { label: 'Withdrawals', value: '47 SOL', pct: '3%', color: '#565d68' },
+    ];
+
+    const mkTrade = (user, action, token, size, pnl, win, isOpen) => ({
+      user, action, token, size, pnl,
+      actionColor: action === 'BUY' ? up : (win ? up : down),
+      actionBg: action === 'BUY' ? 'rgba(58,210,155,0.14)' : (win ? 'rgba(58,210,155,0.14)' : 'rgba(247,107,98,0.14)'),
+      pnlColor: isOpen ? '#8a919c' : (win ? up : down),
+    });
+    const liveTrades = [
+      mkTrade('BM3A…YT8i', 'SELL', 'WIF', '0.4 SOL', '+18.4%', true, false),
+      mkTrade('Cdn8…eAM9', 'BUY', 'POPCAT', '0.3 SOL', 'open', true, true),
+      mkTrade('9xQ2…Lp4k', 'SELL', 'PNUT', '0.5 SOL', '-3.0%', false, false),
+      mkTrade('7hR1…Zm2v', 'BUY', 'MOODENG', '0.2 SOL', 'open', true, true),
+      mkTrade('Ka93…Qw8s', 'SELL', 'MEW', '0.6 SOL', '+21.0%', true, false),
+      mkTrade('Ll20…Rt6y', 'SELL', 'BONK', '0.35 SOL', '+4.2%', true, false),
+    ];
+
+    const alerts = [
+      { icon: '⚠', color: warn, bg: 'rgba(247,185,85,0.14)', text: 'RPC latency spike on node us-east-2 (280ms).', time: '4m ago' },
+      { icon: '🛡', color: down, bg: 'rgba(247,107,98,0.14)', text: 'Wallet 4kD…9f flagged: 60 trades/min (rate limit).', time: '22m ago' },
+      { icon: '◈', color: accent, bg: accentSoft, text: 'Daily fee target reached (300 SOL).', time: '1h ago' },
+      { icon: '👥', color: '#7c8cff', bg: 'rgba(124,140,255,0.14)', text: '214 new signups today — new daily record.', time: '3h ago' },
+    ];
+
+    // users view
+    const userStats = [
+      { label: 'REGISTERED', value: '8,412', color: '#eef1f5' },
+      { label: 'ACTIVE (24H)', value: '1,906', color: '#eef1f5' },
+      { label: 'RUNNING BOTS', value: '347', color: up },
+      { label: 'BANNED', value: '23', color: down },
+    ];
+    const userFilters = ['All', 'Active', 'Idle', 'Flagged'].map((label, i) => ({
+      label, color: i === 0 ? '#06210f' : '#8a919c', bg: i === 0 ? accent : '#101216', border: i === 0 ? accent : '#21252c',
+    }));
+    const rawUsers = [
+      { initials: 'SW', color: '#35d4c4', name: 'Sol Whale', wallet: 'BM3A…YT8i', status: 'RUNNING', balance: '24.1 SOL', trades: '203', pnl: '+48.2', joined: 'Jun 12' },
+      { initials: 'PQ', color: '#7c8cff', name: 'Pump Queen', wallet: 'Cdn8…eAM9', status: 'RUNNING', balance: '18.4 SOL', trades: '142', pnl: '+38.4', joined: 'Jun 14' },
+      { initials: 'DM', color: '#f7b955', name: 'Degen Max', wallet: '9xQ2…Lp4k', status: 'IDLE', balance: '3.2 SOL', trades: '156', pnl: '+27.4', joined: 'Jun 18' },
+      { initials: 'VX', color: '#f76b62', name: '0xViper', wallet: '7hR1…Zm2v', status: 'RUNNING', balance: '11.8 SOL', trades: '178', pnl: '+31.7', joined: 'Jun 09' },
+      { initials: 'LR', color: '#7c8cff', name: 'Luna R', wallet: 'Ka93…Qw8s', status: 'IDLE', balance: '5.6 SOL', trades: '98', pnl: '+19.9', joined: 'Jun 21' },
+      { initials: '4K', color: '#f76b62', name: 'anon', wallet: '4kD9…f1x0', status: 'FLAGGED', balance: '0.9 SOL', trades: '612', pnl: '-4.1', joined: 'Jun 28' },
+      { initials: 'HX', color: '#3ad29b', name: '0xHarper', wallet: 'Ll20…Rt6y', status: 'RUNNING', balance: '8.7 SOL', trades: '134', pnl: '+16.2', joined: 'Jun 16' },
+      { initials: 'AK', color: '#ff9b3d', name: 'ApeKing', wallet: 'Zp51…Nb3d', status: 'IDLE', balance: '2.1 SOL', trades: '210', pnl: '+14.8', joined: 'Jun 22' },
+    ];
+    const users = rawUsers.map(u => ({
+      ...u,
+      pnl: u.pnl + ' SOL',
+      pnlColor: u.pnl.startsWith('-') ? down : up,
+      statusColor: u.status === 'RUNNING' ? up : (u.status === 'FLAGGED' ? down : warn),
+      statusBg: u.status === 'RUNNING' ? 'rgba(58,210,155,0.14)' : (u.status === 'FLAGGED' ? 'rgba(247,107,98,0.14)' : 'rgba(247,185,85,0.14)'),
+    }));
+
+    // system view
+    const services = [
+      { name: 'Scanner', status: 'HEALTHY', metric: '42ms', metricLabel: 'avg scan latency', seed: 11, trend: 0, ok: true },
+      { name: 'RPC nodes', status: 'HEALTHY', metric: '99.98%', metricLabel: 'uptime 24h', seed: 23, trend: 0, ok: true },
+      { name: 'Trade engine', status: 'HEALTHY', metric: '1,284', metricLabel: 'fills 24h', seed: 31, trend: 1, ok: true },
+      { name: 'Fee collector', status: 'HEALTHY', metric: '312 SOL', metricLabel: 'collected 24h', seed: 41, trend: 1, ok: true },
+      { name: 'US-East-2', status: 'DEGRADED', metric: '280ms', metricLabel: 'latency (elevated)', seed: 53, trend: 2, ok: false },
+      { name: 'Notification queue', status: 'HEALTHY', metric: '0', metricLabel: 'backlog', seed: 61, trend: -1, ok: true },
+    ].map(s => ({
+      ...s,
+      statusColor: s.ok ? up : warn,
+      statusBg: s.ok ? 'rgba(58,210,155,0.12)' : 'rgba(247,185,85,0.14)',
+      metricColor: s.ok ? '#eef1f5' : warn,
+      bars: this.bars(s.seed, s.trend),
+    }));
+
+    const logs = [
+      { time: '14:22:07', level: 'INFO', levelColor: '#8a919c', msg: 'scanner cycle complete · 142 tokens · 38ms' },
+      { time: '14:21:54', level: 'TRADE', levelColor: accent, msg: 'fill BM3A…YT8i SELL $WIF 0.4 SOL +18.4%' },
+      { time: '14:21:31', level: 'WARN', levelColor: warn, msg: 'rpc us-east-2 latency 280ms (threshold 200ms)' },
+      { time: '14:20:12', level: 'TRADE', levelColor: accent, msg: 'fill Ka93…Qw8s SELL $MEW 0.6 SOL +21.0%' },
+      { time: '14:19:48', level: 'FLAG', levelColor: down, msg: 'wallet 4kD9…f1x0 rate-limited · 60 tx/min' },
+      { time: '14:18:03', level: 'INFO', levelColor: '#8a919c', msg: 'fee sweep → treasury · 12.4 SOL' },
+      { time: '14:17:22', level: 'INFO', levelColor: '#8a919c', msg: 'new signup Zp51…Nb3d · invite ORCA-8842' },
+    ];
+
+    // ===== TRADES view =====
+    const tradeStats = [
+      { label: 'TRADES (24H)', value: '1,284', color: '#eef1f5' },
+      { label: 'OPEN NOW', value: '412', color: accent },
+      { label: 'WIN RATE', value: '61.2%', color: up },
+      { label: 'VOLUME (24H)', value: '2,940 SOL', color: '#eef1f5' },
+    ];
+    const tradeFilters = ['All', 'Open', 'Closed', 'Stop-loss', 'Flagged'].map((label, i) => ({
+      label, color: i === 0 ? '#06210f' : '#8a919c', bg: i === 0 ? accent : '#101216', border: i === 0 ? accent : '#21252c',
+    }));
+    const rawTradeRows = [
+      { time: '14:22:07', user: 'BM3A…YT8i', token: 'WIF', side: 'SELL', entry: '$1.62', exit: '$1.92', size: '0.40', pnl: '+18.4%', win: true, open: false },
+      { time: '14:21:40', user: 'Cdn8…eAM9', token: 'POPCAT', side: 'BUY', entry: '$0.39', exit: '—', size: '0.30', pnl: 'open', win: true, open: true },
+      { time: '14:20:12', user: 'Ka93…Qw8s', token: 'MEW', side: 'SELL', entry: '$0.0061', exit: '$0.0072', size: '0.60', pnl: '+21.0%', win: true, open: false },
+      { time: '14:19:03', user: '9xQ2…Lp4k', token: 'PNUT', side: 'SELL', entry: '$0.86', exit: '$0.83', size: '0.50', pnl: '-3.0%', win: false, open: false },
+      { time: '14:18:22', user: '7hR1…Zm2v', token: 'MOODENG', side: 'BUY', entry: '$0.16', exit: '—', size: '0.20', pnl: 'open', win: true, open: true },
+      { time: '14:17:55', user: 'Ll20…Rt6y', token: 'BONK', side: 'SELL', entry: '$0.000032', exit: '$0.000034', size: '0.35', pnl: '+4.2%', win: true, open: false },
+      { time: '14:16:31', user: '4kD9…f1x0', token: 'GIGA', side: 'SELL', entry: '$0.061', exit: '$0.052', size: '0.90', pnl: '-14.8%', win: false, open: false },
+      { time: '14:15:09', user: 'Zp51…Nb3d', token: 'FWOG', side: 'BUY', entry: '$0.018', exit: '—', size: '0.15', pnl: 'open', win: true, open: true },
+    ];
+    const tradeRows = rawTradeRows.map(t => ({
+      ...t,
+      sideColor: t.side === 'BUY' ? up : (t.win ? up : down),
+      sideBg: t.side === 'BUY' ? 'rgba(58,210,155,0.14)' : (t.win ? 'rgba(58,210,155,0.14)' : 'rgba(247,107,98,0.14)'),
+      pnlColor: t.open ? '#8a919c' : (t.win ? up : down),
+    }));
+
+    // ===== REVENUE view =====
+    const revKpis = [
+      { icon: '◈', iconBg: accentSoft, value: '1,284 SOL', label: 'Fees (30d)', delta: '+18.2%', deltaColor: up },
+      { icon: '🏦', iconBg: 'rgba(124,140,255,0.14)', value: '8,940 SOL', label: 'Treasury balance', delta: '+312', deltaColor: up },
+      { icon: '📈', iconBg: 'rgba(58,210,155,0.14)', value: '42.1 SOL', label: 'Avg fee / day', delta: '+6.4%', deltaColor: up },
+      { icon: '↗', iconBg: 'rgba(247,185,85,0.14)', value: '156 SOL', label: 'Pending payouts', delta: '18 reqs', deltaColor: warn },
+    ];
+    const revSource = [
+      { label: 'Auto trades', value: '842 SOL', pct: '66%', color: accent },
+      { label: 'Copy trades', value: '286 SOL', pct: '22%', color: '#7c8cff' },
+      { label: 'Swaps', value: '109 SOL', pct: '9%', color: warn },
+      { label: 'Withdrawals', value: '47 SOL', pct: '3%', color: '#565d68' },
+    ];
+    const payouts = [
+      { time: 'Today 13:40', dest: 'Treasury sweep', wallet: 'Trs…9k2', amount: '+124 SOL', status: 'SETTLED', win: true },
+      { time: 'Today 09:12', dest: 'Referral payout', wallet: 'BM3A…YT8i', amount: '-18 SOL', status: 'SETTLED', win: true },
+      { time: 'Yest 22:01', dest: 'Treasury sweep', wallet: 'Trs…9k2', amount: '+98 SOL', status: 'SETTLED', win: true },
+      { time: 'Yest 15:33', dest: 'Referral payout', wallet: 'Cdn8…eAM9', amount: '-24 SOL', status: 'PENDING', win: false },
+    ].map(p => ({
+      ...p,
+      amountColor: p.amount.startsWith('-') ? down : up,
+      statusColor: p.status === 'SETTLED' ? up : warn,
+      statusBg: p.status === 'SETTLED' ? 'rgba(58,210,155,0.14)' : 'rgba(247,185,85,0.14)',
+    }));
+    const revTrend = [46, 52, 49, 58, 55, 64, 60, 72, 68, 80, 76, 88, 84, 96].map((h, i, a) => ({
+      h, label: i % 2 === 0 ? ('' + (i + 1)) : '',
+      color: i === a.length - 1 ? accent : this.hexToRgba(accent, 0.42),
+    }));
+
+    // ===== MODERATION view =====
+    const modStats = [
+      { label: 'OPEN CASES', value: '3', color: down },
+      { label: 'FLAGGED WALLETS', value: '11', color: warn },
+      { label: 'BANNED (30D)', value: '23', color: '#eef1f5' },
+      { label: 'AUTO-FLAGS (24H)', value: '48', color: '#eef1f5' },
+    ];
+    const cases = [
+      { initials: '4K', color: '#f76b62', wallet: '4kD9…f1x0', reason: 'Rate-limit abuse · 60 tx/min', sev: 'HIGH', time: '22m ago' },
+      { initials: 'XZ', color: '#f7b955', wallet: 'Xz01…8bQp', reason: 'Suspected wash trading', sev: 'MEDIUM', time: '1h ago' },
+      { initials: 'R9', color: '#f7b955', wallet: 'R9tk…2mLa', reason: 'Multiple accounts / same IP', sev: 'MEDIUM', time: '3h ago' },
+    ].map(c => ({
+      ...c,
+      sevColor: c.sev === 'HIGH' ? down : warn,
+      sevBg: c.sev === 'HIGH' ? 'rgba(247,107,98,0.14)' : 'rgba(247,185,85,0.14)',
+    }));
+    const modQueue = [
+      { icon: '🚩', color: warn, bg: 'rgba(247,185,85,0.14)', text: 'Auto-flag: wallet Pz3…7q volume spike 40× baseline', time: '12m ago' },
+      { icon: '💬', color: '#7c8cff', bg: 'rgba(124,140,255,0.14)', text: 'Reported post by @degenmax — spam links', time: '48m ago' },
+      { icon: '🚩', color: warn, bg: 'rgba(247,185,85,0.14)', text: 'Auto-flag: new wallet 500 SOL deposit + instant trade', time: '2h ago' },
+    ];
+
+    // ===== SETTINGS view =====
+    const settingGroups = [
+      { title: 'Platform limits', icon: '⚙', rows: [
+        { label: 'Max positions per user', desc: 'Concurrent open trades', value: '5', unit: '' },
+        { label: 'Platform fee', desc: 'Charged per fill', value: '0.25', unit: '%' },
+        { label: 'Min deposit', desc: 'To activate a bot', value: '0.1', unit: 'SOL' },
+        { label: 'Rate limit', desc: 'Max trades per minute', value: '20', unit: '/min' },
+      ]},
+    ];
+    const settingGroupsMapped = settingGroups.map(g => ({
+      ...g, rows: g.rows.map((r, i, a) => ({ ...r, divider: i === a.length - 1 ? 'transparent' : '#16191f' })),
+    }));
+    const tog = this.state.toggles || { newSignups: true, autoFlag: true, maintenance: false, copyTrading: true };
+    const toggleDefs = [
+      { key: 'newSignups', label: 'Accept new signups', desc: 'Allow invite redemptions' },
+      { key: 'autoFlag', label: 'Auto-flag engine', desc: 'Detect abuse automatically' },
+      { key: 'copyTrading', label: 'Copy trading', desc: 'Platform-wide copy feature' },
+      { key: 'maintenance', label: 'Maintenance mode', desc: 'Pause all bots & trading' },
+    ];
+    const settingsToggles = toggleDefs.map((t, i, a) => {
+      const on = !!tog[t.key];
+      const danger = t.key === 'maintenance';
+      const onColor = danger ? down : accent;
+      return {
+        label: t.label, desc: t.desc,
+        divider: i === a.length - 1 ? 'transparent' : '#16191f',
+        trackBg: on ? onColor : '#21252c',
+        trackBorder: on ? onColor : '#2c313a',
+        knobBg: on ? '#06210f' : '#8a919c',
+        knobLeft: on ? '21px' : '2px',
+        onToggle: () => this.setState({ toggles: { ...tog, [t.key]: !on } }),
+      };
+    });
+    const admins = [
+      { initials: 'AD', color: '#f76b62', name: 'You', role: 'Super-admin', roleColor: down },
+      { initials: 'JM', color: '#7c8cff', name: 'J. Mendez', role: 'Moderator', roleColor: '#7c8cff' },
+      { initials: 'SK', color: '#35d4c4', name: 'S. Kane', role: 'Analyst', roleColor: accent },
+    ];
+
+    return {
+      accent, accentSoft, accentBorder,
+      navItems, ranges, pageTitle, pageSub,
+      isOverview, isUsers, isSystem, isTrades, isRevenue, isModeration, isSettings,
+      kpis, revBars, feeBreak, liveTrades, alerts,
+      userStats, userFilters, users,
+      services, logs,
+      tradeStats, tradeFilters, tradeRows,
+      revKpis, revSource, payouts, revTrend,
+      modStats, cases, modQueue,
+      settingGroups: settingGroupsMapped, settingsToggles, admins,
+    };
+  }
+}
+</script>
+</body>
+</html>
