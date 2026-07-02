@@ -5347,6 +5347,44 @@ def toggle_feed_reaction(post_id):
     return jsonify({'ok': True, 'emoji': emoji, 'active': active,
                     'counts': counts, 'mine': mine})
 
+@app.route('/api/feed/reactions/batch', methods=['GET'])
+@rate_limit(60, 60)
+def feed_reactions_batch():
+    raw = request.args.get('ids', '')
+    post_ids = [p.strip() for p in raw.split(',') if p.strip().isdigit()][:50]
+    if not post_ids:
+        return jsonify({'ok': True, 'reactions': {}})
+    wallet = _current_wallet()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        ph = ','.join('?' * len(post_ids))
+        count_rows = conn.execute(
+            f'SELECT post_id, emoji, COUNT(*) FROM post_reactions WHERE post_id IN ({ph}) GROUP BY post_id, emoji',
+            post_ids
+        ).fetchall()
+        reactions = {}
+        for pid, emoji, n in count_rows:
+            reactions.setdefault(pid, {}).setdefault('counts', {})[emoji] = n
+        mine_map = {}
+        if wallet:
+            me = _get_uid(conn, wallet)
+            if me:
+                mine_rows = conn.execute(
+                    f'SELECT post_id, emoji FROM post_reactions WHERE user_id=? AND post_id IN ({ph})',
+                    [me] + post_ids
+                ).fetchall()
+                for pid, emoji in mine_rows:
+                    mine_map.setdefault(pid, []).append(emoji)
+    finally:
+        conn.close()
+    result = {}
+    for pid in post_ids:
+        result[pid] = {
+            'counts': reactions.get(pid, {}).get('counts', {}),
+            'mine':   mine_map.get(pid, [])
+        }
+    return jsonify({'ok': True, 'reactions': result})
+
 @app.route('/api/feed/reply', methods=['POST'])
 @rate_limit(15, 60)
 def post_feed_reply():

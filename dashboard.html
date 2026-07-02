@@ -456,7 +456,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-action.copy{color:#f7b955!important}
 .fc-action.copied{color:#f7b955!important;cursor:default}
 .fc-react-wrap{position:relative;display:inline-flex;align-items:center}
-.fc-react-palette{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:6px 8px;display:none;gap:2px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.55);white-space:nowrap}
+.fc-react-palette{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:6px 8px;display:none;gap:2px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.55);flex-wrap:wrap;max-width:min(240px,90vw)}
 .fc-react-palette button{background:none;border:none;cursor:pointer;font-size:20px;padding:4px 5px;border-radius:7px;transition:background .1s;line-height:1}
 .fc-react-palette button:hover{background:rgba(255,255,255,.09)}
 .fc-reactions{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:0 0 2px}
@@ -8700,6 +8700,7 @@ setInterval(fetchTrades,30000);
 setInterval(fetchPnlChart,30000);
 setInterval(fetchLeaderboard,30000);
 setInterval(fetchTradersFeed,15000);
+setInterval(_refreshVisibleReactions,12000);
 setInterval(fetchPumpScanner,30000);
 
 // ── VERSION POLLING ──
@@ -9875,7 +9876,7 @@ function _emojiPickerToggle(e, palId, inputId){
   var inp=typeof inputId==='string'?document.getElementById(inputId):inputId;
   if(!pal) return;
   var wasOpen=pal.style.display==='grid';
-  document.querySelectorAll('.ep-palette').forEach(function(p){ p.style.display='none'; });
+  document.querySelectorAll('.ep-palette,.fc-react-palette').forEach(function(p){ p.style.display='none'; });
   if(wasOpen) return;
   if(!pal.childElementCount){
     _EMOJI_PALETTE_EMOJIS.forEach(function(emoji){
@@ -9897,7 +9898,7 @@ function _emojiPickerToggle(e, palId, inputId){
   pal.style.display='grid';
 }
 document.addEventListener('click',function(){
-  document.querySelectorAll('.ep-palette').forEach(function(p){ p.style.display='none'; });
+  document.querySelectorAll('.ep-palette,.fc-react-palette').forEach(function(p){ p.style.display='none'; });
 });
 
 async function _dmCopyTrade(btn, btnId, errId, tokenAddr, entryPrice, amtSol){
@@ -11699,6 +11700,24 @@ function _feedRenderPills(postId, counts, mine){
   el.innerHTML = html;
 }
 
+
+async function _refreshVisibleReactions(){
+  var cards = document.querySelectorAll('.fc-card[id^="fc-card-"]');
+  if(!cards.length) return;
+  var ids = [];
+  cards.forEach(function(c){ var m = c.id.match(/^fc-card-(\d+)$/); if(m) ids.push(m[1]); });
+  if(!ids.length) return;
+  try{
+    var r = await fetch('/api/feed/reactions/batch?ids='+ids.map(encodeURIComponent).join(','))
+              .then(function(res){ return res.json(); });
+    if(!r.ok) return;
+    var reactions = r.reactions || {};
+    ids.forEach(function(pid){
+      var data = reactions[pid];
+      if(data) _feedRenderPills(pid, data.counts, data.mine);
+    });
+  }catch(_){}
+}
 
 function _feedToggleReply(btn, postId){
   var rbox = document.getElementById('rbox-'+postId);
