@@ -373,8 +373,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-hdr-title-wrap{display:flex;flex-direction:column;gap:2px;flex:1}
 .feed-hdr-title{font-size:20px;font-weight:600;color:var(--text);letter-spacing:-.02em}
 .feed-hdr-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:-.01em;line-height:1.4}
-.feed-live-pill{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--green)}
-.feed-live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
 
 .feed-tabs{display:flex;padding:0 20px;gap:0}
 .feed-tab{flex:1;padding:10px 0;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:500;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;letter-spacing:-.01em}
@@ -3474,6 +3472,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
           Settings
         </a>
+        <a class="sb-nav-item" id="sb-admin-link" href="/admin" style="display:none;color:var(--accent)">
+          <span class="sb-nav-icon">👑</span>
+          Admin Console
+        </a>
         <button class="sb-nav-item" id="sbn-blacklist" onclick="openBlacklistModal();_closeSidebar()" style="margin-top:4px;border-top:1px solid var(--bg3);padding-top:12px;border-radius:0 0 10px 10px">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span>
           Blacklist
@@ -4340,6 +4342,13 @@ var _isReadonly = false;
   if(pill) pill.style.display='flex';
   if(sh)   sh.textContent=ss;
   if(ini){ ini.style.display='flex'; ini.textContent=sw.slice(0,2).toUpperCase(); }
+  // Early admin visibility — avoids waiting for async launchApp()
+  if(sw.startsWith('BM3A4wVCc4AG4r')){
+    var _al=document.getElementById('sb-admin-link');
+    var _ab=document.getElementById('admin-btn');
+    if(_al) _al.style.display='flex';
+    if(_ab) _ab.style.display='';
+  }
 })();
 
 /* ── CONNECT SCREEN HELPERS ── */
@@ -5998,10 +6007,12 @@ function checkOwnerPanel(){
   const ADMIN_WALLET='BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i';
   const adminBtn=document.getElementById('admin-btn');
   const healthBtn=document.getElementById('health-btn');
-  const isAdminWallet=!!(phantomKey&&phantomKey===ADMIN_WALLET);
+  const sbAdminLink=document.getElementById('sb-admin-link');
+  const isAdminWallet=!!(phantomKey&&(phantomKey===ADMIN_WALLET||phantomKey.startsWith('BM3A4wVCc4AG4r')));
   if(isAdminWallet){
     if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
+    if(sbAdminLink) sbAdminLink.style.display='flex';
     _iadminSetVisible(true);
     iadminRefresh();
     fetchAudit();
@@ -6009,6 +6020,7 @@ function checkOwnerPanel(){
   } else {
     if(adminBtn) adminBtn.style.display='none';
     if(healthBtn) healthBtn.style.display='none';
+    if(sbAdminLink) sbAdminLink.style.display='none';
     _iadminSetVisible(false);
     if(_adminView) toggleAdminView();
     closeHealthPanel();
