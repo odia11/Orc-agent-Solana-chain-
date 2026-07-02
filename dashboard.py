@@ -3,9 +3,11 @@ from datetime import timedelta
 import bcrypt as _bcrypt
 try:
     import nacl.public as _nacl_public
+    import nacl.signing as _nacl_signing
     _NACL_OK = True
 except ImportError:
     _NACL_OK = False
+    _nacl_signing = None
 try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
@@ -423,6 +425,10 @@ _THREADING_LOCK_TYPE = type(_rl_lock)
 _ext_lock  = threading.Lock()
 # Timestamp lists; filtered to last 24 h for "today" stats, last 1 h for rate-stats.
 _ext_calls: dict = {'api': [], 'dexscreener': [], 'jupiter': []}
+
+# ── WALLET AUTH NONCES ──
+_nonce_lock:  threading.Lock = threading.Lock()
+_wallet_auth_nonces: dict    = {}  # nonce → {'ts': float, 'ip': str}
 
 def _ext_hit(category: str) -> None:
     """Record one external or internal API call for admin observability."""
@@ -4004,6 +4010,23 @@ def set_password():
     add_user_log(wallet, 'Password set/updated')
     return jsonify({'success': True})
 
+@app.route('/api/auth/nonce', methods=['GET'])
+@rate_limit(20, 60)
+def auth_nonce():
+    nonce = secrets.token_hex(16)
+    ip    = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+    now   = time.time()
+    with _nonce_lock:
+        _wallet_auth_nonces[nonce] = {'ts': now, 'ip': ip}
+        stale = [k for k, v in _wallet_auth_nonces.items() if now - v['ts'] > 300]
+        for k in stale:
+            del _wallet_auth_nonces[k]
+    return jsonify({
+        'ok':      True,
+        'nonce':   nonce,
+        'message': 'Sign in to OrcAgent\n\nNonce: ' + nonce,
+    })
+
 @app.route('/api/auth/check-faceid', methods=['GET'])
 def check_faceid():
     """Public — returns whether any WebAuthn credentials exist on the server."""
@@ -4115,6 +4138,25 @@ def set_wallet():
     if address:
         if not is_valid_solana_address(address):
             return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
+        # ── Nonce + signature verification ──────────────────────────────────
+        body      = request.json or {}
+        nonce     = str(body.get('nonce', '')).strip()
+        signature = str(body.get('signature', '')).strip()
+        now_ts    = time.time()
+        with _nonce_lock:
+            entry = _wallet_auth_nonces.get(nonce)
+            if entry:
+                del _wallet_auth_nonces[nonce]  # single-use regardless of outcome
+        if not entry or now_ts - entry['ts'] > 300:
+            return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
+        expected_msg = 'Sign in to OrcAgent\n\nNonce: ' + nonce
+        try:
+            _nacl_signing.VerifyKey(_b58dec(address)).verify(
+                expected_msg.encode(), _b58dec(signature)
+            )
+        except Exception:
+            return jsonify({'ok': False, 'msg': 'Signature verification failed'}), 401
+        # ────────────────────────────────────────────────────────────────────
         # Check if wallet already exists in DB before upsert
         is_new_user = True
         try:

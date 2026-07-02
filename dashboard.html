@@ -4692,6 +4692,38 @@ var _b58enc=(function(){
   };
 })();
 
+async function _connectWalletSigned(provider, address){
+  // 1. Fetch nonce
+  var nr = await fetch('/api/auth/nonce').then(function(r){return r.json();}).catch(function(){return null;});
+  if(!nr || !nr.ok) return {ok:false, msg:'Failed to get nonce'};
+
+  // 2. Sign — catch user rejection separately so it doesn't fall to outer catch
+  var result;
+  try{
+    result = await provider.signMessage(new TextEncoder().encode(nr.message), 'utf8');
+  }catch(e){
+    return {ok:false, msg:'Signature rejected'};
+  }
+
+  // 3. Normalise: Phantom → {signature:Uint8Array}, Solflare → Uint8Array directly
+  var sigBytes = (result instanceof Uint8Array)
+    ? result
+    : (result && result.signature instanceof Uint8Array ? result.signature : null);
+  if(!sigBytes) return {ok:false, msg:'Signature rejected'};
+
+  // 4. Base58-encode signature bytes
+  var sigB58 = _b58enc(sigBytes);
+
+  // 5. POST /api/wallet/set with proof
+  var r = await fetch('/api/wallet/set',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({address:address, signature:sigB58, nonce:nr.nonce})
+  }).then(function(x){return x.json();}).catch(function(){return null;});
+
+  return r || {ok:false, msg:'Network error'};
+}
+
 function _phantomMobileV1Connect(){
   var msgEl=document.getElementById('wallet-install-msg');
   var noteEl=document.getElementById('ob-phantom-note');
@@ -4948,7 +4980,11 @@ async function connectWalletOnboard(type){
     const cb=document.getElementById('step1-continue-btn');
     cb.disabled=false; cb.style.cssText='';
     document.getElementById('wallet-back-btn').style.display='flex';
-    const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:phantomKey})}).then(x=>x.json()).catch(()=>null);
+    const r=await _connectWalletSigned(provider, phantomKey);
+    if(!r?.ok && (r?.msg==='Signature rejected'||(r?.msg||'').startsWith('Nonce expired'))){
+      msgEl.textContent='Onderteken het verzoek in je wallet om in te loggen — probeer opnieuw';
+      msgEl.style.display='block'; return;
+    }
     if(r?.csrf_token) _csrfToken=r.csrf_token;
     settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false; _updateKeyStatus();
     if(r?.success){
@@ -5104,12 +5140,11 @@ async function launchApp(){
       const sr = await fetch('/api/state').then(r=>r.json()).catch(()=>null);
       if(!sr || !sr.wallet){
         // Session expired — re-register before showing the dashboard
-        const wr = await fetch('/api/wallet/set',{
-          method:'POST',
-          headers:{'Content-Type':'application/json'},
-          body:JSON.stringify({address:phantomKey})
-        }).then(r=>r.json()).catch(()=>null);
-        if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
+        const _wp=walletType==='Phantom'?window.solana:window.solflare;
+        const wr = await _connectWalletSigned(_wp, phantomKey);
+        if(!wr?.ok && (wr?.msg==='Signature rejected'||(wr?.msg||'').startsWith('Nonce expired'))){
+          showLfToast('🔑','Onderteken het verzoek in je wallet om in te loggen — probeer opnieuw','warn');
+        } else if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
       } else {
         // Pick up any server-side flag changes (key uploaded from another tab, etc.)
         if(typeof sr.is_admin==='boolean') _isAdmin=sr.is_admin;
@@ -5293,12 +5328,11 @@ document.addEventListener('visibilitychange', async function(){
   try{
     const sr=await fetch('/api/state').then(r=>r.json()).catch(()=>null);
     if(sr && !sr.wallet){
-      const wr=await fetch('/api/wallet/set',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({address:phantomKey})
-      }).then(r=>r.json()).catch(()=>null);
-      if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
+      const _wp=walletType==='Phantom'?window.solana:window.solflare;
+      const wr=await _connectWalletSigned(_wp, phantomKey);
+      if(!wr?.ok && (wr?.msg==='Signature rejected'||(wr?.msg||'').startsWith('Nonce expired'))){
+        showLfToast('🔑','Onderteken het verzoek in je wallet om in te loggen — probeer opnieuw','warn');
+      } else if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
     }
   }catch(e){}
 });
@@ -7037,7 +7071,12 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
   if(_p && _n){
     const _pk=_p.publicKey.toString();
     phantomKey=_pk; walletType=_n;
-    const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})}).then(x=>x.json()).catch(()=>null);
+    const r=await _connectWalletSigned(_p, _pk);
+    if(!r?.ok && (r?.msg==='Signature rejected'||(r?.msg||'').startsWith('Nonce expired'))){
+      const _m=document.getElementById('wallet-install-msg');
+      if(_m){ _m.textContent='Onderteken het verzoek in je wallet om in te loggen — probeer opnieuw'; _m.style.display='block'; }
+      return;
+    }
     if(r?.csrf_token) _csrfToken=r.csrf_token;
     settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false; _updateKeyStatus();
     if(r?.success){
