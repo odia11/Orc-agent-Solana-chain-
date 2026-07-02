@@ -3713,12 +3713,18 @@ def message_thread(wallet_address):
         return redirect('/?connect=1')
     wallet = session['wallet']
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet_address,)).fetchone()
+        open_peer_id = row[0] if row else None
+    finally:
+        conn.close()
     return render_template(
         'messages.html',
         wallet=wallet,
         wallet_short=wallet_short,
         is_admin=_is_owner(wallet),
-        open_wallet=wallet_address,
+        open_peer_id=open_peer_id,
         csrf_token=_get_csrf_token(),
     )
 
@@ -5308,16 +5314,18 @@ def api_me():
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            'SELECT username, avatar_url FROM users WHERE wallet_address=?', (wallet,)
+            'SELECT id, username, avatar_url FROM users WHERE wallet_address=?', (wallet,)
         ).fetchone()
     finally:
         conn.close()
-    username   = row[0] if row else None
-    avatar_url = row[1] if row else None
+    user_id    = row[0] if row else None
+    username   = row[1] if row else None
+    avatar_url = row[2] if row else None
     us      = get_user_state(wallet)
     balance = us.get('balance', 0.0)
     return jsonify({
         'ok':       True,
+        'user_id':  user_id,
         'wallet':   wallet,
         'username': username or '',
         'avatar':   avatar_url or '',

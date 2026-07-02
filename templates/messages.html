@@ -304,7 +304,9 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 <script>
 var _myWallet      = {{ wallet|tojson }};
 var _csrfToken     = {{ csrf_token|tojson }};
-var _activeWallet  = null;
+var _myUserId      = null;
+var _activePeerId  = null;
+var _activePeer    = {};      /* {id, wallet, username} */
 var _pollTimer     = null;
 var _conversations = [];
 
@@ -344,13 +346,12 @@ function _scrollToBottom() {
 /* ── CONVERSATIONS ── */
 async function loadConversations() {
   try {
-    var r = await fetch('/api/messages/conversations');
+    var r = await fetch('/api/messages');
     var d = await r.json();
     if (d.ok) {
       _conversations = d.conversations || [];
       _renderConvList();
-      /* show unread badge in sidebar if any */
-      var total = _conversations.reduce(function(n,c){ return n + (c.unread_count||0); }, 0);
+      var total = _conversations.reduce(function(n,c){ return n + (c.unread||0); }, 0);
       var badge = document.getElementById('sb-msg-badge');
       if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
     } else {
@@ -376,20 +377,19 @@ function _renderConvList() {
     return;
   }
   el.innerHTML = _conversations.map(function(c) {
-    var peer   = c.peer_wallet || '';
-    var color  = _avatarColor(peer);
-    var ini    = (peer[0] || '?').toUpperCase();
-    var active = peer === _activeWallet ? ' active' : '';
-    var badge  = (c.unread_count > 0)
-      ? '<span class="conv-badge">'+c.unread_count+'</span>' : '';
-    return '<div class="conv-row'+active+'" onclick="_openThread(\''+_esc(peer)+'\')">'
+    var name   = c.peer_username || _short(c.peer_wallet || '');
+    var color  = _avatarColor(c.peer_wallet || String(c.peer_id));
+    var ini    = (name[0] || '?').toUpperCase();
+    var active = c.peer_id === _activePeerId ? ' active' : '';
+    var badge  = (c.unread > 0) ? '<span class="conv-badge">'+c.unread+'</span>' : '';
+    return '<div class="conv-row'+active+'" onclick="_openThread('+c.peer_id+')">'
       + '<div class="conv-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
       + '<div class="conv-info">'
-      +   '<div class="conv-name">'+_esc(_short(peer))+'</div>'
-      +   '<div class="conv-preview">'+_esc((c.last_message||'').slice(0,60))+'</div>'
+      +   '<div class="conv-name">'+_esc(name)+'</div>'
+      +   '<div class="conv-preview">'+_esc((c.last_msg||'').slice(0,60))+'</div>'
       + '</div>'
       + '<div class="conv-meta">'
-      +   '<span class="conv-time">'+_esc(_timeAgo(c.timestamp))+'</span>'
+      +   '<span class="conv-time">'+_esc(_timeAgo(c.last_ts))+'</span>'
       +   badge
       + '</div>'
       + '</div>';
@@ -397,46 +397,52 @@ function _renderConvList() {
 }
 
 /* ── THREAD ── */
-async function _openThread(peerWallet) {
-  _activeWallet = peerWallet;
+async function _openThread(peerId, peerUsername, peerWallet) {
+  _activePeerId = peerId;
+  var conv = _conversations.find(function(c){ return c.peer_id === peerId; });
+  _activePeer = {
+    id:       peerId,
+    wallet:   (conv && conv.peer_wallet)   || peerWallet   || '',
+    username: (conv && conv.peer_username) || peerUsername || ''
+  };
   _renderConvList();
 
   document.getElementById('msgs-placeholder').style.display = 'none';
-  var thread = document.getElementById('msgs-thread');
-  thread.style.display = 'flex';
+  document.getElementById('msgs-thread').style.display = 'flex';
 
-  /* mobile: swap panels */
   if (window.innerWidth <= 767) {
     document.getElementById('msgs-main').classList.add('thread-open');
   }
 
-  var color = _avatarColor(peerWallet);
-  var ini   = (peerWallet[0] || '?').toUpperCase();
+  var displayName = _activePeer.username || _short(_activePeer.wallet) || ('User #' + peerId);
+  var color = _avatarColor(_activePeer.wallet || String(peerId));
+  var ini   = (displayName[0] || '?').toUpperCase();
 
   document.getElementById('msgs-thread-hdr').innerHTML =
     '<button class="msgs-back" onclick="_backToList()">← Back</button>'
     + '<div class="msgs-thread-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
     + '<div class="msgs-thread-meta">'
-    +   '<div class="msgs-thread-name">'+_esc(_short(peerWallet))+'</div>'
+    +   '<div class="msgs-thread-name">'+_esc(displayName)+'</div>'
     +   '<div class="msgs-thread-status"><span class="msgs-online-dot"></span>Online</div>'
     + '</div>'
-    + '<button class="msgs-copy-trades-btn" onclick="_copyTrades(this,\''+_esc(peerWallet)+'\')">'
-    +   '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
-    +   'Copy Trades'
-    + '</button>';
+    + (_activePeer.wallet
+        ? '<button class="msgs-copy-trades-btn" onclick="_copyTrades(this,'+JSON.stringify(_activePeer.wallet)+')">'
+          + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
+          + 'Copy Trades</button>'
+        : '');
 
   document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
-  await loadThread(peerWallet);
+  await loadThread(peerId);
 
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(function() {
-    if (_activeWallet) loadThread(_activeWallet);
+    if (_activePeerId) loadThread(_activePeerId);
   }, 5000);
 }
 
-async function loadThread(peerWallet) {
+async function loadThread(peerId) {
   try {
-    var r = await fetch('/api/messages/' + encodeURIComponent(peerWallet));
+    var r = await fetch('/api/messages/' + peerId);
     var d = await r.json();
     if (d.ok) _renderMessages(d.messages || []);
   } catch(e) {
@@ -453,47 +459,46 @@ function _renderMessages(msgs) {
     return;
   }
   area.innerHTML = msgs.map(function(m) {
-    var mine = m.mine != null ? m.mine : (m.sender_wallet === _myWallet);
+    var mine = _myUserId != null ? (m.sender_id === _myUserId) : false;
     return '<div class="msg-wrap '+(mine?'mine':'theirs')+'">'
-      + '<div class="msg-bubble">'+_esc(m.content)+'</div>'
+      + '<div class="msg-bubble">'+_esc(m.message)+'</div>'
       + '<span class="msg-time">'+_esc(_timeAgo(m.created_at))+'</span>'
       + '</div>';
   }).join('');
   if (atBottom || msgs.length <= 30) _scrollToBottom();
-  var conv = _conversations.find(function(c){ return c.peer_wallet === _activeWallet; });
-  if (conv && conv.unread_count > 0) { conv.unread_count = 0; _renderConvList(); }
+  var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
+  if (conv && conv.unread > 0) { conv.unread = 0; _renderConvList(); }
 }
 
 /* ── SEND ── */
 async function _sendMessage() {
   var input = document.getElementById('msgs-input');
   var btn   = document.getElementById('msgs-send');
-  if (!input || !_activeWallet) return;
+  if (!input || !_activePeerId) return;
   var text = input.value.trim();
   if (!text) return;
 
   input.value = '';
   btn.disabled = true;
   try {
-    var r = await fetch('/api/messages/' + encodeURIComponent(_activeWallet), {
+    var r = await fetch('/api/messages/' + _activePeerId, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
-      body: JSON.stringify({content: text})
+      body: JSON.stringify({message: text})
     });
     var d = await r.json();
-    if (d.ok && d.message) {
+    if (d.ok) {
       var area  = document.getElementById('msgs-area');
       var empty = area.querySelector('.msgs-area-empty');
       if (empty) empty.remove();
       var div = document.createElement('div');
       div.className = 'msg-wrap mine';
-      div.innerHTML = '<div class="msg-bubble">'+_esc(d.message.content)+'</div>'
-        + '<span class="msg-time">now</span>';
+      div.innerHTML = '<div class="msg-bubble">'+_esc(text)+'</div><span class="msg-time">now</span>';
       area.appendChild(div);
       _scrollToBottom();
-      var conv = _conversations.find(function(c){ return c.peer_wallet === _activeWallet; });
-      if (conv) { conv.last_message = text; conv.timestamp = d.message.created_at; }
-      else { _conversations.unshift({peer_wallet:_activeWallet, last_message:text, timestamp:d.message.created_at, unread_count:0}); }
+      var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
+      if (conv) { conv.last_msg = text; conv.last_ts = d.created_at; }
+      else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:text, last_ts:d.created_at, unread:0}); }
       _renderConvList();
     } else {
       input.value = text;
@@ -549,20 +554,19 @@ function searchUsers(q) {
     fetch('/api/users/search?q=' + encodeURIComponent(q))
       .then(function(r){ return r.json(); })
       .then(function(d) {
-        var users = d.users || d || [];
+        var users = d.users || [];
         if (!users.length) {
           el.innerHTML = '<div style="color:#565d68;font-size:12px;padding:6px 2px">No users found</div>';
           return;
         }
         el.innerHTML = users.map(function(u) {
-          var w    = u.wallet_address || u.wallet || '';
-          var name = u.username || _short(w);
-          var col  = _avatarColor(w);
-          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread(\''+_esc(w)+'\')"'
+          var name = u.username || _short(u.wallet || '');
+          var col  = _avatarColor(u.wallet || '');
+          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread('+u.user_id+','+JSON.stringify(u.username||'')+','+JSON.stringify(u.wallet||'')+')"'
             + ' style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-radius:9px;cursor:pointer"'
             + ' onmouseover="this.style.background=\'#101216\'" onmouseout="this.style.background=\'\'">'
             + '<div style="width:30px;height:30px;border-radius:50%;background:'+col+';color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">'
-            +   name[0].toUpperCase()
+            +   _esc(name[0] ? name[0].toUpperCase() : '?')
             + '</div>'
             + '<div style="font-size:13px;font-weight:600;color:#eef1f5">'+_esc(name)+'</div>'
             + '</div>';
@@ -571,31 +575,33 @@ function searchUsers(q) {
   }, 300);
 }
 
-/* ── SIDEBAR PROFILE ── */
-(function _loadSbProfile() {
-  fetch('/api/me').then(function(r){ return r.json(); }).then(function(d) {
-    if (!d.ok && !d.wallet) return;
-    var w = d.wallet || '';
-    var ini = document.getElementById('sb-avatar-ini');
-    var name = document.getElementById('sb-user-name');
-    var handle = document.getElementById('sb-handle');
-    var sol = document.getElementById('sb-sol');
-    if (ini) ini.textContent = (d.username || w)[0].toUpperCase();
-    if (name) name.textContent = d.username || _short(w);
-    if (handle) handle.textContent = d.username ? '@'+d.username : _short(w);
-    if (sol && d.balance != null) sol.textContent = parseFloat(d.balance).toFixed(3);
-    if (d.avatar) {
-      var img = document.getElementById('sb-avatar-img');
-      if (img) { img.src = d.avatar; img.style.display = ''; }
-    }
-  }).catch(function(){});
-})();
-
 /* ── INIT ── */
-loadConversations();
-{% if open_wallet %}
-_openThread('{{ open_wallet }}');
-{% endif %}
+async function _init() {
+  try {
+    var me = await fetch('/api/me').then(function(r){ return r.json(); });
+    if (me.ok) {
+      _myUserId = me.user_id;
+      var ini    = document.getElementById('sb-avatar-ini');
+      var name   = document.getElementById('sb-user-name');
+      var handle = document.getElementById('sb-handle');
+      var sol    = document.getElementById('sb-sol');
+      if (ini)    ini.textContent    = (me.username || me.wallet || '?')[0].toUpperCase();
+      if (name)   name.textContent   = me.username || _short(me.wallet);
+      if (handle) handle.textContent = me.username ? '@' + me.username : _short(me.wallet);
+      if (sol && me.balance != null) sol.textContent = parseFloat(me.balance).toFixed(3);
+      if (me.avatar) {
+        var img = document.getElementById('sb-avatar-img');
+        if (img) { img.src = me.avatar; img.style.display = ''; }
+      }
+    }
+  } catch(e) {}
+  await loadConversations();
+  {% if open_peer_id %}
+  _openThread({{ open_peer_id }});
+  {% endif %}
+}
+
+_init();
 </script>
 </body>
 </html>
