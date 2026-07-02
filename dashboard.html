@@ -89,7 +89,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* Inner 1320px container: centered, 3-column flex row */
 .app-body{display:flex;flex:1;min-height:0;overflow:hidden;width:100%;max-width:1320px;margin:0 auto}
 /* Center column: flex:1, capped 640px, right divider, own scroll */
-.wrap{flex:1;min-width:0;max-width:640px;margin:0;padding:20px;overflow-y:auto;height:100vh;box-sizing:border-box;border-right:1px solid #16191f}
+.wrap{flex:1;min-width:0;max-width:640px;margin:0;padding:20px 20px 72px;overflow-y:auto;height:100vh;box-sizing:border-box;border-right:1px solid #16191f}
 /* ── RIGHT DISCOVERY RAIL ── */
 #right-rail{width:340px;flex-shrink:0;padding:16px 18px 40px;position:sticky;top:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;gap:0}
 #right-rail::-webkit-scrollbar{width:4px}
@@ -373,8 +373,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-hdr-title-wrap{display:flex;flex-direction:column;gap:2px;flex:1}
 .feed-hdr-title{font-size:20px;font-weight:600;color:var(--text);letter-spacing:-.02em}
 .feed-hdr-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;letter-spacing:-.01em;line-height:1.4}
-.feed-live-pill{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--accent)}
-.feed-live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
+.feed-live-pill{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:700;letter-spacing:.08em;color:var(--green)}
+.feed-live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:blink 1.2s ease-in-out infinite;flex-shrink:0}
+/* ── FEED FOOTER ── */
+#feed-footer{position:fixed;bottom:0;left:0;right:0;z-index:30;background:rgba(10,11,14,0.92);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-top:1px solid #16191f;padding:12px 22px;display:flex;align-items:center;gap:16px}
+.ff-left{display:flex;flex-direction:column;gap:2px;flex-shrink:0;min-width:160px}
+.ff-title{font-size:16px;font-weight:600;color:var(--text);letter-spacing:-.02em;line-height:1.2}
+.ff-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;line-height:1.4}
+.ff-tabs{flex:1;display:flex;justify-content:center}
+.ff-tabs .feed-tab{padding:8px 0;font-size:13px}
+.ff-right{display:flex;align-items:center;flex-shrink:0;min-width:60px;justify-content:flex-end}
 .feed-tabs{display:flex;padding:0 20px;gap:0}
 .feed-tab{flex:1;padding:10px 0;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:500;color:var(--muted);background:transparent;border:none;border-bottom:2px solid transparent;cursor:pointer;transition:color .15s,border-color .15s;letter-spacing:-.01em}
 .feed-tab:hover{color:var(--text)}
@@ -2158,6 +2166,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .mkt-price{font-size:15px}
   .ps-buy-btn,.ps-sell-btn{min-height:44px;font-size:12px;padding:0}
 
+  /* ── FEED FOOTER: hidden on mobile, mobile nav takes over ── */
+  #feed-footer{display:none!important}
+
   /* ── LAYOUT: all cards full width ── */
   .wrap{
     padding:0.75rem 0.75rem calc(60px + env(safe-area-inset-bottom,0px));
@@ -3626,27 +3637,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <button onclick="dismissWelcome()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;line-height:1;flex-shrink:0;align-self:flex-start" title="Dismiss">✕</button>
   </div>
 
-  <!-- FEED STICKY HEADER — backdrop-filter blur, title 20px/600, LIVE dot right -->
-  <div class="feed-hdr">
-    <div class="feed-hdr-top">
-      <!-- Mobile-only logo mark -->
-      <div class="feed-hdr-mobile-logo" style="display:none;width:28px;height:28px;min-width:28px;background:#f7b955;border-radius:8px;align-items:center;justify-content:center;flex-shrink:0">
-        <span style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-bottom:9px solid #0a0b0e;display:block"></span>
-      </div>
-      <div class="feed-hdr-title-wrap">
-        <h1 class="feed-hdr-title">Home</h1>
-        <div class="feed-hdr-sub"><span id="feed-online-count">—</span> traders online · scanner running</div>
-      </div>
-      <div class="feed-live-pill"><span class="feed-live-dot"></span>LIVE</div>
-    </div>
-    <!-- Tabs: accent border-bottom on active -->
-    <div class="feed-tabs">
-      <button class="feed-tab active" onclick="_feedTab(this,'foryou')">For You</button>
-      <button class="feed-tab" onclick="_feedTab(this,'following')">Following</button>
-      <button class="feed-tab" onclick="_feedTab(this,'livetrades')">Live Trades</button>
-    </div>
-  </div>
-
   <!-- BOT STATUS CARD — amber dot + idle text + Start Trading -->
   <div class="feed-bot-card">
     <div class="feed-bot-left">
@@ -4342,6 +4332,24 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <button id="start-btn"></button>
   </div>
   </div><!-- /app-body -->
+
+  <!-- FEED FOOTER — Home + traders online left · tabs center · LIVE right -->
+  <div id="feed-footer">
+    <div class="ff-left">
+      <div class="ff-title">Home</div>
+      <div class="ff-sub"><span id="feed-online-count">—</span> traders online · scanner running</div>
+    </div>
+    <div class="ff-tabs">
+      <div class="feed-tabs" style="padding:0;max-width:340px;width:100%">
+        <button class="feed-tab active" onclick="_feedTab(this,'foryou')">For You</button>
+        <button class="feed-tab" onclick="_feedTab(this,'following')">Following</button>
+        <button class="feed-tab" onclick="_feedTab(this,'livetrades')">Live Trades</button>
+      </div>
+    </div>
+    <div class="ff-right">
+      <div class="feed-live-pill"><span class="feed-live-dot"></span>LIVE</div>
+    </div>
+  </div>
 </div><!-- #app -->
 
 
