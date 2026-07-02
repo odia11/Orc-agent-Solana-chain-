@@ -32,9 +32,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 @keyframes orcaBlink{0%,100%{opacity:1}50%{opacity:.35}}
 
 /* ── ONBOARDING ── */
-#onboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem}
+#onboard{position:fixed;inset:0;background:var(--bg);z-index:100;display:flex;align-items:center;justify-content:center;padding:1rem;overflow-y:auto}
 #onboard.hide{display:none}
-.ob-box{background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:2rem 2rem 1.75rem;width:100%;max-width:400px;box-shadow:0 0 80px rgba(0,0,0,.18);text-align:center}
+.ob-box{background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:2rem 2rem 1.75rem;width:100%;max-width:400px;max-height:90vh;overflow-y:auto;box-shadow:0 0 80px rgba(0,0,0,.18);text-align:center}
 .ob-logo-tile{width:48px;height:48px;min-width:48px;background:var(--accent);border-radius:14px;display:flex;align-items:center;justify-content:center;margin:0 auto 14px}
 .ob-logo-tile::after{content:'';width:0;height:0;border-left:9px solid transparent;border-right:9px solid transparent;border-bottom:16px solid #0a0b0e}
 .ob-title{font-family:var(--ui);font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin-bottom:.25rem}
