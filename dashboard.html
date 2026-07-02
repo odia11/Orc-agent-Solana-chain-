@@ -1847,7 +1847,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-msg.theirs{align-self:flex-start;align-items:flex-start}
 .dm-del-btn{display:none;position:absolute;top:3px;right:3px;background:none;border:none;cursor:pointer;color:#aaaaaa;font-size:12px;line-height:1;padding:3px 4px;border-radius:4px;transition:color .15s;z-index:2}
 .dm-del-btn:hover{color:#ff1744}
-.dm-msg.mine:hover .dm-del-btn{display:block}
+.dm-edit-btn{display:none;position:absolute;top:3px;right:22px;background:none;border:none;cursor:pointer;color:#aaaaaa;font-size:12px;line-height:1;padding:3px 4px;border-radius:4px;transition:color .15s;z-index:2}
+.dm-edit-btn:hover{color:#f7b955}
+.dm-msg.mine:hover .dm-del-btn,.dm-msg.mine:hover .dm-edit-btn{display:block}
+.dm-edited{font-size:10px;color:var(--muted);margin-left:4px;opacity:.7}
 .dm-bubble{
   padding:10px 15px;
   border-radius:16px;
@@ -9772,9 +9775,17 @@ function _dmBuildMessageEl(m, myId){
     div.appendChild(timeEl);
   } else {
     div.className='dm-msg '+(mine?'mine':'theirs');
-    div.innerHTML=`<div class="dm-bubble">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}</div>`;
+    div.innerHTML=`<div class="dm-bubble" id="dm-bubble-${m.id}">${_esc(m.message)}</div><div class="dm-msg-time">${_dmRelTime(m.created_at)}${m.edited_at?'<span class="dm-edited">(edited)</span>':''}</div>`;
   }
   if(mine && m.id){
+    if(m.message_type==='text'||!m.message_type){
+      const editBtn=document.createElement('button');
+      editBtn.className='dm-edit-btn';
+      editBtn.title='Edit message';
+      editBtn.textContent='✏';
+      editBtn.onclick=()=>_dmEditMsg(m.id, div);
+      div.appendChild(editBtn);
+    }
     const delBtn=document.createElement('button');
     delBtn.className='dm-del-btn';
     delBtn.title='Delete message';
@@ -9791,6 +9802,45 @@ async function _dmDeleteMsg(msgId, msgEl){
     const r=await resp.json();
     if(r.ok) msgEl.remove();
   }catch(_){}
+}
+
+async function _dmEditMsg(msgId, msgEl){
+  const bubble=document.getElementById('dm-bubble-'+msgId);
+  if(!bubble) return;
+  const orig=bubble.textContent;
+  const inp=document.createElement('input');
+  inp.type='text';
+  inp.value=orig;
+  inp.style.cssText='width:100%;background:transparent;border:none;outline:none;color:inherit;font:inherit;padding:0';
+  bubble.innerHTML='';
+  bubble.appendChild(inp);
+  inp.focus(); inp.select();
+  let saved=false;
+  async function save(){
+    if(saved) return; saved=true;
+    const newText=inp.value.trim();
+    if(!newText||newText===orig){ bubble.innerHTML=_esc(orig); return; }
+    try{
+      const r=await fetch('/api/messages/'+msgId,{
+        method:'PUT',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({message:newText})
+      }).then(r=>r.json());
+      if(r.ok){
+        bubble.textContent=r.message;
+        const timeEl=msgEl.querySelector('.dm-msg-time');
+        if(timeEl&&!timeEl.querySelector('.dm-edited')){
+          const ed=document.createElement('span');
+          ed.className='dm-edited'; ed.textContent='(edited)';
+          timeEl.appendChild(ed);
+        }
+      } else { bubble.innerHTML=_esc(orig); }
+    }catch(_){ bubble.innerHTML=_esc(orig); }
+  }
+  inp.addEventListener('keydown',e=>{
+    if(e.key==='Enter'){e.preventDefault();inp.blur();}
+    if(e.key==='Escape'){saved=true;bubble.innerHTML=_esc(orig);}
+  });
+  inp.addEventListener('blur',save);
 }
 
 async function _dmCopyTrade(btn, btnId, errId, tokenAddr, entryPrice, amtSol){
