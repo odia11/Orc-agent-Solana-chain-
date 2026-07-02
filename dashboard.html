@@ -4723,19 +4723,22 @@ function _applyPhantomDetection(phantomBtn, phantomNote){
 function _applySolflareDetection(solflareBtn, solflareNote){
   if(!solflareBtn||!solflareNote) return;
   if(window.solflare) return;
-  if(isMobile){
-    solflareBtn.onclick=function(){ window.location.href=solflareDeepLink; };
-    var lbl=solflareBtn.querySelector('span')||solflareBtn;
-    if(lbl.tagName==='SPAN') lbl.textContent='Open in Solflare →';
-    else solflareBtn.textContent='Open in Solflare →';
-    solflareNote.textContent='Opens OrcAgent inside your wallet\'s browser';
-    solflareNote.style.color='var(--muted)';
-  } else {
-    /* Desktop: not installed — change button to install link */
-    var _sfSvg=solflareBtn.querySelector('svg');
-    solflareBtn.innerHTML=(_sfSvg?_sfSvg.outerHTML:'')+' Install Solflare ↗';
-    solflareBtn.onclick=function(){ window.open('https://solflare.com','_blank','noopener'); };
-  }
+  // Solflare injects window.solflare asynchronously on some browsers — wait before applying fallback
+  setTimeout(function(){
+    if(window.solflare) return;
+    if(isMobile){
+      solflareBtn.onclick=function(){ window.location.href=solflareDeepLink; };
+      var lbl=solflareBtn.querySelector('span')||solflareBtn;
+      if(lbl.tagName==='SPAN') lbl.textContent='Open in Solflare →';
+      else solflareBtn.textContent='Open in Solflare →';
+      solflareNote.textContent='Opens OrcAgent inside your wallet\'s browser';
+      solflareNote.style.color='var(--muted)';
+    } else {
+      var _sfSvg=solflareBtn.querySelector('svg');
+      solflareBtn.innerHTML=(_sfSvg?_sfSvg.outerHTML:'')+' Install Solflare ↗';
+      solflareBtn.onclick=function(){ window.open('https://solflare.com','_blank','noopener'); };
+    }
+  }, 400);
 }
 
 /* On load: switch connect screen between Face ID / password / Phantom modes */
