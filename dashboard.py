@@ -76,6 +76,16 @@ def _security_gate():
         if body and _SUSPICIOUS_INPUT_RE.search(body):
             _log_security_event('suspicious_input', session.get('wallet', 'anonymous'),
                                 f'request body on {request.path} from {ip}')
+    ua = (request.headers.get('User-Agent') or '').strip()
+    if ip not in _OWNER_IPS and (
+        not ua or _BOT_UA_RE.search(ua)
+    ):
+        if request.path in _BOT_BLOCKED_PATHS:
+            _log_security_event('bot_blocked', session.get('wallet', 'anonymous'),
+                                f'{request.method} {request.path} ua={ua!r:.120} from {ip}')
+            return jsonify({'error': 'Forbidden'}), 403
+        _log_security_event('bot_probe', session.get('wallet', 'anonymous'),
+                            f'{request.method} {request.path} ua={ua!r:.120} from {ip}')
     if ip not in _OWNER_IPS and not _rate_ok('global:' + ip, 200, 60):
         return jsonify({'error': 'Too many requests'}), 429
     _ext_hit('api')
@@ -361,6 +371,20 @@ def is_valid_solana_private_key(key: str) -> bool:
 # Owner/trusted IPs — set via Railway env var, comma-separated (e.g. "1.2.3.4,5.6.7.8").
 _OWNER_IPS = frozenset(
     ip.strip() for ip in os.environ.get('OWNER_IP_WHITELIST', '').split(',') if ip.strip()
+)
+
+# Sensitive paths that are hard-blocked for bot/empty User-Agents
+_BOT_BLOCKED_PATHS = frozenset({
+    '/api/login_password',
+    '/api/instant-trade',
+    '/api/wallet/send',
+    '/api/connect-wallet',
+})
+
+# User-Agent patterns that indicate automated clients, not real browsers
+_BOT_UA_RE = re.compile(
+    r'curl|python-requests|python-urllib|scrapy|wget|httpx|aiohttp|bot|spider|crawl',
+    re.IGNORECASE,
 )
 
 # Any request path matching this is a known scanner/exploit probe — never legitimate
