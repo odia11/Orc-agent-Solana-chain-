@@ -4943,6 +4943,7 @@ function nextStep(n){currentStep=n+1;showStep(currentStep);}
 function gotoSetupGuide(){currentStep=1;showStep(1);}
 
 async function connectWalletOnboard(type){
+  localStorage.removeItem('orca_manual_disconnect');
   const isPhantom=type==='phantom';
   const provider=isPhantom?window.solana:window.solflare;
   const name=isPhantom?'Phantom':'Solflare';
@@ -5047,6 +5048,7 @@ function disconnectWallet(){
     fetch('/api/logout',{method:'POST',credentials:'include'}).finally(function(){
       phantomKey=null; walletType=null; guestMode=false;
       localStorage.removeItem('orca_credential_id');
+      localStorage.setItem('orca_manual_disconnect','1');
       window.location.reload();
     });
   };
@@ -7047,6 +7049,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── STARTUP: restore session ──
 (async function initApp(){
+  if(localStorage.getItem('orca_manual_disconnect')){ return; }
   // Check extension wallet before using session wallet
   const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected && window.solana?.publicKey;
   const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
