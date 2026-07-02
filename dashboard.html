@@ -4472,6 +4472,7 @@ async function _loginWithPassword(){
 
 function _showWalletOptions(){
   /* Reveal wallet buttons after Face ID failure or "connect a wallet instead" tap */
+  var nullEl={style:{},innerHTML:'',textContent:''};
   var wbtns=document.getElementById('ob-wallet-btns');
   var phantomBtn=document.getElementById('phantom-ob-btn');
   var solflareBtn=document.getElementById('solflare-ob-btn');
@@ -4482,7 +4483,8 @@ function _showWalletOptions(){
   if(solflareBtn) solflareBtn.style.display='flex';
   if(phantomNote) phantomNote.style.display='';
   if(skipBtn)     skipBtn.style.display='flex';
-  _applyPhantomDetection(phantomBtn, phantomNote);
+  _applyPhantomDetection(phantomBtn, phantomNote||nullEl);
+  _applySolflareDetection(solflareBtn, nullEl);
 }
 
 async function _setupFaceID(){
@@ -4693,9 +4695,11 @@ function _applyPhantomDetection(phantomBtn, phantomNote){
     if(lbl) lbl.textContent='Connect Phantom →';
     if(phantomNote){ phantomNote.textContent='Opens Phantom to approve connection'; phantomNote.style.color='var(--muted)'; }
   } else {
-    /* Desktop: grey out and show install link */
-    phantomBtn.style.background='var(--bg3)'; phantomBtn.style.color='var(--muted)'; phantomBtn.style.border='1px solid var(--border2)';
-    if(phantomNote) phantomNote.innerHTML='Phantom not detected. <a href="https://phantom.app" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Phantom ↗</a>';
+    /* Desktop: not installed — change button to install link */
+    var _pLbl=document.getElementById('phantom-ob-label');
+    if(_pLbl) _pLbl.textContent='Install Phantom ↗';
+    phantomBtn.onclick=function(){ window.open('https://phantom.app','_blank','noopener'); };
+    if(phantomNote) phantomNote.innerHTML='';
   }
 }
 
@@ -4710,8 +4714,10 @@ function _applySolflareDetection(solflareBtn, solflareNote){
     solflareNote.textContent='Opens OrcAgent inside your wallet\'s browser';
     solflareNote.style.color='var(--muted)';
   } else {
-    solflareBtn.style.background='var(--bg3)'; solflareBtn.style.color='var(--muted)'; solflareBtn.style.border='1px solid var(--border2)';
-    solflareNote.innerHTML='Solflare not detected. <a href="https://solflare.com" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">Install Solflare ↗</a>';
+    /* Desktop: not installed — change button to install link */
+    var _sfSvg=solflareBtn.querySelector('svg');
+    solflareBtn.innerHTML=(_sfSvg?_sfSvg.outerHTML:'')+' Install Solflare ↗';
+    solflareBtn.onclick=function(){ window.open('https://solflare.com','_blank','noopener'); };
   }
 }
 
@@ -7285,6 +7291,7 @@ var _botRunning=false
 var _botPollTimer=null
 
 async function _botFetchStatus(){
+  if(!phantomKey) return;
   try{
     var r=await fetch('/api/bot/status')
     var d=await r.json()
@@ -7342,6 +7349,7 @@ _botPollTimer=setInterval(_botFetchStatus,30000)
 
 // ── bot PNL panel ──────────────────────────────────────
 async function _botLoadPositions(){
+  if(!phantomKey) return;
   var listEl=document.getElementById('bot-pnl-list')
   var totalEl=document.getElementById('bot-pnl-total')
   try{
