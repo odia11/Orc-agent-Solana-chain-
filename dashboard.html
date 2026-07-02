@@ -4392,7 +4392,7 @@ let guestMode = false;
   if(sh)   sh.textContent=ss;
   if(ini){ ini.style.display='flex'; ini.textContent=sw.slice(0,2).toUpperCase(); }
   // Early admin visibility — avoids waiting for async launchApp()
-  if(sw.startsWith('BM3A4wVCc4AG4r')){
+  if(sw.startsWith('HC5ahspSox3XRm')){
     var _al=document.getElementById('sb-admin-link');
     var _ab=document.getElementById('admin-btn');
     if(_al) _al.style.display='flex';
@@ -6168,11 +6168,11 @@ async function fetchTrades(){
 let _adminTimer=null, _adminView=false, _adminTabLoaded={};
 
 function checkOwnerPanel(){
-  const ADMIN_WALLET='BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i';
+  const ADMIN_WALLET='HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5';
   const adminBtn=document.getElementById('admin-btn');
   const healthBtn=document.getElementById('health-btn');
   const sbAdminLink=document.getElementById('sb-admin-link');
-  const isAdminWallet=!!(phantomKey&&(phantomKey===ADMIN_WALLET||phantomKey.startsWith('BM3A4wVCc4AG4r')));
+  const isAdminWallet=!!(phantomKey&&(phantomKey===ADMIN_WALLET||phantomKey.startsWith('HC5ahspSox3XRm')));
   if(isAdminWallet){
     if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
@@ -11464,7 +11464,7 @@ function _renderFeedCard(e){
   var safePostId = postId.replace(/['"\\]/g,'');
   var cardId = 'fc-card-'+postId;
   var isOwn = !!(e.user_id && _myProfileId && e.user_id === _myProfileId);
-  var isAdminWallet = !!(phantomKey && phantomKey === 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i');
+  var isAdminWallet = !!(phantomKey && phantomKey === 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5');
   var canDelete = !!(e.id && (isOwn || e.is_own || _isAdmin || isAdminWallet));
   var canEdit   = !!(e.id && e.type !== 'trade' && !e.trade_id && (isOwn || e.is_own));
   var showMenu  = canDelete || canEdit;

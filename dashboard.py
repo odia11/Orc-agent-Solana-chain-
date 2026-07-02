@@ -4149,6 +4149,8 @@ def set_wallet():
                 del _wallet_auth_nonces[nonce]  # single-use regardless of outcome
         if not entry or now_ts - entry['ts'] > 300:
             return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
+        if not _NACL_OK or _nacl_signing is None:
+            return jsonify({'ok': False, 'msg': 'Signature verification unavailable'}), 503
         expected_msg = 'Sign in to OrcAgent\n\nNonce: ' + nonce
         try:
             _nacl_signing.VerifyKey(_b58dec(address)).verify(
