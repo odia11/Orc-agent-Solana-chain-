@@ -203,7 +203,7 @@ SOLANA_RPC_URL   = os.environ.get('SOLANA_RPC_URL', '')   # set in Railway — o
 HELIUS_RPC       = os.environ.get('HELIUS_RPC', '')        # full Helius URL e.g. https://mainnet.helius-rpc.com/?api-key=xxx
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
-ADMIN_WALLET     = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'
+ADMIN_WALLET     = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
 JUPITER_PROXY    = os.environ.get('JUPITER_PROXY_URL', '').rstrip('/')
 PROXY_SECRET     = os.environ.get('JUPITER_PROXY_SECRET', '')
