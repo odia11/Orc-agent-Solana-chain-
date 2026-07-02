@@ -455,6 +455,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-action.liked:hover{color:var(--red)!important}
 .fc-action.copy{color:#f7b955!important}
 .fc-action.copied{color:#f7b955!important;cursor:default}
+.fc-react-wrap{position:relative;display:inline-flex;align-items:center}
+.fc-react-palette{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:6px 8px;display:none;gap:2px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.55);white-space:nowrap}
+.fc-react-palette button{background:none;border:none;cursor:pointer;font-size:20px;padding:4px 5px;border-radius:7px;transition:background .1s;line-height:1}
+.fc-react-palette button:hover{background:rgba(255,255,255,.09)}
+.fc-reactions{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:0 0 2px}
+.fc-reaction-pill{display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--bg4);border-radius:99px;padding:3px 9px 3px 7px;font-size:13px;cursor:pointer;transition:border-color .15s,background .15s;line-height:1;font-family:inherit}
+.fc-reaction-pill:hover{background:#1c1f26;border-color:#3a3f4a}
+.fc-reaction-pill.mine{border-color:var(--accent);background:rgba(247,185,85,.08)}
+.fc-reaction-pill .rp-count{font-size:11px;color:#8a919c;font-family:'JetBrains Mono',monospace}
 .fc-reply-box{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .2s ease,padding .2s ease}
 .fc-reply-box.open{max-height:120px;padding:0 22px 14px}
 .fc-reply-inner{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--bg3)}
@@ -11562,8 +11571,13 @@ function _renderFeedCard(e){
     +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">0</span></button>'
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
+    +'<div class="fc-react-wrap">'
+    +'<button class="fc-action fc-react-btn" onclick="_feedReactOpen(event,\''+esc(safePostId)+'\')" title="React">+</button>'
+    +'<div class="fc-react-palette" id="rpal-'+esc(safePostId)+'"></div>'
+    +'</div>'
     +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
     +'</div>'
+    +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
     +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
@@ -11628,6 +11642,55 @@ function _feedToggleLike(btn, postId){
       else         { btn.classList.add('liked');    btn.innerHTML = '❤ <span class="fc-like-count">'+d.count+'</span>'; }
     }).catch(function(e){ console.error('[like]', e); });
 }
+
+const _FEED_EMOJIS = ['👍','❤️','😂','🔥','💰','🚀','😢','😮'];
+
+function _feedReactOpen(e, postId){
+  e.stopPropagation();
+  var pal = document.getElementById('rpal-'+postId);
+  if(!pal) return;
+  var wasOpen = pal.style.display === 'flex';
+  document.querySelectorAll('.fc-react-palette').forEach(function(p){ p.style.display='none'; });
+  if(wasOpen) return;
+  if(!pal.childElementCount){
+    _FEED_EMOJIS.forEach(function(emoji){
+      var b = document.createElement('button');
+      b.textContent = emoji;
+      b.onclick = function(ev){ ev.stopPropagation(); _feedReactSend(postId, emoji); pal.style.display='none'; };
+      pal.appendChild(b);
+    });
+  }
+  pal.style.display = 'flex';
+}
+
+async function _feedReactSend(postId, emoji){
+  try{
+    var r = await fetch('/api/feed/react/'+encodeURIComponent(postId),{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({emoji: emoji})
+    }).then(function(r){ return r.json(); });
+    if(r.ok) _feedRenderPills(postId, r.counts, r.mine);
+  }catch(e){ console.error('[react]', e); }
+}
+
+function _feedRenderPills(postId, counts, mine){
+  var el = document.getElementById('rpills-'+postId);
+  if(!el) return;
+  var mineSet = new Set(mine || []);
+  var html = '';
+  _FEED_EMOJIS.forEach(function(emoji){
+    var n = (counts && counts[emoji]) || 0;
+    if(!n) return;
+    var cls = mineSet.has(emoji) ? ' mine' : '';
+    html += '<button class="fc-reaction-pill'+cls+'" onclick="event.stopPropagation();_feedReactSend(\''+postId+'\',\''+emoji+'\')">'
+      + emoji+'<span class="rp-count">'+n+'</span></button>';
+  });
+  el.innerHTML = html;
+}
+
+document.addEventListener('click', function(){
+  document.querySelectorAll('.fc-react-palette').forEach(function(p){ p.style.display='none'; });
+});
 
 function _feedToggleReply(btn, postId){
   var rbox = document.getElementById('rbox-'+postId);
