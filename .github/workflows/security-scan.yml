@@ -1,0 +1,68 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main, dev]
+  schedule:
+    - cron: '0 6 * * *'   # daily at 06:00 UTC
+
+jobs:
+  security:
+    name: Security checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # full history needed for gitleaks
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install --quiet pip-audit bandit
+          pip install --quiet -r requirements.txt || true
+
+      # ── 1. pip-audit: known CVEs in dependencies ──────────────────────────
+      - name: pip-audit
+        run: pip-audit --strict
+
+      # ── 2. bandit: Python static analysis ─────────────────────────────────
+      - name: bandit
+        run: |
+          bandit -r . \
+            --exclude ./.git,./node_modules,./migrate_messages.py \
+            --severity-level medium \
+            --confidence-level medium \
+            -f txt
+
+      # ── 3. gitleaks: secret / credential scan ─────────────────────────────
+      - name: gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ── 4. Custom checks: debug flag & CORS origin reflection ─────────────
+      - name: Check for debug=True in production code
+        run: |
+          # Fail if app.run(debug=True) appears anywhere outside comments
+          if grep -rn --include="*.py" 'app\.run.*debug\s*=\s*True' . ; then
+            echo "ERROR: debug=True found in Python source — must not reach production."
+            exit 1
+          fi
+          echo "OK: no debug=True found."
+
+      - name: Check for CORS origin reflection
+        run: |
+          # Fail if Access-Control-Allow-Origin is set to a raw request.headers value
+          # (pattern: both the header assignment and request.headers on the same logical line)
+          if grep -rn --include="*.py" \
+            -E "Access-Control-Allow-Origin.*request\.headers|request\.headers.*Access-Control-Allow-Origin" . ; then
+            echo "ERROR: Potential CORS origin reflection detected — use an explicit allowlist."
+            exit 1
+          fi
+          echo "OK: no CORS origin reflection found."
