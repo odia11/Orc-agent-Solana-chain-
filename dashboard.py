@@ -932,6 +932,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN pref_notifications INTEGER DEFAULT 1",
         "ALTER TABLE users ADD COLUMN pref_scam_filter INTEGER DEFAULT 1",
         "ALTER TABLE users ADD COLUMN pref_sound_alerts INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'",
     ]:
         try:
             con.execute(sql)
@@ -947,6 +948,45 @@ def run_migrations():
     )''')
     con.commit()
     con.close()
+
+# ── ROLE HELPERS ──
+
+def get_user_role(wallet: str) -> str:
+    """Return role for a wallet: 'admin', 'moderator', 'analyst', or 'user'."""
+    if not wallet:
+        return 'user'
+    if wallet == ADMIN_WALLET:
+        return 'admin'
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        # admin_roles table takes precedence (roles granted via admin panel)
+        row = conn.execute(
+            'SELECT role FROM admin_roles WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+        if row:
+            conn.close()
+            return row[0].lower()
+        # fall back to users table role column
+        row = conn.execute(
+            'SELECT role FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+        conn.close()
+        if row and row[0]:
+            return row[0].lower()
+    except Exception:
+        pass
+    return 'user'
+
+
+def _require_role(*allowed_roles):
+    """Return a 403 response tuple if session wallet lacks a required role, else None."""
+    wallet = session.get('wallet', '')
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    if get_user_role(wallet) not in allowed_roles:
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    return None
+
 
 # ── SECURITY HELPERS ──
 # Matches base58 strings 87-88 chars long — Solana private key length.
@@ -9063,9 +9103,8 @@ def admin_fees():
 @app.route('/api/admin/stats')
 @rate_limit(20, 60)
 def admin_stats():
-    wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+    err = _require_role('admin', 'moderator', 'analyst')
+    if err: return err
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
@@ -9452,9 +9491,8 @@ def admin_tokens():
 @app.route('/api/admin/health')
 @rate_limit(20, 60)
 def admin_health():
-    wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+    err = _require_role('admin', 'moderator', 'analyst')
+    if err: return err
     try:
         db_size_kb = 0
         try:
@@ -9518,9 +9556,8 @@ def admin_bans():
 @app.route('/api/admin/user/ban', methods=['POST'])
 @csrf_exempt
 def admin_ban_user():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin', 'moderator')
+    if err: return err
     data   = request.get_json(silent=True) or {}
     target = data.get('wallet', '').strip()
     if not target:
@@ -9538,9 +9575,8 @@ def admin_ban_user():
 @app.route('/api/admin/ban', methods=['POST'])
 @csrf_exempt
 def admin_ban_v2():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin', 'moderator')
+    if err: return err
     target = (request.get_json(silent=True) or {}).get('wallet', '').strip()
     if not target:
         return jsonify({'ok': False, 'msg': 'Missing wallet'}), 400
@@ -9557,9 +9593,8 @@ def admin_ban_v2():
 @app.route('/api/admin/post/delete', methods=['POST'])
 @csrf_exempt
 def admin_delete_post():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin', 'moderator')
+    if err: return err
     post_id = (request.get_json(silent=True) or {}).get('post_id')
     if not post_id:
         return jsonify({'ok': False, 'msg': 'Missing post_id'}), 400
@@ -9579,9 +9614,8 @@ def admin_delete_post():
 @csrf_exempt
 @rate_limit(20, 60)
 def admin_trades():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin', 'moderator', 'analyst')
+    if err: return err
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
@@ -9618,9 +9652,8 @@ def admin_trades():
 @csrf_exempt
 @rate_limit(20, 60)
 def admin_posts():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin', 'moderator', 'analyst')
+    if err: return err
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
@@ -9652,9 +9685,8 @@ def admin_posts():
 @csrf_exempt
 @rate_limit(20, 60)
 def admin_revenue():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin', 'moderator', 'analyst')
+    if err: return err
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -9695,9 +9727,8 @@ def admin_revenue():
 @app.route('/api/admin/settings/save', methods=['POST'])
 @csrf_exempt
 def admin_settings_save():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin')
+    if err: return err
     data = request.get_json(silent=True) or {}
     max_positions = data.get('max_positions')
     fee           = data.get('fee')
@@ -9756,9 +9787,8 @@ def admin_roles_list():
 @app.route('/api/admin/invite', methods=['POST'])
 @csrf_exempt
 def admin_invite():
-    wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
-        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    err = _require_role('admin')
+    if err: return err
     data        = request.get_json(silent=True) or {}
     invite_addr = str(data.get('wallet', '')).strip()
     role        = str(data.get('role', 'Moderator')).strip()
