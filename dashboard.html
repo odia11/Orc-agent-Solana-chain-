@@ -68,6 +68,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .ob-input-err{font-size:10px;color:var(--red);min-height:14px;margin-bottom:6px}
 #readonly-banner{display:none;background:#f5a623;color:#0a0b0e;font-size:12px;font-weight:600;padding:7px 20px;align-items:center;justify-content:center;gap:12px;flex-shrink:0}
 #readonly-banner button{background:rgba(0,0,0,.18);border:none;border-radius:6px;padding:4px 12px;font-size:11px;font-weight:700;cursor:pointer;color:#0a0b0e}
+#guest-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:50;background:#101216;border-bottom:1px solid #16191f;padding:10px 20px;align-items:center;justify-content:space-between;gap:12px;font-size:13px;font-weight:500;color:var(--muted)}
+#guest-banner .gb-link{color:#f7b955;font-weight:600;text-decoration:none;cursor:pointer;background:none;border:none;font-size:13px;font-family:inherit;padding:0}
+#guest-banner .gb-link:hover{text-decoration:underline}
+#guest-banner .gb-min{background:none;border:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:4px;margin-left:4px}
+#guest-banner .gb-min:hover{color:var(--text)}
 
 /* ── ORC DANCE ── */
 #orc-overlay{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;background:#1c1c1c;backdrop-filter:blur(10px)}
@@ -3349,6 +3354,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div>
 </div>
 
+<!-- GUEST BANNER -->
+<div id="guest-banner">
+  <span>👋 Browsing as guest · <button class="gb-link" onclick="_guestConnect()">Connect wallet</button></span>
+  <button class="gb-min" onclick="_minimizeGuestBanner()" title="Minimize">✕</button>
+</div>
+
 <!-- MAIN APP -->
 <div id="app" style="display:none">
 
@@ -4331,6 +4342,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <script>
 let traderOn=false, phantomKey=null, walletType=null, currentStep=0, _isAdmin=false, _copySource=null;
 var _isReadonly = false;
+let guestMode = false;
 /* ── Pre-populate navbar from server session (eliminates "not connected" flash) ── */
 (function(){
   var sw='__SESSION_WALLET__', ss='__SESSION_SHORT__';
@@ -4969,9 +4981,29 @@ function _obSkipKey(){
 }
 
 function skipToApp(){
-  // No wallet — launch in view-only mode (market data visible, trading disabled)
+  guestMode = true;
   phantomKey=null; walletType=null;
   launchApp();
+}
+function _showGuestBanner(){
+  var gb=document.getElementById('guest-banner');
+  if(!gb) return;
+  gb.style.display='flex';
+  document.getElementById('app').style.paddingTop=gb.offsetHeight+'px';
+}
+function _minimizeGuestBanner(){
+  var gb=document.getElementById('guest-banner');
+  if(gb) gb.style.display='none';
+  var app=document.getElementById('app');
+  if(app) app.style.paddingTop='';
+}
+function _guestConnect(){
+  _minimizeGuestBanner();
+  var app=document.getElementById('app');
+  if(app) app.style.display='none';
+  var ob=document.getElementById('onboard');
+  if(ob) ob.classList.remove('hide');
+  currentStep=0; showStep(0);
 }
 
 async function launchApp(){
@@ -5026,6 +5058,8 @@ async function launchApp(){
   updateAuthBtns();
   checkOwnerPanel();
   _lastActivity = Date.now();
+  /* guest mode banner */
+  if(guestMode) _showGuestBanner();
   /* apply read-only restrictions */
   if(_isReadonly){
     const roBanner=document.getElementById('readonly-banner');
