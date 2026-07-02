@@ -5300,6 +5300,53 @@ def get_feed_likes(post_id):
         conn.close()
     return jsonify({'ok': True, 'count': int(count), 'liked': liked})
 
+_REACTION_EMOJIS = frozenset({'👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'})
+
+@app.route('/api/feed/react/<path:post_id>', methods=['POST'])
+@rate_limit(60, 60)
+def toggle_feed_reaction(post_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    emoji = str(data.get('emoji', '')).strip()
+    if emoji not in _REACTION_EMOJIS:
+        return jsonify({'ok': False, 'msg': 'Invalid emoji'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        existing = conn.execute(
+            'SELECT id FROM post_reactions WHERE user_id=? AND post_id=? AND emoji=?',
+            (me, post_id, emoji)
+        ).fetchone()
+        if existing:
+            conn.execute(
+                'DELETE FROM post_reactions WHERE user_id=? AND post_id=? AND emoji=?',
+                (me, post_id, emoji)
+            )
+            active = False
+        else:
+            conn.execute(
+                'INSERT INTO post_reactions (user_id, post_id, emoji) VALUES (?,?,?)',
+                (me, post_id, emoji)
+            )
+            active = True
+        conn.commit()
+        counts = {row[0]: row[1] for row in conn.execute(
+            'SELECT emoji, COUNT(*) FROM post_reactions WHERE post_id=? GROUP BY emoji',
+            (post_id,)
+        ).fetchall()}
+        mine = [row[0] for row in conn.execute(
+            'SELECT emoji FROM post_reactions WHERE user_id=? AND post_id=?',
+            (me, post_id)
+        ).fetchall()]
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'emoji': emoji, 'active': active,
+                    'counts': counts, 'mine': mine})
+
 @app.route('/api/feed/reply', methods=['POST'])
 @rate_limit(15, 60)
 def post_feed_reply():
