@@ -3111,8 +3111,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <!-- Post-connect: continue / switch -->
       <button class="ob-btn" id="step1-continue-btn" style="display:none;background:var(--green);color:#fff;cursor:pointer" onclick="gotoSetupGuide()">Continue →</button>
       <button class="ob-btn btn-skip" id="wallet-back-btn" style="display:none" onclick="resetWallet()">← Switch wallet</button>
-      <!-- Browse without connecting (revealed by Face ID failure only) -->
-      <button class="ob-btn btn-skip" id="ob-skip-btn" onclick="skipToApp()" style="display:none;margin-top:4px">Browse without connecting →</button>
+      <!-- Browse without connecting -->
+      <button class="ob-btn btn-skip" id="ob-skip-btn" onclick="skipToApp()" style="margin-top:4px">Browse without connecting →</button>
     </div>
 
     <div class="ob-step" id="step-1">
@@ -4717,7 +4717,7 @@ function _applyPhantomDetection(phantomBtn, phantomNote){
 
 function _applySolflareDetection(solflareBtn, solflareNote){
   if(!solflareBtn||!solflareNote) return;
-  if(window.solflare&&window.solflare.isSolflare) return;
+  if(window.solflare) return;
   if(isMobile){
     solflareBtn.onclick=function(){ window.location.href=solflareDeepLink; };
     var lbl=solflareBtn.querySelector('span')||solflareBtn;
@@ -4752,7 +4752,6 @@ document.addEventListener('DOMContentLoaded',function(){
     if(altLink)  altLink.style.display='';
     if(pwdForm)  pwdForm.style.display='none';
     if(wbtns)    wbtns.style.display='none';
-    if(skipBtn)  skipBtn.style.display='none';
   } else {
     /* No Face ID: show both wallet connect buttons */
     if(pwdForm)     pwdForm.style.display='none';
@@ -4761,7 +4760,6 @@ document.addEventListener('DOMContentLoaded',function(){
     if(wbtns)       wbtns.style.display='block';
     if(phantomBtn)  phantomBtn.style.display='flex';
     if(solflareBtn) solflareBtn.style.display='flex';
-    if(skipBtn)     skipBtn.style.display='none';
     _applyPhantomDetection(phantomBtn, phantomNote||nullEl);
     _applySolflareDetection(solflareBtn, nullEl);
   }
@@ -4887,7 +4885,7 @@ async function connectWalletOnboard(type){
   const provider=isPhantom?window.solana:window.solflare;
   const name=isPhantom?'Phantom':'Solflare';
   const installUrl=isPhantom?'https://phantom.app':'https://solflare.com';
-  const check=isPhantom?provider?.isPhantom:provider?.isSolflare;
+  const check=isPhantom?provider?.isPhantom:!!provider;
   const msgEl=document.getElementById('wallet-install-msg');
 
   if(!check){
@@ -4978,12 +4976,15 @@ async function _obSaveKey(){
 }
 
 function disconnectWallet(){
-  fetch('/api/logout',{method:'POST',credentials:'include'}).then(function(){
-    phantomKey=null; walletType=null;
-    var _wp=window.solana||window.solflare;
-    if(_wp&&_wp.disconnect){ _wp.disconnect().catch(function(){}); }
-    window.location.reload();
-  }).catch(function(){ window.location.reload(); });
+  var _wp=walletType==='Phantom'?window.solana:(walletType==='Solflare'?window.solflare:(window.solana||window.solflare));
+  var _doLogout=function(){
+    fetch('/api/logout',{method:'POST',credentials:'include'}).finally(function(){
+      phantomKey=null; walletType=null; guestMode=false;
+      window.location.reload();
+    });
+  };
+  if(_wp&&_wp.disconnect){ _wp.disconnect().then(_doLogout).catch(_doLogout); }
+  else { _doLogout(); }
 }
 function _obSkipKey(){
   launchApp();
