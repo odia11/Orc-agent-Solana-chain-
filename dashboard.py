@@ -4896,18 +4896,21 @@ def social_feed():
         })
     return jsonify(feed)
 
+_CORS_ALLOWLIST = {'https://www.orcagent.fun', 'https://orcagent.fun'}
+
 @app.after_request
 def _instant_trade_cors(resp):
     """Add CORS headers on every response from /api/instant-trade (preflight + actual)."""
     if request.path == '/api/instant-trade':
-        origin = request.headers.get('Origin', 'https://www.orcagent.fun')
-        resp.headers['Access-Control-Allow-Origin']      = origin
-        resp.headers['Access-Control-Allow-Credentials'] = 'true'
-        resp.headers['Access-Control-Allow-Methods']     = 'POST, OPTIONS'
-        resp.headers['Access-Control-Allow-Headers']     = (
-            'Content-Type, X-CSRF-Token, X-Client-Secret, X-Requested-With'
-        )
-        resp.headers['Access-Control-Max-Age'] = '86400'
+        origin = request.headers.get('Origin', '')
+        if origin in _CORS_ALLOWLIST:
+            resp.headers['Access-Control-Allow-Origin']      = origin
+            resp.headers['Access-Control-Allow-Credentials'] = 'true'
+            resp.headers['Access-Control-Allow-Methods']     = 'POST, OPTIONS'
+            resp.headers['Access-Control-Allow-Headers']     = (
+                'Content-Type, X-CSRF-Token, X-Client-Secret, X-Requested-With'
+            )
+            resp.headers['Access-Control-Max-Age'] = '86400'
     return resp
 
 @app.route('/api/instant-trade', methods=['POST', 'OPTIONS'])
