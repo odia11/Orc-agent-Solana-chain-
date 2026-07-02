@@ -5033,6 +5033,37 @@ function _guestWallConnect(){
   _guestConnect();
 }
 
+// ── ADMIN INVITE ──
+var _pendingInviteId = null;
+async function _checkAdminInvite(){
+  if(!phantomKey) return;
+  var r = await fetch('/api/invite/check',{credentials:'include'}).then(r=>r.json()).catch(()=>null);
+  if(!r?.invite) return;
+  _pendingInviteId = r.invite.id;
+  document.getElementById('aim-role').textContent = r.invite.role;
+  document.getElementById('admin-invite-modal').style.display = 'flex';
+}
+async function _inviteRespond(action){
+  var btn = document.getElementById('aim-accept-btn');
+  if(btn) btn.disabled = true;
+  var r = await fetch('/api/invite/respond',{
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({action: action, invite_id: _pendingInviteId})
+  }).then(r=>r.json()).catch(()=>null);
+  document.getElementById('admin-invite-modal').style.display = 'none';
+  if(btn) btn.disabled = false;
+  if(r?.ok){
+    if(action==='accept'){
+      // Small toast + show admin link if now visible
+      var _sb=document.getElementById('sb-admin-link');
+      if(_sb) _sb.style.display='flex';
+      var _hdr=document.getElementById('admin-btn');
+      if(_hdr) _hdr.style.display='';
+    }
+  }
+}
+
 async function launchApp(){
   // ── 1. Verify / silently restore server-side session ────────────
   if(phantomKey){
@@ -5112,6 +5143,7 @@ async function launchApp(){
   fetchPumpScanner();
   loadHomeFeed();
   _loadRightRail();
+  _checkAdminInvite();
   const _pendingProfile = sessionStorage.getItem('openProfile');
   if(_pendingProfile){
     sessionStorage.removeItem('openProfile');
@@ -11905,6 +11937,20 @@ document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') _mnDrawerClose();
 });
 </script>
+
+<!-- ADMIN INVITE MODAL -->
+<div id="admin-invite-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
+  <div style="background:#101216;border:1px solid #21252c;border-radius:16px;padding:28px;max-width:340px;width:100%;font-family:'Geist',system-ui,sans-serif">
+    <div style="font-size:24px;margin-bottom:12px;text-align:center">👑</div>
+    <div style="font-size:17px;font-weight:700;margin-bottom:8px;color:#eef1f5;text-align:center" id="aim-title">You have been invited</div>
+    <div style="font-size:13px;color:#565d68;margin-bottom:6px;text-align:center;line-height:1.5" id="aim-body">You have been invited as a <strong id="aim-role" style="color:#f7b955"></strong> on OrcAgent.</div>
+    <div style="font-size:11px;color:#565d68;margin-bottom:22px;text-align:center" id="aim-sub">Accepting grants you access to the admin panel.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button id="aim-accept-btn" onclick="_inviteRespond('accept')" style="width:100%;padding:11px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit">Accept</button>
+      <button onclick="_inviteRespond('decline')" style="background:none;border:none;color:#565d68;font-size:13px;cursor:pointer;font-family:inherit;padding:4px 0">Decline</button>
+    </div>
+  </div>
+</div>
 
 <!-- GUEST WALL MODAL -->
 <div id="guest-wall-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">

@@ -739,6 +739,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           <div style="display:flex;flex-direction:column;gap:0" id="admin-access-list">
             <div class="tbl-loading" style="padding:20px 0;text-align:center"><span class="spinner"></span></div>
           </div>
+          <!-- Pending invites -->
+          <div id="pending-invites-section" style="display:none;margin-top:16px;border-top:1px solid var(--bg3);padding-top:16px">
+            <div style="font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin-bottom:10px">Pending invites</div>
+            <div style="display:flex;flex-direction:column;gap:0" id="pending-invites-list"></div>
+          </div>
         </div>
 
       </div>
@@ -1151,6 +1156,35 @@ async function loadModeration() {
 // ══════════════════ SETTINGS ══════════════════
 async function loadSettings() {
   await loadAdminRoles();
+  await loadPendingInvites();
+}
+
+// ── Pending invites ──
+async function loadPendingInvites() {
+  var r = await _a('/api/admin/invites');
+  var el = document.getElementById('pending-invites-section');
+  if (!el) return;
+  var invites = r?.invites || [];
+  if (!invites.length) {
+    el.style.display = 'none';
+    return;
+  }
+  el.style.display = 'block';
+  var rows = invites.map(function(inv) {
+    var w = inv.wallet || '';
+    var short = w.length >= 8 ? w.slice(0,6) + '…' + w.slice(-4) : w;
+    var tagCls = inv.role === 'Moderator' ? 'tag-green' : 'tag-muted';
+    return '<div class="admin-member-row" style="opacity:.7">' +
+      '<div class="admin-member-av" style="background:var(--bg4);color:var(--muted);font-size:11px">?</div>' +
+      '<div class="admin-member-info">' +
+        '<div class="admin-member-name">' + short + '</div>' +
+        '<div class="admin-member-sub">Pending · sent ' + (inv.created_at||'—') + '</div>' +
+      '</div>' +
+      '<span class="tag ' + tagCls + '" style="flex-shrink:0">' + inv.role + '</span>' +
+      '<span style="font-size:10px;color:var(--muted);flex-shrink:0">⏳</span>' +
+      '</div>';
+  }).join('');
+  document.getElementById('pending-invites-list').innerHTML = rows;
 }
 
 // ── Admin roles list ──
@@ -1232,8 +1266,9 @@ async function confirmInvite() {
   btn.disabled = false; btn.textContent = 'Send invite';
   if (r?.ok) {
     closeInviteModal();
-    toast('✓ Invited ' + w.slice(0,8) + '… as ' + role, true);
+    toast('✓ ' + (r.msg || ('Invited ' + w.slice(0,8) + '… as ' + role)), true);
     loadAdminRoles();
+    loadPendingInvites();
   } else {
     err.textContent = r?.msg || 'Failed — check address and try again';
     err.style.display = 'block';

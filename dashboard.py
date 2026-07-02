@@ -946,6 +946,15 @@ def run_migrations():
         invited_by     TEXT,
         invited_at     TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
+    # admin_invites — pending invites shown as modal when user next logs in
+    con.execute('''CREATE TABLE IF NOT EXISTS admin_invites (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet     TEXT NOT NULL,
+        role       TEXT NOT NULL DEFAULT 'Moderator',
+        invited_by TEXT NOT NULL DEFAULT '',
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        status     TEXT NOT NULL DEFAULT 'pending'
+    )''')
     con.commit()
     con.close()
 
@@ -9801,6 +9810,7 @@ def admin_roles_list():
 def admin_invite():
     err = _require_role('admin')
     if err: return err
+    admin_wallet = session.get('wallet', '')
     data        = request.get_json(silent=True) or {}
     invite_addr = str(data.get('wallet', '')).strip()
     role        = str(data.get('role', 'Moderator')).strip()
@@ -9812,14 +9822,117 @@ def admin_invite():
         role = 'Moderator'
     conn = sqlite3.connect(DB_FILE)
     try:
+        # Supersede any existing pending invite for this wallet
         conn.execute(
-            'INSERT INTO admin_roles(wallet_address,role,invited_by) VALUES(?,?,?) '
-            'ON CONFLICT(wallet_address) DO UPDATE SET role=excluded.role',
-            (invite_addr, role, wallet)
+            "UPDATE admin_invites SET status='superseded' WHERE wallet=? AND status='pending'",
+            (invite_addr,)
+        )
+        # Create fresh pending invite (user sees modal on next login)
+        conn.execute(
+            'INSERT INTO admin_invites(wallet, role, invited_by) VALUES(?,?,?)',
+            (invite_addr, role, admin_wallet)
         )
         conn.commit()
-        print(f'[admin] invited {invite_addr[:8]}… as {role} by {wallet[:8]}…', flush=True)
-        return jsonify({'ok': True, 'wallet': invite_addr, 'role': role})
+        print(f'[admin] invite queued {invite_addr[:8]}… as {role} by {admin_wallet[:8]}…', flush=True)
+        return jsonify({
+            'ok': True, 'wallet': invite_addr, 'role': role,
+            'msg': 'Invite sent — user will see it when they log in',
+        })
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/invites')
+@csrf_exempt
+def admin_invites_pending():
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            "SELECT id, wallet, role, invited_by, created_at FROM admin_invites "
+            "WHERE status='pending' ORDER BY created_at DESC"
+        ).fetchall()
+        invites = [{
+            'id': r[0], 'wallet': r[1], 'role': r[2],
+            'invited_by': r[3], 'created_at': (r[4] or '')[:10],
+        } for r in rows]
+        return jsonify({'ok': True, 'invites': invites})
+    finally:
+        conn.close()
+
+
+@app.route('/api/invite/check')
+@csrf_exempt
+def invite_check():
+    wallet = session.get('wallet', '')
+    if not wallet:
+        return jsonify({'ok': False, 'invite': None})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            "SELECT id, role, invited_by FROM admin_invites "
+            "WHERE wallet=? AND status='pending' ORDER BY created_at DESC LIMIT 1",
+            (wallet,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': True, 'invite': None})
+        inv_by = row[2] or ''
+        return jsonify({'ok': True, 'invite': {
+            'id': row[0], 'role': row[1],
+            'invited_by': (inv_by[:8] + '…') if len(inv_by) > 8 else inv_by,
+        }})
+    finally:
+        conn.close()
+
+
+@app.route('/api/invite/respond', methods=['POST'])
+@csrf_exempt
+def invite_respond():
+    wallet = session.get('wallet', '')
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    data      = request.get_json(silent=True) or {}
+    action    = str(data.get('action', '')).strip()
+    invite_id = data.get('invite_id')
+    if action not in ('accept', 'decline'):
+        return jsonify({'ok': False, 'msg': 'Invalid action'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        if invite_id:
+            row = conn.execute(
+                "SELECT id, role, invited_by FROM admin_invites "
+                "WHERE id=? AND wallet=? AND status='pending'",
+                (invite_id, wallet)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id, role, invited_by FROM admin_invites "
+                "WHERE wallet=? AND status='pending' ORDER BY created_at DESC LIMIT 1",
+                (wallet,)
+            ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'No pending invite found'}), 404
+        inv_id, role, invited_by = row
+        if action == 'accept':
+            conn.execute(
+                "UPDATE users SET role=? WHERE wallet_address=?",
+                (role.lower(), wallet)
+            )
+            conn.execute(
+                'INSERT INTO admin_roles(wallet_address,role,invited_by) VALUES(?,?,?) '
+                'ON CONFLICT(wallet_address) DO UPDATE SET role=excluded.role',
+                (wallet, role, invited_by or '')
+            )
+            conn.execute("UPDATE admin_invites SET status='accepted' WHERE id=?", (inv_id,))
+            conn.commit()
+            print(f'[invite] {wallet[:8]}… accepted role {role}', flush=True)
+            return jsonify({'ok': True, 'role': role, 'msg': f'You are now a {role}'})
+        else:
+            conn.execute("UPDATE admin_invites SET status='declined' WHERE id=?", (inv_id,))
+            conn.commit()
+            print(f'[invite] {wallet[:8]}… declined role {role}', flush=True)
+            return jsonify({'ok': True, 'msg': 'Invite declined'})
     finally:
         conn.close()
 
