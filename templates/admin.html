@@ -204,6 +204,53 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .card-title{font-size:13px;font-weight:600;margin-bottom:14px}
 .spinner{width:16px;height:16px;border:2px solid var(--bg4);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 .toast{position:fixed;bottom:24px;right:24px;padding:12px 18px;background:#1c2028;border:1px solid var(--bg4);border-radius:11px;font-size:13px;font-weight:500;z-index:999;display:none;box-shadow:0 4px 24px rgba(0,0,0,.4)}
+
+/* ── MOBILE ── */
+@media(max-width:768px){
+  .shell{flex-direction:column}
+
+  /* sidebar → top horizontal nav bar */
+  aside{width:100%;height:auto;min-width:0;position:sticky;top:0;z-index:40;border-right:none;border-bottom:1px solid var(--bg3);padding:10px 12px;flex-direction:row;flex-wrap:wrap;gap:6px;overflow-y:visible;overflow-x:auto}
+  .sb-brand{padding:0 4px 0 0;flex-shrink:0}
+  .sb-brand-tag{display:none}
+  .sb-nav{flex-direction:row;flex-wrap:nowrap;gap:4px;overflow-x:auto;flex:1;padding-bottom:2px}
+  .sb-sep{width:1px;height:24px;background:var(--bg3);margin:0 4px}
+  .nav-btn{padding:8px 10px;font-size:12px;white-space:nowrap;min-height:36px}
+  .nav-dot{display:none}
+  .sb-status{display:none}
+
+  /* topbar compact */
+  .topbar{padding:12px 16px}
+  .topbar-title{font-size:16px}
+  .topbar-sub{display:none}
+  .back-link span:first-child{display:none}
+
+  /* views padding */
+  .view{padding:14px 14px 80px}
+
+  /* grids → single column */
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+  .stat-grid{grid-template-columns:1fr}
+  .health-grid{grid-template-columns:1fr}
+  .two-col{grid-template-columns:1fr}
+  #view-settings > div{grid-template-columns:1fr}
+
+  /* tables scroll */
+  .tbl{min-width:520px}
+
+  /* settings inputs full width */
+  .stg-input-wrap{width:100%}
+  .stg-input{width:100%}
+
+  /* toggle touch targets min 44px */
+  .stg-toggle{min-height:44px;min-width:52px;width:52px;height:28px;border-radius:14px}
+  .stg-toggle-knob{width:22px;height:22px}
+  .stg-toggle.on .stg-toggle-knob{transform:translateX(24px)}
+  .stg-toggle-row{padding:14px 0;min-height:44px}
+
+  /* toast position */
+  .toast{left:14px;right:14px;bottom:14px;text-align:center}
+}
 </style>
 </head>
 <body>
@@ -1038,22 +1085,47 @@ async function loadModeration() {
 }
 
 // ══════════════════ SETTINGS ══════════════════
-function toggleFlag(btn, flag) {
+async function toggleFlag(btn, flag) {
   btn.classList.toggle('on');
   var on = btn.classList.contains('on');
-  toast((on ? '✓ ' : '✗ ') + flag + ' ' + (on ? 'enabled' : 'disabled'), on);
+  var r = await fetch('/api/admin/features/toggle', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({feature: flag, value: on})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok) {
+    toast((on ? '✓ ' : '✗ ') + flag + ' ' + (on ? 'enabled' : 'disabled'), on);
+  } else {
+    btn.classList.toggle('on'); // revert
+    toast('Error: ' + (r?.msg || 'Failed'), false);
+  }
 }
-function savePlatformLimits() {
-  var maxPos  = document.getElementById('stg-max-pos')?.value;
-  var fee     = document.getElementById('stg-fee')?.value;
-  var minDep  = document.getElementById('stg-min-dep')?.value;
-  var rate    = document.getElementById('stg-rate')?.value;
-  toast('✓ Limits saved (max pos: ' + maxPos + ', fee: ' + fee + '%, min dep: ' + minDep + ' SOL, rate: ' + rate + '/min)', true);
+async function savePlatformLimits() {
+  var maxPos = parseFloat(document.getElementById('stg-max-pos')?.value || 5);
+  var fee    = parseFloat(document.getElementById('stg-fee')?.value    || 0.25);
+  var minDep = parseFloat(document.getElementById('stg-min-dep')?.value || 0.1);
+  var rate   = parseInt(document.getElementById('stg-rate')?.value     || 20, 10);
+  var btn = document.querySelector('#view-settings .btn-primary');
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
+  var r = await fetch('/api/admin/settings/save', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({max_positions: maxPos, fee: fee, min_deposit: minDep, rate_limit: rate})
+  }).then(r => r.json()).catch(() => null);
+  if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
+  if (r?.ok) toast('✓ Platform limits saved', true);
+  else toast('Error: ' + (r?.msg || 'Failed'), false);
 }
-function inviteAdmin() {
+async function inviteAdmin() {
   var wallet = prompt('Enter wallet address to invite:');
   if (!wallet || wallet.length < 32) { toast('Invalid wallet address', false); return; }
   var role = prompt('Role? (Moderator / Analyst)') || 'Moderator';
+  var r = await fetch('/api/admin/invite', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({wallet: wallet, role: role})
+  }).then(r => r.json()).catch(() => null);
+  if (!r?.ok) { toast('Error: ' + (r?.msg || 'Failed'), false); return; }
   var list = document.getElementById('admin-access-list');
   if (!list) return;
   var ini = wallet.slice(0,2).toUpperCase();

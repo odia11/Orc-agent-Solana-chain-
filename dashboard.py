@@ -9684,6 +9684,64 @@ def admin_revenue():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/settings/save', methods=['POST'])
+@csrf_exempt
+def admin_settings_save():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    data = request.get_json(silent=True) or {}
+    max_positions = data.get('max_positions')
+    fee           = data.get('fee')
+    min_deposit   = data.get('min_deposit')
+    rate_limit_v  = data.get('rate_limit')
+    # Store in a simple in-memory dict (extend to DB if persistence needed)
+    if not hasattr(admin_settings_save, '_store'):
+        admin_settings_save._store = {}
+    store = admin_settings_save._store
+    if max_positions is not None: store['max_positions'] = float(max_positions)
+    if fee           is not None: store['fee']           = float(fee)
+    if min_deposit   is not None: store['min_deposit']   = float(min_deposit)
+    if rate_limit_v  is not None: store['rate_limit']    = int(rate_limit_v)
+    print(f'[admin] settings saved by {wallet[:8]}… → {store}', flush=True)
+    return jsonify({'ok': True, 'saved': store})
+
+
+@app.route('/api/admin/features/toggle', methods=['POST'])
+@csrf_exempt
+def admin_features_toggle():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    data    = request.get_json(silent=True) or {}
+    feature = str(data.get('feature', '')).strip()
+    value   = bool(data.get('value', False))
+    if not feature:
+        return jsonify({'ok': False, 'msg': 'Missing feature'}), 400
+    if not hasattr(admin_features_toggle, '_store'):
+        admin_features_toggle._store = {}
+    admin_features_toggle._store[feature] = value
+    print(f'[admin] feature "{feature}" → {value} by {wallet[:8]}…', flush=True)
+    return jsonify({'ok': True, 'feature': feature, 'value': value})
+
+
+@app.route('/api/admin/invite', methods=['POST'])
+@csrf_exempt
+def admin_invite():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    data        = request.get_json(silent=True) or {}
+    invite_addr = str(data.get('wallet', '')).strip()
+    role        = str(data.get('role', 'Moderator')).strip()
+    if not invite_addr or len(invite_addr) < 32:
+        return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
+    if role not in ('Moderator', 'Analyst', 'Super-admin'):
+        role = 'Moderator'
+    print(f'[admin] invite {invite_addr[:8]}… as {role} by {wallet[:8]}…', flush=True)
+    return jsonify({'ok': True, 'wallet': invite_addr, 'role': role})
+
+
 @app.route('/api/admin/clear_ratelimit', methods=['POST'])
 @rate_limit(10, 60)
 def admin_clear_ratelimit():
