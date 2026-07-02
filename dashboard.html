@@ -1999,6 +1999,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-send-btn:hover:not(:disabled){filter:brightness(1.12)}
 .dm-send-btn:active:not(:disabled){transform:scale(.96)}
 .dm-send-btn:disabled{opacity:.35;cursor:not-allowed}
+.dm-emoji-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:0 2px;height:42px;display:flex;align-items:center;flex-shrink:0;opacity:.6;transition:opacity .15s;align-self:flex-end}
+.dm-emoji-btn:hover{opacity:1}
+.dm-emoji-wrap{position:relative;flex-shrink:0;align-self:flex-end}
+.dm-emoji-picker{position:absolute;bottom:calc(100% + 8px);right:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:10px;display:none;z-index:300;width:224px;box-shadow:0 8px 24px rgba(0,0,0,.55)}
+.dm-emoji-picker.open{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dm-emoji-picker button{background:none;border:none;cursor:pointer;font-size:18px;padding:4px;border-radius:6px;transition:background .1s;line-height:1}
+.dm-emoji-picker button:hover{background:rgba(255,255,255,.08)}
 .dm-img-btn{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:6px 10px;color:#aaaaaa;cursor:pointer;font-size:16px;flex-shrink:0;align-self:flex-end;height:42px;display:flex;align-items:center;justify-content:center;transition:color .15s,border-color .15s;line-height:1}
 .dm-img-btn:hover{color:#ffffff;border-color:#aaaaaa}
 .dm-img-btn.loading{pointer-events:none;opacity:.6}
@@ -4227,6 +4234,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
             <button class="dm-img-btn" id="dm-img-btn" onclick="dmPickImage()" title="Send image">📷</button>
             <textarea class="dm-input" id="dm-input" placeholder="Message…" rows="1" maxlength="500"
               onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();dmSend()}"></textarea>
+            <div class="dm-emoji-wrap">
+              <button class="dm-emoji-btn" id="dm-emoji-btn" onclick="_dmToggleEmoji(event)" title="Emoji">😊</button>
+              <div class="dm-emoji-picker" id="dm-emoji-picker"></div>
+            </div>
             <button class="dm-send-btn" id="dm-send-btn" onclick="dmSend()">SEND</button>
           </div>
         </div>
@@ -9842,6 +9853,36 @@ async function _dmEditMsg(msgId, msgEl){
   });
   inp.addEventListener('blur',save);
 }
+
+const _DM_EMOJIS=['😀','😂','😍','🥰','😢','😮','😎','🤔','😤','🔥','❤️','💯','👍','👎','🚀','💰','📈','📉','⚡','🎯','💎','🏆','🌙','💀','🤝','👀','🙏','✅','❌','⚠️'];
+function _dmInitEmojiPicker(){
+  const p=document.getElementById('dm-emoji-picker');
+  if(!p||p.childElementCount) return;
+  _DM_EMOJIS.forEach(e=>{
+    const b=document.createElement('button');
+    b.textContent=e;
+    b.onclick=ev=>{ev.stopPropagation();_dmInsertEmoji(e);};
+    p.appendChild(b);
+  });
+}
+function _dmToggleEmoji(e){
+  e.stopPropagation();
+  _dmInitEmojiPicker();
+  document.getElementById('dm-emoji-picker').classList.toggle('open');
+}
+function _dmInsertEmoji(emoji){
+  const inp=document.getElementById('dm-input');
+  if(!inp) return;
+  const s=inp.selectionStart, en=inp.selectionEnd, v=inp.value;
+  inp.value=v.slice(0,s)+emoji+v.slice(en);
+  const pos=s+[...emoji].length;
+  inp.setSelectionRange(pos,pos);
+  inp.focus();
+}
+document.addEventListener('click',function(){
+  const p=document.getElementById('dm-emoji-picker');
+  if(p) p.classList.remove('open');
+});
 
 async function _dmCopyTrade(btn, btnId, errId, tokenAddr, entryPrice, amtSol){
   const errEl=document.getElementById(errId);
