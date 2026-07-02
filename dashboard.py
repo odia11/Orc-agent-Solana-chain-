@@ -938,6 +938,14 @@ def run_migrations():
             con.commit()
         except Exception:
             pass
+    # admin_roles table — separate from users so it survives account deletion
+    con.execute('''CREATE TABLE IF NOT EXISTS admin_roles (
+        wallet_address TEXT PRIMARY KEY,
+        role           TEXT NOT NULL DEFAULT 'Moderator',
+        invited_by     TEXT,
+        invited_at     TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
+    con.commit()
     con.close()
 
 # ── SECURITY HELPERS ──
@@ -9725,6 +9733,26 @@ def admin_features_toggle():
     return jsonify({'ok': True, 'feature': feature, 'value': value})
 
 
+@app.route('/api/admin/roles', methods=['GET'])
+@csrf_exempt
+def admin_roles_list():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            'SELECT wallet_address, role, invited_by, invited_at FROM admin_roles ORDER BY invited_at'
+        ).fetchall()
+        members = [{'wallet': r[0], 'role': r[1], 'invited_by': r[2], 'invited_at': (r[3] or '')[:10]}
+                   for r in rows]
+        # Always prepend the super-admin (owner) so they appear first
+        owner = {'wallet': ADMIN_WALLET, 'role': 'Super-admin', 'invited_by': None, 'invited_at': ''}
+        return jsonify({'ok': True, 'members': [owner] + members})
+    finally:
+        conn.close()
+
+
 @app.route('/api/admin/invite', methods=['POST'])
 @csrf_exempt
 def admin_invite():
@@ -9736,10 +9764,71 @@ def admin_invite():
     role        = str(data.get('role', 'Moderator')).strip()
     if not invite_addr or len(invite_addr) < 32:
         return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
-    if role not in ('Moderator', 'Analyst', 'Super-admin'):
+    if invite_addr == ADMIN_WALLET:
+        return jsonify({'ok': False, 'msg': 'Owner wallet cannot be re-invited'}), 400
+    if role not in ('Moderator', 'Analyst'):
         role = 'Moderator'
-    print(f'[admin] invite {invite_addr[:8]}… as {role} by {wallet[:8]}…', flush=True)
-    return jsonify({'ok': True, 'wallet': invite_addr, 'role': role})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            'INSERT INTO admin_roles(wallet_address,role,invited_by) VALUES(?,?,?) '
+            'ON CONFLICT(wallet_address) DO UPDATE SET role=excluded.role',
+            (invite_addr, role, wallet)
+        )
+        conn.commit()
+        print(f'[admin] invited {invite_addr[:8]}… as {role} by {wallet[:8]}…', flush=True)
+        return jsonify({'ok': True, 'wallet': invite_addr, 'role': role})
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/role/change', methods=['POST'])
+@csrf_exempt
+def admin_role_change():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    data        = request.get_json(silent=True) or {}
+    target      = str(data.get('wallet', '')).strip()
+    role        = str(data.get('role', '')).strip()
+    if not target or len(target) < 32:
+        return jsonify({'ok': False, 'msg': 'Invalid wallet'}), 400
+    if target == ADMIN_WALLET:
+        return jsonify({'ok': False, 'msg': 'Cannot change owner role'}), 400
+    if role not in ('Moderator', 'Analyst'):
+        return jsonify({'ok': False, 'msg': 'Invalid role'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            'UPDATE admin_roles SET role=? WHERE wallet_address=?', (role, target)
+        )
+        conn.commit()
+        print(f'[admin] role change {target[:8]}… → {role} by {wallet[:8]}…', flush=True)
+        return jsonify({'ok': True, 'wallet': target, 'role': role})
+    finally:
+        conn.close()
+
+
+@app.route('/api/admin/role/remove', methods=['POST'])
+@csrf_exempt
+def admin_role_remove():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    data   = request.get_json(silent=True) or {}
+    target = str(data.get('wallet', '')).strip()
+    if not target or len(target) < 32:
+        return jsonify({'ok': False, 'msg': 'Invalid wallet'}), 400
+    if target == ADMIN_WALLET:
+        return jsonify({'ok': False, 'msg': 'Cannot remove owner'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('DELETE FROM admin_roles WHERE wallet_address=?', (target,))
+        conn.commit()
+        print(f'[admin] role removed {target[:8]}… by {wallet[:8]}…', flush=True)
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 
 
 @app.route('/api/admin/clear_ratelimit', methods=['POST'])

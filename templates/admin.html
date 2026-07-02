@@ -198,6 +198,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .admin-member-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .admin-member-sub{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 
+/* ── ROLE PICKER ── */
+.role-opt{display:flex;align-items:center;padding:7px 10px;background:transparent;border:none;cursor:pointer;width:100%;border-radius:7px;transition:background .12s}
+.role-opt:hover{background:#16191f}
+
 /* ── MISC ── */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
 .card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:18px}
@@ -728,33 +732,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
         <div class="card" style="padding:22px 22px 24px">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
             <div class="card-title" style="font-size:15px;margin-bottom:0">👤 Admin access</div>
-            <button class="btn btn-amber" onclick="inviteAdmin()" style="font-size:12px;padding:6px 12px">+ Invite</button>
+            <button class="btn btn-amber" onclick="openInviteModal()" style="font-size:12px;padding:6px 12px">+ Invite</button>
           </div>
-          <div style="display:flex;flex-direction:column;gap:3px" id="admin-access-list">
-            <div class="admin-member-row">
-              <div class="admin-member-av" style="background:var(--accent)">BM</div>
-              <div class="admin-member-info">
-                <div class="admin-member-name">BM3A4w…T8i</div>
-                <div class="admin-member-sub">Owner wallet</div>
-              </div>
-              <span class="tag tag-amber" style="background:rgba(247,185,85,.15);color:var(--amber);flex-shrink:0">Super-admin</span>
-            </div>
-            <div class="admin-member-row">
-              <div class="admin-member-av" style="background:#7c8cff">MO</div>
-              <div class="admin-member-info">
-                <div class="admin-member-name">Moderator #1</div>
-                <div class="admin-member-sub">mod…0000</div>
-              </div>
-              <span class="tag tag-green" style="flex-shrink:0">Moderator</span>
-            </div>
-            <div class="admin-member-row">
-              <div class="admin-member-av" style="background:#565d68">AN</div>
-              <div class="admin-member-info">
-                <div class="admin-member-name">Analyst #1</div>
-                <div class="admin-member-sub">ana…0000</div>
-              </div>
-              <span class="tag tag-muted" style="flex-shrink:0">Analyst</span>
-            </div>
+          <div style="display:flex;flex-direction:column;gap:0" id="admin-access-list">
+            <div class="tbl-loading" style="padding:20px 0;text-align:center"><span class="spinner"></span></div>
           </div>
         </div>
 
@@ -763,6 +744,43 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
   </div><!-- /views -->
 </main>
+</div>
+
+<!-- ── INVITE MODAL ── -->
+<div id="invite-modal" style="display:none;position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);align-items:center;justify-content:center">
+  <div style="background:#101216;border:1px solid #21252c;border-radius:18px;padding:28px;width:360px;max-width:calc(100vw - 32px)">
+    <div style="font-size:16px;font-weight:700;margin-bottom:20px">Invite admin member</div>
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div class="stg-field">
+        <label class="stg-lbl">Wallet address</label>
+        <div class="stg-input-wrap">
+          <input class="stg-input" id="invite-wallet" type="text" placeholder="Solana wallet…" style="color:var(--text);font-size:13px">
+        </div>
+        <div id="invite-wallet-err" style="font-size:11px;color:var(--red);margin-top:3px;display:none"></div>
+      </div>
+      <div class="stg-field">
+        <label class="stg-lbl">Role</label>
+        <select id="invite-role" style="background:#0a0b0e;border:1px solid #21252c;border-radius:9px;padding:10px 12px;font-size:13px;color:var(--text);font-family:'Geist',system-ui,sans-serif;width:100%;outline:none">
+          <option value="Moderator">Moderator</option>
+          <option value="Analyst">Analyst</option>
+        </select>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:22px">
+      <button class="btn btn-ghost" style="flex:1" onclick="closeInviteModal()">Cancel</button>
+      <button class="btn btn-amber" style="flex:1" id="invite-confirm-btn" onclick="confirmInvite()">Send invite</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── ROLE PICKER DROPDOWN ── -->
+<div id="role-picker" style="display:none;position:fixed;z-index:300;background:#101216;border:1px solid #21252c;border-radius:11px;padding:6px;box-shadow:0 8px 32px rgba(0,0,0,.5);min-width:140px">
+  <button class="role-opt" onclick="applyRoleChange('Moderator')">
+    <span class="tag tag-green" style="pointer-events:none">Moderator</span>
+  </button>
+  <button class="role-opt" onclick="applyRoleChange('Analyst')">
+    <span class="tag tag-muted" style="pointer-events:none">Analyst</span>
+  </button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -797,6 +815,7 @@ function loadView(name) {
   else if (name === 'revenue') loadRevenue();
   else if (name === 'system') loadSystem();
   else if (name === 'moderation') loadModeration();
+  else if (name === 'settings') loadSettings();
 }
 
 // ── HELPERS ──
@@ -1085,6 +1104,146 @@ async function loadModeration() {
 }
 
 // ══════════════════ SETTINGS ══════════════════
+async function loadSettings() {
+  await loadAdminRoles();
+}
+
+// ── Admin roles list ──
+async function loadAdminRoles() {
+  var r = await _a('/api/admin/roles');
+  var list = document.getElementById('admin-access-list');
+  if (!list) return;
+  var members = r?.members || [];
+  if (!members.length) {
+    list.innerHTML = '<div style="padding:16px 0;text-align:center;color:var(--muted);font-size:13px">No members yet</div>';
+    return;
+  }
+  list.innerHTML = members.map(m => _memberRow(m)).join('');
+}
+
+function _roleTagCls(role) {
+  if (role === 'Super-admin') return 'tag-amber';
+  if (role === 'Moderator')   return 'tag-green';
+  return 'tag-muted';
+}
+function _memberRow(m) {
+  var w      = m.wallet || '';
+  var ini    = w.slice(0,2).toUpperCase();
+  var short  = w.length >= 8 ? w.slice(0,6) + '…' + w.slice(-4) : w;
+  var avBg   = w === '{{ wallet }}' ? 'var(--accent)' : _av(w);
+  var isOwner = m.role === 'Super-admin';
+  var badgeClick = isOwner ? '' : 'onclick="openRolePicker(event,\'' + w + '\')"';
+  var badgeCursor = isOwner ? '' : 'cursor:pointer;user-select:none;';
+  var removeBtn   = isOwner ? '' :
+    '<button class="btn btn-ghost" style="padding:4px 8px;font-size:16px;line-height:1;flex-shrink:0;color:var(--muted);min-height:32px" ' +
+    'onclick="removeMember(\'' + w + '\')" title="Remove access">\xd7</button>';
+  return '<div class="admin-member-row" id="member-' + w.slice(-8) + '">' +
+    '<div class="admin-member-av" style="background:' + avBg + '">' + ini + '</div>' +
+    '<div class="admin-member-info">' +
+      '<div class="admin-member-name">' + short + '</div>' +
+      '<div class="admin-member-sub">' + (isOwner ? 'Owner wallet' : 'Invited ' + (m.invited_at||'')) + '</div>' +
+    '</div>' +
+    '<span class="tag ' + _roleTagCls(m.role) + '" style="flex-shrink:0;' + badgeCursor + '" ' + badgeClick + '>' + m.role + '</span>' +
+    removeBtn +
+    '</div>';
+}
+
+// ── Invite modal ──
+function openInviteModal() {
+  document.getElementById('invite-wallet').value = '';
+  var errEl = document.getElementById('invite-wallet-err');
+  errEl.style.display = 'none'; errEl.textContent = '';
+  var btn = document.getElementById('invite-confirm-btn');
+  btn.disabled = false; btn.textContent = 'Send invite';
+  document.getElementById('invite-modal').style.display = 'flex';
+  setTimeout(function(){ document.getElementById('invite-wallet').focus(); }, 80);
+}
+function closeInviteModal() {
+  document.getElementById('invite-modal').style.display = 'none';
+}
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape'){ closeInviteModal(); closeRolePicker(); }
+});
+document.getElementById('invite-modal').addEventListener('click', function(e){
+  if (e.target === e.currentTarget) closeInviteModal();
+});
+
+async function confirmInvite() {
+  var w    = (document.getElementById('invite-wallet').value || '').trim();
+  var role = document.getElementById('invite-role').value;
+  var err  = document.getElementById('invite-wallet-err');
+  if (!w || w.length < 32) {
+    err.textContent = 'Enter a valid Solana wallet (min 32 chars)';
+    err.style.display = 'block'; return;
+  }
+  err.style.display = 'none';
+  var btn = document.getElementById('invite-confirm-btn');
+  btn.disabled = true; btn.textContent = 'Inviting…';
+  var r = await fetch('/api/admin/invite', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wallet: w, role: role})
+  }).then(r => r.json()).catch(() => null);
+  btn.disabled = false; btn.textContent = 'Send invite';
+  if (r?.ok) {
+    closeInviteModal();
+    toast('✓ Invited ' + w.slice(0,8) + '… as ' + role, true);
+    loadAdminRoles();
+  } else {
+    err.textContent = r?.msg || 'Failed — check address and try again';
+    err.style.display = 'block';
+  }
+}
+
+// ── Role picker dropdown ──
+var _roleTarget = null;
+function openRolePicker(e, wallet) {
+  e.stopPropagation();
+  _roleTarget = wallet;
+  var picker = document.getElementById('role-picker');
+  picker.style.display = 'block';
+  var rect = e.target.getBoundingClientRect();
+  var left = rect.left;
+  if (left + 150 > window.innerWidth) left = window.innerWidth - 154;
+  picker.style.top  = (rect.bottom + window.scrollY + 6) + 'px';
+  picker.style.left = left + 'px';
+}
+function closeRolePicker() {
+  document.getElementById('role-picker').style.display = 'none';
+  _roleTarget = null;
+}
+document.addEventListener('click', function(e){
+  var picker = document.getElementById('role-picker');
+  if (picker && !picker.contains(e.target)) closeRolePicker();
+});
+async function applyRoleChange(role) {
+  var wallet = _roleTarget;
+  closeRolePicker();
+  if (!wallet) return;
+  var r = await fetch('/api/admin/role/change', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wallet: wallet, role: role})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok) { toast('✓ Role changed to ' + role, true); loadAdminRoles(); }
+  else toast('Error: ' + (r?.msg || 'Failed'), false);
+}
+
+// ── Remove member ──
+async function removeMember(wallet) {
+  if (!confirm('Remove access for ' + wallet.slice(0,8) + '…?')) return;
+  var r = await fetch('/api/admin/role/remove', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wallet: wallet})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok) {
+    toast('✓ Access removed', true);
+    var row = document.getElementById('member-' + wallet.slice(-8));
+    if (row) { row.style.opacity='.3'; row.style.pointerEvents='none'; setTimeout(()=>row.remove(),600); }
+  } else toast('Error: ' + (r?.msg || 'Failed'), false);
+}
+
 async function toggleFlag(btn, flag) {
   btn.classList.toggle('on');
   var on = btn.classList.contains('on');
@@ -1115,32 +1274,6 @@ async function savePlatformLimits() {
   if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
   if (r?.ok) toast('✓ Platform limits saved', true);
   else toast('Error: ' + (r?.msg || 'Failed'), false);
-}
-async function inviteAdmin() {
-  var wallet = prompt('Enter wallet address to invite:');
-  if (!wallet || wallet.length < 32) { toast('Invalid wallet address', false); return; }
-  var role = prompt('Role? (Moderator / Analyst)') || 'Moderator';
-  var r = await fetch('/api/admin/invite', {
-    method: 'POST', credentials: 'include',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({wallet: wallet, role: role})
-  }).then(r => r.json()).catch(() => null);
-  if (!r?.ok) { toast('Error: ' + (r?.msg || 'Failed'), false); return; }
-  var list = document.getElementById('admin-access-list');
-  if (!list) return;
-  var ini = wallet.slice(0,2).toUpperCase();
-  var tagCls = role === 'Moderator' ? 'tag-green' : 'tag-muted';
-  var row = document.createElement('div');
-  row.className = 'admin-member-row';
-  row.innerHTML =
-    '<div class="admin-member-av" style="background:#565d68">' + ini + '</div>' +
-    '<div class="admin-member-info">' +
-      '<div class="admin-member-name">' + wallet.slice(0,6) + '…' + wallet.slice(-4) + '</div>' +
-      '<div class="admin-member-sub">Invited</div>' +
-    '</div>' +
-    '<span class="tag ' + tagCls + '" style="flex-shrink:0">' + role + '</span>';
-  list.appendChild(row);
-  toast('✓ Invited ' + wallet.slice(0,8) + '… as ' + role, true);
 }
 
 function _renderBans(bans, bodyId, countId) {
