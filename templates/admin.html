@@ -9,303 +9,944 @@
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
-::-webkit-scrollbar{width:9px;height:9px}
+html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
+:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#3ad29b;--amber:#f7b955;--red:#f76b62;--text:#eef1f5;--muted:#565d68;--blue:#7c8cff}
+::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:#21252c;border-radius:5px;border:2px solid #0a0b0e}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
 ::-webkit-scrollbar-thumb:hover{background:#2c313a}
-input::placeholder{color:#565d68}
-@keyframes orcaBlink{0%,100%{opacity:1}50%{opacity:.35}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+@keyframes spin{to{transform:rotate(360deg)}}
 
-.shell{display:flex;min-height:100vh;max-width:1440px;margin:0 auto}
+/* ── LAYOUT ── */
+.shell{display:flex;min-height:100vh}
 
 /* ── SIDEBAR ── */
-aside{width:250px;flex-shrink:0;border-right:1px solid #16191f;padding:18px 14px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
-
-.sb-logo-row{display:flex;align-items:center;gap:11px;padding:4px 8px}
-.sb-logo-tile{width:36px;height:36px;border-radius:11px;background:#f7b955;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.sb-logo-tile::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
-.sb-logo-name{font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1}
-.sb-logo-tag{font-size:10px;font-weight:600;letter-spacing:.14em;color:#f7b955;margin-top:3px}
-
-nav{display:flex;flex-direction:column;gap:2px;margin-top:20px}
-.nav-item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:11px;text-decoration:none;font-size:14.5px;font-weight:500;color:#8a919c;cursor:pointer;transition:background .15s,color .15s;border:none;background:transparent;width:100%;text-align:left}
-.nav-item:hover{background:#14171c;color:#eef1f5}
-.nav-item.active{background:rgba(247,185,85,.12);color:#eef1f5;font-weight:600}
-.nav-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
-
-.sb-status{margin-top:auto;border:1px solid #16191f;border-radius:14px;background:#101216;padding:13px}
-.sb-status-row{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.06em;color:#3ad29b}
-.sb-blink{width:6px;height:6px;border-radius:50%;background:#3ad29b;animation:orcaBlink 1.6s infinite;flex-shrink:0}
-.sb-status-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68;margin-top:8px;line-height:1.6}
-
-.sb-user-row{margin-top:12px;display:flex;align-items:center;gap:11px;padding:8px 6px}
-.sb-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;background:#f76b62;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0a0b0e;font-size:13px}
-.sb-user-info{flex:1;min-width:0}
-.sb-user-name{font-size:13px;font-weight:600}
-.sb-user-sub{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.sb-logout{width:100%;margin-top:8px;padding:9px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
-.sb-logout:hover{border-color:#f76b62}
+aside{width:240px;min-width:240px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid var(--bg3);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto;flex-shrink:0}
+.sb-brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
+.sb-fin{width:34px;height:34px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-fin::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid var(--bg)}
+.sb-brand-text{line-height:1.2}
+.sb-brand-name{font-size:16px;font-weight:700;letter-spacing:-.02em}
+.sb-brand-tag{font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--accent);text-transform:uppercase}
+.sb-nav{display:flex;flex-direction:column;gap:2px;flex:1}
+.sb-sep{height:1px;background:var(--bg3);margin:8px 0}
+.nav-btn{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:background .14s,color .14s;text-decoration:none}
+.nav-btn:hover{background:#14171c;color:var(--text)}
+.nav-btn.active{background:rgba(58,210,155,.1);color:var(--text);font-weight:600}
+.nav-btn.active .nav-dot{opacity:1}
+.nav-icon{width:16px;text-align:center;flex-shrink:0;font-size:13px}
+.nav-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:auto;opacity:0;flex-shrink:0}
+.sb-status{margin-top:auto;padding-top:12px}
+.sb-sys-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.sb-sys-row{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:600;letter-spacing:.06em;color:var(--accent)}
+.sb-sys-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite;flex-shrink:0}
+.sb-sys-meta{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:7px;line-height:1.7}
+.sb-user{display:flex;align-items:center;gap:10px;padding:10px 8px 0}
+.sb-av{width:32px;height:32px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--bg);font-size:12px;flex-shrink:0}
+.sb-uname{font-size:12px;font-weight:600;line-height:1.2}
+.sb-uwallet{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.sb-logout{width:100%;margin-top:10px;padding:9px;border-radius:9px;background:none;border:1px solid var(--bg4);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
+.sb-logout:hover{border-color:var(--red)}
 
 /* ── MAIN ── */
-main{flex:1;min-width:0}
-.page-hdr{position:sticky;top:0;z-index:20;background:rgba(10,11,14,.86);backdrop-filter:blur(16px);border-bottom:1px solid #16191f;padding:16px 30px}
-.page-hdr-inner{display:flex;align-items:center;justify-content:space-between;gap:16px}
-.page-title{font-size:21px;font-weight:700;letter-spacing:-.01em}
-.page-sub{font-size:12px;color:#565d68;margin-top:3px}
-.back-btn{display:inline-flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:#8a919c;text-decoration:none;transition:color .15s}
-.back-btn:hover{color:#eef1f5}
+main{flex:1;min-width:0;display:flex;flex-direction:column}
+.topbar{position:sticky;top:0;z-index:20;background:rgba(10,11,14,.9);backdrop-filter:blur(16px);border-bottom:1px solid var(--bg3);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-shrink:0}
+.topbar-title{font-size:19px;font-weight:700;letter-spacing:-.01em}
+.topbar-sub{font-size:11px;color:var(--muted);margin-top:2px}
+.topbar-right{display:flex;align-items:center;gap:10px}
+.back-link{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;background:var(--bg2);border:1px solid var(--bg4);border-radius:9px;font-size:12px;font-weight:600;color:var(--muted);text-decoration:none;transition:color .14s}
+.back-link:hover{color:var(--text)}
+.refresh-btn{padding:7px 13px;background:var(--bg2);border:1px solid var(--bg4);border-radius:9px;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:color .14s}
+.refresh-btn:hover{color:var(--text)}
 
-.page-body{padding:20px 30px 60px}
+.views{flex:1;overflow-y:auto}
+.view{display:none;padding:24px 28px 60px}
+.view.active{display:block}
 
-/* ── KPI GRID ── */
-.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
-.kpi-card{border:1px solid #16191f;border-radius:16px;background:#101216;padding:17px 18px}
-.kpi-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:14px}
-.kpi-val{font-family:'JetBrains Mono',monospace;font-size:27px;font-weight:700;letter-spacing:-.01em}
-.kpi-lbl{font-size:12px;color:#565d68;margin-top:4px}
+/* ── GRID / CARDS ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}
+.kpi-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:16px 18px}
+.kpi-ico{width:30px;height:30px;border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:15px;margin-bottom:12px}
+.kpi-val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.kpi-lbl{font-size:11px;color:var(--muted);margin-top:5px}
+.kpi-delta{font-size:11px;font-weight:600;margin-top:3px}
 
-/* ── SECTION HEADER ── */
-.section-hdr{display:flex;align-items:center;justify-content:space-between;margin:28px 0 12px}
-.section-title{font-size:16px;font-weight:600}
-.section-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:#565d68}
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+.stat-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:16px 18px}
+.stat-lbl{font-size:11px;color:var(--muted);font-weight:600;letter-spacing:.06em;margin-bottom:8px}
+.stat-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;letter-spacing:-.01em}
+.stat-sub{font-size:11px;color:var(--muted);margin-top:4px}
+
+/* ── SECTION ── */
+.sec-hdr{display:flex;align-items:center;justify-content:space-between;margin:0 0 10px}
+.sec-title{font-size:14px;font-weight:600}
+.sec-count{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+.sec-actions{display:flex;gap:8px}
 
 /* ── TABLES ── */
-.tbl-wrap{overflow-x:auto}
-.tbl-box{border:1px solid #16191f;border-radius:16px;background:#101216;overflow:hidden;min-width:700px}
-.tbl-head{display:grid;padding:13px 20px;border-bottom:1px solid #16191f;font-size:10px;letter-spacing:.08em;color:#565d68;font-weight:600}
-.tbl-row{display:grid;padding:13px 20px;border-bottom:1px solid #16191f;align-items:center}
+.tbl-wrap{overflow-x:auto;margin-bottom:24px}
+.tbl{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;overflow:hidden;min-width:600px}
+.tbl-hdr{display:grid;padding:11px 18px;border-bottom:1px solid var(--bg3);font-size:10px;letter-spacing:.08em;color:var(--muted);font-weight:600;text-transform:uppercase}
+.tbl-row{display:grid;padding:11px 18px;border-bottom:1px solid var(--bg3);align-items:center;transition:background .12s}
 .tbl-row:last-child{border-bottom:none}
 .tbl-row:hover{background:#14171c}
+.tbl-empty{padding:36px 18px;text-align:center;color:var(--muted);font-size:13px}
+.tbl-loading{padding:36px 18px;text-align:center;color:var(--muted);font-size:13px}
 
-.users-grid{grid-template-columns:minmax(0,1.4fr) 130px 100px 130px 110px 80px}
-.posts-grid{grid-template-columns:minmax(0,1fr) 160px 140px 80px}
+/* column layouts */
+.col-users{grid-template-columns:minmax(0,2fr) 90px 70px 90px 90px 100px 130px}
+.col-trades{grid-template-columns:100px minmax(0,1.4fr) 90px 80px 90px 80px}
+.col-revenue{grid-template-columns:100px minmax(0,1.4fr) 90px 80px 90px 80px 70px}
+.col-system{grid-template-columns:minmax(0,1.4fr) 110px 110px}
+.col-bans{grid-template-columns:minmax(0,1fr) 120px 100px 90px}
+.col-mod{grid-template-columns:minmax(0,1fr) 140px 120px 80px}
+.col-posts{grid-template-columns:minmax(0,1fr) 120px 130px 70px}
 
-.user-cell{display:flex;align-items:center;gap:11px;min-width:0;overflow:hidden}
-.user-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#0a0b0e}
-.user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.user-wallet{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68}
-
+/* cell types */
+.cell-user{display:flex;align-items:center;gap:9px;min-width:0}
+.u-av{width:30px;height:30px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px;color:var(--bg)}
+.u-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.u-addr{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
 .mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c7ccd4}
-.mono-sm{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68}
-.pnl-pos{color:#3ad29b;font-weight:700}
-.pnl-neg{color:#f76b62;font-weight:700}
+.mono-sm{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
+.pos{color:var(--accent);font-weight:700}
+.neg{color:var(--red);font-weight:700}
+.tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em}
+.tag-green{background:rgba(58,210,155,.15);color:var(--accent)}
+.tag-red{background:rgba(247,107,98,.15);color:var(--red)}
+.tag-amber{background:rgba(247,185,85,.15);color:var(--amber)}
+.tag-muted{background:rgba(86,93,104,.18);color:var(--muted)}
 
-.btn-ban{background:rgba(247,107,98,.12);color:#f76b62;border:1px solid rgba(247,107,98,.3);border-radius:9px;padding:6px 12px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s}
-.btn-ban:hover{background:rgba(247,107,98,.22)}
-.btn-ban:disabled{opacity:.4;cursor:default}
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:5px;padding:6px 12px;border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:all .14s;border:1px solid transparent}
+.btn:disabled{opacity:.4;cursor:default}
+.btn-ghost{background:transparent;border-color:var(--bg4);color:var(--muted)}
+.btn-ghost:hover:not(:disabled){border-color:#3a3f48;color:var(--text)}
+.btn-danger{background:rgba(247,107,98,.12);border-color:rgba(247,107,98,.3);color:var(--red)}
+.btn-danger:hover:not(:disabled){background:rgba(247,107,98,.22)}
+.btn-success{background:rgba(58,210,155,.12);border-color:rgba(58,210,155,.3);color:var(--accent)}
+.btn-success:hover:not(:disabled){background:rgba(58,210,155,.22)}
+.btn-amber{background:rgba(247,185,85,.12);border-color:rgba(247,185,85,.3);color:var(--amber)}
+.btn-amber:hover:not(:disabled){background:rgba(247,185,85,.22)}
+.btn-primary{background:rgba(58,210,155,.15);border-color:rgba(58,210,155,.4);color:var(--accent);padding:8px 16px;font-size:13px}
+.btn-primary:hover:not(:disabled){background:rgba(58,210,155,.25)}
 
-.btn-del{background:rgba(247,107,98,.12);color:#f76b62;border:1px solid rgba(247,107,98,.3);border-radius:9px;padding:6px 12px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s}
-.btn-del:hover{background:rgba(247,107,98,.22)}
-.btn-del:disabled{opacity:.4;cursor:default}
+/* ── BAR CHART ── */
+.chart-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:20px 22px;margin-bottom:24px}
+.chart-title{font-size:13px;font-weight:600;margin-bottom:16px}
+.chart-bars{display:flex;align-items:flex-end;gap:8px;height:120px}
+.bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%}
+.bar-fill{background:rgba(58,210,155,.55);border-radius:4px 4px 0 0;width:100%;min-height:3px;transition:height .4s ease;margin-top:auto;position:relative}
+.bar-fill:hover{background:rgba(58,210,155,.85)}
+.bar-val{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);white-space:nowrap}
+.bar-lbl{font-size:10px;color:var(--muted);white-space:nowrap}
+.chart-legend{display:flex;gap:18px;margin-top:14px}
+.chart-legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
+.chart-legend-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 
-.post-text{font-size:13px;color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.empty-row{padding:32px 20px;text-align:center;color:#565d68;font-size:13px}
+/* ── HEALTH CARDS ── */
+.health-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:24px}
+.health-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:16px 18px}
+.health-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.health-card-name{font-size:13px;font-weight:600}
+.health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.health-dot.ok{background:var(--accent);animation:pulse 2s infinite}
+.health-dot.warn{background:var(--amber);animation:pulse 1.2s infinite}
+.health-dot.err{background:var(--red)}
+.health-rows{display:flex;flex-direction:column;gap:7px}
+.health-row{display:flex;justify-content:space-between;font-size:12px}
+.health-row-lbl{color:var(--muted)}
+.health-row-val{font-family:'JetBrains Mono',monospace;color:var(--text)}
+
+/* ── EVENT LOG ── */
+.log-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:16px 18px;font-family:'JetBrains Mono',monospace;font-size:11px;max-height:280px;overflow-y:auto;margin-bottom:24px}
+.log-entry{display:flex;gap:10px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.log-entry:last-child{border-bottom:none}
+.log-ts{color:var(--muted);flex-shrink:0;min-width:130px}
+.log-event{color:var(--amber);flex-shrink:0;min-width:100px}
+.log-detail{color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ── SEARCH / FILTER ── */
+.filter-row{display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.filter-input{background:var(--bg2);border:1px solid var(--bg4);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--text);font-family:'Geist',system-ui,sans-serif;width:220px;outline:none;transition:border-color .14s}
+.filter-input:focus{border-color:var(--accent)}
+.filter-input::placeholder{color:var(--muted)}
+.filter-select{background:var(--bg2);border:1px solid var(--bg4);border-radius:9px;padding:8px 12px;font-size:13px;color:var(--text);font-family:'Geist',system-ui,sans-serif;outline:none;cursor:pointer}
+.filter-select option{background:var(--bg2)}
+
+/* ── MISC ── */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:18px}
+.card-title{font-size:13px;font-weight:600;margin-bottom:14px}
+.spinner{width:16px;height:16px;border:2px solid var(--bg4);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
+.toast{position:fixed;bottom:24px;right:24px;padding:12px 18px;background:#1c2028;border:1px solid var(--bg4);border-radius:11px;font-size:13px;font-weight:500;z-index:999;display:none;box-shadow:0 4px 24px rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
 <div class="shell">
 
-  <!-- ========== LEFT RAIL ========== -->
-  <aside>
-    <div class="sb-logo-row">
-      <div class="sb-logo-tile"></div>
-      <div>
-        <div class="sb-logo-name">OrcAgent</div>
-        <div class="sb-logo-tag">ADMIN CONSOLE</div>
-      </div>
+<!-- ════════════════ SIDEBAR ════════════════ -->
+<aside>
+  <div class="sb-brand">
+    <div class="sb-fin"></div>
+    <div class="sb-brand-text">
+      <div class="sb-brand-name">OrcAgent</div>
+      <div class="sb-brand-tag">Admin Console</div>
     </div>
+  </div>
 
-    <nav>
-      <a href="/admin" class="nav-item active">
-        <span class="nav-icon">▦</span>Overview
-      </a>
-      <a href="/" class="nav-item">
-        <span class="nav-icon">⌂</span>Dashboard
-      </a>
-      <a href="/leaderboard" class="nav-item">
-        <span class="nav-icon">◈</span>Leaderboard
-      </a>
-      <a href="/traders" class="nav-item">
-        <span class="nav-icon">👥</span>Traders
-      </a>
-      <a href="/settings" class="nav-item">
-        <span class="nav-icon">⚙</span>Settings
-      </a>
-    </nav>
+  <div class="sb-nav">
+    <button class="nav-btn active" id="nav-overview"   onclick="showView('overview')">
+      <span class="nav-icon">⊞</span>Overview<span class="nav-dot"></span>
+    </button>
+    <button class="nav-btn" id="nav-users"     onclick="showView('users')">
+      <span class="nav-icon">👥</span>Users<span class="nav-dot"></span>
+    </button>
+    <button class="nav-btn" id="nav-trades"    onclick="showView('trades')">
+      <span class="nav-icon">⇄</span>Trades<span class="nav-dot"></span>
+    </button>
+    <button class="nav-btn" id="nav-revenue"   onclick="showView('revenue')">
+      <span class="nav-icon">◈</span>Revenue<span class="nav-dot"></span>
+    </button>
+    <div class="sb-sep"></div>
+    <button class="nav-btn" id="nav-system"    onclick="showView('system')">
+      <span class="nav-icon">⌬</span>System<span class="nav-dot"></span>
+    </button>
+    <button class="nav-btn" id="nav-moderation" onclick="showView('moderation')">
+      <span class="nav-icon">⚑</span>Moderation<span class="nav-dot"></span>
+    </button>
+    <div class="sb-sep"></div>
+    <a href="/settings" class="nav-btn">
+      <span class="nav-icon">⚙</span>Settings
+    </a>
+    <a href="/" class="nav-btn">
+      <span class="nav-icon">⌂</span>Dashboard
+    </a>
+  </div>
 
-    <div class="sb-status">
-      <div class="sb-status-row">
-        <span class="sb-blink"></span>ALL SYSTEMS OPERATIONAL
-      </div>
-      <div class="sb-status-meta">Scanner · active<br>RPC · healthy<br>Queue · 0 backlog</div>
+  <div class="sb-status">
+    <div class="sb-sys-card">
+      <div class="sb-sys-row"><span class="sb-sys-dot"></span>ALL SYSTEMS</div>
+      <div class="sb-sys-meta" id="sb-sys-meta">Scanner · —<br>RPC · —<br>Sessions · —</div>
     </div>
-
-    <div class="sb-user-row">
+    <div class="sb-user">
       <div class="sb-av">{{ (wallet[:2])|upper if wallet else 'AD' }}</div>
-      <div class="sb-user-info">
-        <div class="sb-user-name">Admin</div>
-        <div class="sb-user-sub">{{ wallet[:6] ~ '…' ~ wallet[-4:] if wallet|length >= 8 else wallet }}</div>
+      <div>
+        <div class="sb-uname">Admin</div>
+        <div class="sb-uwallet">{{ wallet[:6] ~ '…' ~ wallet[-4:] if wallet|length >= 8 else wallet }}</div>
       </div>
     </div>
     <button class="sb-logout"
       onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')">
       Disconnect Wallet
     </button>
-  </aside>
+  </div>
+</aside>
 
-  <!-- ========== MAIN ========== -->
-  <main>
-    <div class="page-hdr">
-      <div class="page-hdr-inner">
-        <div>
-          <div class="page-title">Admin Console</div>
-          <div class="page-sub">{{ stats.users_count }} registered wallets · {{ stats.trades_count }} total trades</div>
-        </div>
-        <a href="/" class="back-btn">← Back to app</a>
-      </div>
+<!-- ════════════════ MAIN ════════════════ -->
+<main>
+  <div class="topbar">
+    <div>
+      <div class="topbar-title" id="topbar-title">Overview</div>
+      <div class="topbar-sub" id="topbar-sub">{{ stats.users_count }} users · {{ stats.trades_count }} trades</div>
     </div>
+    <div class="topbar-right">
+      <button class="refresh-btn" onclick="refreshView()">↺ Refresh</button>
+      <a href="/" class="back-link">← Back to app</a>
+    </div>
+  </div>
 
-    <div class="page-body">
+  <div class="views">
 
-      <!-- PLATFORM STATS -->
+    <!-- ══════════ VIEW: OVERVIEW ══════════ -->
+    <div class="view active" id="view-overview">
       <div class="kpi-grid">
         <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(124,140,255,.14)">👥</div>
-          <div class="kpi-val">{{ stats.users_count }}</div>
+          <div class="kpi-ico" style="background:rgba(124,140,255,.14)">👥</div>
+          <div class="kpi-val" id="ov-users">{{ stats.users_count }}</div>
           <div class="kpi-lbl">Total users</div>
+          <div class="kpi-delta" id="ov-users-key" style="color:var(--muted)">— with trading key</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(58,210,155,.14)">⇄</div>
-          <div class="kpi-val">{{ stats.trades_count }}</div>
+          <div class="kpi-ico" style="background:rgba(58,210,155,.14)">⇄</div>
+          <div class="kpi-val" id="ov-trades">{{ stats.trades_count }}</div>
           <div class="kpi-lbl">Total trades</div>
+          <div class="kpi-delta" id="ov-trades-today" style="color:var(--muted)">— today</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(247,185,85,.14)">◈</div>
-          <div class="kpi-val">{{ stats.volume_sol }}</div>
+          <div class="kpi-ico" style="background:rgba(247,185,85,.14)">◈</div>
+          <div class="kpi-val" id="ov-volume">{{ stats.volume_sol }}</div>
           <div class="kpi-lbl">Volume (SOL)</div>
+          <div class="kpi-delta" id="ov-bots" style="color:var(--accent)">— bots live</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-icon" style="background:rgba(247,107,98,.14)">💰</div>
-          <div class="kpi-val">{{ stats.fees_sol }}</div>
+          <div class="kpi-ico" style="background:rgba(58,210,155,.14)">💰</div>
+          <div class="kpi-val" id="ov-fees">{{ stats.fees_sol }}</div>
           <div class="kpi-lbl">Fees collected (SOL)</div>
+          <div class="kpi-delta" id="ov-fees-today" style="color:var(--accent)">— today</div>
         </div>
       </div>
 
-      <!-- USERS TABLE -->
-      <div class="section-hdr">
-        <div class="section-title">Users</div>
-        <div class="section-count">{{ users|length }} shown</div>
+      <div class="chart-wrap">
+        <div class="chart-title">Fee Revenue — Last 7 Days</div>
+        <div class="chart-bars" id="ov-chart">
+          <div class="tbl-loading"><span class="spinner"></span></div>
+        </div>
+        <div class="chart-legend">
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(58,210,155,.55)"></div>Fees collected (SOL)</div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <div class="sec-title">Recent Fee Transactions</div>
+        <div class="sec-count" id="ov-tx-count">—</div>
       </div>
       <div class="tbl-wrap">
-        <div class="tbl-box">
-          <div class="tbl-head users-grid">
-            <div>USER / WALLET</div>
-            <div>USERNAME</div>
-            <div>TRADES</div>
-            <div>ALL-TIME PNL</div>
-            <div>JOINED</div>
-            <div></div>
+        <div class="tbl">
+          <div class="tbl-hdr col-revenue">
+            <div>Wallet</div><div>Token</div><div>Gross</div><div>Fee</div><div>Status</div><div>Time</div><div></div>
           </div>
-          {% if users %}
-            {% for u in users %}
-            <div class="tbl-row users-grid" id="user-row-{{ loop.index }}">
-              <div class="user-cell">
-                <div class="user-av" style="background:{{ loop.cycle('#35d4c4','#7c8cff','#f7b955','#3ad29b','#ff9b3d') }}">{{ u.initials }}</div>
-                <div>
-                  <div class="user-name">{{ u.display_name }}</div>
-                  <div class="user-wallet">{{ u.wallet_short }}</div>
-                </div>
-              </div>
-              <div class="mono">{{ u.username or '—' }}</div>
-              <div class="mono">{{ u.trades }}</div>
-              <div class="mono {% if u.pnl_pos %}pnl-pos{% else %}pnl-neg{% endif %}">{{ u.pnl }} SOL</div>
-              <div class="mono-sm">{{ u.joined }}</div>
-              <div>
-                <button class="btn-ban" data-wallet="{{ u.wallet }}"
-                  onclick="banUser(this)">Ban</button>
-              </div>
+          <div id="ov-tx-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VIEW: USERS ══════════ -->
+    <div class="view" id="view-users">
+      <div class="filter-row">
+        <input class="filter-input" id="usr-search" placeholder="Search wallet or username…" oninput="filterUsers()">
+        <select class="filter-select" id="usr-filter" onchange="filterUsers()">
+          <option value="all">All users</option>
+          <option value="key">Has trading key</option>
+          <option value="nokey">No key</option>
+          <option value="trading">Currently trading</option>
+        </select>
+        <div class="sec-count" id="usr-count" style="margin-left:auto">Loading…</div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl">
+          <div class="tbl-hdr col-users">
+            <div>Wallet</div><div>Key</div><div>Trading</div><div>Positions</div><div>Trades</div><div>PnL Today</div><div>Actions</div>
+          </div>
+          <div id="usr-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VIEW: TRADES ══════════ -->
+    <div class="view" id="view-trades">
+      <div class="filter-row">
+        <input class="filter-input" id="tr-search" placeholder="Filter by wallet or token…" oninput="filterTrades()">
+        <select class="filter-select" id="tr-status" onchange="filterTrades()">
+          <option value="all">All status</option>
+          <option value="ok">Success</option>
+          <option value="failed">Failed</option>
+        </select>
+        <div class="sec-count" id="tr-count" style="margin-left:auto">Loading…</div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl">
+          <div class="tbl-hdr col-trades">
+            <div>Wallet</div><div>Token</div><div>Gross (SOL)</div><div>Fee (SOL)</div><div>Status</div><div>Time</div>
+          </div>
+          <div id="tr-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VIEW: REVENUE ══════════ -->
+    <div class="view" id="view-revenue">
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-lbl">Fees Today</div>
+          <div class="stat-val pos" id="rev-today">—</div>
+          <div class="stat-sub">SOL collected today</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Total Collected</div>
+          <div class="stat-val pos" id="rev-total">—</div>
+          <div class="stat-sub">All-time successful</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-lbl">Pending / Failed</div>
+          <div class="stat-val" id="rev-pending" style="color:var(--amber)">—</div>
+          <div class="stat-sub">Awaiting collection + failed</div>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+          <div class="chart-title" style="margin-bottom:0">Revenue — Last 7 Days</div>
+          <button class="btn btn-amber" id="collect-btn" onclick="collectFees()">💰 Collect Fees</button>
+        </div>
+        <div class="chart-bars" id="rev-chart">
+          <div class="tbl-loading"><span class="spinner"></span></div>
+        </div>
+        <div class="chart-legend">
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(58,210,155,.55)"></div>Success</div>
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(247,107,98,.4)"></div>Failed</div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <div class="sec-title">Fee Transactions</div>
+        <div class="sec-count" id="rev-tx-count">—</div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl">
+          <div class="tbl-hdr col-revenue">
+            <div>Wallet</div><div>Token</div><div>Gross</div><div>Fee</div><div>Status</div><div>Time</div><div>TX</div>
+          </div>
+          <div id="rev-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VIEW: SYSTEM ══════════ -->
+    <div class="view" id="view-system">
+      <div class="health-grid">
+        <div class="health-card">
+          <div class="health-card-hdr">
+            <div class="health-card-name">Token Scanner</div>
+            <div class="health-dot ok" id="hc-scanner-dot"></div>
+          </div>
+          <div class="health-rows">
+            <div class="health-row"><span class="health-row-lbl">Tokens tracked</span><span class="health-row-val" id="hc-tokens">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">AI cache</span><span class="health-row-val" id="hc-aicache">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">DEX rate limited</span><span class="health-row-val" id="hc-dex">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">AI disabled</span><span class="health-row-val" id="hc-ai">—</span></div>
+          </div>
+        </div>
+        <div class="health-card">
+          <div class="health-card-hdr">
+            <div class="health-card-name">Trading Engine</div>
+            <div class="health-dot ok" id="hc-engine-dot"></div>
+          </div>
+          <div class="health-rows">
+            <div class="health-row"><span class="health-row-lbl">Active traders</span><span class="health-row-val" id="hc-traders">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Total sessions</span><span class="health-row-val" id="hc-sessions">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Users w/ key</span><span class="health-row-val" id="hc-users">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Owner wallet</span><span class="health-row-val" id="hc-owner">—</span></div>
+          </div>
+        </div>
+        <div class="health-card">
+          <div class="health-card-hdr">
+            <div class="health-card-name">Infrastructure</div>
+            <div class="health-dot ok" id="hc-infra-dot"></div>
+          </div>
+          <div class="health-rows">
+            <div class="health-row"><span class="health-row-lbl">Database size</span><span class="health-row-val" id="hc-db">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Sec events (1h)</span><span class="health-row-val" id="hc-sec">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Jupiter proxy</span><span class="health-row-val" id="hc-jup">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Anthropic key</span><span class="health-row-val" id="hc-anth">—</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <div class="sec-hdr"><div class="sec-title">API Rate Stats (1h)</div><div class="sec-count" id="sys-rate-count">—</div></div>
+          <div class="tbl">
+            <div class="tbl-hdr col-system"><div>Endpoint</div><div>Requests</div><div>Blocked</div></div>
+            <div id="sys-rate-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          </div>
+        </div>
+        <div>
+          <div class="sec-hdr">
+            <div class="sec-title">Active IP Bans</div>
+            <div class="sec-actions">
+              <button class="btn btn-ghost" onclick="clearAllBans()">Clear All</button>
+              <div class="sec-count" id="sys-ban-count">—</div>
             </div>
-            {% endfor %}
-          {% else %}
-            <div class="empty-row">No users yet</div>
-          {% endif %}
+          </div>
+          <div class="tbl">
+            <div class="tbl-hdr col-bans"><div>IP Address</div><div>Expires</div><div>Mins Left</div><div></div></div>
+            <div id="sys-ban-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          </div>
         </div>
       </div>
 
-      <!-- POSTS MODERATION -->
-      <div class="section-hdr">
-        <div class="section-title">Posts — Moderation</div>
-        <div class="section-count">{{ posts|length }} recent posts</div>
+      <div class="sec-hdr"><div class="sec-title">Security Event Log</div></div>
+      <div class="log-wrap" id="sys-log">
+        <div class="tbl-loading"><span class="spinner"></span></div>
       </div>
-      <div class="tbl-wrap">
-        <div class="tbl-box">
-          <div class="tbl-head posts-grid">
-            <div>POST</div>
-            <div>AUTHOR</div>
-            <div>TIME</div>
-            <div></div>
+    </div>
+
+    <!-- ══════════ VIEW: MODERATION ══════════ -->
+    <div class="view" id="view-moderation">
+      <div class="two-col" style="margin-bottom:24px">
+        <div class="card">
+          <div class="card-title">Open Cases</div>
+          <div style="display:flex;flex-direction:column;gap:8px;font-size:13px;color:var(--muted)">
+            <div style="display:flex;justify-content:space-between"><span>Active IP bans</span><span class="mono" id="mod-bans-count">—</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Total RL buckets</span><span class="mono" id="mod-rl-count">—</span></div>
+            <div style="display:flex;justify-content:space-between"><span>Whitelisted IPs</span><span class="mono" id="mod-wl-count">—</span></div>
           </div>
+          <div style="margin-top:14px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-ghost" onclick="clearAllBans()">Clear All Bans</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title">Review Queue</div>
+          <div style="font-size:13px;color:var(--muted);line-height:1.8">
+            <div>Posts flagged: <span class="mono" id="mod-posts-count">{{ posts|length }}</span></div>
+            <div>Users registered: <span class="mono">{{ users|length }}</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <div class="sec-title">Active IP Bans</div>
+        <div class="sec-count" id="mod-ban-count">—</div>
+      </div>
+      <div class="tbl-wrap" style="margin-bottom:24px">
+        <div class="tbl">
+          <div class="tbl-hdr col-bans"><div>IP Address</div><div>Expires</div><div>Mins Left</div><div></div></div>
+          <div id="mod-ban-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <div class="sec-title">Posts — Review Queue</div>
+        <div class="sec-count">{{ posts|length }} posts</div>
+      </div>
+      <div class="tbl-wrap" style="margin-bottom:24px">
+        <div class="tbl">
+          <div class="tbl-hdr col-posts"><div>Content</div><div>Author</div><div>Time</div><div></div></div>
           {% if posts %}
             {% for p in posts %}
-            <div class="tbl-row posts-grid" id="post-row-{{ p.id }}">
-              <div class="post-text" title="{{ p.content | e }}">{{ p.content }}</div>
+            <div class="tbl-row col-posts" id="post-row-{{ p.id }}">
+              <div style="font-size:12px;color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="{{ p.content|e }}">{{ p.content }}</div>
               <div class="mono-sm">{{ p.author }}</div>
               <div class="mono-sm">{{ p.time }}</div>
-              <div>
-                <button class="btn-del" data-post-id="{{ p.id }}"
-                  onclick="deletePost(this)">Delete</button>
-              </div>
+              <div><button class="btn btn-danger" data-post-id="{{ p.id }}" onclick="deletePost(this)">Delete</button></div>
             </div>
             {% endfor %}
           {% else %}
-            <div class="empty-row">No posts yet</div>
+            <div class="tbl-empty">No posts to review</div>
           {% endif %}
         </div>
       </div>
 
+      <div class="sec-hdr">
+        <div class="sec-title">User Moderation</div>
+        <div class="sec-count">{{ users|length }} users</div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl">
+          <div class="tbl-hdr col-mod"><div>Wallet</div><div>Username</div><div>Joined</div><div></div></div>
+          {% if users %}
+            {% for u in users %}
+            <div class="tbl-row col-mod" id="mod-user-{{ loop.index }}">
+              <div class="cell-user">
+                <div class="u-av" style="background:{{ loop.cycle('#35d4c4','#7c8cff','#f7b955','#3ad29b','#ff9b3d') }}">{{ u.initials }}</div>
+                <div>
+                  <div class="u-name">{{ u.display_name }}</div>
+                  <div class="u-addr">{{ u.wallet_short }}</div>
+                </div>
+              </div>
+              <div class="mono-sm">{{ u.username or '—' }}</div>
+              <div class="mono-sm">{{ u.joined }}</div>
+              <div>
+                <button class="btn btn-danger" data-wallet="{{ u.wallet }}" onclick="banUser(this,'mod-user-{{ loop.index }}')">Ban</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="tbl-empty">No users yet</div>
+          {% endif %}
+        </div>
+      </div>
     </div>
-  </main>
+
+  </div><!-- /views -->
+</main>
 </div>
 
+<div class="toast" id="toast"></div>
+
 <script>
-function banUser(btn) {
-  const wallet = btn.dataset.wallet;
-  if (!confirm('Ban wallet ' + wallet.slice(0,8) + '…?\nThis removes their account.')) return;
-  fetch('/api/admin/user/ban', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    credentials: 'include',
-    body: JSON.stringify({wallet})
-  }).then(r => r.json()).then(d => {
-    if (d.ok) {
-      const row = btn.closest('.tbl-row');
-      row.style.opacity = '0.35';
-      btn.textContent = 'Banned';
-      btn.disabled = true;
-    } else {
-      alert(d.msg || 'Error banning user');
-    }
-  }).catch(() => alert('Request failed'));
+// ── STATE ──
+var _loaded = {};
+var _allUsers = [], _allTrades = [], _allRevTx = [];
+
+// ── VIEW SWITCHING ──
+var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation'};
+function showView(name) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('view-' + name).classList.add('active');
+  var nb = document.getElementById('nav-' + name);
+  if (nb) nb.classList.add('active');
+  document.getElementById('topbar-title').textContent = _titles[name] || name;
+  if (!_loaded[name]) { _loaded[name] = true; loadView(name); }
+}
+function refreshView() {
+  var active = document.querySelector('.view.active');
+  if (!active) return;
+  var name = active.id.replace('view-', '');
+  _loaded[name] = false;
+  loadView(name);
+}
+function loadView(name) {
+  if (name === 'overview') loadOverview();
+  else if (name === 'users') loadUsers();
+  else if (name === 'trades') loadTrades();
+  else if (name === 'revenue') loadRevenue();
+  else if (name === 'system') loadSystem();
+  else if (name === 'moderation') loadModeration();
 }
 
-function deletePost(btn) {
-  const id = btn.dataset.postId;
-  if (!confirm('Delete this post?')) return;
-  fetch('/api/post/' + id + '/delete', {
-    method: 'POST',
-    credentials: 'include'
-  }).then(r => r.json()).then(d => {
-    if (d.ok) {
-      const row = btn.closest('.tbl-row');
-      row.style.opacity = '0.35';
-      btn.textContent = 'Deleted';
-      btn.disabled = true;
-    } else {
-      alert(d.msg || 'Error deleting post');
-    }
-  }).catch(() => alert('Request failed'));
+// ── HELPERS ──
+function _a(v) { return fetch(v, {credentials:'include'}).then(r => r.json()).catch(() => null); }
+function _fmt(n, d) { return (+(n || 0)).toFixed(d != null ? d : 4); }
+function _short(w) { return w && w.length >= 8 ? w.slice(0,4)+'…'+w.slice(-4) : (w||'—'); }
+function _av(w) { return ['#35d4c4','#7c8cff','#f7b955','#3ad29b','#ff9b3d'][Math.abs(w.charCodeAt(0) - 65) % 5]; }
+function toast(msg, ok) {
+  var t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  t.style.color = ok === false ? 'var(--red)' : ok ? 'var(--accent)' : 'var(--text)';
+  setTimeout(() => t.style.display = 'none', 3000);
 }
+function _statusTag(s) {
+  if (s === 'ok' || s === 'success') return '<span class="tag tag-green">ok</span>';
+  if (s === 'failed') return '<span class="tag tag-red">failed</span>';
+  return '<span class="tag tag-muted">' + s + '</span>';
+}
+function _barChart(containerId, data, max) {
+  var el = document.getElementById(containerId);
+  if (!el) return;
+  var mx = max || Math.max(...data.map(d => d.val), 0.001);
+  el.innerHTML = data.map(d => {
+    var pct = Math.max(3, (d.val / mx) * 100);
+    return '<div class="bar-col">' +
+      '<div class="bar-val">' + (d.val > 0 ? _fmt(d.val) : '') + '</div>' +
+      '<div class="bar-fill" style="height:' + pct + '%;background:' + (d.color || 'rgba(58,210,155,.55)') + '" title="' + d.lbl + ': ' + _fmt(d.val) + ' SOL"></div>' +
+      '<div class="bar-lbl">' + d.lbl + '</div>' +
+      '</div>';
+  }).join('');
+}
+
+// ── GROUP BY DATE ──
+function _byDay(txs, days) {
+  var now = new Date(), out = [];
+  for (var i = days - 1; i >= 0; i--) {
+    var d = new Date(now); d.setDate(d.getDate() - i);
+    var key = d.toISOString().slice(0,10);
+    var lbl = i === 0 ? 'Today' : d.toLocaleDateString('en',{weekday:'short'});
+    var val = txs.filter(t => (t.ts||'').startsWith(key) && t.status !== 'failed').reduce((s, t) => s + (t.fee||0), 0);
+    out.push({lbl, val, color: 'rgba(58,210,155,.55)'});
+  }
+  return out;
+}
+
+// ── TX ROW (shared) ──
+function _txRow(t, showTx) {
+  var statusTag = _statusTag(t.status || 'ok');
+  var txLink = t.tx && !String(t.tx).startsWith('FAILED:')
+    ? '<a href="https://solscan.io/tx/'+t.tx+'" target="_blank" rel="noopener" style="color:var(--accent);font-size:11px;font-family:\'JetBrains Mono\',monospace">tx↗</a>'
+    : '<span class="mono-sm">—</span>';
+  return '<div class="tbl-row col-revenue">' +
+    '<div class="mono-sm">' + _short(t.wallet||t.user_wallet||'') + '</div>' +
+    '<div class="mono-sm">' + (t.token||'—') + '</div>' +
+    '<div class="mono">' + _fmt(t.gross||t.gross_profit||0) + '</div>' +
+    '<div class="mono pos">' + _fmt(t.fee||t.fee_amount||0) + '</div>' +
+    statusTag +
+    '<div class="mono-sm">' + ((t.ts||t.timestamp||'').slice(0,16)||'—') + '</div>' +
+    (showTx ? txLink : '') +
+    '</div>';
+}
+
+// ══════════════════ OVERVIEW ══════════════════
+async function loadOverview() {
+  var [admin, fees, stats] = await Promise.all([_a('/api/admin'), _a('/api/admin/fees'), _a('/api/admin/stats')]);
+  if (admin) {
+    document.getElementById('ov-users').textContent = admin.total_users ?? '—';
+    document.getElementById('ov-trades').textContent = admin.total_trades ?? '—';
+    document.getElementById('ov-fees').textContent = _fmt(admin.fees_total);
+    document.getElementById('ov-fees-today').textContent = _fmt(admin.fees_today) + ' today';
+    document.getElementById('ov-trades-today').textContent = (admin.trades_today ?? '—') + ' today';
+    document.getElementById('ov-users-key').textContent = (admin.users_with_key ?? '—') + ' with trading key';
+    document.getElementById('ov-bots').textContent = (admin.users_trading ?? '—') + ' bots live';
+    var txs = admin.fee_txs || [];
+    document.getElementById('ov-tx-count').textContent = txs.length + ' transactions';
+    document.getElementById('ov-tx-body').innerHTML = txs.length
+      ? txs.slice(0,20).map(t => _txRow(t, true)).join('')
+      : '<div class="tbl-empty">No transactions yet</div>';
+    _barChart('ov-chart', _byDay(txs, 7));
+  }
+  if (stats) {
+    if (stats.active_bots != null) document.getElementById('ov-bots').textContent = stats.active_bots + ' bots live';
+    if (stats.volume_sol != null) document.getElementById('ov-volume').textContent = _fmt(stats.volume_sol);
+  }
+  // Update sidebar system meta
+  if (admin || stats) {
+    var traders = (admin?.users_trading ?? stats?.active_bots ?? '—');
+    var sessions = admin?.users_with_key ?? '—';
+    document.getElementById('sb-sys-meta').innerHTML =
+      'Bots active · ' + traders + '<br>Sessions · ' + sessions + '<br>Queue · 0 backlog';
+  }
+}
+
+// ══════════════════ USERS ══════════════════
+async function loadUsers() {
+  document.getElementById('usr-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  var r = await _a('/api/admin/users');
+  _allUsers = (r?.users || []);
+  renderUsers();
+}
+function renderUsers() {
+  var q = (document.getElementById('usr-search')?.value || '').toLowerCase();
+  var f = document.getElementById('usr-filter')?.value || 'all';
+  var filtered = _allUsers.filter(u => {
+    var wm = (u.wallet_full||u.wallet||'').toLowerCase().includes(q);
+    if (!wm) return false;
+    if (f === 'key' && !u.has_key) return false;
+    if (f === 'nokey' && u.has_key) return false;
+    if (f === 'trading' && !u.trading) return false;
+    return true;
+  });
+  document.getElementById('usr-count').textContent = filtered.length + ' / ' + _allUsers.length + ' users';
+  if (!filtered.length) {
+    document.getElementById('usr-body').innerHTML = '<div class="tbl-empty">No users match filter</div>';
+    return;
+  }
+  document.getElementById('usr-body').innerHTML = filtered.map((u, i) => {
+    var wf = u.wallet_full || u.wallet || '';
+    var ini = wf.slice(0,2).toUpperCase();
+    var pnlCls = u.pnl_today >= 0 ? 'pos' : 'neg';
+    return '<div class="tbl-row col-users" id="usr-row-' + i + '">' +
+      '<div class="cell-user"><div class="u-av" style="background:' + _av(wf) + '">' + ini + '</div>' +
+      '<div><div class="u-name">' + _short(wf) + '</div></div></div>' +
+      '<div>' + (u.has_key ? '<span class="tag tag-green">✓ key</span>' : '<span class="tag tag-muted">no key</span>') + '</div>' +
+      '<div>' + (u.trading ? '<span class="tag tag-green">live</span>' : '<span class="tag tag-muted">idle</span>') + '</div>' +
+      '<div class="mono">' + (u.positions ?? 0) + '</div>' +
+      '<div class="mono">' + (u.total_trades ?? 0) + '</div>' +
+      '<div class="mono ' + pnlCls + '">' + _fmt(u.pnl_today, 4) + '</div>' +
+      '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+        '<button class="btn btn-danger" onclick="banUserWallet(\'' + wf + '\',\'usr-row-' + i + '\')" title="Delete user account">Ban</button>' +
+        (u.trading
+          ? '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'pause\')">Pause</button>'
+          : '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'resume\')">Resume</button>') +
+      '</div>' +
+      '</div>';
+  }).join('');
+}
+function filterUsers() { renderUsers(); }
+
+// ══════════════════ TRADES ══════════════════
+async function loadTrades() {
+  document.getElementById('tr-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  var r = await _a('/api/admin/fees');
+  _allTrades = (r?.transactions || []);
+  renderTrades();
+}
+function renderTrades() {
+  var q = (document.getElementById('tr-search')?.value || '').toLowerCase();
+  var st = document.getElementById('tr-status')?.value || 'all';
+  var filtered = _allTrades.filter(t => {
+    if (q && !(t.wallet||'').toLowerCase().includes(q) && !(t.token||'').toLowerCase().includes(q)) return false;
+    if (st !== 'all' && t.status !== st) return false;
+    return true;
+  });
+  document.getElementById('tr-count').textContent = filtered.length + ' / ' + _allTrades.length + ' trades';
+  if (!filtered.length) {
+    document.getElementById('tr-body').innerHTML = '<div class="tbl-empty">No trades match filter</div>';
+    return;
+  }
+  document.getElementById('tr-body').innerHTML = filtered.map(t => {
+    return '<div class="tbl-row col-trades">' +
+      '<div class="mono-sm">' + _short(t.wallet||'') + '</div>' +
+      '<div class="mono-sm">' + (t.token||'—') + '</div>' +
+      '<div class="mono">' + _fmt(t.gross||0) + '</div>' +
+      '<div class="mono pos">' + _fmt(t.fee||0) + '</div>' +
+      _statusTag(t.status||'ok') +
+      '<div class="mono-sm">' + ((t.ts||'').slice(0,16)||'—') + '</div>' +
+      '</div>';
+  }).join('');
+}
+function filterTrades() { renderTrades(); }
+
+// ══════════════════ REVENUE ══════════════════
+async function loadRevenue() {
+  document.getElementById('rev-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  var [fees, feeStats] = await Promise.all([_a('/api/admin/fees'), _a('/api/admin/fee-stats')]);
+  if (feeStats) {
+    document.getElementById('rev-today').textContent = _fmt(feeStats.today) + ' SOL';
+    document.getElementById('rev-total').textContent = _fmt(feeStats.collected) + ' SOL';
+    document.getElementById('rev-pending').textContent = _fmt(feeStats.pending) + ' SOL';
+  }
+  if (fees) {
+    var txs = fees.transactions || [];
+    _allRevTx = txs;
+    document.getElementById('rev-tx-count').textContent = txs.length + ' transactions';
+    document.getElementById('rev-body').innerHTML = txs.length
+      ? txs.map(t => _txRow(t, true)).join('')
+      : '<div class="tbl-empty">No transactions yet</div>';
+    _barChart('rev-chart', _byDay(txs, 7));
+  }
+}
+async function collectFees() {
+  var btn = document.getElementById('collect-btn');
+  btn.disabled = true; btn.textContent = 'Collecting…';
+  var r = await fetch('/api/admin/collect-fees', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:'{}'}).then(r => r.json()).catch(() => null);
+  btn.disabled = false; btn.textContent = '💰 Collect Fees';
+  if (r?.ok) { toast('✓ ' + (r.msg || 'Collected'), true); _loaded.revenue = false; loadRevenue(); }
+  else toast('Error: ' + (r?.error || 'Failed'), false);
+}
+
+// ══════════════════ SYSTEM ══════════════════
+async function loadSystem() {
+  var [health, rateSt, bans] = await Promise.all([_a('/api/admin/health'), _a('/api/admin/rate-stats'), _a('/api/admin/bans')]);
+  if (health) {
+    document.getElementById('hc-tokens').textContent  = health.tokens_tracked ?? '—';
+    document.getElementById('hc-aicache').textContent = health.ai_cache_size ?? '—';
+    document.getElementById('hc-dex').textContent     = health.dex_rate_limited ? 'yes' : 'no';
+    document.getElementById('hc-ai').textContent      = health.ai_disabled ? 'yes' : 'no';
+    document.getElementById('hc-traders').textContent = health.active_traders ?? '—';
+    document.getElementById('hc-sessions').textContent= health.total_sessions ?? '—';
+    document.getElementById('hc-users').textContent   = health.total_users ?? '—';
+    document.getElementById('hc-owner').textContent   = health.owner_configured ? 'set' : 'missing';
+    document.getElementById('hc-db').textContent      = (health.db_size_kb ?? '—') + ' KB';
+    document.getElementById('hc-sec').textContent     = health.sec_events_1h ?? '—';
+    document.getElementById('hc-jup').textContent     = health.jupiter_proxy ? 'yes' : 'no';
+    document.getElementById('hc-anth').textContent    = health.anthropic_key ? 'set' : 'missing';
+    var secDot = document.getElementById('hc-sec');
+    if ((health.sec_events_1h||0) > 10) secDot.style.color = 'var(--red)';
+    if (health.dex_rate_limited) document.getElementById('hc-scanner-dot').className = 'health-dot warn';
+    if (!health.owner_configured) document.getElementById('hc-engine-dot').className = 'health-dot warn';
+    if (!health.anthropic_key || !health.jupiter_proxy) document.getElementById('hc-infra-dot').className = 'health-dot warn';
+  }
+  if (rateSt) {
+    var eps = rateSt.endpoints || [];
+    document.getElementById('sys-rate-count').textContent = eps.length + ' endpoints';
+    document.getElementById('sys-rate-body').innerHTML = eps.length
+      ? eps.slice(0,12).map(e =>
+          '<div class="tbl-row col-system">' +
+          '<div class="mono-sm">' + e.endpoint + '</div>' +
+          '<div class="mono">' + e.requests_1h + '</div>' +
+          '<div class="mono ' + (e.blocked_1h > 0 ? 'neg' : '') + '">' + e.blocked_1h + '</div>' +
+          '</div>').join('')
+      : '<div class="tbl-empty">No rate data</div>';
+  }
+  _renderBans(bans, 'sys-ban-body', 'sys-ban-count');
+
+  // Security log
+  var admin = await _a('/api/admin');
+  if (admin?.security_log) {
+    var log = admin.security_log;
+    document.getElementById('sys-log').innerHTML = log.length
+      ? log.map(e =>
+          '<div class="log-entry"><span class="log-ts">' + ((e.ts||'').slice(0,16)||'—') + '</span>' +
+          '<span class="log-event">' + (e.event||'—') + '</span>' +
+          '<span class="log-detail">' + (e.ip||'') + (e.details ? ' · ' + e.details : '') + '</span></div>'
+        ).join('')
+      : '<div style="color:var(--muted);font-size:12px;text-align:center;padding:24px">No security events</div>';
+  }
+  // Update sidebar
+  if (health) {
+    document.getElementById('sb-sys-meta').innerHTML =
+      'Scanner · ' + (health.tokens_tracked ?? '—') + ' tokens' +
+      '<br>Traders · ' + (health.active_traders ?? '—') + ' live' +
+      '<br>DB · ' + (health.db_size_kb ?? '—') + ' KB';
+  }
+}
+
+// ══════════════════ MODERATION ══════════════════
+async function loadModeration() {
+  var bans = await _a('/api/admin/bans');
+  _renderBans(bans, 'mod-ban-body', 'mod-ban-count');
+  if (bans) {
+    document.getElementById('mod-bans-count').textContent  = (bans.bans||[]).length;
+    document.getElementById('mod-rl-count').textContent    = bans.rl_bucket_count ?? '—';
+    document.getElementById('mod-wl-count').textContent    = (bans.whitelisted_ips||[]).length;
+  }
+}
+
+function _renderBans(bans, bodyId, countId) {
+  var el = document.getElementById(bodyId);
+  var cEl = document.getElementById(countId);
+  if (!bans || !el) return;
+  var list = bans.bans || [];
+  if (cEl) cEl.textContent = list.length + ' active';
+  el.innerHTML = list.length
+    ? list.map(b =>
+        '<div class="tbl-row col-bans">' +
+        '<div class="mono">' + b.ip + '</div>' +
+        '<div class="mono-sm">' + (b.permanent ? 'Permanent' : new Date(b.expires_at * 1000).toLocaleTimeString()) + '</div>' +
+        '<div class="mono ' + (b.mins_left > 5 ? 'neg' : 'pos') + '">' + (b.permanent ? '∞' : b.mins_left + 'm') + '</div>' +
+        '<div><button class="btn btn-ghost" onclick="clearBan(\'' + b.ip + '\')">Unban</button></div>' +
+        '</div>').join('')
+    : '<div class="tbl-empty">No active bans</div>';
+}
+
+// ══════════════════ ACTIONS ══════════════════
+async function banUserWallet(wallet, rowId) {
+  if (!confirm('Ban wallet ' + _short(wallet) + '?\nThis permanently removes their account and posts.')) return;
+  var r = await fetch('/api/admin/user/ban', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wallet})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok) {
+    toast('✓ User banned', true);
+    var row = document.getElementById(rowId);
+    if (row) { row.style.opacity = '.3'; row.style.pointerEvents = 'none'; }
+    _allUsers = _allUsers.filter(u => (u.wallet_full||u.wallet) !== wallet);
+  } else {
+    toast('Error: ' + (r?.msg || 'Failed'), false);
+  }
+}
+function banUser(btn, rowId) {
+  var wallet = btn.dataset.wallet;
+  banUserWallet(wallet, rowId).then(() => {
+    btn.textContent = 'Banned'; btn.disabled = true;
+  });
+}
+async function forceAction(wallet, action) {
+  var ep = action === 'pause' ? '/api/admin/force-pause' : '/api/admin/force-resume';
+  var r = await fetch(ep, {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({wallet})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok) { toast('✓ ' + (r.msg || 'Done'), true); _loaded.users = false; loadUsers(); }
+  else toast('Error: ' + (r?.error || r?.msg || 'Failed'), false);
+}
+async function clearBan(ip) {
+  var r = await fetch('/api/admin/clear_ratelimit', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ip})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok !== false) { toast('✓ Ban cleared for ' + ip, true); _loaded.system = false; _loaded.moderation = false; loadView(document.querySelector('.view.active').id.replace('view-','')); }
+  else toast('Error clearing ban', false);
+}
+async function clearAllBans() {
+  if (!confirm('Clear all IP bans and rate limits?')) return;
+  var r = await fetch('/api/admin/clear_ratelimit', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'},
+    body: '{}'
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok !== false) { toast('✓ All bans cleared', true); _loaded.system = false; _loaded.moderation = false; loadView(document.querySelector('.view.active').id.replace('view-','')); }
+  else toast('Error', false);
+}
+async function deletePost(btn) {
+  var id = btn.dataset.postId;
+  if (!confirm('Delete this post?')) return;
+  var r = await fetch('/api/post/' + id + '/delete', {method:'POST', credentials:'include'}).then(r => r.json()).catch(() => null);
+  if (r?.ok) {
+    toast('✓ Post deleted', true);
+    var row = document.getElementById('post-row-' + id);
+    if (row) { row.style.opacity = '.3'; row.style.pointerEvents = 'none'; btn.textContent = 'Deleted'; btn.disabled = true; }
+  } else toast('Error: ' + (r?.msg || 'Failed'), false);
+}
+
+// ── INIT ──
+loadView('overview');
 </script>
 </body>
 </html>
