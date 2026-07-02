@@ -4988,6 +4988,7 @@ function disconnectWallet(){
   var _doLogout=function(){
     fetch('/api/logout',{method:'POST',credentials:'include'}).finally(function(){
       phantomKey=null; walletType=null; guestMode=false;
+      localStorage.removeItem('orca_credential_id');
       window.location.reload();
     });
   };
