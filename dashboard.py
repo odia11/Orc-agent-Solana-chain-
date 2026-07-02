@@ -9764,6 +9764,18 @@ def admin_features_toggle():
     return jsonify({'ok': True, 'feature': feature, 'value': value})
 
 
+@app.route('/api/admin/whoami')
+@csrf_exempt
+def admin_whoami():
+    wallet = session.get('wallet', '')
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    role = get_user_role(wallet)
+    if role == 'user':
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    return jsonify({'ok': True, 'wallet': wallet, 'role': role})
+
+
 @app.route('/api/admin/roles', methods=['GET'])
 @csrf_exempt
 def admin_roles_list():

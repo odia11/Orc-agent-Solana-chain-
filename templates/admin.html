@@ -48,6 +48,7 @@ aside{width:240px;min-width:240px;height:100vh;position:sticky;top:0;background:
 .sb-uwallet{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 .sb-logout{width:100%;margin-top:10px;padding:9px;border-radius:9px;background:none;border:1px solid var(--bg4);color:var(--red);font-size:12px;font-weight:600;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
 .sb-logout:hover{border-color:var(--red)}
+.sb-role-badge{display:inline-block;padding:1px 6px;border-radius:4px;font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-top:3px}
 
 /* ── MAIN ── */
 main{flex:1;min-width:0;display:flex;flex-direction:column}
@@ -308,6 +309,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <div class="sb-av">{{ (wallet[:2])|upper if wallet else 'AD' }}</div>
       <div>
         <div class="sb-uname">Admin</div>
+        <div id="sb-role-badge" class="sb-role-badge" style="background:rgba(58,210,155,.15);color:var(--accent)">Super-admin</div>
         <div class="sb-uwallet">{{ wallet[:6] ~ '…' ~ wallet[-4:] if wallet|length >= 8 else wallet }}</div>
       </div>
     </div>
@@ -789,10 +791,53 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 // ── STATE ──
 var _loaded = {};
 var _allUsers = [], _allTrades = [], _allRevTx = [];
+var _userRole = 'admin';
+
+// ── ROLE ACCESS ──
+var _ROLE_TABS = {
+  admin:     ['overview','users','trades','revenue','system','moderation','settings'],
+  moderator: ['users','trades','moderation'],
+  analyst:   ['overview','trades','revenue','system'],
+  user:      []
+};
+var _ROLE_BADGE = {
+  admin:     {text:'Super-admin', bg:'rgba(58,210,155,.15)',  color:'var(--accent)'},
+  moderator: {text:'Moderator',   bg:'rgba(124,140,255,.15)', color:'var(--blue)'},
+  analyst:   {text:'Analyst',     bg:'rgba(86,93,104,.2)',    color:'var(--muted)'},
+};
+
+function _applyRoleUI(role) {
+  var allowed = _ROLE_TABS[role] || [];
+  ['overview','users','trades','revenue','system','moderation','settings'].forEach(function(name) {
+    var btn = document.getElementById('nav-' + name);
+    if (btn) btn.style.display = allowed.indexOf(name) >= 0 ? '' : 'none';
+  });
+  document.querySelectorAll('.sb-sep').forEach(function(sep) {
+    sep.style.display = role === 'admin' ? '' : 'none';
+  });
+  var badge = document.getElementById('sb-role-badge');
+  if (badge) {
+    var b = _ROLE_BADGE[role] || _ROLE_BADGE.analyst;
+    badge.textContent = b.text;
+    badge.style.background = b.bg;
+    badge.style.color = b.color;
+  }
+}
+
+async function _initRoleBasedUI() {
+  var r = await fetch('/api/admin/whoami', {credentials:'include'}).then(r => r.json()).catch(() => null);
+  _userRole = r?.role || 'admin';
+  _applyRoleUI(_userRole);
+  var first = (_ROLE_TABS[_userRole] || ['overview'])[0];
+  showView(first);
+  _startAutoRefresh();
+}
 
 // ── VIEW SWITCHING ──
 var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',settings:'Settings'};
 function showView(name) {
+  var allowed = _ROLE_TABS[_userRole] || Object.keys(_titles);
+  if (allowed.indexOf(name) < 0) return;
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -1374,8 +1419,7 @@ function _startAutoRefresh() {
 }
 
 // ── INIT ──
-loadView('overview');
-_startAutoRefresh();
+_initRoleBasedUI();
 </script>
 </body>
 </html>
