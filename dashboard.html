@@ -9937,7 +9937,22 @@ function _emojiPickerToggle(e, palId, inputId){
       pal.appendChild(b);
     });
   }
+  // Escape overflow:hidden clipping by reparenting to body and using position:fixed
+  var btn=e.currentTarget||e.target;
+  var rect=btn.getBoundingClientRect();
+  document.body.appendChild(pal);
+  pal.style.position='fixed';
+  pal.style.right='auto';
+  pal.style.bottom='auto';
+  pal.style.visibility='hidden';
   pal.style.display='grid';
+  var pw=pal.offsetWidth, ph=pal.offsetHeight;
+  var left=Math.max(4,Math.min(rect.left+rect.width/2-pw/2, window.innerWidth-pw-4));
+  var top=rect.top-ph-8;
+  if(top<4) top=rect.bottom+8;
+  pal.style.left=left+'px';
+  pal.style.top=top+'px';
+  pal.style.visibility='';
 }
 document.addEventListener('click',function(){
   document.querySelectorAll('.ep-palette,.fc-react-palette').forEach(function(p){ p.style.display='none'; });
@@ -11714,7 +11729,23 @@ function _feedReactOpen(e, postId){
       pal.appendChild(b);
     });
   }
-  pal.style.display = 'flex';
+  // Escape overflow:hidden clipping by reparenting to body and using position:fixed
+  var btn=e.currentTarget||e.target;
+  var rect=btn.getBoundingClientRect();
+  document.body.appendChild(pal);
+  pal.style.position='fixed';
+  pal.style.transform='none';
+  pal.style.right='auto';
+  pal.style.bottom='auto';
+  pal.style.visibility='hidden';
+  pal.style.display='flex';
+  var pw=pal.offsetWidth, ph=pal.offsetHeight;
+  var left=Math.max(4,Math.min(rect.left+rect.width/2-pw/2, window.innerWidth-pw-4));
+  var top=rect.top-ph-8;
+  if(top<4) top=rect.bottom+8;
+  pal.style.left=left+'px';
+  pal.style.top=top+'px';
+  pal.style.visibility='';
 }
 
 async function _feedReactSend(postId, emoji){
