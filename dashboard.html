@@ -3534,7 +3534,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <div class="sb-online-dot" id="sb-online-dot" style="display:none"></div>
         </div>
         <div style="padding:8px 12px 10px">
-          <button onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')" style="width:100%;padding:10px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);transition:border-color .15s" onmouseenter="this.style.borderColor='#f76b62'" onmouseleave="this.style.borderColor='#21252c'">Disconnect Wallet</button>
+          <button onclick="disconnectWallet()" style="width:100%;padding:10px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);transition:border-color .15s" onmouseenter="this.style.borderColor='#f76b62'" onmouseleave="this.style.borderColor='#21252c'">Disconnect Wallet</button>
         </div>
       </div>
 
@@ -4973,6 +4973,14 @@ async function _obSaveKey(){
   }
 }
 
+function disconnectWallet(){
+  fetch('/api/logout',{method:'POST',credentials:'include'}).then(function(){
+    phantomKey=null; walletType=null;
+    var _wp=window.solana||window.solflare;
+    if(_wp&&_wp.disconnect){ _wp.disconnect().catch(function(){}); }
+    window.location.reload();
+  }).catch(function(){ window.location.reload(); });
+}
 function _obSkipKey(){
   launchApp();
   setTimeout(function(){ _checkWelcomeBanner(); }, 400);
@@ -6918,7 +6926,7 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
     phantomKey=_pk; walletType=_n;
     const r=await fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:_pk})}).then(x=>x.json()).catch(()=>null);
     if(r?.csrf_token) _csrfToken=r.csrf_token;
-    settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false;
+    settingsHasKey=r?.has_trading_key||false; _isAdmin=r?.is_admin||false; _updateKeyStatus();
     if(r?.success){
       if(r.status==='new_user'){ gotoSetupGuide(); return; }
       await launchApp();
