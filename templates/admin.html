@@ -10,7 +10,7 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
-:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#3ad29b;--amber:#f7b955;--red:#f76b62;--text:#eef1f5;--muted:#565d68;--blue:#7c8cff}
+:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--amber:#f7b955;--green:#3ad29b;--red:#f76b62;--text:#eef1f5;--muted:#565d68;--blue:#7c8cff}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
@@ -33,7 +33,7 @@ aside{width:240px;min-width:240px;height:100vh;position:sticky;top:0;background:
 .sb-sep{height:1px;background:var(--bg3);margin:8px 0}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:background .14s,color .14s;text-decoration:none}
 .nav-btn:hover{background:#14171c;color:var(--text)}
-.nav-btn.active{background:rgba(58,210,155,.1);color:var(--text);font-weight:600}
+.nav-btn.active{background:rgba(247,185,85,.1);color:var(--text);font-weight:600}
 .nav-btn.active .nav-dot{opacity:1}
 .nav-icon{width:16px;text-align:center;flex-shrink:0;font-size:13px}
 .nav-dot{width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:auto;opacity:0;flex-shrink:0}
@@ -111,10 +111,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .u-addr{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)}
 .mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c7ccd4}
 .mono-sm{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted)}
-.pos{color:var(--accent);font-weight:700}
+.pos{color:var(--green);font-weight:700}
 .neg{color:var(--red);font-weight:700}
 .tag{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em}
-.tag-green{background:rgba(58,210,155,.15);color:var(--accent)}
+.tag-green{background:rgba(58,210,155,.15);color:var(--green)}
 .tag-red{background:rgba(247,107,98,.15);color:var(--red)}
 .tag-amber{background:rgba(247,185,85,.15);color:var(--amber)}
 .tag-muted{background:rgba(86,93,104,.18);color:var(--muted)}
@@ -126,20 +126,20 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .btn-ghost:hover:not(:disabled){border-color:#3a3f48;color:var(--text)}
 .btn-danger{background:rgba(247,107,98,.12);border-color:rgba(247,107,98,.3);color:var(--red)}
 .btn-danger:hover:not(:disabled){background:rgba(247,107,98,.22)}
-.btn-success{background:rgba(58,210,155,.12);border-color:rgba(58,210,155,.3);color:var(--accent)}
-.btn-success:hover:not(:disabled){background:rgba(58,210,155,.22)}
+.btn-success{background:rgba(247,185,85,.12);border-color:rgba(247,185,85,.3);color:var(--accent)}
+.btn-success:hover:not(:disabled){background:rgba(247,185,85,.22)}
 .btn-amber{background:rgba(247,185,85,.12);border-color:rgba(247,185,85,.3);color:var(--amber)}
 .btn-amber:hover:not(:disabled){background:rgba(247,185,85,.22)}
-.btn-primary{background:rgba(58,210,155,.15);border-color:rgba(58,210,155,.4);color:var(--accent);padding:8px 16px;font-size:13px}
-.btn-primary:hover:not(:disabled){background:rgba(58,210,155,.25)}
+.btn-primary{background:rgba(247,185,85,.15);border-color:rgba(247,185,85,.4);color:var(--accent);padding:8px 16px;font-size:13px}
+.btn-primary:hover:not(:disabled){background:rgba(247,185,85,.25)}
 
 /* ── BAR CHART ── */
 .chart-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:20px 22px;margin-bottom:24px}
 .chart-title{font-size:13px;font-weight:600;margin-bottom:16px}
 .chart-bars{display:flex;align-items:flex-end;gap:8px;height:120px}
 .bar-col{flex:1;display:flex;flex-direction:column;align-items:center;gap:5px;height:100%}
-.bar-fill{background:rgba(58,210,155,.55);border-radius:4px 4px 0 0;width:100%;min-height:3px;transition:height .4s ease;margin-top:auto;position:relative}
-.bar-fill:hover{background:rgba(58,210,155,.85)}
+.bar-fill{background:rgba(247,185,85,.55);border-radius:4px 4px 0 0;width:100%;min-height:3px;transition:height .4s ease;margin-top:auto;position:relative}
+.bar-fill:hover{background:rgba(247,185,85,.85)}
 .bar-val{font-family:'JetBrains Mono',monospace;font-size:9px;color:var(--muted);white-space:nowrap}
 .bar-lbl{font-size:10px;color:var(--muted);white-space:nowrap}
 .chart-legend{display:flex;gap:18px;margin-top:14px}
@@ -152,7 +152,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .health-card-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .health-card-name{font-size:13px;font-weight:600}
 .health-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
-.health-dot.ok{background:var(--accent);animation:pulse 2s infinite}
+.health-dot.ok{background:var(--green);animation:pulse 2s infinite}
 .health-dot.warn{background:var(--amber);animation:pulse 1.2s infinite}
 .health-dot.err{background:var(--red)}
 .health-rows{display:flex;flex-direction:column;gap:7px}
@@ -309,7 +309,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <div class="sb-av">{{ (wallet[:2])|upper if wallet else 'AD' }}</div>
       <div>
         <div class="sb-uname">Admin</div>
-        <div id="sb-role-badge" class="sb-role-badge" style="background:rgba(58,210,155,.15);color:var(--accent)">Super-admin</div>
+        <div id="sb-role-badge" class="sb-role-badge" style="background:rgba(247,185,85,.15);color:var(--accent)">Super-admin</div>
         <div class="sb-uwallet">{{ wallet[:6] ~ '…' ~ wallet[-4:] if wallet|length >= 8 else wallet }}</div>
       </div>
     </div>
@@ -345,7 +345,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           <div class="kpi-delta" id="ov-users-key" style="color:var(--muted)">— with trading key</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-ico" style="background:rgba(58,210,155,.14)">⇄</div>
+          <div class="kpi-ico" style="background:rgba(247,185,85,.14)">⇄</div>
           <div class="kpi-val" id="ov-trades">{{ stats.trades_count }}</div>
           <div class="kpi-lbl">Total trades</div>
           <div class="kpi-delta" id="ov-trades-today" style="color:var(--muted)">— today</div>
@@ -357,7 +357,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           <div class="kpi-delta" id="ov-bots" style="color:var(--accent)">— bots live</div>
         </div>
         <div class="kpi-card">
-          <div class="kpi-ico" style="background:rgba(58,210,155,.14)">💰</div>
+          <div class="kpi-ico" style="background:rgba(247,185,85,.14)">💰</div>
           <div class="kpi-val" id="ov-fees">{{ stats.fees_sol }}</div>
           <div class="kpi-lbl">Fees collected (SOL)</div>
           <div class="kpi-delta" id="ov-fees-today" style="color:var(--accent)">— today</div>
@@ -370,7 +370,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           <div class="tbl-loading"><span class="spinner"></span></div>
         </div>
         <div class="chart-legend">
-          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(58,210,155,.55)"></div>Fees collected (SOL)</div>
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(247,185,85,.55)"></div>Fees collected (SOL)</div>
         </div>
       </div>
 
@@ -460,7 +460,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           <div class="tbl-loading"><span class="spinner"></span></div>
         </div>
         <div class="chart-legend">
-          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(58,210,155,.55)"></div>Success</div>
+          <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(247,185,85,.55)"></div>Success</div>
           <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(247,107,98,.4)"></div>Failed</div>
         </div>
       </div>
@@ -801,7 +801,7 @@ var _ROLE_TABS = {
   user:      []
 };
 var _ROLE_BADGE = {
-  admin:     {text:'Super-admin', bg:'rgba(58,210,155,.15)',  color:'var(--accent)'},
+  admin:     {text:'Super-admin', bg:'rgba(247,185,85,.15)',  color:'var(--accent)'},
   moderator: {text:'Moderator',   bg:'rgba(124,140,255,.15)', color:'var(--blue)'},
   analyst:   {text:'Analyst',     bg:'rgba(86,93,104,.2)',    color:'var(--muted)'},
 };
@@ -888,7 +888,7 @@ function _barChart(containerId, data, max) {
     var pct = Math.max(3, (d.val / mx) * 100);
     return '<div class="bar-col">' +
       '<div class="bar-val">' + (d.val > 0 ? _fmt(d.val) : '') + '</div>' +
-      '<div class="bar-fill" style="height:' + pct + '%;background:' + (d.color || 'rgba(58,210,155,.55)') + '" title="' + d.lbl + ': ' + _fmt(d.val) + ' SOL"></div>' +
+      '<div class="bar-fill" style="height:' + pct + '%;background:' + (d.color || 'rgba(247,185,85,.55)') + '" title="' + d.lbl + ': ' + _fmt(d.val) + ' SOL"></div>' +
       '<div class="bar-lbl">' + d.lbl + '</div>' +
       '</div>';
   }).join('');
@@ -902,7 +902,7 @@ function _byDay(txs, days) {
     var key = d.toISOString().slice(0,10);
     var lbl = i === 0 ? 'Today' : d.toLocaleDateString('en',{weekday:'short'});
     var val = txs.filter(t => (t.ts||'').startsWith(key) && t.status !== 'failed').reduce((s, t) => s + (t.fee||0), 0);
-    out.push({lbl, val, color: 'rgba(58,210,155,.55)'});
+    out.push({lbl, val, color: 'rgba(247,185,85,.55)'});
   }
   return out;
 }
