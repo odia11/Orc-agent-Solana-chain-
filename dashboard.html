@@ -466,7 +466,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reaction-pill .rp-count{font-size:11px;color:#8a919c;font-family:'JetBrains Mono',monospace}
 .fc-reply-box{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .2s ease,padding .2s ease}
 .fc-reply-box.open{max-height:120px;padding:0 22px 14px}
-.fc-reply-inner{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--bg3)}
+.fc-reply-inner{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--bg3);position:relative}
+.fc-reply-emoji-wrap{position:relative;flex-shrink:0}
+.fc-reply-emoji-btn{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;color:#565d68;transition:color .15s}
+.fc-reply-emoji-btn:hover{color:#eef1f5}
+.fc-reply-palette{position:absolute;bottom:calc(100% + 8px);left:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:8px;display:none;grid-template-columns:repeat(6,1fr);gap:3px;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,.55);width:192px}
+.fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:4px;border-radius:6px;transition:background .1s;line-height:1;text-align:center}
+.fc-reply-palette button:hover{background:rgba(255,255,255,.09)}
 .fc-reply-inp{flex:1;background:var(--bg2);border:1px solid var(--bg3);border-radius:20px;padding:8px 14px;font-size:13px;color:var(--text);outline:none;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
 .fc-reply-inp:focus{border-color:var(--accent)}
 .fc-reply-send{padding:8px 16px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;transition:opacity .15s}
@@ -11580,6 +11586,10 @@ function _renderFeedCard(e){
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
     +'<div class="fc-reply-inner">'
+    +'<div class="fc-reply-emoji-wrap">'
+    +'<button class="fc-reply-emoji-btn" onclick="_replyEmojiOpen(event,\''+esc(safePostId)+'\')" title="Emoji">😊</button>'
+    +'<div class="fc-reply-palette" id="repal-'+esc(safePostId)+'"></div>'
+    +'</div>'
     +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
     +'<button class="fc-reply-send" onclick="_feedSubmitReply(document.getElementById(\'rinp-'+esc(safePostId)+'\'),\''+esc(safePostId)+'\')">Reply</button>'
     +'</div>'
@@ -11688,8 +11698,38 @@ function _feedRenderPills(postId, counts, mine){
   el.innerHTML = html;
 }
 
+const _REPLY_EMOJIS = ['😀','😂','😍','🥰','😢','😮','😎','🤔','😤','🔥','❤️','💯','👍','👎','🚀','💰','📈','📉','⚡','🎯','💎','🏆','🙏','✅'];
+
+function _replyEmojiOpen(e, postId){
+  e.stopPropagation();
+  var pal = document.getElementById('repal-'+postId);
+  if(!pal) return;
+  var wasOpen = pal.style.display === 'grid';
+  document.querySelectorAll('.fc-react-palette,.fc-reply-palette').forEach(function(p){ p.style.display='none'; });
+  if(wasOpen) return;
+  if(!pal.childElementCount){
+    _REPLY_EMOJIS.forEach(function(emoji){
+      var b = document.createElement('button');
+      b.textContent = emoji;
+      b.onclick = function(ev){
+        ev.stopPropagation();
+        var inp = document.getElementById('rinp-'+postId);
+        if(inp){
+          var s=inp.selectionStart, en=inp.selectionEnd, v=inp.value;
+          inp.value = v.slice(0,s)+emoji+v.slice(en);
+          var pos = s+[...emoji].length;
+          inp.setSelectionRange(pos,pos);
+          inp.focus();
+        }
+      };
+      pal.appendChild(b);
+    });
+  }
+  pal.style.display = 'grid';
+}
+
 document.addEventListener('click', function(){
-  document.querySelectorAll('.fc-react-palette').forEach(function(p){ p.style.display='none'; });
+  document.querySelectorAll('.fc-react-palette,.fc-reply-palette').forEach(function(p){ p.style.display='none'; });
 });
 
 function _feedToggleReply(btn, postId){
