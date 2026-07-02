@@ -3556,6 +3556,85 @@ def settings_page():
     )
 
 
+@app.route('/admin')
+def admin_page():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return redirect('/')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        users_count  = conn.execute('SELECT COUNT(*) FROM users').fetchone()[0]
+        trades_count = conn.execute('SELECT COUNT(*) FROM trades').fetchone()[0]
+        volume_sol   = conn.execute('SELECT COALESCE(SUM(ABS(amount)), 0) FROM trades').fetchone()[0] or 0.0
+        fees_sol     = conn.execute('SELECT COALESCE(SUM(fee_amount), 0) FROM trades').fetchone()[0] or 0.0
+
+        raw_users = conn.execute('''
+            SELECT u.wallet_address, u.username, u.created_at,
+                   COUNT(t.id) as trade_count,
+                   COALESCE(SUM(t.pnl), 0) as total_pnl
+            FROM users u
+            LEFT JOIN trades t ON t.user_id = u.id
+            GROUP BY u.id
+            ORDER BY u.created_at DESC
+            LIMIT 100
+        ''').fetchall()
+
+        raw_posts = conn.execute('''
+            SELECT fp.id, fp.wallet, fp.content, fp.created_at, u.username
+            FROM feed_posts fp
+            LEFT JOIN users u ON fp.wallet = u.wallet_address
+            ORDER BY fp.created_at DESC
+            LIMIT 50
+        ''').fetchall()
+    finally:
+        conn.close()
+
+    users = []
+    for row in raw_users:
+        w, username, created_at, trade_count, total_pnl = row
+        ws = (w[:4] + '…' + w[-4:]) if len(w) >= 8 else w
+        ini = (username[:2] if username else w[:2]).upper()
+        pnl_val = total_pnl or 0.0
+        users.append({
+            'wallet':       w,
+            'wallet_short': ws,
+            'username':     username or '',
+            'display_name': username or ws,
+            'initials':     ini,
+            'trades':       trade_count,
+            'pnl':          f'{pnl_val:+.2f}',
+            'pnl_pos':      pnl_val >= 0,
+            'joined':       (created_at or '')[:10] or '—',
+        })
+
+    posts = []
+    for row in raw_posts:
+        post_id, w, content, created_at, username = row
+        author = username or ((w[:6] + '…' + w[-4:]) if len(w) >= 10 else w)
+        posts.append({
+            'id':      post_id,
+            'wallet':  w,
+            'content': content or '',
+            'author':  author,
+            'time':    (created_at or '')[:16] or '—',
+        })
+
+    stats = {
+        'users_count':  users_count,
+        'trades_count': trades_count,
+        'volume_sol':   f'{volume_sol:.2f}',
+        'fees_sol':     f'{fees_sol:.4f}',
+    }
+
+    return render_template(
+        'admin.html',
+        wallet=wallet,
+        users=users,
+        posts=posts,
+        stats=stats,
+    )
+
+
 @app.route('/messages')
 def messages_page():
     wallet = _current_wallet()
@@ -3688,7 +3767,6 @@ def notifications_page():
 # /phpmyadmin rely on this handler since they don't match that regex.
 @app.route('/.env')
 @app.route('/wp-login.php')
-@app.route('/admin')
 @app.route('/phpmyadmin')
 @app.route('/config.php')
 @app.route('/.git/config')
@@ -9427,6 +9505,26 @@ def admin_bans():
     return jsonify({'bans': sorted(bans, key=lambda x: (not x['permanent'], x['mins_left'] or 0), reverse=True),
                     'rl_bucket_count': rl_bucket_count,
                     'whitelisted_ips': sorted(_OWNER_IPS)})
+
+
+@app.route('/api/admin/user/ban', methods=['POST'])
+@csrf_exempt
+def admin_ban_user():
+    wallet = session.get('wallet', '')
+    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    data   = request.get_json(silent=True) or {}
+    target = data.get('wallet', '').strip()
+    if not target:
+        return jsonify({'ok': False, 'msg': 'Missing wallet'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('DELETE FROM users WHERE wallet_address=?', (target,))
+        conn.execute('DELETE FROM feed_posts WHERE wallet=?', (target,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 
 
 @app.route('/api/admin/clear_ratelimit', methods=['POST'])

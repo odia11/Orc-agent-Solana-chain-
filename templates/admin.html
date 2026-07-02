@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Admin Console — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:5px;border:2px solid #0a0b0e}
+::-webkit-scrollbar-thumb:hover{background:#2c313a}
+input::placeholder{color:#565d68}
+@keyframes orcaBlink{0%,100%{opacity:1}50%{opacity:.35}}
+
+.shell{display:flex;min-height:100vh;max-width:1440px;margin:0 auto}
+
+/* ── SIDEBAR ── */
+aside{width:250px;flex-shrink:0;border-right:1px solid #16191f;padding:18px 14px 16px;display:flex;flex-direction:column;position:sticky;top:0;height:100vh;overflow-y:auto}
+
+.sb-logo-row{display:flex;align-items:center;gap:11px;padding:4px 8px}
+.sb-logo-tile{width:36px;height:36px;border-radius:11px;background:#f7b955;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sb-logo-tile::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
+.sb-logo-name{font-size:17px;font-weight:700;letter-spacing:-.02em;line-height:1}
+.sb-logo-tag{font-size:10px;font-weight:600;letter-spacing:.14em;color:#f7b955;margin-top:3px}
+
+nav{display:flex;flex-direction:column;gap:2px;margin-top:20px}
+.nav-item{display:flex;align-items:center;gap:11px;padding:11px 12px;border-radius:11px;text-decoration:none;font-size:14.5px;font-weight:500;color:#8a919c;cursor:pointer;transition:background .15s,color .15s;border:none;background:transparent;width:100%;text-align:left}
+.nav-item:hover{background:#14171c;color:#eef1f5}
+.nav-item.active{background:rgba(247,185,85,.12);color:#eef1f5;font-weight:600}
+.nav-icon{width:18px;text-align:center;font-size:14px;flex-shrink:0}
+
+.sb-status{margin-top:auto;border:1px solid #16191f;border-radius:14px;background:#101216;padding:13px}
+.sb-status-row{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:600;letter-spacing:.06em;color:#3ad29b}
+.sb-blink{width:6px;height:6px;border-radius:50%;background:#3ad29b;animation:orcaBlink 1.6s infinite;flex-shrink:0}
+.sb-status-meta{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68;margin-top:8px;line-height:1.6}
+
+.sb-user-row{margin-top:12px;display:flex;align-items:center;gap:11px;padding:8px 6px}
+.sb-av{width:36px;height:36px;border-radius:50%;flex-shrink:0;background:#f76b62;display:flex;align-items:center;justify-content:center;font-weight:700;color:#0a0b0e;font-size:13px}
+.sb-user-info{flex:1;min-width:0}
+.sb-user-name{font-size:13px;font-weight:600}
+.sb-user-sub{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sb-logout{width:100%;margin-top:8px;padding:9px;border-radius:10px;background:none;border:1px solid #21252c;color:#f76b62;font-size:13px;font-weight:600;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
+.sb-logout:hover{border-color:#f76b62}
+
+/* ── MAIN ── */
+main{flex:1;min-width:0}
+.page-hdr{position:sticky;top:0;z-index:20;background:rgba(10,11,14,.86);backdrop-filter:blur(16px);border-bottom:1px solid #16191f;padding:16px 30px}
+.page-hdr-inner{display:flex;align-items:center;justify-content:space-between;gap:16px}
+.page-title{font-size:21px;font-weight:700;letter-spacing:-.01em}
+.page-sub{font-size:12px;color:#565d68;margin-top:3px}
+.back-btn{display:inline-flex;align-items:center;gap:6px;background:#101216;border:1px solid #21252c;border-radius:10px;padding:8px 14px;font-size:13px;font-weight:600;color:#8a919c;text-decoration:none;transition:color .15s}
+.back-btn:hover{color:#eef1f5}
+
+.page-body{padding:20px 30px 60px}
+
+/* ── KPI GRID ── */
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+.kpi-card{border:1px solid #16191f;border-radius:16px;background:#101216;padding:17px 18px}
+.kpi-icon{width:32px;height:32px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:16px;margin-bottom:14px}
+.kpi-val{font-family:'JetBrains Mono',monospace;font-size:27px;font-weight:700;letter-spacing:-.01em}
+.kpi-lbl{font-size:12px;color:#565d68;margin-top:4px}
+
+/* ── SECTION HEADER ── */
+.section-hdr{display:flex;align-items:center;justify-content:space-between;margin:28px 0 12px}
+.section-title{font-size:16px;font-weight:600}
+.section-count{font-family:'JetBrains Mono',monospace;font-size:12px;color:#565d68}
+
+/* ── TABLES ── */
+.tbl-wrap{overflow-x:auto}
+.tbl-box{border:1px solid #16191f;border-radius:16px;background:#101216;overflow:hidden;min-width:700px}
+.tbl-head{display:grid;padding:13px 20px;border-bottom:1px solid #16191f;font-size:10px;letter-spacing:.08em;color:#565d68;font-weight:600}
+.tbl-row{display:grid;padding:13px 20px;border-bottom:1px solid #16191f;align-items:center}
+.tbl-row:last-child{border-bottom:none}
+.tbl-row:hover{background:#14171c}
+
+.users-grid{grid-template-columns:minmax(0,1.4fr) 130px 100px 130px 110px 80px}
+.posts-grid{grid-template-columns:minmax(0,1fr) 160px 140px 80px}
+
+.user-cell{display:flex;align-items:center;gap:11px;min-width:0;overflow:hidden}
+.user-av{width:34px;height:34px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:600;font-size:13px;color:#0a0b0e}
+.user-name{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.user-wallet{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68}
+
+.mono{font-family:'JetBrains Mono',monospace;font-size:12px;color:#c7ccd4}
+.mono-sm{font-family:'JetBrains Mono',monospace;font-size:11px;color:#565d68}
+.pnl-pos{color:#3ad29b;font-weight:700}
+.pnl-neg{color:#f76b62;font-weight:700}
+
+.btn-ban{background:rgba(247,107,98,.12);color:#f76b62;border:1px solid rgba(247,107,98,.3);border-radius:9px;padding:6px 12px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-ban:hover{background:rgba(247,107,98,.22)}
+.btn-ban:disabled{opacity:.4;cursor:default}
+
+.btn-del{background:rgba(247,107,98,.12);color:#f76b62;border:1px solid rgba(247,107,98,.3);border-radius:9px;padding:6px 12px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-del:hover{background:rgba(247,107,98,.22)}
+.btn-del:disabled{opacity:.4;cursor:default}
+
+.post-text{font-size:13px;color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty-row{padding:32px 20px;text-align:center;color:#565d68;font-size:13px}
+</style>
+</head>
+<body>
+<div class="shell">
+
+  <!-- ========== LEFT RAIL ========== -->
+  <aside>
+    <div class="sb-logo-row">
+      <div class="sb-logo-tile"></div>
+      <div>
+        <div class="sb-logo-name">OrcAgent</div>
+        <div class="sb-logo-tag">ADMIN CONSOLE</div>
+      </div>
+    </div>
+
+    <nav>
+      <a href="/admin" class="nav-item active">
+        <span class="nav-icon">▦</span>Overview
+      </a>
+      <a href="/" class="nav-item">
+        <span class="nav-icon">⌂</span>Dashboard
+      </a>
+      <a href="/leaderboard" class="nav-item">
+        <span class="nav-icon">◈</span>Leaderboard
+      </a>
+      <a href="/traders" class="nav-item">
+        <span class="nav-icon">👥</span>Traders
+      </a>
+      <a href="/settings" class="nav-item">
+        <span class="nav-icon">⚙</span>Settings
+      </a>
+    </nav>
+
+    <div class="sb-status">
+      <div class="sb-status-row">
+        <span class="sb-blink"></span>ALL SYSTEMS OPERATIONAL
+      </div>
+      <div class="sb-status-meta">Scanner · active<br>RPC · healthy<br>Queue · 0 backlog</div>
+    </div>
+
+    <div class="sb-user-row">
+      <div class="sb-av">{{ (wallet[:2])|upper if wallet else 'AD' }}</div>
+      <div class="sb-user-info">
+        <div class="sb-user-name">Admin</div>
+        <div class="sb-user-sub">{{ wallet[:6] ~ '…' ~ wallet[-4:] if wallet|length >= 8 else wallet }}</div>
+      </div>
+    </div>
+    <button class="sb-logout"
+      onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')">
+      Disconnect Wallet
+    </button>
+  </aside>
+
+  <!-- ========== MAIN ========== -->
+  <main>
+    <div class="page-hdr">
+      <div class="page-hdr-inner">
+        <div>
+          <div class="page-title">Admin Console</div>
+          <div class="page-sub">{{ stats.users_count }} registered wallets · {{ stats.trades_count }} total trades</div>
+        </div>
+        <a href="/" class="back-btn">← Back to app</a>
+      </div>
+    </div>
+
+    <div class="page-body">
+
+      <!-- PLATFORM STATS -->
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:rgba(124,140,255,.14)">👥</div>
+          <div class="kpi-val">{{ stats.users_count }}</div>
+          <div class="kpi-lbl">Total users</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:rgba(58,210,155,.14)">⇄</div>
+          <div class="kpi-val">{{ stats.trades_count }}</div>
+          <div class="kpi-lbl">Total trades</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:rgba(247,185,85,.14)">◈</div>
+          <div class="kpi-val">{{ stats.volume_sol }}</div>
+          <div class="kpi-lbl">Volume (SOL)</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-icon" style="background:rgba(247,107,98,.14)">💰</div>
+          <div class="kpi-val">{{ stats.fees_sol }}</div>
+          <div class="kpi-lbl">Fees collected (SOL)</div>
+        </div>
+      </div>
+
+      <!-- USERS TABLE -->
+      <div class="section-hdr">
+        <div class="section-title">Users</div>
+        <div class="section-count">{{ users|length }} shown</div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-box">
+          <div class="tbl-head users-grid">
+            <div>USER / WALLET</div>
+            <div>USERNAME</div>
+            <div>TRADES</div>
+            <div>ALL-TIME PNL</div>
+            <div>JOINED</div>
+            <div></div>
+          </div>
+          {% if users %}
+            {% for u in users %}
+            <div class="tbl-row users-grid" id="user-row-{{ loop.index }}">
+              <div class="user-cell">
+                <div class="user-av" style="background:{{ loop.cycle('#35d4c4','#7c8cff','#f7b955','#3ad29b','#ff9b3d') }}">{{ u.initials }}</div>
+                <div>
+                  <div class="user-name">{{ u.display_name }}</div>
+                  <div class="user-wallet">{{ u.wallet_short }}</div>
+                </div>
+              </div>
+              <div class="mono">{{ u.username or '—' }}</div>
+              <div class="mono">{{ u.trades }}</div>
+              <div class="mono {% if u.pnl_pos %}pnl-pos{% else %}pnl-neg{% endif %}">{{ u.pnl }} SOL</div>
+              <div class="mono-sm">{{ u.joined }}</div>
+              <div>
+                <button class="btn-ban" data-wallet="{{ u.wallet }}"
+                  onclick="banUser(this)">Ban</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="empty-row">No users yet</div>
+          {% endif %}
+        </div>
+      </div>
+
+      <!-- POSTS MODERATION -->
+      <div class="section-hdr">
+        <div class="section-title">Posts — Moderation</div>
+        <div class="section-count">{{ posts|length }} recent posts</div>
+      </div>
+      <div class="tbl-wrap">
+        <div class="tbl-box">
+          <div class="tbl-head posts-grid">
+            <div>POST</div>
+            <div>AUTHOR</div>
+            <div>TIME</div>
+            <div></div>
+          </div>
+          {% if posts %}
+            {% for p in posts %}
+            <div class="tbl-row posts-grid" id="post-row-{{ p.id }}">
+              <div class="post-text" title="{{ p.content | e }}">{{ p.content }}</div>
+              <div class="mono-sm">{{ p.author }}</div>
+              <div class="mono-sm">{{ p.time }}</div>
+              <div>
+                <button class="btn-del" data-post-id="{{ p.id }}"
+                  onclick="deletePost(this)">Delete</button>
+              </div>
+            </div>
+            {% endfor %}
+          {% else %}
+            <div class="empty-row">No posts yet</div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+  </main>
+</div>
+
+<script>
+function banUser(btn) {
+  const wallet = btn.dataset.wallet;
+  if (!confirm('Ban wallet ' + wallet.slice(0,8) + '…?\nThis removes their account.')) return;
+  fetch('/api/admin/user/ban', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    credentials: 'include',
+    body: JSON.stringify({wallet})
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      const row = btn.closest('.tbl-row');
+      row.style.opacity = '0.35';
+      btn.textContent = 'Banned';
+      btn.disabled = true;
+    } else {
+      alert(d.msg || 'Error banning user');
+    }
+  }).catch(() => alert('Request failed'));
+}
+
+function deletePost(btn) {
+  const id = btn.dataset.postId;
+  if (!confirm('Delete this post?')) return;
+  fetch('/api/post/' + id + '/delete', {
+    method: 'POST',
+    credentials: 'include'
+  }).then(r => r.json()).then(d => {
+    if (d.ok) {
+      const row = btn.closest('.tbl-row');
+      row.style.opacity = '0.35';
+      btn.textContent = 'Deleted';
+      btn.disabled = true;
+    } else {
+      alert(d.msg || 'Error deleting post');
+    }
+  }).catch(() => alert('Request failed'));
+}
+</script>
+</body>
+</html>
