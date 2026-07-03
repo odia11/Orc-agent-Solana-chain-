@@ -2845,6 +2845,54 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .wlt-token-chg{font-size:10px;font-weight:600;margin-top:1px}
 .wlt-token-chg.pos{color:var(--green)}
 .wlt-token-chg.neg{color:var(--red)}
+/* ── SWAP MODAL ── */
+#swap-overlay{position:fixed;inset:0;background:rgba(6,7,9,.72);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);z-index:300;display:flex;align-items:center;justify-content:center;padding:16px}
+.swap-card{background:#0e1116;border:1px solid var(--border2);border-radius:22px;width:100%;max-width:420px;box-shadow:0 24px 70px rgba(0,0,0,.6);overflow:hidden}
+.swap-hdr{display:flex;align-items:center;justify-content:space-between;padding:18px 20px 14px}
+.swap-hdr-title{font-size:17px;font-weight:700;color:var(--text);letter-spacing:-.02em}
+.swap-close{background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px;border-radius:6px}
+.swap-close:hover{color:var(--text)}
+.swap-panel{background:var(--bg);border:1px solid var(--border2);border-radius:16px;padding:14px 16px;margin:0 16px}
+.swap-panel-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.swap-panel-lbl{font-size:12px;color:var(--muted);font-weight:500}
+.swap-panel-bal{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.swap-panel-mid{display:flex;align-items:center;gap:10px}
+.swap-amount-input{flex:1;background:transparent;border:none;outline:none;font-family:'JetBrains Mono',monospace;font-size:27px;font-weight:700;color:var(--text);min-width:0;-moz-appearance:textfield}
+.swap-amount-input::-webkit-outer-spin-button,.swap-amount-input::-webkit-inner-spin-button{-webkit-appearance:none}
+.swap-amount-input::placeholder{color:var(--muted)}
+.swap-amount-display{flex:1;font-family:'JetBrains Mono',monospace;font-size:27px;font-weight:700;color:var(--muted)}
+.swap-panel-usd{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--muted);margin-top:8px}
+.swap-tok-pill{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:8px 13px;font-size:14px;font-weight:700;color:var(--text);cursor:pointer;white-space:nowrap;flex-shrink:0;transition:border-color .15s}
+.swap-tok-pill:hover{border-color:var(--accent)}
+.swap-tok-pill-recv{background:rgba(247,185,85,.10);border-color:rgba(247,185,85,.3);color:var(--accent)}
+.swap-switch-wrap{display:flex;justify-content:center;margin:6px 0}
+.swap-switch-btn{width:34px;height:34px;border-radius:11px;background:var(--bg3);border:1px solid var(--border2);color:var(--accent);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.swap-switch-btn:hover{background:var(--bg4)}
+.swap-rate{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);text-align:center;padding:10px 16px 2px}
+.swap-review-btn{width:calc(100% - 32px);margin:12px 16px 16px;padding:14px;background:var(--accent);color:#08120f;border:none;border-radius:13px;font-size:15px;font-weight:700;cursor:pointer;transition:filter .15s}
+.swap-review-btn:hover{filter:brightness(1.08)}
+/* picker */
+.swap-picker-hdr{display:flex;align-items:center;gap:10px;padding:4px 16px 14px;font-size:15px;font-weight:600;color:var(--text)}
+.swap-picker-back{background:none;border:1px solid var(--border2);border-radius:8px;color:var(--text);font-size:16px;cursor:pointer;padding:4px 10px;line-height:1.4}
+.swap-picker-back:hover{border-color:var(--accent);color:var(--accent)}
+.sp-search{width:calc(100% - 32px);margin:0 16px;display:block;background:var(--bg);border:1px solid var(--border2);border-radius:13px;padding:11px 15px;font-size:14px;color:var(--text);outline:none;box-sizing:border-box;font-family:inherit}
+.sp-search::placeholder{color:var(--muted)}
+.sp-search:focus{border-color:var(--accent)}
+.sp-quick-chips{display:flex;gap:8px;padding:12px 16px;flex-wrap:wrap}
+.sp-quick-chip{display:flex;align-items:center;gap:6px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:7px 13px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;transition:border-color .15s,color .15s}
+.sp-quick-chip:hover,.sp-quick-chip.active{border-color:var(--accent);color:var(--accent)}
+.sp-section-lbl{font-size:10px;font-weight:600;letter-spacing:.1em;color:var(--muted);padding:4px 16px 8px}
+.sp-token-list{max-height:280px;overflow-y:auto;margin:0 8px 12px}
+.sp-token-row{display:flex;align-items:center;gap:12px;padding:10px 10px;border-radius:13px;cursor:pointer;transition:background .12s}
+.sp-token-row:hover{background:#14171c}
+.sp-token-row.active .sp-tok-sym{color:var(--accent)}
+.sp-tok-chip{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:13px;color:#0a0b0e}
+.sp-tok-info{flex:1;min-width:0}
+.sp-tok-sym{font-size:13px;font-weight:700;color:var(--text)}
+.sp-tok-name{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sp-tok-right{text-align:right;flex-shrink:0}
+.sp-tok-bal{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:600;color:var(--text)}
+.sp-tok-usd{font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted);margin-top:2px}
 .wlt-loading{padding:40px 16px;text-align:center;color:var(--muted);font-size:13px}
 @media(max-width:768px){.wlt-page{padding:14px 12px}}
 /* ── RIGHT RAIL ── */
@@ -7647,7 +7695,171 @@ function showSection(name){
 
 function _wltSend(){ openWithdrawModal(); }
 function _wltReceive(){ openDepositModal(); }
-function _wltSwap(){ window.open('https://jup.ag/swap/SOL-USDC','_blank','noopener'); }
+// ── SWAP MODAL ──────────────────────────────────────────────────────────────
+var _swapTokens = [];   // [{symbol,name,mint,amount,value_usd,logo_url,price_usd}]
+var _swapFrom   = {symbol:'SOL',  name:'Solana',       mint:'So11111111111111111111111111111111111111112', amount:0, value_usd:0, price_usd:0, logo_url:''};
+var _swapTo     = {symbol:'USDC', name:'USD Coin',      mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', amount:0, value_usd:0, price_usd:0, logo_url:''};
+var _swapPickerSide = 'pay'; // 'pay' | 'recv'
+
+var _QUICK_PICKS = ['SOL','USDC','WIF','POP'];
+var _TOK_COLORS  = {SOL:'#9945ff',USDC:'#2775ca',WIF:'#f7b955',POP:'#f76b62',DEFAULT:'#3ad29b'};
+
+function _tokColor(sym){ return _TOK_COLORS[sym] || _TOK_COLORS.DEFAULT; }
+function _tokAvatar(tok, size){
+  size = size||38;
+  if(tok.logo_url){
+    return '<img src="'+tok.logo_url+'" style="width:'+size+'px;height:'+size+'px;border-radius:50%;object-fit:cover;flex-shrink:0" onerror="this.style.display=\'none\'" alt="">';
+  }
+  return '<div class="sp-tok-chip" style="width:'+size+'px;height:'+size+'px;background:'+_tokColor(tok.symbol)+'">'+((tok.symbol||'?')[0].toUpperCase())+'</div>';
+}
+
+function _wltSwap(){
+  document.getElementById('swap-overlay').style.display='flex';
+  _swapRenderForm();
+  if(!_swapTokens.length) _swapLoadTokens();
+}
+function _swapClose(){
+  document.getElementById('swap-overlay').style.display='none';
+  document.getElementById('swap-form-state').style.display='';
+  document.getElementById('swap-picker-state').style.display='none';
+}
+
+async function _swapLoadTokens(){
+  try{
+    var r = await fetch('/api/wallet/tokens');
+    var d = await r.json();
+    if(d.ok && d.tokens && d.tokens.length){
+      _swapTokens = d.tokens.map(function(t){
+        return {
+          symbol:    t.symbol||'?',
+          name:      t.name||t.symbol||'',
+          mint:      t.mint||'',
+          amount:    Number(t.amount||0),
+          value_usd: Number(t.value_usd||0),
+          price_usd: t.amount > 0 ? Number(t.value_usd||0)/Number(t.amount) : 0,
+          logo_url:  t.logo_url||''
+        };
+      });
+      // update balances shown on form panels
+      var fromTok = _swapTokens.find(function(t){ return t.symbol === _swapFrom.symbol; });
+      if(fromTok){ _swapFrom.amount=fromTok.amount; _swapFrom.price_usd=fromTok.price_usd; _swapFrom.logo_url=fromTok.logo_url; }
+      var toTok = _swapTokens.find(function(t){ return t.symbol === _swapTo.symbol; });
+      if(toTok){ _swapTo.amount=toTok.amount; _swapTo.price_usd=toTok.price_usd; _swapTo.logo_url=toTok.logo_url; }
+      _swapRenderForm();
+    }
+  }catch(e){}
+}
+
+function _swapRenderForm(){
+  var el = function(id){ return document.getElementById(id); };
+  el('swap-pay-tok-lbl').textContent  = _swapFrom.symbol;
+  el('swap-recv-tok-lbl').textContent = _swapTo.symbol;
+  el('swap-pay-bal').textContent  = _swapFrom.amount > 0 ? 'Balance: '+_swapFrom.amount.toFixed(4)+' '+_swapFrom.symbol : '';
+  el('swap-recv-bal').textContent = _swapTo.amount   > 0 ? 'Balance: '+_swapTo.amount.toFixed(4)+' '+_swapTo.symbol     : '';
+  _swapUpdateRate();
+}
+
+function _swapUpdateRate(){
+  var amt  = parseFloat(document.getElementById('swap-pay-amt').value||'0')||0;
+  var payUsd  = amt * (_swapFrom.price_usd||0);
+  var recvAmt = (_swapTo.price_usd > 0 && _swapFrom.price_usd > 0) ? (amt * _swapFrom.price_usd / _swapTo.price_usd) : 0;
+  document.getElementById('swap-pay-usd').textContent  = '≈ $'+payUsd.toFixed(2);
+  document.getElementById('swap-recv-amt').textContent = recvAmt > 0 ? recvAmt.toFixed(6) : '0';
+  document.getElementById('swap-recv-usd').textContent = '≈ $'+(recvAmt*(_swapTo.price_usd||0)).toFixed(2);
+  if(amt > 0 && _swapFrom.price_usd > 0 && _swapTo.price_usd > 0){
+    document.getElementById('swap-rate').textContent =
+      '1 '+_swapFrom.symbol+' ≈ '+((_swapFrom.price_usd/_swapTo.price_usd).toFixed(4))+' '+_swapTo.symbol+
+      ' · Slippage 0.5% · Fee 0.25%';
+  } else {
+    document.getElementById('swap-rate').textContent = 'Enter an amount to see rate';
+  }
+}
+
+function _swapSwitch(){
+  var tmp = _swapFrom; _swapFrom = _swapTo; _swapTo = tmp;
+  document.getElementById('swap-pay-amt').value = '';
+  _swapRenderForm();
+}
+
+function _swapReview(){
+  var amt = parseFloat(document.getElementById('swap-pay-amt').value||'0')||0;
+  if(!amt){ document.getElementById('swap-pay-amt').focus(); return; }
+  var url = 'https://jup.ag/swap/'+_swapFrom.symbol+'-'+_swapTo.symbol;
+  window.open(url,'_blank','noopener');
+}
+
+function _swapOpenPicker(side){
+  _swapPickerSide = side;
+  document.getElementById('swap-form-state').style.display   = 'none';
+  document.getElementById('swap-picker-state').style.display = '';
+  document.getElementById('swap-hdr-title').textContent = 'Select token';
+  document.getElementById('sp-search').value = '';
+  _swapRenderPicker('');
+}
+function _swapClosePicker(){
+  document.getElementById('swap-form-state').style.display   = '';
+  document.getElementById('swap-picker-state').style.display = 'none';
+  document.getElementById('swap-hdr-title').textContent = 'Swap';
+}
+function _swapPickerSearch(val){
+  _swapRenderPicker(val.trim().toLowerCase());
+}
+
+function _swapRenderPicker(query){
+  // Quick pick chips
+  var selectedSym = (_swapPickerSide === 'pay' ? _swapFrom : _swapTo).symbol;
+  var qc = document.getElementById('sp-quick-chips');
+  qc.innerHTML = _QUICK_PICKS.map(function(sym){
+    var tok = _swapTokens.find(function(t){ return t.symbol===sym; }) || {symbol:sym,name:sym,logo_url:''};
+    var active = sym === selectedSym ? ' active' : '';
+    return '<button class="sp-quick-chip'+active+'" onclick="_swapSelectToken(\''+sym+'\')">'+
+      '<div style="width:20px;height:20px;border-radius:50%;background:'+_tokColor(sym)+';display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:#0a0b0e">'+sym[0]+'</div>'+
+      sym+'</button>';
+  }).join('');
+
+  // Token list
+  var tokens = _swapTokens.length ? _swapTokens : [_swapFrom, _swapTo];
+  if(query){
+    tokens = tokens.filter(function(t){
+      return t.symbol.toLowerCase().includes(query) ||
+             t.name.toLowerCase().includes(query)   ||
+             t.mint.toLowerCase().includes(query);
+    });
+  }
+  var list = document.getElementById('sp-token-list');
+  if(!tokens.length){
+    list.innerHTML = '<div style="padding:20px;text-align:center;color:var(--muted);font-size:13px">No tokens found</div>';
+    return;
+  }
+  list.innerHTML = tokens.map(function(tok){
+    var active = tok.symbol === selectedSym ? ' active' : '';
+    var balStr = tok.amount > 0 ? tok.amount.toFixed(4)+' '+tok.symbol : '0 '+tok.symbol;
+    var usdStr = tok.value_usd > 0 ? '$'+tok.value_usd.toFixed(2) : '';
+    var chip = tok.logo_url
+      ? '<img src="'+tok.logo_url+'" class="sp-tok-chip" style="object-fit:cover" onerror="this.style.display=\'none\'" alt="">'
+      : '<div class="sp-tok-chip" style="background:'+_tokColor(tok.symbol)+'">'+((tok.symbol||'?')[0].toUpperCase())+'</div>';
+    return '<div class="sp-token-row'+active+'" onclick="_swapSelectToken(\''+tok.symbol.replace(/'/g,"\\'")+'\')">'
+      +chip
+      +'<div class="sp-tok-info"><div class="sp-tok-sym">'+tok.symbol+'</div><div class="sp-tok-name">'+tok.name+'</div></div>'
+      +'<div class="sp-tok-right"><div class="sp-tok-bal">'+balStr+'</div>'+(usdStr?'<div class="sp-tok-usd">'+usdStr+'</div>':'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function _swapSelectToken(sym){
+  var tok = _swapTokens.find(function(t){ return t.symbol===sym; })
+         || {symbol:sym, name:sym, mint:'', amount:0, value_usd:0, price_usd:0, logo_url:''};
+  if(_swapPickerSide === 'pay'){
+    if(sym === _swapTo.symbol){ var tmp=_swapFrom; _swapFrom=_swapTo; _swapTo=tmp; }
+    else { _swapFrom = tok; }
+  } else {
+    if(sym === _swapFrom.symbol){ var tmp=_swapFrom; _swapFrom=_swapTo; _swapTo=tmp; }
+    else { _swapTo = tok; }
+  }
+  document.getElementById('swap-pay-amt').value = '';
+  _swapClosePicker();
+  _swapRenderForm();
+}
 function _sbUpdateUser(profileData){
   const nameEl  =document.getElementById('sb-user-name');
   const handleEl=document.getElementById('sb-handle');
@@ -12258,5 +12470,66 @@ document.addEventListener('keydown', function(e){
 </div>
 
 <script src="/static/notif-poll.js"></script>
+
+<!-- ── SWAP MODAL ── -->
+<div id="swap-overlay" style="display:none" onclick="if(event.target===this)_swapClose()">
+  <div class="swap-card">
+    <div class="swap-hdr">
+      <span class="swap-hdr-title" id="swap-hdr-title">Swap</span>
+      <button class="swap-close" onclick="_swapClose()">&#10005;</button>
+    </div>
+
+    <!-- SWAP FORM STATE -->
+    <div id="swap-form-state">
+      <div class="swap-panel">
+        <div class="swap-panel-top">
+          <span class="swap-panel-lbl">You pay</span>
+          <span class="swap-panel-bal" id="swap-pay-bal"></span>
+        </div>
+        <div class="swap-panel-mid">
+          <input class="swap-amount-input" id="swap-pay-amt" type="number" placeholder="0" min="0" oninput="_swapUpdateRate()">
+          <button class="swap-tok-pill" id="swap-pay-tok-btn" onclick="_swapOpenPicker('pay')">
+            <span id="swap-pay-tok-lbl">SOL</span><span>&#9662;</span>
+          </button>
+        </div>
+        <div class="swap-panel-usd" id="swap-pay-usd">&#8776; $0.00</div>
+      </div>
+
+      <div class="swap-switch-wrap">
+        <button class="swap-switch-btn" onclick="_swapSwitch()" title="Switch tokens">&#8645;</button>
+      </div>
+
+      <div class="swap-panel">
+        <div class="swap-panel-top">
+          <span class="swap-panel-lbl">You receive</span>
+          <span class="swap-panel-bal" id="swap-recv-bal"></span>
+        </div>
+        <div class="swap-panel-mid">
+          <div class="swap-amount-display" id="swap-recv-amt">0</div>
+          <button class="swap-tok-pill swap-tok-pill-recv" id="swap-recv-tok-btn" onclick="_swapOpenPicker('recv')">
+            <span id="swap-recv-tok-lbl">USDC</span><span>&#9662;</span>
+          </button>
+        </div>
+        <div class="swap-panel-usd" id="swap-recv-usd">&#8776; $0.00</div>
+      </div>
+
+      <div class="swap-rate" id="swap-rate">Enter an amount to see rate</div>
+      <button class="swap-review-btn" onclick="_swapReview()">Review swap</button>
+    </div>
+
+    <!-- PICKER STATE -->
+    <div id="swap-picker-state" style="display:none">
+      <div class="swap-picker-hdr">
+        <button class="swap-picker-back" onclick="_swapClosePicker()">&#8592;</button>
+        <span>Select token</span>
+      </div>
+      <input class="sp-search" id="sp-search" type="text" placeholder="Search name or paste address" autocomplete="off" oninput="_swapPickerSearch(this.value)">
+      <div class="sp-quick-chips" id="sp-quick-chips"></div>
+      <div class="sp-section-lbl">YOUR TOKENS</div>
+      <div class="sp-token-list" id="sp-token-list"></div>
+    </div>
+  </div>
+</div>
+
 </body>
 </html>
