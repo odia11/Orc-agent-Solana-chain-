@@ -3864,6 +3864,66 @@ def get_notifications():
         })
     return jsonify(result)
 
+@app.route('/api/notifications/mine', methods=['GET'])
+@rate_limit(60, 60)
+def notifications_mine():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        rows = conn.execute(
+            '''SELECT id, type, content, link, is_read, created_at
+               FROM notifications WHERE user_id=?
+               ORDER BY created_at DESC LIMIT 30''',
+            (me,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'notifications': [
+        {'id': r[0], 'type': r[1], 'content': r[2], 'link': r[3],
+         'is_read': bool(r[4]), 'created_at': r[5]}
+        for r in rows
+    ]})
+
+@app.route('/api/notifications/mine/unread_count', methods=['GET'])
+@rate_limit(120, 60)
+def notifications_unread_count():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT COUNT(*) FROM notifications WHERE user_id=? AND is_read=0', (me,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'unread': row[0] if row else 0})
+
+@app.route('/api/notifications/mine/mark_read', methods=['POST'])
+@rate_limit(30, 60)
+def notifications_mark_read():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        conn.execute('UPDATE notifications SET is_read=1 WHERE user_id=?', (me,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/notifications')
 def notifications_page():
     wallet = _current_wallet()
