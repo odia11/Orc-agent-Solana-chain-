@@ -121,6 +121,18 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .modal-msg.ok{color:var(--green)}
 .modal-msg.err{color:var(--red)}
 
+/* ── USERNAME FIELD ── */
+.st-uname-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:4px}
+.st-uname-inp{flex:1;background:#1a1d23;border:1px solid var(--border2);color:var(--text);font-family:var(--ui);font-size:13px;border-radius:8px;padding:8px 10px;outline:none;transition:border-color .15s;min-width:0}
+.st-uname-inp:focus{border-color:rgba(247,185,85,.4)}
+.st-uname-inp::placeholder{color:var(--muted)}
+.st-uname-save{background:var(--accent);color:#0a0b0e;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s;white-space:nowrap;flex-shrink:0}
+.st-uname-save:hover{opacity:.88}
+.st-uname-save:disabled{opacity:.45;cursor:not-allowed}
+.st-uname-msg{font-size:12px;min-height:14px;margin-top:4px}
+.st-uname-msg.ok{color:var(--green)}
+.st-uname-msg.err{color:var(--red)}
+
 /* ── AVATAR UPLOAD ── */
 .st-av-section{display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)}
 .st-av-circle{width:80px;height:80px;min-width:80px;border-radius:50%;background:var(--bg3);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;overflow:hidden;position:relative;flex-shrink:0}
@@ -354,6 +366,19 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
           </div>
         </div>
 
+        <!-- username -->
+        <div class="st-row" style="border-bottom:none;padding-bottom:0;display:block">
+          <div class="st-row-label" style="margin-bottom:2px">Username</div>
+          <div class="st-row-sub" style="margin-bottom:8px">Letters, numbers, and underscores only · max 20 characters</div>
+          <div class="st-uname-row">
+            <input id="st-uname-inp" class="st-uname-inp" type="text" maxlength="20" placeholder="@username" autocomplete="off" spellcheck="false">
+            <button class="st-uname-save" id="st-uname-btn" onclick="_saveUsername()">Save</button>
+          </div>
+          <div class="st-uname-msg" id="st-uname-msg"></div>
+        </div>
+
+        <div style="border-top:1px solid var(--border);margin:16px 0"></div>
+
         <div class="st-wallet-row">
           <span class="st-wallet-addr" id="st-wallet-addr" title="{{ wallet }}">{{ wallet }}</span>
           <button class="st-copy-btn" onclick="_copyWallet()" title="Copy address">⧉</button>
@@ -425,8 +450,10 @@ async function _initPage(){
     if(notifs) notifs.checked=!!d.pref_notifications;
     if(scam)   scam.checked  =!!d.pref_scam_filter;
     if(sound)  sound.checked =!!d.pref_sound_alerts;
-    /* avatar */
+    /* avatar + username */
     _initAvatarPreview(d.avatar_url, d.username||_wallet);
+    var unameInp=document.getElementById('st-uname-inp');
+    if(unameInp&&d.username) unameInp.value=d.username;
     /* bot toggle — use live status endpoint for real-time accuracy */
     try{
       var bs=await fetch('/api/bot/status').then(function(r){return r.json();});
@@ -528,6 +555,29 @@ async function _saveKey(){
   }
 }
 
+
+/* ── username ── */
+async function _saveUsername(){
+  var inp=document.getElementById('st-uname-inp');
+  var btn=document.getElementById('st-uname-btn');
+  var msgEl=document.getElementById('st-uname-msg');
+  var val=(inp?inp.value:'').trim();
+  if(msgEl){msgEl.className='st-uname-msg';msgEl.textContent='';}
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    var d=await _post('/api/username',{username:val});
+    if(d.ok){
+      if(msgEl){msgEl.className='st-uname-msg ok';msgEl.textContent='✓ Saved';}
+      setTimeout(function(){if(msgEl)msgEl.textContent='';},2500);
+    } else {
+      if(msgEl){msgEl.className='st-uname-msg err';msgEl.textContent='✗ '+(d.msg||'Save failed');}
+    }
+  }catch(e){
+    if(msgEl){msgEl.className='st-uname-msg err';msgEl.textContent='✗ Network error';}
+  }finally{
+    btn.disabled=false; btn.textContent='Save';
+  }
+}
 
 /* ── avatar ── */
 function _avColor(name){

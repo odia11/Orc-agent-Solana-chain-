@@ -5119,15 +5119,17 @@ def social_feed():
     try:
         rows = conn.execute('''
             SELECT fp.id, fp.wallet, fp.content, fp.created_at,
-                   (SELECT COUNT(*) FROM post_likes   WHERE post_id = fp.id) as like_count,
-                   (SELECT COUNT(*) FROM feed_replies WHERE post_id = fp.id) as reply_count,
+                   (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
+                   (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
                    u.username, NULL as symbol, NULL as pnl_pct,
                    (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price
             FROM feed_posts fp
             LEFT JOIN users u ON fp.wallet = u.wallet_address
             UNION ALL
             SELECT t.id, u.wallet_address as wallet, NULL as content,
-                   t.timestamp as created_at, 0 as like_count, 0 as reply_count,
+                   t.timestamp as created_at,
+                   (SELECT COUNT(*) FROM post_likes   WHERE post_id = 't'||t.id) as like_count,
+                   (SELECT COUNT(*) FROM feed_replies WHERE post_id = 't'||t.id) as reply_count,
                    u.username,
                    t.token as symbol,
                    CASE WHEN t.entry_price > 0 AND t.exit_price > 0
