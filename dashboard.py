@@ -2877,8 +2877,23 @@ def api_phantom_decrypt():
         wallet_address = payload.get('public_key', '')
         if not wallet_address:
             return jsonify({'ok': False, 'error': 'no public_key in payload'}), 400
+        if not is_valid_solana_address(wallet_address):
+            return jsonify({'ok': False, 'error': 'invalid wallet address in payload'}), 400
         print(f'[phantom] decrypt OK wallet={wallet_address[:8]}…', flush=True)
-        return jsonify({'ok': True, 'wallet_address': wallet_address})
+        # NaCl handshake proved ownership — establish session directly (no nonce/sig needed)
+        session.permanent = True
+        session.modified  = True
+        session['wallet'] = wallet_address
+        csrf_tok = _get_csrf_token()
+        try:
+            get_or_create_user(wallet_address)
+        except Exception:
+            pass
+        threading.Thread(target=fetch_user_balances, args=(wallet_address,), daemon=True).start()
+        add_user_log(wallet_address, 'Wallet connected (mobile): ' + wallet_address[:6] + '...' + wallet_address[-4:])
+        ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
+        threading.Thread(target=_check_wallet_multi_ip, args=(wallet_address, ip), daemon=True).start()
+        return jsonify({'ok': True, 'wallet_address': wallet_address, 'csrf_token': csrf_tok})
     except Exception as e:
         print(f'[phantom] decrypt ERROR: {e}', flush=True)
         return jsonify({'ok': False, 'error': str(e)}), 400
@@ -4096,11 +4111,14 @@ def auth_nonce():
         conn.commit()
     finally:
         conn.close()
-    return jsonify({
+    resp = jsonify({
         'ok':      True,
         'nonce':   nonce,
         'message': 'Sign in to OrcAgent\n\nNonce: ' + nonce,
     })
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    resp.headers['Pragma']        = 'no-cache'
+    return resp
 
 @app.route('/api/auth/check-faceid', methods=['GET'])
 def check_faceid():

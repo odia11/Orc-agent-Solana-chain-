@@ -68,23 +68,8 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
       fail('Decrypt failed: '+(d.error||'unknown error'));
       return;
     }
-    msg.textContent='Wallet approved — setting up session…';
-    return fetch('/api/wallet/set',{
-      method:'POST',
-      credentials:'include',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({address:d.wallet_address})
-    })
-    .then(function(r){return r.json();})
-    .then(function(wd){
-      console.log('[phantom-cb] wallet/set response:', wd);
-      if(wd.ok||wd.success){
-        msg.textContent='Connected! Redirecting…';
-        window.location.href='/';
-      } else {
-        fail('Session error: '+(wd.msg||'unknown'));
-      }
-    });
+    msg.textContent='Connected! Redirecting…';
+    window.location.href='/';
   })
   .catch(function(e){
     console.error('[phantom-cb] fetch error:', e);
