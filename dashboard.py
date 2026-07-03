@@ -5115,14 +5115,16 @@ def social_feed():
     conn = sqlite3.connect(DB_FILE)
     try:
         rows = conn.execute('''
-            SELECT fp.id, fp.wallet, fp.content, fp.created_at, fp.likes,
+            SELECT fp.id, fp.wallet, fp.content, fp.created_at,
+                   (SELECT COUNT(*) FROM post_likes   WHERE post_id = fp.id) as like_count,
+                   (SELECT COUNT(*) FROM feed_replies WHERE post_id = fp.id) as reply_count,
                    u.username, NULL as symbol, NULL as pnl_pct,
                    (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price
             FROM feed_posts fp
             LEFT JOIN users u ON fp.wallet = u.wallet_address
             UNION ALL
             SELECT t.id, u.wallet_address as wallet, NULL as content,
-                   t.timestamp as created_at, 0 as likes,
+                   t.timestamp as created_at, 0 as like_count, 0 as reply_count,
                    u.username,
                    t.token as symbol,
                    CASE WHEN t.entry_price > 0 AND t.exit_price > 0
@@ -5138,7 +5140,7 @@ def social_feed():
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, likes, username, symbol, pnl_pct, is_own, entry_price, exit_price = row
+        rid, wallet, content, created_at, like_count, reply_count, username, symbol, pnl_pct, is_own, entry_price, exit_price = row
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
         feed.append({
@@ -5146,7 +5148,8 @@ def social_feed():
             'wallet':      short,
             'content':     content or '',
             'created_at':  created_at or '',
-            'likes':       likes or 0,
+            'like_count':  like_count or 0,
+            'reply_count': reply_count or 0,
             'username':    display,
             'symbol':      symbol or '',
             'pnl_pct':     pnl_pct or 0,
@@ -5706,11 +5709,14 @@ def get_feed_replies(post_id):
 @app.route('/api/feed/reply/like/<int:reply_id>', methods=['POST'])
 @rate_limit(30, 60)
 def toggle_feed_reply_like(reply_id):
-    me = _get_uid()
-    if not me:
+    wallet = _current_wallet()
+    if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'error': 'not logged in'}), 401
         existing = conn.execute(
             'SELECT id FROM feed_reply_likes WHERE user_id=? AND reply_id=?',
             (me, reply_id)
@@ -5730,11 +5736,14 @@ def toggle_feed_reply_like(reply_id):
 @app.route('/api/feed/reply/<int:reply_id>', methods=['DELETE'])
 @rate_limit(30, 60)
 def delete_feed_reply(reply_id):
-    me = _get_uid()
-    if not me:
+    wallet = _current_wallet()
+    if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'error': 'not logged in'}), 401
         row = conn.execute(
             'SELECT user_id FROM feed_replies WHERE id=?', (reply_id,)
         ).fetchone()

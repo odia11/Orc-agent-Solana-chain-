@@ -5262,6 +5262,7 @@ async function launchApp(){
         document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
         _updateKeyStatus();
         if(r.avatar_url){ _avatarUrl=r.avatar_url||null; _updateNavPill(); }
+        _prefSoundAlerts = r.pref_sound_alerts||false;
       }
     }).catch(()=>{});
   }
@@ -6930,6 +6931,7 @@ function _lfCheckNewTrades(recent){
 
 // ── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
 let _prevPosMap = null; // null = not yet seeded; Map<mint, posObj> after first poll
+let _prefSoundAlerts = false;
 
 function _checkClosedPositions(currentPositions){
   if(_prevPosMap === null){
@@ -6945,12 +6947,37 @@ function _checkClosedPositions(currentPositions){
       const sol  = Math.abs(pnl).toFixed(4);
       if(pnl >= 0){
         _pushNotif('✅ '+sym+' sold — WIN', '+'+sol+' SOL profit!');
+        if(_prefSoundAlerts) _playTradeSound(true);
       } else {
         _pushNotif('❌ '+sym+' sold — LOSS', '-'+sol+' SOL loss');
+        if(_prefSoundAlerts) _playTradeSound(false);
       }
     }
   }
   _prevPosMap = new Map((currentPositions||[]).map(p=>[p.mint, p]));
+}
+
+function _playTradeSound(win){
+  try{
+    var ctx=new (window.AudioContext||window.webkitAudioContext)();
+    var osc=ctx.createOscillator();
+    var gain=ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type='sine';
+    if(win){
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1100, ctx.currentTime+0.12);
+    } else {
+      osc.frequency.setValueAtTime(440, ctx.currentTime);
+      osc.frequency.setValueAtTime(330, ctx.currentTime+0.12);
+    }
+    gain.gain.setValueAtTime(0.3, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.35);
+    osc.start(ctx.currentTime);
+    osc.stop(ctx.currentTime+0.35);
+    osc.onended=function(){ ctx.close(); };
+  }catch(e){}
 }
 
 function _lfCheckNewBuys(positions){
@@ -11880,9 +11907,9 @@ function _renderFeedCard(e){
     +'</div>'
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
-    +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">0</span></button>'
+    +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">'+esc(String(p.reply_count||0))+'</span></button>'
     +copyHtml
-    +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">0</span></button>'
+    +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">'+esc(String(p.like_count||0))+'</span></button>'
     +'<div class="fc-react-wrap">'
     +'<button class="fc-action fc-react-btn" onclick="_feedReactOpen(event,\''+esc(safePostId)+'\')" title="React">+</button>'
     +'<div class="fc-react-palette" id="rpal-'+esc(safePostId)+'"></div>'
