@@ -135,12 +135,12 @@ def _csrf_check():
     _ep = app.view_functions.get(request.endpoint)
     if _ep and getattr(_ep, '_csrf_exempt', False):
         return None
-    # ── 0. Shared client secret (only enforced if X_CLIENT_SECRET is configured) ──
-    if X_CLIENT_SECRET:
-        sent = request.headers.get('X-Client-Secret', '')
-        if not sent or not hmac.compare_digest(sent.encode(), X_CLIENT_SECRET.encode()):
+    # ── 0. Shared client secret (only enforced if API_SHARED_SECRET is configured) ──
+    if API_SHARED_SECRET:
+        sent = request.headers.get('X-API-Shared-Secret', '')
+        if not sent or not hmac.compare_digest(sent.encode(), API_SHARED_SECRET.encode()):
             _log_security_event('client_secret_fail', session.get('wallet', 'unknown'),
-                                f'bad/missing X-Client-Secret on {request.path}')
+                                f'bad/missing X-API-Shared-Secret on {request.path}')
             return jsonify({'error': 'Forbidden'}), 403
     # ── 1. Origin / Host validation ──────────────────────────────────────────
     origin = request.headers.get('Origin', '')
@@ -212,7 +212,7 @@ print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPIT
 # Defense-in-depth against scripted bots that POST straight to the API without ever
 # loading the page (and therefore never seeing this value). Skipped entirely when unset,
 # so local/dev deployments without the env var keep working unchanged.
-X_CLIENT_SECRET  = os.environ.get('X_CLIENT_SECRET', '')
+API_SHARED_SECRET  = os.environ.get('API_SHARED_SECRET', '')
 FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
 FEE_WALLET       = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'  # hardcoded fee recipient
 
@@ -2800,10 +2800,10 @@ def health():
 @app.route('/')
 def index():
     # Inject the client secret (if configured) so the frontend can echo it back
-    # on mutating requests — see X_CLIENT_SECRET / _csrf_check above.
+    # on mutating requests — see API_SHARED_SECRET / _csrf_check above.
     with open(os.path.join(BASE, 'dashboard.html'), 'r', encoding='utf-8') as f:
         html = f.read()
-    html = html.replace('__X_CLIENT_SECRET__', X_CLIENT_SECRET)
+    html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
     _sw = session.get('wallet', '')
     _ss = (_sw[:4] + '...' + _sw[-4:]) if len(_sw) > 8 else _sw
     html = html.replace('__SESSION_WALLET__', _sw)
@@ -2889,8 +2889,8 @@ def api_test_auth():
         'session_keys':  list(session.keys()),
         'host':          request.host,
         'origin':        request.headers.get('Origin', ''),
-        'x_client_secret_required': bool(X_CLIENT_SECRET),
-        'x_client_secret_sent':     bool(request.headers.get('X-Client-Secret')),
+        'x_client_secret_required': bool(API_SHARED_SECRET),
+        'x_client_secret_sent':     bool(request.headers.get('X-API-Shared-Secret')),
     })
 
 @app.route('/api/my-trades')
@@ -3494,7 +3494,7 @@ def traders():
         wallet_short=wallet_short,
         logged_in=bool(session_wallet),
         csrf_token=_get_csrf_token() if session_wallet else '',
-        client_secret=X_CLIENT_SECRET,
+        client_secret=API_SHARED_SECRET,
     )
 
 @app.route('/leaderboard')
@@ -3559,7 +3559,7 @@ def live_market():
     return render_template('live_market.html',
                            wallet_short=wallet_short,
                            csrf_token=_get_csrf_token(),
-                           client_secret=X_CLIENT_SECRET)
+                           client_secret=API_SHARED_SECRET)
 
 
 @app.route('/history')
@@ -5002,7 +5002,7 @@ def _instant_trade_cors(resp):
             resp.headers['Access-Control-Allow-Credentials'] = 'true'
             resp.headers['Access-Control-Allow-Methods']     = 'POST, OPTIONS'
             resp.headers['Access-Control-Allow-Headers']     = (
-                'Content-Type, X-CSRF-Token, X-Client-Secret, X-Requested-With'
+                'Content-Type, X-CSRF-Token, X-API-Shared-Secret, X-Requested-With'
             )
             resp.headers['Access-Control-Max-Age'] = '86400'
     return resp
