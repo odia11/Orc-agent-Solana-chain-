@@ -5220,7 +5220,9 @@ def api_instant_trade():
         add_user_log(wallet, f'instant-trade {side} {symbol}: ' + (stdout[-300:] or stderr[-200:]))
 
         if result.returncode != 0:
-            err_msg = stderr.split('\n')[-1] if stderr else 'Swap failed (no output)'
+            err_msg = (stderr.split('\n')[-1] if stderr else '') or \
+                      (stdout.split('\n')[-1] if stdout else '') or \
+                      'Swap failed (no output)'
             return jsonify({'error': err_msg[-200:], 'detail': stderr[-500:]}), 500
 
         # Extract TX signature from stdout: "… TX:<sig>"
