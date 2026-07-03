@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="nl">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
@@ -21,9 +21,11 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 
 .ntf-body{max-width:520px;margin:0 auto;padding:20px 16px 60px}
 
-.ntf-filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
-.ntf-filter{background:#101216;border:1px solid #21252c;border-radius:9px;padding:6px 13px;font-size:13px;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,color .15s,border-color .15s}
-.ntf-filter.active,.ntf-filter:hover{background:#16191f;color:#eef1f5;border-color:#3ad29b}
+/* ── TABS ── */
+.ntf-tabs{display:flex;border-bottom:1px solid #16191f;margin-bottom:20px}
+.ntf-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 18px 9px;font-size:14px;font-weight:500;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:color .15s,border-color .15s;margin-bottom:-1px;-webkit-tap-highlight-color:transparent}
+.ntf-tab.active{color:#eef1f5;border-bottom-color:#3ad29b}
+.ntf-tab:hover:not(.active){color:#c0c8d4}
 
 .ntf-list{display:flex;flex-direction:column;gap:2px}
 
@@ -34,6 +36,7 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 
 .ntf-icon{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:16px}
 .ntf-icon.trade{background:rgba(58,210,155,.12);color:#3ad29b}
+.ntf-icon.message{background:rgba(99,102,241,.12);color:#6366f1}
 .ntf-icon.like{background:rgba(247,107,98,.12);color:#f76b62}
 .ntf-icon.follow{background:rgba(99,102,241,.12);color:#6366f1}
 .ntf-icon.copy{background:rgba(247,185,85,.12);color:#f7b955}
@@ -50,7 +53,8 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 
 ::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
-/* ── MOBILE BACK BAR ── */
+
+/* ── MOBILE ── */
 .mobile-back-bar{display:none}
 @media(max-width:767px){
   html,body{overflow-x:hidden}
@@ -58,7 +62,7 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
   .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
   .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
   .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
-  .ntf-filter{min-height:44px;display:inline-flex;align-items:center}
+  .ntf-tab{min-height:44px}
   .ntf-row{min-height:56px}
 }
 </style>
@@ -66,26 +70,128 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 <body>
 
 <div class="mobile-back-bar">
-  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
-  <span class="mobile-page-title">Notifications</span>
+  <button onclick="history.back()" class="mobile-back-btn">← Terug</button>
+  <span class="mobile-page-title">Notificaties</span>
 </div>
 
-<div id="notifs" style="padding:16px;display:flex;flex-direction:column;gap:8px">
-  <p style="color:#565d68">Loading...</p>
+<div class="ntf-header">
+  <div class="ntf-hdr-left">
+    <a href="/" class="ntf-back">←</a>
+    <span class="ntf-title">Notificaties</span>
+  </div>
+  <div class="ntf-nav-pill"><span class="ntf-nav-dot"></span>OrcAgent</div>
+</div>
+
+<div class="ntf-body">
+
+  <div class="ntf-tabs">
+    <button class="ntf-tab active" id="tab-personal" onclick="_switchTab('personal')">Persoonlijk</button>
+    <button class="ntf-tab" id="tab-trades" onclick="_switchTab('trades')">Trades</button>
+  </div>
+
+  <div id="section-personal">
+    <div class="ntf-list" id="personal-list">
+      <p style="color:#565d68;text-align:center;padding:40px 0">Laden…</p>
+    </div>
+  </div>
+
+  <div id="section-trades" style="display:none">
+    <div class="ntf-list" id="trades-list">
+      <p style="color:#565d68;text-align:center;padding:40px 0">Laden…</p>
+    </div>
+  </div>
+
 </div>
 
 <script>
-fetch('/api/notifications').then(r=>r.json()).then(d=>{
-  document.getElementById('notifs').innerHTML=d.length?d.map(n=>`
-    <div style="display:flex;align-items:center;gap:12px;padding:14px;background:#101216;border:1px solid #21252c;border-radius:14px">
-      <div style="width:36px;height:36px;border-radius:50%;background:#3ad29b;color:#08120f;display:flex;align-items:center;justify-content:center;font-weight:700">${n.wallet.slice(0,2)}</div>
-      <div style="flex:1">
-        <div><b>${n.wallet.slice(0,8)}...</b> traded <b>$${n.symbol}</b></div>
-        <div style="font-size:12px;color:#565d68">${n.created_at}</div>
-      </div>
-      <div style="font-family:monospace;font-weight:700;color:${n.pnl_pct>=0?'#3ad29b':'#f76b62'}">${n.pnl_pct>=0?'+':''}${(n.pnl_pct||0).toFixed(1)}%</div>
-    </div>`).join(''):'<p style="color:#565d68">No notifications yet</p>'
-})
+function _switchTab(tab){
+  document.getElementById('tab-personal').classList.toggle('active', tab==='personal');
+  document.getElementById('tab-trades').classList.toggle('active', tab==='trades');
+  document.getElementById('section-personal').style.display = tab==='personal' ? '' : 'none';
+  document.getElementById('section-trades').style.display   = tab==='trades'    ? '' : 'none';
+}
+
+function _esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function _relTime(ts){
+  if(!ts) return '';
+  var d = new Date(ts.replace(' ','T')+'Z');
+  var s = Math.floor((Date.now()-d)/1000);
+  if(s<60)     return 'zojuist';
+  if(s<3600)   return Math.floor(s/60)+'m geleden';
+  if(s<86400)  return Math.floor(s/3600)+'u geleden';
+  if(s<172800) return 'gisteren';
+  return d.toLocaleDateString('nl-NL',{day:'numeric',month:'short'});
+}
+
+var _ICONS = {
+  message: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
+  like:    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>',
+  follow:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  trade:   '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+  system:  '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
+};
+
+function _ntfIconHtml(type){
+  var cls  = _ICONS[type] ? type : 'system';
+  var icon = _ICONS[type] || _ICONS.system;
+  return '<div class="ntf-icon '+cls+'">'+icon+'</div>';
+}
+
+async function _loadPersonal(){
+  var r = await fetch('/api/notifications/mine').then(function(x){return x.json();}).catch(function(){return null;});
+  var list = document.getElementById('personal-list');
+  if(!r || !r.ok || !r.notifications){
+    list.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>Geen persoonlijke notificaties</div>';
+    return;
+  }
+  var items = r.notifications;
+  if(!items.length){
+    list.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>Geen persoonlijke notificaties</div>';
+    return;
+  }
+  list.innerHTML = items.map(function(n){
+    var sep   = n.content.indexOf(': ');
+    var actor = sep > -1 ? n.content.slice(0, sep) : n.content;
+    var body  = sep > -1 ? n.content.slice(sep + 2) : '';
+    var href  = n.link || '#';
+    return '<a class="ntf-row'+(n.is_read ? '' : ' unread')+'" href="'+_esc(href)+'">'
+      + _ntfIconHtml(n.type)
+      + '<div class="ntf-info">'
+      + '<div class="ntf-text"><span class="ntf-actor">'+_esc(actor)+'</span>'+(body ? ' '+_esc(body) : '')+'</div>'
+      + '<div class="ntf-meta">'+_relTime(n.created_at)+'</div>'
+      + '</div>'
+      + (n.is_read ? '' : '<div class="ntf-unread-dot"></div>')
+      + '</a>';
+  }).join('');
+  fetch('/api/notifications/mine/mark_read', {method:'POST'});
+}
+
+async function _loadTrades(){
+  var d = await fetch('/api/notifications').then(function(r){return r.json();}).catch(function(){return [];});
+  var list = document.getElementById('trades-list');
+  if(!d || !d.length){
+    list.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">📊</div>Nog geen trade-notificaties</div>';
+    return;
+  }
+  list.innerHTML = d.map(function(n){
+    var pct = n.pnl_pct || 0;
+    var pos = pct >= 0;
+    return '<div class="ntf-row" style="cursor:default">'
+      + _ntfIconHtml('trade')
+      + '<div class="ntf-info">'
+      + '<div class="ntf-text"><span class="ntf-actor">'+_esc(n.wallet.slice(0,8))+'…</span> traded <b>'+_esc(n.symbol)+'</b></div>'
+      + '<div class="ntf-meta">'+_relTime(n.created_at)+'</div>'
+      + '</div>'
+      + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:'+(pos?'#3ad29b':'#f76b62')+'">'+(pos?'+':'')+pct.toFixed(1)+'%</div>'
+      + '</div>';
+  }).join('');
+}
+
+_loadPersonal();
+_loadTrades();
 </script>
 </body>
 </html>
