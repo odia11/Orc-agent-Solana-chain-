@@ -20,61 +20,105 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
 <div class="brand">OrcAgent</div>
 
 <script>
-(function(){
-  var msg=document.getElementById('msg');
+(async function(){
+  var msg = document.getElementById('msg');
+
   function fail(txt){
-    msg.className='msg err';
-    msg.textContent=txt;
-    setTimeout(function(){window.location.href='/';},5000);
+    msg.className = 'msg err';
+    msg.textContent = txt;
+    setTimeout(function(){ window.location.href = '/'; }, 5000);
   }
 
-  var p=new URLSearchParams(window.location.search);
-  console.log('[phantom-cb] full URL:', window.location.href);
+  var p = new URLSearchParams(window.location.search);
+  console.log('[phantom-cb] URL:', window.location.href);
   p.forEach(function(v,k){
-    console.log('[phantom-cb] param', k, '=', (k==='data'||k==='nonce')?v.slice(0,20)+'…':v);
+    console.log('[phantom-cb]', k, '=', (k==='data'||k==='nonce') ? v.slice(0,20)+'…' : v);
   });
 
-  var errCode=p.get('errorCode');
+  var errCode = p.get('errorCode');
   if(errCode){
-    fail('Phantom rejected the connection — '+(p.get('errorMessage')||'')+' ('+errCode+')');
+    fail('Phantom rejected — '+(p.get('errorMessage')||'')+' ('+errCode+')');
     return;
   }
 
-  var token       = p.get('token');
-  var phantomPk   = p.get('phantom_encryption_public_key');
-  var nonce       = p.get('nonce');
-  var data        = p.get('data');
+  // ── STEP: sign ── signMessage callback → decrypt signature → wallet/set ──────
+  if(p.get('step') === 'sign'){
+    var token     = p.get('token');
+    var phantomPk = p.get('phantom_encryption_public_key');
+    var nonce     = p.get('nonce');
+    var data      = p.get('data');
 
-  console.log('[phantom-cb] token:', token ? token.slice(0,8)+'…' : 'MISSING');
-  console.log('[phantom-cb] phantom_pk:', !!phantomPk);
-  console.log('[phantom-cb] nonce:', !!nonce);
-  console.log('[phantom-cb] data:', !!data);
+    console.log('[phantom-cb] sign step — token:', token ? token.slice(0,8)+'…' : 'MISSING');
 
-  if(!token)  { fail('Session token missing — please try connecting again.'); return; }
-  if(!phantomPk||!nonce||!data){ fail('Incomplete callback — missing Phantom params. Please try again.'); return; }
+    // Retrieve wallet address and auth nonce stored before signMessage redirect
+    var walletAddress = null, authNonce = null;
+    try{
+      walletAddress = sessionStorage.getItem('_orca_phantom_wallet');
+      authNonce     = sessionStorage.getItem('_orca_phantom_nonce');
+      sessionStorage.removeItem('_orca_phantom_wallet');
+      sessionStorage.removeItem('_orca_phantom_nonce');
+    }catch(e){}
 
-  msg.textContent='Decrypting wallet response…';
+    if(!walletAddress || !authNonce){ fail('Session data lost — please reconnect.'); return; }
+    if(!token || !phantomPk || !nonce || !data){ fail('Incomplete sign callback — please try again.'); return; }
 
-  fetch('/api/phantom/decrypt',{
-    method:'POST',
-    credentials:'include',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({token:token, phantom_pk:phantomPk, nonce:nonce, data:data})
-  })
-  .then(function(r){return r.json();})
-  .then(function(d){
-    console.log('[phantom-cb] decrypt response:', d);
-    if(!d.ok||!d.wallet_address){
-      fail('Decrypt failed: '+(d.error||'unknown error'));
+    // Decrypt signature from Phantom's encrypted response
+    msg.textContent = 'Verifying signature…';
+    var sigR = await fetch('/api/phantom/decrypt-signature',{
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({token:token, phantom_pk:phantomPk, nonce:nonce, data:data})
+    }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+    if(!sigR || !sigR.ok || !sigR.signature){
+      fail('Signature decryption failed: '+((sigR && sigR.error) || 'unknown'));
       return;
     }
-    msg.textContent='Connected! Redirecting…';
-    window.location.href='/';
-  })
-  .catch(function(e){
-    console.error('[phantom-cb] fetch error:', e);
-    fail('Network error: '+e.message);
-  });
+    console.log('[phantom-cb] sig='+sigR.signature.slice(0,12)+'…');
+
+    // Authenticate: wallet/set with address + nonce + signature proof
+    msg.textContent = 'Completing sign-in…';
+    var wr = await fetch('/api/wallet/set',{
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({address:walletAddress, nonce:authNonce, signature:sigR.signature})
+    }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+    if(wr && (wr.ok || wr.success)){
+      msg.textContent = 'Connected! Redirecting…';
+      window.location.href = '/';
+    } else {
+      fail('Auth failed: '+((wr && wr.msg) || 'unknown'));
+    }
+    return;
+  }
+
+  // ── DEFAULT: connect callback → decrypt wallet address → redirect ─────────────
+  var token     = p.get('token');
+  var phantomPk = p.get('phantom_encryption_public_key');
+  var nonce     = p.get('nonce');
+  var data      = p.get('data');
+
+  console.log('[phantom-cb] connect step — token:', token ? token.slice(0,8)+'…' : 'MISSING');
+
+  if(!token)                    { fail('Session token missing — please try again.'); return; }
+  if(!phantomPk || !nonce || !data){ fail('Incomplete callback — please try again.'); return; }
+
+  msg.textContent = 'Decrypting wallet response…';
+  var dr = await fetch('/api/phantom/decrypt',{
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({token:token, phantom_pk:phantomPk, nonce:nonce, data:data})
+  }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+  console.log('[phantom-cb] decrypt response:', dr);
+  if(!dr || !dr.ok || !dr.wallet_address){
+    fail('Decrypt failed: '+((dr && dr.error) || 'unknown error'));
+    return;
+  }
+
+  msg.textContent = 'Connected! Redirecting…';
+  window.location.href = '/';
 })();
 </script>
 </body>

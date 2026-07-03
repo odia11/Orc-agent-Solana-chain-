@@ -2899,6 +2899,41 @@ def api_phantom_decrypt():
         return jsonify({'ok': False, 'error': str(e)}), 400
 
 
+@app.route('/api/phantom/decrypt-signature', methods=['POST'])
+def api_phantom_decrypt_signature():
+    """Decrypt a Phantom v1 signMessage callback payload.
+    Body: {token, phantom_pk, nonce, data} — all b58-encoded strings.
+    The decrypted payload contains a 'signature' field (b58).
+    Returns {ok, signature}."""
+    if not _NACL_OK:
+        return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
+    body = request.get_json(silent=True) or {}
+    token          = body.get('token', '')
+    phantom_pk_b58 = body.get('phantom_pk', '')
+    nonce_b58      = body.get('nonce', '')
+    data_b58       = body.get('data', '')
+    if not all([token, phantom_pk_b58, nonce_b58, data_b58]):
+        return jsonify({'ok': False, 'error': 'missing params'}), 400
+    session_data = _phantom_sessions.pop(token, None)
+    if not session_data:
+        print(f'[phantom] decrypt-sig — token not found: {token[:8]}…', flush=True)
+        return jsonify({'ok': False, 'error': 'session expired or invalid'}), 400
+    try:
+        phantom_pk_obj = _nacl_public.PublicKey(_b58dec(phantom_pk_b58))
+        dapp_sk_obj    = _nacl_public.PrivateKey(session_data['sk'])
+        box            = _nacl_public.Box(dapp_sk_obj, phantom_pk_obj)
+        decrypted      = box.decrypt(_b58dec(data_b58), _b58dec(nonce_b58))
+        payload        = json.loads(decrypted.decode('utf-8'))
+        signature_b58  = payload.get('signature', '')
+        if not signature_b58:
+            return jsonify({'ok': False, 'error': 'no signature in payload'}), 400
+        print(f'[phantom] decrypt-sig OK sig={signature_b58[:12]}…', flush=True)
+        return jsonify({'ok': True, 'signature': signature_b58})
+    except Exception as e:
+        print(f'[phantom] decrypt-sig ERROR: {e}', flush=True)
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
 @app.route('/phantom-callback')
 def phantom_callback():
     return render_template('phantom_callback.html')
