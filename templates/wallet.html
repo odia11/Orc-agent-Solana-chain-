@@ -558,8 +558,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
     <!-- action buttons -->
     <div class="wlt-actions">
       <button class="wlt-btn wlt-btn-primary" onclick="_modalDeposit()">↓ Deposit</button>
-      <button class="wlt-btn wlt-btn-outline" onclick="_modalWithdraw()">↑ Withdraw</button>
-      <button class="wlt-btn wlt-btn-outline" onclick="_modalSend()">→ Send</button>
+<button class="wlt-btn wlt-btn-outline" onclick="_modalSend()">→ Send</button>
       <button class="wlt-btn wlt-btn-outline" onclick="openSwapModal()">⇄ Swap</button>
     </div>
     <!-- balance card -->
@@ -817,18 +816,6 @@ function _modalDeposit(){
   )
 }
 
-function _modalWithdraw(){
-  _showModal(
-    '<div class="w-modal-title">Withdraw</div>'
-    +'<div class="w-modal-label">YOUR WALLET ADDRESS</div>'
-    +'<div class="w-modal-addr">'+_walletAddr+'</div>'
-    +'<div class="w-modal-note">To withdraw funds, send SOL or tokens from this address using your connected Solana wallet (Phantom, Solflare, etc.).<br><br>Your private key controls this address — use your wallet app to initiate outgoing transfers.</div>'
-    +'<div class="w-modal-btns" style="margin-top:14px">'
-      +'<a class="w-modal-btn w-modal-secondary" href="https://phantom.app" target="_blank" rel="noopener">Phantom ↗</a>'
-      +'<a class="w-modal-btn w-modal-secondary" href="https://solflare.com" target="_blank" rel="noopener">Solflare ↗</a>'
-    +'</div>'
-  )
-}
 
 function _modalSend(){
   _showModal(
