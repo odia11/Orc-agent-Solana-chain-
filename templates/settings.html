@@ -342,13 +342,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
         </div>
       </div>
 
-      <!-- ── CARD 4: Emergency Stop ── -->
-      <div class="st-card emergency">
-        <div class="st-card-hdr">🛑 Emergency Stop</div>
-        <div class="st-emergency-desc">Immediately halt all bot activity and cancel open scans. Existing positions are not auto-closed — manage them manually.</div>
-        <button class="st-emergency-btn" id="emergency-btn" onclick="_emergencyStop()">Emergency Stop</button>
-        <div class="st-save-msg" id="emergency-msg" style="margin-top:8px"></div>
-      </div>
 
     </div><!-- /st-content -->
   </main>
@@ -506,27 +499,6 @@ async function _saveKey(){
   }
 }
 
-/* ── emergency stop ── */
-async function _emergencyStop(){
-  var btn=document.getElementById('emergency-btn');
-  var msgEl=document.getElementById('emergency-msg');
-  if(!confirm('Emergency stop: halt all bot activity immediately?')) return;
-  btn.textContent='Stopping…'; btn.disabled=true;
-  try{
-    var d=await _post('/api/bot/stop',{});
-    if(d.ok||d.stopped||d.status==='stopped'){
-      if(msgEl){msgEl.className='st-save-msg ok';msgEl.textContent='✓ Bot stopped — all trading halted';}
-      var tog=document.getElementById('pref-autobot');
-      if(tog) tog.checked=false;
-    } else {
-      if(msgEl){msgEl.className='st-save-msg err';msgEl.textContent='✗ '+(d.error||d.msg||'Stop failed');}
-    }
-  }catch(e){
-    if(msgEl){msgEl.className='st-save-msg err';msgEl.textContent='✗ Network error';}
-  }finally{
-    btn.textContent='Emergency Stop'; btn.disabled=false;
-  }
-}
 
 /* ── escape to close modals ── */
 document.addEventListener('keydown',function(e){
