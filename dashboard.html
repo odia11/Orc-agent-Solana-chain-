@@ -4750,7 +4750,7 @@ function _phantomMobileV1Connect(){
       _setNote('Connection init failed — please try again.','var(--red)');
       return;
     }
-    var _cbUrl='https://orcagent.fun/phantom-callback?token='+encodeURIComponent(d.token);
+    var _cbUrl='https://orcagent.fun/phantom-callback?token='+encodeURIComponent(d.token)+'&_cb='+Date.now();
     console.log('[phantom] server-side init ok, token=',d.token.slice(0,8)+'…');
     var params=new URLSearchParams({
       app_url:'https://orcagent.fun',
