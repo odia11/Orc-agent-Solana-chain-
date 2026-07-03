@@ -924,6 +924,13 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_feed_replies_post ON feed_replies(post_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS feed_reply_likes (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id  INTEGER NOT NULL,
+        reply_id INTEGER NOT NULL,
+        UNIQUE(user_id, reply_id),
+        FOREIGN KEY(reply_id) REFERENCES feed_replies(id)
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS notifications (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id    INTEGER NOT NULL,
@@ -5618,20 +5625,46 @@ def post_feed_reply():
 @app.route('/api/feed/replies/<path:post_id>', methods=['GET'])
 @rate_limit(60, 60)
 def get_feed_replies(post_id):
+    me = _get_uid()
     conn = sqlite3.connect(DB_FILE)
     try:
         rows = conn.execute(
-            '''SELECT COALESCE(u.username, ''), r.message, r.created_at
+            '''SELECT r.id,
+                      COALESCE(u.username, ''),
+                      COALESCE(u.wallet_address, ''),
+                      r.message,
+                      r.created_at,
+                      r.user_id,
+                      (SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id = r.id) AS like_count
                FROM feed_replies r
                LEFT JOIN users u ON u.id = r.user_id
                WHERE r.post_id = ?
                ORDER BY r.created_at ASC''',
             (post_id,)
         ).fetchall()
+        liked = set()
+        if me and rows:
+            ids = [r[0] for r in rows]
+            placeholders = ','.join('?' * len(ids))
+            liked_rows = conn.execute(
+                f'SELECT reply_id FROM feed_reply_likes WHERE user_id=? AND reply_id IN ({placeholders})',
+                [me] + ids
+            ).fetchall()
+            liked = {lr[0] for lr in liked_rows}
     finally:
         conn.close()
     return jsonify({'ok': True, 'replies': [
-        {'username': r[0], 'message': r[1], 'created_at': r[2]}
+        {
+            'id':           r[0],
+            'username':     r[1],
+            'wallet':       r[2],
+            'message':      r[3],
+            'created_at':   r[4],
+            'user_id':      r[5],
+            'like_count':   r[6],
+            'liked_by_me':  r[0] in liked,
+            'is_mine':      me is not None and r[5] == me,
+        }
         for r in rows
     ]})
 
