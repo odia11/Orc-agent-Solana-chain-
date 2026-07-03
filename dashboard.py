@@ -5632,6 +5632,7 @@ def get_feed_replies(post_id):
             '''SELECT r.id,
                       COALESCE(u.username, ''),
                       COALESCE(u.wallet_address, ''),
+                      COALESCE(u.avatar_url, ''),
                       r.message,
                       r.created_at,
                       r.user_id,
@@ -5658,12 +5659,13 @@ def get_feed_replies(post_id):
             'id':           r[0],
             'username':     r[1],
             'wallet':       r[2],
-            'message':      r[3],
-            'created_at':   r[4],
-            'user_id':      r[5],
-            'like_count':   r[6],
+            'avatar_url':   r[3],
+            'message':      r[4],
+            'created_at':   r[5],
+            'user_id':      r[6],
+            'like_count':   r[7],
             'liked_by_me':  r[0] in liked,
-            'is_mine':      me is not None and r[5] == me,
+            'is_mine':      me is not None and r[6] == me,
         }
         for r in rows
     ]})
