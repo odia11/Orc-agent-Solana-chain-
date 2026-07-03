@@ -477,9 +477,25 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reply-inp:focus{border-color:var(--accent)}
 .fc-reply-send{padding:8px 16px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;transition:opacity .15s}
 .fc-reply-send:hover{opacity:.88}
-.fc-replies-list{margin-top:8px;display:flex;flex-direction:column;gap:6px}
-.fc-reply-item{font-size:12px;color:var(--muted);padding:4px 0}
-.fc-reply-item strong{color:var(--text)}
+.fc-replies-list{margin-top:8px;display:flex;flex-direction:column;gap:0}
+.fc-reply-item{padding:8px 0;position:relative}
+.fc-ri-header{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.fc-ri-avatar{width:24px;height:24px;min-width:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:#eef1f5;flex-shrink:0}
+.fc-ri-name{font-size:13px;font-weight:700;color:var(--text)}
+.fc-ri-you{font-size:10px;font-weight:700;background:rgba(247,185,85,.15);color:var(--accent);border:1px solid rgba(247,185,85,.3);border-radius:5px;padding:1px 6px;line-height:1.4}
+.fc-ri-handle{font-size:12px;color:var(--muted)}
+.fc-ri-sep{font-size:12px;color:var(--muted)}
+.fc-ri-time{font-size:12px;color:var(--muted)}
+.fc-ri-text{font-size:13px;color:#c7ccd4;line-height:1.5;margin:4px 0 4px 31px}
+.fc-ri-actions{display:flex;align-items:center;gap:16px;margin-left:31px;margin-top:2px}
+.fc-ri-like{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;transition:color .15s;font-family:inherit}
+.fc-ri-like:hover{color:#eef1f5}
+.fc-ri-like.liked{color:var(--accent)}
+.fc-ri-reply-btn{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;padding:0;transition:color .15s;font-family:inherit}
+.fc-ri-reply-btn:hover{color:#eef1f5}
+.fc-ri-delete{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;padding:0;opacity:0;pointer-events:none;transition:color .15s,opacity .15s;font-family:inherit;margin-left:auto}
+.fc-reply-item:hover .fc-ri-delete{opacity:1;pointer-events:auto}
+.fc-ri-delete:hover{color:#f76b62}
 @media(max-width:600px){.fc-trade-row{padding:10px 12px;gap:8px}}
 /* ── PULSING LIVE DOT ── */
 .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00e676;animation:pulse-dot 2s ease-in-out infinite;margin-right:5px;vertical-align:middle;flex-shrink:0}
@@ -12033,16 +12049,86 @@ function _feedToggleReply(btn, postId){
   }
 }
 
+function _replyRelTime(created_at){
+  if(!created_at) return '';
+  var d = new Date(created_at.replace(' ','T')+'Z');
+  var s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if(isNaN(s)||s<0) return 'just now';
+  if(s<60) return s+'s';
+  if(s<3600) return Math.floor(s/60)+'m';
+  if(s<86400) return Math.floor(s/3600)+'h';
+  return Math.floor(s/86400)+'d';
+}
+
+function _renderReplyRow(r, postId){
+  var name    = esc(r.username || r.wallet || '?');
+  var handle  = r.username ? '@'+esc(r.username) : (r.wallet ? '@'+esc(r.wallet.slice(0,6)+'…') : '');
+  var initKey = r.username || r.wallet || '?';
+  var bg      = typeof _lbAvatarColor === 'function' ? _lbAvatarColor(initKey) : '#1b4332';
+  var ini     = initKey[0].toUpperCase();
+  var youChip = r.is_mine ? '<span class="fc-ri-you">You</span>' : '';
+  var likedCls= r.liked_by_me ? ' liked' : '';
+  var likeCnt = Number(r.like_count)||0;
+  var delBtn  = r.is_mine
+    ? '<button class="fc-ri-delete" onclick="_feedDeleteReply('+r.id+',this.closest(\'.fc-reply-item\'),\''+postId.replace(/'/g,"\\'")+'\')" title="Delete">&#128465;</button>'
+    : '';
+  return '<div class="fc-reply-item" data-reply-id="'+r.id+'">'
+    +'<div class="fc-ri-header">'
+    +'<div class="fc-ri-avatar" style="background:'+bg+'">'+ini+'</div>'
+    +'<span class="fc-ri-name">'+name+'</span>'
+    +youChip
+    +'<span class="fc-ri-handle">'+handle+'</span>'
+    +'<span class="fc-ri-sep">·</span>'
+    +'<span class="fc-ri-time">'+_replyRelTime(r.created_at)+'</span>'
+    +'</div>'
+    +'<div class="fc-ri-text">'+esc(r.message)+'</div>'
+    +'<div class="fc-ri-actions">'
+    +'<button class="fc-ri-like'+likedCls+'" data-rid="'+r.id+'" onclick="_feedLikeReply('+r.id+',this)">&#9825; <span class="fc-ri-lc">'+likeCnt+'</span></button>'
+    +'<button class="fc-ri-reply-btn">&#8617; Reply</button>'
+    +delBtn
+    +'</div>'
+    +'</div>';
+}
+
 function _feedLoadReplies(postId){
   var list = document.getElementById('rlist-'+postId);
   if(!list) return;
   fetch('/api/feed/replies/'+encodeURIComponent(postId))
     .then(function(r){ return r.json(); })
     .then(function(d){
-      if(!d.ok || !d.replies.length) return;
-      list.innerHTML = d.replies.map(function(r){
-        return '<div class="fc-reply-item"><strong>'+esc(r.username||'?')+'</strong> '+esc(r.message)+'</div>';
-      }).join('');
+      if(!d.ok) return;
+      if(!d.replies||!d.replies.length){
+        list.innerHTML='<div style="font-size:12px;color:var(--muted);padding:4px 0">No replies yet — be the first.</div>';
+        return;
+      }
+      list.innerHTML = d.replies.map(function(r){ return _renderReplyRow(r, postId); }).join('');
+    })
+    .catch(function(){});
+}
+
+function _feedLikeReply(replyId, btn){
+  fetch('/api/feed/reply/like/'+replyId, {method:'POST', credentials:'include'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok) return;
+      btn.classList.toggle('liked', d.liked);
+      var lc = btn.querySelector('.fc-ri-lc');
+      if(lc) lc.textContent = d.like_count;
+    })
+    .catch(function(){});
+}
+
+function _feedDeleteReply(replyId, rowEl, postId){
+  fetch('/api/feed/reply/'+replyId, {method:'DELETE', credentials:'include'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok){ console.warn('[reply-del]', d.error); return; }
+      if(rowEl) rowEl.remove();
+      var card = document.getElementById('fc-card-'+postId);
+      if(card){
+        var rcnt = card.querySelector('.fc-reply-count');
+        if(rcnt) rcnt.textContent = Math.max(0,(parseInt(rcnt.textContent,10)||1)-1);
+      }
     })
     .catch(function(){});
 }
@@ -12056,6 +12142,7 @@ function _feedSubmitReply(inp, postId){
   if(sendBtn){ sendBtn.disabled = true; sendBtn.textContent = '…'; }
   fetch('/api/feed/reply', {
     method: 'POST',
+    credentials: 'include',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({post_id: postId, message: text})
   }).then(function(r){ return r.json(); }).then(function(d){
@@ -12063,12 +12150,16 @@ function _feedSubmitReply(inp, postId){
       inp.value = '';
       var list = document.getElementById('rlist-'+postId);
       if(list){
-        var item = document.createElement('div');
-        item.className = 'fc-reply-item';
-        item.innerHTML = '<strong>'+esc(d.username||'You')+'</strong> '+esc(d.message);
-        list.appendChild(item);
+        var emptyMsg = list.querySelector('div');
+        if(emptyMsg && emptyMsg.textContent.indexOf('No replies yet')!==-1) list.innerHTML='';
+        var fakeReply = {
+          id: d.id, user_id: d.user_id,
+          username: d.username, wallet: '',
+          message: d.message, created_at: d.created_at,
+          like_count: 0, liked_by_me: false, is_mine: true
+        };
+        list.insertAdjacentHTML('beforeend', _renderReplyRow(fakeReply, postId));
       }
-      /* bump reply count on action button */
       var card = document.getElementById('fc-card-'+postId);
       if(card){
         var rcnt = card.querySelector('.fc-reply-count');
