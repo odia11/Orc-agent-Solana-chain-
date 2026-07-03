@@ -5122,7 +5122,8 @@ def social_feed():
                    (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
                    (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
                    u.username, NULL as symbol, NULL as pnl_pct,
-                   (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price
+                   (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
+                   u.avatar_url
             FROM feed_posts fp
             LEFT JOIN users u ON fp.wallet = u.wallet_address
             UNION ALL
@@ -5135,7 +5136,8 @@ def social_feed():
                    CASE WHEN t.entry_price > 0 AND t.exit_price > 0
                         THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                         ELSE 0 END as pnl_pct,
-                   (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price
+                   (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
+                   u.avatar_url
             FROM trades t
             LEFT JOIN users u ON t.user_id = u.id
             ORDER BY created_at DESC LIMIT 50
@@ -5145,7 +5147,7 @@ def social_feed():
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, like_count, reply_count, username, symbol, pnl_pct, is_own, entry_price, exit_price = row
+        rid, wallet, content, created_at, like_count, reply_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url = row
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
         feed.append({
@@ -5162,6 +5164,7 @@ def social_feed():
             'exit_price':  exit_price or 0,
             'type':        'text' if content else 'trade',
             'is_own':      bool(is_own),
+            'avatar_url':  avatar_url or '',
         })
     return jsonify(feed)
 
