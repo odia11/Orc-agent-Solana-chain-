@@ -426,9 +426,6 @@ _ext_lock  = threading.Lock()
 # Timestamp lists; filtered to last 24 h for "today" stats, last 1 h for rate-stats.
 _ext_calls: dict = {'api': [], 'dexscreener': [], 'jupiter': []}
 
-# ── WALLET AUTH NONCES ──
-_nonce_lock:  threading.Lock = threading.Lock()
-_wallet_auth_nonces: dict    = {}  # nonce → {'ts': float, 'ip': str}
 
 def _ext_hit(category: str) -> None:
     """Record one external or internal API call for admin observability."""
@@ -912,6 +909,12 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_post_reactions_post ON post_reactions(post_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS auth_nonces (
+        nonce      TEXT PRIMARY KEY,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        ip         TEXT
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_auth_nonces_created ON auth_nonces(created_at)')
     c.execute('''CREATE TABLE IF NOT EXISTS feed_replies (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id    INTEGER NOT NULL,
@@ -4015,12 +4018,13 @@ def set_password():
 def auth_nonce():
     nonce = secrets.token_hex(16)
     ip    = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
-    now   = time.time()
-    with _nonce_lock:
-        _wallet_auth_nonces[nonce] = {'ts': now, 'ip': ip}
-        stale = [k for k, v in _wallet_auth_nonces.items() if now - v['ts'] > 480]
-        for k in stale:
-            del _wallet_auth_nonces[k]
+    conn  = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('INSERT INTO auth_nonces (nonce, ip) VALUES (?, ?)', (nonce, ip))
+        conn.execute("DELETE FROM auth_nonces WHERE created_at < datetime('now', '-20 minutes')")
+        conn.commit()
+    finally:
+        conn.close()
     return jsonify({
         'ok':      True,
         'nonce':   nonce,
@@ -4142,12 +4146,24 @@ def set_wallet():
         body      = request.json or {}
         nonce     = str(body.get('nonce', '')).strip()
         signature = str(body.get('signature', '')).strip()
-        now_ts    = time.time()
-        with _nonce_lock:
-            entry = _wallet_auth_nonces.get(nonce)
-            if entry:
-                del _wallet_auth_nonces[nonce]  # single-use regardless of outcome
-        if not entry or now_ts - entry['ts'] > 480:
+        _nonce_conn = sqlite3.connect(DB_FILE)
+        try:
+            row = _nonce_conn.execute(
+                'SELECT created_at FROM auth_nonces WHERE nonce=?', (nonce,)
+            ).fetchone()
+            if row:
+                _nonce_conn.execute('DELETE FROM auth_nonces WHERE nonce=?', (nonce,))
+                _nonce_conn.commit()
+        finally:
+            _nonce_conn.close()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
+        try:
+            created = datetime.datetime.strptime(row[0], '%Y-%m-%d %H:%M:%S')
+            age_s   = (datetime.datetime.utcnow() - created).total_seconds()
+        except Exception:
+            age_s   = 9999
+        if age_s > 1200:
             return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
         if not _NACL_OK or _nacl_signing is None:
             return jsonify({'ok': False, 'msg': 'Signature verification unavailable'}), 503
