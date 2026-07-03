@@ -6860,12 +6860,6 @@ function _lfCheckNewTrades(recent){
 // ── PUSH NOTIFICATIONS ───────────────────────────────────────────────────────
 let _prevPosMap = null; // null = not yet seeded; Map<mint, posObj> after first poll
 
-function _pushNotif(title, body){
-  if(!document.hidden) return;
-  if(Notification.permission !== 'granted') return;
-  try{ new Notification(title, {body, icon:'/favicon.ico'}); }catch(e){}
-}
-
 function _checkClosedPositions(currentPositions){
   if(_prevPosMap === null){
     // First poll after load: seed the map without firing notifications
@@ -8753,7 +8747,6 @@ setInterval(fetchPnlChart,30000);
 setInterval(fetchLeaderboard,30000);
 setInterval(fetchTradersFeed,15000);
 setInterval(_refreshVisibleReactions,12000);
-setInterval(_pollNotifCount,15000);
 setInterval(fetchPumpScanner,30000);
 
 // ── VERSION POLLING ──
@@ -10126,36 +10119,6 @@ function _dmSetUnreadBadge(n){
   });
 }
 
-function _setNotifBadge(n){
-  [document.getElementById('sb-notif-badge'),
-   document.getElementById('mn-notif-badge')].forEach(el=>{
-    if(!el) return;
-    el.textContent=n>99?'99+':n||'';
-    el.style.display=n>0?'inline-block':'none';
-  });
-}
-
-var _prevNotifCount=-1;
-async function _pollNotifCount(){
-  try{
-    var r=await fetch('/api/notifications/mine/unread_count').then(function(x){return x.json();}).catch(function(){return null;});
-    if(!r||!r.ok) return;
-    var n=r.unread||0;
-    _setNotifBadge(n);
-    if(_prevNotifCount>=0 && n>_prevNotifCount){
-      var nr=await fetch('/api/notifications/mine').then(function(x){return x.json();}).catch(function(){return null;});
-      if(nr&&nr.ok&&nr.notifications&&nr.notifications.length){
-        var notif=nr.notifications[0];
-        var sep=notif.content.indexOf(': ');
-        var title=sep>-1?notif.content.slice(0,sep):notif.content;
-        var body=sep>-1?notif.content.slice(sep+2):'';
-        _pushNotif(title,body);
-      }
-    }
-    _prevNotifCount=n;
-  }catch(_){}
-}
-
 function _dmUpdateUnreadBadge(){
   const total=_dmConvos.reduce((s,c)=>s+(c.unread||0),0);
   _dmSetUnreadBadge(total);
@@ -11355,6 +11318,9 @@ function renderHomeFeed(){
   if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
   el.innerHTML = items.map(_renderFeedCard).join('');
   _initLiveCharts();
+  el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
+    _feedLoadReplies(card.id.slice('fc-card-'.length));
+  });
 }
 
 function showToken(symbol){
@@ -11843,6 +11809,20 @@ function _feedToggleReply(btn, postId){
   }
 }
 
+function _feedLoadReplies(postId){
+  var list = document.getElementById('rlist-'+postId);
+  if(!list) return;
+  fetch('/api/feed/replies/'+encodeURIComponent(postId))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok || !d.replies.length) return;
+      list.innerHTML = d.replies.map(function(r){
+        return '<div class="fc-reply-item"><strong>'+esc(r.username||'?')+'</strong> '+esc(r.message)+'</div>';
+      }).join('');
+    })
+    .catch(function(){});
+}
+
 function _feedSubmitReply(inp, postId){
   if(!inp) return;
   var text = inp.value.trim();
@@ -12265,5 +12245,6 @@ document.addEventListener('keydown', function(e){
   </div>
 </div>
 
+<script src="/static/notif-poll.js"></script>
 </body>
 </html>

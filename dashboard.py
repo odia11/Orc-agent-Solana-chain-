@@ -5556,6 +5556,26 @@ def post_feed_reply():
         'created_at': now,
     })
 
+@app.route('/api/feed/replies/<path:post_id>', methods=['GET'])
+@rate_limit(60, 60)
+def get_feed_replies(post_id):
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            '''SELECT COALESCE(u.username, ''), r.message, r.created_at
+               FROM feed_replies r
+               LEFT JOIN users u ON u.id = r.user_id
+               WHERE r.post_id = ?
+               ORDER BY r.created_at ASC''',
+            (post_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'replies': [
+        {'username': r[0], 'message': r[1], 'created_at': r[2]}
+        for r in rows
+    ]})
+
 # ── PROFILE ──
 @app.route('/api/me', methods=['GET'])
 @rate_limit(60, 60)

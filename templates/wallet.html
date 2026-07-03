@@ -61,6 +61,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 .sb-nav-item.active{background:rgba(247,185,85,.1);color:var(--text);font-weight:600}
 .sb-nav-item.active::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--amber);margin-left:auto;flex-shrink:0}
 .sb-nav-icon{width:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+.sb-nav-badge{margin-left:auto;background:#f7b955;color:#0a0b0e;font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
 
 /* ── center column ── */
 .wlt-center{flex:1;min-width:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
@@ -512,6 +513,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
     <a class="sb-nav-item" href="/notifications">
       <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
       Notifications
+      <span class="sb-nav-badge" id="sb-notif-badge" style="display:none"></span>
     </a>
     <a class="sb-nav-item" href="/profile">
       <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></span>
@@ -1489,5 +1491,6 @@ _loadActivity()
 
 
 </script>
+<script src="/static/notif-poll.js"></script>
 </body>
 </html>

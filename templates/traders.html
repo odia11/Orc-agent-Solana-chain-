@@ -318,6 +318,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <a class="sb-nav-item" href="/notifications">
         <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></span>
         Notifications
+        <span class="sb-nav-badge" id="sb-notif-badge" style="display:none"></span>
       </a>
       <a class="sb-nav-item" href="/wallet">
         <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg></span>
@@ -731,5 +732,6 @@ function _toast(msg,type){
   }).catch(function(){});
 })();
 </script>
+<script src="/static/notif-poll.js"></script>
 </body>
 </html>
