@@ -7048,6 +7048,11 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
     document.getElementById('dapp-connect-section').style.display='none';
     // Launch button is irrelevant until the user is inside a dapp browser
     document.getElementById('step1-continue-btn').style.display='none';
+    // Hide Phantom connect on mobile regular browsers — deep-link flow is unreliable
+    var _pb=document.getElementById('phantom-ob-btn');
+    var _pn=document.getElementById('ob-phantom-note');
+    if(_pb) _pb.style.display='none';
+    if(_pn) _pn.style.display='none';
   }
 })();
 
