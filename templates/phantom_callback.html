@@ -131,30 +131,8 @@ var _b58enc=(function(){
     return;
   }
 
-  sessionStorage.setItem('_orca_phantom_wallet', dr.wallet_address);
-  msg.textContent = 'Preparing sign-in…';
-
-  var nr = await fetch('/api/auth/nonce').then(function(r){ return r.json(); }).catch(function(){ return null; });
-  if(!nr || !nr.ok){ fail('Could not get auth challenge — please try again.'); return; }
-
-  sessionStorage.setItem('_orca_phantom_nonce', nr.nonce);
-
-  // Init a new NaCl session for signMessage (needs fresh keypair so Phantom can encrypt the sig back)
-  var ir = await fetch('/api/phantom/init',{
-    method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'}, body:'{}'
-  }).then(function(r){ return r.json(); }).catch(function(){ return null; });
-  if(!ir || !ir.ok || !ir.dapp_pk){ fail('Could not init sign session — please try again.'); return; }
-
-  var msgB58 = _b58enc(new TextEncoder().encode(nr.message));
-  var sp = new URLSearchParams({
-    dapp_encryption_public_key: ir.dapp_pk,
-    message:                    msgB58,
-    redirect_link:              'https://orcagent.fun/phantom-callback?step=sign&token=' + encodeURIComponent(ir.token),
-    cluster:                    'mainnet-beta'
-  });
-  msg.textContent = 'Redirecting to Phantom…';
-  window.location.href = 'https://phantom.app/ul/v1/signMessage?' + sp.toString();
+  msg.textContent = 'Connected! Redirecting…';
+  window.location.href = '/';
 })();
 </script>
 </body>
