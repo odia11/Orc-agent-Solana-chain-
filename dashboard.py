@@ -2400,10 +2400,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                           f'in trading wallet {_trading_wallet}', flush=True)
                     # Exit checks (Pass 1) still run below — sells return SOL.
                 elif total_live == 0:
-                    add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
+                    add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/' + str(max_positions))
                 else:
                     add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                                 ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/5')
+                                 ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/' + str(max_positions))
 
                 # ── Pass 1: exit checks for ALL open positions ──
                 # Iterates positions dict (not live scan) so tokens that drop off the
@@ -2528,7 +2528,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                          'bot paused for 1 hour to protect gains')
 
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < 5 and us_sol >= _GAS_MIN and not _pc_locked:
+                if not stop_event.is_set() and open_pos < max_positions and us_sol >= _GAS_MIN and not _pc_locked:
                     # Re-fetch blacklist each scan so additions take effect immediately
                     try:
                         _bl_conn = sqlite3.connect(DB_FILE)
