@@ -4506,7 +4506,8 @@ def settings_get():
         row = conn.execute(
             '''SELECT encrypted_private_key, breakout_trigger, take_profit,
                       stop_loss, max_positions, pref_notifications,
-                      pref_scam_filter, pref_sound_alerts, bot_enabled
+                      pref_scam_filter, pref_sound_alerts, bot_enabled,
+                      avatar_url, username
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
@@ -4529,6 +4530,8 @@ def settings_get():
         'pref_scam_filter':   bool(row[6] if row[6] is not None else 1),
         'pref_sound_alerts':  bool(row[7] if row[7] is not None else 0),
         'bot_running': bot_running,
+        'avatar_url': row[9] or '',
+        'username':   row[10] or '',
     })
 
 @app.route('/api/settings/save', methods=['POST'])
