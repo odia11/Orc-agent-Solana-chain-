@@ -924,6 +924,17 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_feed_replies_post ON feed_replies(post_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS notifications (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        type       TEXT NOT NULL,
+        content    TEXT NOT NULL,
+        link       TEXT,
+        is_read    INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)')
     c.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id       INTEGER NOT NULL,
@@ -6806,8 +6817,15 @@ def send_dm(peer_id):
             'INSERT INTO direct_messages (sender_id, receiver_id, message, message_type, created_at) VALUES (?,?,?,?,?)',
             (me, peer_id, text, message_type, now)
         )
-        conn.commit()
         message_id = cur.lastrowid
+        sender_row  = conn.execute('SELECT username FROM users WHERE id=?', (me,)).fetchone()
+        sender_name = (sender_row[0] if sender_row and sender_row[0] else wallet[:8] + '…')
+        preview     = text[:60] + ('…' if len(text) > 60 else '')
+        conn.execute(
+            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            (peer_id, 'message', sender_name + ': ' + preview, '/messages/' + wallet)
+        )
+        conn.commit()
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
     finally:
