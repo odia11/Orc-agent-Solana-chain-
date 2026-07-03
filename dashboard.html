@@ -12099,9 +12099,12 @@ function _renderReplyRow(r, postId){
   var delBtn  = r.is_mine
     ? '<button class="fc-ri-delete" onclick="_feedDeleteReply('+r.id+',this.closest(\'.fc-reply-item\'),\''+postId.replace(/'/g,"\\'")+'\')" title="Delete">&#128465;</button>'
     : '';
+  var avatarImg = r.avatar_url
+    ? '<img src="'+esc(r.avatar_url)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
+    : '';
   return '<div class="fc-reply-item" data-reply-id="'+r.id+'">'
     +'<div class="fc-ri-header">'
-    +'<div class="fc-ri-avatar" style="background:'+bg+'">'+ini+'</div>'
+    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="openProfileCard('+Number(r.user_id)+')">'+ini+avatarImg+'</div>'
     +'<span class="fc-ri-name">'+name+'</span>'
     +youChip
     +'<span class="fc-ri-handle">'+handle+'</span>'
