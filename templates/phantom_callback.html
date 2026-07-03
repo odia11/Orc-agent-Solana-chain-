@@ -20,6 +20,20 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
 <div class="brand">OrcAgent</div>
 
 <script>
+var _b58enc=(function(){
+  var A='123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+  return function(buf){
+    var d=[],s='';
+    for(var i=0;i<buf.length;i++){
+      var c=buf[i];
+      for(var j=0;j<d.length;j++){c+=d[j]<<8;d[j]=c%58;c=c/58|0;}
+      while(c>0){d.push(c%58);c=c/58|0;}
+    }
+    for(var k=0;buf[k]===0&&k<buf.length-1;k++) s+='1';
+    return s+d.reverse().map(function(x){return A[x];}).join('');
+  };
+})();
+
 (async function(){
   var msg = document.getElementById('msg');
 
@@ -117,8 +131,30 @@ body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;d
     return;
   }
 
-  msg.textContent = 'Connected! Redirecting…';
-  window.location.href = '/';
+  sessionStorage.setItem('_orca_phantom_wallet', dr.wallet_address);
+  msg.textContent = 'Preparing sign-in…';
+
+  var nr = await fetch('/api/auth/nonce').then(function(r){ return r.json(); }).catch(function(){ return null; });
+  if(!nr || !nr.ok){ fail('Could not get auth challenge — please try again.'); return; }
+
+  sessionStorage.setItem('_orca_phantom_nonce', nr.nonce);
+
+  // Init a new NaCl session for signMessage (needs fresh keypair so Phantom can encrypt the sig back)
+  var ir = await fetch('/api/phantom/init',{
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json'}, body:'{}'
+  }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+  if(!ir || !ir.ok || !ir.dapp_pk){ fail('Could not init sign session — please try again.'); return; }
+
+  var msgB58 = _b58enc(new TextEncoder().encode(nr.message));
+  var sp = new URLSearchParams({
+    dapp_encryption_public_key: ir.dapp_pk,
+    message:                    msgB58,
+    redirect_link:              'https://orcagent.fun/phantom-callback?step=sign&token=' + encodeURIComponent(ir.token),
+    cluster:                    'mainnet-beta'
+  });
+  msg.textContent = 'Redirecting to Phantom…';
+  window.location.href = 'https://phantom.app/ul/v1/signMessage?' + sp.toString();
 })();
 </script>
 </body>
