@@ -5668,6 +5668,52 @@ def get_feed_replies(post_id):
         for r in rows
     ]})
 
+@app.route('/api/feed/reply/like/<int:reply_id>', methods=['POST'])
+@rate_limit(30, 60)
+def toggle_feed_reply_like(reply_id):
+    me = _get_uid()
+    if not me:
+        return jsonify({'ok': False, 'error': 'not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        existing = conn.execute(
+            'SELECT id FROM feed_reply_likes WHERE user_id=? AND reply_id=?',
+            (me, reply_id)
+        ).fetchone()
+        if existing:
+            conn.execute('DELETE FROM feed_reply_likes WHERE user_id=? AND reply_id=?', (me, reply_id))
+        else:
+            conn.execute('INSERT INTO feed_reply_likes (user_id, reply_id) VALUES (?,?)', (me, reply_id))
+        conn.commit()
+        count = conn.execute(
+            'SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id=?', (reply_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'liked': not existing, 'like_count': count})
+
+@app.route('/api/feed/reply/<int:reply_id>', methods=['DELETE'])
+@rate_limit(30, 60)
+def delete_feed_reply(reply_id):
+    me = _get_uid()
+    if not me:
+        return jsonify({'ok': False, 'error': 'not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT user_id FROM feed_replies WHERE id=?', (reply_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'error': 'reply not found'}), 404
+        if row[0] != me:
+            return jsonify({'ok': False, 'error': 'forbidden'}), 403
+        conn.execute('DELETE FROM feed_reply_likes WHERE reply_id=?', (reply_id,))
+        conn.execute('DELETE FROM feed_replies WHERE id=?', (reply_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 # ── PROFILE ──
 @app.route('/api/me', methods=['GET'])
 @rate_limit(60, 60)
