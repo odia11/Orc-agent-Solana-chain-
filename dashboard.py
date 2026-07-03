@@ -2022,7 +2022,7 @@ def check_daily_reset_user(us: dict):
 
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
-                       exit_reason: str = '', opened_at: float = 0.0):
+                       exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -2163,6 +2163,20 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         print(f'[trade_record] DB write failed: {e}', flush=True)
     if wallet:
         _recalculate_badges(wallet)
+    if pref_notifications and user_id:
+        pnl_sign     = '+' if pnl >= 0 else ''
+        notif_content = (f'Trade closed: ${symbol} '
+                         f'{pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL) — {exit_reason}' if exit_reason
+                         else f'Trade closed: ${symbol} {pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL)')
+        try:
+            _nc = sqlite3.connect(DB_FILE)
+            _nc.execute(
+                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                (user_id, 'trade', notif_content, '/history'))
+            _nc.commit()
+            _nc.close()
+        except Exception as _ne:
+            print(f'[notif] trade notification failed: {_ne}', flush=True)
 
 # ── BADGE SYSTEM ──
 def _calculate_badges(wallet: str) -> list:
@@ -2276,7 +2290,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -2298,8 +2312,10 @@ def user_trader_loop(stop_event, config, wallet: str):
     stop_loss     = (float(row[7]) / 100) if row[7] is not None else STOP_LOSS
     crash_exit    = CRASH_EXIT
     m5_min        = float(row[5]) if row[5] is not None else 8
-    m5_max        = None
-    max_positions = int(row[8]) if row[8] is not None else 5
+    m5_max             = None
+    max_positions      = int(row[8])  if row[8]  is not None else 5
+    pref_scam_filter   = bool(row[9]  if row[9]  is not None else 1)
+    pref_notifications = bool(row[10] if row[10] is not None else 1)
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -2352,11 +2368,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
-                                       exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0))
+                                       exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
+                                       pref_notifications=pref_notifications)
             else:
                 _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                    _pos['amount'], _pos.get('spend', 0), mint=_mint,
-                                   exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0))
+                                   exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
+                                   pref_notifications=pref_notifications)
             positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
             continue  # skip normal stop-loss check — crash exit already handled
         if _chg <= -stop_loss:
@@ -2368,11 +2386,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
-                                       exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0))
+                                       exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
+                                       pref_notifications=pref_notifications)
             else:
                 _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                    _pos['amount'], _pos.get('spend', 0), mint=_mint,
-                                   exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0))
+                                   exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
+                                   pref_notifications=pref_notifications)
             positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
 
     try:
@@ -2453,12 +2473,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0))
+                                                   exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
+                                                   pref_notifications=pref_notifications)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position cleared')
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                mint=mint, exit_reason='RUGPULL ' + _rug_reason[:40],
-                                               opened_at=pos.get('opened_at', 0.0))
+                                               opened_at=pos.get('opened_at', 0.0),
+                                               pref_notifications=pref_notifications)
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
                         continue  # skip crash-exit and TP/SL
@@ -2472,12 +2494,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0))
+                                                   exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
+                                                   pref_notifications=pref_notifications)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position cleared')
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                mint=mint, exit_reason='CRASH EXIT ' + crash_pct,
-                                               opened_at=pos.get('opened_at', 0.0))
+                                               opened_at=pos.get('opened_at', 0.0),
+                                               pref_notifications=pref_notifications)
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
                         continue  # skip normal TP/SL — crash exit already handled
@@ -2494,12 +2518,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0))
+                                                   exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
+                                                   pref_notifications=pref_notifications)
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
                             _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                mint=mint, exit_reason=exit_reason,
-                                               opened_at=pos.get('opened_at', 0.0))
+                                               opened_at=pos.get('opened_at', 0.0),
+                                               pref_notifications=pref_notifications)
                         positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                         open_pos -= 1
 
@@ -2548,6 +2574,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if _t['mint'] in _blacklisted:
                             _skip_log.append(f'[skip] {_tsym}: blacklisted by user')
                             continue
+                        if pref_scam_filter:
+                            _rf = _t.get('breakdown', {}).get('risk_flags', [])
+                            if 'VERY LOW LIQ' in _rf:
+                                _skip_log.append(f'[skip] {_tsym}: scam filter — VERY LOW LIQ')
+                                continue
                         _dex  = _t.get('dexId', '') or ''
                         _sc   = _t.get('score', 0)
                         _m5   = _t.get('change5m', 0)
