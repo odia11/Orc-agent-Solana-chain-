@@ -11787,7 +11787,7 @@ async function _refreshVisibleReactions(){
   var cards = document.querySelectorAll('.fc-card[id^="fc-card-"]');
   if(!cards.length) return;
   var ids = [];
-  cards.forEach(function(c){ var m = c.id.match(/^fc-card-(\d+)$/); if(m) ids.push(m[1]); });
+  cards.forEach(function(c){ var m = c.id.match(/^fc-card-([A-Za-z0-9_]+)$/); if(m) ids.push(m[1]); });
   if(!ids.length) return;
   try{
     var r = await fetch('/api/feed/reactions/batch?ids='+ids.map(encodeURIComponent).join(','))

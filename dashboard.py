@@ -5395,7 +5395,7 @@ def toggle_feed_reaction(post_id):
 @rate_limit(60, 60)
 def feed_reactions_batch():
     raw = request.args.get('ids', '')
-    post_ids = [p.strip() for p in raw.split(',') if p.strip().isdigit()][:50]
+    post_ids = [p.strip() for p in raw.split(',') if re.match(r'^[A-Za-z0-9_]{1,64}$', p.strip())][:50]
     if not post_ids:
         return jsonify({'ok': True, 'reactions': {}})
     wallet = _current_wallet()
