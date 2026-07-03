@@ -2294,11 +2294,12 @@ def user_trader_loop(stop_event, config, wallet: str):
     daily_loss_limit = abs(float(row[2] if row[2] is not None else 50.0))
     min_trade_usdc   = float(row[3]) if (len(row) > 3 and row[3] is not None) else 1.0
     max_trade_usdc   = float(row[4]) if (len(row) > 4 and row[4] is not None) else 10.0
-    take_profit      = TAKE_PROFIT
-    stop_loss        = STOP_LOSS
-    crash_exit       = CRASH_EXIT
-    m5_min           = 8    # entry threshold: change5m OR change1h must hit this
-    m5_max           = None
+    take_profit   = (float(row[6]) / 100) if row[6] is not None else TAKE_PROFIT
+    stop_loss     = (float(row[7]) / 100) if row[7] is not None else STOP_LOSS
+    crash_exit    = CRASH_EXIT
+    m5_min        = float(row[5]) if row[5] is not None else 8
+    m5_max        = None
+    max_positions = int(row[8]) if row[8] is not None else 5
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
