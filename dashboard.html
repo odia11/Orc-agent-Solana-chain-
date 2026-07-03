@@ -4693,35 +4693,44 @@ var _b58enc=(function(){
 })();
 
 async function _connectWalletSigned(provider, address){
-  // 1. Fetch nonce
-  var nr = await fetch('/api/auth/nonce').then(function(r){return r.json();}).catch(function(){return null;});
-  if(!nr || !nr.ok) return {ok:false, msg:'Failed to get nonce'};
+  async function _attempt(){
+    // 1. Fetch nonce
+    var nr = await fetch('/api/auth/nonce').then(function(r){return r.json();}).catch(function(){return null;});
+    if(!nr || !nr.ok) return {ok:false, msg:'Failed to get nonce'};
 
-  // 2. Sign — catch user rejection separately so it doesn't fall to outer catch
-  var result;
-  try{
-    result = await provider.signMessage(new TextEncoder().encode(nr.message), 'utf8');
-  }catch(e){
-    return {ok:false, msg:'Signature rejected'};
+    // 2. Sign — catch user rejection separately so it doesn't fall to outer catch
+    var result;
+    try{
+      result = await provider.signMessage(new TextEncoder().encode(nr.message), 'utf8');
+    }catch(e){
+      return {ok:false, msg:'Signature rejected'};
+    }
+
+    // 3. Normalise: Phantom → {signature:Uint8Array}, Solflare → Uint8Array directly
+    var sigBytes = (result instanceof Uint8Array)
+      ? result
+      : (result && result.signature instanceof Uint8Array ? result.signature : null);
+    if(!sigBytes) return {ok:false, msg:'Signature rejected'};
+
+    // 4. Base58-encode signature bytes
+    var sigB58 = _b58enc(sigBytes);
+
+    // 5. POST /api/wallet/set with proof
+    var r = await fetch('/api/wallet/set',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({address:address, signature:sigB58, nonce:nr.nonce})
+    }).then(function(x){return x.json();}).catch(function(){return null;});
+
+    return r || {ok:false, msg:'Network error'};
   }
 
-  // 3. Normalise: Phantom → {signature:Uint8Array}, Solflare → Uint8Array directly
-  var sigBytes = (result instanceof Uint8Array)
-    ? result
-    : (result && result.signature instanceof Uint8Array ? result.signature : null);
-  if(!sigBytes) return {ok:false, msg:'Signature rejected'};
-
-  // 4. Base58-encode signature bytes
-  var sigB58 = _b58enc(sigBytes);
-
-  // 5. POST /api/wallet/set with proof
-  var r = await fetch('/api/wallet/set',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({address:address, signature:sigB58, nonce:nr.nonce})
-  }).then(function(x){return x.json();}).catch(function(){return null;});
-
-  return r || {ok:false, msg:'Network error'};
+  var r = await _attempt();
+  // Nonce expired (e.g. user took >5 min in Phantom app on mobile) — retry once with a fresh nonce
+  if(r && !r.ok && r.msg === 'Nonce expired, try again'){
+    r = await _attempt();
+  }
+  return r;
 }
 
 function _phantomMobileV1Connect(){

@@ -4018,7 +4018,7 @@ def auth_nonce():
     now   = time.time()
     with _nonce_lock:
         _wallet_auth_nonces[nonce] = {'ts': now, 'ip': ip}
-        stale = [k for k, v in _wallet_auth_nonces.items() if now - v['ts'] > 300]
+        stale = [k for k, v in _wallet_auth_nonces.items() if now - v['ts'] > 480]
         for k in stale:
             del _wallet_auth_nonces[k]
     return jsonify({
@@ -4147,7 +4147,7 @@ def set_wallet():
             entry = _wallet_auth_nonces.get(nonce)
             if entry:
                 del _wallet_auth_nonces[nonce]  # single-use regardless of outcome
-        if not entry or now_ts - entry['ts'] > 300:
+        if not entry or now_ts - entry['ts'] > 480:
             return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
         if not _NACL_OK or _nacl_signing is None:
             return jsonify({'ok': False, 'msg': 'Signature verification unavailable'}), 503
