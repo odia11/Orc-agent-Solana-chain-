@@ -5625,9 +5625,10 @@ def post_feed_reply():
 @app.route('/api/feed/replies/<path:post_id>', methods=['GET'])
 @rate_limit(60, 60)
 def get_feed_replies(post_id):
-    me = _get_uid()
+    wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
+        me = _get_uid(conn, wallet) if wallet else None
         rows = conn.execute(
             '''SELECT r.id,
                       COALESCE(u.username, ''),
