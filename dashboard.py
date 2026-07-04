@@ -3788,12 +3788,26 @@ def settings_page():
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    x_handle = x_share_trade = x_share_badge = None
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        xrow = conn.execute(
+            'SELECT x_handle, share_on_big_trade, share_on_badge FROM x_connections WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+        if xrow:
+            x_handle, x_share_trade, x_share_badge = xrow[0], bool(xrow[1]), bool(xrow[2])
+    finally:
+        conn.close()
     return render_template(
         'settings.html',
         wallet=wallet,
         wallet_short=wallet_short,
         is_admin=_is_owner(wallet),
         csrf_token=_get_csrf_token(),
+        x_handle=x_handle,
+        x_share_trade=x_share_trade,
+        x_share_badge=x_share_badge,
     )
 
 
@@ -6400,6 +6414,43 @@ def x_callback():
     session.pop('x_code_verifier', None)
     session.pop('x_oauth_wallet',  None)
     return redirect('/settings?x_connected=1')
+
+@app.route('/api/x/prefs', methods=['POST'])
+@rate_limit(20, 60)
+def x_prefs():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    updates, params = [], []
+    if 'share_on_big_trade' in data:
+        updates.append('share_on_big_trade=?'); params.append(1 if data['share_on_big_trade'] else 0)
+    if 'share_on_badge' in data:
+        updates.append('share_on_badge=?'); params.append(1 if data['share_on_badge'] else 0)
+    if not updates:
+        return jsonify({'ok': True})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(f'UPDATE x_connections SET {",".join(updates)} WHERE wallet_address=?',
+                     params + [wallet])
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+@app.route('/api/x/disconnect', methods=['POST'])
+@rate_limit(10, 60)
+def x_disconnect():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('DELETE FROM x_connections WHERE wallet_address=?', (wallet,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
 
 # ── BIO ──
 @app.route('/api/bio', methods=['POST'])

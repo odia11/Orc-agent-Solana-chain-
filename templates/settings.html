@@ -121,6 +121,15 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .modal-msg.ok{color:var(--green)}
 .modal-msg.err{color:var(--red)}
 
+/* ── X (TWITTER) CARD ── */
+.st-x-connected{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.st-x-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.st-x-handle{font-size:14px;font-weight:700;color:var(--text)}
+.st-x-connect-btn{display:inline-flex;align-items:center;gap:7px;background:#000;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s;text-decoration:none}
+.st-x-connect-btn:hover{opacity:.85}
+.st-x-disconnect{background:none;border:1px solid var(--border2);color:var(--red);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;font-family:var(--ui);cursor:pointer;transition:border-color .15s;margin-top:14px}
+.st-x-disconnect:hover{border-color:var(--red)}
+
 /* ── USERNAME FIELD ── */
 .st-uname-row{display:flex;align-items:flex-start;gap:8px;margin-bottom:4px}
 .st-uname-inp{flex:1;background:#1a1d23;border:1px solid var(--border2);color:var(--text);font-family:var(--ui);font-size:13px;border-radius:8px;padding:8px 10px;outline:none;transition:border-color .15s;min-width:0}
@@ -395,6 +404,49 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       </div>
 
 
+      <!-- ── CARD 4: X (Twitter) ── -->
+      <div class="st-card">
+        <div class="st-card-hdr">𝕏 X (Twitter)</div>
+
+        {% if x_handle %}
+        <div class="st-x-connected">
+          <span class="st-x-dot"></span>
+          <span class="st-x-handle">@{{ x_handle }} connected</span>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Auto-share big trades</div>
+            <div class="st-tog-sub">Post to X when a trade closes with significant P&amp;L</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="x-share-trade" {% if x_share_trade %}checked{% endif %} onchange="_saveXPref('share_on_big_trade',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Auto-share badges</div>
+            <div class="st-tog-sub">Post to X when you earn a new badge</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="x-share-badge" {% if x_share_badge %}checked{% endif %} onchange="_saveXPref('share_on_badge',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <button class="st-x-disconnect" onclick="_disconnectX()">Disconnect @{{ x_handle }}</button>
+
+        {% else %}
+        <div class="st-row-sub" style="margin-bottom:14px">Connect your X account to auto-share trades and badges.</div>
+        <a href="/api/x/connect" class="st-x-connect-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Connect X
+        </a>
+        {% endif %}
+      </div>
+
     </div><!-- /st-content -->
   </main>
 </div><!-- /app -->
@@ -637,6 +689,17 @@ async function _uploadAvatar(dataUrl){
   }catch(e){
     if(msgEl){ msgEl.className='st-av-msg err'; msgEl.textContent='✗ Network error'; }
   }
+}
+
+/* ── X prefs ── */
+function _saveXPref(key, val){
+  var body={}; body[key]=val?1:0;
+  _post('/api/x/prefs', body).catch(function(){});
+}
+async function _disconnectX(){
+  if(!confirm('Disconnect your X account?')) return;
+  var d=await _post('/api/x/disconnect',{}).catch(function(){return null;});
+  if(d&&d.ok) window.location.reload();
 }
 
 /* ── escape to close modals ── */
