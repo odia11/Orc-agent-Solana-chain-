@@ -3224,47 +3224,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="s-title">⚙ TRADING SETTINGS</div>
     <div class="s-sub" id="s-user-label">Connect a wallet to save per-wallet settings</div>
 
-    <div id="s-key-saved" class="s-key-saved-row" style="display:none">
-      <span style="font-size:12px;color:var(--green)">✅ Private key saved — ready to trade</span>
-      <button onclick="removeKey()" class="s-remove-key-btn">Remove key</button>
-    </div>
-
-    <div class="how-to-box">
-      <button class="how-to-toggle" onclick="toggleHowTo(this)" aria-expanded="false">
-        ℹ How to Start Trading <span class="how-to-arrow">▼</span>
-      </button>
-      <div class="how-to-body">
-        <div class="how-to-section">💰 Minimum Requirements</div>
-        <div class="how-to-item">At least 0.1 SOL in your trading wallet (used directly for buying tokens)</div>
-        <div class="how-to-item">A small extra SOL buffer (~0.01 SOL) is kept for transaction fees automatically</div>
-        <div class="how-to-item">Your trading wallet private key saved below</div>
-        <div class="how-to-section">⚡ How the Bot Trades</div>
-        <div class="how-to-item">Scans Solana tokens every 30 seconds</div>
-        <div class="how-to-item">Buys when: ≥5% price rise in last 5 min with accelerating volume</div>
-        <div class="how-to-item">Skips tokens already up 50%+ in the hour (momentum played out)</div>
-        <div class="how-to-item">Maximum 5 open positions at once</div>
-        <div class="how-to-item">Auto sells at TP +12% or SL -3% — 100% of position every time (Auto Strategy)</div>
-
-      </div>
-    </div>
-
-    <div class="s-field">
-      <label class="s-label">Private Key <span class="s-key-hint" id="s-key-hint"></span></label>
-      <div class="s-key-wrap">
-        <input id="s-privkey" class="s-input" type="password" placeholder="Enter private key to enable trading" autocomplete="new-password">
-        <button class="s-vis-btn" id="s-vis-btn" onclick="togglePrivVis()">👁</button>
-      </div>
-      <div style="background:#1c1c1c;border:1px solid #2e2e2e;border-left:4px solid #000000;border-radius:6px;padding:12px 14px;margin-top:8px;font-size:11px;">
-        <div style="color:#ffffff;font-weight:bold;margin-bottom:6px;">🔒 YOUR KEY IS SAFE</div>
-        <div style="color:#a0a0a0;line-height:1.6;">
-          ✅ Double-encrypted with Fernet before storage<br>
-          ✅ Never exposed in API responses or logs<br>
-          ✅ Only decrypted in memory during trade execution<br>
-          ⚠️ Use a dedicated trading wallet only — never your main wallet
-        </div>
-      </div>
-    </div>
-
     <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Min Trade Size (USDC)</label>
