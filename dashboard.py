@@ -3135,6 +3135,14 @@ def profile():
         win_rate  = round(wins / total * 100) if total else 0
         total_pnl = round(stats['total_pnl'] or 0, 4)
         wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+        sol_balance = None
+        try:
+            r = requests.post(SOLANA_RPC, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+            }, timeout=5)
+            sol_balance = round(r.json()['result']['value'] / 1e9, 4)
+        except Exception:
+            pass
         return render_template(
             'profile.html',
             wallet=wallet,
@@ -3153,6 +3161,7 @@ def profile():
             followers=followers,
             following=following,
             posts=[dict(p) for p in posts],
+            sol_balance=sol_balance,
         )
     finally:
         conn.close()
