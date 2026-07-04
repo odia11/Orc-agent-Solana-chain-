@@ -5211,7 +5211,10 @@ def social_feed():
                    u.avatar_url
             FROM trades t
             LEFT JOIN users u ON t.user_id = u.id
-            ORDER BY created_at DESC LIMIT 50
+            ORDER BY
+              CASE WHEN created_at LIKE '%T%'
+                   THEN replace(replace(created_at,'T',' '),'Z','')
+                   ELSE created_at END DESC LIMIT 50
         ''', (my_wallet, my_wallet)).fetchall()
     finally:
         conn.close()
