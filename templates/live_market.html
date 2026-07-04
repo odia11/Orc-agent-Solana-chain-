@@ -320,15 +320,15 @@ async function _fetchNew(){
 }
 
 async function _fetchGainers(){
-  var r = await fetch('https://api.dexscreener.com/latest/dex/search?q=solana');
-  var d = await r.json();
-  var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; });
-  pairs.sort(function(a,b){
+  var trending = await _fetchTrending();
+  var fresh    = await _fetchNew();
+  var merged   = trending.concat(fresh);
+  merged.sort(function(a,b){
     var ac = a.priceChange&&a.priceChange.h24!=null?a.priceChange.h24:-Infinity;
     var bc = b.priceChange&&b.priceChange.h24!=null?b.priceChange.h24:-Infinity;
     return bc-ac;
   });
-  return _dedupeByAddress(pairs, {});
+  return _dedupeByAddress(merged, {});
 }
 
 function _dedupeByAddress(pairs, iconMap){
