@@ -4498,7 +4498,7 @@ async function connectReadonlyAddress(){
     }).then(function(x){ return x.json(); });
     if(r.ok){
       phantomKey=r.wallet; walletType='readonly'; _isReadonly=true;
-      if(r.csrf_token) window._csrfToken=r.csrf_token;
+      if(r.csrf_token) _csrfToken=r.csrf_token;
       launchApp();
     } else {
       if(errEl) errEl.textContent=r.msg||'Invalid address.';
@@ -11976,7 +11976,13 @@ function _feedToggleLike(btn, postId){
   else      { btn.classList.add('liked');    btn.innerHTML = '❤ <span class="fc-like-count">'+(cur+1)+'</span>'; }
   fetch('/api/feed/like/'+encodeURIComponent(postId), {method:'POST'})
     .then(function(r){ return r.json(); }).then(function(d){
-      if(!d.ok) return;
+      if(!d.ok){
+        console.error('[like] failed:', d.msg||'unknown error');
+        // revert optimistic update
+        if(liked){ btn.classList.add('liked');    btn.innerHTML = '❤ <span class="fc-like-count">'+cur+'</span>'; }
+        else      { btn.classList.remove('liked'); btn.innerHTML = '♡ <span class="fc-like-count">'+cur+'</span>'; }
+        return;
+      }
       var newCountEl = btn.querySelector('.fc-like-count');
       if(newCountEl) newCountEl.textContent = d.count;
       if(!d.liked){ btn.classList.remove('liked'); btn.innerHTML = '♡ <span class="fc-like-count">'+d.count+'</span>'; }
