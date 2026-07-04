@@ -7890,7 +7890,6 @@ async function openSettings(){
   modal.classList.add('open');
   const msgEl=document.getElementById('s-msg');
   msgEl.className='s-msg'; msgEl.textContent='';
-  document.getElementById('s-privkey').value='';
   const saveBtn=document.getElementById('s-save-btn');
   if(phantomKey){
     const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
