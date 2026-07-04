@@ -108,6 +108,7 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
 </div>
 
 <script>
+var _csrfToken = {{ csrf_token|tojson }};
 function _switchTab(tab){
   document.getElementById('tab-personal').classList.toggle('active', tab==='personal');
   document.getElementById('tab-trades').classList.toggle('active', tab==='trades');
@@ -211,7 +212,7 @@ async function _markAllSeen(){
   });
   if(!ids.length){ alert('Selecteer eerst één of meer notificaties.'); return; }
   await fetch('/api/notifications/mine/mark_read_batch', {
-    method:'POST', headers:{'Content-Type':'application/json'},
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
     body: JSON.stringify({ids: ids})
   }).catch(function(){});
   _loadPersonal();

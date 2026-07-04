@@ -4159,6 +4159,7 @@ def notifications_page():
         wallet=wallet,
         wallet_short=wallet_short,
         is_admin=_is_owner(wallet),
+        csrf_token=_get_csrf_token(),
     )
 
 
