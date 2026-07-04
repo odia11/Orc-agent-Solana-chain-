@@ -1,5 +1,0 @@
-Traceback (most recent call last):
-  File "<string>", line 6, in <module>
-    cur.execute('SELECT * FROM trades ORDER BY timestamp DESC')
-    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sqlite3.OperationalError: no such table: trades
