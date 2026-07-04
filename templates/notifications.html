@@ -163,14 +163,17 @@ async function _loadPersonal(){
     var actor = sep > -1 ? n.content.slice(0, sep) : n.content;
     var body  = sep > -1 ? n.content.slice(sep + 2) : '';
     var href  = n.link || '#';
-    return '<a class="ntf-row'+(n.is_read ? '' : ' unread')+'" href="'+_esc(href)+'">'
+    return '<div class="ntf-row'+(n.is_read ? '' : ' unread')+'" data-id="'+n.id+'">'
+      + '<input type="checkbox" class="ntf-check" onclick="event.stopPropagation()" style="margin-right:10px">'
+      + '<a href="'+_esc(href)+'" style="display:contents;text-decoration:none;color:inherit">'
       + _ntfIconHtml(n.type)
       + '<div class="ntf-info">'
       + '<div class="ntf-text"><span class="ntf-actor">'+_esc(actor)+'</span>'+(body ? ' '+_esc(body) : '')+'</div>'
       + '<div class="ntf-meta">'+_relTime(n.created_at)+'</div>'
       + '</div>'
       + (n.is_read ? '' : '<div class="ntf-unread-dot"></div>')
-      + '</a>';
+      + '</a>'
+      + '</div>';
   }).join('');
   fetch('/api/notifications/mine/mark_read', {method:'POST'});
 }

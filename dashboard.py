@@ -4127,6 +4127,27 @@ def notifications_mark_read():
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
+@rate_limit(30, 60)
+def notifications_mark_read_batch():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    ids = request.get_json(silent=True) or {}
+    id_list = ids.get('ids', [])
+    if not isinstance(id_list, list) or not id_list:
+        return jsonify({'ok': False, 'msg': 'No ids provided'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        placeholders = ','.join('?' * len(id_list))
+        conn.execute(f'UPDATE notifications SET is_read=1 WHERE user_id=? AND id IN ({placeholders})',
+                     [me] + id_list)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/notifications')
 def notifications_page():
     wallet = _current_wallet()
