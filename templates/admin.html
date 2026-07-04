@@ -547,6 +547,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <div class="log-wrap" id="sys-log">
         <div class="tbl-loading"><span class="spinner"></span></div>
       </div>
+
+      <div class="sec-hdr" style="margin-top:24px">
+        <div class="sec-title">Database Backups</div>
+        <button class="btn btn-ghost" onclick="loadBackups()">Refresh</button>
+      </div>
+      <div class="tbl" id="sys-backups-wrap">
+        <div class="tbl-loading"><span class="spinner"></span></div>
+      </div>
     </div>
 
     <!-- ══════════ VIEW: MODERATION ══════════ -->
@@ -1004,6 +1012,7 @@ function renderUsers() {
         (u.trading
           ? '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'pause\')">Pause</button>'
           : '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'resume\')">Resume</button>') +
+        '<button class="btn btn-danger" onclick="forceAction(\'' + wf + '\',\'close-all\')">Close All</button>' +
       '</div>' +
       '</div>';
   }).join('');
@@ -1075,6 +1084,16 @@ async function collectFees() {
 }
 
 // ══════════════════ SYSTEM ══════════════════
+async function loadBackups(){
+  var wrap = document.getElementById('sys-backups-wrap');
+  var r = await _a('/api/admin/backups');
+  if (!r || !r.ok) { wrap.innerHTML = '<div class="tbl-empty">Failed to load</div>'; return; }
+  if (!r.backups.length) { wrap.innerHTML = '<div class="tbl-empty">No backups yet</div>'; return; }
+  wrap.innerHTML = r.backups.slice(0,10).map(function(b){
+    var sizeMb = (b.size/1024/1024).toFixed(1);
+    return '<div style="display:flex;justify-content:space-between;padding:8px 12px;border-bottom:1px solid var(--border)"><span class="mono">'+b.filename+'</span><span class="mono" style="color:var(--muted)">'+sizeMb+' MB</span></div>';
+  }).join('');
+}
 async function loadSystem() {
   var [health, rateSt, bans] = await Promise.all([_a('/api/admin/health'), _a('/api/admin/rate-stats'), _a('/api/admin/bans')]);
   if (health) {
@@ -1129,6 +1148,7 @@ async function loadSystem() {
       '<br>Traders · ' + (health.active_traders ?? '—') + ' live' +
       '<br>DB · ' + (health.db_size_kb ?? '—') + ' KB';
   }
+  loadBackups();
 }
 
 // ══════════════════ MODERATION ══════════════════
@@ -1401,7 +1421,9 @@ function banUser(btn, rowId) {
   });
 }
 async function forceAction(wallet, action) {
-  var ep = action === 'pause' ? '/api/admin/force-pause' : '/api/admin/force-resume';
+  var ep = action === 'pause' ? '/api/admin/force-pause'
+    : action === 'close-all' ? '/api/admin/force-close-all'
+    : '/api/admin/force-resume';
   var r = await fetch(ep, {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
