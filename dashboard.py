@@ -9794,9 +9794,8 @@ def api_audit_run():
 
 @app.route('/api/admin')
 def api_admin():
-    wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+    err = _require_role('admin', 'analyst')
+    if err: return err
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -9845,9 +9844,8 @@ def api_admin():
 @app.route('/api/admin/users')
 @rate_limit(20, 60)
 def admin_users():
-    wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+    err = _require_role('admin', 'moderator')
+    if err: return err
     try:
         today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
         conn = sqlite3.connect(DB_FILE)
@@ -9884,9 +9882,8 @@ def admin_users():
 @app.route('/api/admin/fees')
 @rate_limit(20, 60)
 def admin_fees():
-    wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+    err = _require_role('admin', 'analyst')
+    if err: return err
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -10070,9 +10067,8 @@ def admin_force_close_all():
 @app.route('/api/admin/rate-stats')
 @rate_limit(20, 60)
 def admin_rate_stats():
-    caller = _current_wallet()
-    if not caller or not _is_owner(caller):
-        return jsonify({'ok': False, 'error': 'Forbidden'}), 403
+    err = _require_role('admin', 'analyst')
+    if err: return err
 
     now        = time.time()
     hour_ago   = now - 3600
@@ -10345,9 +10341,9 @@ def admin_health():
 @rate_limit(20, 60)
 def admin_bans():
     """Return currently active IP bans and total rate-limit bucket count."""
+    err = _require_role('admin', 'analyst')
+    if err: return err
     wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
     now  = time.time()
     bans = []
     for ip, expires in list(_ip_ban.items()):
@@ -10365,7 +10361,7 @@ def admin_bans():
         rl_bucket_count = len(_rl_hits)
     return jsonify({'bans': sorted(bans, key=lambda x: (not x['permanent'], x['mins_left'] or 0), reverse=True),
                     'rl_bucket_count': rl_bucket_count,
-                    'whitelisted_ips': sorted(_OWNER_IPS)})
+                    'whitelisted_ips': sorted(_OWNER_IPS) if _is_owner(wallet) else []})
 
 
 @app.route('/api/admin/user/ban', methods=['POST'])
@@ -10544,6 +10540,7 @@ def admin_revenue():
 def admin_settings_save():
     err = _require_role('admin')
     if err: return err
+    wallet = session.get('wallet', '')
     data = request.get_json(silent=True) or {}
     max_positions = data.get('max_positions')
     fee           = data.get('fee')
