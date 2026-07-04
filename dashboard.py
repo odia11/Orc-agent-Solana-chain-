@@ -5649,6 +5649,13 @@ def toggle_feed_reaction(post_id):
                 (me, post_id, emoji)
             )
             active = True
+            owner_uid = _post_owner_uid(conn, post_id)
+            if owner_uid and owner_uid != me:
+                reactor_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
+                reactor_name = (reactor_row[0] if reactor_row and reactor_row[0] else wallet[:8]+'…')
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                    (owner_uid, 'reaction', reactor_name+' reacted '+emoji+' to your post', '/#post-'+post_id))
         conn.commit()
         counts = {row[0]: row[1] for row in conn.execute(
             'SELECT emoji, COUNT(*) FROM post_reactions WHERE post_id=? GROUP BY emoji',
@@ -5701,6 +5708,18 @@ def feed_reactions_batch():
         }
     return jsonify({'ok': True, 'reactions': result})
 
+def _post_owner_uid(conn, post_id):
+    if post_id.startswith('p'):
+        row = conn.execute(
+            "SELECT u.id FROM feed_posts fp JOIN users u ON fp.wallet=u.wallet_address WHERE fp.id=?",
+            (post_id[1:],)).fetchone()
+    elif post_id.startswith('t'):
+        row = conn.execute("SELECT user_id FROM trades WHERE id=?", (post_id[1:],)).fetchone()
+    else:
+        row = None
+    return row[0] if row else None
+
+
 @app.route('/api/feed/reply', methods=['POST'])
 @rate_limit(15, 60)
 def post_feed_reply():
@@ -5727,6 +5746,15 @@ def post_feed_reply():
             (me, post_id, message, now)
         )
         conn.commit()
+        owner_uid = _post_owner_uid(conn, post_id)
+        if owner_uid and owner_uid != me:
+            replier_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
+            replier_name = (replier_row[0] if replier_row and replier_row[0] else wallet[:8]+'…')
+            preview = message[:60] + ('…' if len(message) > 60 else '')
+            conn.execute(
+                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                (owner_uid, 'reply', replier_name+' replied: '+preview, '/#post-'+post_id))
+            conn.commit()
         reply_id = cur.lastrowid
         row = conn.execute(
             'SELECT COALESCE(username,""), COALESCE(avatar_url,"") FROM users WHERE id=?', (me,)
