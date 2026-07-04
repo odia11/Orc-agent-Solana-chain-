@@ -2342,6 +2342,21 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
         return False
 
+def _check_mint_safety(mint_address: str) -> dict:
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
+            'params': [mint_address, {'encoding': 'base64'}]
+        }, timeout=5)
+        raw = r.json()['result']['value']['data'][0]
+        data = base64.b64decode(raw)
+        mint_auth_active   = data[0:4] != b'\x00\x00\x00\x00'
+        freeze_auth_active = data[46:50] != b'\x00\x00\x00\x00'
+        return {'mint_authority_active': mint_auth_active,
+                'freeze_authority_active': freeze_auth_active, 'ok': True}
+    except Exception:
+        return {'mint_authority_active': True, 'freeze_authority_active': True, 'ok': False}
+
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
     us    = get_user_state(wallet)
@@ -2694,6 +2709,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                         m5s   = ('+' if m5 >= 0 else '') + str(round(m5, 1)) + '%'
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
+                        _safety = _check_mint_safety(bmint)
+                        if _safety['mint_authority_active'] or _safety['freeze_authority_active']:
+                            add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                         ' — mint/freeze authority still active (rug risk)')
+                            continue
                         trade_pct = 0.60 if sc >= 7 else user_trade_pct
                         spend = us_sol * trade_pct
                         # min/max trade size are USDC-denominated in the UI — convert to
