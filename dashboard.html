@@ -1542,6 +1542,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   margin-top:4px;
   flex:1;
 }
+.iadmin-rl-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
+@media(max-width:520px){.iadmin-rl-grid{grid-template-columns:1fr}}
 .iadmin-table{
   width:100%;
   table-layout:fixed;
@@ -3807,7 +3809,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span>Rate Limits &amp; API Calls</span>
           <button class="iadmin-action-btn" style="padding:3px 10px;font-size:9px;margin:0" onclick="iadminFetchRateStats()">↺ Refresh</button>
         </div>
-        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:12px">
+        <div class="iadmin-rl-grid" style="gap:10px;margin-bottom:12px">
           <div style="background:rgba(118,118,118,.04);border:1px solid rgba(118,118,118,.1);border-radius:9px;padding:10px 14px">
             <div class="iadmin-stat-lbl" style="font-size:8px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;color:var(--muted)">API Calls Today</div>
             <div class="iadmin-stat-val" id="ia-rl-api" style="font-size:18px">—</div>
