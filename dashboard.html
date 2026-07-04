@@ -8173,7 +8173,7 @@ function _tvTimeAgo(ts){
 
 function _tvTimeAgoStr(isoStr){
   if(!isoStr) return '';
-  try{ return _tvTimeAgo(Math.floor(new Date(isoStr+'Z'.replace('ZZ','Z')).getTime()/1000)); }catch(e){ return ''; }
+  try{ var _fixed = isoStr.endsWith('Z') ? isoStr : isoStr + 'Z'; return _tvTimeAgo(Math.floor(new Date(_fixed).getTime()/1000)); }catch(e){ return ''; }
 }
 
 const _TV_AVATAR_COLORS=['#1a5276','#0e4d3a','#2d3561','#4a235a','#5b2333','#1b4332','#154360','#3d1a00'];
