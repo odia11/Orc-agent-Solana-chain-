@@ -5800,9 +5800,6 @@ async function iadminFetchRateStats(){
   const r=await fetch('/api/admin/rate-stats').then(r=>r.json()).catch(()=>null);
   const s=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
   if(!r?.ok){
-    s('ia-rl-api','—'); s('ia-rl-jup','—'); s('ia-rl-dex','—');
-    const tb=document.getElementById('ia-rl-tbody');
-    if(tb) tb.innerHTML='<tr><td colspan="3" style="text-align:center;padding:10px;color:var(--red)">Failed to load</td></tr>';
     return;
   }
   s('ia-rl-api', r.api_calls_today??'—');
@@ -6321,7 +6318,7 @@ async function fetchAdminOverview(){
 async function fetchAdminUsers(){
   const tbody=document.getElementById('ad-users-tbody');
   const r=await fetch('/api/admin/users').then(r=>r.json()).catch(()=>null);
-  if(!r||r.error){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px">Failed to load</td></tr>';return;}
+  if(!r||r.error){return;}
   const users=r.users||[];
   if(!users.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No users yet</td></tr>';return;}
   tbody.innerHTML=users.map(u=>`<tr>
@@ -6337,7 +6334,7 @@ async function fetchAdminUsers(){
 async function fetchAdminFees(){
   const tbody=document.getElementById('ad-fees-tbody');
   const r=await fetch('/api/admin/fees').then(r=>r.json()).catch(()=>null);
-  if(!r||r.error){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px">Failed to load</td></tr>';return;}
+  if(!r||r.error){return;}
   const txs=r.transactions||[];
   if(!txs.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No fees collected yet</td></tr>';return;}
   tbody.innerHTML=txs.map(f=>{
@@ -6357,7 +6354,7 @@ async function fetchAdminFees(){
 async function fetchAdminTokens(){
   const tbody=document.getElementById('ad-tokens-tbody');
   const r=await fetch('/api/admin/tokens').then(r=>r.json()).catch(()=>null);
-  if(!r||r.error){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--red);padding:16px">Failed to load</td></tr>';return;}
+  if(!r||r.error){return;}
   const tokens=r.tokens||[];
   if(!tokens.length){tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">No trades yet</td></tr>';return;}
   tbody.innerHTML=tokens.map(t=>{
@@ -6376,7 +6373,7 @@ async function fetchAdminTokens(){
 async function fetchAdminHealth(){
   const grid=document.getElementById('ad-health-grid');
   const r=await fetch('/api/admin/health').then(r=>r.json()).catch(()=>null);
-  if(!r||r.error){grid.innerHTML='<div style="text-align:center;color:var(--red);grid-column:1/-1;padding:16px">Failed to load</div>';return;}
+  if(!r||r.error){return;}
   const items=[
     ['Tokens Tracked', r.tokens_tracked, ''],
     ['Active Traders', r.active_traders, ''],
@@ -6482,7 +6479,7 @@ async function testFeeTransfer(){
 async function fetchAdminSecurity(){
   const tbody=document.getElementById('ad-sec-tbody');
   const r=await fetch('/api/admin').then(r=>r.json()).catch(()=>null);
-  if(!r||r.error){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--red);padding:12px">Failed to load</td></tr>';return;}
+  if(!r||r.error){return;}
   const log=r.security_log||[];
   if(!log.length){tbody.innerHTML='<tr><td colspan="5" style="text-align:center;color:var(--muted);padding:12px">No security events yet</td></tr>';return;}
   const ec={key_saved:'var(--green)',key_deleted:'var(--yellow)',key_access:'var(--blue)',key_leak_blocked:'#ff1744',key_rotation:'#ff9500'};
@@ -6503,7 +6500,7 @@ async function fetchAdminSecurity(){
 async function fetchAdminBans(){
   const el=document.getElementById('ad-bans-list');
   const r=await fetch('/api/admin/bans').then(x=>x.json()).catch(()=>null);
-  if(!r){el.style.color='var(--red)';el.textContent='Failed to load';return;}
+  if(!r){return;}
   el.style.color='var(--muted)';
   if(!r.bans||!r.bans.length){
     el.textContent=`No active bans  •  ${r.rl_bucket_count||0} rate-limit bucket(s) in memory`;
