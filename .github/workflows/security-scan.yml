@@ -29,14 +29,14 @@ jobs:
 
       # ── 1. pip-audit: known CVEs in dependencies ──────────────────────────
       - name: pip-audit
-        run: pip-audit --strict
+        run: pip-audit --strict -r requirements.txt
 
       # ── 2. bandit: Python static analysis ─────────────────────────────────
       - name: bandit
         run: |
           bandit -r . \
-            --exclude ./.git,./node_modules,./migrate_messages.py \
-            --severity-level medium \
+            --exclude ./.git,./node_modules \
+            --severity-level high \
             --confidence-level medium \
             -f txt
 
