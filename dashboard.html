@@ -11343,9 +11343,9 @@ async function loadHomeFeed(){
       if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed error: unexpected response</div>';
     }
   }catch(e){
-    console.error('[feed] load error:', e);
-    if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed error: '+(e.name==='AbortError'?'Request timed out — retrying…':e.message)+'</div>';
-    if(e.name==='AbortError') setTimeout(loadHomeFeed, 3000);
+    console.error('[feed] load error (silent, keeping last known feed):', e);
+    if(!_homeFeedData.length && el) el.innerHTML='<div class="fc-loading">Loading…</div>';
+    setTimeout(loadHomeFeed, 5000);
   }
 }
 
