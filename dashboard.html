@@ -3282,6 +3282,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div style="font-size:9px;color:var(--muted);margin-top:4px">min $1 USDC</div>
       </div>
     </div>
+    <div style="height:10px"></div>
+    <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
+      <div class="s-field" style="margin-bottom:0">
+        <label class="s-label">Trade Size (% of balance)</label>
+        <input type="number" id="s-tradepct" class="s-input" min="5" max="100" step="1" value="20">
+        <div style="font-size:9px;color:var(--muted);margin-top:4px">5–100% of SOL balance</div>
+      </div>
+    </div>
 
     <div style="height:14px"></div>
     <div class="s-msg" id="s-msg"></div>

@@ -773,6 +773,10 @@ def init_db():
     except sqlite3.OperationalError:
         pass
     try:
+        c.execute("ALTER TABLE users ADD COLUMN trade_pct REAL DEFAULT 0.20")
+    except sqlite3.OperationalError:
+        pass
+    try:
         c.execute("ALTER TABLE users ADD COLUMN difficulty TEXT DEFAULT 'MEDIUM'")
     except sqlite3.OperationalError:
         pass
@@ -2346,7 +2350,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -2372,6 +2376,7 @@ def user_trader_loop(stop_event, config, wallet: str):
     max_positions      = int(row[8])  if row[8]  is not None else 5
     pref_scam_filter   = bool(row[9]  if row[9]  is not None else 1)
     pref_notifications = bool(row[10] if row[10] is not None else 1)
+    user_trade_pct = float(row[11]) if (len(row) > 11 and row[11] is not None) else 0.20
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -2689,7 +2694,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         m5s   = ('+' if m5 >= 0 else '') + str(round(m5, 1)) + '%'
                         add_user_log(wallet, '[' + short + '] Best: ' + label +
                                      ' score ' + str(sc) + '/10 → BUYING m5:' + m5s)
-                        trade_pct = 0.60 if sc >= 7 else config.get('trade_pct', 0.40)
+                        trade_pct = 0.60 if sc >= 7 else user_trade_pct
                         spend = us_sol * trade_pct
                         # min/max trade size are USDC-denominated in the UI — convert to
                         # SOL at the current price before clamping the SOL-denominated spend.
@@ -4547,6 +4552,11 @@ def save_settings():
     max_trade_size   = max(1.0, min(max_trade_size,   100000.0))
     min_trade_size   = max(1.0, min(min_trade_size,   max_trade_size))
     daily_loss_limit = max(1.0, min(daily_loss_limit, 500000.0))
+    try:
+        trade_pct = float(data.get('trade_pct', 20.0)) / 100
+    except (ValueError, TypeError):
+        trade_pct = 0.20
+    trade_pct = max(0.05, min(trade_pct, 1.0))
 
     # Validate, double-encrypt, and verify round-trip before touching the DB
     encrypted = ''   # initialised here so it is always defined in the INSERT branch below
@@ -4574,17 +4584,17 @@ def save_settings():
         if row:
             if private_key_raw:
                 # New key provided — update key columns + settings
-                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, min_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                          (encrypted, new_hash, max_trade_size, min_trade_size, daily_loss_limit, wallet))
+                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, min_trade_size=?, daily_loss_limit=?, trade_pct=? WHERE wallet_address=?',
+                          (encrypted, new_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_pct, wallet))
                 final_enc = encrypted
             else:
                 # No new key — only update settings, leave encrypted_private_key untouched
-                c.execute('UPDATE users SET max_trade_size=?, min_trade_size=?, daily_loss_limit=? WHERE wallet_address=?',
-                          (max_trade_size, min_trade_size, daily_loss_limit, wallet))
+                c.execute('UPDATE users SET max_trade_size=?, min_trade_size=?, daily_loss_limit=?, trade_pct=? WHERE wallet_address=?',
+                          (max_trade_size, min_trade_size, daily_loss_limit, trade_pct, wallet))
                 final_enc = row[1]
         else:
-            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_size_unit_migrated) VALUES (?,?,?,?,?,?,1)',
-                      (wallet, encrypted or '', new_hash or '', max_trade_size, min_trade_size, daily_loss_limit))
+            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_pct, trade_size_unit_migrated) VALUES (?,?,?,?,?,?,?,1)',
+                      (wallet, encrypted or '', new_hash or '', max_trade_size, min_trade_size, daily_loss_limit, trade_pct))
             final_enc = encrypted or ''
         conn.commit()
     finally:
