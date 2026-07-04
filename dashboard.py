@@ -2357,6 +2357,22 @@ def _check_mint_safety(mint_address: str) -> dict:
     except Exception:
         return {'mint_authority_active': True, 'freeze_authority_active': True, 'ok': False}
 
+def _check_lp_locked(mint_address: str) -> dict:
+    try:
+        r = requests.get(
+            f'https://api.rugcheck.xyz/v1/tokens/{mint_address}/report/summary',
+            headers={'Accept': 'application/json'}, timeout=6
+        )
+        data = r.json()
+        lp_pct = data.get('lpLockedPct')
+        if lp_pct is None and isinstance(data.get('markets'), list) and data['markets']:
+            lp_pct = data['markets'][0].get('lp', {}).get('lpLockedPct', 0)
+        print(f'[rugcheck] {mint_address[:8]} lpLockedPct={lp_pct} raw_keys={list(data.keys())}', flush=True)
+        return {'lp_locked_pct': float(lp_pct or 0), 'ok': True}
+    except Exception as e:
+        print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
+        return {'lp_locked_pct': 0, 'ok': False}
+
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
     us    = get_user_state(wallet)
@@ -2713,6 +2729,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if _safety['mint_authority_active'] or _safety['freeze_authority_active']:
                             add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
                                          ' — mint/freeze authority still active (rug risk)')
+                            continue
+                        _lp = _check_lp_locked(bmint)
+                        if _lp['ok'] and _lp['lp_locked_pct'] < 50:
+                            add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                         ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (rug risk)')
                             continue
                         trade_pct = 0.60 if sc >= 7 else user_trade_pct
                         spend = us_sol * trade_pct
