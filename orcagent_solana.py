@@ -21,6 +21,15 @@ SOLANA_RPCS   = [
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT      = 'So11111111111111111111111111111111111111112'
 
+def _clean_rpc_error(err):
+    if isinstance(err, dict):
+        if err.get('message'):
+            return str(err['message'])[:200]
+        if isinstance(err.get('data'), dict) and err['data'].get('err'):
+            return f"Transaction simulation failed: {err['data']['err']}"[:200]
+        return 'RPC error (see server logs for details)'
+    return str(err)[:200]
+
 # Optional proxy — set JUPITER_PROXY_URL in Railway Variables to route swap
 # calls through the Cloudflare Workers proxy in proxy/worker.js.
 # Proxy routes: /quote → api.jup.ag/swap/v1/quote, /swap → api.jup.ag/swap/v1/swap
@@ -189,7 +198,7 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     print(f'[TRADE] Step 4/6 — Signing transaction (tx present={bool(swap_tx_b64)})', flush=True)
     if 'error' in swap_resp:
         print(f'[TRADE] Jupiter swap error: {swap_resp["error"]}', flush=True)
-        raise Exception(f'Jupiter swap error: {swap_resp["error"]}')
+        raise Exception(f'Jupiter swap error: {_clean_rpc_error(swap_resp["error"])}')
     if not swap_tx_b64:
         raise Exception(f'No swapTransaction in response: {str(swap_resp)[:300]}')
 
@@ -229,7 +238,7 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     print(f'[TRADE] Step 6/6 — RPC response: {rpc_resp}', flush=True)
     if 'error' in rpc_resp:
         print(f'[TRADE] RPC ERROR: {rpc_resp["error"]}', flush=True)
-        raise Exception(f'RPC sendTransaction error: {rpc_resp["error"]}')
+        raise Exception(f'RPC sendTransaction error: {_clean_rpc_error(rpc_resp["error"])}')
     sig = rpc_resp.get('result')
     if sig:
         print(f'[TRADE] SUCCESS: https://solscan.io/tx/{sig}', flush=True)

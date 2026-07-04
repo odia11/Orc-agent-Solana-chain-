@@ -5311,6 +5311,11 @@ def api_instant_trade():
             return jsonify({'error': 'token_address is required'}), 400
         if side == 'buy' and amount_sol <= 0:
             return jsonify({'error': 'amount_sol must be > 0 for buy'}), 400
+        if side == 'buy':
+            fetch_user_balances(wallet)
+            current_sol = get_user_state(wallet).get('sol', 0)
+            if current_sol < amount_sol + 0.005:
+                return jsonify({'error': f'Insufficient SOL balance. You have {current_sol:.4f} SOL, need at least {amount_sol + 0.005:.4f} SOL (includes network fee).'}), 400
 
         # Fetch encrypted key
         try:
