@@ -850,6 +850,18 @@ def init_db():
         created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(copier_wallet, copied_wallet)
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS x_connections (
+        id                INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet_address    TEXT NOT NULL UNIQUE,
+        x_user_id         TEXT NOT NULL,
+        x_handle          TEXT NOT NULL,
+        access_token      TEXT NOT NULL,
+        refresh_token     TEXT,
+        token_expires_at  TIMESTAMP,
+        share_on_big_trade INTEGER DEFAULT 0,
+        share_on_badge    INTEGER DEFAULT 0,
+        created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_blacklist (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id   INTEGER NOT NULL,
@@ -6279,6 +6291,115 @@ def get_following_by_wallet(wallet: str):
     finally:
         conn.close()
     return jsonify({'ok': True, 'users': _follow_list_rows(rows, today, viewer_wallet)})
+
+# ── X (TWITTER) OAUTH ──
+@app.route('/api/x/connect', methods=['GET'])
+@rate_limit(20, 60)
+def x_connect():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    client_id = os.getenv('X_CLIENT_ID', '')
+    callback_url = os.getenv('X_CALLBACK_URL', '')
+    if not client_id or not callback_url:
+        return jsonify({'ok': False, 'msg': 'X OAuth not configured'}), 500
+    code_verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(code_verifier.encode()).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b'=').decode()
+    state = secrets.token_urlsafe(16)
+    session['x_code_verifier'] = code_verifier
+    session['x_oauth_state']   = state
+    session['x_oauth_wallet']  = wallet
+    params = {
+        'response_type':         'code',
+        'client_id':             client_id,
+        'redirect_uri':          callback_url,
+        'scope':                 'tweet.read tweet.write users.read offline.access',
+        'state':                 state,
+        'code_challenge':        code_challenge,
+        'code_challenge_method': 'S256',
+    }
+    import urllib.parse
+    auth_url = 'https://x.com/i/oauth2/authorize?' + urllib.parse.urlencode(params)
+    return redirect(auth_url)
+
+@app.route('/api/x/callback', methods=['GET'])
+@rate_limit(20, 60)
+def x_callback():
+    code     = request.args.get('code', '').strip()
+    state    = request.args.get('state', '').strip()
+    error    = request.args.get('error', '')
+    if error:
+        return redirect('/settings?x_error=' + error)
+    # 1. verify state
+    if not state or state != session.get('x_oauth_state'):
+        return redirect('/settings?x_error=state_mismatch')
+    code_verifier = session.get('x_code_verifier', '')
+    wallet        = session.get('x_oauth_wallet', '')
+    if not code or not code_verifier or not wallet:
+        return redirect('/settings?x_error=missing_params')
+    client_id     = os.getenv('X_CLIENT_ID', '')
+    client_secret = os.getenv('X_CLIENT_SECRET', '')
+    callback_url  = os.getenv('X_CALLBACK_URL', '')
+    # 2. exchange code for tokens
+    try:
+        token_resp = requests.post(
+            'https://api.x.com/2/oauth2/token',
+            data={
+                'grant_type':    'authorization_code',
+                'code':          code,
+                'redirect_uri':  callback_url,
+                'code_verifier': code_verifier,
+            },
+            auth=(client_id, client_secret),
+            timeout=15,
+        )
+        token_data = token_resp.json()
+    except Exception:
+        return redirect('/settings?x_error=token_request_failed')
+    if 'access_token' not in token_data:
+        return redirect('/settings?x_error=no_access_token')
+    access_token  = token_data['access_token']
+    refresh_token = token_data.get('refresh_token')
+    expires_in    = token_data.get('expires_in', 7200)
+    token_expires_at = (datetime.datetime.utcnow() +
+                        datetime.timedelta(seconds=int(expires_in))).isoformat()
+    # 3. fetch X user info
+    try:
+        me_resp = requests.get(
+            'https://api.x.com/2/users/me',
+            headers={'Authorization': 'Bearer ' + access_token},
+            timeout=10,
+        )
+        me_data = me_resp.json().get('data', {})
+    except Exception:
+        return redirect('/settings?x_error=userinfo_failed')
+    x_user_id = str(me_data.get('id', ''))
+    x_handle  = str(me_data.get('username', ''))
+    if not x_user_id or not x_handle:
+        return redirect('/settings?x_error=no_user_info')
+    # 4. upsert into x_connections
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('''
+            INSERT INTO x_connections
+                (wallet_address, x_user_id, x_handle, access_token, refresh_token, token_expires_at)
+            VALUES (?,?,?,?,?,?)
+            ON CONFLICT(wallet_address) DO UPDATE SET
+                x_user_id        = excluded.x_user_id,
+                x_handle         = excluded.x_handle,
+                access_token     = excluded.access_token,
+                refresh_token    = excluded.refresh_token,
+                token_expires_at = excluded.token_expires_at
+        ''', (wallet, x_user_id, x_handle, access_token, refresh_token, token_expires_at))
+        conn.commit()
+    finally:
+        conn.close()
+    # 5. clean up session
+    session.pop('x_oauth_state',   None)
+    session.pop('x_code_verifier', None)
+    session.pop('x_oauth_wallet',  None)
+    return redirect('/settings?x_connected=1')
 
 # ── BIO ──
 @app.route('/api/bio', methods=['POST'])
