@@ -7906,11 +7906,6 @@ async function openSettings(){
       _updateKeyStatus();
       if(r.avatar_url!==undefined){ _avatarUrl=r.avatar_url||null; _updateNavPill(); }
     }
-    const ru=await fetch('/api/username').then(r=>r.json()).catch(()=>null);
-    if(ru?.ok) document.getElementById('s-username').value=ru.username||'';
-    const unMsg=document.getElementById('s-username-msg');
-    unMsg.className='s-msg'; unMsg.textContent='';
-    _syncSettingsAvatar();
     loadBlacklist();
   } else {
     document.getElementById('s-user-label').textContent='Connect a wallet to save settings';
