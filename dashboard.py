@@ -5963,7 +5963,19 @@ def share_feed_to_x(post_id):
         return jsonify({'ok': False, 'msg': 'Connect X in Settings first'}), 400
     if post_id.startswith('p'):
         row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (post_id[1:],)).fetchone()
-        text = (row[0] if row else '')[:250]
+        raw = row[0] if row else ''
+        chart_idx = raw.find('__CHART__')
+        if chart_idx != -1:
+            caption = raw[:chart_idx].strip()
+            try:
+                chart_data = json.loads(raw[chart_idx+9:])
+                symbol = chart_data.get('symbol', '')
+            except Exception:
+                symbol = ''
+            text = caption if caption else ('Check out $'+symbol+' on OrcAgent' if symbol else '')
+        else:
+            text = raw.split('__TRADE__')[0].strip()
+        text = text[:250]
     elif post_id.startswith('t'):
         row = conn.execute('SELECT token FROM trades WHERE id=?', (post_id[1:],)).fetchone()
         text = ('Check out my trade on $'+row[0]+' via @OrcAgent') if row else ''
