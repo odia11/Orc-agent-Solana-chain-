@@ -87,7 +87,10 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
   <div class="ntf-tabs">
     <button class="ntf-tab active" id="tab-personal" onclick="_switchTab('personal')">Persoonlijk</button>
     <button class="ntf-tab" id="tab-trades" onclick="_switchTab('trades')">Trades</button>
-    <button class="ntf-tab" style="margin-left:auto;color:var(--accent)" onclick="_markAllSeen()">✓ Mark all as seen</button>
+    <label style="margin-left:auto;display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted);cursor:pointer">
+      <input type="checkbox" id="ntf-select-all" onclick="_toggleSelectAll(this)"> Select all
+    </label>
+    <button class="ntf-tab" style="color:var(--accent)" onclick="_markAllSeen()">✓ Mark seen</button>
   </div>
 
   <div id="section-personal">
@@ -175,7 +178,6 @@ async function _loadPersonal(){
       + '</a>'
       + '</div>';
   }).join('');
-  fetch('/api/notifications/mine/mark_read', {method:'POST'});
 }
 
 async function _loadTrades(){
@@ -199,8 +201,19 @@ async function _loadTrades(){
   }).join('');
 }
 
+function _toggleSelectAll(cb){
+  document.querySelectorAll('.ntf-check').forEach(function(c){ c.checked = cb.checked; });
+}
+
 async function _markAllSeen(){
-  await fetch('/api/notifications/mine/mark_read', {method:'POST'}).catch(function(){});
+  var ids = Array.from(document.querySelectorAll('.ntf-check:checked')).map(function(c){
+    return parseInt(c.closest('.ntf-row').dataset.id, 10);
+  });
+  if(!ids.length){ alert('Selecteer eerst één of meer notificaties.'); return; }
+  await fetch('/api/notifications/mine/mark_read_batch', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ids: ids})
+  }).catch(function(){});
   _loadPersonal();
 }
 
