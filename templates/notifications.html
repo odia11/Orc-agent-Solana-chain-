@@ -117,7 +117,9 @@ function _esc(s){
 
 function _relTime(ts){
   if(!ts) return '';
-  var d = new Date(ts.replace(' ','T')+'Z');
+  var iso = ts.replace(' ','T');
+  if(!iso.endsWith('Z')) iso += 'Z';
+  var d = new Date(iso);
   var s = Math.floor((Date.now()-d)/1000);
   if(s<60)     return 'zojuist';
   if(s<3600)   return Math.floor(s/60)+'m geleden';
