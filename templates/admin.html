@@ -803,7 +803,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 <script>
 // ── CSRF ──
 window._csrfToken = '';
-fetch('/api/csrf-token').then(function(r){return r.json();}).then(function(d){ window._csrfToken = d.csrf_token || ''; }).catch(function(){});
+fetch('/api/csrf-token').then(function(r){return r.json();}).then(function(d){ window._csrfToken = d.token || ''; }).catch(function(){});
 
 // ── STATE ──
 var _loaded = {};
