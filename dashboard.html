@@ -8024,44 +8024,23 @@ function togglePrivVis(){
 
 async function saveSettings(){
   if(!phantomKey){alert('Connect a wallet first.');return;}
-  const pk       =document.getElementById('s-privkey').value.trim();
   const minUsdc  =parseFloat(document.getElementById('s-minusdc').value)||0.01;
   const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||0.5;
   const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||10;
   const msgEl    =document.getElementById('s-msg');
   const saveBtn  =document.getElementById('s-save-btn');
 
-  if(!pk&&!settingsHasKey){
-    msgEl.className='s-msg err';
-    msgEl.textContent='✗ Please enter your trading wallet private key';
-    return;
-  }
-
   saveBtn.textContent='SAVING...'; saveBtn.disabled=true;
   const r=await fetch('/api/settings',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({private_key:pk,min_trade_size:minUsdc,max_trade_size:maxUsdc,daily_loss_limit:lossLimit,trade_pct:parseFloat(document.getElementById('s-tradepct').value)||20})
+    body:JSON.stringify({min_trade_size:minUsdc,max_trade_size:maxUsdc,daily_loss_limit:lossLimit,trade_pct:parseFloat(document.getElementById('s-tradepct').value)||20})
   }).then(r=>r.json()).catch(()=>null);
   saveBtn.textContent='SAVE SETTINGS'; saveBtn.disabled=false;
 
   if(r?.ok){
     msgEl.className='s-msg ok';
-    settingsHasKey=r.has_trading_key||settingsHasKey;
-    _updateKeyStatus();
-    if(pk){
-      msgEl.textContent='✓ Settings saved. Private key encrypted and stored securely.';
-      document.getElementById('s-privkey').value='';
-      /* Offer Face ID setup if key was just saved */
-      if(r.prompt_faceid && window.PublicKeyCredential){
-        const fp=document.getElementById('s-faceid-prompt');
-        const fpm=document.getElementById('s-faceid-prompt-msg');
-        if(fp){ fp.style.display='block'; }
-        if(fpm) fpm.textContent='';
-      }
-    } else {
-      msgEl.textContent='✓ Trade settings updated.';
-    }
+    msgEl.textContent='✓ Bot settings updated.';
   } else {
     msgEl.className='s-msg err';
     msgEl.textContent='✗ '+(r?.msg||'Save failed. Check server logs.');
