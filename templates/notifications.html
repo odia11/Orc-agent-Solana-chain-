@@ -87,6 +87,7 @@ html,body{min-height:100vh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',
   <div class="ntf-tabs">
     <button class="ntf-tab active" id="tab-personal" onclick="_switchTab('personal')">Persoonlijk</button>
     <button class="ntf-tab" id="tab-trades" onclick="_switchTab('trades')">Trades</button>
+    <button class="ntf-tab" style="margin-left:auto;color:var(--accent)" onclick="_markAllSeen()">✓ Mark all as seen</button>
   </div>
 
   <div id="section-personal">
@@ -193,6 +194,11 @@ async function _loadTrades(){
       + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:13px;font-weight:700;color:'+(pos?'#3ad29b':'#f76b62')+'">'+(pos?'+':'')+pct.toFixed(1)+'%</div>'
       + '</div>';
   }).join('');
+}
+
+async function _markAllSeen(){
+  await fetch('/api/notifications/mine/mark_read', {method:'POST'}).catch(function(){});
+  _loadPersonal();
 }
 
 _loadPersonal();
