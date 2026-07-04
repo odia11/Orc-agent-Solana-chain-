@@ -842,6 +842,14 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_follows_follower  ON follows(follower_id)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_follows_following ON follows(following_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS copy_relationships (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        copier_wallet  TEXT NOT NULL,
+        copied_wallet  TEXT NOT NULL,
+        active         INTEGER DEFAULT 1,
+        created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(copier_wallet, copied_wallet)
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_blacklist (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id   INTEGER NOT NULL,
@@ -3460,16 +3468,15 @@ def api_copy_trade_toggle():
         return jsonify({'ok': False, 'msg': 'Cannot copy yourself'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
         row = conn.execute('SELECT copy_source FROM users WHERE wallet_address=?', (wallet,)).fetchone()
         currently_copying_target = row and row[0] == target
         if currently_copying_target:
-            # Toggle OFF — amount irrelevant
             conn.execute('UPDATE users SET copy_source=NULL, copy_amount=NULL WHERE wallet_address=?', (wallet,))
-            conn.commit()
-            print(f'[copy-trade] {wallet[:8]}… stopped copying {target[:8]}…', flush=True)
-            return jsonify({'ok': True, 'copying': False})
+            new_active = 0
         else:
-            # Toggle ON — validate amount
             try:
                 amount_sol = round(float(raw_amount), 4)
                 if amount_sol < 0.01 or amount_sol > 100:
@@ -3478,11 +3485,28 @@ def api_copy_trade_toggle():
                 return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
             conn.execute('UPDATE users SET copy_source=?, copy_amount=? WHERE wallet_address=?',
                          (target, amount_sol, wallet))
-            conn.commit()
-            print(f'[copy-trade] {wallet[:8]}… now copying {target[:8]}… at {amount_sol} SOL/trade', flush=True)
-            return jsonify({'ok': True, 'copying': True, 'sol_amount': amount_sol})
+            new_active = 1
+        # sync copy_relationships table
+        existing = conn.execute(
+            'SELECT id FROM copy_relationships WHERE copier_wallet=? AND copied_wallet=?',
+            (wallet, target)
+        ).fetchone()
+        if existing:
+            conn.execute('UPDATE copy_relationships SET active=? WHERE id=?', (new_active, existing[0]))
+        else:
+            conn.execute(
+                'INSERT INTO copy_relationships (copier_wallet, copied_wallet, active) VALUES (?,?,?)',
+                (wallet, target, new_active)
+            )
+        conn.commit()
+        copiers_count = conn.execute(
+            'SELECT COUNT(*) FROM copy_relationships WHERE copied_wallet=? AND active=1',
+            (target,)
+        ).fetchone()[0]
+        print(f'[copy-trade] {wallet[:8]}… {"now copying" if new_active else "stopped copying"} {target[:8]}…', flush=True)
     finally:
         conn.close()
+    return jsonify({'ok': True, 'active': bool(new_active), 'copying': bool(new_active), 'copiers_count': copiers_count})
 
 
 @app.route('/api/copy-trade/status', methods=['GET'])
@@ -5881,6 +5905,11 @@ def get_profile(user_id: int):
             (user_id,)
         )
         win_rate_row = c.fetchone()
+        c.execute(
+            'SELECT COUNT(*) FROM copy_relationships WHERE copied_wallet=? AND active=1',
+            (wallet,)
+        )
+        copiers_count_row = c.fetchone()
     finally:
         conn.close()
 
@@ -5888,6 +5917,7 @@ def get_profile(user_id: int):
     display_name = username if username else short_wallet
     total_pnl    = round(float(total_pnl_row[0] or 0), 6) if total_pnl_row else 0.0
     win_rate     = round(float(win_rate_row[0] or 0), 1) if (win_rate_row and win_rate_row[0] is not None) else 0.0
+    copiers_count = int(copiers_count_row[0] or 0) if copiers_count_row else 0
 
     # Live open position count from in-memory state
     us = user_states.get(wallet or '', {})
@@ -5925,6 +5955,7 @@ def get_profile(user_id: int):
         'closed_trades':   int(trade_count or 0),
         'total_pnl':       total_pnl,
         'win_rate':        win_rate,
+        'copiers_count':   copiers_count,
         'bot_active':      bot_active,
         'badges':          [b.strip() for b in (badges_str or '').split(',') if b.strip()],
         'is_following':    is_following,

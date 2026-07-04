@@ -193,6 +193,23 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   .pf-copy-btn{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}
   html,body{overflow-x:hidden}
 }
+/* ── FOLLOW LIST MODAL ── */
+.flm-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:600;align-items:flex-start;justify-content:center;padding:60px 16px 20px;overflow-y:auto}
+.flm-back.open{display:flex}
+.flm-box{background:#101216;border:1px solid #21252c;border-radius:16px;width:100%;max-width:400px;overflow:hidden;flex-shrink:0}
+.flm-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 14px;border-bottom:1px solid #16191f}
+.flm-title{font-size:15px;font-weight:700;color:#eef1f5}
+.flm-close{background:none;border:none;color:#565d68;font-size:18px;cursor:pointer;line-height:1;padding:2px;transition:color .15s}
+.flm-close:hover{color:#eef1f5}
+.flm-body{max-height:60vh;overflow-y:auto}
+.flm-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s}
+.flm-row:last-child{border-bottom:none}
+.flm-row:hover{background:#14171c}
+.flm-av{width:38px;height:38px;min-width:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;position:relative;overflow:hidden;flex-shrink:0}
+.flm-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
+.flm-name{font-size:14px;font-weight:600;color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.flm-handle{font-size:12px;color:#565d68}
+.flm-empty{padding:28px 18px;text-align:center;font-size:13px;color:#565d68}
 </style>
 </head>
 <body>
@@ -349,12 +366,12 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
     <!-- FOLLOWING / FOLLOWERS / COPIERS -->
     <div class="pf-follow-row">
-      <div class="pf-follow-item">
+      <div class="pf-follow-item" onclick="openFollowListModal('following')">
         <span class="pf-follow-count">{{ following }}</span>
         <span class="pf-follow-label">Following</span>
       </div>
       <span class="pf-follow-sep">·</span>
-      <div class="pf-follow-item">
+      <div class="pf-follow-item" onclick="openFollowListModal('followers')">
         <span class="pf-follow-count">{{ followers }}</span>
         <span class="pf-follow-label">Followers</span>
       </div>
@@ -521,6 +538,17 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   </div><!-- /pf-main -->
 </div><!-- /app -->
 
+<!-- ── FOLLOW LIST MODAL ── -->
+<div class="flm-back" id="flm-back" onclick="if(event.target===this)closeFollowListModal()">
+  <div class="flm-box">
+    <div class="flm-hdr">
+      <span class="flm-title" id="flm-title">Following</span>
+      <button class="flm-close" onclick="closeFollowListModal()">✕</button>
+    </div>
+    <div class="flm-body" id="flm-body"></div>
+  </div>
+</div>
+
 <script>
 function copyWallet() {
   var addr = document.getElementById('pf-addr').textContent.trim();
@@ -559,6 +587,45 @@ function _followUser() {
     }
   }).catch(function(){});
 }
+
+/* ── FOLLOW LIST MODAL ── */
+var _flmColors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6'];
+function _flmColor(s){ var h=0; for(var i=0;i<(s||'').length;i++) h=(h*31+s.charCodeAt(i))&0xfffffff; return _flmColors[h%_flmColors.length]; }
+
+function closeFollowListModal(){
+  var back = document.getElementById('flm-back');
+  if(back) back.classList.remove('open');
+}
+
+async function openFollowListModal(type){
+  var back  = document.getElementById('flm-back');
+  var title = document.getElementById('flm-title');
+  var body  = document.getElementById('flm-body');
+  if(!back) return;
+  title.textContent = type === 'following' ? 'Following' : 'Followers';
+  body.innerHTML = '<div class="flm-empty">Loading…</div>';
+  back.classList.add('open');
+  var wallet = '{{ wallet }}';
+  try{
+    var d = await fetch('/api/profile/'+encodeURIComponent(wallet)+'/'+type).then(function(r){return r.json();});
+    var users = (d.users)||[];
+    if(!users.length){ body.innerHTML='<div class="flm-empty">No '+type+' yet.</div>'; return; }
+    body.innerHTML = users.map(function(u){
+      var ini   = (u.username||u.wallet||'?')[0].toUpperCase();
+      var color = _flmColor(u.wallet_address||u.username||'');
+      var img   = u.avatar_url ? '<img src="'+u.avatar_url.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">' : '';
+      var handle = u.wallet ? '<div class="flm-handle">'+u.wallet+'</div>' : '';
+      return '<div class="flm-row" onclick="closeFollowListModal();window.location.href=\'/profile/'+encodeURIComponent(u.wallet_address||'')+'\'">'
+        +'<div class="flm-av" style="background:'+color+'">'+ini+img+'</div>'
+        +'<div style="flex:1;min-width:0"><div class="flm-name">'+u.username+'</div>'+handle+'</div>'
+        +'</div>';
+    }).join('');
+  }catch(e){
+    body.innerHTML='<div class="flm-empty">Failed to load.</div>';
+  }
+}
+
+document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeFollowListModal(); });
 
 /* ── SIDEBAR PROFILE ── */
 (function() {

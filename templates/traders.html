@@ -458,7 +458,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
               </div>
               <div class="stat">
                 <div class="stat-label">COPIERS</div>
-                <div class="stat-value">{{ e.copier_count|default(0) }}</div>
+                <div class="stat-value" id="copiers-{{ e.user_id }}">{{ e.copier_count|default(0) }}</div>
               </div>
             </div>
 
@@ -656,7 +656,7 @@ function _confirmCopy(){
     fetch('/api/copy-trade/toggle',{
       method:'POST',credentials:'include',
       headers:_apiHeaders(),
-      body:JSON.stringify({wallet:m.wallet})
+      body:JSON.stringify({target_wallet:m.wallet})
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -665,6 +665,7 @@ function _confirmCopy(){
       document.getElementById('copy-modal-backdrop').classList.remove('open');
       m.btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Copy Trades';
       m.btn.classList.remove('copying');
+      var cc=document.getElementById('copiers-'+m.userId); if(cc&&d.copiers_count!=null) cc.textContent=d.copiers_count;
       _toast('Copy trading stopped','ok');
     })
     .catch(function(){ confirmBtn.disabled=false; _toast('Network error','err'); });
@@ -678,7 +679,7 @@ function _confirmCopy(){
     fetch('/api/copy-trade/toggle',{
       method:'POST',credentials:'include',
       headers:_apiHeaders(),
-      body:JSON.stringify({wallet:m.wallet, sol_amount:raw})
+      body:JSON.stringify({target_wallet:m.wallet, sol_amount:raw})
     })
     .then(function(r){ return r.json(); })
     .then(function(d){
@@ -689,8 +690,9 @@ function _confirmCopy(){
         b.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg> Copy Trades';
         b.classList.remove('copying');
       });
-      m.btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copying Trades';
+      m.btn.innerHTML='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copying ✓';
       m.btn.classList.add('copying');
+      var cc=document.getElementById('copiers-'+m.userId); if(cc&&d.copiers_count!=null) cc.textContent=d.copiers_count;
       _toast('Now copying — '+raw+' SOL per trade','ok');
     })
     .catch(function(){ confirmBtn.disabled=false; _toast('Network error','err'); });

@@ -8741,7 +8741,7 @@ async function openProfileCard(userId){
   else               { _tvFollowed.delete(followKey); }
   const isFollowing = _tvFollowed.has(followKey);
   const followCls = 'tpc-follow-btn btn-follow'+(isFollowing?' following is-following':'');
-  const _isSelf = phantomKey && _tpcCurrentFullWallet === phantomKey;
+  const _isSelf = !!(_myProfileId && userId && _myProfileId === userId);
   const isCopyingThis = !_isSelf && copyStatus?.ok && copyStatus.copying && copyStatus.target_wallet === _tpcCurrentFullWallet;
   const followBtnHtml = _isSelf
     ? `<button class="tpc-follow-btn" style="border-color:rgba(0,0,0,.4);color:var(--green);background:rgba(0,0,0,.06)" onclick="closeTraderProfile();openSettings()">✏ Edit Profile</button>`
