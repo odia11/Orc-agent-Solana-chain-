@@ -4002,7 +4002,7 @@ def community_page():
     if not wallet:
         return redirect('/?next=community')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
-    return render_template('community.html', wallet=wallet, wallet_short=wallet_short, is_admin=_is_owner(wallet))
+    return redirect('/')
 
 @app.route('/api/community/messages')
 def community_messages():
