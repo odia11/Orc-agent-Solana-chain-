@@ -5189,28 +5189,30 @@ def social_feed():
     conn = sqlite3.connect(DB_FILE)
     try:
         rows = conn.execute('''
-            SELECT fp.id, fp.wallet, fp.content, fp.created_at,
-                   (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
-                   (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
-                   u.username, NULL as symbol, NULL as pnl_pct,
-                   (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
-                   u.avatar_url
-            FROM feed_posts fp
-            LEFT JOIN users u ON fp.wallet = u.wallet_address
-            UNION ALL
-            SELECT t.id, u.wallet_address as wallet, NULL as content,
-                   t.timestamp as created_at,
-                   (SELECT COUNT(*) FROM post_likes   WHERE post_id = 't'||t.id) as like_count,
-                   (SELECT COUNT(*) FROM feed_replies WHERE post_id = 't'||t.id) as reply_count,
-                   u.username,
-                   t.token as symbol,
-                   CASE WHEN t.entry_price > 0 AND t.exit_price > 0
-                        THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
-                        ELSE 0 END as pnl_pct,
-                   (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
-                   u.avatar_url
-            FROM trades t
-            LEFT JOIN users u ON t.user_id = u.id
+            SELECT * FROM (
+                SELECT fp.id, fp.wallet, fp.content, fp.created_at,
+                       (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
+                       (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
+                       u.username, NULL as symbol, NULL as pnl_pct,
+                       (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
+                       u.avatar_url
+                FROM feed_posts fp
+                LEFT JOIN users u ON fp.wallet = u.wallet_address
+                UNION ALL
+                SELECT t.id, u.wallet_address as wallet, NULL as content,
+                       t.timestamp as created_at,
+                       (SELECT COUNT(*) FROM post_likes   WHERE post_id = 't'||t.id) as like_count,
+                       (SELECT COUNT(*) FROM feed_replies WHERE post_id = 't'||t.id) as reply_count,
+                       u.username,
+                       t.token as symbol,
+                       CASE WHEN t.entry_price > 0 AND t.exit_price > 0
+                            THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
+                            ELSE 0 END as pnl_pct,
+                       (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
+                       u.avatar_url
+                FROM trades t
+                LEFT JOIN users u ON t.user_id = u.id
+            )
             ORDER BY
               CASE WHEN created_at LIKE '%T%'
                    THEN replace(replace(created_at,'T',' '),'Z','')
