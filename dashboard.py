@@ -214,7 +214,16 @@ print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPIT
 # loading the page (and therefore never seeing this value). Skipped entirely when unset,
 # so local/dev deployments without the env var keep working unchanged.
 API_SHARED_SECRET  = os.environ.get('API_SHARED_SECRET', '')
-FEE_RATE         = 0.05  # 5% performance fee on profitable trades only
+FEE_RATE_DEFAULT = 0.02  # 2% performance fee on profitable trades only
+
+def _get_fee_rate():
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute("SELECT value FROM platform_settings WHERE key='fee_rate'").fetchone()
+        conn.close()
+        return float(row[0]) if row else FEE_RATE_DEFAULT
+    except Exception:
+        return FEE_RATE_DEFAULT
 FEE_WALLET       = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'  # hardcoded fee recipient
 
 # Ordered list of RPC endpoints for claim_sol / blockhash / send_raw queries.
@@ -862,6 +871,11 @@ def init_db():
         share_on_big_trade INTEGER DEFAULT 0,
         share_on_badge    INTEGER DEFAULT 0,
         created_at        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS platform_settings (
+        key        TEXT PRIMARY KEY,
+        value      TEXT NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_blacklist (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2065,9 +2079,10 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     # The fee goes FROM the trading keypair TO FEE_WALLET — these are different addresses,
     # so even the platform owner's trades generate a valid transfer.
     if pnl > 0.0 and wallet and private_key:
-        fee_amount = round(pnl * FEE_RATE, 6)
+        _fee_rate = _get_fee_rate()
+        fee_amount = round(pnl * _fee_rate, 6)
         print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
-              f'({FEE_RATE * 100:.1f}% of {pnl:.6f} SOL profit)', flush=True)
+              f'({_fee_rate * 100:.1f}% of {pnl:.6f} SOL profit)', flush=True)
 
         if fee_amount > 0:
             _pk   = private_key     # Python string — immutable, ref lives in thread args tuple
@@ -10192,7 +10207,7 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
               AND u.encrypted_private_key IS NOT NULL
               AND u.encrypted_private_key != ""
             GROUP BY u.wallet_address, u.encrypted_private_key
-        ''', (FEE_RATE,))
+        ''', (_get_fee_rate(),))
         rows = c.fetchall()
         conn.close()
     except Exception as e:
@@ -10258,7 +10273,7 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
             conn2.execute(
                 '''INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status)
                    VALUES (?,?,?,?,?,?)''',
-                (user_wallet, '[recovery]', total_fee / FEE_RATE, total_fee, tx_sig, 'ok'))
+                (user_wallet, '[recovery]', total_fee / _get_fee_rate(), total_fee, tx_sig, 'ok'))
             conn2.commit()
             conn2.close()
 
