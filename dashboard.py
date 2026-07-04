@@ -3161,17 +3161,18 @@ def profile():
 def profile_view(wallet_address: str):
     """Public profile page for any wallet address."""
     session_wallet = _current_wallet()
-    if not is_valid_solana_address(wallet_address):
-        return redirect('/traders')
+    is_wallet = is_valid_solana_address(wallet_address)
     conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
     try:
+        col = 'wallet_address' if is_wallet else 'username'
         user = conn.execute(
-            'SELECT id, username, avatar_url, bio, created_at FROM users WHERE wallet_address=?',
+            f'SELECT id, username, avatar_url, bio, created_at, wallet_address FROM users WHERE {col}=?',
             (wallet_address,)
         ).fetchone()
         if not user:
             return redirect('/traders')
+        wallet_address = user['wallet_address']
         user_id = user['id']
         stats = conn.execute(
             'SELECT COUNT(*) AS total, '
@@ -3198,6 +3199,14 @@ def profile_view(wallet_address: str):
         wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else wallet_address
         sw = session_wallet or ''
         sw_short = (sw[:4] + '...' + sw[-4:]) if len(sw) >= 8 else sw
+        sol_balance = None
+        try:
+            r = requests.post(SOLANA_RPC, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet_address]
+            }, timeout=5)
+            sol_balance = round(r.json()['result']['value'] / 1e9, 4)
+        except Exception:
+            pass
         return render_template(
             'profile.html',
             wallet=wallet_address,
