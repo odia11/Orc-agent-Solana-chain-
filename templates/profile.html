@@ -193,6 +193,19 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   .pf-copy-btn{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}
   html,body{overflow-x:hidden}
 }
+/* ── SHARE MODAL ── */
+.spm-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:600;align-items:flex-start;justify-content:center;padding:60px 16px 20px}
+.spm-back.open{display:flex}
+.spm-box{background:#101216;border:1px solid #21252c;border-radius:16px;width:100%;max-width:400px;overflow:hidden;flex-shrink:0}
+.spm-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 14px;border-bottom:1px solid #16191f}
+.spm-title{font-size:15px;font-weight:700;color:#eef1f5}
+.spm-body{padding:18px}
+.spm-row{display:flex;gap:8px;margin-bottom:14px}
+.spm-input{flex:1;background:#0a0c0f;border:1px solid #21252c;border-radius:8px;padding:9px 12px;color:#eef1f5;font-size:13px;outline:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spm-copy-btn{background:#21252c;border:none;border-radius:8px;padding:9px 14px;color:#eef1f5;font-size:13px;cursor:pointer;white-space:nowrap;transition:background .15s}
+.spm-copy-btn:hover{background:#2a2f38}
+.spm-x-btn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:#000;border:1px solid #333;border-radius:10px;padding:11px;color:#fff;font-size:14px;font-weight:600;cursor:pointer;transition:background .15s}
+.spm-x-btn:hover{background:#111}
 /* ── FOLLOW LIST MODAL ── */
 .flm-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:600;align-items:flex-start;justify-content:center;padding:60px 16px 20px;overflow-y:auto}
 .flm-back.open{display:flex}
@@ -538,6 +551,26 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   </div><!-- /pf-main -->
 </div><!-- /app -->
 
+<!-- ── SHARE MODAL ── -->
+<div class="spm-back" id="spm-back" onclick="if(event.target===this)closeShareModal()">
+  <div class="spm-box">
+    <div class="spm-hdr">
+      <span class="spm-title">Share Profile</span>
+      <button class="flm-close" onclick="closeShareModal()">✕</button>
+    </div>
+    <div class="spm-body">
+      <div class="spm-row">
+        <input class="spm-input" id="spm-url" readonly>
+        <button class="spm-copy-btn" id="spm-copy-btn" onclick="copyShareLink()">Copy link</button>
+      </div>
+      <button class="spm-x-btn" onclick="shareOnX()">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.259 5.629 5.905-5.629zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+        Share on X
+      </button>
+    </div>
+  </div>
+</div>
+
 <!-- ── FOLLOW LIST MODAL ── -->
 <div class="flm-back" id="flm-back" onclick="if(event.target===this)closeFollowListModal()">
   <div class="flm-box">
@@ -562,16 +595,26 @@ function copyWallet() {
 
 function _shareProfile() {
   var url = window.location.href;
-  if (navigator.share) {
-    navigator.share({ title: document.title, url: url }).catch(function(){});
-  } else {
-    navigator.clipboard.writeText(url).then(function() {
-      var btn = document.querySelector('.pf-btn-icon');
-      btn.style.color = '#f7b955';
-      btn.style.borderColor = 'rgba(247,185,85,.4)';
-      setTimeout(function(){ btn.style.color = ''; btn.style.borderColor = ''; }, 1800);
-    }).catch(function(){});
-  }
+  document.getElementById('spm-url').value = url;
+  document.getElementById('spm-back').classList.add('open');
+}
+function closeShareModal() {
+  document.getElementById('spm-back').classList.remove('open');
+}
+function copyShareLink() {
+  var url = document.getElementById('spm-url').value;
+  var btn = document.getElementById('spm-copy-btn');
+  navigator.clipboard.writeText(url).then(function() {
+    btn.textContent = '✓ Copied';
+    btn.style.color = '#f7b955';
+    setTimeout(function(){ btn.textContent = 'Copy link'; btn.style.color = ''; }, 1800);
+  }).catch(function(){});
+}
+function shareOnX() {
+  var url = document.getElementById('spm-url').value;
+  var username = {{ (username or wallet_short)|tojson }};
+  var text = 'Check out ' + username + ' on OrcAgent';
+  window.open('https://x.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url), '_blank');
 }
 
 function _followUser() {
@@ -625,7 +668,7 @@ async function openFollowListModal(type){
   }
 }
 
-document.addEventListener('keydown',function(e){ if(e.key==='Escape') closeFollowListModal(); });
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeFollowListModal(); closeShareModal(); } });
 
 /* ── SIDEBAR PROFILE ── */
 (function() {
