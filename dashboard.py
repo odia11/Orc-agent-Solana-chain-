@@ -5704,7 +5704,7 @@ def toggle_feed_reaction(post_id):
                 reactor_name = (reactor_row[0] if reactor_row and reactor_row[0] else wallet[:8]+'…')
                 conn.execute(
                     'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (owner_uid, 'reaction', reactor_name+' reacted '+emoji+' to your post', '/#post-'+post_id))
+                    (owner_uid, 'reaction', reactor_name+': reacted '+emoji+' to your post', '/#post-'+post_id))
         conn.commit()
         counts = {row[0]: row[1] for row in conn.execute(
             'SELECT emoji, COUNT(*) FROM post_reactions WHERE post_id=? GROUP BY emoji',
@@ -5802,7 +5802,7 @@ def post_feed_reply():
             preview = message[:60] + ('…' if len(message) > 60 else '')
             conn.execute(
                 'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                (owner_uid, 'reply', replier_name+' replied: '+preview, '/#post-'+post_id))
+                (owner_uid, 'reply', replier_name+': replied to your post — '+preview, '/#post-'+post_id))
             conn.commit()
         reply_id = cur.lastrowid
         row = conn.execute(
@@ -5887,6 +5887,15 @@ def toggle_feed_reply_like(reply_id):
         else:
             conn.execute('INSERT INTO feed_reply_likes (user_id, reply_id) VALUES (?,?)', (me, reply_id))
         conn.commit()
+        if not existing:
+            owner_row = conn.execute('SELECT user_id FROM feed_replies WHERE id=?', (reply_id,)).fetchone()
+            if owner_row and owner_row[0] != me:
+                liker_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
+                liker_name = (liker_row[0] if liker_row and liker_row[0] else wallet[:8]+'…')
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                    (owner_row[0], 'reply_like', liker_name+': liked your reply', ''))
+                conn.commit()
         count = conn.execute(
             'SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id=?', (reply_id,)
         ).fetchone()[0]
