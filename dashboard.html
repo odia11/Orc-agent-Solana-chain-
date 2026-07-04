@@ -3241,14 +3241,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div style="font-size:9px;color:var(--muted);margin-top:4px">min $1 USDC</div>
       </div>
     </div>
-    <div style="height:10px"></div>
-    <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
-      <div class="s-field" style="margin-bottom:0">
-        <label class="s-label">Trade Size (% of balance)</label>
-        <input type="number" id="s-tradepct" class="s-input" min="5" max="100" step="1" value="20">
-        <div style="font-size:9px;color:var(--muted);margin-top:4px">5–100% of SOL balance</div>
-      </div>
-    </div>
 
     <div style="height:14px"></div>
     <div class="s-msg" id="s-msg"></div>
@@ -5186,7 +5178,6 @@ async function launchApp(){
         settingsHasKey=r.has_trading_key||false;
         document.getElementById('s-minusdc').value=r.min_trade_size??1;
         document.getElementById('s-maxusdc').value=r.max_trade_size||10;
-        document.getElementById('s-tradepct').value=(r.trade_pct*100)||20;
         document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
         _updateKeyStatus();
         if(r.avatar_url){ _avatarUrl=r.avatar_url||null; _updateNavPill(); }
@@ -7899,7 +7890,6 @@ async function openSettings(){
     if(r?.ok){
       document.getElementById('s-minusdc').value=r.min_trade_size??1;
       document.getElementById('s-maxusdc').value=r.max_trade_size||10;
-      document.getElementById('s-tradepct').value=(r.trade_pct*100)||20;
       document.getElementById('s-losslimit').value=r.daily_loss_limit||50;
       settingsHasKey=r.has_trading_key||false;
       _updateKeyStatus();
@@ -8033,7 +8023,7 @@ async function saveSettings(){
   const r=await fetch('/api/settings',{
     method:'POST',
     headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({min_trade_size:minUsdc,max_trade_size:maxUsdc,daily_loss_limit:lossLimit,trade_pct:parseFloat(document.getElementById('s-tradepct').value)||20})
+    body:JSON.stringify({min_trade_size:minUsdc,max_trade_size:maxUsdc,daily_loss_limit:lossLimit})
   }).then(r=>r.json()).catch(()=>null);
   saveBtn.textContent='SAVE SETTINGS'; saveBtn.disabled=false;
 
