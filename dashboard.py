@@ -3226,6 +3226,7 @@ def profile_view(wallet_address: str):
             followers=followers,
             following=following,
             posts=[dict(p) for p in posts],
+            sol_balance=sol_balance,
         )
     finally:
         conn.close()
