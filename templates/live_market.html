@@ -165,8 +165,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   }
 
   /* Status rows and dropdown rows span all 5 columns */
-  .lm-status-row td,
-  .lm-drop-row td{
+  .lm-status-row td:first-child,
+  .lm-drop-row td:first-child{
     grid-column:1 / -1;
     white-space:normal;
     text-align:center;
