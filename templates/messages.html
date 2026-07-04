@@ -383,8 +383,11 @@ function _renderConvList() {
     var ini    = (name[0] || '?').toUpperCase();
     var active = c.peer_id === _activePeerId ? ' active' : '';
     var badge  = (c.unread > 0) ? '<span class="conv-badge">'+c.unread+'</span>' : '';
+    var avatarImg = c.peer_avatar
+      ? '<img src="'+_esc(c.peer_avatar)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
+      : '';
     return '<div class="conv-row'+active+'" onclick="_openThread('+c.peer_id+')">'
-      + '<div class="conv-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
+      + '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden">'+_esc(ini)+avatarImg+'</div>'
       + '<div class="conv-info">'
       +   '<div class="conv-name">'+_esc(name)+'</div>'
       +   '<div class="conv-preview">'+_esc((c.last_msg||'').slice(0,60))+'</div>'

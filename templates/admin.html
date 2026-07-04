@@ -314,7 +314,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       </div>
     </div>
     <button class="sb-logout"
-      onclick="fetch('/api/logout',{method:'POST',credentials:'include'}).then(()=>window.location.href='/')">
+      onclick="fetch('/api/logout',{method:'POST',credentials:'include',headers:{'X-CSRF-Token':window._csrfToken}}).then(()=>window.location.href='/')">
       Disconnect Wallet
     </button>
   </div>
@@ -793,6 +793,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 <div class="toast" id="toast"></div>
 
 <script>
+// ── CSRF ──
+window._csrfToken = '';
+fetch('/api/csrf-token').then(function(r){return r.json();}).then(function(d){ window._csrfToken = d.csrf_token || ''; }).catch(function(){});
+
 // ── STATE ──
 var _loaded = {};
 var _allUsers = [], _allTrades = [], _allRevTx = [];
@@ -1064,7 +1068,7 @@ async function loadRevenue() {
 async function collectFees() {
   var btn = document.getElementById('collect-btn');
   btn.disabled = true; btn.textContent = 'Collecting…';
-  var r = await fetch('/api/admin/collect-fees', {method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body:'{}'}).then(r => r.json()).catch(() => null);
+  var r = await fetch('/api/admin/collect-fees', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken}, credentials:'include', body:'{}'}).then(r => r.json()).catch(() => null);
   btn.disabled = false; btn.textContent = '💰 Collect Fees';
   if (r?.ok) { toast('✓ ' + (r.msg || 'Collected'), true); _loaded.revenue = false; loadRevenue(); }
   else toast('Error: ' + (r?.error || 'Failed'), false);
@@ -1260,7 +1264,7 @@ async function confirmInvite() {
   btn.disabled = true; btn.textContent = 'Inviting…';
   var r = await fetch('/api/admin/invite', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({wallet: w, role: role})
   }).then(r => r.json()).catch(() => null);
   btn.disabled = false; btn.textContent = 'Send invite';
@@ -1302,7 +1306,7 @@ async function applyRoleChange(role) {
   if (!wallet) return;
   var r = await fetch('/api/admin/role/change', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({wallet: wallet, role: role})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok) { toast('✓ Role changed to ' + role, true); loadAdminRoles(); }
@@ -1314,7 +1318,7 @@ async function removeMember(wallet) {
   if (!confirm('Remove access for ' + wallet.slice(0,8) + '…?')) return;
   var r = await fetch('/api/admin/role/remove', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({wallet: wallet})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok) {
@@ -1329,7 +1333,7 @@ async function toggleFlag(btn, flag) {
   var on = btn.classList.contains('on');
   var r = await fetch('/api/admin/features/toggle', {
     method: 'POST', credentials: 'include',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({feature: flag, value: on})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok) {
@@ -1348,7 +1352,7 @@ async function savePlatformLimits() {
   if (btn) { btn.disabled = true; btn.textContent = 'Saving…'; }
   var r = await fetch('/api/admin/settings/save', {
     method: 'POST', credentials: 'include',
-    headers: {'Content-Type': 'application/json'},
+    headers: {'Content-Type': 'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({max_positions: maxPos, fee: fee, min_deposit: minDep, rate_limit: rate})
   }).then(r => r.json()).catch(() => null);
   if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
@@ -1378,7 +1382,7 @@ async function banUserWallet(wallet, rowId) {
   if (!confirm('Ban wallet ' + _short(wallet) + '?\nThis permanently removes their account and posts.')) return;
   var r = await fetch('/api/admin/ban', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({wallet})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok) {
@@ -1400,7 +1404,7 @@ async function forceAction(wallet, action) {
   var ep = action === 'pause' ? '/api/admin/force-pause' : '/api/admin/force-resume';
   var r = await fetch(ep, {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({wallet})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok) { toast('✓ ' + (r.msg || 'Done'), true); _loaded.users = false; loadUsers(); }
@@ -1409,7 +1413,7 @@ async function forceAction(wallet, action) {
 async function clearBan(ip) {
   var r = await fetch('/api/admin/clear_ratelimit', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({ip})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok !== false) { toast('✓ Ban cleared for ' + ip, true); _loaded.system = false; _loaded.moderation = false; loadView(document.querySelector('.view.active').id.replace('view-','')); }
@@ -1419,7 +1423,7 @@ async function clearAllBans() {
   if (!confirm('Clear all IP bans and rate limits?')) return;
   var r = await fetch('/api/admin/clear_ratelimit', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: '{}'
   }).then(r => r.json()).catch(() => null);
   if (r?.ok !== false) { toast('✓ All bans cleared', true); _loaded.system = false; _loaded.moderation = false; loadView(document.querySelector('.view.active').id.replace('view-','')); }
@@ -1430,7 +1434,7 @@ async function deletePost(btn) {
   if (!confirm('Delete this post?')) return;
   var r = await fetch('/api/admin/post/delete', {
     method:'POST', credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
     body: JSON.stringify({post_id: parseInt(id, 10)})
   }).then(r => r.json()).catch(() => null);
   if (r?.ok) {

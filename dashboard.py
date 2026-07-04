@@ -5111,7 +5111,7 @@ def platform_stats():
 
 # ── SOCIAL FEED ──
 @app.route('/api/social/feed', methods=['GET'])
-@rate_limit(60, 60)
+@rate_limit(120, 60)
 def social_feed():
     feed_filter = request.args.get('filter', 'all')
     my_wallet = session.get('wallet', '')
@@ -6958,7 +6958,8 @@ def list_conversations():
                    (SELECT username     FROM users WHERE id=peer_id) AS peer_username,
                    last_msg, last_ts,
                    (SELECT COUNT(*) FROM direct_messages
-                    WHERE receiver_id=? AND sender_id=peer_id AND is_read=0) AS unread
+                    WHERE receiver_id=? AND sender_id=peer_id AND is_read=0) AS unread,
+                   (SELECT avatar_url   FROM users WHERE id=peer_id) AS peer_avatar
             FROM (
                 SELECT
                     CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END AS peer_id,
@@ -6978,7 +6979,7 @@ def list_conversations():
         conn.close()
     return jsonify({'ok': True, 'conversations': [
         {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
-         'last_msg': r[3], 'last_ts': r[4], 'unread': r[5]}
+         'last_msg': r[3], 'last_ts': r[4], 'unread': r[5], 'peer_avatar': r[6] or ''}
         for r in rows
     ]})
 
