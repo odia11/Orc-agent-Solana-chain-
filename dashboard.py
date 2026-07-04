@@ -5950,6 +5950,31 @@ def delete_feed_reply(reply_id):
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/feed/share-to-x/<path:post_id>', methods=['POST'])
+@rate_limit(10, 60)
+def share_feed_to_x(post_id):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    xrow = conn.execute('SELECT 1 FROM x_connections WHERE wallet_address=?', (wallet,)).fetchone()
+    if not xrow:
+        conn.close()
+        return jsonify({'ok': False, 'msg': 'Connect X in Settings first'}), 400
+    if post_id.startswith('p'):
+        row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (post_id[1:],)).fetchone()
+        text = (row[0] if row else '')[:250]
+    elif post_id.startswith('t'):
+        row = conn.execute('SELECT token FROM trades WHERE id=?', (post_id[1:],)).fetchone()
+        text = ('Check out my trade on $'+row[0]+' via @OrcAgent') if row else ''
+    else:
+        text = ''
+    conn.close()
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Nothing to share'}), 400
+    ok = _post_to_x(wallet, text)
+    return jsonify({'ok': ok, 'msg': 'Shared to X!' if ok else 'Failed to share to X'})
+
 # ── PROFILE ──
 @app.route('/api/me', methods=['GET'])
 @rate_limit(60, 60)

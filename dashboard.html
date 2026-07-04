@@ -11793,7 +11793,7 @@ function _renderFeedCard(e){
     +'<button class="fc-action fc-react-btn" onclick="_feedReactOpen(event,\''+esc(safePostId)+'\')" title="React">+</button>'
     +'<div class="fc-react-palette" id="rpal-'+esc(safePostId)+'"></div>'
     +'</div>'
-    +'<button class="fc-action" onclick="event.stopPropagation()">↗</button>'
+    +'<button class="fc-action" onclick="_shareToX(event,\''+esc(safePostId)+'\')">↗</button>'
     +'</div>'
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
@@ -11847,6 +11847,16 @@ function _feedCopyTrade(btn, tokenAddr, entryPrice){
   });
 }
 
+function _shareToX(event, postId){
+  event.stopPropagation();
+  fetch('/api/feed/share-to-x/'+encodeURIComponent(postId), {method:'POST'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(d.ok) alert('✓ Shared to X!');
+      else alert(d.msg || 'Could not share to X');
+    })
+    .catch(function(){ alert('Network error — could not share to X'); });
+}
 function _feedToggleLike(btn, postId){
   if(!btn) return;
   var countEl = btn.querySelector('.fc-like-count');
