@@ -1,5 +1,5 @@
 import sqlite3, os
-DB_FILE = os.getenv('DB_FILE', 'orcagent.db')
+DB_FILE = os.getenv('DB_FILE', '/data/orcagent.db' if os.path.exists('/data') else 'orcagent.db')
 conn = sqlite3.connect(DB_FILE)
 c = conn.cursor()
 post_ids = [f"p{row[0]}" for row in c.execute("SELECT id FROM feed_posts").fetchall()]
