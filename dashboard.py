@@ -88,7 +88,8 @@ def _security_gate():
             return jsonify({'error': 'Forbidden'}), 403
         _log_security_event('bot_probe', session.get('wallet', 'anonymous'),
                             f'{request.method} {request.path} ua={ua!r:.120} from {ip}')
-    if ip not in _OWNER_IPS and not _rate_ok('global:' + ip, 200, 60):
+    if (ip not in _OWNER_IPS and not _is_owner(session.get('wallet', ''))
+            and not _rate_ok('global:' + ip, 500, 60)):
         return jsonify({'error': 'Too many requests'}), 429
     _ext_hit('api')
     return None
