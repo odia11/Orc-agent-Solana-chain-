@@ -2183,6 +2183,14 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         print(f'[trade_record] DB write failed: {e}', flush=True)
     if wallet:
         _recalculate_badges(wallet)
+    if wallet and abs(pnl_pct) >= 20:
+        _xrow = sqlite3.connect(DB_FILE).execute(
+            'SELECT share_on_big_trade FROM x_connections WHERE wallet_address=?',
+            (wallet,)).fetchone()
+        if _xrow and _xrow[0]:
+            _sign  = '+' if pnl_pct >= 0 else ''
+            _tweet = f'Just closed ${symbol} {_sign}{pnl_pct:.1f}% ({_sign}{pnl:.4f} SOL) on @OrcAgent 🐋'
+            threading.Thread(target=_post_to_x, args=(wallet, _tweet), daemon=True).start()
     if pref_notifications and user_id:
         pnl_sign     = '+' if pnl >= 0 else ''
         notif_content = (f'Trade closed: ${symbol} '
@@ -2272,9 +2280,21 @@ def _recalculate_badges(wallet: str) -> None:
     badges = _calculate_badges(wallet)
     try:
         conn = sqlite3.connect(DB_FILE)
+        old_row    = conn.execute('SELECT badges FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        old_badges = set((old_row[0] or '').split(',')) if old_row else set()
+        new_badges = set(badges) - old_badges - {''}
         conn.execute('UPDATE users SET badges=? WHERE wallet_address=?',
                      (','.join(badges), wallet))
         conn.commit()
+        if new_badges:
+            xrow = conn.execute(
+                'SELECT share_on_badge FROM x_connections WHERE wallet_address=?',
+                (wallet,)
+            ).fetchone()
+            if xrow and xrow[0]:
+                for badge in new_badges:
+                    _tweet = f'Just unlocked the {badge} badge on @OrcAgent 🏆'
+                    threading.Thread(target=_post_to_x, args=(wallet, _tweet), daemon=True).start()
         conn.close()
     except Exception as e:
         print(f'[badges] save error for {wallet}: {e}', flush=True)
@@ -6305,6 +6325,71 @@ def get_following_by_wallet(wallet: str):
     finally:
         conn.close()
     return jsonify({'ok': True, 'users': _follow_list_rows(rows, today, viewer_wallet)})
+
+# ── X (TWITTER) HELPERS ──
+def _post_to_x(wallet: str, text: str) -> bool:
+    """Post a tweet on behalf of wallet. Returns True on success, False otherwise."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT access_token, refresh_token, token_expires_at FROM x_connections WHERE wallet_address=?',
+                (wallet,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            return False
+        access_token, refresh_token, token_expires_at_str = row
+        # refresh if expired or expiring within 60 seconds
+        if token_expires_at_str:
+            try:
+                exp = datetime.datetime.fromisoformat(token_expires_at_str)
+                if datetime.datetime.utcnow() >= exp - datetime.timedelta(seconds=60):
+                    token_expires_at_str = None  # force refresh
+            except ValueError:
+                token_expires_at_str = None
+        if not token_expires_at_str:
+            client_id     = os.getenv('X_CLIENT_ID', '')
+            client_secret = os.getenv('X_CLIENT_SECRET', '')
+            resp = requests.post(
+                'https://api.x.com/2/oauth2/token',
+                data={'grant_type': 'refresh_token', 'refresh_token': refresh_token,
+                      'client_id': client_id},
+                auth=(client_id, client_secret),
+                timeout=15,
+            )
+            if resp.status_code != 200:
+                print(f'[x] token refresh failed for {wallet[:8]}: {resp.status_code} {resp.text[:120]}', flush=True)
+                return False
+            td = resp.json()
+            access_token  = td.get('access_token', access_token)
+            refresh_token = td.get('refresh_token', refresh_token)
+            expires_in    = int(td.get('expires_in', 7200))
+            new_exp       = (datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)).isoformat()
+            conn2 = sqlite3.connect(DB_FILE)
+            try:
+                conn2.execute(
+                    'UPDATE x_connections SET access_token=?, refresh_token=?, token_expires_at=? WHERE wallet_address=?',
+                    (access_token, refresh_token, new_exp, wallet)
+                )
+                conn2.commit()
+            finally:
+                conn2.close()
+        # post the tweet
+        tweet_resp = requests.post(
+            'https://api.x.com/2/tweets',
+            json={'text': text},
+            headers={'Authorization': 'Bearer ' + access_token},
+            timeout=15,
+        )
+        if not (200 <= tweet_resp.status_code < 300):
+            print(f'[x] tweet failed for {wallet[:8]}: {tweet_resp.status_code} {tweet_resp.text[:120]}', flush=True)
+            return False
+        return True
+    except Exception as e:
+        print(f'[x] _post_to_x error for {wallet[:8]}: {e}', flush=True)
+        return False
 
 # ── X (TWITTER) OAUTH ──
 @app.route('/api/x/connect', methods=['GET'])
