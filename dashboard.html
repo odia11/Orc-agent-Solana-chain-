@@ -5019,10 +5019,12 @@ async function launchApp(){
         if(typeof sr.is_admin==='boolean') _isAdmin=sr.is_admin;
         if(typeof sr.has_trading_key==='boolean'){ settingsHasKey=sr.has_trading_key; _updateKeyStatus(); }
       }
-    }catch(e){}
+    }catch(e){ window._debugErrors.push('step1 CAUGHT: '+e.message); }
+    window._debugErrors.push('step1 DONE');
   }
 
   // ── 2. Show dashboard ──────────────────────────────────────────
+  window._debugErrors.push('step2 START');
   if(phantomKey) guestMode = false;
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
