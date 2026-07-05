@@ -3108,7 +3108,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <div id="_debug_overlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;font-size:10px;padding:4px;z-index:99999;font-family:monospace"></div>
 <script>
 window._debugErrors = [];
-function _debugLog(msg){ window._debugErrors.push(msg); }
+function _debugLog(msg){
+  window._debugErrors.push(msg);
+  var d = document.getElementById('_debug_overlay');
+  if (d) d.textContent = window._debugErrors.join(' | ');
+}
 window.onerror = function(msg, url, line, col, err){
   window._debugErrors.push(msg + ' @ line ' + line + ':' + col);
 };
