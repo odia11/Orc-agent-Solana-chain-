@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
 <title>Messages — OrcAgent</title>
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -147,11 +147,11 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   /* thread pane hidden by default; opens as fullscreen overlay */
   .msgs-right{display:none}
   .msgs-main.thread-open .msgs-left{display:none}
-  .msgs-main.thread-open .msgs-right{display:flex;flex-direction:column;position:fixed;inset:0;z-index:100;background:#0a0b0e;overflow:hidden}
+  .msgs-main.thread-open .msgs-right{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:100;background:#0a0b0e;overflow:hidden}
   .msgs-thread{flex:1;min-height:0;display:flex;flex-direction:column}
   .msgs-area{flex:1;overflow-y:auto;min-height:0}
   .msgs-back{display:flex}
-  .msgs-input-bar{flex-shrink:0;position:sticky;bottom:0}
+  .msgs-input-bar{flex-shrink:0;position:sticky;bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
 
   /* list header: proper 52px sticky top bar */
   .msgs-left-hdr{position:sticky;top:0;z-index:10;background:#101216;border-bottom:1px solid #16191f;padding:0 16px;height:52px;display:flex;align-items:center;gap:0}
