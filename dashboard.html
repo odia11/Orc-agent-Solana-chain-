@@ -3105,29 +3105,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 </style>
 </head>
 <body>
-<div id="_debug_overlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;font-size:10px;padding:4px;z-index:99999;font-family:monospace"></div>
-<script>
-window._debugErrors = [];
-function _debugLog(msg){
-  window._debugErrors.push(msg);
-  var d = document.getElementById('_debug_overlay');
-  if (d) d.textContent = window._debugErrors.join(' | ');
-}
-window.onerror = function(msg, url, line, col, err){
-  window._debugErrors.push(msg + ' @ line ' + line + ':' + col);
-};
-window.addEventListener('DOMContentLoaded', () => _debugLog('DOMContentLoaded fired'));
-window.addEventListener('load', () => _debugLog('window.load fired'));
-window.addEventListener('pageshow', (e) => _debugLog('pageshow persisted=' + e.persisted));
-window.addEventListener('load', function(){
-  setTimeout(function(){
-    var d = document.getElementById('_debug_overlay');
-    if(d) d.textContent = 'phantomKey=' + (typeof phantomKey!=='undefined'?phantomKey:'undefined')
-      + ' | onboardHidden=' + (document.getElementById('onboard')?document.getElementById('onboard').classList.contains('hide'):'no-el')
-      + ' | ERRORS=' + JSON.stringify(window._debugErrors);
-  }, 2000);
-});
-</script>
 
 <script>document.addEventListener('DOMContentLoaded',function(){
   var _qs=new URLSearchParams(window.location.search);
@@ -4598,6 +4575,7 @@ async function _connectWalletSigned(provider, address){
 }
 
 function _phantomMobileV1Connect(){
+  localStorage.removeItem('orca_manual_disconnect');
   var msgEl=document.getElementById('wallet-install-msg');
   var noteEl=document.getElementById('ob-phantom-note');
   function _setNote(txt,col){
@@ -5009,10 +4987,8 @@ async function _inviteRespond(action){
 }
 
 async function launchApp(){
-  window._debugErrors.push('launchApp START');
   // ── 1. Verify / silently restore server-side session ────────────
   if(phantomKey){
-    window._debugErrors.push('step1 START');
     try{
       const sr = await fetch('/api/state').then(r=>r.json()).catch(()=>null);
       if(!sr || !sr.wallet){
@@ -5027,12 +5003,10 @@ async function launchApp(){
         if(typeof sr.is_admin==='boolean') _isAdmin=sr.is_admin;
         if(typeof sr.has_trading_key==='boolean'){ settingsHasKey=sr.has_trading_key; _updateKeyStatus(); }
       }
-    }catch(e){ window._debugErrors.push('step1 CAUGHT: '+e.message); }
-    window._debugErrors.push('step1 DONE');
+    }catch(e){}
   }
 
   // ── 2. Show dashboard ──────────────────────────────────────────
-  window._debugErrors.push('step2 START');
   if(phantomKey) guestMode = false;
   document.getElementById('onboard').classList.add('hide');
   document.getElementById('app').style.display='block';
@@ -6948,7 +6922,8 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 // ── STARTUP: restore session ──
 (async function initApp(){
-  if(localStorage.getItem('orca_manual_disconnect')){ return; }
+  if(localStorage.getItem('orca_manual_disconnect') && !phantomKey){ return; }
+  if(phantomKey){ localStorage.removeItem('orca_manual_disconnect'); }
   // Check extension wallet before using session wallet
   const phantomReady  = window.solana?.isPhantom   && window.solana?.isConnected && window.solana?.publicKey;
   const solflareReady = window.solflare?.isSolflare && window.solflare?.isConnected && window.solflare?.publicKey;
@@ -6996,7 +6971,6 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
 
 window.addEventListener('pageshow', function(event) {
   if (event.persisted) {
-    _debugLog('pageshow persisted=true, herstart launchApp');
     launchApp();
   }
 });
