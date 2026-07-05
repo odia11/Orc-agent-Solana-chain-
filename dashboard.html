@@ -3108,9 +3108,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <div id="_debug_overlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;font-size:10px;padding:4px;z-index:99999;font-family:monospace"></div>
 <script>
 window._debugErrors = [];
+function _debugLog(msg){ window._debugErrors.push(msg); }
 window.onerror = function(msg, url, line, col, err){
   window._debugErrors.push(msg + ' @ line ' + line + ':' + col);
 };
+window.addEventListener('DOMContentLoaded', () => _debugLog('DOMContentLoaded fired'));
+window.addEventListener('load', () => _debugLog('window.load fired'));
+window.addEventListener('pageshow', (e) => _debugLog('pageshow persisted=' + e.persisted));
 window.addEventListener('load', function(){
   setTimeout(function(){
     var d = document.getElementById('_debug_overlay');
@@ -6985,6 +6989,13 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
   // No wallet detected — leave onboarding visible so user can connect
   // (skipToApp() is still available for browse-without-connecting)
 })();
+
+window.addEventListener('pageshow', function(event) {
+  if (event.persisted) {
+    _debugLog('pageshow persisted=true, herstart launchApp');
+    launchApp();
+  }
+});
 
 // ── SETTINGS MODAL ──
 let settingsHasKey=false;
