@@ -403,7 +403,8 @@ async function _openThread(peerId, peerUsername, peerWallet) {
   _activePeer = {
     id:       peerId,
     wallet:   (conv && conv.peer_wallet)   || peerWallet   || '',
-    username: (conv && conv.peer_username) || peerUsername || ''
+    username: (conv && conv.peer_username) || peerUsername || '',
+    avatar:   (conv && conv.peer_avatar)   || ''
   };
   _renderConvList();
 
@@ -417,10 +418,13 @@ async function _openThread(peerId, peerUsername, peerWallet) {
   var displayName = _activePeer.username || _short(_activePeer.wallet) || ('User #' + peerId);
   var color = _avatarColor(_activePeer.wallet || String(peerId));
   var ini   = (displayName[0] || '?').toUpperCase();
+  var avatarImg = _activePeer.avatar
+    ? '<img src="'+_esc(_activePeer.avatar)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
+    : '';
 
   document.getElementById('msgs-thread-hdr').innerHTML =
     '<button class="msgs-back" onclick="_backToList()">← Back</button>'
-    + '<div class="msgs-thread-avatar" style="background:'+color+'">'+_esc(ini)+'</div>'
+    + '<div class="msgs-thread-avatar" style="background:'+color+';position:relative;overflow:hidden">'+_esc(ini)+avatarImg+'</div>'
     + '<div class="msgs-thread-meta">'
     +   '<div class="msgs-thread-name">'+_esc(displayName)+'</div>'
     +   '<div class="msgs-thread-status"><span class="msgs-online-dot"></span>Online</div>'
