@@ -6021,11 +6021,13 @@ function checkOwnerPanel(){
   const adminBtn=document.getElementById('admin-btn');
   const healthBtn=document.getElementById('health-btn');
   const sbAdminLink=document.getElementById('sb-admin-link');
+  const mnAdminLink=document.getElementById('mn-admin-link');
   const isAdminWallet=!!(phantomKey&&(phantomKey===ADMIN_WALLET||phantomKey.startsWith('HC5ahspSox3XRm')));
   if(isAdminWallet){
     if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
     if(sbAdminLink) sbAdminLink.style.display='flex';
+    if(mnAdminLink) mnAdminLink.style.display='flex';
     _iadminSetVisible(true);
     iadminRefresh();
     fetchAudit();
@@ -6034,6 +6036,7 @@ function checkOwnerPanel(){
     if(adminBtn) adminBtn.style.display='none';
     if(healthBtn) healthBtn.style.display='none';
     if(sbAdminLink) sbAdminLink.style.display='none';
+    if(mnAdminLink) mnAdminLink.style.display='none';
     _iadminSetVisible(false);
     if(_adminView) toggleAdminView();
     closeHealthPanel();
@@ -12283,6 +12286,10 @@ document.addEventListener('DOMContentLoaded', function() {
     <a class="mn-drawer-item" href="/history" onclick="_mnDrawerClose()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
       History
+    </a>
+    <a class="mn-drawer-item" id="mn-admin-link" href="/admin" onclick="_mnDrawerClose()" style="display:none;color:#f7b955">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 21 12 17.77 5.82 21 7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+      Admin
     </a>
     <button class="mn-drawer-item" style="color:#f76b62" onclick="_mnDrawerClose();disconnectWallet()">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
