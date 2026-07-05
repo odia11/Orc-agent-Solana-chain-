@@ -5328,11 +5328,11 @@ def social_feed():
                 FROM trades t
                 LEFT JOIN users u ON t.user_id = u.id
             )
+        ''' + where_clause + '''
             ORDER BY
               CASE WHEN created_at LIKE '%T%'
                    THEN replace(replace(created_at,'T',' '),'Z','')
                    ELSE created_at END DESC LIMIT 50
-        ''' + where_clause + '''
         ''', (my_wallet, my_wallet) + ((my_uid,) if feed_filter == 'following' else ())).fetchall()
     finally:
         conn.close()
