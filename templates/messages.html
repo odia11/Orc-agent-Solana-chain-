@@ -58,6 +58,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msgs-left-hdr{padding:16px 16px 12px;border-bottom:1px solid #16191f;flex-shrink:0}
 .msgs-left-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .msgs-left-title{font-size:16px;font-weight:700;color:#eef1f5}
+.msgs-home-back{display:none}
 .msgs-new-btn{background:#f7b955;color:#0a0b0e;border:none;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .msgs-new-btn:hover{opacity:.85}
 .msgs-search-wrap{position:relative}
@@ -156,7 +157,8 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   /* list header: proper 52px sticky top bar */
   .msgs-left-hdr{position:sticky;top:0;z-index:10;background:#101216;border-bottom:1px solid #16191f;padding:0 16px;height:52px;display:flex;align-items:center;gap:0}
   .msgs-left-title-row{width:100%;margin-bottom:0}
-  .msgs-left-title{font-size:16px;font-weight:600;color:#eef1f5}
+  .msgs-left-title{font-size:16px;font-weight:600;color:#eef1f5;margin-right:auto}
+  .msgs-home-back{display:inline-flex;align-items:center;justify-content:center;color:#f7b955;font-size:20px;text-decoration:none;min-width:32px;min-height:44px;margin-right:4px;-webkit-tap-highlight-color:transparent}
   .msgs-search-wrap{display:none}
 
   /* prevent iOS auto-zoom on input focus */
@@ -253,6 +255,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
     <div class="msgs-left" id="msgs-left">
       <div class="msgs-left-hdr">
         <div class="msgs-left-title-row">
+          <a href="/" class="msgs-home-back" title="Back to home">←</a>
           <div class="msgs-left-title">Messages</div>
           <button class="msgs-new-btn" onclick="document.getElementById('newMsgBar').style.display='block';document.getElementById('searchUser').focus()">+ New</button>
         </div>
