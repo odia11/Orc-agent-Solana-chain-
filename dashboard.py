@@ -2957,6 +2957,9 @@ def index():
         html = f.read()
     html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
     _sw = session.get('wallet', '')
+    print(f'[phantom-debug] index() session_wallet={_sw!r} '
+          f'cookies_received={list(request.cookies.keys())} '
+          f'host={request.headers.get("Host")}', flush=True)
     _ss = (_sw[:4] + '...' + _sw[-4:]) if len(_sw) > 8 else _sw
     html = html.replace('__SESSION_WALLET__', _sw)
     html = html.replace('__SESSION_SHORT__',  _ss)
@@ -3034,6 +3037,10 @@ def api_phantom_decrypt():
         add_user_log(wallet_address, 'Wallet connected (mobile): ' + wallet_address[:6] + '...' + wallet_address[-4:])
         ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
         threading.Thread(target=_check_wallet_multi_ip, args=(wallet_address, ip), daemon=True).start()
+        print(f'[phantom-debug] is_secure={request.is_secure} '
+              f'x_fwd_proto={request.headers.get("X-Forwarded-Proto")} '
+              f'host={request.headers.get("Host")} '
+              f'session_after_set={dict(session)}', flush=True)
         return jsonify({'ok': True, 'wallet_address': wallet_address, 'csrf_token': csrf_tok})
     except Exception as e:
         print(f'[phantom] decrypt ERROR: {e}', flush=True)
