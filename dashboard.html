@@ -6923,10 +6923,9 @@ function _inDappBrowser(){ return !!(window.solana||window.solflare); }
   // On a mobile regular browser (no injected wallet), swap connect buttons for deep links.
   // Inside Phantom/Solflare's built-in browser, or on desktop, keep the existing flow.
   if(_isMobile()&&!_inDappBrowser()){
-    document.getElementById('mobile-deeplink-section').style.display='block';
-    document.getElementById('dapp-connect-section').style.display='none';
-    // Launch button is irrelevant until the user is inside a dapp browser
-    document.getElementById('step1-continue-btn').style.display='none';
+    var _mds=document.getElementById('mobile-deeplink-section'); if(_mds) _mds.style.display='none';
+    var _dcs=document.getElementById('dapp-connect-section'); if(_dcs) _dcs.style.display='none';
+    var _scb=document.getElementById('step1-continue-btn'); if(_scb) _scb.style.display='none';
     // Hide Phantom connect on mobile regular browsers — deep-link flow is unreliable
     var _pb=document.getElementById('phantom-ob-btn');
     var _pn=document.getElementById('ob-phantom-note');
