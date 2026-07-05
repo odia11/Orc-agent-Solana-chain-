@@ -3106,14 +3106,21 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 </head>
 <body>
 <div id="_debug_overlay" style="position:fixed;top:0;left:0;right:0;background:red;color:white;font-size:10px;padding:4px;z-index:99999;font-family:monospace"></div>
-<script>window.addEventListener('load', function(){
+<script>
+window._debugErrors = [];
+window.onerror = function(msg, url, line, col, err){
+  window._debugErrors.push(msg + ' @ line ' + line + ':' + col);
+};
+window.addEventListener('load', function(){
   setTimeout(function(){
     var d = document.getElementById('_debug_overlay');
     if(d) d.textContent = 'phantomKey=' + (typeof phantomKey!=='undefined'?phantomKey:'undefined')
       + ' | manualDC=' + localStorage.getItem('orca_manual_disconnect')
-      + ' | onboardHidden=' + (document.getElementById('onboard')?document.getElementById('onboard').classList.contains('hide'):'no-el');
+      + ' | onboardHidden=' + (document.getElementById('onboard')?document.getElementById('onboard').classList.contains('hide'):'no-el')
+      + ' | ERRORS=' + JSON.stringify(window._debugErrors);
   }, 1500);
-});</script>
+});
+</script>
 <script>document.addEventListener('DOMContentLoaded',function(){
   var _qs=new URLSearchParams(window.location.search);
   var p=_qs.get('action');
