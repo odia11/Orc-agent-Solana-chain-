@@ -5294,6 +5294,14 @@ def social_feed():
     feed_filter = request.args.get('filter', 'all')
     my_wallet = session.get('wallet', '')
     conn = sqlite3.connect(DB_FILE)
+    where_clause = ''
+    if feed_filter == 'following':
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (my_wallet,)).fetchone()
+        my_uid = row[0] if row else -1
+        where_clause = '''WHERE wallet IN (
+            SELECT u2.wallet_address FROM follows f
+            JOIN users u2 ON f.following_id = u2.id
+            WHERE f.follower_id = ?)'''
     try:
         rows = conn.execute('''
             SELECT * FROM (
@@ -5324,7 +5332,8 @@ def social_feed():
               CASE WHEN created_at LIKE '%T%'
                    THEN replace(replace(created_at,'T',' '),'Z','')
                    ELSE created_at END DESC LIMIT 50
-        ''', (my_wallet, my_wallet)).fetchall()
+        ''' + where_clause + '''
+        ''', (my_wallet, my_wallet) + ((my_uid,) if feed_filter == 'following' else ())).fetchall()
     finally:
         conn.close()
 
