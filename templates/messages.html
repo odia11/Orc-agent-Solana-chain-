@@ -428,12 +428,7 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     + '<div class="msgs-thread-meta">'
     +   '<div class="msgs-thread-name">'+_esc(displayName)+'</div>'
     +   '<div class="msgs-thread-status"><span class="msgs-online-dot"></span>Online</div>'
-    + '</div>'
-    + (_activePeer.wallet
-        ? '<button class="msgs-copy-trades-btn" onclick="_copyTrades(this,'+JSON.stringify(_activePeer.wallet)+')">'
-          + '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:5px"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>'
-          + 'Copy Trades</button>'
-        : '');
+    + '</div>';
 
   document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
   await loadThread(peerId);
