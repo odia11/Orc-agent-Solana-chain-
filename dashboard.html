@@ -5001,8 +5001,10 @@ async function _inviteRespond(action){
 }
 
 async function launchApp(){
+  window._debugErrors.push('launchApp START');
   // ── 1. Verify / silently restore server-side session ────────────
   if(phantomKey){
+    window._debugErrors.push('step1 START');
     try{
       const sr = await fetch('/api/state').then(r=>r.json()).catch(()=>null);
       if(!sr || !sr.wallet){
