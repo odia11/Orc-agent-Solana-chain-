@@ -532,12 +532,13 @@ async function _saveStrategy(){
   var btn=document.getElementById('strat-save-btn');
   btn.textContent='Saving…'; btn.disabled=true;
   try{
-    var d=await _post('/api/settings/save',{
+    var submitted = {
       breakout_trigger: parseFloat(document.getElementById('s-breakout').value)||3,
       take_profit:      parseFloat(document.getElementById('s-tp').value)||15,
       stop_loss:        parseFloat(document.getElementById('s-sl').value)||8,
       max_positions:    parseInt(document.getElementById('s-maxpos').value)||3
-    });
+    };
+    var d=await _post('/api/settings/save', submitted);
     var msgEl=document.getElementById('strat-msg');
     if(msgEl){msgEl.className='st-save-msg '+(d.ok?'ok':'err');msgEl.textContent=d.ok?'✓ Saved':'✗ '+(d.msg||'failed');}
     setTimeout(function(){if(msgEl)msgEl.textContent='';},3000);
