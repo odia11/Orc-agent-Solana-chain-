@@ -111,6 +111,15 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msg-wrap.mine   .msg-bubble{background:#f7b955;color:#0a0b0e;border-radius:18px 18px 4px 18px;font-weight:500}
 .msg-wrap.theirs .msg-bubble{background:#101216;color:#eef1f5;border:1px solid #16191f;border-radius:18px 18px 18px 4px}
 .msg-time{font-size:11px;color:#565d68;margin-top:3px;padding:0 2px}
+.msg-wrap.mine{position:relative}
+.msg-menu-btn{display:none;position:absolute;top:-2px;left:-28px;background:none;border:none;color:#565d68;cursor:pointer;font-size:16px;padding:4px}
+.msg-wrap.mine:hover .msg-menu-btn{display:block}
+.msg-menu{display:none;position:absolute;top:20px;left:-90px;background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:110px;z-index:15}
+.msg-menu.open{display:block}
+.msg-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:#eef1f5;font-size:13px;padding:7px 10px;border-radius:7px;cursor:pointer}
+.msg-menu button:hover{background:#16191f}
+.msg-menu button.danger{color:#ff4d6a}
+.msg-edited-tag{color:#565d68;font-size:10px;margin-left:4px}
 .msg-bubble.msg-image{padding:0;background:none!important;border:none!important;max-width:220px;line-height:0}
 .msg-bubble.msg-image img{display:block;width:100%;border-radius:14px;cursor:pointer}
 .msg-bubble.msg-pending{opacity:.6}
