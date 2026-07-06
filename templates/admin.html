@@ -808,7 +808,7 @@ fetch('/api/csrf-token').then(function(r){return r.json();}).then(function(d){ w
 // ── STATE ──
 var _loaded = {};
 var _allUsers = [], _allTrades = [], _allRevTx = [];
-var _userRole = 'admin';
+var _userRole = 'user';
 
 // ── ROLE ACCESS ──
 var _ROLE_TABS = {
@@ -843,7 +843,7 @@ function _applyRoleUI(role) {
 
 async function _initRoleBasedUI() {
   var r = await fetch('/api/admin/whoami', {credentials:'include'}).then(r => r.json()).catch(() => null);
-  _userRole = r?.role || 'admin';
+  _userRole = (r && r.ok && r.role) ? r.role : 'user';
   _applyRoleUI(_userRole);
   var first = (_ROLE_TABS[_userRole] || ['overview'])[0];
   showView(first);
