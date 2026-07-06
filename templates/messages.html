@@ -550,6 +550,20 @@ document.addEventListener('click', function(e) {
     panel.classList.remove('open');
   }
 });
+var _emojiPanelEl = document.getElementById('msgs-emoji-panel');
+if (_emojiPanelEl) {
+  _emojiPanelEl.addEventListener('click', function(e) {
+    if (e.target.tagName !== 'BUTTON') return;
+    var input = document.getElementById('msgs-input');
+    if (!input) return;
+    var start = input.selectionStart || input.value.length;
+    var end   = input.selectionEnd   || input.value.length;
+    input.value = input.value.slice(0, start) + e.target.textContent + input.value.slice(end);
+    var pos = start + e.target.textContent.length;
+    input.focus();
+    input.setSelectionRange(pos, pos);
+  });
+}
 
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
