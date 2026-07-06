@@ -14,6 +14,11 @@ try:
     _APSCHEDULER_OK = True
 except ImportError:
     _APSCHEDULER_OK = False
+try:
+    from flask_compress import Compress as _Compress
+    _COMPRESS_OK = True
+except ImportError:
+    _COMPRESS_OK = False
 from contextlib import contextmanager
 from flask import Flask, jsonify, request, session, render_template, redirect, make_response
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -23,6 +28,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+if _COMPRESS_OK:
+    app.config['COMPRESS_MIMETYPES'] = ['text/html','text/css','text/xml','text/javascript','application/json','application/javascript']
+    _Compress(app)
 def _load_secret_key() -> bytes:
     _env = os.getenv('SECRET_KEY')
     if _env:
