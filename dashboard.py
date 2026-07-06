@@ -3932,7 +3932,7 @@ def settings_page():
 @app.route('/admin')
 def admin_page():
     wallet = session.get('wallet', '')
-    if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
+    if not wallet or get_user_role(wallet) == 'user':
         return redirect('/')
     conn = sqlite3.connect(DB_FILE)
     try:
