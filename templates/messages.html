@@ -541,6 +541,17 @@ async function _deleteMsg(id) {
   } catch(e) { console.error('[messages] delete error', e); }
 }
 
+function _startEditMsg(id, currentText) {
+  document.querySelectorAll('.msg-menu.open').forEach(function(m){ m.classList.remove('open'); });
+  var wrap = document.querySelector('.msg-wrap[data-mid="'+id+'"]');
+  var bubble = wrap && wrap.querySelector('.msg-bubble');
+  if (!bubble) return;
+  bubble.outerHTML = '<div class="msg-bubble msg-editing"><input type="text" class="msg-edit-input" id="msg-edit-'+id+'" value="'+_esc(currentText)+'" maxlength="500">'
+    + '<div class="msg-edit-actions"><button onclick="_saveEditMsg('+id+')">Save</button><button onclick="loadThread(_activePeerId)">Cancel</button></div></div>';
+  var input = document.getElementById('msg-edit-'+id);
+  if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
+}
+
 /* ── SEND ── */
 async function _sendMessage() {
   var input = document.getElementById('msgs-input');
