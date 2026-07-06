@@ -7506,7 +7506,7 @@ def get_dm_history(peer_id):
         print(f'[dm_get] me={me} peer={peer_id}', flush=True)
         rows = conn.execute(
             'SELECT id, sender_id, receiver_id, message, created_at, is_read, '
-            'COALESCE(message_type, "text") '
+            'COALESCE(message_type, "text"), edited_at '
             'FROM direct_messages '
             'WHERE (sender_id=? AND receiver_id=?) OR (sender_id=? AND receiver_id=?) '
             'ORDER BY created_at ASC LIMIT 200',
@@ -7527,7 +7527,7 @@ def get_dm_history(peer_id):
     return jsonify({'ok': True, 'messages': [
         {'id': r[0], 'sender_id': r[1], 'receiver_id': r[2],
          'message': r[3], 'created_at': r[4], 'is_read': bool(r[5]),
-         'message_type': r[6]}
+         'message_type': r[6], 'edited_at': r[7]}
         for r in rows
     ]})
 
