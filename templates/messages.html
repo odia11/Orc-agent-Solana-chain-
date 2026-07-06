@@ -551,6 +551,19 @@ function _startEditMsg(id, currentText) {
   var input = document.getElementById('msg-edit-'+id);
   if (input) { input.focus(); input.setSelectionRange(input.value.length, input.value.length); }
 }
+async function _saveEditMsg(id) {
+  var input = document.getElementById('msg-edit-'+id);
+  var text = input && input.value.trim();
+  if (!text) return;
+  try {
+    var r = await fetch('/api/messages/' + id, {
+      method:'PUT', headers:{'Content-Type':'application/json','X-CSRF-Token': _csrfToken},
+      body: JSON.stringify({message: text})
+    });
+    var d = await r.json();
+    if (d.ok) loadThread(_activePeerId); else alert(d.msg || 'Edit failed');
+  } catch(e) { console.error('[messages] edit error', e); }
+}
 
 /* ── SEND ── */
 async function _sendMessage() {
