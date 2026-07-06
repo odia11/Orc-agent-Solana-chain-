@@ -6036,8 +6036,6 @@ function checkOwnerPanel(){
   if(isAdminWallet){
     if(adminBtn) adminBtn.style.display='';
     if(healthBtn) healthBtn.style.display='';
-    if(sbAdminLink) sbAdminLink.style.display='flex';
-    if(mnAdminLink) mnAdminLink.style.display='flex';
     _iadminSetVisible(true);
     iadminRefresh();
     fetchAudit();
@@ -6045,8 +6043,6 @@ function checkOwnerPanel(){
   } else {
     if(adminBtn) adminBtn.style.display='none';
     if(healthBtn) healthBtn.style.display='none';
-    if(sbAdminLink) sbAdminLink.style.display='none';
-    if(mnAdminLink) mnAdminLink.style.display='none';
     _iadminSetVisible(false);
     if(_adminView) toggleAdminView();
     closeHealthPanel();
