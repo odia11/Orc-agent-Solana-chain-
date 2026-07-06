@@ -539,6 +539,10 @@ async function _saveStrategy(){
       max_positions:    parseInt(document.getElementById('s-maxpos').value)||3
     };
     var d=await _post('/api/settings/save', submitted);
+    var adjusted = d.ok && d.max_positions !== undefined && d.max_positions !== submitted.max_positions;
+    if (adjusted) {
+      document.getElementById('s-maxpos').value = d.max_positions;
+    }
     var msgEl=document.getElementById('strat-msg');
     if(msgEl){msgEl.className='st-save-msg '+(d.ok?'ok':'err');msgEl.textContent=d.ok?'✓ Saved':'✗ '+(d.msg||'failed');}
     setTimeout(function(){if(msgEl)msgEl.textContent='';},3000);
