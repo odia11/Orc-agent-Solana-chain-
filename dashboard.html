@@ -5035,7 +5035,7 @@ async function launchApp(){
     }).catch(()=>{});
   }
   updateAuthBtns();
-  checkOwnerPanel();
+  checkOwnerPanel(); _syncAdminNavLink();
   _lastActivity = Date.now();
   /* guest mode banner */
   if(guestMode) _showGuestBanner();
@@ -5184,7 +5184,7 @@ document.addEventListener('visibilitychange', async function(){
       const wr=await _connectWalletSigned(_wp, phantomKey);
       if(!wr?.ok && (wr?.msg==='Signature rejected'||(wr?.msg||'').startsWith('Nonce expired'))){
         showLfToast('🔑','Onderteken het verzoek in je wallet om in te loggen — probeer opnieuw','warn');
-      } else if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
+      } else if(wr){ settingsHasKey=wr.has_trading_key||false; _isAdmin=wr.is_admin||false; _updateKeyStatus(); checkOwnerPanel(); _syncAdminNavLink(); if(wr.csrf_token) _csrfToken=wr.csrf_token; }
     }
   }catch(e){}
 });
@@ -5268,7 +5268,7 @@ async function fetchState(){
   if(!r) return;
   if(typeof r.is_admin==='boolean' && r.is_admin!==_isAdmin){
     _isAdmin=r.is_admin;
-    checkOwnerPanel();
+    checkOwnerPanel(); _syncAdminNavLink();
   }
   if(typeof r.has_trading_key==='boolean' && r.has_trading_key!==settingsHasKey){
     settingsHasKey=r.has_trading_key;
