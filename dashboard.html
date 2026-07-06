@@ -3010,10 +3010,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   #mobile-nav{
     display:flex;align-items:stretch;
     position:fixed;bottom:0;left:0;right:0;
-    height:60px;background:#101216;
+    height:calc(60px + env(safe-area-inset-bottom,0px));
+    padding-bottom:env(safe-area-inset-bottom,0px);
+    background:#101216;
     border-top:1px solid #16191f;z-index:500;
     -webkit-tap-highlight-color:transparent;
   }
+  .rr-search,.hdr-search,.fc-reply-inp{font-size:16px}
   .mn-item{
     flex:1;display:flex;flex-direction:column;align-items:center;
     justify-content:center;gap:3px;text-decoration:none;
