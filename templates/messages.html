@@ -540,6 +540,17 @@ async function _sendMessage() {
   input.focus();
 }
 
+function _toggleEmojiPanel(e) {
+  e.stopPropagation();
+  document.getElementById('msgs-emoji-panel').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  var panel = document.getElementById('msgs-emoji-panel');
+  if (panel && panel.classList.contains('open') && !panel.contains(e.target) && e.target.className !== 'msgs-emoji-btn') {
+    panel.classList.remove('open');
+  }
+});
+
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
   if (allowed.indexOf(file.type) === -1) { alert('Only jpg, png, gif or webp images are supported.'); return; }
