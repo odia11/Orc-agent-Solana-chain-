@@ -6014,6 +6014,18 @@ async function fetchTrades(){
 // ── OWNER ADMIN PANEL ──
 let _adminTimer=null, _adminView=false, _adminTabLoaded={};
 
+async function _syncAdminNavLink(){
+  var sbAdminLink=document.getElementById('sb-admin-link');
+  var mnAdminLink=document.getElementById('mn-admin-link');
+  if(!phantomKey){ if(sbAdminLink)sbAdminLink.style.display='none'; if(mnAdminLink)mnAdminLink.style.display='none'; return; }
+  try{
+    var r=await fetch('/api/admin/whoami',{credentials:'include'}).then(function(x){return x.json();});
+    var show=!!(r&&r.ok&&r.role&&r.role!=='user');
+    if(sbAdminLink) sbAdminLink.style.display=show?'flex':'none';
+    if(mnAdminLink) mnAdminLink.style.display=show?'flex':'none';
+  }catch(e){}
+}
+
 function checkOwnerPanel(){
   const ADMIN_WALLET='HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5';
   const adminBtn=document.getElementById('admin-btn');
