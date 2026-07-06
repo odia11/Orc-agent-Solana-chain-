@@ -517,6 +517,27 @@ function _renderMessages(msgs) {
   if (conv && conv.unread > 0) { conv.unread = 0; _renderConvList(); }
 }
 
+function _toggleMsgMenu(e, id) {
+  e.stopPropagation();
+  document.querySelectorAll('.msg-menu.open').forEach(function(m){ if(m.id!=='msg-menu-'+id) m.classList.remove('open'); });
+  var el = document.getElementById('msg-menu-'+id);
+  if (el) el.classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.msg-menu') && !e.target.closest('.msg-menu-btn')) {
+    document.querySelectorAll('.msg-menu.open').forEach(function(m){ m.classList.remove('open'); });
+  }
+});
+async function _deleteMsg(id) {
+  if (!confirm('Delete this message?')) return;
+  try {
+    var r = await fetch('/api/messages/' + id, {method:'DELETE', headers:{'X-CSRF-Token': _csrfToken}});
+    var d = await r.json();
+    if (d.ok) { var el = document.querySelector('.msg-wrap[data-mid="'+id+'"]'); if (el) el.remove(); }
+    else { alert(d.msg || 'Delete failed'); }
+  } catch(e) { console.error('[messages] delete error', e); }
+}
+
 /* ── SEND ── */
 async function _sendMessage() {
   var input = document.getElementById('msgs-input');
