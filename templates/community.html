@@ -54,12 +54,12 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   {% endif %}
 </header>
 
-<div id="msgs" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;height:calc(100vh - 120px)">
+<div id="msgs" style="padding:16px;display:flex;flex-direction:column;gap:12px;overflow-y:auto;height:calc(100vh - 120px);height:calc(100dvh - 120px)">
   <div style="color:#565d68;font-size:13px;text-align:center;margin-top:40px">Loading messages…</div>
 </div>
 
-<div style="position:fixed;bottom:0;padding:12px;background:#0a0b0e;border-top:1px solid #16191f;display:flex;gap:10px;width:100%">
-  <input id="msg" placeholder="Say something..." style="flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5" onkeydown="if(event.key==='Enter')send()">
+<div style="position:fixed;bottom:0;padding:12px;background:#0a0b0e;border-top:1px solid #16191f;display:flex;gap:10px;width:100%;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))">
+  <input id="msg" placeholder="Say something..." style="flex:1;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5;font-size:16px;min-height:44px" onkeydown="if(event.key==='Enter')send()">
   <button onclick="sendMsg()" style="background:#3ad29b;color:#08120f;border:none;border-radius:11px;padding:11px 18px;font-weight:700">Send</button>
 </div>
 
