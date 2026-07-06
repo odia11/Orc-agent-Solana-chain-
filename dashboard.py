@@ -1008,6 +1008,8 @@ def init_db():
         likes      INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_feed_posts_created ON feed_posts(created_at)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_feed_posts_wallet_created ON feed_posts(wallet, created_at)')
     c.execute('''CREATE TABLE IF NOT EXISTS user_tokens (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id       INTEGER NOT NULL,
