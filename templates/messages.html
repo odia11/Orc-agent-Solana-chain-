@@ -649,6 +649,15 @@ if (_emojiPanelEl) {
   });
 }
 
+async function _toggleTradePanel(e) {
+  e.stopPropagation();
+  var panel = document.getElementById('msgs-trade-panel');
+  var willOpen = !panel.classList.contains('open');
+  panel.classList.toggle('open');
+  if (!willOpen) return;
+  panel.innerHTML = '<div class="msgs-trade-panel-empty">Loading…</div>';
+}
+
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
   if (allowed.indexOf(file.type) === -1) { alert('Only jpg, png, gif or webp images are supported.'); return; }
