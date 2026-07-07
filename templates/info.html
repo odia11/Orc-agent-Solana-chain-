@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>{{ page_title }} — OrcAgent</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;
+  --accent:#f7b955;--accent-dim:rgba(247,185,85,.12);--accent-border:rgba(247,185,85,.25);
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --mono:'JetBrains Mono','Share Tech Mono',monospace;
+  --ui:'Geist',system-ui,sans-serif;
+}
+html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+
+/* ── NAVBAR ── */
+.navbar{
+  position:sticky;top:0;z-index:50;
+  background:rgba(10,11,14,.82);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid #16191f;
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:56px;gap:16px;
+}
+.nav-left{display:flex;align-items:center;gap:14px;text-decoration:none;flex-shrink:0}
+.nav-logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
+.nav-brand{font-family:var(--ui);font-size:18px;font-weight:700;color:var(--text);letter-spacing:.04em;line-height:1}
+.nav-tag{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.nav-btn{display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;font-family:var(--ui);font-size:12px;font-weight:600;text-decoration:none;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
+.nav-btn:hover{border-color:#35353d;color:var(--text)}
+
+/* ── PAGE ── */
+.page{max-width:760px;margin:0 auto;padding:48px 28px 80px}
+
+/* ── HEADER ── */
+.info-header{margin-bottom:36px;padding-bottom:24px;border-bottom:1px solid #16191f}
+.info-title{font-size:28px;font-weight:700;color:var(--text);margin-bottom:6px}
+.info-meta{font-size:12px;color:var(--muted)}
+
+/* ── CONTENT typography ── */
+.info-body h2{font-size:16px;font-weight:600;color:var(--text);margin:28px 0 10px;letter-spacing:.01em}
+.info-body h3{font-size:14px;font-weight:600;color:var(--sub);margin:20px 0 8px}
+.info-body p{color:var(--sub);margin-bottom:14px}
+.info-body ul,.info-body ol{color:var(--sub);padding-left:20px;margin-bottom:14px}
+.info-body li{margin-bottom:6px}
+.info-body a{color:var(--accent);text-decoration:none}
+.info-body a:hover{text-decoration:underline}
+.info-body code{font-family:var(--mono);font-size:12px;background:#16191f;border-radius:4px;padding:1px 5px;color:var(--text)}
+.info-body pre{background:#101216;border:1px solid #16191f;border-radius:10px;padding:16px;overflow-x:auto;margin-bottom:14px}
+.info-body pre code{background:none;padding:0}
+.info-body .callout{background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:14px 16px;color:var(--accent);font-size:13px;margin-bottom:14px}
+
+/* ── MOBILE ── */
+@media(max-width:600px){
+  .page{padding:32px 16px 60px}
+  .navbar{padding:0 16px}
+  .info-title{font-size:22px}
+}
+</style>
+</head>
+<body>
+
+<nav class="navbar">
+  <a class="nav-left" href="/">
+    <div class="nav-logo-tile"></div>
+    <div>
+      <div class="nav-brand">OrcAgent</div>
+      <div class="nav-tag">SOCIAL TRADING</div>
+    </div>
+  </a>
+  <div class="nav-right">
+    <a class="nav-btn" href="/">Dashboard</a>
+  </div>
+</nav>
+
+<div class="page">
+  <div class="info-header">
+    <div class="info-title">{{ page_title }}</div>
+    <div class="info-meta">Last updated: {{ updated }}</div>
+  </div>
+  <div class="info-body">
+    {{ content|safe }}
+  </div>
+</div>
+
+</body>
+</html>

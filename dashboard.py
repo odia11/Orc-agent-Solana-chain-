@@ -3755,6 +3755,26 @@ def traders():
         client_secret=API_SHARED_SECRET,
     )
 
+_INFO_UPDATED = 'July 2026'
+
+@app.route('/about')
+def page_about():
+    content = '''
+    <p>OrcAgent is an invite-only social trading platform for Solana meme coins.
+    Connect a dedicated wallet, follow traders you trust, and let a rules-based
+    bot execute your strategy automatically.</p>
+    <h2>What you can do</h2>
+    <ul>
+      <li>Automate entries and exits with your own breakout / TP / SL rules</li>
+      <li>Follow other traders and copy their trades in real time</li>
+      <li>Track a live feed of trades and posts from people you follow</li>
+      <li>Chat directly with other traders, share images and trade cards</li>
+    </ul>
+    <div class="callout">OrcAgent is a tool for automating your own trading rules.
+    It is not investment advice.</div>
+    '''
+    return render_template('info.html', page_title='About OrcAgent', updated=_INFO_UPDATED, content=content)
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
