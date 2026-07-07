@@ -7709,7 +7709,12 @@ def send_dm(peer_id):
         message_id = cur.lastrowid
         sender_row  = conn.execute('SELECT username FROM users WHERE id=?', (me,)).fetchone()
         sender_name = (sender_row[0] if sender_row and sender_row[0] else wallet[:8] + '…')
-        preview     = text[:60] + ('…' if len(text) > 60 else '')
+        if message_type == 'image':
+            preview = '📷 Photo'
+        elif message_type == 'trade':
+            preview = '📊 Shared a trade'
+        else:
+            preview = text[:60] + ('…' if len(text) > 60 else '')
         conn.execute(
             'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
             (peer_id, 'message', sender_name + ': ' + preview, '/messages/' + wallet)
