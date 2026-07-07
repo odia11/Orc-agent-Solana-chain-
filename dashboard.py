@@ -3760,7 +3760,7 @@ _INFO_UPDATED = 'July 2026'
 @app.route('/about')
 def page_about():
     content = '''
-    <p>OrcAgent is an invite-only social trading platform for Solana meme coins.
+    <p>OrcAgent is a social trading platform for Solana meme coins.
     Connect a dedicated wallet, follow traders you trust, and let a rules-based
     bot execute your strategy automatically.</p>
     <h2>What you can do</h2>
@@ -3833,9 +3833,9 @@ def page_security():
 @app.route('/terms')
 def page_terms():
     content = '''
-    <h2>Invite-only access</h2>
-    <p>OrcAgent is provided on an invite-only basis. Access may be limited,
-    paused, or revoked at the platform's discretion.</p>
+    <h2>Access</h2>
+    <p>OrcAgent is open to anyone who connects a supported wallet. Access may
+    be limited, paused, or revoked at the platform's discretion.</p>
     <h2>No investment advice</h2>
     <p>Nothing on OrcAgent constitutes financial or investment advice.
     Cryptocurrency trading carries a high risk of loss, including total loss
