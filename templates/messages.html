@@ -684,6 +684,30 @@ document.addEventListener('click', function(e) {
   }
 });
 
+async function _sendTrade(tradeId) {
+  document.getElementById('msgs-trade-panel').classList.remove('open');
+  if (!_activePeerId) return;
+  try {
+    var r = await fetch('/api/messages/' + _activePeerId, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
+      body: JSON.stringify({message_type: 'trade', trade_id: tradeId})
+    });
+    var d = await r.json();
+    if (d.ok) {
+      loadThread(_activePeerId);
+      var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
+      var previewText = '📊 Shared a trade';
+      if (conv) { conv.last_msg = previewText; conv.last_ts = d.created_at; conv.last_type = 'trade'; }
+      _renderConvList();
+    } else {
+      alert(d.msg || 'Could not share trade');
+    }
+  } catch (e) {
+    console.error('[messages] send trade error', e);
+  }
+}
+
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
   if (allowed.indexOf(file.type) === -1) { alert('Only jpg, png, gif or webp images are supported.'); return; }
