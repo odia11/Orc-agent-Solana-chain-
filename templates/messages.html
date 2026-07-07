@@ -664,6 +664,14 @@ async function _toggleTradePanel(e) {
       panel.innerHTML = '<div class="msgs-trade-panel-empty">No closed trades yet</div>';
       return;
     }
+    panel.innerHTML = trades.map(function(t) {
+      var pnl = t.pnl || 0, isPos = pnl >= 0;
+      var pnlStr = (isPos ? '+' : '') + pnl.toFixed(3) + ' SOL';
+      return '<button type="button" class="msgs-trade-opt" onclick="_sendTrade(' + t.id + ')">'
+        + '<span class="msgs-trade-opt-tok">' + _esc(t.token || '?') + '</span>'
+        + '<span class="msgs-trade-opt-pnl" style="color:' + (isPos ? '#3ad29b' : '#f76b62') + '">' + pnlStr + '</span>'
+        + '</button>';
+    }).join('');
   } catch (e) {
     panel.innerHTML = '<div class="msgs-trade-panel-empty">Couldn\'t load trades</div>';
   }
