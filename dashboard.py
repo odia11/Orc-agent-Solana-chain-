@@ -7664,6 +7664,7 @@ def send_dm(peer_id):
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     body = request.json or {}
     message_type = body.get('message_type', 'text')
+    trade_id = None
     if message_type == 'image':
         text = str(body.get('message', ''))
         _dm_prefix = '/static/dm_images/'
