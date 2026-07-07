@@ -7672,6 +7672,12 @@ def send_dm(peer_id):
             return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
         if not _UPLOAD_FILENAME_RE.match(text[len(_dm_prefix):]):
             return jsonify({'ok': False, 'msg': 'Invalid image filename'}), 400
+    elif message_type == 'trade':
+        try:
+            trade_id = int(body.get('trade_id'))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'msg': 'Invalid trade'}), 400
+        text = ''
     else:
         message_type = 'text'
         text = _sanitize(str(body.get('message', '')))
