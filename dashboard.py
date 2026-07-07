@@ -7727,6 +7727,30 @@ def send_dm(peer_id):
     return jsonify({'ok': True, 'success': True, 'message_id': message_id,
                     'created_at': now, 'message': text, 'message_type': message_type})
 
+@app.route('/api/messages/my-recent-trades')
+@rate_limit(30, 60)
+def messages_my_recent_trades():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': True, 'trades': []})
+        rows = conn.execute(
+            'SELECT id, token, entry_price, exit_price, pnl, timestamp FROM trades '
+            'WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0 '
+            'ORDER BY timestamp DESC LIMIT 10',
+            (me,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'trades': [
+        {'id': r[0], 'token': r[1], 'entry': r[2], 'exit': r[3], 'pnl': r[4], 'timestamp': r[5]}
+        for r in rows
+    ]})
+
 @app.route('/api/messages/<int:message_id>', methods=['DELETE'])
 @rate_limit(30, 60)
 def delete_dm(message_id):
