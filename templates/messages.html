@@ -518,7 +518,12 @@ function _renderMessages(msgs) {
       bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="window.open('+JSON.stringify(m.message)+',\'_blank\')"></div>';
     } else if (m.message_type === 'trade') {
       var tr = {}; try { tr = JSON.parse(m.message); } catch(e) {}
-      bubble = '<div class="msg-bubble msg-trade"></div>';
+      var trPnl = tr.pnl || 0, trPos = trPnl >= 0;
+      bubble = '<div class="msg-bubble msg-trade">'
+        + '<div class="msg-trade-tok">' + _esc(tr.token || '?') + '</div>'
+        + '<div class="msg-trade-prices">Entry $' + Number(tr.entry||0).toFixed(4) + ' → Exit $' + Number(tr.exit||0).toFixed(4) + '</div>'
+        + '<div class="msg-trade-pnl" style="color:' + (trPos ? '#3ad29b' : '#f76b62') + '">' + (trPos?'+':'') + trPnl.toFixed(3) + ' SOL</div>'
+        + '</div>';
     } else {
       bubble = '<div class="msg-bubble">'+_esc(m.message)+'</div>';
     }
