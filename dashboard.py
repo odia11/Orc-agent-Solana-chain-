@@ -3813,6 +3813,23 @@ def page_fees():
     '''
     return render_template('info.html', page_title='Fees', updated=_INFO_UPDATED, content=content)
 
+@app.route('/security')
+def page_security():
+    content = '''
+    <h2>Your wallet</h2>
+    <p>OrcAgent never has access to your seed phrase. Trading keys are
+    encrypted at rest and used only to sign trades you've configured the bot
+    to make.</p>
+    <h2>Session security</h2>
+    <p>Wallet connections use Sign-In With Solana with server-issued,
+    single-use nonces. Optional Face ID / WebAuthn login is available.</p>
+    <h2>Trade safety checks</h2>
+    <p>Before entering a position, the bot validates a token's mint and
+    freeze authority and runs a rug-pull risk check. No automated check
+    eliminates risk.</p>
+    '''
+    return render_template('info.html', page_title='Security', updated=_INFO_UPDATED, content=content)
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
