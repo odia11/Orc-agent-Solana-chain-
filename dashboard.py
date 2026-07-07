@@ -3999,13 +3999,15 @@ def admin_page():
         'fees_sol':     f'{fees_sol:.4f}',
     }
 
-    return render_template(
+    resp = make_response(render_template(
         'admin.html',
         wallet=wallet,
         users=users,
         posts=posts,
         stats=stats,
-    )
+    ))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @app.route('/messages')
