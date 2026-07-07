@@ -516,6 +516,9 @@ function _renderMessages(msgs) {
     var bubble;
     if (m.message_type === 'image') {
       bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="window.open('+JSON.stringify(m.message)+',\'_blank\')"></div>';
+    } else if (m.message_type === 'trade') {
+      var tr = {}; try { tr = JSON.parse(m.message); } catch(e) {}
+      bubble = '<div class="msg-bubble msg-trade"></div>';
     } else {
       bubble = '<div class="msg-bubble">'+_esc(m.message)+'</div>';
     }
