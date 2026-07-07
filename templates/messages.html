@@ -677,6 +677,13 @@ async function _toggleTradePanel(e) {
   }
 }
 
+document.addEventListener('click', function(e) {
+  var panel = document.getElementById('msgs-trade-panel');
+  if (panel && panel.classList.contains('open') && !e.target.closest('.msgs-trade-wrap')) {
+    panel.classList.remove('open');
+  }
+});
+
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
   if (allowed.indexOf(file.type) === -1) { alert('Only jpg, png, gif or webp images are supported.'); return; }
