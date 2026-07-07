@@ -3830,6 +3830,25 @@ def page_security():
     '''
     return render_template('info.html', page_title='Security', updated=_INFO_UPDATED, content=content)
 
+@app.route('/terms')
+def page_terms():
+    content = '''
+    <h2>Invite-only access</h2>
+    <p>OrcAgent is provided on an invite-only basis. Access may be limited,
+    paused, or revoked at the platform's discretion.</p>
+    <h2>No investment advice</h2>
+    <p>Nothing on OrcAgent constitutes financial or investment advice.
+    Cryptocurrency trading carries a high risk of loss, including total loss
+    of funds.</p>
+    <h2>Your responsibility</h2>
+    <p>You are solely responsible for the trades your account and bot
+    configuration make. Use a wallet dedicated to OrcAgent, not one holding
+    your primary assets.</p>
+    <h2>No warranty</h2>
+    <p>OrcAgent is provided "as is," without warranty of any kind.</p>
+    '''
+    return render_template('info.html', page_title='Terms of Service', updated=_INFO_UPDATED, content=content)
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
