@@ -7567,6 +7567,7 @@ def list_conversations():
                     CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END AS peer_id,
                     message AS last_msg,
                     created_at AS last_ts,
+                    COALESCE(message_type, 'text') AS last_type,
                     ROW_NUMBER() OVER (
                         PARTITION BY CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END
                         ORDER BY created_at DESC
