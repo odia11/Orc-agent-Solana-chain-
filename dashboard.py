@@ -7692,6 +7692,15 @@ def send_dm(peer_id):
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         if me == int(peer_id):
             return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
+        if message_type == 'trade':
+            trow = conn.execute(
+                'SELECT token, entry_price, exit_price, pnl FROM trades WHERE id=? AND user_id=?',
+                (trade_id, me)
+            ).fetchone()
+            if not trow:
+                return jsonify({'ok': False, 'msg': 'Trade not found'}), 404
+            token, entry_price, exit_price, pnl = trow
+            text = json.dumps({'token': token, 'entry': entry_price, 'exit': exit_price, 'pnl': pnl})
         now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
             'INSERT INTO direct_messages (sender_id, receiver_id, message, message_type, created_at) VALUES (?,?,?,?,?)',
