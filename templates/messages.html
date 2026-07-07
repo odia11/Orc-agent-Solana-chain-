@@ -656,6 +656,17 @@ async function _toggleTradePanel(e) {
   panel.classList.toggle('open');
   if (!willOpen) return;
   panel.innerHTML = '<div class="msgs-trade-panel-empty">Loading…</div>';
+  try {
+    var r = await fetch('/api/messages/my-recent-trades');
+    var d = await r.json();
+    var trades = (d.ok && d.trades) || [];
+    if (!trades.length) {
+      panel.innerHTML = '<div class="msgs-trade-panel-empty">No closed trades yet</div>';
+      return;
+    }
+  } catch (e) {
+    panel.innerHTML = '<div class="msgs-trade-panel-empty">Couldn\'t load trades</div>';
+  }
 }
 
 async function _uploadAndSendImage(file) {
