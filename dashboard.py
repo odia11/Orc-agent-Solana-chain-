@@ -3797,6 +3797,22 @@ def page_docs():
     '''
     return render_template('info.html', page_title='Documentation', updated=_INFO_UPDATED, content=content)
 
+@app.route('/fees')
+def page_fees():
+    fee_pct = round(_get_fee_rate() * 100, 2)
+    content = f'''
+    <h2>Performance fee</h2>
+    <p>OrcAgent charges a <strong>{fee_pct}%</strong> performance fee, taken
+    only from profitable closed trades. Losing trades and open positions are
+    never charged.</p>
+    <h2>Network fees</h2>
+    <p>Every on-chain trade also pays standard Solana network and
+    swap-routing fees, set by the network, not by OrcAgent.</p>
+    <div class="callout">Fee rates are configurable and may change. The
+    current rate is always shown here.</div>
+    '''
+    return render_template('info.html', page_title='Fees', updated=_INFO_UPDATED, content=content)
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
