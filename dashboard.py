@@ -3775,6 +3775,21 @@ def page_about():
     '''
     return render_template('info.html', page_title='About OrcAgent', updated=_INFO_UPDATED, content=content)
 
+@app.route('/docs')
+def page_docs():
+    content = '''
+    <h2>Getting started</h2>
+    <ol>
+      <li>Connect a Phantom or Solflare wallet — use a wallet dedicated to
+      OrcAgent, not your main holdings.</li>
+      <li>Fund it with SOL for trading and network fees.</li>
+      <li>Set your Breakout Trigger, Take Profit, Stop Loss and Max Concurrent
+      Positions under <a href="/settings">Bot Settings</a>.</li>
+      <li>Toggle Auto Trading on when you're ready.</li>
+    </ol>
+    '''
+    return render_template('info.html', page_title='Documentation', updated=_INFO_UPDATED, content=content)
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
