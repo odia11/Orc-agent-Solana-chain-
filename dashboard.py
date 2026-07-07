@@ -7582,7 +7582,7 @@ def list_conversations():
         conn.close()
     return jsonify({'ok': True, 'conversations': [
         {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
-         'last_msg': r[3], 'last_ts': r[4], 'unread': r[5], 'peer_avatar': r[6] or ''}
+         'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'unread': r[6], 'peer_avatar': r[7] or ''}
         for r in rows
     ]})
 
