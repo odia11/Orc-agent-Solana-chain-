@@ -3787,6 +3787,13 @@ def page_docs():
       Positions under <a href="/settings">Bot Settings</a>.</li>
       <li>Toggle Auto Trading on when you're ready.</li>
     </ol>
+    <h2>How the bot decides to trade</h2>
+    <p>The bot scans the live market for tokens moving past your configured
+    breakout threshold, checks mint/freeze authority and runs a rug-pull
+    check before entering.</p>
+    <h2>Copy trading</h2>
+    <p>Enable copy trading on a trader's profile to mirror their entries at
+    your own configured position size.</p>
     '''
     return render_template('info.html', page_title='Documentation', updated=_INFO_UPDATED, content=content)
 
