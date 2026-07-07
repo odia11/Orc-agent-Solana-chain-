@@ -7558,7 +7558,7 @@ def list_conversations():
             SELECT peer_id,
                    (SELECT wallet_address FROM users WHERE id=peer_id) AS peer_wallet,
                    (SELECT username     FROM users WHERE id=peer_id) AS peer_username,
-                   last_msg, last_ts,
+                   last_msg, last_ts, last_type,
                    (SELECT COUNT(*) FROM direct_messages
                     WHERE receiver_id=? AND sender_id=peer_id AND is_read=0) AS unread,
                    (SELECT avatar_url   FROM users WHERE id=peer_id) AS peer_avatar
