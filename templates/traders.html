@@ -96,6 +96,9 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 }
 .card:hover{border-color:var(--border2);box-shadow:0 4px 24px rgba(0,0,0,.4)}
 .card-link{position:absolute;inset:0;z-index:1;border-radius:16px}
+#avatar-lightbox{display:none;position:fixed;inset:0;background:rgba(10,11,14,.85);z-index:9999;align-items:center;justify-content:center;cursor:pointer}
+#avatar-lightbox.open{display:flex}
+#avatar-lightbox img{max-width:min(360px,80vw);max-height:min(360px,80vh);border-radius:16px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .card-body{position:relative;z-index:2;display:flex;flex-direction:column;gap:16px}
 .card.is-me{border-color:var(--accent-border);background:linear-gradient(135deg,var(--accent-dim),var(--bg2))}
 .card.top-1{border-color:rgba(247,185,85,.35)}
@@ -115,7 +118,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
 /* ── identity ── */
 .ident{display:flex;align-items:flex-start;gap:12px}
-.avatar-wrap{position:relative;flex-shrink:0}
+.avatar-wrap{position:relative;flex-shrink:0;z-index:2}
 .avatar{
   width:48px;height:48px;border-radius:50%;overflow:hidden;
   background:var(--bg3);border:2px solid var(--border2);
