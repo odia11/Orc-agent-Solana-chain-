@@ -274,5 +274,10 @@ async function _loadPersonal(){
   if(badge){ if(unread){ badge.textContent = unread; badge.style.display = ''; } else { badge.style.display = 'none'; } }
   _render();
 }
+async function _loadTrades(){
+  var d = await fetch('/api/notifications').then(function(r){return r.json();}).catch(function(){return [];});
+  _trades = Array.isArray(d) ? d : [];
+  _render();
+}
 </script>
 </body></html>
