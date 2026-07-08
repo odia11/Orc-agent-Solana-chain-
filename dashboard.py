@@ -10992,6 +10992,13 @@ def admin_settings_save():
                 (str(float(min_deposit)),)
             )
             saved['min_deposit'] = float(min_deposit)
+        if rate_limit_v is not None:
+            conn.execute(
+                "INSERT INTO platform_settings (key, value) VALUES ('rate_limit', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(int(rate_limit_v)),)
+            )
+            saved['rate_limit'] = int(rate_limit_v)
         conn.commit()
     finally:
         conn.close()
