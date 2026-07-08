@@ -10982,7 +10982,6 @@ def admin_settings_save():
     wallet = session.get('wallet', '')
     data = request.get_json(silent=True) or {}
     max_positions = data.get('max_positions')
-    fee           = data.get('fee')
     min_deposit   = data.get('min_deposit')
     rate_limit_v  = data.get('rate_limit')
     saved = {}
