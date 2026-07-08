@@ -11686,7 +11686,7 @@ function _renderFeedCard(e){
   return '<div class="fc-card" id="'+esc(cardId)+'" data-post-content="'+esc(e.content||'')+'">'
     +menuHtml
     +(e.avatar_url
-      ? '<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_showAvatarLightbox('+JSON.stringify(e.avatar_url)+')">'+imgHtml+'</div>'
+      ? '<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(e.avatar_url))+')">'+imgHtml+'</div>'
       : _aProf+'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0"><span class="fc-avatar-ini">'+ini+'</span></div></a>')
     +'<div class="fc-body">'
     +'<div class="fc-header">'
