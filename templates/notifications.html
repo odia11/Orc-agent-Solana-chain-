@@ -287,5 +287,12 @@ async function _markAllRead(){
 }
 _loadPersonal();
 _loadTrades();
+(function(){
+  fetch('/api/me').then(function(r){ return r.json(); }).then(function(d){
+    if(!d.ok && !d.wallet) return;
+    var w = d.wallet||'';
+    function _s(s){ return s?s.slice(0,4)+'…'+s.slice(-4):''; }
+  }).catch(function(){});
+})();
 </script>
 </body></html>
