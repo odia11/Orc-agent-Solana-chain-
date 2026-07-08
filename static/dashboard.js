@@ -3,7 +3,7 @@ var _isReadonly = false;
 let guestMode = false;
 /* ── Pre-populate navbar from server session (eliminates "not connected" flash) ── */
 (function(){
-  var sw=window.__SESSION_WALLET__||'', ss=window.__SESSION_SHORT__||'';
+  var sw=window.__SESSION_WALLET||'', ss=window.__SESSION_SHORT||'';
   if(!sw) return;
   phantomKey=sw;
   var pill=document.getElementById('wallet-pill');
@@ -463,7 +463,7 @@ let _csrfToken = '';
 
 // Shared client secret, injected server-side at page-serve time (see index() in
 // dashboard.py). Empty string when API_SHARED_SECRET isn't configured on the server.
-const _CLIENT_SECRET = window.__API_SHARED_SECRET__||'';
+const _CLIENT_SECRET = window.__API_SHARED_SECRET||'';
 
 // Override fetch globally: inject X-CSRF-Token and X-API-Shared-Secret into all mutating
 // requests. The override is installed synchronously so it covers every fetch call below.
