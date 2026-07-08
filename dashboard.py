@@ -3691,6 +3691,7 @@ def traders():
                 u.username,
                 u.avatar_url,
                 u.badges,
+                u.is_verified,
                 ROUND(SUM(t.pnl), 4)                                          AS total_pnl,
                 ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
                       * 100.0 / COUNT(*), 1)                                  AS win_rate,
