@@ -5070,6 +5070,12 @@ async function launchApp(){
   fetchCopyStatus();
   fetchMyProfile();
   dmFetchUnread();
+  fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
+  if (!window._heartbeatTimer) {
+    window._heartbeatTimer = setInterval(function(){
+      fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
+    }, 45000);
+  }
   fetchPumpScanner();
   loadHomeFeed();
   _loadRightRail();
