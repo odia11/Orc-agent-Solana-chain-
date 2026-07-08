@@ -11668,7 +11668,7 @@ function _renderFeedCard(e){
     +_aProf+'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0">'+imgHtml+'<span class="fc-avatar-ini">'+ini+'</span>'+verifiedBadge+'</div></a>'
     +'<div class="fc-body">'
     +'<div class="fc-header">'
-    +_aProf+'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+'</span></a>'
+    +_aProf+'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+(e.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</span></a>'
     +_aProf+'<span class="fc-handle">'+esc(handle)+'</span></a>'
     +(timeStr ? '<span class="fc-sep">·</span><span class="fc-time">'+esc(timeStr)+'</span>' : '')
     +'</div>'
