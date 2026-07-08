@@ -7561,7 +7561,8 @@ def list_conversations():
                    last_msg, last_ts, last_type,
                    (SELECT COUNT(*) FROM direct_messages
                     WHERE receiver_id=? AND sender_id=peer_id AND is_read=0) AS unread,
-                   (SELECT avatar_url   FROM users WHERE id=peer_id) AS peer_avatar
+                   (SELECT avatar_url   FROM users WHERE id=peer_id) AS peer_avatar,
+                   (SELECT last_active  FROM users WHERE id=peer_id) AS peer_last_active
             FROM (
                 SELECT
                     CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END AS peer_id,
