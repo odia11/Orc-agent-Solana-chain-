@@ -10242,7 +10242,7 @@ def admin_users():
         c.execute('SELECT id, wallet_address, encrypted_private_key, created_at, is_verified FROM users ORDER BY created_at DESC')
         rows = c.fetchall()
         users = []
-        for uid, w, enc_key, created in rows:
+        for uid, w, enc_key, created, is_verified in rows:
             w = w or ''
             us  = user_states.get(w, {})
             pos = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
