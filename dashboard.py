@@ -10987,14 +10987,6 @@ def admin_settings_save():
     saved = {}
     conn = sqlite3.connect(DB_FILE)
     try:
-        if fee is not None:
-            fee_rate = float(fee) / 100.0
-            conn.execute(
-                "INSERT INTO platform_settings (key, value) VALUES ('fee_rate', ?) "
-                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
-                (str(fee_rate),)
-            )
-            saved['fee_rate'] = fee_rate
         if max_positions is not None:
             conn.execute(
                 "INSERT INTO platform_settings (key, value) VALUES ('max_positions_per_user', ?) "
