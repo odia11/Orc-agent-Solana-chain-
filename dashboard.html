@@ -422,6 +422,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-body{flex:1;min-width:0}
 .fc-header{display:flex;align-items:center;gap:6px;margin-bottom:8px;flex-wrap:wrap}
 .fc-avatar{width:44px;height:44px;border-radius:50%;flex-shrink:0;align-self:flex-start;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden;font-size:16px;font-weight:700;color:#fff}
+#avatar-lightbox{display:none;position:fixed;inset:0;background:rgba(10,11,14,.85);z-index:9999;align-items:center;justify-content:center;cursor:zoom-out}
+#avatar-lightbox.open{display:flex}
+#avatar-lightbox img{max-width:min(360px,80vw);max-height:min(360px,80vh);border-radius:16px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.5)}
 .fc-avatar-ini{position:relative;z-index:1;pointer-events:none}
 .fc-name{font-size:14px;font-weight:700;color:#eef1f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .fc-handle{font-size:13px;color:#565d68;white-space:nowrap}
