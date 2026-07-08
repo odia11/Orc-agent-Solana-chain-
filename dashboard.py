@@ -5107,7 +5107,7 @@ def get_leaderboard():
             'total_pnl':      round(float(total_pnl or 0), 6),
             'trade_count':    int(trade_count or 0),
             'best_trade':     round(float(best_trade or 0), 6),
-            'badges':         [b.strip() for b in (badges_str or '').split(',') if b.strip()],
+            'badges':         badges_list,
         })
     return jsonify(result)
 
