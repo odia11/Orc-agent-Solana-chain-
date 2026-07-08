@@ -28,6 +28,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 app = Flask(__name__)
+app.config['SEND_FILE_MAX_AGE_DEFAULT'] = 31536000
 if _COMPRESS_OK:
     app.config['COMPRESS_MIMETYPES'] = ['text/html','text/css','text/xml','text/javascript','application/json','application/javascript']
     _Compress(app)
