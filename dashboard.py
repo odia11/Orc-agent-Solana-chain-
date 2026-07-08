@@ -3721,7 +3721,7 @@ def traders():
     except Exception as e:
         print(f'[traders] DB error: {e}', flush=True)
         rows = []
-    for rank, (uid, wallet, username, avatar_url, badges_str,
+    for rank, (uid, wallet, username, avatar_url, badges_str, is_verified,
                total_pnl, win_rate, trade_count,
                best_trade_pct, best_token,
                follower_count, week_pnl) in enumerate(rows, 1):
