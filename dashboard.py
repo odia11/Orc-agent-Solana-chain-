@@ -4800,7 +4800,7 @@ def settings_get():
             '''SELECT encrypted_private_key, breakout_trigger, take_profit,
                       stop_loss, max_positions, pref_notifications,
                       pref_scam_filter, pref_sound_alerts, bot_enabled,
-                      avatar_url, username
+                      avatar_url, username, is_verified
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
