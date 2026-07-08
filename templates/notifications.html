@@ -264,5 +264,15 @@ function _switchTab(tab){
   });
   _render();
 }
+async function _loadPersonal(){
+  var r = await fetch('/api/notifications/mine').then(function(x){return x.json();}).catch(function(){return null;});
+  _personal = (r && r.ok && r.notifications) ? r.notifications : [];
+  var unread = _personal.filter(function(n){ return !n.is_read; }).length;
+  var sub = document.getElementById('ntf-unread-sub');
+  if(sub) sub.textContent = unread ? (unread + ' unread') : 'All caught up';
+  var badge = document.getElementById('sb-notif-badge');
+  if(badge){ if(unread){ badge.textContent = unread; badge.style.display = ''; } else { badge.style.display = 'none'; } }
+  _render();
+}
 </script>
 </body></html>
