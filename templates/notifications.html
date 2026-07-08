@@ -166,4 +166,13 @@
     </div>
   </div>
 </div>
+<script>
+var _csrfToken = {{ csrf_token|tojson }};
+var _personal = [];
+var _trades = [];
+var _activeTab = 'all';
+function _esc(s){
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
 </body></html>
