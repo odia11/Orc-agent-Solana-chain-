@@ -438,7 +438,9 @@ function _renderConvList() {
       ? '<img src="'+_esc(c.peer_avatar)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
       : '';
     return '<div class="conv-row'+active+'" onclick="_openThread('+c.peer_id+')">'
-      + '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden">'+_esc(ini)+avatarImg+'</div>'
+      + '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden">'+_esc(ini)+avatarImg
+      +   (c.peer_online ? '<span class="msgs-online-dot" style="position:absolute;bottom:1px;right:1px;border:2px solid #0a0b0e"></span>' : '')
+      + '</div>'
       + '<div class="conv-info">'
       +   '<div class="conv-name">'+_esc(name)+'</div>'
       +   '<div class="conv-preview">'+_esc((c.last_msg||'').startsWith('/static/dm_images/') ? '📷 Photo' : (c.last_msg||'').slice(0,60))+'</div>'
