@@ -412,7 +412,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
               <div class="avatar-wrap">
                 <div class="avatar"
                      data-ini="{{ (e.username or e.wallet_short)[:1]|upper }}"
-                     data-seed="{{ e.username or e.wallet_short }}">
+                     data-seed="{{ e.username or e.wallet_short }}"
+                     {% if e.avatar_url %}style="cursor:pointer" onclick="event.stopPropagation();_showAvatarLightbox({{ e.avatar_url|tojson }})"{% endif %}>
                   {% if e.avatar_url %}
                   <img src="{{ e.avatar_url }}" alt="" loading="lazy"
                        onerror="this.style.display='none'">
