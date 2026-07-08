@@ -1374,7 +1374,6 @@ async function toggleFlag(btn, flag) {
 }
 async function savePlatformLimits() {
   var maxPos = parseFloat(document.getElementById('stg-max-pos')?.value || 5);
-  var fee    = parseFloat(document.getElementById('stg-fee')?.value    || 0.25);
   var minDep = parseFloat(document.getElementById('stg-min-dep')?.value || 0.1);
   var rate   = parseInt(document.getElementById('stg-rate')?.value     || 20, 10);
   var btn = document.querySelector('#view-settings .btn-primary');
