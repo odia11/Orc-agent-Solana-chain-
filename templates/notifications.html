@@ -257,5 +257,12 @@ function _render(){
   }
   list.innerHTML = rows.map(function(r){ return _rowHtml(r.n, r.kind); }).join('');
 }
+function _switchTab(tab){
+  _activeTab = tab;
+  ['all','trades','social'].forEach(function(t){
+    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
+  });
+  _render();
+}
 </script>
 </body></html>
