@@ -209,6 +209,11 @@ function _parseTradeContent(content){
 function _rowHtml(n, kind){
   var isUnread = kind === 'personal' && !n.is_read;
   var iconCls, bodyHtml, timeStr;
+  if(kind === 'trade'){
+    var raw = 'Trade closed: $' + n.symbol + ' ' + (n.pnl_pct>=0?'+':'') + (n.pnl_pct||0).toFixed(1) + '% (' + (n.pnl>=0?'+':'') + (n.pnl||0).toFixed(4) + ' SOL)';
+    var parsed = _parseTradeContent(raw);
+    iconCls = parsed.positive ? 'trade-up' : 'trade-down';
+  }
 }
 </script>
 </body></html>
