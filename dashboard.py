@@ -3870,7 +3870,8 @@ def leaderboard():
                       * 100.0 / COUNT(*), 1)                                            AS win_rate,
                 COUNT(*)                                                                 AS trade_count,
                 ROUND(MAX(t.pnl), 4)                                                    AS best_trade,
-                u.badges                                                                 AS badges
+                u.badges                                                                 AS badges,
+                u.is_verified                                                            AS is_verified
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
