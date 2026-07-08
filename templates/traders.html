@@ -534,6 +534,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 <div class="toast" id="toast"></div>
 
 <script>
+function _showAvatarLightbox(url){
+  var lb = document.getElementById('avatar-lightbox');
+  var img = document.getElementById('avatar-lightbox-img');
+  if(!lb || !img) return;
+  img.src = url;
+  lb.classList.add('open');
+}
+function _closeAvatarLightbox(){
+  var lb = document.getElementById('avatar-lightbox');
+  if(lb) lb.classList.remove('open');
+}
 var _loggedIn     = {{ 'true' if logged_in else 'false' }};
 var _csrfToken    = (document.querySelector('meta[name="csrf-token"]')    || {}).content || '';
 var _clientSecret = (document.querySelector('meta[name="client-secret"]') || {}).content || '';
