@@ -206,7 +206,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
       <div class="podium-top-line"></div>
       <div class="podium-medal">{{ medal }}</div>
       <div class="podium-place">{{ lbl }}</div>
-      <div class="podium-wallet{{ ' is-me' if e.is_me else '' }}">{{ e.wallet }}</div>
+      <div class="podium-wallet{{ ' is-me' if e.is_me else '' }}">{{ e.wallet }}{% if e.is_verified %} <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}</div>
       <div class="podium-pnl {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
         {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }} SOL
       </div>
