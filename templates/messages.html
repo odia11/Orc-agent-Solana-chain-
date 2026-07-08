@@ -488,7 +488,7 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     '<button class="msgs-back" onclick="_backToList()">← Back</button>'
     + '<div class="msgs-thread-avatar" style="background:'+color+';position:relative;overflow:hidden">'+_esc(ini)+avatarImg+'</div>'
     + '<div class="msgs-thread-meta">'
-    +   '<div class="msgs-thread-name">'+_esc(displayName)+(_activePeer.verified ? ' <span style="color:#f7b955">✓</span>' : '')+'</div>'
+    +   '<div class="msgs-thread-name">'+_esc(displayName)+(_activePeer.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
     +   '<div class="msgs-thread-status">'+statusHtml+'</div>'
     + '</div>';
 
