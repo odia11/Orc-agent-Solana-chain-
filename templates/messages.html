@@ -486,7 +486,7 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     + '<div class="msgs-thread-avatar" style="background:'+color+';position:relative;overflow:hidden">'+_esc(ini)+avatarImg+'</div>'
     + '<div class="msgs-thread-meta">'
     +   '<div class="msgs-thread-name">'+_esc(displayName)+'</div>'
-    +   '<div class="msgs-thread-status"><span class="msgs-online-dot"></span>Online</div>'
+    +   '<div class="msgs-thread-status">'+statusHtml+'</div>'
     + '</div>';
 
   document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
