@@ -1185,8 +1185,21 @@ async function loadModeration() {
 
 // ══════════════════ SETTINGS ══════════════════
 async function loadSettings() {
+  await loadPlatformLimits();
   await loadAdminRoles();
   await loadPendingInvites();
+}
+async function loadPlatformLimits() {
+  var r = await _a('/api/admin/settings/get');
+  if (!r?.ok) return;
+  var maxPos = document.getElementById('stg-max-pos');
+  var fee    = document.getElementById('stg-fee');
+  var minDep = document.getElementById('stg-min-dep');
+  var rate   = document.getElementById('stg-rate');
+  if (maxPos) maxPos.value = r.max_positions;
+  if (fee)    fee.value    = r.fee;
+  if (minDep) minDep.value = r.min_deposit;
+  if (rate)   rate.value   = r.rate_limit;
 }
 
 // ── Pending invites ──
