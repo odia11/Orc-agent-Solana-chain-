@@ -221,6 +221,13 @@ function _rowHtml(n, kind){
       + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(timeStr) + '</div></div>'
       + '</div>';
   }
+  var type = n.type || 'system';
+  if(type === 'trade'){
+    var p = _parseTradeContent(n.content);
+    iconCls = p.positive ? 'trade-up' : 'trade-down';
+    bodyHtml = '<div class="ntf-text">' + _esc(p.headline) + '</div>'
+      + (p.chip ? '<div class="ntf-chip ' + (p.positive?'pos':'neg') + '">' + _esc(p.chip) + '</div>' : '');
+  }
 }
 </script>
 </body></html>
