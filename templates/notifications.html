@@ -292,6 +292,18 @@ _loadTrades();
     if(!d.ok && !d.wallet) return;
     var w = d.wallet||'';
     function _s(s){ return s?s.slice(0,4)+'…'+s.slice(-4):''; }
+    var ini  = document.getElementById('sb-avatar-ini');
+    var name = document.getElementById('sb-user-name');
+    var hdl  = document.getElementById('sb-handle');
+    var sol  = document.getElementById('sb-sol');
+    if(ini)  ini.textContent  = (d.username||w)[0].toUpperCase();
+    if(name) name.textContent = d.username||_s(w);
+    if(hdl)  hdl.textContent  = d.username?'@'+d.username:_s(w);
+    if(sol&&d.balance!=null) sol.textContent = parseFloat(d.balance).toFixed(3);
+    if(d.avatar){
+      var img = document.getElementById('sb-avatar-img');
+      if(img){ img.src=d.avatar; img.style.display=''; }
+    }
   }).catch(function(){});
 })();
 </script>
