@@ -234,6 +234,12 @@ function _rowHtml(n, kind){
     iconCls = 'social';
     bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
   }
+  var href = n.link || '#';
+  return '<a class="ntf-row" href="' + _esc(href) + '" data-id="' + n.id + '">'
+    + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
+    + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
+    + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
+    + '</a>';
 }
 </script>
 </body></html>
