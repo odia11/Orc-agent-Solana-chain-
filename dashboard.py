@@ -3227,6 +3227,7 @@ def profile():
             following=following,
             posts=[dict(p) for p in posts],
             sol_balance=sol_balance,
+            is_verified=bool(user["is_verified"]),
         )
     finally:
         conn.close()
