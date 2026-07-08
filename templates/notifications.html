@@ -227,6 +227,12 @@ function _rowHtml(n, kind){
     iconCls = p.positive ? 'trade-up' : 'trade-down';
     bodyHtml = '<div class="ntf-text">' + _esc(p.headline) + '</div>'
       + (p.chip ? '<div class="ntf-chip ' + (p.positive?'pos':'neg') + '">' + _esc(p.chip) + '</div>' : '');
+  } else if(type === 'message'){
+    iconCls = 'message';
+    bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
+  } else {
+    iconCls = 'social';
+    bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
   }
 }
 </script>
