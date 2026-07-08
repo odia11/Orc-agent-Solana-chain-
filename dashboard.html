@@ -11913,7 +11913,7 @@ function _renderReplyRow(r, postId){
     : '';
   return '<div class="fc-reply-item" data-reply-id="'+r.id+'">'
     +'<div class="fc-ri-header">'
-    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="openProfileCard('+Number(r.user_id)+')">'+ini+avatarImg+'</div>'
+    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+(r.avatar_url ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')' : 'openProfileCard('+Number(r.user_id)+')')+'">'+ini+avatarImg+'</div>'
     +'<span class="fc-ri-name">'+name+'</span>'
     +youChip
     +'<span class="fc-ri-handle">'+handle+'</span>'
