@@ -653,6 +653,28 @@ async function _saveUsername(){
   }
 }
 
+async function _saveBio(){
+  var inp=document.getElementById('st-bio-inp');
+  var btn=document.getElementById('st-bio-btn');
+  var msgEl=document.getElementById('st-bio-msg');
+  var val=(inp?inp.value:'').trim();
+  if(msgEl){msgEl.className='st-uname-msg';msgEl.textContent='';}
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    var d=await _post('/api/bio',{bio:val});
+    if(d.ok){
+      if(msgEl){msgEl.className='st-uname-msg ok';msgEl.textContent='✓ Saved';}
+      setTimeout(function(){if(msgEl)msgEl.textContent='';},2500);
+    } else {
+      if(msgEl){msgEl.className='st-uname-msg err';msgEl.textContent='✗ '+(d.msg||'Save failed');}
+    }
+  }catch(e){
+    if(msgEl){msgEl.className='st-uname-msg err';msgEl.textContent='✗ Network error';}
+  }finally{
+    btn.disabled=false; btn.textContent='Save';
+  }
+}
+
 /* ── avatar ── */
 function _avColor(name){
   var palette=['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6'];
