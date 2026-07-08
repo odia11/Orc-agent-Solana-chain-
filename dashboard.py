@@ -10967,16 +10967,14 @@ def admin_settings_save():
     fee           = data.get('fee')
     min_deposit   = data.get('min_deposit')
     rate_limit_v  = data.get('rate_limit')
-    # Store in a simple in-memory dict (extend to DB if persistence needed)
-    if not hasattr(admin_settings_save, '_store'):
-        admin_settings_save._store = {}
-    store = admin_settings_save._store
-    if max_positions is not None: store['max_positions'] = float(max_positions)
-    if fee           is not None: store['fee']           = float(fee)
-    if min_deposit   is not None: store['min_deposit']   = float(min_deposit)
-    if rate_limit_v  is not None: store['rate_limit']    = int(rate_limit_v)
-    print(f'[admin] settings saved by {wallet[:8]}… → {store}', flush=True)
-    return jsonify({'ok': True, 'saved': store})
+    saved = {}
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.commit()
+    finally:
+        conn.close()
+    print(f'[admin] settings saved by {wallet[:8]}… → {saved}', flush=True)
+    return jsonify({'ok': True, 'saved': saved})
 
 
 @app.route('/api/admin/features/toggle', methods=['POST'])
