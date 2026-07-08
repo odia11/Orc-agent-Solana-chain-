@@ -8,4 +8,8 @@
 .sb-nav{flex:1;padding:8px 12px;display:flex;flex-direction:column;gap:1px}
 .sb-nav-item{display:flex;align-items:center;gap:12px;padding:10px 12px;font-size:14px;font-weight:500;color:var(--sub);transition:background .15s,color .15s;text-decoration:none;border-radius:11px;position:relative}
 .sb-nav-item:hover{background:#14171c;color:var(--text)}
+.sb-nav-item.active{background:rgba(247,185,85,.12);color:var(--text);font-weight:600}
+.sb-nav-item.active::after{content:'';position:absolute;right:12px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.sb-nav-icon{flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center}
+.sb-nav-badge{margin-left:auto;background:var(--accent);color:var(--bg);font-size:9px;font-weight:700;border-radius:999px;padding:2px 7px;min-width:18px;text-align:center}
 </style></head><body></body></html>
