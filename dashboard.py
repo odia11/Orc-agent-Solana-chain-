@@ -7595,7 +7595,7 @@ def list_conversations():
     return jsonify({'ok': True, 'conversations': [
         {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
          'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'unread': r[6], 'peer_avatar': r[7] or '',
-         'peer_online': _is_online(r[8])}
+         'peer_online': _is_online(r[8]), 'peer_verified': bool(r[9])}
         for r in rows
     ]})
 
