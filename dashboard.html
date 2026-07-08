@@ -11090,6 +11090,18 @@ function _feedTab(btn, tab){
 var _homeFeedFilter = 'foryou';
 var _homeFeedData   = [];
 
+function _showAvatarLightbox(url){
+  var lb = document.getElementById('avatar-lightbox');
+  var img = document.getElementById('avatar-lightbox-img');
+  if(!lb || !img) return;
+  img.src = url;
+  lb.classList.add('open');
+}
+function _closeAvatarLightbox(){
+  var lb = document.getElementById('avatar-lightbox');
+  if(lb) lb.classList.remove('open');
+}
+
 async function loadHomeFeed(){
   const filter = _homeFeedFilter === 'following' ? 'following' : 'all';
   const el = document.getElementById('center-feed');
