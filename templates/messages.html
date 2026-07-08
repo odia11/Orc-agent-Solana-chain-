@@ -555,7 +555,7 @@ function _renderMessages(msgs) {
     if (mine) {
       menu = '<button class="msg-menu-btn" onclick="_toggleMsgMenu(event,'+m.id+')">⋯</button>'
         + '<div class="msg-menu" id="msg-menu-'+m.id+'">'
-        + (m.message_type !== 'image' ? '<button onclick="_startEditMsg('+m.id+','+JSON.stringify(m.message)+')">Edit</button>' : '')
+        + (m.message_type === 'text' ? '<button onclick="_startEditMsg('+m.id+','+JSON.stringify(m.message)+')">Edit</button>' : '')
         + '<button class="danger" onclick="_deleteMsg('+m.id+')">Delete</button></div>';
     }
     var editedTag = m.edited_at ? '<span class="msg-edited-tag">(edited)</span>' : '';
