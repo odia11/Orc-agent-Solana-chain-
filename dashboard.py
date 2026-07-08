@@ -1044,6 +1044,7 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN pref_sound_alerts INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'",
         "ALTER TABLE direct_messages ADD COLUMN edited_at TIMESTAMP DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
