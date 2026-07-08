@@ -7841,12 +7841,14 @@ def edit_dm(message_id):
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         row = conn.execute(
-            'SELECT sender_id FROM direct_messages WHERE id=?', (message_id,)
+            'SELECT sender_id, COALESCE(message_type, "text") FROM direct_messages WHERE id=?', (message_id,)
         ).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Message not found'}), 404
         if row[0] != me:
             return jsonify({'ok': False, 'msg': 'Not your message'}), 403
+        if row[1] != 'text':
+            return jsonify({'ok': False, 'msg': 'Only text messages can be edited'}), 400
         conn.execute(
             'UPDATE direct_messages SET message=?, edited_at=CURRENT_TIMESTAMP WHERE id=?',
             (text, message_id)
