@@ -11272,9 +11272,9 @@ def admin_role_remove():
 def admin_clear_ratelimit():
     """Clear IP ban and rate-limit hit counters.
     POST body: {"ip": "1.2.3.4"} to target one IP, or {} to clear everything."""
+    err = _require_role('admin', 'moderator')
+    if err: return err
     wallet = _current_wallet()
-    if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
     data   = request.json or {}
     target = (data.get('ip') or '').strip()
     if target:
