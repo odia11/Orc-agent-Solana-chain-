@@ -7581,9 +7581,18 @@ def list_conversations():
         ''', (me, me, me, me, me)).fetchall()
     finally:
         conn.close()
+    _online_cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=3)
+    def _is_online(ts):
+        if not ts:
+            return False
+        try:
+            return datetime.datetime.strptime(ts[:19], '%Y-%m-%d %H:%M:%S') >= _online_cutoff
+        except ValueError:
+            return False
     return jsonify({'ok': True, 'conversations': [
         {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
-         'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'unread': r[6], 'peer_avatar': r[7] or ''}
+         'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'unread': r[6], 'peer_avatar': r[7] or '',
+         'peer_online': _is_online(r[8])}
         for r in rows
     ]})
 
