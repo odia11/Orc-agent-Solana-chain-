@@ -10262,6 +10262,7 @@ def admin_users():
                 'total_trades': total_trades,
                 'pnl_today':   pnl_today,
                 'last_seen':   last_seen,
+                'is_verified': bool(is_verified),
             })
         conn.close()
         return jsonify({'users': users, 'total': len(users)})
