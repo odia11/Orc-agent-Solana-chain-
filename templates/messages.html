@@ -560,8 +560,10 @@ function _renderMessages(msgs) {
     }
     var editedTag = m.edited_at ? '<span class="msg-edited-tag">(edited)</span>' : '';
     return '<div class="msg-wrap '+(mine?'mine':'theirs')+'" data-mid="'+m.id+'">'
-      + menu
-      + bubble
+      + '<div class="msg-bubble-wrap">'
+      +   menu
+      +   bubble
+      + '</div>'
       + '<span class="msg-time">'+_esc(_timeAgo(m.created_at))+editedTag+'</span>'
       + '</div>';
   }).join('');
