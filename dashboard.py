@@ -4832,6 +4832,7 @@ def settings_get():
         'avatar_url': row[9] or '',
         'username':   row[10] or '',
         'is_verified': bool(row[11]),
+        'bio': row[12] or '',
     })
 
 @app.route('/api/settings/save', methods=['POST'])
