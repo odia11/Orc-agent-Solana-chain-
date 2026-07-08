@@ -462,7 +462,8 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     wallet:   (conv && conv.peer_wallet)   || peerWallet   || '',
     username: (conv && conv.peer_username) || peerUsername || '',
     avatar:   (conv && conv.peer_avatar)   || '',
-    online:   !!(conv && conv.peer_online)
+    online:   !!(conv && conv.peer_online),
+    verified: !!(conv && conv.peer_verified)
   };
   _renderConvList();
 
