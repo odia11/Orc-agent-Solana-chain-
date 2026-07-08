@@ -154,6 +154,16 @@
       </div>
       <button class="ntf-mark-all" onclick="_markAllRead()">Mark all read</button>
     </div>
+    <div class="ntf-body">
+      <div class="ntf-tabs">
+        <button class="ntf-tab active" id="tab-all" onclick="_switchTab('all')">All</button>
+        <button class="ntf-tab" id="tab-trades" onclick="_switchTab('trades')">Trades</button>
+        <button class="ntf-tab" id="tab-social" onclick="_switchTab('social')">Social</button>
+      </div>
+      <div class="ntf-list" id="ntf-list">
+        <p style="color:var(--muted);text-align:center;padding:40px 0">Loading…</p>
+      </div>
+    </div>
   </div>
 </div>
 </body></html>
