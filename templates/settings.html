@@ -386,6 +386,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
           <div class="st-uname-msg" id="st-uname-msg"></div>
         </div>
 
+        <!-- bio -->
+        <div class="st-row" style="border-bottom:none;padding-bottom:0;display:block">
+          <div class="st-row-label" style="margin-bottom:2px">Bio</div>
+          <div class="st-row-sub" style="margin-bottom:8px">Shown on your profile · max 100 characters</div>
+          <div class="st-uname-row">
+            <input id="st-bio-inp" class="st-uname-inp" type="text" maxlength="100" placeholder="Tell people about your trading style…" autocomplete="off" spellcheck="false">
+            <button class="st-uname-save" id="st-bio-btn" onclick="_saveBio()">Save</button>
+          </div>
+          <div class="st-uname-msg" id="st-bio-msg"></div>
+        </div>
+
         <div style="border-top:1px solid var(--border);margin:16px 0"></div>
 
         <div class="st-wallet-row">
