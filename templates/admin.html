@@ -1381,7 +1381,7 @@ async function savePlatformLimits() {
   var r = await fetch('/api/admin/settings/save', {
     method: 'POST', credentials: 'include',
     headers: {'Content-Type': 'application/json','X-CSRF-Token':window._csrfToken},
-    body: JSON.stringify({max_positions: maxPos, fee: fee, min_deposit: minDep, rate_limit: rate})
+    body: JSON.stringify({max_positions: maxPos, min_deposit: minDep, rate_limit: rate})
   }).then(r => r.json()).catch(() => null);
   if (btn) { btn.disabled = false; btn.textContent = 'Save changes'; }
   if (r?.ok) toast('✓ Platform limits saved', true);
