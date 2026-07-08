@@ -442,7 +442,7 @@ function _renderConvList() {
       +   (c.peer_online ? '<span class="msgs-online-dot" style="position:absolute;bottom:1px;right:1px;border:2px solid #0a0b0e"></span>' : '')
       + '</div>'
       + '<div class="conv-info">'
-      +   '<div class="conv-name">'+_esc(name)+'</div>'
+      +   '<div class="conv-name">'+_esc(name)+(c.peer_verified ? ' <span style="color:#f7b955">✓</span>' : '')+'</div>'
       +   '<div class="conv-preview">'+_esc((c.last_msg||'').startsWith('/static/dm_images/') ? '📷 Photo' : (c.last_msg||'').slice(0,60))+'</div>'
       + '</div>'
       + '<div class="conv-meta">'
