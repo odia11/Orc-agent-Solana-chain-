@@ -1052,6 +1052,21 @@ def run_migrations():
             con.commit()
         except Exception:
             pass
+    # one-time cleanup: old message notifications stored the raw image path
+    # instead of a friendly "📷 Photo" label — fix any that still do
+    try:
+        rows = con.execute(
+            "SELECT id, content FROM notifications WHERE type='message' AND "
+            "(content LIKE '%/static/dm_images/%' OR content LIKE '%/static/chat_images/%')"
+        ).fetchall()
+        for nid, content in rows:
+            sep = content.find(': ')
+            prefix = content[:sep + 2] if sep > -1 else ''
+            con.execute('UPDATE notifications SET content=? WHERE id=?', (prefix + '📷 Photo', nid))
+        if rows:
+            con.commit()
+    except Exception:
+        pass
     # admin_roles table — separate from users so it survives account deletion
     con.execute('''CREATE TABLE IF NOT EXISTS admin_roles (
         wallet_address TEXT PRIMARY KEY,
