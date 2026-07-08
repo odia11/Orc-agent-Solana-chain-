@@ -7739,6 +7739,23 @@ def send_dm(peer_id):
     return jsonify({'ok': True, 'success': True, 'message_id': message_id,
                     'created_at': now, 'message': text, 'message_type': message_type})
 
+@app.route('/api/heartbeat', methods=['POST'])
+@rate_limit(6, 60)
+def api_heartbeat():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            'UPDATE users SET last_active=CURRENT_TIMESTAMP WHERE wallet_address=?',
+            (wallet,)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/api/messages/my-recent-trades')
 @rate_limit(30, 60)
 def messages_my_recent_trades():
