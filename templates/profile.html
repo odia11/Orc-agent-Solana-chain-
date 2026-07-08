@@ -314,7 +314,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
     <div class="pf-cover">
       <div class="pf-avatar-wrap">
         {% if avatar_url %}
-        <img class="pf-avatar-img" src="{{ avatar_url }}" alt="avatar"
+        <img class="pf-avatar-img" src="{{ avatar_url }}" alt="avatar" style="cursor:pointer"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <div class="pf-avatar-fallback" style="display:none">{{ (username or wallet_short)[:2]|upper }}</div>
         {% else %}
