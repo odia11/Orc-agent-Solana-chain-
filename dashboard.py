@@ -3242,7 +3242,7 @@ def profile_view(wallet_address: str):
     try:
         col = 'wallet_address' if is_wallet else 'username'
         user = conn.execute(
-            f'SELECT id, username, avatar_url, bio, created_at, wallet_address FROM users WHERE {col}=?',
+            f'SELECT id, username, avatar_url, bio, created_at, wallet_address, is_verified FROM users WHERE {col}=?',
             (wallet_address,)
         ).fetchone()
         if not user:
