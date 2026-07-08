@@ -3171,7 +3171,7 @@ def profile():
     conn.row_factory = sqlite3.Row
     try:
         user = conn.execute(
-            'SELECT id, username, avatar_url, bio, created_at FROM users WHERE wallet_address=?',
+            'SELECT id, username, avatar_url, bio, created_at, is_verified FROM users WHERE wallet_address=?',
             (wallet,)
         ).fetchone()
         if not user:
