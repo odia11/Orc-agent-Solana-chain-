@@ -206,5 +206,9 @@ function _parseTradeContent(content){
     positive: positive
   };
 }
+function _rowHtml(n, kind){
+  var isUnread = kind === 'personal' && !n.is_read;
+  var iconCls, bodyHtml, timeStr;
+}
 </script>
 </body></html>
