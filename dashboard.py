@@ -3885,7 +3885,7 @@ def leaderboard():
     except Exception as e:
         print(f'[leaderboard] DB error: {e}', flush=True)
         rows = []
-    for rank, (wallet, total_pnl, win_rate, trade_count, best_trade, badges_str) in enumerate(rows, 1):
+    for rank, (wallet, total_pnl, win_rate, trade_count, best_trade, badges_str, is_verified) in enumerate(rows, 1):
         wallet = wallet or ''
         is_me  = bool(session_wallet and wallet == session_wallet)
         anon   = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else (wallet or '???')
@@ -3898,6 +3898,7 @@ def leaderboard():
             'best_trade':  round(float(best_trade   or 0), 4),
             'is_me':       is_me,
             'badges':      [b.strip() for b in (badges_str or '').split(',') if b.strip()],
+            'is_verified': bool(is_verified),
         })
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
