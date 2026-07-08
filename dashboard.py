@@ -222,7 +222,7 @@ print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPIT
 # loading the page (and therefore never seeing this value). Skipped entirely when unset,
 # so local/dev deployments without the env var keep working unchanged.
 API_SHARED_SECRET  = os.environ.get('API_SHARED_SECRET', '')
-FEE_RATE_DEFAULT = 0.02  # 2% performance fee on profitable trades only
+FEE_RATE_DEFAULT = 0.05  # 5% performance fee on profitable trades only
 
 def _get_fee_rate():
     try:
