@@ -426,6 +426,18 @@ function _filterConvs(q) {
   });
 }
 
+function _showAvatarLightbox(url){
+  var lb = document.getElementById('avatar-lightbox');
+  var img = document.getElementById('avatar-lightbox-img');
+  if(!lb || !img) return;
+  img.src = url;
+  lb.classList.add('open');
+}
+function _closeAvatarLightbox(){
+  var lb = document.getElementById('avatar-lightbox');
+  if(lb) lb.classList.remove('open');
+}
+
 function _renderConvList() {
   var el = document.getElementById('conv-list');
   if (!_conversations.length) {
