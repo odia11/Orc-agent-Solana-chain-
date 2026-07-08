@@ -3735,6 +3735,7 @@ def traders():
             'username':       username or anon,
             'avatar_url':     avatar_url or '',
             'badges':         [b.strip() for b in (badges_str or '').split(',') if b.strip()],
+            'is_verified':    bool(is_verified),
             'total_pnl':      round(float(total_pnl      or 0), 4),
             'win_rate':       round(float(win_rate        or 0), 1),
             'trade_count':    int  (trade_count           or 0),
