@@ -477,6 +477,9 @@ async function _openThread(peerId, peerUsername, peerWallet) {
   var avatarImg = _activePeer.avatar
     ? '<img src="'+_esc(_activePeer.avatar)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
     : '';
+  var statusHtml = _activePeer.online
+    ? '<span class="msgs-online-dot"></span>Online'
+    : '@' + _esc(_short(_activePeer.wallet));
 
   document.getElementById('msgs-thread-hdr').innerHTML =
     '<button class="msgs-back" onclick="_backToList()">← Back</button>'
