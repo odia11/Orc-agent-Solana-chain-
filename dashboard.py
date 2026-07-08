@@ -5092,9 +5092,12 @@ def get_leaderboard():
         conn.close()
     result = []
     for rank, row in enumerate(rows, 1):
-        user_id, username, wallet, avatar_url, total_pnl, trade_count, best_trade, badges_str = row
+        user_id, username, wallet, avatar_url, total_pnl, trade_count, best_trade, badges_str, is_verified = row
         if not username:
             username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
+        badges_list = [b.strip() for b in (badges_str or '').split(',') if b.strip()]
+        if is_verified and 'verified' not in badges_list:
+            badges_list.append('verified')
         result.append({
             'rank':           rank,
             'user_id':        user_id,
