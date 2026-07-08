@@ -223,9 +223,13 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .flm-name{font-size:14px;font-weight:600;color:#eef1f5;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .flm-handle{font-size:12px;color:#565d68}
 .flm-empty{padding:28px 18px;text-align:center;font-size:13px;color:#565d68}
+#avatar-lightbox{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:pointer}
+#avatar-lightbox.open{display:flex}
+#avatar-lightbox-img{max-width:90vw;max-height:90vh;border-radius:12px;object-fit:contain;pointer-events:none}
 </style>
 </head>
 <body>
+<div id="avatar-lightbox" onclick="_closeAvatarLightbox()"><img id="avatar-lightbox-img" src="" alt=""></div>
 <div id="app">
 
   <!-- SIDEBAR (exact structure from dashboard) -->
@@ -315,6 +319,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
       <div class="pf-avatar-wrap">
         {% if avatar_url %}
         <img class="pf-avatar-img" src="{{ avatar_url }}" alt="avatar" style="cursor:pointer"
+             onclick="_showAvatarLightbox({{ avatar_url|tojson }})"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         <div class="pf-avatar-fallback" style="display:none">{{ (username or wallet_short)[:2]|upper }}</div>
         {% else %}
@@ -690,6 +695,9 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeFoll
     }
   }).catch(function(){});
 })();
+function _showAvatarLightbox(url){if(!url)return;document.getElementById('avatar-lightbox-img').src=url;document.getElementById('avatar-lightbox').classList.add('open');}
+function _closeAvatarLightbox(){document.getElementById('avatar-lightbox').classList.remove('open');document.getElementById('avatar-lightbox-img').src='';}
+document.addEventListener('keydown',function(e){if(e.key==='Escape')_closeAvatarLightbox();});
 </script>
 <script src="/static/notif-poll.js"></script>
 <script src="/static/page-loader.js"></script>
