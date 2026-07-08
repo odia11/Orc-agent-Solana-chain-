@@ -251,6 +251,11 @@ function _render(){
     _trades.forEach(function(n){ rows.push({n:n, kind:'trade', ts:n.created_at}); });
   }
   rows.sort(function(a,b){ return new Date(b.ts) - new Date(a.ts); });
+  if(!rows.length){
+    list.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>No notifications yet</div>';
+    return;
+  }
+  list.innerHTML = rows.map(function(r){ return _rowHtml(r.n, r.kind); }).join('');
 }
 </script>
 </body></html>
