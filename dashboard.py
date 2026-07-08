@@ -10451,9 +10451,9 @@ def admin_force_resume():
 @app.route('/api/admin/force-close-all', methods=['POST'])
 @rate_limit(10, 60)
 def admin_force_close_all():
+    err = _require_role('admin', 'moderator')
+    if err: return err
     caller = _current_wallet()
-    if not caller or not _is_owner(caller):
-        return jsonify({'error': 'Unauthorized'}), 403
     target = str((request.json or {}).get('wallet', '')).strip()
     if not is_valid_solana_address(target):
         return jsonify({'error': 'Invalid wallet'}), 400
