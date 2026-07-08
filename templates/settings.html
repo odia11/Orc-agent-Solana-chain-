@@ -504,6 +504,10 @@ async function _initPage(){
     if(sound)  sound.checked =!!d.pref_sound_alerts;
     /* avatar + username */
     _initAvatarPreview(d.avatar_url, d.username||_wallet);
+    if(d.is_verified){
+      var sbName=document.querySelector('.sb-user-name');
+      if(sbName) sbName.innerHTML='You <span style="color:#f7b955">✓</span>';
+    }
     var unameInp=document.getElementById('st-uname-inp');
     if(unameInp&&d.username) unameInp.value=d.username;
     /* bot toggle — use live status endpoint for real-time accuracy */
