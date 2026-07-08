@@ -279,5 +279,11 @@ async function _loadTrades(){
   _trades = Array.isArray(d) ? d : [];
   _render();
 }
+async function _markAllRead(){
+  await fetch('/api/notifications/mine/mark_all_read', {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}
+  }).catch(function(){});
+  _loadPersonal();
+}
 </script>
 </body></html>
