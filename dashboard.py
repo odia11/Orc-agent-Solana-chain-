@@ -10978,6 +10978,20 @@ def admin_settings_save():
                 (str(fee_rate),)
             )
             saved['fee_rate'] = fee_rate
+        if max_positions is not None:
+            conn.execute(
+                "INSERT INTO platform_settings (key, value) VALUES ('max_positions_per_user', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(float(max_positions)),)
+            )
+            saved['max_positions'] = float(max_positions)
+        if min_deposit is not None:
+            conn.execute(
+                "INSERT INTO platform_settings (key, value) VALUES ('min_deposit', ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (str(float(min_deposit)),)
+            )
+            saved['min_deposit'] = float(min_deposit)
         conn.commit()
     finally:
         conn.close()
