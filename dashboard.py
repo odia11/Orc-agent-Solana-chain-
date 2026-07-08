@@ -10956,6 +10956,24 @@ def admin_revenue():
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+@app.route('/api/admin/settings/get')
+def admin_settings_get():
+    err = _require_role('admin', 'moderator', 'analyst')
+    if err: return err
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = dict(conn.execute("SELECT key, value FROM platform_settings").fetchall())
+    finally:
+        conn.close()
+    return jsonify({
+        'ok': True,
+        'fee':           round(float(rows.get('fee_rate', FEE_RATE_DEFAULT)) * 100, 4),
+        'max_positions': float(rows.get('max_positions_per_user', 5)),
+        'min_deposit':   float(rows.get('min_deposit', 0.1)),
+        'rate_limit':    int(float(rows.get('rate_limit', 20))),
+    })
+
+
 @app.route('/api/admin/settings/save', methods=['POST'])
 @csrf_exempt
 def admin_settings_save():
