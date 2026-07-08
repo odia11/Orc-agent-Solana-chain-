@@ -194,5 +194,17 @@ var _ICON_SVG = {
   'message':    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>',
   'system':     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>'
 };
+function _parseTradeContent(content){
+  var m = content.match(/^Trade closed:\s*\$?(\S+)\s*([+\-][\d.]+)%\s*\(([+\-][\d.]+)\s*SOL\)(?:\s*—\s*(.+))?$/);
+  if(!m) return {headline: content, chip: null, positive: true};
+  var symbol = m[1], pct = m[2], sol = m[3], reason = m[4] || '';
+  var positive = pct.indexOf('-') !== 0;
+  var reasonText = reason ? (reason.indexOf('take') > -1 ? 'at take-profit' : reason.indexOf('stop') > -1 ? 'at stop-loss' : 'at ' + reason) : '';
+  return {
+    headline: 'Your bot closed $' + symbol + (reasonText ? ' ' + reasonText : '') + '.',
+    chip: pct + '% · ' + sol + ' SOL',
+    positive: positive
+  };
+}
 </script>
 </body></html>
