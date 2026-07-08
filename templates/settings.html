@@ -521,6 +521,8 @@ async function _initPage(){
     }
     var unameInp=document.getElementById('st-uname-inp');
     if(unameInp&&d.username) unameInp.value=d.username;
+    var bioInp=document.getElementById('st-bio-inp');
+    if(bioInp&&d.bio) bioInp.value=d.bio;
     /* bot toggle — use live status endpoint for real-time accuracy */
     try{
       var bs=await fetch('/api/bot/status').then(function(r){return r.json();});
