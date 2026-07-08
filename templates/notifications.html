@@ -216,6 +216,10 @@ function _rowHtml(n, kind){
     bodyHtml = '<div class="ntf-text">' + _esc(parsed.headline) + '</div>'
       + (parsed.chip ? '<div class="ntf-chip ' + (parsed.positive?'pos':'neg') + '">' + _esc(parsed.chip) + '</div>' : '');
     timeStr = _relTime(n.created_at);
+    return '<div class="ntf-row" style="cursor:default">'
+      + '<div class="ntf-icon ' + iconCls + '">' + _ICON_SVG[iconCls] + '</div>'
+      + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(timeStr) + '</div></div>'
+      + '</div>';
   }
 }
 </script>
