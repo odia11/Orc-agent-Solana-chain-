@@ -3228,6 +3228,7 @@ def profile():
             posts=[dict(p) for p in posts],
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
+            is_own_profile=True,
         )
     finally:
         conn.close()
