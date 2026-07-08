@@ -4825,6 +4825,7 @@ def settings_get():
         'bot_running': bot_running,
         'avatar_url': row[9] or '',
         'username':   row[10] or '',
+        'is_verified': bool(row[11]),
     })
 
 @app.route('/api/settings/save', methods=['POST'])
