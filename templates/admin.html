@@ -1438,6 +1438,15 @@ async function forceAction(wallet, action) {
   if (r?.ok) { toast('✓ ' + (r.msg || 'Done'), true); _loaded.users = false; loadUsers(); }
   else toast('Error: ' + (r?.error || r?.msg || 'Failed'), false);
 }
+async function toggleVerify(wallet, rowId, currentlyVerified) {
+  var r = await fetch('/api/admin/user/verify', {
+    method:'POST', credentials:'include',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
+    body: JSON.stringify({wallet, verified: !currentlyVerified})
+  }).then(r => r.json()).catch(() => null);
+  if (r?.ok) { toast('✓ ' + (r.verified ? 'Verified' : 'Unverified'), true); _loaded.users = false; loadUsers(); }
+  else toast('Error: ' + (r?.msg || 'Failed'), false);
+}
 async function clearBan(ip) {
   var r = await fetch('/api/admin/clear_ratelimit', {
     method:'POST', credentials:'include',
