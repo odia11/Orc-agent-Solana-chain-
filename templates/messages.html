@@ -866,6 +866,10 @@ async function _init() {
 }
 
 _init();
+fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
+setInterval(function(){
+  fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
+}, 45000);
 </script>
 <script src="/static/notif-poll.js"></script>
 <script src="/static/page-loader.js"></script>
