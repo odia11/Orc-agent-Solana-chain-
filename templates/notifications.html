@@ -213,6 +213,9 @@ function _rowHtml(n, kind){
     var raw = 'Trade closed: $' + n.symbol + ' ' + (n.pnl_pct>=0?'+':'') + (n.pnl_pct||0).toFixed(1) + '% (' + (n.pnl>=0?'+':'') + (n.pnl||0).toFixed(4) + ' SOL)';
     var parsed = _parseTradeContent(raw);
     iconCls = parsed.positive ? 'trade-up' : 'trade-down';
+    bodyHtml = '<div class="ntf-text">' + _esc(parsed.headline) + '</div>'
+      + (parsed.chip ? '<div class="ntf-chip ' + (parsed.positive?'pos':'neg') + '">' + _esc(parsed.chip) + '</div>' : '');
+    timeStr = _relTime(n.created_at);
   }
 }
 </script>
