@@ -5077,7 +5077,8 @@ def get_leaderboard():
                    SUM(t.pnl)  AS total_pnl,
                    COUNT(*)    AS trade_count,
                    MAX(t.pnl)  AS best_trade,
-                   u.badges    AS badges
+                   u.badges    AS badges,
+                   u.is_verified AS is_verified
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE date(t.timestamp) = date('now')
