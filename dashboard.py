@@ -10239,7 +10239,7 @@ def admin_users():
         today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        c.execute('SELECT id, wallet_address, encrypted_private_key, created_at FROM users ORDER BY created_at DESC')
+        c.execute('SELECT id, wallet_address, encrypted_private_key, created_at, is_verified FROM users ORDER BY created_at DESC')
         rows = c.fetchall()
         users = []
         for uid, w, enc_key, created in rows:
