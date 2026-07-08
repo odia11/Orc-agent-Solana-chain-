@@ -10772,6 +10772,24 @@ def admin_ban_user():
         conn.close()
 
 
+@app.route('/api/admin/user/verify', methods=['POST'])
+@csrf_exempt
+def admin_toggle_verify():
+    err = _require_role('admin')
+    if err: return err
+    body = request.get_json(silent=True) or {}
+    target = body.get('wallet', '').strip()
+    verified = bool(body.get('verified', True))
+    if not target:
+        return jsonify({'ok': False, 'msg': 'Missing wallet'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET is_verified=? WHERE wallet_address=?', (1 if verified else 0, target))
+        conn.commit()
+        return jsonify({'ok': True, 'verified': verified})
+    finally:
+        conn.close()
+
 @app.route('/api/admin/ban', methods=['POST'])
 @csrf_exempt
 def admin_ban_v2():
