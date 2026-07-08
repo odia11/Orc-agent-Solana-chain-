@@ -1004,7 +1004,7 @@ function renderUsers() {
     var pnlCls = u.pnl_today >= 0 ? 'pos' : 'neg';
     return '<div class="tbl-row col-users" id="usr-row-' + i + '">' +
       '<div class="cell-user"><div class="u-av" style="background:' + _av(wf) + '">' + ini + '</div>' +
-      '<div><div class="u-name">' + _short(wf) + (u.is_verified ? ' <span style="color:#f7b955">✓</span>' : '') + '</div></div></div>' +
+      '<div><div class="u-name">' + _short(wf) + (u.is_verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '') + '</div></div></div>' +
       '<div>' + (u.has_key ? '<span class="tag tag-green">✓ key</span>' : '<span class="tag tag-muted">no key</span>') + '</div>' +
       '<div>' + (u.trading ? '<span class="tag tag-green">live</span>' : '<span class="tag tag-muted">idle</span>') + '</div>' +
       '<div class="mono">' + (u.positions ?? 0) + '</div>' +
