@@ -445,7 +445,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
       <!-- ACHIEVEMENTS -->
       {% set achiev = achievements|default([]) %}
-      {% if achiev or true %}
+      {% if can_view_sensitive and (achiev or true) %}
       <div class="pf-section-hdr">Achievements</div>
       <div class="pf-achievements" id="pf-achievements">
         {% if achiev %}
