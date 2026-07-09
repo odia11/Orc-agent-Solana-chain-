@@ -3327,7 +3327,7 @@ def profile_view(wallet_address: str):
             posts=[dict(p) for p in posts],
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
-            is_own_profile=bool(session_wallet and session_wallet == user["wallet_address"]),
+            is_own_profile=is_own,
         )
     finally:
         conn.close()
