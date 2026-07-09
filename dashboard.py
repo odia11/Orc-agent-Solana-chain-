@@ -3229,6 +3229,7 @@ def profile():
             wallet=wallet,
             wallet_short=wallet_short,
             session_wallet=wallet,
+            can_view_sensitive=True,
             display_name=user['username'] or wallet_short,
             username=user['username'],
             avatar_url=user['avatar_url'],
