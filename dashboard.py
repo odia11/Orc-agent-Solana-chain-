@@ -3311,6 +3311,7 @@ def profile_view(wallet_address: str):
             wallet_short=wallet_short,
             session_wallet=sw,
             session_wallet_short=sw_short,
+            can_view_sensitive=can_view_sensitive,
             display_name=user['username'] or wallet_short,
             username=user['username'],
             avatar_url=user['avatar_url'],
