@@ -3299,6 +3299,12 @@ def profile_view(wallet_address: str):
             sol_balance = round(r.json()['result']['value'] / 1e9, 4)
         except Exception:
             pass
+        is_own = bool(session_wallet and session_wallet == user["wallet_address"])
+        if user["wallet_address"] == ADMIN_WALLET:
+            viewer_role = get_user_role(session_wallet) if session_wallet else 'user'
+            can_view_sensitive = is_own or viewer_role in ('admin', 'moderator', 'analyst')
+        else:
+            can_view_sensitive = True
         return render_template(
             'profile.html',
             wallet=wallet_address,
