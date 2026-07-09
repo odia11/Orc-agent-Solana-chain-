@@ -399,10 +399,16 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
     <div class="pf-content">
 
       <!-- Wallet address -->
+      {% if can_view_sensitive %}
       <div class="pf-wallet-row">
         <span class="pf-wallet-addr" id="pf-addr">{{ wallet }}</span>
         <button class="pf-copy-btn" onclick="copyWallet()" title="Copy address">⧉</button>
       </div>
+      {% else %}
+      <div class="pf-wallet-row" style="color:#565d68;font-size:13px">
+        🔒 Trading stats and wallet details are private
+      </div>
+      {% endif %}
 
       <!-- 4 STAT TILES -->
       <div class="pf-tiles">
