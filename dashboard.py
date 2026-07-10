@@ -4364,6 +4364,13 @@ def _send_push_notification(user_id, title, body, url='/'):
         except Exception:
             pass
 
+@app.route('/sw.js')
+def service_worker_root():
+    resp = make_response(send_from_directory(app.static_folder, 'sw.js'))
+    resp.headers['Content-Type'] = 'application/javascript'
+    resp.headers['Service-Worker-Allowed'] = '/'
+    return resp
+
 @app.route('/api/push/vapid-public-key')
 def push_vapid_public_key():
     return jsonify({'key': VAPID_PUBLIC_KEY})
