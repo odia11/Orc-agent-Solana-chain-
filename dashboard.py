@@ -6634,6 +6634,7 @@ def follow_toggle_by_wallet():
             c.execute(
                 'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
                 (target_id, 'follow', follower_name + ' started following you.', '/profile/' + me_wallet))
+            _send_push_notification(target_id, 'New follower', follower_name + ' started following you', '/profile/' + me_wallet)
         c.execute('SELECT COUNT(*) FROM follows WHERE following_id=?', (target_id,))
         follower_count = (c.fetchone() or [0])[0]
         conn.commit()
