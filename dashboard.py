@@ -4343,6 +4343,16 @@ def _send_push_notification(user_id, title, body, url='/'):
         conn.close()
     except Exception:
         return
+    for sub_id, endpoint, p256dh, auth in rows:
+        try:
+            webpush(
+                subscription_info={'endpoint': endpoint, 'keys': {'p256dh': p256dh, 'auth': auth}},
+                data=json.dumps({'title': title, 'body': body, 'url': url}),
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims=dict(VAPID_CLAIMS)
+            )
+        except Exception:
+            pass
 
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
