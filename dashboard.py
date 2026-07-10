@@ -4332,6 +4332,18 @@ def notifications_mark_read():
         conn.close()
     return jsonify({'ok': True})
 
+def _send_push_notification(user_id, title, body, url='/'):
+    if not _PYWEBPUSH_OK or not VAPID_PRIVATE_KEY:
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        rows = conn.execute(
+            'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id=?', (user_id,)
+        ).fetchall()
+        conn.close()
+    except Exception:
+        return
+
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
 def notifications_mark_read_batch():
