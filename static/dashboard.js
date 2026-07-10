@@ -6422,6 +6422,10 @@ function _toggleFeedEmojiPanel(e){
   if(e) e.stopPropagation()
   document.getElementById('feed-emoji-panel').classList.toggle('open')
 }
+document.addEventListener('click', function(e){
+  var panel = document.getElementById('feed-emoji-panel')
+  if(panel && panel.classList.contains('open') && !e.target.closest('.feed-emoji-wrap')) panel.classList.remove('open')
+})
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
