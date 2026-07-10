@@ -62,3 +62,14 @@ async function _disablePushNotifications() {
     return { ok: false, msg: String(e) };
   }
 }
+async function _isPushSubscribed() {
+  if (!('serviceWorker' in navigator)) return false;
+  try {
+    var reg = await navigator.serviceWorker.getRegistration('/static/sw.js');
+    if (!reg) return false;
+    var sub = await reg.pushManager.getSubscription();
+    return !!sub;
+  } catch (e) {
+    return false;
+  }
+}
