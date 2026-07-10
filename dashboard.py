@@ -4363,6 +4363,10 @@ def _send_push_notification(user_id, title, body, url='/'):
         except Exception:
             pass
 
+@app.route('/api/push/vapid-public-key')
+def push_vapid_public_key():
+    return jsonify({'key': VAPID_PUBLIC_KEY})
+
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
 def notifications_mark_read_batch():
