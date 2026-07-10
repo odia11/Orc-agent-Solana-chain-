@@ -5855,6 +5855,16 @@ def feed_post_create():
         author_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE wallet_address=?', (wallet,)).fetchone()
         author_name = (author_row[0] if author_row and author_row[0] else wallet[:8]+'…')
         mentioned = set(m.lower() for m in re.findall(r'@([a-zA-Z0-9_]+)', content))
+        for uname in mentioned:
+            m_row = conn.execute(
+                'SELECT id FROM users WHERE username=? COLLATE NOCASE AND wallet_address!=?', (uname, wallet)
+            ).fetchone()
+            if m_row:
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                    (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-'+str(post_id)))
+                conn.commit()
+                _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-'+str(post_id))
         return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
