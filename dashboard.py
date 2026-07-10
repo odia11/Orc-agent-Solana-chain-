@@ -5852,6 +5852,9 @@ def feed_post_create():
         )
         conn.commit()
         post_id = cur.lastrowid
+        author_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        author_name = (author_row[0] if author_row and author_row[0] else wallet[:8]+'…')
+        mentioned = set(m.lower() for m in re.findall(r'@([a-zA-Z0-9_]+)', content))
         return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
