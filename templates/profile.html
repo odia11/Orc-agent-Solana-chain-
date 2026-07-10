@@ -637,9 +637,15 @@ function _followUser() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({wallet: wallet})
   }).then(function(r){ return r.json(); }).then(function(d) {
-    if (d.ok) {
-      var btn = document.querySelector('.pf-btn-primary');
-      if (btn) { btn.textContent = 'Following'; btn.style.opacity = '.7'; btn.disabled = true; }
+    var btn = document.querySelector('.pf-btn-primary');
+    if (d.ok && btn) {
+      if (d.following) {
+        btn.textContent = 'Following';
+        btn.style.opacity = '.7';
+      } else {
+        btn.textContent = 'Follow';
+        btn.style.opacity = '1';
+      }
     }
   }).catch(function(){});
 }
