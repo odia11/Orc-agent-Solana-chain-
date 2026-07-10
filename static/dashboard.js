@@ -6426,6 +6426,19 @@ document.addEventListener('click', function(e){
   var panel = document.getElementById('feed-emoji-panel')
   if(panel && panel.classList.contains('open') && !e.target.closest('.feed-emoji-wrap')) panel.classList.remove('open')
 })
+document.addEventListener('click', function(e){
+  var btn = e.target.closest('#feed-emoji-panel button')
+  if(!btn) return
+  var ta = document.getElementById('postText')
+  if(!ta) return
+  var start = ta.selectionStart || ta.value.length
+  var end = ta.selectionEnd || ta.value.length
+  ta.value = ta.value.slice(0,start) + btn.textContent + ta.value.slice(end)
+  var pos = start + btn.textContent.length
+  ta.focus()
+  ta.setSelectionRange(pos,pos)
+  document.getElementById('feed-emoji-panel').classList.remove('open')
+})
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
