@@ -6512,11 +6512,11 @@ def follow_toggle_by_wallet():
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
-        c.execute('SELECT id FROM users WHERE wallet_address=?', (me_wallet,))
+        c.execute('SELECT id, username FROM users WHERE wallet_address=?', (me_wallet,))
         me_row = c.fetchone()
         if not me_row:
             return jsonify({'ok': False, 'msg': 'Your account not found'}), 404
-        me_id = me_row[0]
+        me_id, me_username = me_row[0], me_row[1]
         c.execute('SELECT id FROM users WHERE wallet_address=?', (target_wallet,))
         tgt_row = c.fetchone()
         if not tgt_row:
