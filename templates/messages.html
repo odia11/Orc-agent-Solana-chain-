@@ -560,12 +560,13 @@ function _renderMessages(msgs) {
         + '<button class="danger" onclick="_deleteMsg('+m.id+')">Delete</button></div>';
     }
     var editedTag = m.edited_at ? '<span class="msg-edited-tag">(edited)</span>' : '';
+    var seenTag = (mine && m.is_read) ? '<span class="msg-seen-tag"> · Seen</span>' : '';
     return '<div class="msg-wrap '+(mine?'mine':'theirs')+'" data-mid="'+m.id+'">'
       + '<div class="msg-bubble-wrap">'
       +   menu
       +   bubble
       + '</div>'
-      + '<span class="msg-time">'+_esc(_timeAgo(m.created_at))+editedTag+'</span>'
+      + '<span class="msg-time">'+_esc(_timeAgo(m.created_at))+editedTag+seenTag+'</span>'
       + '</div>';
   }).join('');
   if (atBottom || msgs.length <= 30) _scrollToBottom();
