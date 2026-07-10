@@ -9,3 +9,4 @@ anthropic>=0.34.0,<2.0.0
 apscheduler>=3.10.0,<4.0.0
 bcrypt>=4.0.0,<5.0.0
 PyNaCl>=1.5.0,<2.0.0
+pywebpush>=2.0.0,<3.0.0
