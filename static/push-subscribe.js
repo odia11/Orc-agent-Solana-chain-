@@ -11,3 +11,20 @@ function _urlBase64ToUint8Array(base64String) {
   }
   return outputArray;
 }
+async function _enablePushNotifications() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    alert('Push notifications are not supported on this browser.');
+    return { ok: false, msg: 'Not supported' };
+  }
+  try {
+    var perm = await Notification.requestPermission();
+    if (perm !== 'granted') {
+      return { ok: false, msg: 'Permission denied' };
+    }
+    var reg = await navigator.serviceWorker.register('/static/sw.js');
+    await navigator.serviceWorker.ready;
+  } catch (e) {
+    console.error('[push] subscribe failed', e);
+    return { ok: false, msg: String(e) };
+  }
+}
