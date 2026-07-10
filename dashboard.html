@@ -3758,6 +3758,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         @ Tag user
       </button>
+      <!-- Emoji picker -->
+      <div class="feed-emoji-wrap">
+        <button class="feed-emoji-btn" type="button" onclick="_toggleFeedEmojiPanel(event)">😀</button>
+        <div class="feed-emoji-panel" id="feed-emoji-panel"></div>
+      </div>
       <div style="flex:1"></div>
       <!-- Post button -->
       <button class="feed-composer-post" onclick="if(checkGuest())return;submitPost()">POST</button>
