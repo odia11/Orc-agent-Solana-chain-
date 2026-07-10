@@ -36,3 +36,14 @@ async function _pollNotifCount(){
 
 if('Notification' in window) Notification.requestPermission();
 setInterval(_pollNotifCount,15000);
+async function _silentPushResubscribeCheck(){
+  if(!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if(!('Notification' in window) || Notification.permission !== 'granted') return;
+  try{
+    var reg = await navigator.serviceWorker.getRegistration('/sw.js');
+    if(!reg) reg = await navigator.serviceWorker.register('/sw.js');
+    await navigator.serviceWorker.ready;
+    var sub = await reg.pushManager.getSubscription();
+    if(sub) return;
+  }catch(e){}
+}
