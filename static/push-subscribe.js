@@ -23,6 +23,15 @@ async function _enablePushNotifications() {
     }
     var reg = await navigator.serviceWorker.register('/static/sw.js');
     await navigator.serviceWorker.ready;
+    var keyRes = await fetch('/api/push/vapid-public-key').then(function(r) { return r.json(); });
+    var appServerKey = _urlBase64ToUint8Array(keyRes.key);
+    var sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: appServerKey
+      });
+    }
   } catch (e) {
     console.error('[push] subscribe failed', e);
     return { ok: false, msg: String(e) };
