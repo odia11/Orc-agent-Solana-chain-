@@ -5851,7 +5851,8 @@ def feed_post_create():
             (wallet, content, now)
         )
         conn.commit()
-        return jsonify({'ok': True, 'id': cur.lastrowid})
+        post_id = cur.lastrowid
+        return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
 
