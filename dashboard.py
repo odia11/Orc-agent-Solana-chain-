@@ -6026,6 +6026,7 @@ def toggle_feed_reaction(post_id):
                 conn.execute(
                     'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
                     (owner_uid, 'reaction', reactor_name+': reacted '+emoji+' to your post', '/#post-'+post_id))
+                _send_push_notification(owner_uid, 'New reaction', reactor_name+' reacted '+emoji+' to your post', '/#post-'+post_id)
         conn.commit()
         counts = {row[0]: row[1] for row in conn.execute(
             'SELECT emoji, COUNT(*) FROM post_reactions WHERE post_id=? GROUP BY emoji',
