@@ -6406,6 +6406,11 @@ function searchUserTag(q){
   fetch('/api/users/search?q='+encodeURIComponent(q))
   .then(r=>r.json()).then(d=>{
     const users=(d&&d.users)||[]
+    document.getElementById('userTagResults').innerHTML=users.length?
+    users.map(u=>`<div onclick="selectUserTag('${u.username.replace(/'/g,"\\'")}')" style="padding:10px;cursor:pointer;border-bottom:1px solid #16191f;color:#eef1f5">
+      <span style="color:#f7b955;font-weight:700">@${u.username}</span>
+    </div>`).join('')
+    :'<div style="color:#565d68;padding:10px">No users found</div>'
   })
 }
 async function submitPost(){
