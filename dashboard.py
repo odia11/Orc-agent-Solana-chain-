@@ -7875,6 +7875,7 @@ def send_dm(peer_id):
             'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
             (peer_id, 'message', sender_name + ': ' + preview, '/messages/' + wallet)
         )
+        _send_push_notification(peer_id, sender_name, preview, '/messages/' + wallet)
         conn.commit()
     except Exception as e:
         return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
