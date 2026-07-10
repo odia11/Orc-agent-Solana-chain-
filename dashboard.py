@@ -4351,6 +4351,15 @@ def _send_push_notification(user_id, title, body, url='/'):
                 vapid_private_key=VAPID_PRIVATE_KEY,
                 vapid_claims=dict(VAPID_CLAIMS)
             )
+        except WebPushException as ex:
+            if ex.response is not None and ex.response.status_code in (404, 410):
+                try:
+                    c2 = sqlite3.connect(DB_FILE)
+                    c2.execute('DELETE FROM push_subscriptions WHERE id=?', (sub_id,))
+                    c2.commit()
+                    c2.close()
+                except Exception:
+                    pass
         except Exception:
             pass
 
