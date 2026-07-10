@@ -6396,6 +6396,9 @@ function selectToken(symbol, mint){
   document.getElementById('tokenModal').style.display='none'
 }
 
+function tagUser(){
+  document.getElementById('userTagModal').style.display='flex'
+}
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
