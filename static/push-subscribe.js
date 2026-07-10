@@ -32,6 +32,13 @@ async function _enablePushNotifications() {
         applicationServerKey: appServerKey
       });
     }
+    var subJson = sub.toJSON();
+    var res = await fetch('/api/push/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(subJson)
+    }).then(function(r) { return r.json(); });
+    return res;
   } catch (e) {
     console.error('[push] subscribe failed', e);
     return { ok: false, msg: String(e) };
