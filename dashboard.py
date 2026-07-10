@@ -6219,6 +6219,7 @@ def toggle_feed_reply_like(reply_id):
                     'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
                     (owner_row[0], 'reply_like', liker_name+': liked your reply', ''))
                 conn.commit()
+                _send_push_notification(owner_row[0], 'New like', liker_name+' liked your reply', '/notifications')
         count = conn.execute(
             'SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id=?', (reply_id,)
         ).fetchone()[0]
