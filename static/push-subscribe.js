@@ -21,7 +21,7 @@ async function _enablePushNotifications() {
     if (perm !== 'granted') {
       return { ok: false, msg: 'Permission denied' };
     }
-    var reg = await navigator.serviceWorker.register('/static/sw.js');
+    var reg = await navigator.serviceWorker.register('/sw.js');
     await navigator.serviceWorker.ready;
     var keyRes = await fetch('/api/push/vapid-public-key').then(function(r) { return r.json(); });
     var appServerKey = _urlBase64ToUint8Array(keyRes.key);
