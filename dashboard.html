@@ -414,6 +414,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-composer-actions{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--bg3)}
 .feed-emoji-wrap{position:relative;display:inline-block}
 .feed-emoji-btn{display:flex;align-items:center;justify-content:center;padding:6px 10px;background:transparent;border:1px solid #21252c;border-radius:9px;font-size:15px;cursor:pointer}
+.feed-emoji-panel{display:none;position:absolute;bottom:calc(100% + 6px);left:0;width:260px;max-height:220px;overflow-y:auto;background:#101216;border:1px solid #21252c;border-radius:13px;padding:8px;grid-template-columns:repeat(7,1fr);gap:2px;z-index:20}
+.feed-emoji-panel.open{display:grid}
+.feed-emoji-panel button{background:none;border:none;font-size:19px;padding:6px 0;border-radius:8px;cursor:pointer}
+.feed-emoji-panel button:hover{background:#16191f}
 .feed-composer-pill{display:flex;align-items:center;gap:5px;padding:6px 11px;background:transparent;border:1px solid #21252c;border-radius:9px;font-size:12px;font-weight:500;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,border-color .15s}
 .feed-composer-pill:hover{background:#16191f;border-color:#2d333c;color:#eef1f5}
 .feed-composer-post{padding:8px 18px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
