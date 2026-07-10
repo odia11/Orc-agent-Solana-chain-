@@ -6398,6 +6398,8 @@ function selectToken(symbol, mint){
 
 function tagUser(){
   document.getElementById('userTagModal').style.display='flex'
+  const inp=document.getElementById('userTagSearch')
+  if(inp){ inp.value=''; document.getElementById('userTagResults').innerHTML=''; inp.focus() }
 }
 async function submitPost(){
   const t=document.getElementById('postText')
