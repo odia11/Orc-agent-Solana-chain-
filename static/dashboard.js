@@ -6401,6 +6401,13 @@ function tagUser(){
   const inp=document.getElementById('userTagSearch')
   if(inp){ inp.value=''; document.getElementById('userTagResults').innerHTML=''; inp.focus() }
 }
+function searchUserTag(q){
+  if(q.length<1){ document.getElementById('userTagResults').innerHTML=''; return }
+  fetch('/api/users/search?q='+encodeURIComponent(q))
+  .then(r=>r.json()).then(d=>{
+    const users=(d&&d.users)||[]
+  })
+}
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
