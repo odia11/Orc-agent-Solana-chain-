@@ -336,6 +336,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
         <div class="st-tog-row">
           <div>
+            <div class="st-tog-label">Phone Notifications</div>
+            <div class="st-tog-sub">Get notified even when the site is closed</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-push" onchange="_onPushToggle(this)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
             <div class="st-tog-label">Scam Filter</div>
             <div class="st-tog-sub">Skip flagged honeypot tokens</div>
           </div>
