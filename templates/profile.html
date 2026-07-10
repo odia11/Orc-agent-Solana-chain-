@@ -632,10 +632,10 @@ function shareOnX() {
 
 function _followUser() {
   var wallet = '{{ wallet }}';
-  fetch('/api/follow', {
+  fetch('/api/follow/toggle', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({target_wallet: wallet})
+    body: JSON.stringify({wallet: wallet})
   }).then(function(r){ return r.json(); }).then(function(d) {
     if (d.ok) {
       var btn = document.querySelector('.pf-btn-primary');
