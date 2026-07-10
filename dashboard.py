@@ -4367,6 +4367,21 @@ def _send_push_notification(user_id, title, body, url='/'):
 def push_vapid_public_key():
     return jsonify({'key': VAPID_PUBLIC_KEY})
 
+@app.route('/api/push/subscribe', methods=['POST'])
+@csrf_exempt
+@rate_limit(10, 60)
+def push_subscribe():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint', '')
+    keys = data.get('keys', {})
+    p256dh = keys.get('p256dh', '')
+    auth = keys.get('auth', '')
+    if not endpoint or not p256dh or not auth:
+        return jsonify({'ok': False, 'msg': 'Invalid subscription'}), 400
+
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
 def notifications_mark_read_batch():
