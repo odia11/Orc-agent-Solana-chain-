@@ -6413,6 +6413,11 @@ function searchUserTag(q){
     :'<div style="color:#565d68;padding:10px">No users found</div>'
   })
 }
+function selectUserTag(username){
+  const ta=document.getElementById('postText')
+  if(ta) ta.value+=' @'+username+' '
+  document.getElementById('userTagModal').style.display='none'
+}
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
