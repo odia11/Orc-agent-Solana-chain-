@@ -4394,6 +4394,21 @@ def push_subscribe():
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/push/unsubscribe', methods=['POST'])
+@csrf_exempt
+@rate_limit(10, 60)
+def push_unsubscribe():
+    data = request.get_json(silent=True) or {}
+    endpoint = data.get('endpoint', '')
+    if endpoint:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute('DELETE FROM push_subscriptions WHERE endpoint=?', (endpoint,))
+            conn.commit()
+        finally:
+            conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
 def notifications_mark_read_batch():
