@@ -1076,6 +1076,15 @@ def run_migrations():
             con.commit()
     except Exception:
         pass
+    # push_subscriptions table — stores Web Push subscriptions for phone notifications
+    con.execute('''CREATE TABLE IF NOT EXISTS push_subscriptions (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        endpoint   TEXT NOT NULL UNIQUE,
+        p256dh     TEXT NOT NULL,
+        auth       TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
     # admin_roles table — separate from users so it survives account deletion
     con.execute('''CREATE TABLE IF NOT EXISTS admin_roles (
         wallet_address TEXT PRIMARY KEY,
