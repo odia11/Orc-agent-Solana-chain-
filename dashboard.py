@@ -25,6 +25,11 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
+try:
+    from pywebpush import webpush, WebPushException
+    _PYWEBPUSH_OK = True
+except ImportError:
+    _PYWEBPUSH_OK = False
 load_dotenv()
 
 app = Flask(__name__)
