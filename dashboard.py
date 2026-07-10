@@ -6532,6 +6532,7 @@ def follow_toggle_by_wallet():
                 'INSERT INTO follows (follower_id, following_id, created_at) VALUES (?,?,?)',
                 (me_id, target_id, datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')))
             following = True
+            follower_name = me_username or (me_wallet[:4] + '...' + me_wallet[-4:])
         c.execute('SELECT COUNT(*) FROM follows WHERE following_id=?', (target_id,))
         follower_count = (c.fetchone() or [0])[0]
         conn.commit()
