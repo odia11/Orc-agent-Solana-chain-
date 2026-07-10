@@ -598,6 +598,24 @@ function _savePref(key, val){
   _post('/api/settings/save', body).catch(function(){});
 }
 
+async function _onPushToggle(cb){
+  cb.disabled = true;
+  if(cb.checked){
+    var r = await _enablePushNotifications();
+    if(!r.ok){ cb.checked = false; alert('Could not enable phone notifications: ' + (r.msg || 'unknown error')); }
+  } else {
+    await _disablePushNotifications();
+  }
+  cb.disabled = false;
+}
+
+async function _initPushToggle(){
+  var cb = document.getElementById('pref-push');
+  if(!cb || typeof _isPushSubscribed !== 'function') return;
+  cb.checked = await _isPushSubscribed();
+}
+_initPushToggle();
+
 /* ── copy wallet ── */
 function _copyWallet(){
   navigator.clipboard.writeText(_wallet).then(function(){
