@@ -4381,6 +4381,18 @@ def push_subscribe():
     auth = keys.get('auth', '')
     if not endpoint or not p256dh or not auth:
         return jsonify({'ok': False, 'msg': 'Invalid subscription'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        conn.execute(
+            'INSERT INTO push_subscriptions (user_id, endpoint, p256dh, auth) VALUES (?,?,?,?) '
+            'ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id, p256dh=excluded.p256dh, auth=excluded.auth',
+            (uid, endpoint, p256dh, auth)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
 
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
