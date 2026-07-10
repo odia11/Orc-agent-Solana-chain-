@@ -45,5 +45,14 @@ async function _silentPushResubscribeCheck(){
     await navigator.serviceWorker.ready;
     var sub = await reg.pushManager.getSubscription();
     if(sub) return;
+    var keyRes = await fetch('/api/push/vapid-public-key').then(function(r){return r.json();});
+    if(!keyRes.key) return;
+    var pad = '='.repeat((4 - keyRes.key.length % 4) % 4);
+    var b64 = (keyRes.key + pad).replace(/-/g,'+').replace(/_/g,'/');
+    var raw = window.atob(b64);
+    var arr = new Uint8Array(raw.length);
+    for(var i=0;i<raw.length;i++) arr[i]=raw.charCodeAt(i);
+    var newSub = await reg.pushManager.subscribe({userVisibleOnly:true, applicationServerKey:arr});
+    await fetch('/api/push/subscribe', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(newSub.toJSON())});
   }catch(e){}
 }
