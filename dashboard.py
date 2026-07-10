@@ -6126,6 +6126,7 @@ def post_feed_reply():
                 'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
                 (owner_uid, 'reply', replier_name+': replied to your post — '+preview, '/#post-'+post_id))
             conn.commit()
+            _send_push_notification(owner_uid, 'New reply', replier_name+' replied to your post', '/#post-'+post_id)
         reply_id = cur.lastrowid
         row = conn.execute(
             'SELECT COALESCE(username,""), COALESCE(avatar_url,"") FROM users WHERE id=?', (me,)
