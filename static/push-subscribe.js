@@ -44,3 +44,21 @@ async function _enablePushNotifications() {
     return { ok: false, msg: String(e) };
   }
 }
+async function _disablePushNotifications() {
+  try {
+    var reg = await navigator.serviceWorker.getRegistration('/static/sw.js');
+    if (!reg) return { ok: true };
+    var sub = await reg.pushManager.getSubscription();
+    if (sub) {
+      await fetch('/api/push/unsubscribe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ endpoint: sub.endpoint })
+      }).catch(function() {});
+      await sub.unsubscribe();
+    }
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, msg: String(e) };
+  }
+}
