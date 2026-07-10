@@ -4452,6 +4452,8 @@ document.addEventListener('DOMContentLoaded', function() {
     <input id="userTagSearch" placeholder="Search username..."
       oninput="searchUserTag(this.value)"
       style="width:100%;background:#0a0b0e;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;outline:none">
+    <div id="userTagResults" style="margin-top:10px;max-height:200px;overflow-y:auto"></div>
+    <button onclick="document.getElementById('userTagModal').style.display='none'" style="margin-top:12px;width:100%;background:#21252c;border:none;border-radius:10px;padding:10px;color:#8a919c;cursor:pointer">Cancel</button>
   </div>
 </div>
 
