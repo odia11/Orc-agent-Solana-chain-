@@ -619,7 +619,6 @@ async function _initPushToggle(){
   if(!cb || typeof _isPushSubscribed !== 'function') return;
   cb.checked = await _isPushSubscribed();
 }
-_initPushToggle();
 
 /* ── copy wallet ── */
 function _copyWallet(){
