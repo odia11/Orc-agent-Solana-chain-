@@ -6418,6 +6418,10 @@ function selectUserTag(username){
   if(ta) ta.value+=' @'+username+' '
   document.getElementById('userTagModal').style.display='none'
 }
+function _toggleFeedEmojiPanel(e){
+  if(e) e.stopPropagation()
+  document.getElementById('feed-emoji-panel').classList.toggle('open')
+}
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
