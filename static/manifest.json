@@ -1,0 +1,15 @@
+{
+  "name": "OrcAgent",
+  "short_name": "OrcAgent",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0b0e",
+  "theme_color": "#f7b955",
+  "icons": [
+    {
+      "src": "/static/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
