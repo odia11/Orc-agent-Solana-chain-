@@ -6439,6 +6439,16 @@ function _mentionSelect(username){
   el.setSelectionRange(newPos, newPos);
   _mentionHide();
 }
+document.addEventListener('input', function(e){
+  if(e.target.id === 'postText' || e.target.classList.contains('fc-reply-inp')){
+    _mentionCheck(e.target);
+  }
+});
+document.addEventListener('click', function(e){
+  if(!e.target.closest('#mention-suggest') && e.target.id !== 'postText' && !e.target.classList.contains('fc-reply-inp')){
+    _mentionHide();
+  }
+});
 function tagUser(){
   document.getElementById('userTagModal').style.display='flex'
   const inp=document.getElementById('userTagSearch')
