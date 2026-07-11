@@ -6426,6 +6426,19 @@ function _mentionCheck(el){
     box.style.display='block';
   }).catch(function(){});
 }
+function _mentionSelect(username){
+  if(!_mentionTarget) return;
+  var el = _mentionTarget;
+  var val = el.value;
+  var pos = el.selectionStart;
+  var before = val.slice(0, _mentionAtPos);
+  var after = val.slice(pos);
+  el.value = before + '@' + username + ' ' + after;
+  var newPos = (before + '@' + username + ' ').length;
+  el.focus();
+  el.setSelectionRange(newPos, newPos);
+  _mentionHide();
+}
 function tagUser(){
   document.getElementById('userTagModal').style.display='flex'
   const inp=document.getElementById('userTagSearch')
