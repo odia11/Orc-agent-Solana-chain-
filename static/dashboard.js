@@ -6403,6 +6403,17 @@ function _mentionHide(){
   if(box) box.style.display='none';
   _mentionTarget = null;
 }
+function _mentionCheck(el){
+  var val = el.value;
+  var pos = el.selectionStart;
+  var uptoCursor = val.slice(0, pos);
+  var m = uptoCursor.match(/@([a-zA-Z0-9_]*)$/);
+  if(!m){ _mentionHide(); return; }
+  var partial = m[1];
+  _mentionAtPos = pos - m[0].length;
+  _mentionTarget = el;
+  if(partial.length < 1){ _mentionHide(); return; }
+}
 function tagUser(){
   document.getElementById('userTagModal').style.display='flex'
   const inp=document.getElementById('userTagSearch')
