@@ -7730,7 +7730,7 @@ function _renderReplyRow(r, postId){
     +'<span class="fc-ri-sep">·</span>'
     +'<span class="fc-ri-time">'+_replyRelTime(r.created_at)+'</span>'
     +'</div>'
-    +'<div class="fc-ri-text">'+esc(r.message)+'</div>'
+    +'<div class="fc-ri-text">'+esc(r.message).replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>')+'</div>'
     +'<div class="fc-ri-actions">'
     +'<button class="fc-ri-like'+likedCls+'" data-rid="'+r.id+'" onclick="_feedLikeReply('+r.id+',this)">&#9825; <span class="fc-ri-lc">'+likeCnt+'</span></button>'
     +'<button class="fc-ri-reply-btn">&#8617; Reply</button>'
