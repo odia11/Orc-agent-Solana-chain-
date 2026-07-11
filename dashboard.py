@@ -7201,6 +7201,22 @@ def search_tokens():
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
+@app.route('/api/dexscreener/token-boosts')
+@rate_limit(30, 60)
+def api_dex_token_boosts():
+    r = _dex_get('https://api.dexscreener.com/token-boosts/top/v1')
+    if r and r.status_code == 200:
+        return jsonify(r.json())
+    return jsonify([]), 502
+
+@app.route('/api/dexscreener/token-profiles')
+@rate_limit(30, 60)
+def api_dex_token_profiles():
+    r = _dex_get('https://api.dexscreener.com/token-profiles/latest/v1')
+    if r and r.status_code == 200:
+        return jsonify(r.json())
+    return jsonify([]), 502
+
 @app.route('/api/token/info/<mint_address>', methods=['GET'])
 @rate_limit(60, 60)
 def api_token_info(mint_address):
