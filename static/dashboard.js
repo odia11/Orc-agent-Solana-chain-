@@ -7447,6 +7447,7 @@ function _renderFeedCard(e){
       }
     } else if(_rawContent.trim()) {
       var _safeContent = esc(_rawContent).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+      _safeContent = _safeContent.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
       textBody += '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>';
     }
   }
