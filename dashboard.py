@@ -7217,6 +7217,15 @@ def api_dex_token_profiles():
         return jsonify(r.json())
     return jsonify([]), 502
 
+@app.route('/api/dexscreener/tokens/<addresses>')
+@rate_limit(60, 60)
+def api_dex_tokens_batch(addresses):
+    safe = re.sub(r'[^A-Za-z0-9,]', '', addresses)[:2000]
+    r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + safe)
+    if r and r.status_code == 200:
+        return jsonify(r.json())
+    return jsonify({'pairs': []}), 502
+
 @app.route('/api/token/info/<mint_address>', methods=['GET'])
 @rate_limit(60, 60)
 def api_token_info(mint_address):
