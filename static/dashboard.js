@@ -6565,6 +6565,7 @@ async function _fcEditSave(postId,dbId){
       var textEl=document.getElementById('fc-text-'+postId);
       if(textEl){
         var safe=esc(text).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+        safe = safe.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
         textEl.innerHTML='<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+safe+'</div>';
       }
       _fcEditCancel(postId);
