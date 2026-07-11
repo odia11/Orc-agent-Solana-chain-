@@ -646,7 +646,7 @@ function _followUser() {
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({wallet: wallet})
   }).then(function(r){ return r.json(); }).then(function(d) {
-    var btn = document.querySelector('.pf-btn-primary');
+    var btn = document.getElementById('pf-follow-btn');
     if (d.ok && btn) {
       if (d.following) {
         btn.textContent = 'Following';
