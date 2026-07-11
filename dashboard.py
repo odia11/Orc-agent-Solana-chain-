@@ -4446,6 +4446,20 @@ def notifications_mark_read_batch():
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/notifications/mine/mark_all_read', methods=['POST'])
+def notifications_mark_all_read():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        conn.execute('UPDATE notifications SET is_read=1 WHERE user_id=?', (me,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/notifications')
 def notifications_page():
     wallet = _current_wallet()
