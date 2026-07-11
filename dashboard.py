@@ -4365,6 +4365,13 @@ def _send_push_notification_sync(user_id, title, body, url='/'):
         except Exception:
             pass
 
+def _send_push_notification(user_id, title, body, url='/'):
+    threading.Thread(
+        target=_send_push_notification_sync,
+        args=(user_id, title, body, url),
+        daemon=True
+    ).start()
+
 @app.route('/sw.js')
 def service_worker_root():
     resp = make_response(send_from_directory(app.static_folder, 'sw.js'))
