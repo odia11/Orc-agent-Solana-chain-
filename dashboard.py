@@ -4350,7 +4350,8 @@ def _send_push_notification_sync(user_id, title, body, url='/'):
                 subscription_info={'endpoint': endpoint, 'keys': {'p256dh': p256dh, 'auth': auth}},
                 data=json.dumps({'title': title, 'body': body, 'url': url}),
                 vapid_private_key=VAPID_PRIVATE_KEY,
-                vapid_claims=dict(VAPID_CLAIMS)
+                vapid_claims=dict(VAPID_CLAIMS),
+                timeout=5
             )
         except WebPushException as ex:
             if ex.response is not None and ex.response.status_code in (404, 410):
