@@ -6413,6 +6413,11 @@ function _mentionCheck(el){
   _mentionAtPos = pos - m[0].length;
   _mentionTarget = el;
   if(partial.length < 1){ _mentionHide(); return; }
+  fetch('/api/users/search?q='+encodeURIComponent(partial)).then(function(r){return r.json();}).then(function(d){
+    var users = (d && d.users) || [];
+    var box = document.getElementById('mention-suggest');
+    if(!users.length){ box.style.display='none'; return; }
+  }).catch(function(){});
 }
 function tagUser(){
   document.getElementById('userTagModal').style.display='flex'
