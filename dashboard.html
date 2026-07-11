@@ -4258,6 +4258,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 window.__API_SHARED_SECRET = '__API_SHARED_SECRET__';
 window.__SESSION_WALLET = '__SESSION_WALLET__';
 window.__SESSION_SHORT = '__SESSION_SHORT__';
+if (window.__SESSION_WALLET) {
+  var _ob = document.getElementById('onboard');
+  if (_ob) _ob.style.display = 'none';
+}
 </script>
 <script src="/static/dashboard.js?v=1"></script>
 
