@@ -307,7 +307,7 @@ async function _fetchTrending(){
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
   var addresses = solana.map(function(i){ return i.tokenAddress; }).join(',');
-  var pr = await fetch('https://api.dexscreener.com/latest/dex/tokens/'+addresses);
+  var pr = await fetch('/api/dexscreener/tokens/'+addresses);
   var pd = await pr.json();
   return _dedupeByAddress(pd.pairs||[], iconMap);
 }
@@ -320,7 +320,7 @@ async function _fetchNew(){
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
   var addresses = solana.map(function(i){ return i.tokenAddress; }).join(',');
-  var pr = await fetch('https://api.dexscreener.com/latest/dex/tokens/'+addresses);
+  var pr = await fetch('/api/dexscreener/tokens/'+addresses);
   var pd = await pr.json();
   return _dedupeByAddress(pd.pairs||[], iconMap);
 }
