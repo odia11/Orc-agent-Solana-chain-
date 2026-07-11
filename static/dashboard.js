@@ -6396,6 +6396,13 @@ function selectToken(symbol, mint){
   document.getElementById('tokenModal').style.display='none'
 }
 
+var _mentionTarget = null;
+var _mentionAtPos = -1;
+function _mentionHide(){
+  var box = document.getElementById('mention-suggest');
+  if(box) box.style.display='none';
+  _mentionTarget = null;
+}
 function tagUser(){
   document.getElementById('userTagModal').style.display='flex'
   const inp=document.getElementById('userTagSearch')
