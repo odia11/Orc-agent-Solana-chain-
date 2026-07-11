@@ -4333,7 +4333,7 @@ def notifications_mark_read():
         conn.close()
     return jsonify({'ok': True})
 
-def _send_push_notification(user_id, title, body, url='/'):
+def _send_push_notification_sync(user_id, title, body, url='/'):
     if not _PYWEBPUSH_OK or not VAPID_PRIVATE_KEY:
         return
     try:
