@@ -300,7 +300,7 @@ async function _loadTab(tab){
 }
 
 async function _fetchTrending(){
-  var r     = await fetch('https://api.dexscreener.com/token-boosts/top/v1');
+  var r     = await fetch('/api/dexscreener/token-boosts');
   var items = await r.json();
   var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
   if(!solana.length) return [];
@@ -313,7 +313,7 @@ async function _fetchTrending(){
 }
 
 async function _fetchNew(){
-  var r     = await fetch('https://api.dexscreener.com/token-profiles/latest/v1');
+  var r     = await fetch('/api/dexscreener/token-profiles');
   var items = await r.json();
   var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
   if(!solana.length) return [];
