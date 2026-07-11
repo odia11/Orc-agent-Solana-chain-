@@ -650,10 +650,14 @@ function _followUser() {
     if (d.ok && btn) {
       if (d.following) {
         btn.textContent = 'Following';
-        btn.style.opacity = '.7';
+        btn.style.background = '#21252c';
+        btn.style.color = '#eef1f5';
+        btn.dataset.following = 'true';
       } else {
         btn.textContent = 'Follow';
-        btn.style.opacity = '1';
+        btn.style.background = '';
+        btn.style.color = '';
+        btn.dataset.following = 'false';
       }
     }
   }).catch(function(){});
