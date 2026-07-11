@@ -6417,6 +6417,13 @@ function _mentionCheck(el){
     var users = (d && d.users) || [];
     var box = document.getElementById('mention-suggest');
     if(!users.length){ box.style.display='none'; return; }
+    var rect = el.getBoundingClientRect();
+    box.style.left = rect.left+'px';
+    box.style.top = (rect.top - Math.min(users.length,5)*40 - 8)+'px';
+    box.innerHTML = users.map(function(u){
+      return '<div onclick="_mentionSelect(\''+u.username.replace(/'/g,"\\'")+'\')" style="padding:9px 12px;cursor:pointer;color:#eef1f5;border-bottom:1px solid #16191f"><span style="color:#f7b955;font-weight:700">@'+u.username+'</span></div>';
+    }).join('');
+    box.style.display='block';
   }).catch(function(){});
 }
 function tagUser(){
