@@ -3360,6 +3360,8 @@ def profile_view(wallet_address: str):
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=is_own,
+            is_following=is_following,
+            follows_me=follows_me,
         )
     finally:
         conn.close()
