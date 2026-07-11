@@ -3319,6 +3319,19 @@ def profile_view(wallet_address: str):
         except Exception:
             pass
         is_own = bool(session_wallet and session_wallet == user["wallet_address"])
+        is_following = False
+        follows_me = False
+        if session_wallet and not is_own:
+            me_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (session_wallet,)).fetchone()
+            if me_row:
+                is_following = bool(conn.execute(
+                    'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+                    (me_row['id'], user_id)
+                ).fetchone())
+                follows_me = bool(conn.execute(
+                    'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+                    (user_id, me_row['id'])
+                ).fetchone())
         if user["wallet_address"] == ADMIN_WALLET:
             viewer_role = get_user_role(session_wallet) if session_wallet else 'user'
             can_view_sensitive = is_own or viewer_role in ('admin', 'moderator', 'analyst')
