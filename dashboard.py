@@ -8929,6 +8929,33 @@ def api_manual_sell():
 
 
 # ── TRADER START/STOP ──
+def _insufficient_trade_balance(wallet: str, enc_blob: str):
+    """Checks the trading wallet (derived from the saved key, not the Phantom
+    session wallet) against the SOL needed for one trade plus network fees.
+    Returns (error_msg, trading_wallet) — error_msg is None if the balance is enough."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row  = conn.execute('SELECT min_trade_size FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        conn.close()
+    except Exception:
+        row = None
+    min_trade_usdc = float(row[0]) if row and row[0] is not None else 1.0
+    min_spend_sol  = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
+    gas_estimate   = 0.005  # matches _GAS_MIN used by the trading loop
+    required       = round(min_spend_sol + gas_estimate, 4)
+    try:
+        with _use_key(enc_blob, wallet) as _pk:
+            from solders.keypair import Keypair as _KP_bal
+            trading_wallet = str(_KP_bal.from_base58_string(_pk).pubkey())
+    except Exception:
+        return None, None  # key errors are surfaced by the loop itself; don't double-block here
+    us_sol = _get_user_sol(trading_wallet)
+    if us_sol < required:
+        return (f'Insufficient SOL balance to trade — trading wallet has {us_sol:.4f} SOL, '
+                f'need at least {required:.4f} SOL (covers min. trade + network fee). '
+                f'Deposit at least {required:.4f} SOL to {trading_wallet}.'), trading_wallet
+    return None, trading_wallet
+
 @app.route('/api/trader/start', methods=['POST'])
 @rate_limit(5, 60)
 def start_trader():
@@ -8948,6 +8975,9 @@ def start_trader():
         return jsonify({'ok': False, 'msg': 'Internal error — please try again'}), 500
     if not kr or not kr[0]:
         return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    _bal_msg, _bal_wallet = _insufficient_trade_balance(wallet, kr[0])
+    if _bal_msg:
+        return jsonify({'ok': False, 'low_balance': True, 'trading_wallet': _bal_wallet, 'msg': _bal_msg}), 400
     if _sec_check_state.get('trading_paused'):
         return jsonify({'ok': False,
                         'msg': 'Trading suspended — security check failure. Contact admin to resume.'}), 503
@@ -8992,6 +9022,9 @@ def bot_start():
         return jsonify({'ok': False, 'msg': 'Internal error'}), 500
     if not kr or not kr[0]:
         return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+    _bal_msg, _bal_wallet = _insufficient_trade_balance(wallet, kr[0])
+    if _bal_msg:
+        return jsonify({'ok': False, 'low_balance': True, 'trading_wallet': _bal_wallet, 'msg': _bal_msg}), 400
     if _sec_check_state.get('trading_paused'):
         return jsonify({'ok': False, 'msg': 'Trading suspended — security check failure'}), 503
     with _trader_lock:
