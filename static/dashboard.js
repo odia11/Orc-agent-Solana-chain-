@@ -313,7 +313,17 @@ var _b58enc=(function(){
   };
 })();
 
+var _walletSignPromise = null;
 async function _connectWalletSigned(provider, address){
+  if (_walletSignPromise) return _walletSignPromise;
+  _walletSignPromise = _connectWalletSignedInner(provider, address);
+  try {
+    return await _walletSignPromise;
+  } finally {
+    _walletSignPromise = null;
+  }
+}
+async function _connectWalletSignedInner(provider, address){
   async function _attempt(){
     // 1. Fetch nonce
     var nr = await fetch('/api/auth/nonce').then(function(r){return r.json();}).catch(function(){return null;});
