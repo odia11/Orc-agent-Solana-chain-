@@ -1,7 +1,7 @@
 function _pushNotif(title, body){
   if(!document.hidden) return;
   if(Notification.permission !== 'granted') return;
-  try{ new Notification(title, {body, icon:'/favicon.ico'}); }catch(e){}
+  try{ new Notification(title, {body, icon:'/favicon.ico?v=2'}); }catch(e){}
 }
 
 function _setNotifBadge(n){
