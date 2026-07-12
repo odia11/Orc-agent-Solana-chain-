@@ -2357,6 +2357,15 @@ def _check_auto_verify(user_id):
             "AND timestamp >= datetime('now','-24 hours')",
             (user_id,)
         ).fetchone()[0]
+        if total >= 5.0:
+            conn.execute('UPDATE users SET is_verified=1 WHERE id=?', (user_id,))
+            conn.commit()
+            conn.execute(
+                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                (user_id, 'system', "You've been automatically verified for earning 5+ SOL profit in 24h! 🎉", '/profile')
+            )
+            conn.commit()
+            _send_push_notification(user_id, "You're verified! ✓", "You earned 5+ SOL profit in 24h and got the verified badge.", '/profile')
         conn.close()
     except Exception as e:
         print(f'[auto_verify] check failed: {e}', flush=True)
