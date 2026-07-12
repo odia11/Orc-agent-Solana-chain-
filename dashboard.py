@@ -2343,6 +2343,18 @@ def _calculate_badges(wallet: str) -> list:
     return badges
 
 
+def _check_auto_verify(user_id):
+    if not user_id:
+        return
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT is_verified FROM users WHERE id=?', (user_id,)).fetchone()
+        if not row or row[0]:
+            conn.close()
+            return
+    except Exception as e:
+        print(f'[auto_verify] check failed: {e}', flush=True)
+
 def _recalculate_badges(wallet: str) -> None:
     badges = _calculate_badges(wallet)
     try:
