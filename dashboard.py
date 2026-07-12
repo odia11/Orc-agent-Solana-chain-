@@ -2248,6 +2248,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         print(f'[trade_record] DB write failed: {e}', flush=True)
     if wallet:
         _recalculate_badges(wallet)
+    _check_auto_verify(user_id)
     if wallet and abs(pnl_pct) >= 20:
         _xrow = sqlite3.connect(DB_FILE).execute(
             'SELECT share_on_big_trade FROM x_connections WHERE wallet_address=?',
