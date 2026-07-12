@@ -2352,6 +2352,12 @@ def _check_auto_verify(user_id):
         if not row or row[0]:
             conn.close()
             return
+        total = conn.execute(
+            "SELECT COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND exit_price IS NOT NULL "
+            "AND timestamp >= datetime('now','-24 hours')",
+            (user_id,)
+        ).fetchone()[0]
+        conn.close()
     except Exception as e:
         print(f'[auto_verify] check failed: {e}', flush=True)
 
