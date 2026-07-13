@@ -6620,6 +6620,9 @@ document.addEventListener('click',function(ev){
   if(_fcActiveMenuId && !ev.target.closest('.fc-menu-wrap')) _fcMenuClose();
 },true);
 
+/* ── Feed post reply icon ── */
+var _REPLY_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>';
+
 /* ── Feed post share menu ── */
 var _SHARE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>';
 var _fcHasNativeShare=(typeof navigator!=='undefined' && typeof navigator.share==='function');
@@ -7665,7 +7668,7 @@ function _renderFeedCard(e){
     +'</div>'
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
-    +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
+    +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">'+_REPLY_ICON_SVG+'<span class="fc-reply-label">Reply</span><span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" '
       +'onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')" '
