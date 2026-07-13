@@ -7332,11 +7332,6 @@ function renderHomeFeed(){
     el.innerHTML='<p style="color:#565d68;padding:20px">No posts yet</p>';
     return;
   }
-  /* build set of mints the current user already holds */
-  window._feedMyMints = new Set();
-  _homeFeedData.forEach(function(i){
-    if(i.type==='open' && i.user_id===_myProfileId && i.token_address) window._feedMyMints.add(i.token_address);
-  });
   var items = _homeFeedData;
   if(_homeFeedFilter === 'live' || _homeFeedFilter === 'livetrades') items = items.filter(function(i){ return i.type==='trade'||i.type==='open'; });
   if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
@@ -7612,18 +7607,6 @@ function _renderFeedCard(e){
     }
   }
 
-  /* ── copy button ── */
-  var copyHtml;
-  if(isTrade && e.token_address){
-    var alreadyMine = window._feedMyMints && window._feedMyMints.has(e.token_address);
-    var safeAddr = e.token_address.replace(/['"\\]/g,'');
-    copyHtml = alreadyMine
-      ? '<button class="fc-action copy" disabled>⧉ In trade</button>'
-      : '<button class="fc-action copy" id="cpbtn-'+esc(safePostId)+'" onclick="_feedCopyTrade(this,\''+safeAddr+'\',' +(e.entry_price||0)+')">⧉ Copy</button>';
-  } else {
-    copyHtml = '<button class="fc-action copy" onclick="event.stopPropagation()">⧉ Copy</button>';
-  }
-
   var _profileHref = '/profile/'+encodeURIComponent(e.username||e.wallet||'');
   var _aProf = '<a href="'+_profileHref+'" onclick="event.stopPropagation()" style="text-decoration:none;color:inherit;">';
 
@@ -7669,7 +7652,6 @@ function _renderFeedCard(e){
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
     +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">'+_REPLY_ICON_SVG+'<span class="fc-reply-label">Reply</span><span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
-    +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" '
       +'onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')" '
       +'onmousedown="_fcLikePressStart(\''+esc(safePostId)+'\')" onmouseup="_fcLikePressEnd()" onmouseleave="_fcLikePressEnd()" '
@@ -7709,37 +7691,6 @@ function _renderFeedCard(e){
 function _homeCopyTrade(uid, username){
   if(typeof _tvCopyTrade==='function') _tvCopyTrade(uid, username);
   else if(typeof openProfileCard==='function') openProfileCard(uid);
-}
-
-function _feedCopyTrade(btn, tokenAddr, entryPrice){
-  if(!btn || btn.disabled) return;
-  btn.disabled = true;
-  btn.textContent = '⏳ Copying…';
-  fetch('/api/trades/copy-from-message', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({token_address: tokenAddr, entry_price: entryPrice, amount_sol: 0.1})
-  }).then(function(r){ return r.json(); }).then(function(d){
-    if(d.ok){
-      btn.textContent = '✓ Copied!';
-      btn.classList.add('copied');
-      if(window._feedMyMints) window._feedMyMints.add(tokenAddr);
-    } else {
-      btn.disabled = false;
-      btn.textContent = '⚡ Copy Trade';
-      var msg = d.msg || 'Copy failed';
-      /* show brief inline error */
-      var err = document.createElement('span');
-      err.style.cssText = 'font-size:11px;color:var(--red);margin-left:8px';
-      err.textContent = msg;
-      btn.parentNode.appendChild(err);
-      setTimeout(function(){ if(err.parentNode) err.parentNode.removeChild(err); }, 3500);
-    }
-  }).catch(function(e){
-    btn.disabled = false;
-    btn.textContent = '⚡ Copy Trade';
-    console.error('[copy-trade]', e);
-  });
 }
 
 function _shareToX(event, postId){
