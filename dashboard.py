@@ -11527,6 +11527,9 @@ def admin_role_remove():
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute('DELETE FROM admin_roles WHERE wallet_address=?', (target,))
+        # get_user_role() falls back to users.role when no admin_roles row exists —
+        # reset it too, otherwise the stale value keeps the old role in effect.
+        conn.execute("UPDATE users SET role='user' WHERE wallet_address=?", (target,))
         conn.commit()
         print(f'[admin] role removed {target[:8]}… by {wallet[:8]}…', flush=True)
         return jsonify({'ok': True})
