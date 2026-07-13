@@ -99,6 +99,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
 /* column layouts */
 .col-users{grid-template-columns:minmax(0,2fr) 90px 70px 90px 90px 100px 130px}
+.usr-actions{display:flex;gap:5px;flex-wrap:wrap}
 .col-trades{grid-template-columns:100px minmax(0,1.4fr) 90px 80px 90px 80px}
 .col-revenue{grid-template-columns:100px minmax(0,1.4fr) 90px 80px 90px 80px 70px}
 .col-system{grid-template-columns:minmax(0,1.4fr) 110px 110px}
@@ -245,6 +246,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
   /* tables scroll */
   .tbl{min-width:520px}
+
+  /* users table: narrower columns + stacked actions so Ban/Close All/Verify
+     stay fully visible and tappable instead of being cut off on the right */
+  .col-users{grid-template-columns:minmax(0,1.3fr) 60px 50px 40px 40px 62px 88px}
+  .usr-actions{flex-direction:column;align-items:stretch;gap:4px}
+  .usr-actions .btn{width:100%;padding:7px 6px;font-size:11px;min-height:34px}
 
   /* settings inputs full width */
   .stg-input-wrap{width:100%}
@@ -1005,7 +1012,7 @@ function renderUsers() {
       '<div class="mono">' + (u.positions ?? 0) + '</div>' +
       '<div class="mono">' + (u.total_trades ?? 0) + '</div>' +
       '<div class="mono ' + pnlCls + '">' + _fmt(u.pnl_today, 4) + '</div>' +
-      '<div style="display:flex;gap:5px;flex-wrap:wrap">' +
+      '<div class="usr-actions">' +
         '<button class="btn btn-danger" onclick="banUserWallet(\'' + wf + '\',\'usr-row-' + i + '\')" title="Delete user account">Ban</button>' +
         (u.trading
           ? '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'pause\')">Pause</button>'
