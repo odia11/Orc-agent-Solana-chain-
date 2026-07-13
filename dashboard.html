@@ -471,6 +471,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-action.copied{color:#f7b955!important;cursor:default}
 .fc-reply-btn,.fc-share-btn{padding:4px 6px;margin:-4px -6px;border-radius:6px;transition:color .15s,background-color .15s}
 .fc-reply-btn:hover,.fc-reply-btn:active,.fc-share-btn:hover,.fc-share-btn:active{color:#f7b955;background:rgba(247,185,85,.12)}
+.fc-share-wrap{position:relative;display:inline-flex;align-items:center}
+.fc-share-dd{position:absolute;bottom:calc(100% + 8px);right:0;background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:170px;box-shadow:0 8px 24px rgba(0,0,0,.65);z-index:100}
+.fc-share-item{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 12px;font-size:13px;color:#c7ccd4;cursor:pointer;border-radius:6px;font-family:'Geist',system-ui,sans-serif;transition:background .12s,color .12s;white-space:nowrap}
+.fc-share-item:hover{background:rgba(247,185,85,.1);color:#f7b955}
 .fc-react-wrap{position:relative;display:inline-flex;align-items:center}
 .fc-react-palette{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:6px 8px;display:none;gap:2px;z-index:200;box-shadow:0 4px 20px rgba(0,0,0,.55);flex-wrap:wrap;max-width:min(240px,90vw)}
 .fc-react-palette button{background:none;border:none;cursor:pointer;font-size:20px;padding:4px 5px;border-radius:7px;transition:background .1s;line-height:1}

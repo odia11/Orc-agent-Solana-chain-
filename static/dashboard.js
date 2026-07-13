@@ -6620,6 +6620,55 @@ document.addEventListener('click',function(ev){
   if(_fcActiveMenuId && !ev.target.closest('.fc-menu-wrap')) _fcMenuClose();
 },true);
 
+/* ── Feed post share menu ── */
+var _SHARE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>';
+var _fcHasNativeShare=(typeof navigator!=='undefined' && typeof navigator.share==='function');
+var _fcActiveShareId=null;
+function _fcShareToggle(postId){
+  var dd=document.getElementById('fc-share-dd-'+postId);
+  if(!dd) return;
+  var closing=(_fcActiveShareId===postId && dd.style.display!=='none');
+  _fcShareClose();
+  if(!closing){ dd.style.display='block'; _fcActiveShareId=postId; }
+}
+function _fcShareClose(){
+  if(_fcActiveShareId){
+    var dd=document.getElementById('fc-share-dd-'+_fcActiveShareId);
+    if(dd) dd.style.display='none';
+    _fcActiveShareId=null;
+  }
+}
+document.addEventListener('click',function(ev){
+  if(_fcActiveShareId && !ev.target.closest('.fc-share-wrap')) _fcShareClose();
+},true);
+function _fcPostLinkUrl(postId){
+  return location.origin+location.pathname+'?post='+encodeURIComponent(postId);
+}
+function _fcCopyPostLink(btn,postId){
+  var url=_fcPostLinkUrl(postId);
+  var done=function(){
+    if(btn) btn.textContent='✓ Link copied!';
+    setTimeout(function(){ _fcShareClose(); if(btn) btn.textContent='Copy link to post'; },1200);
+  };
+  var fallback=function(){
+    var ta=document.createElement('textarea');
+    ta.value=url; ta.style.cssText='position:fixed;opacity:0;pointer-events:none';
+    document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); }catch(_){}
+    document.body.removeChild(ta);
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done).catch(function(){ fallback(); done(); });
+  } else {
+    fallback(); done();
+  }
+}
+function _fcShareNative(postId){
+  _fcShareClose();
+  if(!_fcHasNativeShare) return;
+  navigator.share({url:_fcPostLinkUrl(postId)}).catch(function(){});
+}
+
 function _fcMenuDelete(id,type){
   _fcMenuClose();
   _fcPendingDelete={id:id,type:type||'text'};
@@ -7623,7 +7672,14 @@ function _renderFeedCard(e){
     +'<button class="fc-action fc-react-btn" onclick="_feedReactOpen(event,\''+esc(safePostId)+'\')" title="React">+</button>'
     +'<div class="fc-react-palette" id="rpal-'+esc(safePostId)+'"></div>'
     +'</div>'
-    +'<button class="fc-action fc-share-btn" onclick="_shareToX(event,\''+esc(safePostId)+'\')">↗</button>'
+    +'<div class="fc-share-wrap">'
+    +'<button class="fc-action fc-share-btn" onclick="event.stopPropagation();_fcShareToggle(\''+esc(safePostId)+'\')" title="Share">'+_SHARE_ICON_SVG+'</button>'
+    +'<div class="fc-share-dd" id="fc-share-dd-'+esc(safePostId)+'" style="display:none">'
+      +'<button class="fc-share-item" id="fc-share-copy-'+esc(safePostId)+'" onclick="event.stopPropagation();_fcCopyPostLink(this,\''+esc(safePostId)+'\')">Copy link to post</button>'
+      +'<button class="fc-share-item" onclick="event.stopPropagation();_shareToX(event,\''+esc(safePostId)+'\')">Share to X</button>'
+      +(_fcHasNativeShare ? '<button class="fc-share-item" onclick="event.stopPropagation();_fcShareNative(\''+esc(safePostId)+'\')">Share via…</button>' : '')
+    +'</div>'
+    +'</div>'
     +'</div>'
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
