@@ -6083,6 +6083,31 @@ def get_feed_likes(post_id):
         conn.close()
     return jsonify({'ok': True, 'count': int(count), 'liked': liked})
 
+@app.route('/api/feed/likes/<path:post_id>/users', methods=['GET'])
+@rate_limit(60, 60)
+def get_feed_like_users(post_id):
+    """Who liked this post — for the 'liked by' list. Most recent like first."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            '''SELECT u.id, u.wallet_address, u.username, u.avatar_url, u.is_verified
+               FROM post_likes pl JOIN users u ON u.id = pl.user_id
+               WHERE pl.post_id=?
+               ORDER BY pl.created_at DESC
+               LIMIT 200''',
+            (post_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    users = [{
+        'user_id':     r[0],
+        'wallet':      r[1],
+        'username':    r[2] or '',
+        'avatar_url':  r[3] or '',
+        'verified':    bool(r[4]),
+    } for r in rows]
+    return jsonify({'ok': True, 'users': users, 'count': len(users)})
+
 _REACTION_EMOJIS = frozenset({'👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'})
 
 @app.route('/api/feed/react/<path:post_id>', methods=['POST'])

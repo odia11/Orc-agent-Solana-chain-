@@ -7667,7 +7667,13 @@ function _renderFeedCard(e){
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
     +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
     +copyHtml
-    +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">'+esc(String(e.like_count||0))+'</span></button>'
+    +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" '
+      +'onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')" '
+      +'onmousedown="_fcLikePressStart(\''+esc(safePostId)+'\')" onmouseup="_fcLikePressEnd()" onmouseleave="_fcLikePressEnd()" '
+      +'ontouchstart="_fcLikePressStart(\''+esc(safePostId)+'\')" ontouchend="_fcLikePressEnd()" ontouchmove="_fcLikePressCancel()">'
+      +'<span class="fc-heart-ico">♡</span>'
+      +'<span class="fc-like-count" onclick="event.stopPropagation();_fcOpenLikedBy(\''+esc(safePostId)+'\')" title="See who liked this">'+esc(String(e.like_count||0))+'</span>'
+    +'</button>'
     +'<div class="fc-react-wrap">'
     +'<button class="fc-action fc-react-btn" onclick="_feedReactOpen(event,\''+esc(safePostId)+'\')" title="React">+</button>'
     +'<div class="fc-react-palette" id="rpal-'+esc(safePostId)+'"></div>'
@@ -7745,26 +7751,86 @@ function _shareToX(event, postId){
 }
 function _feedToggleLike(btn, postId){
   if(!btn) return;
+  if(_fcLikePressFired){ _fcLikePressFired=false; return; } /* long-press already opened the liked-by list */
+  var heartEl = btn.querySelector('.fc-heart-ico');
   var countEl = btn.querySelector('.fc-like-count');
   var liked = btn.classList.contains('liked');
-  /* optimistic update */
   var cur = parseInt(countEl ? countEl.textContent : '0', 10) || 0;
-  if(liked){ btn.classList.remove('liked'); btn.innerHTML = '♡ <span class="fc-like-count">'+(Math.max(0,cur-1))+'</span>'; }
-  else      { btn.classList.add('liked');    btn.innerHTML = '❤ <span class="fc-like-count">'+(cur+1)+'</span>'; }
+  function setState(isLiked, count){
+    btn.classList.toggle('liked', isLiked);
+    if(heartEl) heartEl.textContent = isLiked ? '❤' : '♡';
+    if(countEl) countEl.textContent = count;
+  }
+  /* optimistic update + Instagram-style pop animation on the heart itself */
+  setState(!liked, liked ? Math.max(0,cur-1) : cur+1);
+  if(heartEl){
+    heartEl.classList.remove('fc-heart-pop');
+    void heartEl.offsetWidth; /* force reflow so the animation restarts on repeated clicks */
+    heartEl.classList.add('fc-heart-pop');
+  }
   fetch('/api/feed/like/'+encodeURIComponent(postId), {method:'POST'})
     .then(function(r){ return r.json(); }).then(function(d){
       if(!d.ok){
         console.error('[like] failed:', d.msg||'unknown error');
-        // revert optimistic update
-        if(liked){ btn.classList.add('liked');    btn.innerHTML = '❤ <span class="fc-like-count">'+cur+'</span>'; }
-        else      { btn.classList.remove('liked'); btn.innerHTML = '♡ <span class="fc-like-count">'+cur+'</span>'; }
+        setState(liked, cur); /* revert optimistic update */
         return;
       }
-      var newCountEl = btn.querySelector('.fc-like-count');
-      if(newCountEl) newCountEl.textContent = d.count;
-      if(!d.liked){ btn.classList.remove('liked'); btn.innerHTML = '♡ <span class="fc-like-count">'+d.count+'</span>'; }
-      else         { btn.classList.add('liked');    btn.innerHTML = '❤ <span class="fc-like-count">'+d.count+'</span>'; }
+      setState(d.liked, d.count);
     }).catch(function(e){ console.error('[like]', e); });
+}
+
+/* ── like button long-press → open "liked by" list (mirrors click-on-count) ── */
+var _fcLikePressTimer=null, _fcLikePressFired=false;
+function _fcLikePressStart(postId){
+  _fcLikePressFired=false;
+  clearTimeout(_fcLikePressTimer);
+  _fcLikePressTimer=setTimeout(function(){
+    _fcLikePressFired=true;
+    _fcOpenLikedBy(postId);
+  }, 500);
+}
+function _fcLikePressEnd(){ clearTimeout(_fcLikePressTimer); }
+function _fcLikePressCancel(){ clearTimeout(_fcLikePressTimer); _fcLikePressFired=false; }
+
+/* ── "Liked by" modal ── */
+function _fcOpenLikedBy(postId){
+  var modal=document.getElementById('liked-by-modal');
+  if(!modal) return;
+  modal.classList.add('open');
+  var listEl=document.getElementById('liked-by-list');
+  var countEl=document.getElementById('liked-by-count');
+  listEl.innerHTML='<div class="liked-by-empty">Loading…</div>';
+  countEl.textContent='';
+  fetch('/api/feed/likes/'+encodeURIComponent(postId)+'/users')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!d.ok || !d.users){ listEl.innerHTML='<div class="liked-by-empty">Could not load likes</div>'; return; }
+      countEl.textContent = d.count===1 ? '1 person' : d.count+' people';
+      if(!d.users.length){ listEl.innerHTML='<div class="liked-by-empty">No likes yet</div>'; return; }
+      listEl.innerHTML=d.users.map(_renderLikedByRow).join('');
+    })
+    .catch(function(){ listEl.innerHTML='<div class="liked-by-empty">Network error</div>'; });
+}
+function _fcCloseLikedBy(){
+  var modal=document.getElementById('liked-by-modal');
+  if(modal) modal.classList.remove('open');
+}
+function _renderLikedByRow(u){
+  var name=esc(u.username||u.wallet||'?');
+  var handle=u.username ? '@'+esc(u.username) : (u.wallet ? '@'+esc(u.wallet.slice(0,6)+'…') : '');
+  var initKey=u.username||u.wallet||'?';
+  var bg=typeof _lbAvatarColor==='function' ? _lbAvatarColor(initKey) : '#21252c';
+  var ini=esc(initKey[0].toUpperCase());
+  var avatarImg=u.avatar_url
+    ? '<img src="'+esc(u.avatar_url)+'" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
+    : '';
+  var verified=u.verified
+    ? ' <svg width="12" height="12" viewBox="0 0 24 24" style="vertical-align:-1px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="3" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '';
+  return '<a class="liked-by-item" href="'+('/profile/'+encodeURIComponent(u.username||u.wallet||''))+'" onclick="_fcCloseLikedBy()">'
+    +'<div class="liked-by-avatar" style="background:'+bg+'">'+ini+avatarImg+'</div>'
+    +'<div class="liked-by-text"><div class="liked-by-name">'+name+verified+'</div><div class="liked-by-handle">'+handle+'</div></div>'
+  +'</a>';
 }
 
 const _FEED_EMOJIS = ['👍','❤️','😂','🔥','💰','🚀','😢','😮'];

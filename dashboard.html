@@ -467,6 +467,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-action:hover{color:#eef1f5}
 .fc-action.liked{color:var(--red)!important}
 .fc-action.liked:hover{color:var(--red)!important}
+.fc-heart-ico{display:inline-block}
+@keyframes fc-heart-pop{0%{transform:scale(1)}30%{transform:scale(1.35)}55%{transform:scale(.92)}100%{transform:scale(1)}}
+.fc-heart-ico.fc-heart-pop{animation:fc-heart-pop .35s ease}
+.fc-like-count{cursor:pointer}
+.fc-like-count:hover{text-decoration:underline}
 .fc-action.copy{color:#f7b955!important}
 .fc-action.copied{color:#f7b955!important;cursor:default}
 .fc-reply-btn,.fc-share-btn{padding:4px 6px;margin:-4px -6px;border-radius:6px;transition:color .15s,background-color .15s}
@@ -910,6 +915,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .s-close:hover{color:var(--text)}
 .s-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
 .s-sub{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:18px}
+.liked-by-item{display:flex;align-items:center;gap:10px;padding:9px 6px;border-radius:8px;text-decoration:none;transition:background .12s}
+.liked-by-item:hover{background:#16191f}
+.liked-by-avatar{width:38px;height:38px;border-radius:50%;position:relative;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#0a0b0e;overflow:hidden}
+.liked-by-text{min-width:0}
+.liked-by-name,.liked-by-handle{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.liked-by-name{font-size:13.5px;font-weight:600;color:var(--text);line-height:1.3}
+.liked-by-handle{font-size:11.5px;color:var(--muted);line-height:1.3}
+.liked-by-empty{padding:30px 0;text-align:center;color:var(--muted);font-size:13px}
 .s-warn{background:rgba(118,118,118,.06);border:1px solid rgba(118,118,118,.25);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--yellow);margin-bottom:18px;display:flex;gap:8px;line-height:1.55}
 .s-field{margin-bottom:14px}
 .s-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;display:block;margin-bottom:5px}
@@ -4413,6 +4426,16 @@ if (window.__SESSION_WALLET) {
     <div id="lb-copy-msg" style="font-size:10px;color:var(--green);min-height:14px;margin-bottom:10px;letter-spacing:.04em"></div>
 
     <button onclick="closeLowBalanceModal()" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Close</button>
+  </div>
+</div>
+
+<!-- ── LIKED BY MODAL ── -->
+<div id="liked-by-modal" class="s-modal" onclick="if(event.target===this)_fcCloseLikedBy()">
+  <div class="s-card" style="max-width:380px;max-height:70vh;display:flex;flex-direction:column">
+    <button class="s-close" onclick="_fcCloseLikedBy()">✕</button>
+    <div class="s-title" style="margin-bottom:3px">❤ Liked by</div>
+    <div class="s-sub" id="liked-by-count">&nbsp;</div>
+    <div id="liked-by-list" style="overflow-y:auto;flex:1;margin:0 -8px;padding:0 8px"></div>
   </div>
 </div>
 
