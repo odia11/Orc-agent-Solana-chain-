@@ -7616,14 +7616,14 @@ function _renderFeedCard(e){
     +'</div>'
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
-    +'<button class="fc-action" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
+    +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">↩ <span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
     +copyHtml
     +'<button class="fc-action" id="lkbtn-'+esc(safePostId)+'" onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')">♡ <span class="fc-like-count">'+esc(String(e.like_count||0))+'</span></button>'
     +'<div class="fc-react-wrap">'
     +'<button class="fc-action fc-react-btn" onclick="_feedReactOpen(event,\''+esc(safePostId)+'\')" title="React">+</button>'
     +'<div class="fc-react-palette" id="rpal-'+esc(safePostId)+'"></div>'
     +'</div>'
-    +'<button class="fc-action" onclick="_shareToX(event,\''+esc(safePostId)+'\')">↗</button>'
+    +'<button class="fc-action fc-share-btn" onclick="_shareToX(event,\''+esc(safePostId)+'\')">↗</button>'
     +'</div>'
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
