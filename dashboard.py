@@ -1135,7 +1135,7 @@ def get_user_role(wallet: str) -> str:
 
 def _require_role(*allowed_roles):
     """Return a 403 response tuple if session wallet lacks a required role, else None."""
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
     if get_user_role(wallet) not in allowed_roles:
@@ -1489,6 +1489,16 @@ def get_or_create_user(wallet: str) -> int:
 def _current_wallet() -> str:
     """Returns the wallet address for the current session only.
     Never falls back to shared state — that would leak one user's identity to another."""
+    return session.get('wallet', '')
+
+def _authenticated_wallet() -> str:
+    """Like _current_wallet(), but returns '' for read-only sessions (connect-readonly
+    proves no key/signature ownership — session['readonly'] is set but was previously
+    never checked). Use this instead of session.get('wallet')/_current_wallet() anywhere
+    a role or owner check is about to be made, so pasting an address you don't own can't
+    be used to impersonate that wallet's role."""
+    if session.get('readonly'):
+        return ''
     return session.get('wallet', '')
 
 def _is_owner(wallet: str) -> bool:
@@ -3361,7 +3371,8 @@ def profile_view(wallet_address: str):
                     (user_id, me_row['id'])
                 ).fetchone())
         if user["wallet_address"] == ADMIN_WALLET:
-            viewer_role = get_user_role(session_wallet) if session_wallet else 'user'
+            _auth_wallet = _authenticated_wallet()
+            viewer_role = get_user_role(_auth_wallet) if _auth_wallet else 'user'
             can_view_sensitive = is_own or viewer_role in ('admin', 'moderator', 'analyst')
         else:
             can_view_sensitive = True
@@ -3639,7 +3650,7 @@ def api_badges(wallet_addr):
 @app.route('/api/copy-trade', methods=['POST'])
 @rate_limit(20, 60)
 def api_copy_trade_start():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     target = str((request.json or {}).get('target_wallet', '')).strip()
@@ -3659,7 +3670,7 @@ def api_copy_trade_start():
 @app.route('/api/copy-trade/stop', methods=['POST'])
 @rate_limit(20, 60)
 def api_copy_trade_stop():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -3675,7 +3686,7 @@ def api_copy_trade_stop():
 @csrf_exempt
 @rate_limit(20, 60)
 def api_copy_trade_toggle():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     body   = request.get_json(silent=True) or {}
@@ -4120,7 +4131,7 @@ def settings_page():
 
 @app.route('/admin')
 def admin_page():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet or get_user_role(wallet) == 'user':
         return redirect('/')
     conn = sqlite3.connect(DB_FILE)
@@ -4362,7 +4373,7 @@ def notifications_unread_count():
 @app.route('/api/notifications/mine/mark_read', methods=['POST'])
 @rate_limit(30, 60)
 def notifications_mark_read():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -4430,7 +4441,7 @@ def push_vapid_public_key():
 @csrf_exempt
 @rate_limit(10, 60)
 def push_subscribe():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     data = request.get_json(silent=True) or {}
@@ -4471,7 +4482,7 @@ def push_unsubscribe():
 @app.route('/api/notifications/mine/mark_read_batch', methods=['POST'])
 @rate_limit(30, 60)
 def notifications_mark_read_batch():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     ids = request.get_json(silent=True) or {}
@@ -4491,7 +4502,7 @@ def notifications_mark_read_batch():
 
 @app.route('/api/notifications/mine/mark_all_read', methods=['POST'])
 def notifications_mark_all_read():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -4647,7 +4658,7 @@ def login_password():
 @app.route('/api/set_password', methods=['POST'])
 @rate_limit(10, 60)
 def set_password():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'success': False, 'error': 'Login required'}), 401
     body     = request.json or {}
@@ -4722,7 +4733,7 @@ def webauthn_has_credential():
 def webauthn_register():
     # Registration requires an active session — user must already be logged in
     user_id = session.get('user_id')
-    wallet  = session.get('wallet') or ''
+    wallet  = _authenticated_wallet()
     if not user_id:
         return jsonify({'success': False, 'msg': 'Login required before setting up Face ID'}), 401
 
@@ -4908,7 +4919,7 @@ def get_settings():
 @rate_limit(10, 60)
 def save_settings():
     ip     = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
@@ -5032,7 +5043,7 @@ def settings_get():
 @csrf_exempt
 @rate_limit(20, 60)
 def settings_save():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not connected'}), 401
     data = request.get_json(silent=True) or {}
@@ -5085,7 +5096,7 @@ def settings_save():
 @rate_limit(5, 60)
 def wallet_set_key():
     ip = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Not connected'}), 401
@@ -5123,7 +5134,7 @@ def wallet_set_key():
 @rate_limit(3, 300)
 def wallet_reveal_key():
     ip = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Not connected'}), 401
@@ -5160,7 +5171,7 @@ def api_blacklist_get():
 @app.route('/api/blacklist/add', methods=['POST'])
 @rate_limit(10, 60)
 def api_blacklist_add():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     data   = request.get_json(silent=True) or {}
@@ -5181,7 +5192,7 @@ def api_blacklist_add():
 @app.route('/api/blacklist/remove', methods=['POST'])
 @rate_limit(10, 60)
 def api_blacklist_remove():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     data = request.get_json(silent=True) or {}
@@ -5211,7 +5222,7 @@ def get_username():
 @app.route('/api/username', methods=['POST'])
 @rate_limit(10, 60)
 def save_username():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
     username = str((request.json or {}).get('username', '')).strip()
@@ -5238,7 +5249,7 @@ def save_username():
 @app.route('/api/avatar', methods=['POST'])
 @rate_limit(10, 60)
 def save_avatar():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
     avatar_data = str((request.json or {}).get('avatar_data', '')).strip()
@@ -5391,7 +5402,7 @@ def wallet_activity():
 @csrf_exempt
 @rate_limit(3, 60)
 def wallet_send():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'Not logged in'}), 401
     data      = request.get_json(silent=True) or {}
@@ -5711,7 +5722,7 @@ def api_instant_trade():
     try:
         print(f'[instant-trade] session keys: {list(session.keys())}, wallet: {session.get("wallet")}', flush=True)
 
-        wallet = _current_wallet()
+        wallet = _authenticated_wallet()
         if not wallet:
             return jsonify({'error': 'not logged in', 'logged_in': False}), 401
 
@@ -5899,7 +5910,7 @@ def api_instant_trade():
 @app.route('/api/feed/post', methods=['POST'])
 @rate_limit(15, 60)
 def feed_post_create():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     body = request.json or {}
@@ -5959,7 +5970,7 @@ def feed_post_delete(post_id):
 @csrf_exempt
 @rate_limit(20, 60)
 def feed_post_edit(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     body = request.json or {}
@@ -6031,7 +6042,7 @@ def trade_delete(trade_id):
 @app.route('/api/feed/like/<path:post_id>', methods=['POST'])
 @rate_limit(60, 60)
 def toggle_feed_like(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -6077,7 +6088,7 @@ _REACTION_EMOJIS = frozenset({'👍', '❤️', '😂', '🔥', '💰', '🚀', 
 @app.route('/api/feed/react/<path:post_id>', methods=['POST'])
 @rate_limit(60, 60)
 def toggle_feed_reaction(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     data = request.get_json(silent=True) or {}
@@ -6180,7 +6191,7 @@ def _post_owner_uid(conn, post_id):
 @app.route('/api/feed/reply', methods=['POST'])
 @rate_limit(15, 60)
 def post_feed_reply():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     body = request.json or {}
@@ -6279,7 +6290,7 @@ def get_feed_replies(post_id):
 @app.route('/api/feed/reply/like/<int:reply_id>', methods=['POST'])
 @rate_limit(30, 60)
 def toggle_feed_reply_like(reply_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -6341,7 +6352,7 @@ def delete_feed_reply(reply_id):
 @app.route('/api/feed/share-to-x/<path:post_id>', methods=['POST'])
 @rate_limit(10, 60)
 def share_feed_to_x(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -6638,7 +6649,7 @@ def profile_user_trades(user_id: int):
 @app.route('/api/follow/<int:target_id>', methods=['POST'])
 @rate_limit(60, 60)
 def toggle_follow(target_id: int):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
 
@@ -6684,7 +6695,7 @@ def toggle_follow(target_id: int):
 @rate_limit(60, 60)
 def follow_toggle_by_wallet():
     """Wallet-address-based follow toggle used by traders.html."""
-    me_wallet = _current_wallet()
+    me_wallet = _authenticated_wallet()
     if not me_wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     body = request.get_json(silent=True) or {}
@@ -7047,7 +7058,7 @@ def x_callback():
 @app.route('/api/x/prefs', methods=['POST'])
 @rate_limit(20, 60)
 def x_prefs():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     data = request.get_json(silent=True) or {}
@@ -7070,7 +7081,7 @@ def x_prefs():
 @app.route('/api/x/disconnect', methods=['POST'])
 @rate_limit(10, 60)
 def x_disconnect():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -7085,7 +7096,7 @@ def x_disconnect():
 @app.route('/api/bio', methods=['POST'])
 @rate_limit(10, 60)
 def save_bio():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
     bio = str((request.json or {}).get('bio', '')).strip()
@@ -7366,7 +7377,7 @@ def api_token_info(mint_address):
 @app.route('/api/trade/buy', methods=['POST'])
 @rate_limit(10, 60)
 def api_trade_buy():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     data         = request.get_json(silent=True) or {}
@@ -7419,7 +7430,7 @@ def api_trade_buy():
 @app.route('/api/trade/sell', methods=['POST'])
 @rate_limit(10, 60)
 def api_trade_sell():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     data   = request.get_json(silent=True) or {}
@@ -7897,7 +7908,7 @@ def get_dm_history(peer_id):
 @app.route('/api/messages/upload-image', methods=['POST'])
 @rate_limit(10, 60)
 def upload_dm_image():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     f = request.files.get('image')
@@ -7926,7 +7937,7 @@ def upload_dm_image():
 @app.route('/api/messages/<int:peer_id>', methods=['POST'])
 @rate_limit(20, 60)
 def send_dm(peer_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     body = request.json or {}
@@ -7998,7 +8009,7 @@ def send_dm(peer_id):
 @app.route('/api/heartbeat', methods=['POST'])
 @rate_limit(6, 60)
 def api_heartbeat():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -8142,7 +8153,7 @@ def get_group_chat():
 @app.route('/api/chat', methods=['POST'])
 @rate_limit(15, 60)
 def post_group_chat():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     body = request.json or {}
@@ -8219,7 +8230,7 @@ def delete_group_chat(message_id):
 @app.route('/api/chat/upload-image', methods=['POST'])
 @rate_limit(10, 60)
 def upload_chat_image():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     f = request.files.get('image')
@@ -8282,7 +8293,7 @@ def api_open_trades():
 @app.route('/api/messages/<int:peer_id>/share-trade', methods=['POST'])
 @rate_limit(10, 60)
 def share_trade_dm(peer_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     token_address = str((request.json or {}).get('token_address', '')).strip()
@@ -8413,7 +8424,7 @@ def get_wallet_thread(wallet):
 @app.route('/api/messages/<wallet>', methods=['POST'])
 @rate_limit(20, 60)
 def send_wallet_message(wallet):
-    me = _current_wallet()
+    me = _authenticated_wallet()
     if not me:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     if not is_valid_solana_address(wallet):
@@ -8448,7 +8459,7 @@ def send_wallet_message(wallet):
 @rate_limit(5, 60)
 def copy_trade_from_message():
     ip = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
@@ -8545,7 +8556,7 @@ def get_profile_comments(profile_uid):
 @app.route('/api/comments/<int:profile_uid>', methods=['POST'])
 @rate_limit(10, 60)
 def post_profile_comment(profile_uid):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     text = _sanitize(str((request.json or {}).get('message', '')))
@@ -8716,7 +8727,7 @@ def api_pump_scanner():
 @rate_limit(10, 60)
 def api_pump_scanner_buy():
     ip     = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
@@ -8793,7 +8804,7 @@ def api_pump_scanner_buy():
 @rate_limit(10, 60)
 def api_manual_buy():
     ip     = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
@@ -8873,7 +8884,7 @@ def api_manual_buy():
 @app.route('/api/manual_sell', methods=['POST'])
 @rate_limit(10, 60)
 def api_manual_sell():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     mint = str((request.json or {}).get('mint_address', '')).strip()
@@ -9159,7 +9170,7 @@ def bot_positions():
 @app.route('/api/sell', methods=['POST'])
 @rate_limit(10, 60)
 def manual_sell():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     mint = str((request.json or {}).get('mint', '')).strip()
@@ -9218,7 +9229,7 @@ def manual_sell():
 @rate_limit(10, 60)
 def api_withdraw():
     ip     = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'error': 'Connect a wallet first'}), 401
@@ -9522,7 +9533,7 @@ def api_get_tokens():
 @app.route('/api/claim_sol', methods=['POST'])
 @rate_limit(3, 60)
 def api_claim_sol():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
 
@@ -9824,7 +9835,7 @@ def api_burn_tokens():
     Body: {"accounts": ["<token_account_address>", ...]}  (max 25)
     Returns: {"success": bool, "recovered_sol": float, "failed": ["<addr>", ...], "txs": [...]}
     """
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'success': False, 'error': 'Not authenticated'}), 401
 
@@ -11295,7 +11306,7 @@ def admin_settings_save():
 @app.route('/api/admin/features/toggle', methods=['POST'])
 @csrf_exempt
 def admin_features_toggle():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
     data    = request.get_json(silent=True) or {}
@@ -11313,7 +11324,7 @@ def admin_features_toggle():
 @app.route('/api/admin/whoami')
 @csrf_exempt
 def admin_whoami():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
     role = get_user_role(wallet)
@@ -11325,7 +11336,7 @@ def admin_whoami():
 @app.route('/api/admin/roles', methods=['GET'])
 @csrf_exempt
 def admin_roles_list():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
     conn = sqlite3.connect(DB_FILE)
@@ -11477,7 +11488,7 @@ def invite_respond():
 @app.route('/api/admin/role/change', methods=['POST'])
 @csrf_exempt
 def admin_role_change():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
     data        = request.get_json(silent=True) or {}
@@ -11504,7 +11515,7 @@ def admin_role_change():
 @app.route('/api/admin/role/remove', methods=['POST'])
 @csrf_exempt
 def admin_role_remove():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet or not hmac.compare_digest(wallet.encode(), ADMIN_WALLET.encode()):
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
     data   = request.get_json(silent=True) or {}
