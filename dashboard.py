@@ -3715,6 +3715,13 @@ def api_copy_trade_toggle():
                     return jsonify({'ok': False, 'msg': 'Amount must be 0.01–100 SOL'}), 400
             except (TypeError, ValueError):
                 return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+            key_row = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+            if not key_row or not key_row[0]:
+                return jsonify({'ok': False, 'msg': 'No trading key saved — add it in Settings first'}), 400
+            _bal_msg, _bal_wallet, _bal_sol, _bal_required = _insufficient_trade_balance(wallet, key_row[0])
+            if _bal_msg:
+                return jsonify({'ok': False, 'low_balance': True, 'trading_wallet': _bal_wallet,
+                                'current_sol': _bal_sol, 'required_sol': _bal_required, 'msg': _bal_msg}), 400
             conn.execute('UPDATE users SET copy_source=?, copy_amount=? WHERE wallet_address=?',
                          (target, amount_sol, wallet))
             new_active = 1
