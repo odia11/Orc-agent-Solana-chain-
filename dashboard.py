@@ -1055,6 +1055,7 @@ def run_migrations():
         "ALTER TABLE direct_messages ADD COLUMN edited_at TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN banner_url TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -3246,7 +3247,7 @@ def profile():
     conn.row_factory = sqlite3.Row
     try:
         user = conn.execute(
-            'SELECT id, username, avatar_url, bio, created_at, is_verified FROM users WHERE wallet_address=?',
+            'SELECT id, username, avatar_url, banner_url, bio, created_at, is_verified FROM users WHERE wallet_address=?',
             (wallet,)
         ).fetchone()
         if not user:
@@ -3292,6 +3293,7 @@ def profile():
             display_name=user['username'] or wallet_short,
             username=user['username'],
             avatar_url=user['avatar_url'],
+            banner_url=user['banner_url'],
             bio=user['bio'],
             created_at=(user['created_at'] or '')[:10],
             total_trades=total,
@@ -3305,6 +3307,7 @@ def profile():
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=True,
+            csrf_token=_get_csrf_token(),
         )
     finally:
         conn.close()
@@ -3319,7 +3322,7 @@ def profile_view(wallet_address: str):
     try:
         col = 'wallet_address' if is_wallet else 'username'
         user = conn.execute(
-            f'SELECT id, username, avatar_url, bio, created_at, wallet_address, is_verified FROM users WHERE {col}=?',
+            f'SELECT id, username, avatar_url, banner_url, bio, created_at, wallet_address, is_verified FROM users WHERE {col}=?',
             (wallet_address,)
         ).fetchone()
         if not user:
@@ -3389,6 +3392,7 @@ def profile_view(wallet_address: str):
             display_name=user['username'] or wallet_short,
             username=user['username'],
             avatar_url=user['avatar_url'],
+            banner_url=user['banner_url'],
             bio=user['bio'],
             created_at=(user['created_at'] or '')[:10],
             total_trades=total,
@@ -3404,6 +3408,7 @@ def profile_view(wallet_address: str):
             is_own_profile=is_own,
             is_following=is_following,
             follows_me=follows_me,
+            csrf_token=_get_csrf_token(),
         )
     finally:
         conn.close()
@@ -5282,6 +5287,34 @@ def save_avatar():
     finally:
         conn.close()
     return jsonify({'ok': True, 'avatar_url': avatar_data})
+
+# ── PROFILE BANNER ──
+@app.route('/api/banner', methods=['POST'])
+@rate_limit(10, 60)
+def save_banner():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    banner_data = str((request.json or {}).get('banner_data', '')).strip()
+    if banner_data:
+        _ALLOWED_PREFIXES = (
+            'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+            'data:image/png;base64,',  'data:image/gif;base64,',
+            'data:image/webp;base64,',
+        )
+        if not any(banner_data.startswith(p) for p in _ALLOWED_PREFIXES):
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, GIF, or WebP images are accepted'})
+        b64_part = banner_data.split(',', 1)[1] if ',' in banner_data else ''
+        if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
+            return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET banner_url=? WHERE wallet_address=?',
+                     (banner_data if banner_data else None, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'banner_url': banner_data})
 
 # ── LEADERBOARD ──
 @app.route('/api/leaderboard', methods=['GET'])

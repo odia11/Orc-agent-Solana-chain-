@@ -60,10 +60,23 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .pf-main{flex:1;overflow-y:auto;background:#0a0b0e;min-width:0}
 
 /* ── COVER ── */
-.pf-cover{height:120px;background:linear-gradient(180deg,#101216 0%,#0a0b0e 100%);position:relative;flex-shrink:0}
+.pf-cover{height:120px;background:linear-gradient(180deg,#101216 0%,#0a0b0e 100%);position:relative;flex-shrink:0;overflow:hidden}
+.pf-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
+.pf-cover-edit-wrap{position:absolute;top:10px;right:12px;z-index:2}
+.pf-cover-edit-btn{background:rgba(10,11,14,.55);backdrop-filter:blur(4px);color:#eef1f5;border:1px solid rgba(255,255,255,.15);border-radius:9px;padding:7px 10px;font-size:12px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;transition:background .15s;font-family:'Geist',system-ui,sans-serif}
+.pf-cover-edit-btn:hover{background:rgba(10,11,14,.8)}
+.pf-cover-menu{display:none;position:absolute;top:36px;right:0;background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.pf-cover-menu.open{display:block}
+.pf-cover-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:#eef1f5;font-size:13px;padding:8px 10px;border-radius:7px;cursor:pointer;font-family:inherit}
+.pf-cover-menu button:hover{background:#16191f}
+.pf-cover-menu button.danger{color:#ff4d6a}
+.pf-cover-msg{position:absolute;bottom:8px;right:12px;z-index:2;font-size:11px;color:#8a919c;background:rgba(10,11,14,.7);padding:4px 9px;border-radius:7px}
+.pf-cover-msg:empty{display:none}
+.pf-cover-msg.ok{color:#3ad29b}
+.pf-cover-msg.err{color:#ff4d6a}
 
 /* ── AVATAR (overlaps cover bottom) ── */
-.pf-avatar-wrap{position:absolute;bottom:-40px;left:28px}
+.pf-avatar-wrap{position:absolute;bottom:-40px;left:28px;z-index:1}
 .pf-avatar-img{width:80px;height:80px;border-radius:50%;object-fit:cover;border:3px solid #0a0b0e;display:block}
 .pf-avatar-fallback{width:80px;height:80px;border-radius:50%;background:#16191f;border:3px solid #0a0b0e;display:flex;align-items:center;justify-content:center;font-size:26px;font-weight:700;color:#f7b955;font-family:'JetBrains Mono',monospace}
 
@@ -322,6 +335,9 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
     <!-- COVER -->
     <div class="pf-cover">
+      <img class="pf-cover-img" id="pf-cover-img" src="{{ banner_url or '' }}" alt="banner"
+           style="{{ '' if banner_url else 'display:none' }}"
+           onerror="this.style.display='none'">
       <div class="pf-avatar-wrap">
         {% if avatar_url %}
         <img class="pf-avatar-img" src="{{ avatar_url }}" alt="avatar" style="cursor:pointer"
@@ -332,6 +348,20 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         <div class="pf-avatar-fallback">{{ (username or wallet_short)[:2]|upper }}</div>
         {% endif %}
       </div>
+      {% if is_own_profile|default(false) %}
+      <input type="file" id="pf-banner-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onBannerFile(this)">
+      <div class="pf-cover-edit-wrap">
+        <button class="pf-cover-edit-btn" onclick="_toggleBannerMenu(event)" title="Edit banner">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+          Banner
+        </button>
+        <div class="pf-cover-menu" id="pf-cover-menu">
+          <button id="pf-change-banner-btn" onclick="document.getElementById('pf-banner-input').click();document.getElementById('pf-cover-menu').classList.remove('open')">{{ 'Change banner' if banner_url else 'Upload banner' }}</button>
+          <button onclick="_removeBanner()" id="pf-remove-banner-btn" class="danger" style="{{ '' if banner_url else 'display:none' }}">Remove banner</button>
+        </div>
+      </div>
+      <span class="pf-cover-msg" id="pf-cover-msg"></span>
+      {% endif %}
     </div>
 
     <!-- IDENTITY -->
@@ -605,6 +635,8 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 </div>
 
 <script>
+var _csrf = {{ csrf_token|tojson }};
+
 function copyWallet() {
   var addr = document.getElementById('pf-addr').textContent.trim();
   navigator.clipboard.writeText(addr).then(function() {
@@ -725,6 +757,99 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeFoll
 function _showAvatarLightbox(url){if(!url)return;document.getElementById('avatar-lightbox-img').src=url;document.getElementById('avatar-lightbox').classList.add('open');}
 function _closeAvatarLightbox(){document.getElementById('avatar-lightbox').classList.remove('open');document.getElementById('avatar-lightbox-img').src='';}
 document.addEventListener('keydown',function(e){if(e.key==='Escape')_closeAvatarLightbox();});
+
+/* ── PROFILE BANNER ── */
+function _toggleBannerMenu(e){
+  e.stopPropagation();
+  document.getElementById('pf-cover-menu').classList.toggle('open');
+}
+document.addEventListener('click', function(e){
+  var menu = document.getElementById('pf-cover-menu');
+  if (menu && menu.classList.contains('open') && !e.target.closest('.pf-cover-edit-wrap')) {
+    menu.classList.remove('open');
+  }
+});
+
+function _bannerMsg(text, cls){
+  var el = document.getElementById('pf-cover-msg');
+  if (!el) return;
+  el.className = 'pf-cover-msg' + (cls ? ' ' + cls : '');
+  el.textContent = text;
+  if (cls === 'ok') setTimeout(function(){ el.textContent=''; el.className='pf-cover-msg'; }, 2500);
+}
+
+function _onBannerFile(input){
+  var file = input.files && input.files[0];
+  if (!file) return;
+  document.getElementById('pf-cover-menu').classList.remove('open');
+  var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
+  if (allowed.indexOf(file.type) === -1) {
+    _bannerMsg('✗ Only JPEG, PNG, GIF, or WebP images are accepted', 'err');
+    input.value = '';
+    return;
+  }
+  if (file.size > 2*1024*1024) {
+    _bannerMsg('✗ Image too large (max 2 MB)', 'err');
+    input.value = '';
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(e){ _uploadBanner(e.target.result); };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+
+async function _uploadBanner(dataUrl){
+  _bannerMsg('Uploading…');
+  try {
+    var r = await fetch('/api/banner', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-Token':_csrf},
+      body: JSON.stringify({banner_data: dataUrl})
+    });
+    var d = await r.json();
+    if (d.ok) {
+      var img = document.getElementById('pf-cover-img');
+      img.src = dataUrl;
+      img.style.display = '';
+      var rmBtn = document.getElementById('pf-remove-banner-btn');
+      if (rmBtn) rmBtn.style.display = '';
+      var chBtn = document.getElementById('pf-change-banner-btn');
+      if (chBtn) chBtn.textContent = 'Change banner';
+      _bannerMsg('✓ Banner saved', 'ok');
+    } else {
+      _bannerMsg('✗ ' + (d.msg || 'Upload failed'), 'err');
+    }
+  } catch(e) {
+    _bannerMsg('✗ Network error', 'err');
+  }
+}
+
+async function _removeBanner(){
+  document.getElementById('pf-cover-menu').classList.remove('open');
+  try {
+    var r = await fetch('/api/banner', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-Token':_csrf},
+      body: JSON.stringify({banner_data: ''})
+    });
+    var d = await r.json();
+    if (d.ok) {
+      var img = document.getElementById('pf-cover-img');
+      img.style.display = 'none';
+      img.src = '';
+      var rmBtn = document.getElementById('pf-remove-banner-btn');
+      if (rmBtn) rmBtn.style.display = 'none';
+      var chBtn = document.getElementById('pf-change-banner-btn');
+      if (chBtn) chBtn.textContent = 'Upload banner';
+      _bannerMsg('✓ Banner removed', 'ok');
+    } else {
+      _bannerMsg('✗ ' + (d.msg || 'Remove failed'), 'err');
+    }
+  } catch(e) {
+    _bannerMsg('✗ Network error', 'err');
+  }
+}
 </script>
 <script src="/static/notif-poll.js"></script>
 <script src="/static/page-loader.js"></script>
