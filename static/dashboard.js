@@ -7090,6 +7090,7 @@ async function loadHomeFeed(){
       _homeFeedData = data;
       try{
         renderHomeFeed();
+        _handleNotifDeepLink();
       }catch(e){
         console.error('[feed] render error:', e);
         if(el) el.innerHTML='<div class="fc-loading" style="color:#f76b62">Feed render error: '+e.message+'</div>';
@@ -7428,7 +7429,7 @@ function renderPost(item){
     <span style="font-size:22px;font-weight:700;font-family:monospace;color:${col}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
   </div>`:''
   const actions=`<div style="display:flex;gap:24px;margin-top:12px;font-size:13px;color:#565d68">
-    <button onclick="replyPost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">↩ <span>${item.replies||0}</span></button>
+    <button onclick="replyPost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">${_REPLY_ICON_SVG} <span>${item.replies||0}</span></button>
     <button onclick="copyTrade(${item.id})" style="background:none;border:none;color:#f7b955;cursor:pointer;display:flex;align-items:center;gap:6px">⧉ Copy <span>${item.copies||0}</span></button>
     <button onclick="likePost(${item.id},this)" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">♡ <span>${item.likes||0}</span></button>
     ${(item.is_own||_isAdmin)?`<button onclick="deletePost(${item.id},'${item.type}')" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:14px;margin-left:auto" title="Delete">🗑</button>`:''}
@@ -7877,6 +7878,43 @@ function _feedToggleReply(btn, postId){
   }
 }
 
+/* ── Notification deep-linking: #post-<id> jumps straight to that post ── */
+var _notifDeepLinkDone = false;
+function _handleNotifDeepLink(){
+  if(_notifDeepLinkDone) return;
+  var m = /^#post-(.+)$/.exec(location.hash);
+  if(!m) return;
+  _notifDeepLinkDone = true;
+  _jumpToPost(decodeURIComponent(m[1]));
+}
+
+async function _jumpToPost(postId){
+  var card = document.getElementById('fc-card-'+postId);
+  if(!card){
+    try{
+      var r = await fetch('/api/feed/post/'+encodeURIComponent(postId));
+      var d = await r.json();
+      if(d && d.ok && d.post){
+        _homeFeedData = (_homeFeedData||[]).filter(function(i){
+          var pid = i.id ? 'p'+i.id : (i.trade_id ? 't'+i.trade_id : null);
+          return pid !== postId;
+        });
+        _homeFeedData.unshift(d.post);
+        renderHomeFeed();
+        card = document.getElementById('fc-card-'+postId);
+      }
+    }catch(err){ console.error('[notif-deeplink] failed to fetch post', postId, err); }
+  }
+  if(!card) return;
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  card.scrollIntoView({behavior: reduceMotion ? 'auto' : 'smooth', block: 'center'});
+  card.classList.add('fc-card-highlight');
+  setTimeout(function(){ card.classList.remove('fc-card-highlight'); }, 2200);
+  var rbox = document.getElementById('rbox-'+postId);
+  if(rbox) rbox.classList.add('open');
+  _feedLoadReplies(postId);
+}
+
 function _replyRelTime(created_at){
   if(!created_at) return '';
   var d = new Date(created_at.replace(' ','T')+'Z');
@@ -7915,7 +7953,7 @@ function _renderReplyRow(r, postId){
     +'<div class="fc-ri-text">'+esc(r.message).replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>')+'</div>'
     +'<div class="fc-ri-actions">'
     +'<button class="fc-ri-like'+likedCls+'" data-rid="'+r.id+'" onclick="_feedLikeReply('+r.id+',this)">&#9825; <span class="fc-ri-lc">'+likeCnt+'</span></button>'
-    +'<button class="fc-ri-reply-btn">&#8617; Reply</button>'
+    +'<button class="fc-ri-reply-btn">'+_REPLY_ICON_SVG+'<span>Reply</span></button>'
     +delBtn
     +'</div>'
     +'</div>';

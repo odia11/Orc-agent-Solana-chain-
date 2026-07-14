@@ -5938,9 +5938,9 @@ def feed_post_create():
             if m_row:
                 conn.execute(
                     'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-'+str(post_id)))
+                    (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id)))
                 conn.commit()
-                _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-'+str(post_id))
+                _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id))
         return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
@@ -6107,6 +6107,75 @@ def get_feed_like_users(post_id):
         'verified':    bool(r[4]),
     } for r in rows]
     return jsonify({'ok': True, 'users': users, 'count': len(users)})
+
+@app.route('/api/feed/post/<path:post_id>', methods=['GET'])
+@rate_limit(120, 60)
+def get_feed_post(post_id):
+    """Fetch a single post/trade-post by id (e.g. 'p123' or 't45'), same shape as
+    /api/social/feed rows — used to deep-link a notification straight to its post
+    even when that post has scrolled out of the initial feed window."""
+    my_wallet = _current_wallet()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        if post_id.startswith('p') and post_id[1:].isdigit():
+            row = conn.execute('''
+                SELECT fp.id, fp.wallet, fp.content, fp.created_at,
+                       (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
+                       (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
+                       u.username, NULL as symbol, NULL as pnl_pct,
+                       (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
+                       u.avatar_url, u.is_verified
+                FROM feed_posts fp
+                LEFT JOIN users u ON fp.wallet = u.wallet_address
+                WHERE fp.id = ?
+            ''', (my_wallet, post_id[1:])).fetchone()
+            is_trade = False
+        elif post_id.startswith('t') and post_id[1:].isdigit():
+            row = conn.execute('''
+                SELECT t.id, u.wallet_address as wallet, NULL as content,
+                       t.timestamp as created_at,
+                       (SELECT COUNT(*) FROM post_likes   WHERE post_id = 't'||t.id) as like_count,
+                       (SELECT COUNT(*) FROM feed_replies WHERE post_id = 't'||t.id) as reply_count,
+                       u.username,
+                       t.token as symbol,
+                       CASE WHEN t.entry_price > 0 AND t.exit_price > 0
+                            THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
+                            ELSE 0 END as pnl_pct,
+                       (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
+                       u.avatar_url, u.is_verified
+                FROM trades t
+                LEFT JOIN users u ON t.user_id = u.id
+                WHERE t.id = ?
+            ''', (my_wallet, post_id[1:])).fetchone()
+            is_trade = True
+        else:
+            return jsonify({'ok': False, 'msg': 'Invalid post id'}), 400
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+    rid, wallet, content, created_at, like_count, reply_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
+    short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
+    display = username if username else short
+    post = {
+        'id':          None if is_trade else rid,
+        'trade_id':    rid if is_trade else None,
+        'wallet':      short,
+        'content':     content or '',
+        'created_at':  created_at or '',
+        'like_count':  like_count or 0,
+        'reply_count': reply_count or 0,
+        'username':    display,
+        'symbol':      symbol or '',
+        'pnl_pct':     pnl_pct or 0,
+        'entry_price': entry_price or 0,
+        'exit_price':  exit_price or 0,
+        'type':        'trade' if is_trade else 'text',
+        'is_own':      bool(is_own),
+        'avatar_url':  avatar_url or '',
+        'verified':    bool(is_verified),
+    }
+    return jsonify({'ok': True, 'post': post})
 
 _REACTION_EMOJIS = frozenset({'👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'})
 
@@ -6333,15 +6402,16 @@ def toggle_feed_reply_like(reply_id):
             conn.execute('INSERT INTO feed_reply_likes (user_id, reply_id) VALUES (?,?)', (me, reply_id))
         conn.commit()
         if not existing:
-            owner_row = conn.execute('SELECT user_id FROM feed_replies WHERE id=?', (reply_id,)).fetchone()
+            owner_row = conn.execute('SELECT user_id, post_id FROM feed_replies WHERE id=?', (reply_id,)).fetchone()
             if owner_row and owner_row[0] != me:
                 liker_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
                 liker_name = (liker_row[0] if liker_row and liker_row[0] else wallet[:8]+'…')
+                reply_link = '/#post-'+owner_row[1]
                 conn.execute(
                     'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (owner_row[0], 'reply_like', liker_name+': liked your reply', ''))
+                    (owner_row[0], 'reply_like', liker_name+': liked your reply', reply_link))
                 conn.commit()
-                _send_push_notification(owner_row[0], 'New like', liker_name+' liked your reply', '/notifications')
+                _send_push_notification(owner_row[0], 'New like', liker_name+' liked your reply', reply_link)
         count = conn.execute(
             'SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id=?', (reply_id,)
         ).fetchone()[0]
