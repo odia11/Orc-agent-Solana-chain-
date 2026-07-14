@@ -787,12 +787,14 @@ function _onAvatarClick(){
   if (input) input.click();
 }
 
+var _avatarMsgTimer = null;
 function _avatarMsg(text, cls){
   var el = document.getElementById('pf-avatar-msg');
   if (!el) return;
+  clearTimeout(_avatarMsgTimer);
   el.className = 'pf-avatar-msg' + (cls ? ' ' + cls : '');
   el.textContent = text;
-  if (cls === 'ok') setTimeout(function(){ el.textContent=''; el.className='pf-avatar-msg'; }, 2500);
+  if (cls === 'ok') _avatarMsgTimer = setTimeout(function(){ el.textContent=''; el.className='pf-avatar-msg'; }, 2500);
 }
 
 function _onAvatarFileProfile(input){
@@ -865,12 +867,14 @@ document.addEventListener('click', function(e){
   }
 });
 
+var _bannerMsgTimer = null;
 function _bannerMsg(text, cls){
   var el = document.getElementById('pf-cover-msg');
   if (!el) return;
+  clearTimeout(_bannerMsgTimer);
   el.className = 'pf-cover-msg' + (cls ? ' ' + cls : '');
   el.textContent = text;
-  if (cls === 'ok') setTimeout(function(){ el.textContent=''; el.className='pf-cover-msg'; }, 2500);
+  if (cls === 'ok') _bannerMsgTimer = setTimeout(function(){ el.textContent=''; el.className='pf-cover-msg'; }, 2500);
 }
 
 function _onBannerFile(input){
