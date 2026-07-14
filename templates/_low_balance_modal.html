@@ -1,0 +1,31 @@
+<!-- Shared "Insufficient SOL Balance" modal — included by any page that can trigger a
+     low-balance response (bot start, copy trade, ...). Keep this the single source of
+     truth for structure/copy so desktop and mobile never drift into separate variants;
+     pair with /static/low-balance-modal.js. -->
+<div id="low-balance-modal" class="s-modal" onclick="if(event.target===this)closeLowBalanceModal()">
+  <div class="s-card" style="max-width:400px">
+    <button class="s-close" onclick="closeLowBalanceModal()">✕</button>
+    <div class="s-title" style="margin-bottom:3px">⚠ Insufficient SOL Balance</div>
+    <div class="s-sub">FUND YOUR TRADING WALLET TO START</div>
+
+    <div style="display:flex;gap:10px;margin-bottom:14px">
+      <div style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Current</div>
+        <div id="lb-current" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text);font-weight:600">0.0000 SOL</div>
+      </div>
+      <div style="flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 12px">
+        <div style="font-size:9px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:4px">Required</div>
+        <div id="lb-required" style="font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--accent);font-weight:600">0.0000 SOL</div>
+      </div>
+    </div>
+
+    <label style="font-size:9px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;display:block;margin-bottom:5px">Deposit To Trading Wallet</label>
+    <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--accent);word-break:break-all;display:flex;align-items:center;gap:8px;justify-content:space-between;text-align:left;margin-bottom:6px">
+      <span id="lb-addr-text" style="flex:1;word-break:break-all;font-family:'JetBrains Mono',monospace"></span>
+      <button onclick="copyLowBalanceAddr()" id="lb-copy-btn" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;flex-shrink:0;padding:0;line-height:1;transition:color .15s" title="Copy address">📋</button>
+    </div>
+    <div id="lb-copy-msg" style="font-size:10px;color:var(--green);min-height:14px;margin-bottom:10px;letter-spacing:.04em"></div>
+
+    <button onclick="closeLowBalanceModal()" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s" onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Close</button>
+  </div>
+</div>

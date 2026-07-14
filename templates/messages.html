@@ -12,15 +12,24 @@
 <link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Orbitron:wght@700;900&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
 :root{
   --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
-  --accent:#f7b955;--text:#eef1f5;--muted:#565d68;
+  --accent:#f7b955;--text:#eef1f5;--muted:#565d68;--dim:#565d68;--green:#3ad29b;
   --border:#16191f;--border2:#21252c;
 }
+
+/* ── SHARED MODAL SHELL (mirrors dashboard.html) — used by _low_balance_modal.html ── */
+.s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
+.s-modal.open{display:flex}
+.s-card{background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:14px;padding:26px 24px;width:100%;max-width:480px;position:relative;box-shadow:0 0 60px rgba(0,0,0,.5)}
+.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
+.s-close:hover{color:var(--text)}
+.s-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
+.s-sub{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:18px}
 
 /* ── SIDEBAR (mirrors dashboard) ── */
 #sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid #16191f;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
@@ -240,6 +249,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 </head>
 <body>
 <div id="avatar-lightbox" onclick="_closeAvatarLightbox()"><img id="avatar-lightbox-img" src="" alt=""></div>
+{% include '_low_balance_modal.html' %}
 <div id="app">
 
   <!-- SIDEBAR (exact structure from dashboard) -->
@@ -902,6 +912,8 @@ function _copyTrades(btn, wallet) {
         btn.classList.toggle('active', copying);
       }
       _toast(copying ? 'Now copying trades from ' + _short(wallet) : 'Stopped copying ' + _short(wallet));
+    } else if (d.low_balance) {
+      showLowBalanceModal(d);
     } else {
       _toast(d.msg || d.error || 'Copy trade failed.');
     }
@@ -984,6 +996,7 @@ setInterval(function(){
   fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
 }, 45000);
 </script>
+<script src="/static/low-balance-modal.js"></script>
 <script src="/static/notif-poll.js"></script>
 <script src="/static/page-loader.js"></script>
 </body>

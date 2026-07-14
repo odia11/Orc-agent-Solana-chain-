@@ -3039,6 +3039,9 @@ def index():
     # on mutating requests — see API_SHARED_SECRET / _csrf_check above.
     with open(os.path.join(BASE, 'dashboard.html'), 'r', encoding='utf-8') as f:
         html = f.read()
+    with open(os.path.join(BASE, 'templates', '_low_balance_modal.html'), 'r', encoding='utf-8') as f:
+        low_balance_modal_html = f.read()
+    html = html.replace('__LOW_BALANCE_MODAL__', low_balance_modal_html)
     html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
     _sw = session.get('wallet', '')
     print(f'[phantom-debug] index() session_wallet={_sw!r} '
