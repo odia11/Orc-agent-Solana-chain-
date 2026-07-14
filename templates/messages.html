@@ -64,7 +64,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msgs-left-title-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
 .msgs-left-title{font-size:16px;font-weight:700;color:#eef1f5}
 .msgs-home-back{display:none}
-.msgs-new-btn{background:#f7b955;color:#0a0b0e;border:none;border-radius:9px;padding:6px 12px;font-size:12px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.msgs-new-btn{background:#f7b955;color:#0a0b0e;border:none;border-radius:50%;width:30px;height:30px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .msgs-new-btn:hover{opacity:.85}
 .msgs-search-wrap{position:relative}
 .msgs-search-icon{position:absolute;left:11px;top:50%;transform:translateY(-50%);color:#565d68;pointer-events:none}
@@ -86,6 +86,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .conv-info{flex:1;min-width:0}
 .conv-name{font-size:14px;font-weight:600;color:#eef1f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .conv-preview{font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.conv-preview.unread{color:#c7ccd4}
 .conv-meta{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
 .conv-time{font-size:11px;color:#565d68;white-space:nowrap}
 .conv-badge{background:#f7b955;color:#0a0b0e;border-radius:999px;font-size:10px;font-weight:700;padding:2px 7px}
@@ -106,12 +107,22 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msgs-thread-meta{flex:1;min-width:0}
 .msgs-thread-name{font-size:14px;font-weight:700;color:#eef1f5}
 .msgs-thread-status{font-size:11px;color:#565d68;margin-top:2px;display:flex;align-items:center;gap:5px}
+.msgs-thread-status.online{color:#3ad29b}
 .msgs-online-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
 .msgs-copy-trades-btn{background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.25);border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;color:#f7b955;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s;white-space:nowrap;flex-shrink:0}
 .msgs-copy-trades-btn:hover{background:rgba(247,185,85,.18)}
+.msgs-copy-trades-btn.active{background:rgba(58,210,155,.14);border-color:rgba(58,210,155,.35);color:#3ad29b}
+.msgs-more-wrap{position:relative;flex-shrink:0}
+.msgs-more-btn{background:none;border:1px solid #21252c;border-radius:9px;width:32px;height:32px;color:#8a919c;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:16px;transition:border-color .15s,color .15s}
+.msgs-more-btn:hover{border-color:#f7b955;color:#f7b955}
+.msgs-more-menu{display:none;position:absolute;top:38px;right:0;background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:150px;z-index:25}
+.msgs-more-menu.open{display:block}
+.msgs-more-menu a,.msgs-more-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:#eef1f5;font-size:13px;padding:8px 10px;border-radius:7px;cursor:pointer;text-decoration:none;font-family:inherit}
+.msgs-more-menu a:hover,.msgs-more-menu button:hover{background:#16191f}
 
 /* messages area */
 .msgs-area{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-height:0}
+.msgs-day-divider{text-align:center;color:#565d68;font-size:11px;font-weight:600;letter-spacing:.04em;margin:6px 0 2px}
 .msg-wrap{display:flex;flex-direction:column}
 .msg-wrap.mine{align-items:flex-end}
 .msg-wrap.theirs{align-items:flex-start}
@@ -164,9 +175,10 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msgs-input{flex:1;min-width:0;background:#101216;border:1px solid #21252c;border-radius:13px;padding:11px 15px;color:#eef1f5;font-size:14px;font-family:'Geist',system-ui,sans-serif;outline:none;transition:border-color .15s}
 .msgs-input::placeholder{color:#565d68}
 .msgs-input:focus{border-color:rgba(247,185,85,.4)}
-.msgs-send{background:#f7b955;color:#0a0b0e;border:none;border-radius:11px;padding:11px 20px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s;flex-shrink:0}
+.msgs-send{background:#f7b955;color:#0a0b0e;border:none;border-radius:50%;width:44px;height:44px;padding:0;display:flex;align-items:center;justify-content:center;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s;flex-shrink:0}
 .msgs-send:hover{opacity:.88}
 .msgs-send:disabled{opacity:.4;cursor:not-allowed}
+.msgs-send svg{margin-left:-1px}
 
 /* scrollbar */
 ::-webkit-scrollbar{width:4px}
@@ -306,7 +318,9 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
         <div class="msgs-left-title-row">
           <a href="/" class="msgs-home-back" title="Back to home">←</a>
           <div class="msgs-left-title">Messages</div>
-          <button class="msgs-new-btn" onclick="document.getElementById('newMsgBar').style.display='block';document.getElementById('searchUser').focus()">+ New</button>
+          <button class="msgs-new-btn" title="New message" aria-label="New message" onclick="document.getElementById('newMsgBar').style.display='block';document.getElementById('searchUser').focus()">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4z"/></svg>
+          </button>
         </div>
         <div class="msgs-search-wrap">
           <svg class="msgs-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -356,7 +370,9 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
           <input class="msgs-input" id="msgs-input" type="text"
                  placeholder="Write a message…" maxlength="2000"
                  onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_sendMessage();}">
-          <button class="msgs-send" id="msgs-send" onclick="_sendMessage()">Send</button>
+          <button class="msgs-send" id="msgs-send" title="Send" aria-label="Send" onclick="_sendMessage()">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
         </div>
       </div>
 
@@ -390,6 +406,25 @@ function _timeAgo(ts) {
   if (sec < 3600)  return Math.floor(sec / 60) + 'm';
   if (sec < 86400) return Math.floor(sec / 3600) + 'h';
   return Math.floor(sec / 86400) + 'd';
+}
+
+function _dayKey(ts) {
+  if (!ts) return '';
+  var s = typeof ts === 'string' && ts.indexOf('T') < 0 ? ts.replace(' ', 'T') + 'Z' : ts;
+  var d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+}
+function _dayLabel(ts) {
+  var s = typeof ts === 'string' && ts.indexOf('T') < 0 ? ts.replace(' ', 'T') + 'Z' : ts;
+  var d = new Date(s);
+  if (isNaN(d.getTime())) return '';
+  var now = new Date();
+  var startOf = function(x){ return new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime(); };
+  var diffDays = Math.round((startOf(now) - startOf(d)) / 86400000);
+  if (diffDays === 0) return 'Today';
+  if (diffDays === 1) return 'Yesterday';
+  return d.toLocaleDateString('en-US', diffDays > 330 ? {month:'short', day:'numeric', year:'numeric'} : {month:'short', day:'numeric'});
 }
 
 function _short(w) {
@@ -456,17 +491,22 @@ function _renderConvList() {
     var color  = _avatarColor(c.peer_wallet || String(c.peer_id));
     var ini    = (name[0] || '?').toUpperCase();
     var active = c.peer_id === _activePeerId ? ' active' : '';
-    var badge  = (c.unread > 0) ? '<span class="conv-badge">'+c.unread+'</span>' : '';
+    var unread = c.unread > 0;
+    var badge  = unread ? '<span class="conv-badge">'+c.unread+'</span>' : '';
     var avatarImg = c.peer_avatar
       ? '<img src="'+_esc(c.peer_avatar)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
       : '';
+    var previewRaw = c.last_type === 'image' ? '📷 Photo'
+      : c.last_type === 'trade' ? '📊 Shared a trade'
+      : (c.last_msg || '');
+    var preview = (c.last_is_mine ? 'you: ' : '') + previewRaw.slice(0, 60);
     return '<div class="conv-row'+active+'" onclick="_openThread('+c.peer_id+')">'
       + '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden'+(c.peer_avatar?';cursor:pointer':'')+'"'+(c.peer_avatar?' onclick="event.stopPropagation();_showAvatarLightbox('+_esc(JSON.stringify(c.peer_avatar))+')"':'')+'>'+_esc(ini)+avatarImg
       +   (c.peer_online ? '<span class="msgs-online-dot" style="position:absolute;bottom:1px;right:1px;border:2px solid #0a0b0e"></span>' : '')
       + '</div>'
       + '<div class="conv-info">'
       +   '<div class="conv-name">'+_esc(name)+(c.peer_verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
-      +   '<div class="conv-preview">'+_esc((c.last_msg||'').startsWith('/static/dm_images/') ? '📷 Photo' : (c.last_msg||'').slice(0,60))+'</div>'
+      +   '<div class="conv-preview'+(unread?' unread':'')+'">'+_esc(preview)+'</div>'
       + '</div>'
       + '<div class="conv-meta">'
       +   '<span class="conv-time">'+_esc(_timeAgo(c.last_ts))+'</span>'
@@ -504,16 +544,26 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     ? '<img src="'+_esc(_activePeer.avatar)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
     : '';
   var statusHtml = _activePeer.online
-    ? '<span class="msgs-online-dot"></span>Online'
+    ? '<span class="msgs-online-dot"></span>Online · @' + _esc(_short(_activePeer.wallet))
     : '@' + _esc(_short(_activePeer.wallet));
+  var statusCls = _activePeer.online ? ' online' : '';
 
   document.getElementById('msgs-thread-hdr').innerHTML =
     '<button class="msgs-back" onclick="_backToList()">← Back</button>'
     + '<div class="msgs-thread-avatar" style="background:'+color+';position:relative;overflow:hidden'+(_activePeer.avatar?';cursor:pointer':'')+'"'+(_activePeer.avatar?' onclick="event.stopPropagation();_showAvatarLightbox('+_esc(JSON.stringify(_activePeer.avatar))+')"':'')+'>'+_esc(ini)+avatarImg+'</div>'
     + '<div class="msgs-thread-meta">'
     +   '<div class="msgs-thread-name">'+_esc(displayName)+(_activePeer.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
-    +   '<div class="msgs-thread-status">'+statusHtml+'</div>'
+    +   '<div class="msgs-thread-status'+statusCls+'">'+statusHtml+'</div>'
+    + '</div>'
+    + '<button class="msgs-copy-trades-btn" id="msgs-copy-btn" onclick="_copyTrades(this,\''+_esc(_activePeer.wallet).replace(/'/g,"\\'")+'\')">⧉ Copy Trades</button>'
+    + '<div class="msgs-more-wrap">'
+    +   '<button class="msgs-more-btn" onclick="_toggleMoreMenu(event)" title="More" aria-label="More">⋯</button>'
+    +   '<div class="msgs-more-menu" id="msgs-more-menu">'
+    +     '<a href="/profile/'+encodeURIComponent(_activePeer.wallet)+'">View profile</a>'
+    +   '</div>'
     + '</div>';
+
+  _refreshCopyTradesBtn();
 
   document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
   await loadThread(peerId);
@@ -523,6 +573,29 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     if (_activePeerId) loadThread(_activePeerId);
   }, 5000);
 }
+
+async function _refreshCopyTradesBtn() {
+  var btn = document.getElementById('msgs-copy-btn');
+  if (!btn || !_activePeer.wallet) return;
+  try {
+    var r = await fetch('/api/copy-trade/status');
+    var d = await r.json();
+    var copying = d.ok && d.copying && d.target_wallet === _activePeer.wallet;
+    btn.textContent = copying ? '⧉ Copying ✓' : '⧉ Copy Trades';
+    btn.classList.toggle('active', copying);
+  } catch (e) {}
+}
+
+function _toggleMoreMenu(e) {
+  e.stopPropagation();
+  document.getElementById('msgs-more-menu').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  var menu = document.getElementById('msgs-more-menu');
+  if (menu && menu.classList.contains('open') && !e.target.closest('.msgs-more-wrap')) {
+    menu.classList.remove('open');
+  }
+});
 
 async function loadThread(peerId) {
   try {
@@ -542,11 +615,18 @@ function _renderMessages(msgs) {
     area.innerHTML = '<div class="msgs-area-empty">No messages yet. Say hello!</div>';
     return;
   }
+  var lastDayKey = null;
   area.innerHTML = msgs.map(function(m) {
+    var dayKey = _dayKey(m.created_at);
+    var divider = '';
+    if (dayKey && dayKey !== lastDayKey) {
+      divider = '<div class="msgs-day-divider">'+_esc(_dayLabel(m.created_at))+'</div>';
+      lastDayKey = dayKey;
+    }
     var mine = _myUserId != null ? (m.sender_id === _myUserId) : false;
     var bubble;
     if (m.message_type === 'image') {
-      bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="window.open('+JSON.stringify(m.message)+',\'_blank\')"></div>';
+      bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="window.open('+_esc(JSON.stringify(m.message))+',\'_blank\')"></div>';
     } else if (m.message_type === 'trade') {
       var tr = {}; try { tr = JSON.parse(m.message); } catch(e) {}
       var trPnl = tr.pnl || 0, trPos = trPnl >= 0;
@@ -562,12 +642,13 @@ function _renderMessages(msgs) {
     if (mine) {
       menu = '<button class="msg-menu-btn" onclick="_toggleMsgMenu(event,'+m.id+')">⋯</button>'
         + '<div class="msg-menu" id="msg-menu-'+m.id+'">'
-        + (m.message_type === 'text' ? '<button onclick="_startEditMsg('+m.id+','+JSON.stringify(m.message)+')">Edit</button>' : '')
+        + (m.message_type === 'text' ? '<button onclick="_startEditMsg('+m.id+')">Edit</button>' : '')
         + '<button class="danger" onclick="_deleteMsg('+m.id+')">Delete</button></div>';
     }
     var editedTag = m.edited_at ? '<span class="msg-edited-tag">(edited)</span>' : '';
     var seenTag = (mine && m.is_read) ? '<span class="msg-seen-tag"> · Seen</span>' : '';
-    return '<div class="msg-wrap '+(mine?'mine':'theirs')+'" data-mid="'+m.id+'">'
+    return divider
+      + '<div class="msg-wrap '+(mine?'mine':'theirs')+'" data-mid="'+m.id+'">'
       + '<div class="msg-bubble-wrap">'
       +   menu
       +   bubble
@@ -601,11 +682,12 @@ async function _deleteMsg(id) {
   } catch(e) { console.error('[messages] delete error', e); }
 }
 
-function _startEditMsg(id, currentText) {
+function _startEditMsg(id) {
   document.querySelectorAll('.msg-menu.open').forEach(function(m){ m.classList.remove('open'); });
   var wrap = document.querySelector('.msg-wrap[data-mid="'+id+'"]');
   var bubble = wrap && wrap.querySelector('.msg-bubble');
   if (!bubble) return;
+  var currentText = bubble.textContent;
   bubble.outerHTML = '<div class="msg-bubble msg-editing"><input type="text" class="msg-edit-input" id="msg-edit-'+id+'" value="'+_esc(currentText)+'" maxlength="500">'
     + '<div class="msg-edit-actions"><button onclick="_saveEditMsg('+id+')">Save</button><button onclick="loadThread(_activePeerId)">Cancel</button></div></div>';
   var input = document.getElementById('msg-edit-'+id);
@@ -643,17 +725,11 @@ async function _sendMessage() {
     });
     var d = await r.json();
     if (d.ok) {
-      var area  = document.getElementById('msgs-area');
-      var empty = area.querySelector('.msgs-area-empty');
-      if (empty) empty.remove();
-      var div = document.createElement('div');
-      div.className = 'msg-wrap mine';
-      div.innerHTML = '<div class="msg-bubble">'+_esc(text)+'</div><span class="msg-time">now</span>';
-      area.appendChild(div);
+      await loadThread(_activePeerId);
       _scrollToBottom();
       var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
-      if (conv) { conv.last_msg = text; conv.last_ts = d.created_at; }
-      else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:text, last_ts:d.created_at, unread:0}); }
+      if (conv) { conv.last_msg = text; conv.last_ts = d.created_at; conv.last_type = 'text'; conv.last_is_mine = true; }
+      else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:text, last_ts:d.created_at, last_type:'text', last_is_mine:true, unread:0}); }
       _renderConvList();
     } else {
       input.value = text;
@@ -668,6 +744,8 @@ async function _sendMessage() {
 
 function _toggleEmojiPanel(e) {
   e.stopPropagation();
+  var tradePanel = document.getElementById('msgs-trade-panel');
+  if (tradePanel) tradePanel.classList.remove('open');
   document.getElementById('msgs-emoji-panel').classList.toggle('open');
 }
 document.addEventListener('click', function(e) {
@@ -693,6 +771,8 @@ if (_emojiPanelEl) {
 
 async function _toggleTradePanel(e) {
   e.stopPropagation();
+  var emojiPanel = document.getElementById('msgs-emoji-panel');
+  if (emojiPanel) emojiPanel.classList.remove('open');
   var panel = document.getElementById('msgs-trade-panel');
   var willOpen = !panel.classList.contains('open');
   panel.classList.toggle('open');
@@ -740,7 +820,7 @@ async function _sendTrade(tradeId) {
       loadThread(_activePeerId);
       var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
       var previewText = '📊 Shared a trade';
-      if (conv) { conv.last_msg = previewText; conv.last_ts = d.created_at; conv.last_type = 'trade'; }
+      if (conv) { conv.last_msg = previewText; conv.last_ts = d.created_at; conv.last_type = 'trade'; conv.last_is_mine = true; }
       _renderConvList();
     } else {
       alert(d.msg || 'Could not share trade');
@@ -786,13 +866,13 @@ async function _uploadAndSendImage(file) {
     });
     var rd = await r.json();
     var p = document.getElementById(pendingId);
-    if (p) {
-      p.innerHTML = '<div class="msg-bubble msg-image"><img src="'+_esc(ud.url)+'" loading="lazy" onclick="window.open('+JSON.stringify(ud.url)+',\'_blank\')"></div><span class="msg-time">now</span>';
-    }
+    if (p) p.remove();
     URL.revokeObjectURL(localUrl);
+    await loadThread(_activePeerId);
+    _scrollToBottom();
     var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
-    if (conv) { conv.last_msg = ud.url; conv.last_ts = rd.created_at; }
-    else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:ud.url, last_ts:rd.created_at, unread:0}); }
+    if (conv) { conv.last_msg = ud.url; conv.last_ts = rd.created_at; conv.last_type = 'image'; conv.last_is_mine = true; }
+    else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:ud.url, last_ts:rd.created_at, last_type:'image', last_is_mine:true, unread:0}); }
     _renderConvList();
   } catch(e) {
     var p = document.getElementById(pendingId);
@@ -812,8 +892,8 @@ function _copyTrades(btn, wallet) {
     if (d.ok) {
       var copying = d.copying;
       if (btn) {
-        btn.textContent = copying ? 'Copying ✓' : 'Copy Trades';
-        btn.style.background = copying ? '#3ad29b' : '#f7b955';
+        btn.textContent = copying ? '⧉ Copying ✓' : '⧉ Copy Trades';
+        btn.classList.toggle('active', copying);
       }
       _toast(copying ? 'Now copying trades from ' + _short(wallet) : 'Stopped copying ' + _short(wallet));
     } else {
@@ -853,7 +933,7 @@ function searchUsers(q) {
         el.innerHTML = users.map(function(u) {
           var name = u.username || _short(u.wallet || '');
           var col  = _avatarColor(u.wallet || '');
-          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread('+u.user_id+','+JSON.stringify(u.username||'')+','+JSON.stringify(u.wallet||'')+')"'
+          return '<div onclick="document.getElementById(\'newMsgBar\').style.display=\'none\';_openThread('+u.user_id+','+_esc(JSON.stringify(u.username||''))+','+_esc(JSON.stringify(u.wallet||''))+')"'
             + ' style="display:flex;align-items:center;gap:10px;padding:8px 4px;border-radius:9px;cursor:pointer"'
             + ' onmouseover="this.style.background=\'#101216\'" onmouseout="this.style.background=\'\'">'
             + '<div style="width:30px;height:30px;border-radius:50%;background:'+col+';color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;flex-shrink:0">'

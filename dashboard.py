@@ -7933,7 +7933,7 @@ def list_conversations():
             SELECT peer_id,
                    (SELECT wallet_address FROM users WHERE id=peer_id) AS peer_wallet,
                    (SELECT username     FROM users WHERE id=peer_id) AS peer_username,
-                   last_msg, last_ts, last_type,
+                   last_msg, last_ts, last_type, last_is_mine,
                    (SELECT COUNT(*) FROM direct_messages
                     WHERE receiver_id=? AND sender_id=peer_id AND is_read=0) AS unread,
                    (SELECT avatar_url   FROM users WHERE id=peer_id) AS peer_avatar,
@@ -7945,6 +7945,7 @@ def list_conversations():
                     message AS last_msg,
                     created_at AS last_ts,
                     COALESCE(message_type, 'text') AS last_type,
+                    (sender_id=?) AS last_is_mine,
                     ROW_NUMBER() OVER (
                         PARTITION BY CASE WHEN sender_id=? THEN receiver_id ELSE sender_id END
                         ORDER BY created_at DESC
@@ -7954,7 +7955,7 @@ def list_conversations():
             ) WHERE rn=1
             ORDER BY last_ts DESC
             LIMIT 100
-        ''', (me, me, me, me, me)).fetchall()
+        ''', (me, me, me, me, me, me)).fetchall()
     finally:
         conn.close()
     _online_cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=3)
@@ -7967,8 +7968,9 @@ def list_conversations():
             return False
     return jsonify({'ok': True, 'conversations': [
         {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
-         'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'unread': r[6], 'peer_avatar': r[7] or '',
-         'peer_online': _is_online(r[8]), 'peer_verified': bool(r[9])}
+         'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'last_is_mine': bool(r[6]),
+         'unread': r[7], 'peer_avatar': r[8] or '',
+         'peer_online': _is_online(r[9]), 'peer_verified': bool(r[10])}
         for r in rows
     ]})
 
