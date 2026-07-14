@@ -7375,6 +7375,20 @@ def api_dex_tokens_batch(addresses):
         return jsonify(r.json())
     return jsonify({'pairs': []}), 502
 
+@app.route('/api/dexscreener/search', methods=['GET'])
+@rate_limit(60, 60)
+def api_dex_search():
+    """Full-pair-shape DexScreener search (name/ticker/address), proxied through the
+    shared _dex_get cache+backoff — used by the Live Market search bar to find tokens
+    outside the currently loaded Trending/New/Gainers list."""
+    q = _sanitize(request.args.get('q', '').strip())[:100]
+    if not q:
+        return jsonify({'pairs': []})
+    r = _dex_get('https://api.dexscreener.com/latest/dex/search?q=' + requests.utils.quote(q, safe=''))
+    if r and r.status_code == 200:
+        return jsonify(r.json())
+    return jsonify({'pairs': []}), 502
+
 @app.route('/api/token/info/<mint_address>', methods=['GET'])
 @rate_limit(60, 60)
 def api_token_info(mint_address):

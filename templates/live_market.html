@@ -40,6 +40,13 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-scan-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite;flex-shrink:0}
 @keyframes scanBlink{0%,100%{opacity:1}50%{opacity:.25}}
 
+/* search bar (above tabs — visible on mobile too, unlike the header search) */
+.lm-search2-wrap{position:relative;margin:14px 16px 0}
+.lm-search2{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:12px;padding:11px 14px 11px 38px;color:var(--text);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.lm-search2:focus{border-color:var(--accent)}
+.lm-search2::placeholder{color:var(--muted)}
+.lm-search2-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:15px}
+
 /* tabs */
 .lm-tabs{display:flex;gap:6px;padding:12px 16px;background:var(--bg);position:sticky;top:56px;z-index:20;border-bottom:1px solid var(--bg3);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
 .lm-tab{padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;flex-shrink:0}
@@ -248,6 +255,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
 </header>
 
+<div class="lm-search2-wrap">
+  <span class="lm-search2-icon">⌕</span>
+  <input class="lm-search2" id="lm-search2" type="text" placeholder="Search name or $SYMBOL…" autocomplete="off" oninput="_lm2SearchDebounce(this.value)">
+</div>
+
 <div class="lm-tabs" id="lm-tabs">
   <button class="lm-tab active" id="tab-trending" onclick="_setTab('trending')">Trending</button>
   <button class="lm-tab"        id="tab-new"       onclick="_setTab('new')">New Pairs</button>
@@ -277,6 +289,10 @@ var _pairs       = [];
 function _setTab(tab){
   _activeTab = tab;
   document.getElementById('lm-search').value = '';
+  document.getElementById('lm-search2').value = '';
+  _lm2LocalResults = [];
+  _lm2RemoteResults = [];
+  _lm2LastQuery = '';
   ['trending','new','gainers'].forEach(function(t){
     document.getElementById('tab-'+t).classList.toggle('active', t===tab);
   });
@@ -375,6 +391,61 @@ async function _doSearch(q){
     var d = await r.json();
     _renderTable(_dedupeByAddress((d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }),{}));
   }catch(e){ _setError('Search failed'); }
+}
+
+/* ── search bar above the tabs: instant local filter + backend-proxied remote search ── */
+var _lm2Timer         = null;
+var _lm2LocalResults  = [];
+var _lm2RemoteResults = [];
+var _lm2LastQuery     = '';
+
+function _lm2MatchesQuery(p, qLower, qTicker){
+  var sym  = ((p.baseToken&&p.baseToken.symbol)||'').toLowerCase();
+  var name = ((p.baseToken&&p.baseToken.name)||'').toLowerCase();
+  var addr = ((p.baseToken&&p.baseToken.address)||'').toLowerCase();
+  return sym.indexOf(qTicker)>=0 || name.indexOf(qLower)>=0 || (qLower.length>10 && addr===qLower);
+}
+
+function _lm2SearchDebounce(q){
+  clearTimeout(_lm2Timer);
+  if(!q.trim()){
+    _lm2LocalResults = [];
+    _lm2RemoteResults = [];
+    _lm2LastQuery = '';
+    if(_cache[_activeTab]) _renderTable(_cache[_activeTab]);
+    else _loadTab(_activeTab);
+    return;
+  }
+  _lm2LastQuery = q;
+  /* instant local filter against whatever is already loaded for this tab — no network wait */
+  var qLower  = q.trim().toLowerCase();
+  var qTicker = qLower.replace(/^\$/,'');
+  var source  = _cache[_activeTab] || _pairs || [];
+  _lm2LocalResults = source.filter(function(p){ return _lm2MatchesQuery(p, qLower, qTicker); });
+  _lm2Render();
+  /* then, debounced, also search DexScreener (via our proxy) for tokens not in the loaded list */
+  _lm2Timer = setTimeout(function(){ _lm2RemoteSearch(q); }, 300);
+}
+
+function _lm2Render(){
+  var merged = _dedupeByAddress(_lm2LocalResults.concat(_lm2RemoteResults), {});
+  if(!merged.length){
+    document.getElementById('lm-table-wrap').innerHTML =
+      _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found for "'+_esc(_lm2LastQuery)+'"</td></tr>');
+    return;
+  }
+  _renderTable(merged);
+}
+
+async function _lm2RemoteSearch(q){
+  try{
+    var qRemote = q.trim().replace(/^\$/,''); /* DexScreener's search doesn't understand a leading $ */
+    var r = await fetch('/api/dexscreener/search?q='+encodeURIComponent(qRemote));
+    var d = await r.json();
+    var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; });
+    _lm2RemoteResults = pairs;
+    if(q === _lm2LastQuery) _lm2Render(); /* ignore stale responses from fast typing */
+  }catch(e){ /* keep whatever local matches are already shown */ }
 }
 
 /* thead — 13 columns */
