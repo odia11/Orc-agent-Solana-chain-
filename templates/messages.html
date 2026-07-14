@@ -582,7 +582,8 @@ async function _openThread(peerId, peerUsername, peerWallet) {
   _refreshCopyTradesBtn();
 
   document.getElementById('msgs-area').innerHTML = '<div class="msgs-area-empty">Loading…</div>';
-  await loadThread(peerId);
+  _lastMsgsSig = null;
+  await loadThread(peerId, true);
 
   if (_pollTimer) clearInterval(_pollTimer);
   _pollTimer = setInterval(function() {
@@ -613,19 +614,27 @@ document.addEventListener('click', function(e) {
   }
 });
 
-async function loadThread(peerId) {
+async function loadThread(peerId, forceScroll) {
   try {
     var r = await fetch('/api/messages/' + peerId);
     var d = await r.json();
-    if (d.ok) _renderMessages(d.messages || []);
+    if (d.ok) _renderMessages(d.messages || [], !!forceScroll);
   } catch(e) {
     console.warn('[messages] thread load error', e);
   }
 }
 
-function _renderMessages(msgs) {
+var _lastMsgsSig = null;
+
+function _renderMessages(msgs, forceScroll) {
   var area = document.getElementById('msgs-area');
   if (!area) return;
+  // Skip the (expensive, flicker-causing) full re-render on the 5s poll when
+  // nothing actually changed — this was rebuilding the whole DOM every cycle
+  // regardless, which is what made the thread feel like it stutters.
+  var sig = msgs.length + '|' + msgs.map(function(m){ return m.id+':'+(m.edited_at||'')+':'+(m.is_read?1:0); }).join(',');
+  if (sig === _lastMsgsSig && !forceScroll) return;
+  _lastMsgsSig = sig;
   var atBottom = area.scrollHeight - area.scrollTop - area.clientHeight < 80;
   if (!msgs.length) {
     area.innerHTML = '<div class="msgs-area-empty">No messages yet. Say hello!</div>';
@@ -672,7 +681,7 @@ function _renderMessages(msgs) {
       + '<span class="msg-time">'+_esc(_timeAgo(m.created_at))+editedTag+seenTag+'</span>'
       + '</div>';
   }).join('');
-  if (atBottom || msgs.length <= 30) _scrollToBottom();
+  if (forceScroll || atBottom) _scrollToBottom();
   var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
   if (conv && conv.unread > 0) { conv.unread = 0; _renderConvList(); }
 }
@@ -741,8 +750,7 @@ async function _sendMessage() {
     });
     var d = await r.json();
     if (d.ok) {
-      await loadThread(_activePeerId);
-      _scrollToBottom();
+      await loadThread(_activePeerId, true);
       var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
       if (conv) { conv.last_msg = text; conv.last_ts = d.created_at; conv.last_type = 'text'; conv.last_is_mine = true; }
       else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:text, last_ts:d.created_at, last_type:'text', last_is_mine:true, unread:0}); }
@@ -833,7 +841,7 @@ async function _sendTrade(tradeId) {
     });
     var d = await r.json();
     if (d.ok) {
-      loadThread(_activePeerId);
+      loadThread(_activePeerId, true);
       var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
       var previewText = '📊 Shared a trade';
       if (conv) { conv.last_msg = previewText; conv.last_ts = d.created_at; conv.last_type = 'trade'; conv.last_is_mine = true; }
@@ -884,8 +892,7 @@ async function _uploadAndSendImage(file) {
     var p = document.getElementById(pendingId);
     if (p) p.remove();
     URL.revokeObjectURL(localUrl);
-    await loadThread(_activePeerId);
-    _scrollToBottom();
+    await loadThread(_activePeerId, true);
     var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
     if (conv) { conv.last_msg = ud.url; conv.last_ts = rd.created_at; conv.last_type = 'image'; conv.last_is_mine = true; }
     else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:ud.url, last_ts:rd.created_at, last_type:'image', last_is_mine:true, unread:0}); }
