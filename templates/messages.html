@@ -92,6 +92,11 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 #avatar-lightbox{display:none;position:fixed;inset:0;background:rgba(10,11,14,.85);z-index:9999;align-items:center;justify-content:center;cursor:pointer}
 #avatar-lightbox.open{display:flex}
 #avatar-lightbox img{max-width:min(360px,80vw);max-height:min(360px,80vh);border-radius:16px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+#img-lightbox{display:none;position:fixed;inset:0;background:rgba(10,11,14,.9);z-index:9999;align-items:center;justify-content:center;cursor:pointer}
+#img-lightbox.open{display:flex}
+#img-lightbox img{max-width:90vw;max-height:88vh;border-radius:12px;object-fit:contain;box-shadow:0 20px 60px rgba(0,0,0,.5);cursor:default}
+#img-lightbox-close{position:fixed;top:20px;right:20px;background:rgba(10,11,14,.7);border:1px solid rgba(247,185,85,.35);border-radius:50%;width:40px;height:40px;color:#f7b955;font-size:20px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:border-color .15s,background .15s;font-family:'Geist',system-ui,sans-serif}
+#img-lightbox-close:hover{background:rgba(247,185,85,.12);border-color:#f7b955}
 .conv-info{flex:1;min-width:0}
 .conv-name{font-size:14px;font-weight:600;color:#eef1f5;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .conv-preview{font-size:12px;color:#565d68;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
@@ -249,6 +254,10 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 </head>
 <body>
 <div id="avatar-lightbox" onclick="_closeAvatarLightbox()"><img id="avatar-lightbox-img" src="" alt=""></div>
+<div id="img-lightbox" onclick="_closeImgLightbox()">
+  <button id="img-lightbox-close" onclick="event.stopPropagation();_closeImgLightbox()" aria-label="Close" title="Close">&times;</button>
+  <img id="img-lightbox-img" src="" alt="" onclick="event.stopPropagation()">
+</div>
 {% include '_low_balance_modal.html' %}
 <div id="app">
 
@@ -496,6 +505,21 @@ function _closeAvatarLightbox(){
   if(lb) lb.classList.remove('open');
 }
 
+function _showImgLightbox(url){
+  var lb = document.getElementById('img-lightbox');
+  var img = document.getElementById('img-lightbox-img');
+  if(!lb || !img) return;
+  img.src = url;
+  lb.classList.add('open');
+}
+function _closeImgLightbox(){
+  var lb = document.getElementById('img-lightbox');
+  if(lb) lb.classList.remove('open');
+}
+document.addEventListener('keydown', function(e){
+  if (e.key === 'Escape') _closeImgLightbox();
+});
+
 function _renderConvList() {
   var el = document.getElementById('conv-list');
   if (!_conversations.length) {
@@ -651,7 +675,7 @@ function _renderMessages(msgs, forceScroll) {
     var mine = _myUserId != null ? (m.sender_id === _myUserId) : false;
     var bubble;
     if (m.message_type === 'image') {
-      bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="window.open('+_esc(JSON.stringify(m.message))+',\'_blank\')"></div>';
+      bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="_showImgLightbox('+_esc(JSON.stringify(m.message))+')"></div>';
     } else if (m.message_type === 'trade') {
       var tr = {}; try { tr = JSON.parse(m.message); } catch(e) {}
       var trPnl = tr.pnl || 0, trPos = trPnl >= 0;
