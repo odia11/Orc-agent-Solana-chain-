@@ -88,6 +88,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 /* ── TABLES ── */
 .tbl-wrap{overflow-x:auto;margin-bottom:24px}
 .tbl{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;overflow:hidden;min-width:600px}
+/* internal vertical scroll for tables with many rows (e.g. API Rate Stats) —
+   keeps the header fixed and lets the page around it stay put, with a fade
+   at the bottom signalling there's more to scroll to. */
+.tbl-scroll-wrap{position:relative}
+.tbl-scroll-wrap .tbl-body-scroll{max-height:420px;overflow-y:auto}
+.tbl-fade-bottom{position:absolute;left:0;right:0;bottom:0;height:32px;background:linear-gradient(to bottom, rgba(16,18,22,0), var(--bg2));pointer-events:none;border-radius:0 0 14px 14px}
 .tbl-hdr{display:grid;gap:8px;padding:11px 18px;border-bottom:1px solid var(--bg3);font-size:10px;letter-spacing:.08em;color:var(--muted);font-weight:600;text-transform:uppercase}
 .tbl-hdr>div{overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
 .tbl-row{display:grid;gap:8px;padding:11px 18px;border-bottom:1px solid var(--bg3);align-items:center;transition:background .12s}
@@ -211,6 +217,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
 /* ── MISC ── */
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:24px}
+.two-col>div{min-width:0}
 .card{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:18px}
 .card-title{font-size:13px;font-weight:600;margin-bottom:14px}
 .spinner{width:16px;height:16px;border:2px solid var(--bg4);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
@@ -249,6 +256,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 
   /* tables scroll */
   .tbl{min-width:520px}
+  .tbl-scroll-wrap .tbl-body-scroll{max-height:320px}
 
   /* users table: narrower columns + stacked actions so Ban/Close All/Verify
      stay fully visible and tappable instead of being cut off on the right */
@@ -542,9 +550,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <div class="two-col">
         <div>
           <div class="sec-hdr"><div class="sec-title">API Rate Stats (1h)</div><div class="sec-count" id="sys-rate-count">—</div></div>
-          <div class="tbl">
-            <div class="tbl-hdr col-system"><div>Endpoint</div><div>Requests</div><div>Blocked</div></div>
-            <div id="sys-rate-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          <div class="tbl-wrap">
+            <div class="tbl tbl-scroll-wrap">
+              <div class="tbl-hdr col-system"><div>Endpoint</div><div>Requests</div><div>Blocked</div></div>
+              <div id="sys-rate-body" class="tbl-body-scroll"><div class="tbl-loading"><span class="spinner"></span></div></div>
+              <div class="tbl-fade-bottom"></div>
+            </div>
           </div>
         </div>
         <div>
@@ -555,9 +566,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
               <div class="sec-count" id="sys-ban-count">—</div>
             </div>
           </div>
-          <div class="tbl">
-            <div class="tbl-hdr col-bans"><div>IP Address</div><div>Expires</div><div>Mins Left</div><div></div></div>
-            <div id="sys-ban-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          <div class="tbl-wrap">
+            <div class="tbl">
+              <div class="tbl-hdr col-bans"><div>IP Address</div><div>Expires</div><div>Mins Left</div><div></div></div>
+              <div id="sys-ban-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+            </div>
           </div>
         </div>
       </div>
@@ -1201,7 +1214,7 @@ async function loadSystem() {
     var eps = rateSt.endpoints || [];
     document.getElementById('sys-rate-count').textContent = eps.length + ' endpoints';
     document.getElementById('sys-rate-body').innerHTML = eps.length
-      ? eps.slice(0,12).map(e =>
+      ? eps.map(e =>
           '<div class="tbl-row col-system">' +
           '<div class="mono-sm">' + e.endpoint + '</div>' +
           '<div class="mono">' + e.requests_1h + '</div>' +
