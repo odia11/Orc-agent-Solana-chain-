@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Bot Overview — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OrcAgent">
+<link rel="apple-touch-icon" href="/static/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
+  --accent:#f7b955;--green:#3ad29b;--red:#f76b62;
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --border:#16191f;--border2:#21252c;
+  --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,sans-serif;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.page-wrap{max-width:1100px;margin:0 auto;padding:0 28px 60px}
+
+/* ── NAVBAR (shared shell — matches /history) ── */
+.header{
+  position:sticky;top:0;z-index:30;
+  background:rgba(10,11,14,.86);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 28px;height:56px;gap:16px;
+  margin:0 -28px;
+}
+.logo-row{display:flex;align-items:center;gap:10px;text-decoration:none;flex-shrink:0}
+.logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
+.brand{font-family:var(--ui);font-size:18px;font-weight:700;color:var(--text);letter-spacing:.04em;line-height:1}
+.brand-sub{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
+.header-right{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.wallet-pill{display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--border2);border-radius:20px;padding:5px 12px;font-family:var(--mono);font-size:10px;color:var(--sub)}
+.dot-green{width:6px;height:6px;border-radius:50%;background:var(--green);flex-shrink:0}
+a.hdr-btn,button.hdr-btn{background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:8px 14px;font-family:var(--ui);font-size:12px;font-weight:600;color:var(--sub);cursor:pointer;transition:all .15s;text-decoration:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+a.hdr-btn:hover,button.hdr-btn:hover{border-color:#35353d;color:var(--text)}
+a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accent)}
+
+/* ── PAGE TITLE ── */
+.page-title{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin:26px 0 20px}
+
+/* ── STATUS / ACTION BAR ── */
+.status-bar{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px 22px;margin-bottom:20px}
+.status-left{display:flex;align-items:center;gap:12px;min-width:0}
+.status-dot{width:10px;height:10px;border-radius:50%;background:var(--accent);flex-shrink:0;box-shadow:0 0 0 4px rgba(247,185,85,.15)}
+.status-dot.running{background:var(--green);box-shadow:0 0 0 4px rgba(58,210,155,.15)}
+.status-text-wrap{min-width:0}
+.status-text{font-size:15px;font-weight:700;color:var(--text)}
+.status-sub{font-size:12px;color:var(--muted);margin-top:2px}
+.status-sub a{color:var(--accent);text-decoration:underline;text-underline-offset:2px}
+.bot-toggle-btn{background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;padding:12px 24px;font-family:var(--ui);font-size:14px;font-weight:700;cursor:pointer;transition:opacity .15s;white-space:nowrap;flex-shrink:0}
+.bot-toggle-btn:hover{opacity:.88}
+.bot-toggle-btn:disabled{opacity:.5;cursor:default}
+.bot-toggle-btn.running{background:transparent;border:1px solid rgba(247,107,98,.4);color:var(--red)}
+.status-error{width:100%;font-size:12px;color:var(--red);background:rgba(247,107,98,.08);border:1px solid rgba(247,107,98,.25);border-radius:10px;padding:10px 14px;margin-top:4px;display:none}
+
+/* ── STAT CARDS ── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.stat-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px 19px;display:flex;flex-direction:column;gap:7px}
+.stat-icon{font-size:18px;line-height:1}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.stat-val{font-family:var(--mono);font-size:22px;font-weight:700;color:var(--text)}
+.stat-val.pos{color:var(--green)}
+.stat-val.neg{color:var(--red)}
+.stat-sub{font-size:12px;color:var(--sub);font-family:var(--mono)}
+.stat-sub .win{color:var(--green)}
+.stat-sub .loss{color:var(--red)}
+.progress-track{height:5px;border-radius:3px;background:var(--bg4);overflow:hidden;margin-top:2px}
+.progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
+
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+*{scrollbar-width:thin;scrollbar-color:#21252c transparent}
+
+@media(max-width:768px){
+  .page-title{font-size:17px}
+  .header{padding:0 14px;margin:0 -14px;display:none!important}
+  .page-wrap{padding:0 14px 60px}
+  .stat-grid{grid-template-columns:repeat(2,1fr)}
+  .status-bar{flex-direction:column;align-items:stretch}
+  .bot-toggle-btn{width:100%;min-height:44px}
+  html,body{overflow-x:hidden}
+}
+.mobile-back-bar{display:none}
+@media(max-width:768px){
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
+}
+</style>
+</head>
+<body>
+<div class="mobile-back-bar">
+  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Bot Overview</span>
+</div>
+<div class="page-wrap">
+
+  <!-- NAVBAR -->
+  <div class="header">
+    <a class="logo-row" href="/" style="text-decoration:none">
+      <div class="logo-tile"></div>
+      <div>
+        <div class="brand">OrcAgent</div>
+        <div class="brand-sub">SOLANA SMART SCALPER V4</div>
+      </div>
+    </a>
+    <div class="header-right">
+      {% if wallet %}
+      <div class="wallet-pill">
+        <div class="dot-green"></div>
+        <span>{{ wallet_short }}</span>
+      </div>
+      {% endif %}
+      <a href="/" class="hdr-btn">Dashboard</a>
+      <a href="/bot" class="hdr-btn active">Bot</a>
+      <a href="/history" class="hdr-btn">History</a>
+      <a href="/leaderboard" class="hdr-btn">Leaderboard</a>
+      {% if is_admin %}
+      <a href="/admin" class="hdr-btn" style="border-color:rgba(247,185,85,.3);color:#f7b955">Admin</a>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- TITLE -->
+  <div class="page-title">Bot Overview</div>
+
+  <!-- STATUS / ACTION BAR -->
+  <div class="status-bar">
+    <div class="status-left">
+      <div class="status-dot" id="bot-status-dot"></div>
+      <div class="status-text-wrap">
+        <div class="status-text" id="bot-status-text">Loading…</div>
+        <div class="status-sub" id="bot-status-sub">&nbsp;</div>
+      </div>
+    </div>
+    <button class="bot-toggle-btn" id="bot-toggle-btn" onclick="toggleBot()">Loading…</button>
+    <div class="status-error" id="bot-status-error"></div>
+  </div>
+
+  <!-- STAT CARDS -->
+  <div class="stat-grid">
+    <div class="stat-card">
+      <div class="stat-icon">🎯</div>
+      <div class="stat-lbl">Win Rate</div>
+      <div class="stat-val" id="stat-winrate">—</div>
+      <div class="stat-sub" id="stat-winrate-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📊</div>
+      <div class="stat-lbl">Total Trades</div>
+      <div class="stat-val" id="stat-trades">—</div>
+      <div class="stat-sub" id="stat-trades-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">💰</div>
+      <div class="stat-lbl">Trading Wallet SOL</div>
+      <div class="stat-val" id="stat-sol">—</div>
+      <div class="stat-sub" id="stat-sol-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">⚙️</div>
+      <div class="stat-lbl">Take Profit / Stop Loss</div>
+      <div class="stat-val" id="stat-tpsl">—</div>
+      <div class="stat-sub">Per-trade exit thresholds</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📍</div>
+      <div class="stat-lbl">Open Positions</div>
+      <div class="stat-val" id="stat-positions">—</div>
+      <div class="progress-track"><div class="progress-fill" id="stat-positions-bar" style="width:0%"></div></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">🚀</div>
+      <div class="stat-lbl">Best Trade</div>
+      <div class="stat-val pos" id="stat-best">—</div>
+      <div class="stat-sub" id="stat-best-sub">—</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon">📉</div>
+      <div class="stat-lbl">Worst Trade</div>
+      <div class="stat-val neg" id="stat-worst">—</div>
+      <div class="stat-sub" id="stat-worst-sub">—</div>
+    </div>
+  </div>
+
+</div><!-- /page-wrap -->
+
+<script>
+var _csrfToken = {{ csrf_token|tojson }};
+var _botRunning = false;
+var _hasKey = false;
+
+function _fmtSol(n, showSign) {
+  var v = parseFloat(n || 0);
+  var sign = showSign && v >= 0 ? '+' : '';
+  return sign + v.toFixed(4) + ' SOL';
+}
+function _fmtDate(ts) {
+  if (!ts) return '—';
+  return String(ts).slice(0, 16).replace('T', ' ');
+}
+
+async function loadOverview() {
+  var r = await fetch('/api/bot/overview', {credentials: 'include'}).then(function(r){return r.json()}).catch(function(){return null});
+  if (!r || !r.ok) return;
+
+  _botRunning = !!r.running;
+  _hasKey = !!r.has_trading_key;
+
+  var dot = document.getElementById('bot-status-dot');
+  var text = document.getElementById('bot-status-text');
+  var sub = document.getElementById('bot-status-sub');
+  var btn = document.getElementById('bot-toggle-btn');
+
+  dot.classList.toggle('running', _botRunning);
+  text.textContent = _botRunning ? 'Bot is running' : 'Bot is idle';
+
+  if (!_hasKey) {
+    sub.innerHTML = 'No trading key saved — add one in <a href="/settings">Settings</a> to enable the bot.';
+    btn.textContent = '▶ Start Trading';
+    btn.disabled = true;
+    btn.classList.remove('running');
+  } else {
+    sub.textContent = r.trading_wallet_short ? ('Trading wallet ' + r.trading_wallet_short) : ' ';
+    btn.disabled = false;
+    if (_botRunning) {
+      btn.textContent = '⏹ Stop Trading';
+      btn.classList.add('running');
+    } else {
+      btn.textContent = '▶ Start Trading';
+      btn.classList.remove('running');
+    }
+  }
+
+  // Win rate
+  document.getElementById('stat-winrate').textContent = r.total_trades ? r.win_rate.toFixed(1) + '%' : '—';
+  document.getElementById('stat-winrate').className = 'stat-val' + (r.total_trades ? (r.win_rate >= 50 ? ' pos' : ' neg') : '');
+  document.getElementById('stat-winrate-sub').textContent = r.total_trades ? ('based on ' + r.total_trades + ' trade' + (r.total_trades === 1 ? '' : 's')) : 'no trades yet';
+
+  // Total trades
+  document.getElementById('stat-trades').textContent = r.total_trades || 0;
+  document.getElementById('stat-trades-sub').innerHTML = r.total_trades
+    ? '<span class="win">' + r.wins + ' win' + (r.wins === 1 ? '' : 's') + '</span> · <span class="loss">' + r.losses + ' loss' + (r.losses === 1 ? '' : 'es') + '</span>'
+    : '—';
+
+  // Trading wallet SOL
+  var solEl = document.getElementById('stat-sol');
+  solEl.textContent = parseFloat(r.trading_wallet_sol || 0).toFixed(4) + ' SOL';
+  document.getElementById('stat-sol-sub').textContent = r.trading_wallet_short ? r.trading_wallet_short : (_hasKey ? '—' : 'no trading key saved');
+
+  // TP / SL
+  document.getElementById('stat-tpsl').innerHTML =
+    '<span style="color:var(--green)">+' + parseFloat(r.take_profit).toFixed(1) + '%</span> / <span style="color:var(--red)">-' + parseFloat(r.stop_loss).toFixed(1) + '%</span>';
+
+  // Open positions
+  var maxPos = r.max_positions || 1;
+  var openPos = r.open_positions || 0;
+  document.getElementById('stat-positions').textContent = openPos + ' / ' + maxPos;
+  var pct = Math.min(100, Math.round((openPos / maxPos) * 100));
+  document.getElementById('stat-positions-bar').style.width = pct + '%';
+
+  // Best / worst trade
+  if (r.best_trade) {
+    document.getElementById('stat-best').textContent = _fmtSol(r.best_trade.pnl, true);
+    document.getElementById('stat-best-sub').textContent = '$' + r.best_trade.token + ' · ' + _fmtDate(r.best_trade.timestamp);
+  } else {
+    document.getElementById('stat-best').textContent = '—';
+    document.getElementById('stat-best-sub').textContent = 'no trades yet';
+  }
+  if (r.worst_trade) {
+    document.getElementById('stat-worst').textContent = _fmtSol(r.worst_trade.pnl, true);
+    document.getElementById('stat-worst-sub').textContent = '$' + r.worst_trade.token + ' · ' + _fmtDate(r.worst_trade.timestamp);
+  } else {
+    document.getElementById('stat-worst').textContent = '—';
+    document.getElementById('stat-worst-sub').textContent = 'no trades yet';
+  }
+}
+
+async function toggleBot() {
+  var btn = document.getElementById('bot-toggle-btn');
+  var errEl = document.getElementById('bot-status-error');
+  errEl.style.display = 'none';
+  btn.disabled = true;
+  btn.textContent = _botRunning ? 'Stopping…' : 'Starting…';
+  try {
+    var url = _botRunning ? '/api/bot/stop' : '/api/bot/start';
+    var r = await fetch(url, {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
+      body: '{}'
+    });
+    var d = await r.json().catch(function(){return {}});
+    if (!d.ok && !d.success) {
+      errEl.textContent = d.msg || 'Failed to update bot status';
+      errEl.style.display = 'block';
+    }
+  } catch (e) {
+    errEl.textContent = 'Network error — please try again';
+    errEl.style.display = 'block';
+  }
+  btn.disabled = false;
+  await loadOverview();
+}
+
+loadOverview();
+setInterval(loadOverview, 20000);
+</script>
+<script src="/static/notif-poll.js"></script>
+<script src="/static/page-loader.js"></script>
+</body>
+</html>

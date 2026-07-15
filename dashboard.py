@@ -4100,6 +4100,20 @@ def history():
     )
 
 
+@app.route('/bot')
+def bot_overview_page():
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/')
+    return render_template(
+        'bot.html',
+        wallet=wallet,
+        wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
+        is_admin=_is_owner(wallet),
+        csrf_token=_get_csrf_token(),
+    )
+
+
 @app.route('/wallet')
 def wallet_page():
     print(f'[wallet] route hit — session wallet: {session.get("wallet")} | session keys: {list(session.keys())}', flush=True)
@@ -9331,6 +9345,89 @@ def bot_positions():
         'ok':           True,
         'positions':    result,
         'total_pnl_sol': round(total_pnl_sol, 6),
+    })
+
+@app.route('/api/bot/overview', methods=['GET'])
+@rate_limit(20, 60)
+def bot_overview():
+    """Aggregate snapshot for the dedicated /bot page: live run status, the
+    trading wallet's own SOL balance (not the Phantom session wallet — see
+    _insufficient_trade_balance), current TP/SL/max-positions, and all-time
+    trade stats. One call instead of stitching together several endpoints."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+
+    empty = {
+        'ok': True, 'has_trading_key': False, 'running': False,
+        'open_positions': 0, 'max_positions': 3,
+        'take_profit': 15.0, 'stop_loss': 8.0,
+        'trading_wallet_short': None, 'trading_wallet_sol': 0.0,
+        'total_trades': 0, 'wins': 0, 'losses': 0, 'win_rate': 0.0,
+        'best_trade': None, 'worst_trade': None,
+    }
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            '''SELECT id, encrypted_private_key, take_profit, stop_loss, max_positions
+               FROM users WHERE wallet_address=?''', (wallet,)
+        ).fetchone()
+        if not row:
+            return jsonify(empty)
+        uid, enc_key, take_profit, stop_loss, max_positions = row
+
+        trading_wallet_short = None
+        trading_wallet_sol = 0.0
+        if enc_key:
+            try:
+                with _use_key(enc_key, wallet) as _pk:
+                    from solders.keypair import Keypair as _KP_ov
+                    trading_wallet = str(_KP_ov.from_base58_string(_pk).pubkey())
+                trading_wallet_short = (trading_wallet[:4] + '...' + trading_wallet[-4:])
+                trading_wallet_sol = _get_user_sol(trading_wallet)
+            except Exception:
+                pass
+
+        c = conn.cursor()
+        c.execute('SELECT COUNT(*), SUM(CASE WHEN pnl>=0 THEN 1 ELSE 0 END) FROM trades WHERE user_id=?', (uid,))
+        total_trades, wins = c.fetchone()
+        total_trades = total_trades or 0
+        wins = wins or 0
+        losses = total_trades - wins
+        win_rate = round(wins / total_trades * 100, 1) if total_trades else 0.0
+
+        best_trade = worst_trade = None
+        c.execute('SELECT token, pnl, timestamp FROM trades WHERE user_id=? AND pnl IS NOT NULL ORDER BY pnl DESC LIMIT 1', (uid,))
+        r = c.fetchone()
+        if r:
+            best_trade = {'token': r[0] or '—', 'pnl': round(r[1] or 0, 6), 'timestamp': r[2]}
+        c.execute('SELECT token, pnl, timestamp FROM trades WHERE user_id=? AND pnl IS NOT NULL ORDER BY pnl ASC LIMIT 1', (uid,))
+        r = c.fetchone()
+        if r:
+            worst_trade = {'token': r[0] or '—', 'pnl': round(r[1] or 0, 6), 'timestamp': r[2]}
+    finally:
+        conn.close()
+
+    us = get_user_state(wallet)
+    running = bool(us.get('trader_running', False))
+    open_positions = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
+
+    return jsonify({
+        'ok': True,
+        'has_trading_key': bool(enc_key),
+        'running': running,
+        'open_positions': open_positions,
+        'max_positions': max_positions if max_positions is not None else 3,
+        'take_profit': take_profit if take_profit is not None else 15.0,
+        'stop_loss': stop_loss if stop_loss is not None else 8.0,
+        'trading_wallet_short': trading_wallet_short,
+        'trading_wallet_sol': trading_wallet_sol,
+        'total_trades': total_trades,
+        'wins': wins,
+        'losses': losses,
+        'win_rate': win_rate,
+        'best_trade': best_trade,
+        'worst_trade': worst_trade,
     })
 
 # ── MANUAL SELL ──
