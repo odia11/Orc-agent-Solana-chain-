@@ -4579,7 +4579,7 @@ setInterval(async()=>{
   if(!_pageVersion) return;
   const r=await fetch('/api/version').then(r=>r.json()).catch(()=>null);
   if(r?.version && r.version!==_pageVersion){
-    document.getElementById('update-banner').style.display='block';
+    document.getElementById('update-banner').style.display='flex';
   }
 },30000);
 

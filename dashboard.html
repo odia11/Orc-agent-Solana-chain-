@@ -2514,11 +2514,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .low-sol-close-btn{background:transparent;border:1px solid var(--border2);color:var(--muted);font-size:10px;font-weight:700;letter-spacing:.06em;padding:8px 16px;border-radius:6px;cursor:pointer;width:100%;font-family:'Orbitron',monospace}
 .low-sol-close-btn:hover{border-color:var(--text);color:var(--text)}
 
-#update-banner{display:none;position:fixed;top:0;left:0;right:0;z-index:9999;background:linear-gradient(90deg,#1a4a2a,#0f3320);border-bottom:2px solid #4ade80;padding:10px 16px;text-align:center;animation:ub-slide .35s ease}
-@keyframes ub-slide{from{transform:translateY(-100%)}to{transform:translateY(0)}}
-#update-banner span{color:#e0ffe8;font-family:'Share Tech Mono',monospace;font-size:13px;letter-spacing:.04em}
-#update-banner button{margin-left:14px;background:#4ade80;color:#0a1a10;border:none;border-radius:6px;padding:5px 14px;font-family:'Share Tech Mono',monospace;font-size:12px;font-weight:700;cursor:pointer;letter-spacing:.04em}
-#update-banner button:hover{background:#6aee9a}
+#update-banner{display:none;position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:9999;background:var(--bg2);border:1px solid var(--border2);border-radius:12px;padding:12px 16px;align-items:center;gap:12px;max-width:calc(100vw - 32px);box-shadow:0 8px 32px rgba(0,0,0,.5);animation:ub-slide .3s cubic-bezier(.16,.5,.3,1)}
+@keyframes ub-slide{from{opacity:0;transform:translateX(-50%) translateY(12px)}to{opacity:1;transform:translateX(-50%) translateY(0)}}
+#update-banner .ub-icon{font-size:15px;flex-shrink:0;line-height:1}
+#update-banner .ub-text{color:var(--text);font-family:'Geist',system-ui,sans-serif;font-size:13px;line-height:1.4}
+#update-banner .ub-btn{flex-shrink:0;background:var(--accent);color:#0a0b0e;border:none;border-radius:8px;padding:7px 14px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s;white-space:nowrap}
+#update-banner .ub-btn:hover{opacity:.88}
+@media(max-width:480px){
+  #update-banner{flex-direction:column;align-items:stretch;text-align:center;bottom:16px;padding:14px 16px;gap:10px;width:calc(100vw - 32px)}
+  #update-banner .ub-btn{width:100%;padding:9px 14px}
+}
 
 /* ═══════════════════════════════════════════
    DESIGN UPGRADE — glass cards, glow, Inter
@@ -3166,8 +3171,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
 <!-- UPDATE BANNER -->
 <div id="update-banner">
-  <span>&#x1F4E6; A new update is available &mdash; please refresh the page</span>
-  <button onclick="location.reload()">Refresh Now</button>
+  <span class="ub-icon">&#x1F4E6;</span>
+  <span class="ub-text">A new update is available &mdash; please refresh the page</span>
+  <button class="ub-btn" onclick="location.reload()">Refresh Now</button>
 </div>
 
 <!-- ORC DANCE OVERLAY -->
