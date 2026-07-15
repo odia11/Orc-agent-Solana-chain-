@@ -106,6 +106,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .col-bans{grid-template-columns:minmax(0,1fr) 120px 100px 90px}
 .col-mod{grid-template-columns:minmax(0,1fr) 140px 120px 80px}
 .col-posts{grid-template-columns:minmax(0,1fr) 120px 130px 70px}
+.col-keyevents{grid-template-columns:120px 110px minmax(0,.9fr) minmax(0,1.3fr) 100px minmax(0,1.2fr)}
+.col-staleroles{grid-template-columns:minmax(0,1fr) 90px 100px 140px 130px}
+.col-readonly{grid-template-columns:130px minmax(0,.9fr) 110px minmax(0,1.3fr)}
 
 /* cell types */
 .cell-user{display:flex;align-items:center;gap:9px;min-width:0}
@@ -303,6 +306,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
     </button>
     <button class="nav-btn" id="nav-moderation" onclick="showView('moderation')">
       <span class="nav-icon">⚑</span>Moderation<span class="nav-dot"></span>
+    </button>
+    <button class="nav-btn" id="nav-security" onclick="showView('security')">
+      <span class="nav-icon">🔒</span>Security<span class="nav-dot"></span>
     </button>
     <div class="sb-sep"></div>
     <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
@@ -659,6 +665,74 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       </div>
     </div>
 
+    <!-- ══════════ VIEW: SECURITY ══════════ -->
+    <div class="view" id="view-security">
+      <div class="sec-hdr">
+        <div class="sec-title">Security Audit</div>
+        <div class="sec-actions" style="align-items:center">
+          <span class="sec-count" id="sec-audit-meta">Not run yet</span>
+          <button class="btn btn-primary" id="sec-audit-btn" onclick="runSecurityAudit()">Run Security Audit</button>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="sec-audit-summary" style="display:none">
+        <div class="card">
+          <div class="card-title">Key Reveal / Send Anomalies</div>
+          <div style="font-size:28px;font-weight:700;font-family:'JetBrains Mono',monospace" id="sec-sum-keyevents">—</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" id="sec-sum-keyevents-sub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Stale Privileged Accounts</div>
+          <div style="font-size:28px;font-weight:700;font-family:'JetBrains Mono',monospace" id="sec-sum-stale">—</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" id="sec-sum-stale-sub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Read-only → Privileged Route Hits</div>
+          <div style="font-size:28px;font-weight:700;font-family:'JetBrains Mono',monospace" id="sec-sum-readonly">—</div>
+          <div style="font-size:12px;color:var(--muted);margin-top:4px" id="sec-sum-readonly-sub">—</div>
+        </div>
+      </div>
+
+      <div id="sec-audit-empty" style="padding:48px 18px;text-align:center;color:var(--muted);font-size:13px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px">
+        Run the audit to scan for key-reveal/send anomalies, stale privileged accounts, and read-only sessions that hit privileged routes.
+      </div>
+
+      <div id="sec-audit-results" style="display:none">
+        <div class="sec-hdr">
+          <div class="sec-title">Key Reveal / Send Events</div>
+          <div class="sec-count" id="sec-keyevents-count">—</div>
+        </div>
+        <div class="tbl-wrap" style="margin-bottom:24px">
+          <div class="tbl">
+            <div class="tbl-hdr col-keyevents"><div>Time</div><div>Event</div><div>Wallet</div><div>Wallet Status</div><div>IP</div><div>IP Anomaly</div></div>
+            <div id="sec-keyevents-body"></div>
+          </div>
+        </div>
+
+        <div class="sec-hdr">
+          <div class="sec-title">Stale Privileged Accounts</div>
+          <div class="sec-count" id="sec-stale-count">—</div>
+        </div>
+        <div class="tbl-wrap" style="margin-bottom:24px">
+          <div class="tbl">
+            <div class="tbl-hdr col-staleroles"><div>Wallet</div><div>Role</div><div>Source</div><div>Last Active</div><div>Status</div></div>
+            <div id="sec-stale-body"></div>
+          </div>
+        </div>
+
+        <div class="sec-hdr">
+          <div class="sec-title">Read-only Sessions on Privileged Routes</div>
+          <div class="sec-count" id="sec-readonly-count">—</div>
+        </div>
+        <div class="tbl-wrap">
+          <div class="tbl">
+            <div class="tbl-hdr col-readonly"><div>Time</div><div>Wallet</div><div>IP</div><div>Route</div></div>
+            <div id="sec-readonly-body"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ══════════ VIEW: SETTINGS ══════════ -->
     <div class="view" id="view-settings">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start">
@@ -808,7 +882,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 <script>
 // ── CSRF ──
 window._csrfToken = '';
-fetch('/api/csrf-token').then(function(r){return r.json();}).then(function(d){ window._csrfToken = d.token || ''; }).catch(function(){});
+fetch('/api/csrf-token', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){ window._csrfToken = d.token || ''; }).catch(function(){});
 
 // ── STATE ──
 var _loaded = {};
@@ -817,8 +891,8 @@ var _userRole = 'user';
 
 // ── ROLE ACCESS ──
 var _ROLE_TABS = {
-  admin:     ['overview','users','trades','revenue','system','moderation','settings'],
-  moderator: ['users','trades','moderation'],
+  admin:     ['overview','users','trades','revenue','system','moderation','security','settings'],
+  moderator: ['users','trades','moderation','security'],
   analyst:   ['overview','trades','revenue','system'],
   user:      []
 };
@@ -830,7 +904,7 @@ var _ROLE_BADGE = {
 
 function _applyRoleUI(role) {
   var allowed = _ROLE_TABS[role] || [];
-  ['overview','users','trades','revenue','system','moderation','settings'].forEach(function(name) {
+  ['overview','users','trades','revenue','system','moderation','security','settings'].forEach(function(name) {
     var btn = document.getElementById('nav-' + name);
     if (btn) btn.style.display = allowed.indexOf(name) >= 0 ? '' : 'none';
   });
@@ -856,7 +930,7 @@ async function _initRoleBasedUI() {
 }
 
 // ── VIEW SWITCHING ──
-var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',settings:'Settings'};
+var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',security:'Security',settings:'Settings'};
 function showView(name) {
   var allowed = _ROLE_TABS[_userRole] || Object.keys(_titles);
   if (allowed.indexOf(name) < 0) return;
@@ -1183,6 +1257,96 @@ async function loadModeration() {
         : '<div class="tbl-empty">No posts</div>';
     }
   }
+}
+
+// ══════════════════ SECURITY ══════════════════
+function _escHtml(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+function _walletStatusTag(status, label) {
+  var cls = status === 'known_trader' ? 'tag-green' : status === 'unknown' ? 'tag-red' : 'tag-muted';
+  return '<span class="tag ' + cls + '">' + _escHtml(label) + '</span>';
+}
+function _staleStatusTag(a) {
+  if (a.status === 'stale')        return '<span class="tag tag-red">stale · ' + a.days_inactive + 'd inactive</span>';
+  if (a.status === 'never_active') return '<span class="tag tag-red">never active</span>';
+  return '<span class="tag tag-green">active</span>';
+}
+async function runSecurityAudit() {
+  var btn = document.getElementById('sec-audit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  var r = await fetch('/api/admin/security-audit', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window._csrfToken},
+    body: '{}'
+  }).then(r => r.json()).catch(() => null);
+  btn.disabled = false;
+  btn.textContent = 'Run Security Audit';
+  if (!r || !r.ok) { toast((r && r.msg) || 'Security audit failed', false); return; }
+
+  var ke = r.key_events, sa = r.stale_accounts, ra = r.readonly_attempts;
+
+  document.getElementById('sec-audit-meta').textContent =
+    'Last run ' + (r.ran_at || '').replace('T', ' ').replace('Z', '') + ' UTC · ' + r.window_days + 'd window';
+  document.getElementById('sec-audit-empty').style.display = 'none';
+  document.getElementById('sec-audit-summary').style.display = '';
+  document.getElementById('sec-audit-results').style.display = '';
+
+  var keEl = document.getElementById('sec-sum-keyevents');
+  keEl.textContent = ke.flagged;
+  keEl.style.color = ke.flagged > 0 ? 'var(--red)' : 'var(--accent)';
+  document.getElementById('sec-sum-keyevents-sub').textContent = ke.items.length + ' event(s) in window';
+
+  var saEl = document.getElementById('sec-sum-stale');
+  saEl.textContent = sa.flagged;
+  saEl.style.color = sa.flagged > 0 ? 'var(--red)' : 'var(--accent)';
+  document.getElementById('sec-sum-stale-sub').textContent = sa.items.length + ' privileged account(s) total';
+
+  var raEl = document.getElementById('sec-sum-readonly');
+  raEl.textContent = ra.flagged;
+  raEl.style.color = ra.flagged > 0 ? 'var(--red)' : 'var(--accent)';
+  document.getElementById('sec-sum-readonly-sub').textContent = 'in the last ' + r.window_days + ' days';
+
+  document.getElementById('sec-keyevents-count').textContent = ke.items.length + ' event(s)';
+  document.getElementById('sec-keyevents-body').innerHTML = ke.items.length
+    ? ke.items.map(function(e) {
+        return '<div class="tbl-row col-keyevents">' +
+          '<div class="mono-sm">' + _escHtml((e.ts || '—').slice(0, 16)) + '</div>' +
+          '<div class="mono-sm" title="' + _escHtml(e.details) + '">' + _escHtml(e.event_type) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(e.wallet_short) + '</div>' +
+          '<div>' + _walletStatusTag(e.wallet_status, e.wallet_status_label) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(e.ip || '—') + '</div>' +
+          '<div>' + (e.ip_anomaly ? '<span class="tag tag-amber">' + _escHtml(e.ip_anomaly) + '</span>' : '<span class="tag tag-muted">none</span>') + '</div>' +
+          '</div>';
+      }).join('')
+    : '<div class="tbl-empty">No key_revealed / sol_sent / send_failed events in the window</div>';
+
+  document.getElementById('sec-stale-count').textContent = sa.items.length + ' account(s)';
+  document.getElementById('sec-stale-body').innerHTML = sa.items.length
+    ? sa.items.map(function(a) {
+        return '<div class="tbl-row col-staleroles">' +
+          '<div class="mono-sm">' + _escHtml(a.wallet_short) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(a.role) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(a.source) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(a.last_active ? a.last_active.slice(0, 16) : 'never') + '</div>' +
+          '<div>' + _staleStatusTag(a) + '</div>' +
+          '</div>';
+      }).join('')
+    : '<div class="tbl-empty">No admin/moderator/analyst-role accounts found</div>';
+
+  document.getElementById('sec-readonly-count').textContent = ra.items.length + ' attempt(s)';
+  document.getElementById('sec-readonly-body').innerHTML = ra.items.length
+    ? ra.items.map(function(x) {
+        return '<div class="tbl-row col-readonly">' +
+          '<div class="mono-sm">' + _escHtml((x.ts || '—').slice(0, 16)) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(x.wallet_short) + '</div>' +
+          '<div class="mono-sm">' + _escHtml(x.ip || '—') + '</div>' +
+          '<div class="mono-sm">' + _escHtml(x.path || '—') + '</div>' +
+          '</div>';
+      }).join('')
+    : '<div class="tbl-empty">No read-only session hit a privileged route in the window</div>';
 }
 
 // ══════════════════ SETTINGS ══════════════════

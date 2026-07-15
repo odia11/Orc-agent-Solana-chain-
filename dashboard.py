@@ -1136,6 +1136,12 @@ def get_user_role(wallet: str) -> str:
 
 def _require_role(*allowed_roles):
     """Return a 403 response tuple if session wallet lacks a required role, else None."""
+    if session.get('readonly') and session.get('wallet'):
+        # Pasted-address read-only session hitting a role-gated route — the exact
+        # privilege-escalation pattern fixed in _authenticated_wallet(). Logged so
+        # the admin security audit has real attempts to surface, not just theory.
+        _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
+                             f'{request.method} {request.path}')
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
@@ -4146,6 +4152,9 @@ def settings_page():
 
 @app.route('/admin')
 def admin_page():
+    if session.get('readonly') and session.get('wallet'):
+        _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
+                             f'GET {request.path}')
     wallet = _authenticated_wallet()
     if not wallet or get_user_role(wallet) == 'user':
         return redirect('/')
@@ -11955,6 +11964,164 @@ def admin_security_status():
         'multi_ip_wallets':     multi_ip,
         'ran_at':               datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
     })
+
+# How far back the key-event and readonly-attempt checks look.
+_AUDIT_WINDOW_DAYS = 14
+# A privileged account with no heartbeat in this many days is flagged as stale.
+_AUDIT_STALE_ROLE_DAYS = 30
+
+@app.route('/api/admin/security-audit', methods=['POST'])
+@rate_limit(6, 60)
+def admin_security_audit():
+    """On-demand security audit for the admin dashboard's Security tab.
+
+    Three checks, all read-only:
+    1. Recent key_revealed/sol_sent/send_failed events, enriched with whether the
+       wallet is a known active trader and same-IP anomalies (mirrors the manual
+       analyze_reveal_send.sql incident-response query, but windowed + reusable).
+    2. Privileged (admin/moderator/analyst) accounts with no heartbeat in
+       _AUDIT_STALE_ROLE_DAYS days — dormant accounts that still hold access.
+    3. readonly_privileged_attempt hits — read-only sessions that got 403'd by
+       _require_role(), the exact pattern behind the read-only privilege-escalation
+       fix (see _authenticated_wallet()).
+    """
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+
+        # ── Check 1: key_revealed / sol_sent / send_failed ──
+        c.execute('''
+            WITH hits AS (
+                SELECT id, timestamp, ip_addr, wallet AS wallet_short, event_type, details
+                FROM security_log
+                WHERE event_type IN ('key_revealed','sol_sent','send_failed')
+                  AND timestamp >= datetime('now', ?)
+            ),
+            user_lookup AS (
+                SELECT id, wallet_address,
+                       substr(wallet_address,1,4) || '...' || substr(wallet_address,-4) AS wallet_short,
+                       (encrypted_private_key IS NOT NULL AND encrypted_private_key != '') AS has_key
+                FROM users
+            ),
+            trade_counts AS (
+                SELECT user_id, COUNT(*) AS trade_count, MAX(timestamp) AS last_trade
+                FROM trades GROUP BY user_id
+            ),
+            ip_stats AS (
+                SELECT h1.id,
+                    (SELECT COUNT(*) FROM hits h2 WHERE h2.ip_addr = h1.ip_addr AND h2.id != h1.id
+                       AND ABS(strftime('%s', h2.timestamp) - strftime('%s', h1.timestamp)) <= 60
+                    ) AS same_ip_60s,
+                    (SELECT COUNT(DISTINCT wallet_short) FROM hits h3 WHERE h3.ip_addr = h1.ip_addr
+                    ) AS distinct_wallets_ip
+                FROM hits h1
+            )
+            SELECT h.timestamp, h.ip_addr, h.wallet_short, h.event_type, h.details,
+                   u.id, u.has_key, tc.trade_count, tc.last_trade,
+                   ips.same_ip_60s, ips.distinct_wallets_ip
+            FROM hits h
+            LEFT JOIN user_lookup  u   ON u.wallet_short = h.wallet_short
+            LEFT JOIN trade_counts tc  ON tc.user_id = u.id
+            LEFT JOIN ip_stats     ips ON ips.id = h.id
+            ORDER BY h.timestamp DESC
+            LIMIT 200
+        ''', (f'-{_AUDIT_WINDOW_DAYS} days',))
+        key_events = []
+        for ts, ip, wshort, etype, details, uid, has_key, trade_count, last_trade, same_ip_60s, distinct_wallets in c.fetchall():
+            trade_count = trade_count or 0
+            if uid is None:
+                wallet_status, wallet_status_label = 'unknown', 'Unknown — no matching user for this wallet'
+            elif has_key and trade_count > 0:
+                wallet_status = 'known_trader'
+                wallet_status_label = f'Known active trader — {trade_count} trade(s), last {last_trade}'
+            elif has_key:
+                wallet_status, wallet_status_label = 'key_no_trades', 'Key stored, never traded'
+            else:
+                wallet_status, wallet_status_label = 'no_key', 'No trading key stored'
+
+            ip_anomaly = None
+            if same_ip_60s:
+                ip_anomaly = f'{same_ip_60s} other hit(s) from this IP within 60s'
+            elif distinct_wallets and distinct_wallets > 1:
+                ip_anomaly = f'this IP touched {distinct_wallets} different wallets'
+
+            key_events.append({
+                'ts': ts, 'ip': ip, 'wallet_short': wshort, 'event_type': etype,
+                'details': _redact_keys(str(details or '')),
+                'wallet_status': wallet_status, 'wallet_status_label': wallet_status_label,
+                'ip_anomaly': ip_anomaly,
+            })
+
+        # ── Check 2: stale privileged accounts ──
+        c.execute('''
+            SELECT wallet_address, role, 'admin_roles' AS source FROM admin_roles
+            UNION
+            SELECT wallet_address, role, 'users.role' AS source FROM users
+            WHERE role IS NOT NULL AND lower(role) IN ('admin','moderator','analyst')
+              AND wallet_address NOT IN (SELECT wallet_address FROM admin_roles)
+        ''')
+        privileged = c.fetchall()
+        stale_accounts = []
+        for waddr, role, source in privileged:
+            if waddr == ADMIN_WALLET:
+                continue  # constant super-admin wallet, not a delegated/revocable grant
+            row = conn.execute(
+                'SELECT last_active, created_at FROM users WHERE wallet_address=?', (waddr,)
+            ).fetchone()
+            last_active, created_at = row if row else (None, None)
+            wshort = (waddr[:4] + '...' + waddr[-4:]) if len(waddr) >= 8 else waddr
+            if not last_active:
+                status, days_inactive = 'never_active', None
+            else:
+                try:
+                    days_inactive = (datetime.datetime.utcnow() -
+                                      datetime.datetime.fromisoformat(last_active.replace(' ', 'T'))).days
+                except Exception:
+                    days_inactive = None
+                status = 'stale' if (days_inactive is None or days_inactive >= _AUDIT_STALE_ROLE_DAYS) else 'ok'
+            stale_accounts.append({
+                'wallet': waddr, 'wallet_short': wshort, 'role': (role or '').lower(),
+                'source': source, 'last_active': last_active, 'created_at': created_at,
+                'days_inactive': days_inactive, 'status': status,
+            })
+        stale_accounts.sort(key=lambda a: (a['status'] != 'stale', a['status'] != 'never_active'))
+
+        # ── Check 3: readonly sessions that hit privileged routes ──
+        c.execute('''
+            SELECT timestamp, wallet, ip_addr, details FROM security_log
+            WHERE event_type='readonly_privileged_attempt'
+              AND timestamp >= datetime('now', ?)
+            ORDER BY timestamp DESC
+            LIMIT 100
+        ''', (f'-{_AUDIT_WINDOW_DAYS} days',))
+        readonly_attempts = [
+            {'ts': r[0], 'wallet_short': r[1], 'ip': r[2], 'path': r[3]}
+            for r in c.fetchall()
+        ]
+
+        return jsonify({
+            'ok': True,
+            'ran_at': datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+            'window_days': _AUDIT_WINDOW_DAYS,
+            'key_events': {
+                'items': key_events,
+                'flagged': sum(1 for e in key_events if e['ip_anomaly']),
+            },
+            'stale_accounts': {
+                'items': stale_accounts,
+                'flagged': sum(1 for a in stale_accounts if a['status'] in ('stale', 'never_active')),
+            },
+            'readonly_attempts': {
+                'items': readonly_attempts,
+                'flagged': len(readonly_attempts),
+            },
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)[:200]}), 500
+    finally:
+        conn.close()
 
 @app.route('/api/admin/test_trade', methods=['POST'])
 @rate_limit(3, 300)
