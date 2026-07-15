@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-<title>Trade History — OrcAgent</title>
+<title>Bot Trade History — OrcAgent</title>
 <link rel="manifest" href="/static/manifest.json">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -49,7 +49,8 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:#35353d;color:var(--text)}
 a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accent)}
 
 /* ── PAGE TITLE ── */
-.page-title{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin:26px 0 20px}
+.page-title{font-size:22px;font-weight:700;color:var(--text);letter-spacing:-.02em;margin:26px 0 4px}
+.page-sub{font-size:13px;color:var(--muted);margin-bottom:20px}
 
 /* ── FILTER BAR ── */
 .filter-bar{display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:16px 18px;margin-bottom:16px}
@@ -150,7 +151,7 @@ a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accen
 <body>
 <div class="mobile-back-bar">
   <button onclick="history.back()" class="mobile-back-btn">← Back</button>
-  <span class="mobile-page-title">Trade History</span>
+  <span class="mobile-page-title">Bot Trade History</span>
 </div>
 <div class="page-wrap">
 
@@ -181,7 +182,8 @@ a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accen
   </div>
 
   <!-- TITLE -->
-  <div class="page-title">Trade History</div>
+  <div class="page-title">Bot Trade History</div>
+  <div class="page-sub">Trades executed by your trading bot — manual Live Market trades appear on your <a href="/wallet" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px">Wallet</a> page</div>
 
   {% if trades %}
 
