@@ -2123,7 +2123,8 @@ def check_daily_reset_user(us: dict):
 
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
-                       exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True):
+                       exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True,
+                       source: str = 'bot'):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -2253,11 +2254,11 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         try:
             conn.execute(
                 '''INSERT INTO trades
-                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
-                 mint or None))
+                 mint or None, source))
             conn.commit()
         finally:
             conn.close()
@@ -7687,12 +7688,12 @@ def api_trade_sell():
             _record_user_trade(user_id, us, symbol, entry, exit_price,
                                pos['amount'], pos.get('spend', 0.0),
                                wallet=wallet, private_key=pk, mint=mint,
-                               exit_reason='MANUAL SELL', opened_at=opened_at)
+                               exit_reason='MANUAL SELL', opened_at=opened_at, source='manual')
     else:
         _record_user_trade(user_id, us, symbol, entry, exit_price,
                            pos['amount'], pos.get('spend', 0.0),
                            mint=mint, exit_reason='MANUAL SELL (swap failed)',
-                           opened_at=opened_at)
+                           opened_at=opened_at, source='manual')
     us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
     return jsonify({'ok': True, 'pnl': pnl, 'exit_price': exit_price, 'sell_executed': sell_ok})
 
@@ -9148,12 +9149,12 @@ def api_manual_sell():
         with _use_key(enc_blob, wallet) as _pk:
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                                wallet=wallet, private_key=_pk, mint=mint,
-                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0))
+                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual')
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
     else:
         _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                            mint=mint, exit_reason='MANUAL SELL',
-                           opened_at=pos.get('opened_at', 0.0))
+                           opened_at=pos.get('opened_at', 0.0), source='manual')
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position cleared')
     us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
     if not sell_ok:
@@ -9524,12 +9525,12 @@ def manual_sell():
         with _use_key(enc_blob, wallet) as _pk:
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                                wallet=wallet, private_key=_pk, mint=mint,
-                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0))
+                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual')
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
     else:
         _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                            mint=mint, exit_reason='MANUAL SELL',
-                           opened_at=pos.get('opened_at', 0.0))
+                           opened_at=pos.get('opened_at', 0.0), source='manual')
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position cleared')
     us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
     if not sell_ok:
