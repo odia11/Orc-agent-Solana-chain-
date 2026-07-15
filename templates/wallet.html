@@ -218,6 +218,14 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 .act-amt{font-family:var(--mono);font-size:13px;font-weight:700}
 .act-time{font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
 
+/* ── manual trade history (Live Market instant-trades) ── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px;margin-bottom:14px}
+.stat-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:16px 17px;display:flex;flex-direction:column;gap:6px}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.stat-val{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--text)}
+.stat-val.pos{color:var(--green)}
+.stat-val.neg{color:var(--red)}
+
 /* ── state msg ── */
 .state-msg{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
 
@@ -616,6 +624,27 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
         <a href="/history" class="act-viewall">View all →</a>
       </div>
       <div id="activity-list"><div class="state-msg">Loading…</div></div>
+    </div>
+
+    <!-- manual trade history — Live Market instant-trades only (source='manual');
+         bot-executed trades live on /bot and /history instead -->
+    <div class="act-card" style="margin-top:16px">
+      <div class="act-hdr">
+        <span class="act-title">Trade History</span>
+      </div>
+      <div style="padding:16px 18px 0">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-lbl">Total Trades</div>
+            <div class="stat-val" id="mt-total">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Total PnL</div>
+            <div class="stat-val" id="mt-pnl">—</div>
+          </div>
+        </div>
+      </div>
+      <div id="manual-trades-list"><div class="state-msg">Loading…</div></div>
     </div>
 
   </div><!-- .wlt-content -->
@@ -1481,6 +1510,57 @@ async function _loadActivity(){
   }
 }
 _loadActivity()
+
+// ── manual trade history (Live Market instant-trades) ──
+async function _loadManualTrades(){
+  var list=document.getElementById('manual-trades-list')
+  var totalEl=document.getElementById('mt-total')
+  var pnlEl=document.getElementById('mt-pnl')
+  try{
+    var r=await fetch('/api/wallet/manual-trades')
+    var d=await r.json()
+    if(!d.ok){
+      list.innerHTML='<div class="state-msg">Failed to load trade history</div>'
+      return
+    }
+    totalEl.textContent=d.total_trades||0
+    var pnl=parseFloat(d.total_pnl||0)
+    pnlEl.textContent=(pnl>=0?'+':'')+pnl.toFixed(4)+' SOL'
+    pnlEl.className='stat-val'+(pnl>0?' pos':pnl<0?' neg':'')
+
+    if(!d.items||!d.items.length){
+      list.innerHTML='<div class="state-msg">No manual trades yet — instant-trades from Live Market will appear here</div>'
+      return
+    }
+    var html=''
+    d.items.forEach(function(t){
+      var isBuy=t.type==='buy'
+      var iconBg=isBuy?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)'
+      var color=isBuy?'#3ad29b':'#f76b62'
+      var arrow=isBuy?'↑':'↓'
+      var sym=(t.token||'?').replace(/^\$/,'').toUpperCase()
+      var sub=(isBuy?'Bought':'Sold')+' $'+sym
+      var amtStr=isBuy?(t.amount_sol.toFixed(4)+' SOL'):'—'
+      var ts=(t.timestamp||'').replace('T',' ').slice(0,16)
+      html+='<div class="act-row">'
+        +'<div class="act-tile" style="background:'+iconBg+';color:'+color+'">'+arrow+'</div>'
+        +'<div class="act-main">'
+        +'<div class="act-type">'+(isBuy?'Buy':'Sell')+'</div>'
+        +'<div class="act-sub">'+sub+'</div>'
+        +'</div>'
+        +'<div class="act-right">'
+        +'<div class="act-amt" style="color:'+color+'">'+amtStr+'</div>'
+        +'<div class="act-time">'+ts+'</div>'
+        +'</div>'
+        +'</div>'
+    })
+    list.innerHTML=html
+  }catch(e){
+    console.error('[manual-trades]',e)
+    list.innerHTML='<div class="state-msg">Failed to load trade history</div>'
+  }
+}
+_loadManualTrades()
 
 
 </script>

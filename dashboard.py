@@ -4056,7 +4056,7 @@ def history():
             user_id = row[0]
             c.execute(
                 '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address
-                   FROM trades WHERE user_id=? ORDER BY timestamp DESC''',
+                   FROM trades WHERE user_id=? AND COALESCE(source,'bot')='bot' ORDER BY timestamp DESC''',
                 (user_id,)
             )
             for ts, token, entry, exit_p, amount, pnl, opened_at, mint_addr in c.fetchall():
@@ -5462,6 +5462,51 @@ def wallet_activity():
             'time':       rel,
         })
     return jsonify({'ok': True, 'activity': activity})
+
+
+@app.route('/api/wallet/manual-trades', methods=['GET'])
+@rate_limit(30, 60)
+def wallet_manual_trades():
+    """Summary + list of trades made manually via Live Market instant-trade
+    (source='manual') — the counterpart to /api/bot/overview, which only
+    covers trades the bot itself executed (source='bot')."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        user_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if not user_row:
+            return jsonify({'ok': True, 'total_trades': 0, 'total_pnl': 0.0, 'items': []})
+        uid = user_row[0]
+        c = conn.cursor()
+        c.execute("SELECT COUNT(*), COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND source='manual'", (uid,))
+        total_trades, total_pnl = c.fetchone()
+        rows = conn.execute(
+            "SELECT token, amount, pnl, timestamp, mint_address FROM trades "
+            "WHERE user_id=? AND source='manual' ORDER BY timestamp DESC LIMIT 50",
+            (uid,)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    items = []
+    for token, amount, pnl, ts, mint_addr in rows:
+        is_buy = float(amount or 0) > 0
+        items.append({
+            'token':        token or '—',
+            'type':         'buy' if is_buy else 'sell',
+            'amount_sol':   round(float(amount or 0), 4),
+            'pnl':          round(float(pnl or 0), 6),
+            'timestamp':    ts,
+            'mint_address': mint_addr or '',
+        })
+    return jsonify({
+        'ok': True,
+        'total_trades': total_trades or 0,
+        'total_pnl':    round(total_pnl or 0.0, 6),
+        'items':        items,
+    })
 
 
 @app.route('/api/wallet/send', methods=['POST'])
@@ -9388,8 +9433,11 @@ def bot_overview():
             except Exception:
                 pass
 
+        # Bot Overview only covers trades the bot itself executed — manual Live
+        # Market instant-trades (source='manual') get their own summary on the
+        # wallet page instead, so they're excluded here.
         c = conn.cursor()
-        c.execute('SELECT COUNT(*), SUM(CASE WHEN pnl>=0 THEN 1 ELSE 0 END) FROM trades WHERE user_id=?', (uid,))
+        c.execute("SELECT COUNT(*), SUM(CASE WHEN pnl>=0 THEN 1 ELSE 0 END) FROM trades WHERE user_id=? AND COALESCE(source,'bot')='bot'", (uid,))
         total_trades, wins = c.fetchone()
         total_trades = total_trades or 0
         wins = wins or 0
@@ -9397,11 +9445,11 @@ def bot_overview():
         win_rate = round(wins / total_trades * 100, 1) if total_trades else 0.0
 
         best_trade = worst_trade = None
-        c.execute('SELECT token, pnl, timestamp FROM trades WHERE user_id=? AND pnl IS NOT NULL ORDER BY pnl DESC LIMIT 1', (uid,))
+        c.execute("SELECT token, pnl, timestamp FROM trades WHERE user_id=? AND COALESCE(source,'bot')='bot' AND pnl IS NOT NULL ORDER BY pnl DESC LIMIT 1", (uid,))
         r = c.fetchone()
         if r:
             best_trade = {'token': r[0] or '—', 'pnl': round(r[1] or 0, 6), 'timestamp': r[2]}
-        c.execute('SELECT token, pnl, timestamp FROM trades WHERE user_id=? AND pnl IS NOT NULL ORDER BY pnl ASC LIMIT 1', (uid,))
+        c.execute("SELECT token, pnl, timestamp FROM trades WHERE user_id=? AND COALESCE(source,'bot')='bot' AND pnl IS NOT NULL ORDER BY pnl ASC LIMIT 1", (uid,))
         r = c.fetchone()
         if r:
             worst_trade = {'token': r[0] or '—', 'pnl': round(r[1] or 0, 6), 'timestamp': r[2]}
