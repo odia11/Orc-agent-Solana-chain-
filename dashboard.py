@@ -4133,6 +4133,7 @@ def history():
     if not wallet:
         return redirect('/')
     trades = []
+    open_positions = []
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
@@ -4140,6 +4141,31 @@ def history():
         row = c.fetchone()
         if row:
             user_id = row[0]
+            c.execute(
+                '''SELECT mint_address, symbol, amount, buy_price, opened_at
+                   FROM open_positions WHERE user_id=? AND source='bot' ORDER BY opened_at DESC''',
+                (user_id,)
+            )
+            live_map = {t['mint']: t for t in state.get('tokens', [])}
+            for mint_addr, symbol, amount, buy_price, opened_at in c.fetchall():
+                live       = live_map.get(mint_addr, {})
+                cur_price  = live.get('price', buy_price)
+                pnl_pct    = round((cur_price - buy_price) / buy_price * 100, 2) if buy_price > 0 else 0.0
+                opened_str = ''
+                if opened_at:
+                    try:
+                        opened_str = datetime.datetime.utcfromtimestamp(float(opened_at)).strftime('%Y-%m-%d %H:%M')
+                    except Exception:
+                        pass
+                open_positions.append({
+                    'token':         symbol or (mint_addr[:8] if mint_addr else '—'),
+                    'entry_price':   round(buy_price, 6),
+                    'current_price': round(cur_price, 6),
+                    'amount':        round(amount, 4),
+                    'pnl_pct':       pnl_pct,
+                    'opened_at':     opened_str,
+                    'mint_address':  mint_addr or '',
+                })
             c.execute(
                 '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address
                    FROM trades WHERE user_id=? AND COALESCE(source,'bot')='bot' ORDER BY timestamp DESC''',
@@ -4151,10 +4177,14 @@ def history():
                 exit_p  = exit_p or 0.0
                 pnl_pct = round((exit_p - entry) / entry * 100, 2) if entry > 0 else 0.0
                 duration = ''
+                opened_date = ''
+                opened_time = ''
                 if opened_at:
                     try:
                         closed_dt = datetime.datetime.strptime((ts or '')[:19], '%Y-%m-%dT%H:%M:%S')
                         opened_dt = datetime.datetime.utcfromtimestamp(float(opened_at))
+                        opened_date = opened_dt.strftime('%Y-%m-%d')
+                        opened_time = opened_dt.strftime('%H:%M')
                         secs = max(0, int((closed_dt - opened_dt).total_seconds()))
                         if secs >= 3600:
                             duration = f'{secs // 3600}h {(secs % 3600) // 60}m'
@@ -4165,6 +4195,8 @@ def history():
                 trades.append({
                     'date':         (ts or '')[:10],
                     'time':         (ts or '')[11:16],
+                    'opened_date':  opened_date,
+                    'opened_time':  opened_time,
                     'token':        token or '—',
                     'entry_price':  round(entry,  6),
                     'exit_price':   round(exit_p, 6),
@@ -4180,6 +4212,7 @@ def history():
     return render_template(
         'history.html',
         trades=trades,
+        open_positions=open_positions,
         wallet=wallet,
         wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
         is_admin=_is_owner(wallet),
