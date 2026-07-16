@@ -209,6 +209,7 @@ TAKE_PROFIT     = 0.05   # 5%  — universal take profit
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
+MIN_MARKETCAP_USD = 30_000  # tokens below this (fdv) are skipped before any paid/rate-limited check
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -2757,6 +2758,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _tsym = _t.get('symbol', '') or _t['mint'][:8]
                         if _t['mint'] in _blacklisted:
                             _skip_log.append(f'[skip] {_tsym}: blacklisted by user')
+                            continue
+                        _mcap = _t.get('fdv', 0) or 0
+                        if _mcap < MIN_MARKETCAP_USD:
+                            _skip_log.append(f'[skip] {_tsym}: Skipped: marketcap ${int(_mcap):,} below ${int(MIN_MARKETCAP_USD):,} minimum')
                             continue
                         if pref_scam_filter:
                             _rf = _t.get('breakdown', {}).get('risk_flags', [])
