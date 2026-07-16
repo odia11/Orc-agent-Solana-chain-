@@ -2381,9 +2381,9 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             _nc = sqlite3.connect(DB_FILE)
             _nc.execute(
                 'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                (user_id, 'trade', notif_content, '/history'))
+                (user_id, 'trade', notif_content, '/notifications'))
             _nc.commit()
-            _send_push_notification(user_id, 'Trade closed', notif_content, '/history')
+            _send_push_notification(user_id, 'Trade closed', notif_content, '/notifications')
             _nc.close()
         except Exception as _ne:
             print(f'[notif] trade notification failed: {_ne}', flush=True)

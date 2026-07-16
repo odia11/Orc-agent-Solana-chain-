@@ -36,6 +36,11 @@
 .ntf-list{display:flex;flex-direction:column}
 .ntf-row{display:flex;align-items:flex-start;gap:12px;padding:16px 4px;border-bottom:1px solid var(--bg3);text-decoration:none;color:inherit;position:relative}
 .ntf-row:hover{background:#0d0e11}
+.ntf-row-link{display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;text-decoration:none;color:inherit}
+.ntf-share-btn{flex-shrink:0;align-self:center;background:none;border:1px solid var(--bg4);color:var(--accent);font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:var(--ui);white-space:nowrap;transition:background .15s;min-height:32px}
+.ntf-share-btn:hover{background:rgba(247,185,85,.08)}
+.ntf-share-btn:disabled{opacity:.6;cursor:default}
+@media(max-width:767px){ .ntf-share-btn{min-height:44px} }
 .ntf-icon{width:38px;height:38px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;margin-top:2px}
 .ntf-icon.trade-up{background:rgba(58,210,155,.14);color:var(--green)}
 .ntf-icon.trade-down{background:rgba(255,77,106,.14);color:var(--red)}
@@ -228,6 +233,17 @@ function _rowHtml(n, kind){
     iconCls = p.positive ? 'trade-up' : 'trade-down';
     bodyHtml = '<div class="ntf-text">' + _esc(p.headline) + '</div>'
       + (p.chip ? '<div class="ntf-chip ' + (p.positive?'pos':'neg') + '">' + _esc(p.chip) + '</div>' : '');
+    var tradeHref = n.link || '#';
+    // The bot no longer auto-posts this trade anywhere — give the user an
+    // explicit, one-click way to share it themselves if they want to.
+    return '<div class="ntf-row">'
+      + '<a class="ntf-row-link" href="' + _esc(tradeHref) + '" data-id="' + n.id + '">'
+      + '<div class="ntf-icon ' + iconCls + '">' + _ICON_SVG[iconCls] + '</div>'
+      + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
+      + '</a>'
+      + '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" onclick="_shareTrade(this,event)">Share</button>'
+      + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
+      + '</div>';
   } else if(type === 'message'){
     iconCls = 'message';
     bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
@@ -241,6 +257,33 @@ function _rowHtml(n, kind){
     + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
     + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
     + '</a>';
+}
+function _shareTrade(btn, ev){
+  ev.preventDefault();
+  ev.stopPropagation();
+  var content = btn.getAttribute('data-content') || '';
+  var m = content.match(/^Trade closed:\s*\$?(\S+)\s*([+\-][\d.]+)%\s*\(([+\-][\d.]+)\s*SOL\)/);
+  if(!m) return;
+  var symbol = m[1], pct = m[2], sol = m[3];
+  var shareText = 'Just closed $' + symbol + ' ' + pct + '% (' + sol + ' SOL) on OrcAgent 🐋';
+  btn.disabled = true;
+  btn.textContent = 'Sharing…';
+  fetch('/api/feed/post', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json', 'X-CSRF-Token':_csrfToken},
+    body: JSON.stringify({content: shareText})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok){
+      btn.textContent = 'Shared ✓';
+    } else {
+      btn.disabled = false;
+      btn.textContent = 'Share';
+      alert(d.msg || 'Could not share');
+    }
+  }).catch(function(){
+    btn.disabled = false;
+    btn.textContent = 'Share';
+  });
 }
 function _render(){
   var list = document.getElementById('ntf-list');
