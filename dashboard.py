@@ -2621,10 +2621,11 @@ def user_trader_loop(stop_event, config, wallet: str):
     print(f'[trader]   TP     : +{round(take_profit*100)}%', flush=True)
     print(f'[trader]   SL     : -{round(stop_loss*100)}%', flush=True)
     print(f'[trader]   exit   : {round(EXIT_PERCENTAGE*100)}% of position', flush=True)
-    print(f'[trader]   max pos: 5  |  scan interval: 30s', flush=True)
+    _scan_interval = config.get('interval', 15)
+    print(f'[trader]   max pos: 5  |  scan interval: {_scan_interval}s', flush=True)
     add_user_log(wallet, '[' + short + '] Trader started — TP:+' + str(round(take_profit*100)) +
                  '% SL:-' + str(round(stop_loss*100)) +
-                 '% | entry: ' + _m5_desc + ' 5m OR 1h + not reversing | max 5 pos | scan 30s')
+                 '% | entry: ' + _m5_desc + ' 5m OR 1h + not reversing | max 5 pos | scan ' + str(_scan_interval) + 's')
     positions = us['positions']
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
@@ -2941,7 +2942,7 @@ def user_trader_loop(stop_event, config, wallet: str):
             except Exception as e:
                 print(f'[bot] {short} LOOP ERROR: {e}', flush=True)
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
-            stop_event.wait(config.get('interval', 30))
+            stop_event.wait(config.get('interval', 15))
     finally:
         print(f'[bot] {short} loop exited — running set to False', flush=True)
         add_user_log(wallet, '[' + short + '] Trader stopped')
