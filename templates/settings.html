@@ -784,9 +784,9 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape') _closeManage();
 });
 </script>
-<script src="/static/notif-poll.js"></script>
-<script src="/static/push-subscribe.js?v=2"></script>
+<script src="/static/notif-poll.js?v={{ app_version }}"></script>
+<script src="/static/push-subscribe.js?v={{ app_version }}"></script>
 <script>_initPushToggle();</script>
-<script src="/static/page-loader.js"></script>
+<script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body>
 </html>

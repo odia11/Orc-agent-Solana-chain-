@@ -3051,6 +3051,7 @@ def index():
         low_balance_modal_html = f.read()
     html = html.replace('__LOW_BALANCE_MODAL__', low_balance_modal_html)
     html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
+    html = html.replace('__ASSET_VER__', _APP_VERSION)
     _sw = session.get('wallet', '')
     print(f'[phantom-debug] index() session_wallet={_sw!r} '
           f'cookies_received={list(request.cookies.keys())} '
@@ -4601,6 +4602,10 @@ def _app_version() -> str:
 
 _APP_VERSION: str = _app_version()
 
+@app.context_processor
+def _inject_app_version():
+    return {'app_version': _APP_VERSION}
+
 @app.route('/api/version')
 @rate_limit(120, 60)
 def api_version():
@@ -5749,8 +5754,7 @@ def social_feed():
         rows = conn.execute('''
             SELECT * FROM (
                 SELECT fp.id, fp.wallet, fp.content, fp.created_at,
-                       (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
-                       (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
+                       'p' as kind,
                        u.username, NULL as symbol, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
                        u.avatar_url, u.is_verified
@@ -5759,8 +5763,7 @@ def social_feed():
                 UNION ALL
                 SELECT t.id, u.wallet_address as wallet, NULL as content,
                        t.timestamp as created_at,
-                       (SELECT COUNT(*) FROM post_likes   WHERE post_id = 't'||t.id) as like_count,
-                       (SELECT COUNT(*) FROM feed_replies WHERE post_id = 't'||t.id) as reply_count,
+                       't' as kind,
                        u.username,
                        t.token as symbol,
                        CASE WHEN t.entry_price > 0 AND t.exit_price > 0
@@ -5777,12 +5780,27 @@ def social_feed():
                    THEN replace(replace(created_at,'T',' '),'Z','')
                    ELSE created_at END DESC LIMIT 50
         ''', (my_wallet, my_wallet) + ((my_uid,) if feed_filter == 'following' else ())).fetchall()
+
+        # Batch-fetch like/reply counts for exactly the rows on this page instead
+        # of a correlated subquery per row (which forced SQLite to compute counts
+        # for every historical post/trade before the outer ORDER BY/LIMIT applied).
+        post_ids = [row[4] + str(row[0]) for row in rows]
+        like_counts, reply_counts = {}, {}
+        if post_ids:
+            ph = ','.join('?' * len(post_ids))
+            like_counts = dict(conn.execute(
+                f'SELECT post_id, COUNT(*) FROM post_likes WHERE post_id IN ({ph}) GROUP BY post_id',
+                post_ids))
+            reply_counts = dict(conn.execute(
+                f'SELECT post_id, COUNT(*) FROM feed_replies WHERE post_id IN ({ph}) GROUP BY post_id',
+                post_ids))
     finally:
         conn.close()
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, like_count, reply_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
+        rid, wallet, content, created_at, kind, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
+        post_id = kind + str(rid)
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
         feed.append({
@@ -5790,8 +5808,8 @@ def social_feed():
             'wallet':      short,
             'content':     content or '',
             'created_at':  created_at or '',
-            'like_count':  like_count or 0,
-            'reply_count': reply_count or 0,
+            'like_count':  like_counts.get(post_id, 0),
+            'reply_count': reply_counts.get(post_id, 0),
             'username':    display,
             'symbol':      symbol or '',
             'pnl_pct':     pnl_pct or 0,
