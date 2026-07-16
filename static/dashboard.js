@@ -5049,26 +5049,26 @@ function copyDepositAddr() {
 
 // ── TIPS MODAL ───────────────────────────────────────────────────────────────
 const _TIPS_DATA=[
-  {icon:'🔄',color:'#9b6bff',title:'Two Ways to Trade',
+  {icon:'🔄',title:'Two Ways to Trade',
    items:['🤖 <b>Auto Mode</b> — bot scans and trades automatically 24/7',
           '🖐️ <b>Manual Mode</b> — pick tokens from Live Market and buy/sell yourself'],
-   note:'<span style="color:#ffffff;font-weight:700">Or use both at the same time!</span>'},
-  {icon:'🤖',color:'#000000',title:'Auto Trading',
+   note:'Or use both at the same time!'},
+  {icon:'🤖',title:'Auto Trading',
    items:['Bot scans 75+ tokens every 30 seconds',
           'Buys on momentum + volume + liquidity signals',
           'Sells at Take Profit or Stop Loss automatically']},
-  {icon:'🖐️',color:'#00bfff',title:'Manual Trading',
+  {icon:'🖐️',title:'Manual Trading',
    items:['Go to Live Solana Market on dashboard',
           'Press BUY on any token to instantly buy',
           'Press SELL to exit your position']},
-  {icon:'⚙️',color:'#767676',title:'Bot Strategy (Auto)',
+  {icon:'⚙️',title:'Bot Strategy (Auto)',
    items:['Bot strategy: TP +12% / SL -3% — 100% exit on both',
           'No configuration needed — strategy is fixed',
           'SL check runs before TP for capital preservation']},
-  {icon:'💰',color:'#00d2b4',title:'Deposit SOL',
+  {icon:'💰',title:'Deposit SOL',
    items:['Minimum 0.05 SOL to trade',
           'Max 5 concurrent positions']},
-  {icon:'🔒',color:'#ff1744',title:'Stay Safe',
+  {icon:'🔒',title:'Stay Safe',
    items:['Never share your private key',
           'Start with small trade sizes']},
 ];
@@ -5096,7 +5096,7 @@ function _renderTipsSlide(){
   const note=tip.note?'<div class="tips-note">'+tip.note+'</div>':'';
   document.getElementById('tips-content').innerHTML=
     '<div class="tips-slide-icon">'+tip.icon+'</div>'+
-    '<div class="tips-slide-title" style="color:'+tip.color+'">'+tip.title.toUpperCase()+'</div>'+
+    '<div class="tips-slide-title">'+tip.title.toUpperCase()+'</div>'+
     '<ul class="tips-items">'+items+'</ul>'+note;
   document.getElementById('tips-prev-btn').disabled=_tipsStep===0;
   document.getElementById('tips-next-btn').textContent=isLast?'Start Trading! ▶':'Next →';
@@ -7295,7 +7295,14 @@ function renderHomeFeed(){
     return;
   }
   var items = _homeFeedData;
-  if(_homeFeedFilter === 'live' || _homeFeedFilter === 'livetrades') items = items.filter(function(i){ return i.type==='trade'||i.type==='open'; });
+  if(_homeFeedFilter === 'live' || _homeFeedFilter === 'livetrades'){
+    items = items.filter(function(i){ return i.type==='trade'||i.type==='open'; });
+  } else {
+    // Trades no longer auto-appear as if personally posted in the regular
+    // feed — they only show in the explicit Live Trades ticker above, or as
+    // a real post if the user chose to share one via the notifications page.
+    items = items.filter(function(i){ return i.type!=='trade'; });
+  }
   if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
   el.innerHTML = items.map(_renderFeedCard).join('');
   _initLiveCharts();
