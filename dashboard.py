@@ -2555,13 +2555,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
                                        pref_notifications=pref_notifications)
+                positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
             else:
-                _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                   _pos['amount'], _pos.get('spend', 0), mint=_mint,
-                                   exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
-                                   pref_notifications=pref_notifications)
-            positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-            continue  # skip normal stop-loss check — crash exit already handled
+                add_user_log(wallet, f'[{short}] ✗ [crash-exit] {_label} sell failed — position kept open, will retry next scan')
+            continue  # skip normal stop-loss check — crash exit already handled (or will retry)
         if _chg <= -stop_loss:
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             print(f'[trader] {short} STARTUP FORCE SELL {_label} {round(_chg*100,1)}%', flush=True)
@@ -2573,12 +2570,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
                                        pref_notifications=pref_notifications)
+                positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
             else:
-                _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                   _pos['amount'], _pos.get('spend', 0), mint=_mint,
-                                   exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
-                                   pref_notifications=pref_notifications)
-            positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                add_user_log(wallet, f'[{short}] ✗ STARTUP FORCE SELL {_label} failed — position kept open, will retry next scan')
 
     try:
         while not stop_event.is_set():
@@ -2660,14 +2654,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications)
+                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                            open_pos -= 1
                         else:
-                            add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position cleared')
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               mint=mint, exit_reason='RUGPULL ' + _rug_reason[:40],
-                                               opened_at=pos.get('opened_at', 0.0),
-                                               pref_notifications=pref_notifications)
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-                        open_pos -= 1
+                            add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position kept open, will retry next scan')
                         continue  # skip crash-exit and TP/SL
                     if price < pos['buy_price'] * (1 - crash_exit):
                         crash_pct = str(round(chg*100,1)) + '%'
@@ -2681,15 +2671,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications)
+                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                            open_pos -= 1
                         else:
-                            add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position cleared')
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               mint=mint, exit_reason='CRASH EXIT ' + crash_pct,
-                                               opened_at=pos.get('opened_at', 0.0),
-                                               pref_notifications=pref_notifications)
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-                        open_pos -= 1
-                        continue  # skip normal TP/SL — crash exit already handled
+                            add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position kept open, will retry next scan')
+                        continue  # skip normal TP/SL — crash exit already handled (or will retry)
                     exit_reason = None
                     if chg <= -stop_loss:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
@@ -2705,14 +2691,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications)
+                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                            open_pos -= 1
                         else:
-                            add_user_log(wallet, '[' + short + '] ✗ Sell failed — position cleared')
-                            _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
-                                               mint=mint, exit_reason=exit_reason,
-                                               opened_at=pos.get('opened_at', 0.0),
-                                               pref_notifications=pref_notifications)
-                        positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-                        open_pos -= 1
+                            add_user_log(wallet, '[' + short + '] ✗ Sell failed — position kept open, will retry next scan')
 
                 # ── Profit protection: gate Pass 2 without touching exit logic ──
                 _now_plk   = time.time()
