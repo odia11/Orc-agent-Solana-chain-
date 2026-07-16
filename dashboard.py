@@ -558,7 +558,12 @@ def _cleanup_loop():
             )
             for wallet, _ in by_age[:len(user_states) - _USER_STATES_MAX]:
                 try:
-                    if not user_states[wallet].get('trader_running'):
+                    _ws = user_states[wallet]
+                    _has_open_pos = any(p.get('amount', 0) > 0 for p in _ws.get('positions', {}).values())
+                    # Never evict a wallet with a running bot or an open position — hydration
+                    # would rebuild a SECOND, separate positions dict for it on next touch,
+                    # diverging from whatever the still-running bot thread holds a reference to.
+                    if not _ws.get('trader_running') and not _has_open_pos:
                         del user_states[wallet]
                 except KeyError:
                     pass  # already removed by another thread
@@ -727,6 +732,9 @@ def _audit_loop():
 
 # ── TRADER LOCK (prevents double-start race condition) ──
 _trader_lock = threading.Lock()
+# Guards the check-hydrate-insert sequence in get_user_state() so a wallet's
+# open positions are only ever loaded from the DB once per process lifetime.
+_user_states_lock = threading.Lock()
 
 # ── SQLITE DATABASE ──
 def init_db():
@@ -773,6 +781,25 @@ def init_db():
         fee_tx       TEXT DEFAULT '',
         timestamp    TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
+    # Open positions: persists what used to live only in user_states[wallet]['positions']
+    # (RAM), so a process restart no longer silently loses track of held tokens. A row
+    # exists iff the position is currently open — closing it means deleting the row.
+    c.execute('''CREATE TABLE IF NOT EXISTS open_positions (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id         INTEGER NOT NULL,
+        mint_address    TEXT NOT NULL,
+        symbol          TEXT DEFAULT '',
+        amount          REAL NOT NULL,
+        buy_price       REAL NOT NULL,
+        spend           REAL DEFAULT 0,
+        entry_liquidity REAL DEFAULT 0,
+        opened_at       REAL DEFAULT 0,
+        source          TEXT DEFAULT 'bot',
+        updated_at      TEXT DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, mint_address),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_open_positions_user ON open_positions(user_id)')
     # Migrations: add columns introduced after initial deploy
     try:
         c.execute('ALTER TABLE trades ADD COLUMN fee_amount REAL DEFAULT 0')
@@ -1651,21 +1678,51 @@ def _b58dec(s: str) -> bytes:
     n_leading = len(s) - len(s.lstrip('1'))
     return bytes([0] * n_leading) + bytes(reversed(d))
 
+def _hydrate_positions_from_db(wallet: str, us: dict):
+    """Restore open positions from the open_positions table — the only way a
+    bot recovers what it was holding after a process restart, since RAM alone
+    used to be the sole source of truth and got wiped on every deploy/crash."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+            if not row:
+                return
+            rows = conn.execute(
+                '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at
+                   FROM open_positions WHERE user_id=?''', (row[0],)
+            ).fetchall()
+        finally:
+            conn.close()
+        for mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at in rows:
+            us['positions'][mint] = {
+                'amount': amount, 'buy_price': buy_price, 'spend': spend,
+                'symbol': symbol, 'opened_at': opened_at, 'entry_liquidity': entry_liquidity,
+            }
+        if rows:
+            print(f'[open_positions] restored {len(rows)} open position(s) for {wallet[:8]}…', flush=True)
+    except Exception as e:
+        print(f'[open_positions] hydrate failed for {wallet[:8]}…: {e}', flush=True)
+
 def get_user_state(wallet: str) -> dict:
     if wallet not in user_states:
-        user_states[wallet] = {
-            'positions': {},
-            'daily_stats': _fresh_daily(),
-            'trades_history': [],
-            'trader_running': False,
-            'trader_stop': None,
-            'trader_thread': None,
-            'sol': 0.0,
-            'usdc': 0.0,
-            'balance_fetched_at': 0.0,
-            'has_trading_key': False,
-            'log_lines': list(state['log_lines']),  # seed with recent system events
-        }
+        with _user_states_lock:
+            if wallet not in user_states:
+                us = {
+                    'positions': {},
+                    'daily_stats': _fresh_daily(),
+                    'trades_history': [],
+                    'trader_running': False,
+                    'trader_stop': None,
+                    'trader_thread': None,
+                    'sol': 0.0,
+                    'usdc': 0.0,
+                    'balance_fetched_at': 0.0,
+                    'has_trading_key': False,
+                    'log_lines': list(state['log_lines']),  # seed with recent system events
+                }
+                _hydrate_positions_from_db(wallet, us)
+                user_states[wallet] = us
     return user_states[wallet]
 
 def fetch_user_balances(wallet: str):
@@ -2122,6 +2179,45 @@ def check_daily_reset_user(us: dict):
     if us.get('daily_stats', {}).get('date') != today:
         us['daily_stats'] = _fresh_daily()
 
+# ── OPEN POSITION PERSISTENCE ──
+# Write-through helpers: every call site that used to mutate
+# user_states[wallet]['positions'] directly now goes through one of these two,
+# so the in-memory dict and the open_positions table never drift apart.
+def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot'):
+    get_user_state(wallet)['positions'][mint] = pos
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute('PRAGMA busy_timeout=3000')
+            conn.execute(
+                '''INSERT INTO open_positions
+                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, source, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   ON CONFLICT(user_id, mint_address) DO UPDATE SET
+                       symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
+                       spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
+                       opened_at=excluded.opened_at, source=excluded.source, updated_at=CURRENT_TIMESTAMP''',
+                (user_id, mint, pos.get('symbol', ''), pos.get('amount', 0.0), pos.get('buy_price', 0.0),
+                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0), pos.get('opened_at', 0.0), source))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[open_positions] upsert failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
+
+def _close_open_position(user_id: int, wallet: str, mint: str):
+    get_user_state(wallet)['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute('PRAGMA busy_timeout=3000')
+            conn.execute('DELETE FROM open_positions WHERE user_id=? AND mint_address=?', (user_id, mint))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[open_positions] close failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
+
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
                        exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True,
@@ -2555,7 +2651,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
                                        pref_notifications=pref_notifications)
-                positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                _close_open_position(user_id, wallet, _mint)
             else:
                 add_user_log(wallet, f'[{short}] ✗ [crash-exit] {_label} sell failed — position kept open, will retry next scan')
             continue  # skip normal stop-loss check — crash exit already handled (or will retry)
@@ -2570,7 +2666,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
                                        pref_notifications=pref_notifications)
-                positions[_mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                _close_open_position(user_id, wallet, _mint)
             else:
                 add_user_log(wallet, f'[{short}] ✗ STARTUP FORCE SELL {_label} failed — position kept open, will retry next scan')
 
@@ -2654,7 +2750,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications)
-                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                            _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position kept open, will retry next scan')
@@ -2671,7 +2767,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications)
-                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                            _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position kept open, will retry next scan')
@@ -2691,7 +2787,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications)
-                            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+                            _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position kept open, will retry next scan')
@@ -2836,6 +2932,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['symbol']          = label
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
+                                _upsert_open_position(user_id, wallet, bmint, pos, source='bot')
                                 open_pos += 1
                                 _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
                             else:
@@ -2859,7 +2956,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
             conn = sqlite3.connect(DB_FILE)
             try:
                 rows = conn.execute(
-                    'SELECT wallet_address, encrypted_private_key, min_trade_size, copy_amount FROM users '
+                    'SELECT id, wallet_address, encrypted_private_key, min_trade_size, copy_amount FROM users '
                     'WHERE copy_source=? AND encrypted_private_key != "" AND encrypted_private_key IS NOT NULL',
                     (buyer_wallet,)
                 ).fetchall()
@@ -2869,7 +2966,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
             print(f'[copy-trade] DB error: {e}', flush=True)
             return
 
-        for c_wallet, c_enc, c_min_usdc, c_copy_amount in rows:
+        for c_uid, c_wallet, c_enc, c_min_usdc, c_copy_amount in rows:
             try:
                 c_short = c_wallet[:6] + '...' + c_wallet[-4:]
                 c_us    = get_user_state(c_wallet)
@@ -2915,7 +3012,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                 pos['symbol']          = symbol
                 pos['opened_at']       = time.time()
                 pos['entry_liquidity'] = liquidity
-                c_us['positions'][mint] = pos
+                _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy')
                 add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
             except Exception as e:
                 print(f'[copy-trade] error for {c_wallet[:6]}: {e}', flush=True)
@@ -7649,7 +7746,7 @@ def api_trade_buy():
     pos['spend']     = pos.get('spend', 0.0) + amount_sol
     pos['symbol']    = symbol
     pos['opened_at'] = time.time()
-    positions[mint]  = pos
+    _upsert_open_position(user_id, wallet, mint, pos, source='manual')
     return jsonify({'ok': True, 'amount_sol': amount_sol, 'entry_price': entry_price, 'symbol': symbol})
 
 
@@ -7694,12 +7791,7 @@ def api_trade_sell():
                                pos['amount'], pos.get('spend', 0.0),
                                wallet=wallet, private_key=pk, mint=mint,
                                exit_reason='MANUAL SELL', opened_at=opened_at, source='manual')
-    else:
-        _record_user_trade(user_id, us, symbol, entry, exit_price,
-                           pos['amount'], pos.get('spend', 0.0),
-                           mint=mint, exit_reason='MANUAL SELL (swap failed)',
-                           opened_at=opened_at, source='manual')
-    us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+        _close_open_position(user_id, wallet, mint)
     return jsonify({'ok': True, 'pnl': pnl, 'exit_price': exit_price, 'sell_executed': sell_ok})
 
 
@@ -8749,7 +8841,7 @@ def copy_trade_from_message():
     pos['symbol']          = token_data['symbol'] or token_address[:8]
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
-    us['positions'][token_address] = pos
+    _upsert_open_position(row[0], wallet, token_address, pos, source='manual')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] COPY TRADE: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -9020,7 +9112,7 @@ def api_pump_scanner_buy():
     pos['symbol']          = token_data['symbol'] or mint[:8]
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
-    us['positions'][mint] = pos
+    _upsert_open_position(row[0], wallet, mint, pos, source='manual')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -9099,7 +9191,7 @@ def api_manual_buy():
     pos['symbol']          = token_data['symbol'] or mint[:8]
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
-    us['positions'][mint]  = pos
+    _upsert_open_position(row[0], wallet, mint, pos, source='manual')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] MANUAL BUY: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -9155,14 +9247,10 @@ def api_manual_sell():
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                                wallet=wallet, private_key=_pk, mint=mint,
                                exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual')
+        _close_open_position(user_id, wallet, mint)
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
     else:
-        _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
-                           mint=mint, exit_reason='MANUAL SELL',
-                           opened_at=pos.get('opened_at', 0.0), source='manual')
-        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position cleared')
-    us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-    if not sell_ok:
+        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position kept open, will retry')
         return jsonify({'ok': False, 'msg': 'Sell transaction failed — check logs for details'}), 500
     return jsonify({'ok': True, 'msg': 'Sold ' + symbol, 'symbol': symbol})
 
@@ -9531,14 +9619,10 @@ def manual_sell():
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                                wallet=wallet, private_key=_pk, mint=mint,
                                exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual')
+        _close_open_position(user_id, wallet, mint)
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
     else:
-        _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
-                           mint=mint, exit_reason='MANUAL SELL',
-                           opened_at=pos.get('opened_at', 0.0), source='manual')
-        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position cleared')
-    us['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
-    if not sell_ok:
+        add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} — swap failed, position kept open, will retry')
         return jsonify({'ok': False, 'msg': 'Sell transaction failed — check logs for details'}), 500
     return jsonify({'ok': True, 'symbol': symbol})
 
@@ -11052,23 +11136,23 @@ def admin_force_close_all():
         return jsonify({'error': str(e)}), 500
     if not row or not row[1]:
         return jsonify({'error': 'User not found or has no trading key'}), 400
+    user_id, enc_blob = row
     us = user_states.get(target, {})
     positions = {k: v for k, v in us.get('positions', {}).items() if v.get('amount', 0) > 0}
     if not positions:
         return jsonify({'ok': True, 'msg': 'No open positions to close'})
-    try:
-        from cryptography.fernet import Fernet
-        fernet = Fernet(ENCRYPTION_KEY.encode() if isinstance(ENCRYPTION_KEY, str) else ENCRYPTION_KEY)
-        pk = fernet.decrypt(row[1].encode()).decode()
-    except Exception as e:
-        return jsonify({'error': 'Key decryption failed'}), 500
     closed, failed = 0, 0
-    for mint in list(positions.keys()):
+    for mint, pos in list(positions.items()):
         try:
-            from orcagent_solana import sell_token
-            sell_token(pk, mint, target)
-            closed += 1
-        except Exception:
+            with _use_key(enc_blob, target) as _pk:
+                sell_ok = _execute_user_swap(target, _pk, 'sell', mint, str(pos.get('amount', 0)))
+            if sell_ok:
+                _close_open_position(user_id, target, mint)
+                closed += 1
+            else:
+                failed += 1
+        except Exception as e:
+            print(f'[admin] force-close-all sell error for {mint[:8]}: {e}', flush=True)
             failed += 1
     print(f'[admin] force-close-all {target[:8]}… closed={closed} failed={failed}', flush=True)
     return jsonify({'ok': True, 'msg': f'Closed {closed} position(s)' + (f', {failed} failed' if failed else '')})
