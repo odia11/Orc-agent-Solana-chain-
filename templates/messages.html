@@ -277,6 +277,7 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   <img id="img-lightbox-img" src="" alt="" onclick="event.stopPropagation()">
 </div>
 {% include '_low_balance_modal.html' %}
+{% include '_delete_convo_modal.html' %}
 <div id="app">
 
   <!-- SIDEBAR (exact structure from dashboard) -->
@@ -732,9 +733,8 @@ function _attachSwipeToDelete(wrapEl, contentEl, deleteBtnEl, opts) {
   });
 }
 
-async function _deleteConversation(peerId, wrapEl) {
-  if (!confirm('Delete this conversation?\nThis only removes it from your inbox — the other person keeps their copy.')) return;
-  await _deleteConversationConfirmed(peerId, wrapEl);
+function _deleteConversation(peerId, wrapEl) {
+  openDeleteConvoModal(function(){ _deleteConversationConfirmed(peerId, wrapEl); });
 }
 // Used by the desktop hover-icon popover, which is itself the confirmation
 // step — a second native confirm() here would just silently no-op the
@@ -1237,6 +1237,7 @@ setInterval(function(){
 }, 45000);
 </script>
 <script src="/static/low-balance-modal.js?v={{ app_version }}"></script>
+<script src="/static/delete-convo-modal.js?v={{ app_version }}"></script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body>

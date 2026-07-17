@@ -5863,9 +5863,8 @@ function _attachSwipeToDelete(wrapEl, contentEl, deleteBtnEl, opts){
   });
 }
 
-async function _dmDeleteConvo(peerId, wrapEl){
-  if(!confirm('Delete this conversation?\nThis only removes it from your inbox — the other person keeps their copy.')) return;
-  await _dmDeleteConvoConfirmed(peerId, wrapEl);
+function _dmDeleteConvo(peerId, wrapEl){
+  openDeleteConvoModal(()=>_dmDeleteConvoConfirmed(peerId, wrapEl));
 }
 // Used by the desktop hover-icon popover, which is itself the confirmation
 // step — a second native confirm() here would silently no-op the delete.

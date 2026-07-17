@@ -1,0 +1,21 @@
+<!-- Shared "Delete this conversation?" confirm modal — replaces the native
+     confirm() dialog for both swipe-to-delete (mobile) and the desktop
+     hover-icon delete flow, in both messages.html and the embedded DM panel
+     in dashboard.html. Pairs with /static/delete-convo-modal.js. -->
+<div id="delete-convo-modal" class="s-modal" onclick="if(event.target===this)closeDeleteConvoModal()">
+  <div class="s-card" style="max-width:360px">
+    <button class="s-close" onclick="closeDeleteConvoModal()">✕</button>
+    <div class="s-title">Delete this conversation?</div>
+    <div class="s-sub" style="letter-spacing:normal;text-transform:none;font-size:11px;line-height:1.5;margin-bottom:20px">
+      This only removes it from your inbox — the other person keeps their copy.
+    </div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeDeleteConvoModal()"
+        style="flex:1;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s"
+        onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Cancel</button>
+      <button onclick="_dcmConfirm()"
+        style="flex:1;padding:11px;background:#ff3b3b;border:none;border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:700;color:#fff;cursor:pointer;transition:background .15s"
+        onmouseover="this.style.background='#e63333'" onmouseout="this.style.background='#ff3b3b'">Delete</button>
+    </div>
+  </div>
+</div>

@@ -3279,6 +3279,9 @@ def index():
     with open(os.path.join(BASE, 'templates', '_low_balance_modal.html'), 'r', encoding='utf-8') as f:
         low_balance_modal_html = f.read()
     html = html.replace('__LOW_BALANCE_MODAL__', low_balance_modal_html)
+    with open(os.path.join(BASE, 'templates', '_delete_convo_modal.html'), 'r', encoding='utf-8') as f:
+        delete_convo_modal_html = f.read()
+    html = html.replace('__DELETE_CONVO_MODAL__', delete_convo_modal_html)
     html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
     html = html.replace('__ASSET_VER__', _APP_VERSION)
     _sw = session.get('wallet', '')
