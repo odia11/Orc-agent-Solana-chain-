@@ -34,7 +34,9 @@
 .ntf-tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 .ntf-tab:hover:not(.active){color:#c0c8d4}
 .ntf-list{display:flex;flex-direction:column}
-.ntf-row{display:flex;align-items:flex-start;gap:12px;padding:16px 4px;border-bottom:1px solid var(--bg3);text-decoration:none;color:inherit;position:relative}
+.ntf-row-wrap{position:relative;overflow:hidden}
+.ntf-swipe-delete-btn{position:absolute;top:0;right:0;height:100%;width:84px;background:#ff3b3b;color:#fff;border:none;font-size:12px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
+.ntf-row{display:flex;align-items:flex-start;gap:12px;padding:16px 4px;border-bottom:1px solid var(--bg3);text-decoration:none;color:inherit;position:relative;background:var(--bg);touch-action:pan-y}
 .ntf-row:hover{background:#0d0e11}
 .ntf-row-link{display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;text-decoration:none;color:inherit}
 .ntf-share-btn{flex-shrink:0;align-self:center;background:none;border:1px solid var(--bg4);color:var(--accent);font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:var(--ui);white-space:nowrap;transition:background .15s;min-height:32px}
@@ -276,7 +278,14 @@ function _rowHtml(n, kind){
     var tradeHref = n.link || '#';
     // The bot no longer auto-posts this trade anywhere — give the user an
     // explicit, one-click way to share it themselves if they want to.
-    return '<div class="ntf-row" data-notif-id="' + n.id + '">'
+    // .ntf-row-wrap + .ntf-swipe-delete-btn: mobile swipe-to-delete, same
+    // pattern as Messages. The swipe button sits BEFORE .ntf-row in DOM order
+    // so the row's own background paints on top of it at rest (a later
+    // sibling would otherwise always win the paint order and show through as
+    // a permanent bar — the exact bug hit and fixed in Messages).
+    return '<div class="ntf-row-wrap" data-notif-id="' + n.id + '">'
+      + '<button class="ntf-swipe-delete-btn">Delete</button>'
+      + '<div class="ntf-row" data-notif-id="' + n.id + '">'
       + '<a class="ntf-row-link" href="' + _esc(tradeHref) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
       + '<div class="ntf-icon ' + iconCls + '">' + _ICON_SVG[iconCls] + '</div>'
       + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
@@ -284,6 +293,7 @@ function _rowHtml(n, kind){
       + '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" onclick="_shareTrade(this,event)">Share</button>'
       + _actionsHtml(n, isUnread)
       + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
+      + '</div>'
       + '</div>';
   } else if(type === 'message'){
     iconCls = 'message';
@@ -293,13 +303,16 @@ function _rowHtml(n, kind){
     bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
   }
   var href = n.link || '#';
-  return '<div class="ntf-row" data-notif-id="' + n.id + '">'
+  return '<div class="ntf-row-wrap" data-notif-id="' + n.id + '">'
+    + '<button class="ntf-swipe-delete-btn">Delete</button>'
+    + '<div class="ntf-row" data-notif-id="' + n.id + '">'
     + '<a class="ntf-row-link" href="' + _esc(href) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
     + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
     + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
     + '</a>'
     + _actionsHtml(n, isUnread)
     + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
+    + '</div>'
     + '</div>';
 }
 function _shareTrade(btn, ev){
@@ -330,6 +343,11 @@ function _shareTrade(btn, ev){
   });
 }
 function _render(){
+  // Skip a rebuild while a row is mid-swipe -- a full innerHTML replace would
+  // silently snap it shut. Same guard used in Messages; here nothing polls
+  // #ntf-list automatically (notif-poll.js only touches the badge), but tab
+  // switches or another row's mark-read/delete could still land mid-swipe.
+  if (_ntfSwipeOpenWrap && document.body.contains(_ntfSwipeOpenWrap)) return;
   var list = document.getElementById('ntf-list');
   var rows = [];
   if(_activeTab === 'all' || _activeTab === 'social'){
@@ -344,6 +362,92 @@ function _render(){
     return;
   }
   list.innerHTML = rows.map(function(r){ return _rowHtml(r.n, r.kind); }).join('');
+  list.querySelectorAll('.ntf-row-wrap').forEach(function(wrap){
+    var id = parseInt(wrap.dataset.notifId, 10);
+    var content = wrap.querySelector('.ntf-row');
+    var delBtn = wrap.querySelector('.ntf-swipe-delete-btn');
+    _attachNtfSwipeToDelete(wrap, content, delBtn, {
+      onDelete: function(){ _confirmDeleteNotif(id); }
+    });
+  });
+}
+// ── SWIPE-TO-DELETE (touch-only; vanilla touchstart/touchmove/touchend, no
+// library) — same mechanism as Messages' swipe-to-delete. One difference:
+// .ntf-row contains a real <a href> (Messages' .conv-row doesn't), so the
+// "tap while swiped open closes it instead of navigating" handler here must
+// call preventDefault()/stopPropagation() or the anchor's own navigation
+// would still fire alongside the close. ──
+var _ntfSwipeOpenWrap = null;
+function _attachNtfSwipeToDelete(wrapEl, contentEl, deleteBtnEl, opts){
+  var ACTION_WIDTH = 84;
+  var startX = 0, startY = 0, startTranslate = 0, dragging = false, horizontal = null, moved = false;
+
+  function curTranslate(){
+    var m = /translateX\((-?\d+(?:\.\d+)?)px\)/.exec(contentEl.style.transform);
+    return m ? parseFloat(m[1]) : 0;
+  }
+  function setTranslate(x, animate){
+    contentEl.style.transition = animate ? 'transform .2s ease' : 'none';
+    contentEl.style.transform = 'translateX(' + x + 'px)';
+  }
+  function closeRow(animate){
+    setTranslate(0, animate !== false);
+    wrapEl.dataset.swipeOpen = '0';
+    if (_ntfSwipeOpenWrap === wrapEl) _ntfSwipeOpenWrap = null;
+  }
+  function openRow(){
+    if (_ntfSwipeOpenWrap && _ntfSwipeOpenWrap !== wrapEl) {
+      var otherContent = _ntfSwipeOpenWrap.querySelector('.ntf-row');
+      if (otherContent) { otherContent.style.transition = 'transform .2s ease'; otherContent.style.transform = 'translateX(0)'; }
+      _ntfSwipeOpenWrap.dataset.swipeOpen = '0';
+    }
+    setTranslate(-ACTION_WIDTH, true);
+    wrapEl.dataset.swipeOpen = '1';
+    _ntfSwipeOpenWrap = wrapEl;
+  }
+
+  wrapEl.addEventListener('touchstart', function(e){
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    startTranslate = curTranslate();
+    dragging = true; horizontal = null; moved = false;
+  }, {passive: true});
+
+  wrapEl.addEventListener('touchmove', function(e){
+    if (!dragging) return;
+    var dx = e.touches[0].clientX - startX, dy = e.touches[0].clientY - startY;
+    if (horizontal === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) horizontal = Math.abs(dx) > Math.abs(dy);
+    if (horizontal) {
+      e.preventDefault();
+      moved = true;
+      setTranslate(Math.max(-ACTION_WIDTH, Math.min(0, startTranslate + dx)), false);
+    }
+  }, {passive: false});
+
+  function endDrag(){
+    if (!dragging) return;
+    dragging = false;
+    if (horizontal && moved) {
+      if (curTranslate() < -ACTION_WIDTH * 0.35) openRow(); else closeRow();
+    }
+    horizontal = null; moved = false;
+  }
+  wrapEl.addEventListener('touchend', endDrag, {passive: true});
+  wrapEl.addEventListener('touchcancel', endDrag, {passive: true});
+
+  // capture phase: must run before the inner <a>'s own navigation/onclick so
+  // preventDefault() here actually stops it when we're just closing an open swipe.
+  contentEl.addEventListener('click', function(e){
+    if (wrapEl.dataset.swipeOpen === '1') {
+      e.preventDefault();
+      e.stopPropagation();
+      closeRow();
+    }
+  }, true);
+  deleteBtnEl.addEventListener('click', function(ev){
+    ev.stopPropagation();
+    if (opts.onDelete) opts.onDelete();
+  });
 }
 function _switchTab(tab){
   _activeTab = tab;
@@ -412,6 +516,11 @@ async function _deleteNotif(id){
   if(r && r.ok){
     _personal = _personal.filter(function(n){ return n.id !== id; });
     _updateUnreadUI();
+    // If this row was the one tracked as swiped-open, release the lock before
+    // _render() -- otherwise _render()'s own guard (skip rebuild while a row
+    // is swiped open) would block removing the very row just deleted, since
+    // it's still in the DOM and still flagged open at this point.
+    if (_ntfSwipeOpenWrap && _ntfSwipeOpenWrap.dataset.notifId === String(id)) _ntfSwipeOpenWrap = null;
     _render();
   } else {
     alert((r && r.msg) || 'Could not delete this notification.');
