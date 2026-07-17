@@ -8685,13 +8685,24 @@ def admin_support_suggest_reply(thread_id):
             return jsonify({'ok': False, 'msg': 'AI disabled — invalid API key'}), 503
         if resp.status_code == 429:
             return jsonify({'ok': False, 'msg': 'AI is rate-limited — try again shortly'}), 503
-        resp.raise_for_status()
+        if resp.status_code >= 400:
+            # Anthropic's error.message says exactly what's wrong (bad model id,
+            # malformed content, etc.) — log the full body and surface it instead
+            # of a bare status code, or every failure just reads "400 Bad Request".
+            print(f'[support-ai] Anthropic {resp.status_code} error: {resp.text[:1000]}', flush=True)
+            api_msg = ''
+            try:
+                api_msg = (resp.json().get('error') or {}).get('message', '')
+            except Exception:
+                pass
+            return jsonify({'ok': False, 'msg': 'AI request failed: ' + (api_msg or f'HTTP {resp.status_code}')}), 502
         text = ((resp.json().get('content') or [{}])[0].get('text') or '').strip()
         if not text:
             return jsonify({'ok': False, 'msg': 'AI returned an empty draft'}), 502
         return jsonify({'ok': True, 'draft': text})
     except requests.exceptions.RequestException as e:
-        return jsonify({'ok': False, 'msg': 'AI request failed: ' + str(e)[:100]}), 502
+        print(f'[support-ai] request exception: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'AI request failed: ' + str(e)[:200]}), 502
 
 
 @app.route('/api/heartbeat', methods=['POST'])
