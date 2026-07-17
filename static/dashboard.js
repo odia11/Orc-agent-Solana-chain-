@@ -5171,9 +5171,15 @@ function tipsNext(){
 }());
 
 // ── SUPPORT CHAT ─────────────────────────────────────────────────────────────
+// Feature-flagged off for now — the FAB is CSS-hidden (dashboard.html) and this
+// flag additionally no-ops every entry point (including the "Support replied"
+// push-notification deep link below), so the feature can't surface anywhere
+// while off. Flip this back to true (and remove the CSS override) to re-enable.
+const _SUPPORT_CHAT_ENABLED=false;
 let _supportOpen=false, _supportPollTimer=null;
 
 function toggleSupportChat(force){
+  if(!_SUPPORT_CHAT_ENABLED) return;
   if(!phantomKey){ if(typeof showLfToast==='function') showLfToast('🔴','Connect wallet to use support chat','neg'); return; }
   _supportOpen = (force!==undefined) ? force : !_supportOpen;
   document.getElementById('support-panel').classList.toggle('open', _supportOpen);
@@ -5214,7 +5220,7 @@ async function _supportLoadThread(){
 }
 
 async function _supportFetchUnread(){
-  if(!phantomKey) return;
+  if(!_SUPPORT_CHAT_ENABLED || !phantomKey) return;
   try{
     const r = await fetch('/api/support/unread').then(x=>x.json());
     const b = document.getElementById('support-fab-badge');
@@ -5241,12 +5247,14 @@ async function sendSupportMessage(){
   finally{ btn.disabled=false; inp.focus(); }
 }
 
-setInterval(_supportFetchUnread, 30000);
-setTimeout(_supportFetchUnread, 2000);
+if(_SUPPORT_CHAT_ENABLED){
+  setInterval(_supportFetchUnread, 30000);
+  setTimeout(_supportFetchUnread, 2000);
+}
 
 // Deep link from a "Support replied" push notification (/?support=1) — open
 // the widget once the wallet session is ready, then clean the URL.
-if(new URLSearchParams(location.search).get('support')==='1'){
+if(_SUPPORT_CHAT_ENABLED && new URLSearchParams(location.search).get('support')==='1'){
   let _supportDeepLinkTries=0;
   const _supportDeepLinkTimer=setInterval(function(){
     _supportDeepLinkTries++;
