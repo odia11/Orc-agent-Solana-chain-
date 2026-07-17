@@ -6159,6 +6159,12 @@ def social_feed():
         feed.append({
             'id':          rid,
             'wallet':      short,
+            # Full, untruncated address -- 'wallet' above is display-only (and,
+            # without a username, 'username' below falls back to that same
+            # short form too). Profile links must resolve through this field,
+            # not the short one, or /profile/<short> fails Solana-address
+            # validation and 404s into a redirect to /traders.
+            'wallet_full': wallet or '',
             'content':     content or '',
             'created_at':  created_at or '',
             'like_count':  like_counts.get(post_id, 0),

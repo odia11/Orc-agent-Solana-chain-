@@ -7917,7 +7917,12 @@ function _renderFeedCard(e){
     }
   }
 
-  var _profileHref = '/profile/'+encodeURIComponent(e.username||e.wallet||'');
+  // e.wallet is already display-truncated (e.g. "679sTH...YuRp") and, without a
+  // real username, e.username falls back to that SAME truncated string server-
+  // side -- neither reliably resolves via /profile/<id>, which 404s into a
+  // redirect to /traders. e.wallet_full is the untruncated address and always
+  // resolves correctly regardless of whether the user has a username set.
+  var _profileHref = '/profile/'+encodeURIComponent(e.wallet_full||e.username||e.wallet||'');
   var _aProf = '<a href="'+_profileHref+'" onclick="event.stopPropagation()" style="text-decoration:none;color:inherit;">';
 
   /* ── "..." hover menu ── */
