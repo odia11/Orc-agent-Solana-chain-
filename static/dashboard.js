@@ -5703,7 +5703,10 @@ function _dmRenderConvoList(){
     div.className='dm-convo'+(c.peer_id===_dmPeerId?' active':'');
     const name=c.peer_username||_dmShort(c.peer_wallet||'');
     div.innerHTML=`
-      <div class="dm-convo-av" id="dm-cav-${c.peer_id}">${_dmInitials(name)}</div>
+      <div class="dm-convo-av-wrap">
+        <div class="dm-convo-av" id="dm-cav-${c.peer_id}">${_dmInitials(name)}</div>
+        ${c.peer_online?'<span class="dm-online-dot"></span>':''}
+      </div>
       <div class="dm-convo-info">
         <div class="dm-convo-name">${_esc(name)}</div>
         <div class="dm-convo-preview">${_esc((c.last_msg||'').slice(0,60))}</div>

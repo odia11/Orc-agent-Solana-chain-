@@ -1863,6 +1863,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   border-left:3px solid #000000;
   padding-left:15px;
 }
+.dm-convo-av-wrap{position:relative;flex-shrink:0}
 .dm-convo-av{
   width:42px;
   height:42px;
@@ -1879,6 +1880,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   overflow:hidden;
 }
 .dm-convo-av img{width:100%;height:100%;object-fit:cover}
+/* Dot lives OUTSIDE .dm-convo-av (a sibling in .dm-convo-av-wrap, not a child) --
+   that div has overflow:hidden to clip the avatar image to a circle, which would
+   also clip a corner-positioned badge sitting at its bounding-box edge. */
+.dm-online-dot{position:absolute;bottom:0;right:0;width:6px;height:6px;border-radius:50%;background:#3ad29b;border:2px solid #1c1c1c}
+.dm-convo:hover .dm-online-dot{border-color:#131b28}
 .dm-convo-info{flex:1;min-width:0}
 .dm-convo-name{
   font-size:13px;

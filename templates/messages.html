@@ -142,6 +142,8 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .msgs-thread-status.online{color:#3ad29b}
 .msgs-status-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .msgs-online-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;flex-shrink:0}
+.conv-avatar-wrap{position:relative;flex-shrink:0}
+.msgs-online-dot.avatar-badge{position:absolute;bottom:0;right:0;border:2px solid #0a0b0e}
 .msgs-copy-trades-btn{background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.25);border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;color:#f7b955;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s;white-space:nowrap;flex-shrink:0}
 .msgs-copy-trades-btn:hover{background:rgba(247,185,85,.18)}
 .msgs-copy-trades-btn.active{background:rgba(58,210,155,.14);border-color:rgba(58,210,155,.35);color:#3ad29b}
@@ -544,6 +546,15 @@ document.addEventListener('keydown', function(e){
 });
 
 function _renderConvList() {
+  // Skip a rebuild while the user is mid-interaction with the list -- a full
+  // innerHTML replace would silently snap a swiped-open row shut, orphan an
+  // open delete-confirm popover's target row, or reset the search filter.
+  // The next periodic refresh resumes automatically once these clear.
+  if (_convSwipeOpenWrap && document.body.contains(_convSwipeOpenWrap)) return;
+  if (document.getElementById('conv-del-popover') &&
+      document.getElementById('conv-del-popover').classList.contains('open')) return;
+  var searchEl = document.getElementById('msgs-search');
+  if (searchEl && searchEl.value.trim()) return;
   var el = document.getElementById('conv-list');
   if (!_conversations.length) {
     el.innerHTML = '<div class="msgs-left-empty">No conversations yet.<br>Press <strong style="color:#f7b955">+ New</strong> to start one.</div>';
@@ -570,8 +581,13 @@ function _renderConvList() {
       // through as a permanent bar, which is exactly what happened here.
       + '<button class="conv-delete-btn">Delete</button>'
       + '<div class="conv-row'+active+'">'
-      +   '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden'+(c.peer_avatar?';cursor:pointer':'')+'"'+(c.peer_avatar?' onclick="event.stopPropagation();_showAvatarLightbox('+_esc(JSON.stringify(c.peer_avatar))+')"':'')+'>'+_esc(ini)+avatarImg
-      +     (c.peer_online ? '<span class="msgs-online-dot" style="position:absolute;bottom:1px;right:1px;border:2px solid #0a0b0e"></span>' : '')
+      +   '<div class="conv-avatar-wrap">'
+      +     '<div class="conv-avatar" style="background:'+color+';overflow:hidden'+(c.peer_avatar?';cursor:pointer':'')+'"'+(c.peer_avatar?' onclick="event.stopPropagation();_showAvatarLightbox('+_esc(JSON.stringify(c.peer_avatar))+')"':'')+'>'+_esc(ini)+avatarImg+'</div>'
+      // Dot lives OUTSIDE .conv-avatar (a sibling, not a child) -- that div has
+      // overflow:hidden to clip the <img> to a circle, which would also clip a
+      // corner-positioned badge sitting right at its bounding-box edge (a square
+      // corner falls outside the inscribed circle), making it invisible.
+      +     (c.peer_online ? '<span class="msgs-online-dot avatar-badge"></span>' : '')
       +   '</div>'
       +   '<div class="conv-info">'
       +     '<div class="conv-name">'+_esc(name)+(c.peer_verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
@@ -1235,6 +1251,10 @@ fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).c
 setInterval(function(){
   fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
 }, 45000);
+// Re-poll the conversation list so peer online-status (and previews/unread
+// counts) stay fresh without a page reload -- same 5s cadence already used
+// by the embedded DM panel's auto-refresh, for consistency.
+setInterval(loadConversations, 5000);
 </script>
 <script src="/static/low-balance-modal.js?v={{ app_version }}"></script>
 <script src="/static/delete-convo-modal.js?v={{ app_version }}"></script>
