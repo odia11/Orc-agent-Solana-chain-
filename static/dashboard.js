@@ -5112,6 +5112,96 @@ function tipsNext(){
   if(!localStorage.getItem('orcagent_tips_seen')) setTimeout(openTipsModal,600);
 }());
 
+// ── SUPPORT CHAT ─────────────────────────────────────────────────────────────
+let _supportOpen=false, _supportPollTimer=null;
+
+function toggleSupportChat(force){
+  if(!phantomKey){ if(typeof showLfToast==='function') showLfToast('🔴','Connect wallet to use support chat','neg'); return; }
+  _supportOpen = (force!==undefined) ? force : !_supportOpen;
+  document.getElementById('support-panel').classList.toggle('open', _supportOpen);
+  if(_supportOpen){
+    _supportLoadThread();
+    if(!_supportPollTimer) _supportPollTimer=setInterval(_supportLoadThread,5000);
+    document.getElementById('support-fab-badge').style.display='none';
+  } else {
+    clearInterval(_supportPollTimer); _supportPollTimer=null;
+  }
+}
+
+function _supportRenderMessages(msgs){
+  const el=document.getElementById('support-messages');
+  if(!msgs.length){
+    el.innerHTML='<div class="support-empty">👋 Need help? Send a message below and a moderator will reply here.</div>';
+    return;
+  }
+  const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+  el.innerHTML = msgs.map(function(m){
+    const cls = m.sender_role==='staff' ? 'staff' : 'user';
+    const t = new Date(m.created_at+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    return '<div class="support-msg '+cls+'">'+_esc(m.message)+
+           '<div class="support-msg-time">'+(cls==='staff'?'Support · ':'')+t+'</div></div>';
+  }).join('');
+  if(atBottom) el.scrollTop = el.scrollHeight;
+}
+
+async function _supportLoadThread(){
+  if(!phantomKey) return;
+  try{
+    const r = await fetch('/api/support/thread').then(x=>x.json());
+    if(!r || !r.ok) return;
+    document.getElementById('support-status-sub').textContent =
+      r.status==='resolved' ? 'Marked resolved — send a message to reopen' : 'We usually reply within a few hours';
+    _supportRenderMessages(r.messages||[]);
+  }catch(e){}
+}
+
+async function _supportFetchUnread(){
+  if(!phantomKey) return;
+  try{
+    const r = await fetch('/api/support/unread').then(x=>x.json());
+    const b = document.getElementById('support-fab-badge');
+    const n = (r&&r.ok)?(r.unread||0):0;
+    b.textContent = n>9?'9+':n;
+    b.style.display = (n>0 && !_supportOpen) ? 'flex' : 'none';
+  }catch(e){}
+}
+
+async function sendSupportMessage(){
+  const inp=document.getElementById('support-input');
+  const text=inp.value.trim();
+  if(!text) return;
+  const btn=document.getElementById('support-send-btn');
+  btn.disabled=true;
+  try{
+    const r = await fetch('/api/support/thread/message',{
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({message:text})
+    }).then(x=>x.json());
+    if(r&&r.ok){ inp.value=''; inp.style.height='auto'; await _supportLoadThread(); }
+    else if(r&&r.msg){ alert(r.msg); }
+  }catch(e){}
+  finally{ btn.disabled=false; inp.focus(); }
+}
+
+setInterval(_supportFetchUnread, 30000);
+setTimeout(_supportFetchUnread, 2000);
+
+// Deep link from a "Support replied" push notification (/?support=1) — open
+// the widget once the wallet session is ready, then clean the URL.
+if(new URLSearchParams(location.search).get('support')==='1'){
+  let _supportDeepLinkTries=0;
+  const _supportDeepLinkTimer=setInterval(function(){
+    _supportDeepLinkTries++;
+    if(phantomKey){
+      clearInterval(_supportDeepLinkTimer);
+      toggleSupportChat(true);
+      history.replaceState(null,'',location.pathname);
+    } else if(_supportDeepLinkTries>20){
+      clearInterval(_supportDeepLinkTimer);
+    }
+  },300);
+}
+
 // ── DIRECT MESSAGES ──
 let _dmOpen=false, _dmPeerId=null, _dmPeerWallet='', _dmPeerUsername='',
     _dmRefreshTimer=null, _dmMyId=null, _dmConvos=[];

@@ -1026,6 +1026,30 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)')
+    # support_threads/support_messages — one shared thread per user, visible to every
+    # admin/moderator (unlike direct_messages, which is a strict 1:1 pair table).
+    c.execute('''CREATE TABLE IF NOT EXISTS support_threads (
+        id           INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id      INTEGER NOT NULL UNIQUE,
+        status       TEXT NOT NULL DEFAULT 'open',
+        created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        last_message TEXT DEFAULT '',
+        user_unread  INTEGER NOT NULL DEFAULT 0,
+        mod_unread   INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_support_threads_status ON support_threads(status, updated_at)')
+    c.execute('''CREATE TABLE IF NOT EXISTS support_messages (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        thread_id   INTEGER NOT NULL,
+        sender_id   INTEGER NOT NULL,
+        sender_role TEXT NOT NULL,
+        message     TEXT NOT NULL,
+        created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (thread_id) REFERENCES support_threads(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_support_messages_thread ON support_messages(thread_id, created_at)')
     c.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id       INTEGER NOT NULL,
@@ -4583,6 +4607,36 @@ def _send_push_notification(user_id, title, body, url='/'):
         args=(user_id, title, body, url),
         daemon=True
     ).start()
+
+def _notify_staff(title: str, body: str, link: str = '/admin#support'):
+    """Fan out a notification + push to every current admin/moderator so a new
+    support message doesn't rely on one specific mod having the inbox open."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            rows = conn.execute('''
+                SELECT wallet_address FROM admin_roles WHERE lower(role) IN ('admin','moderator')
+                UNION
+                SELECT wallet_address FROM users
+                WHERE role IS NOT NULL AND lower(role) IN ('admin','moderator')
+            ''').fetchall()
+            staff_wallets = {r[0] for r in rows if r[0]}
+            if ADMIN_WALLET:
+                staff_wallets.add(ADMIN_WALLET)
+            for w in staff_wallets:
+                uid = _get_uid(conn, w)
+                if not uid:
+                    continue
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                    (uid, 'message', body, link)
+                )
+                _send_push_notification(uid, title, body, link)
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[support] staff notify failed: {e}', flush=True)
 
 @app.route('/sw.js')
 def service_worker_root():
@@ -8359,6 +8413,219 @@ def send_dm(peer_id):
         conn.close()
     return jsonify({'ok': True, 'success': True, 'message_id': message_id,
                     'created_at': now, 'message': text, 'message_type': message_type})
+
+
+# ── SUPPORT CHAT (user-facing) ──────────────────────────────────────────────
+# One shared thread per user (support_threads.user_id is UNIQUE) — any admin/
+# moderator can see and reply to it, unlike the strictly 1:1 direct_messages.
+@app.route('/api/support/thread', methods=['GET'])
+@rate_limit(60, 60)
+def support_get_thread():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': True, 'exists': False, 'status': 'open', 'messages': []})
+        trow = conn.execute('SELECT id, status FROM support_threads WHERE user_id=?', (me,)).fetchone()
+        if not trow:
+            return jsonify({'ok': True, 'exists': False, 'status': 'open', 'messages': []})
+        thread_id, status = trow
+        rows = conn.execute(
+            'SELECT id, sender_role, message, created_at FROM support_messages '
+            'WHERE thread_id=? ORDER BY created_at ASC LIMIT 200', (thread_id,)
+        ).fetchall()
+        conn.execute('UPDATE support_threads SET user_unread=0 WHERE id=?', (thread_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'exists': True, 'status': status, 'messages': [
+        {'id': r[0], 'sender_role': r[1], 'message': r[2], 'created_at': r[3]} for r in rows
+    ]})
+
+@app.route('/api/support/unread', methods=['GET'])
+@rate_limit(60, 60)
+def support_unread():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': True, 'unread': 0})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': True, 'unread': 0})
+        row = conn.execute('SELECT user_unread FROM support_threads WHERE user_id=?', (me,)).fetchone()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'unread': row[0] if row else 0})
+
+@app.route('/api/support/thread/message', methods=['POST'])
+@rate_limit(20, 60)
+def support_send_message():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    text = _sanitize(str((request.json or {}).get('message', '')))
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+    if len(text) > 500:
+        return jsonify({'ok': False, 'msg': 'Message too long (max 500 characters)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        row = conn.execute('SELECT id, status FROM support_threads WHERE user_id=?', (me,)).fetchone()
+        if row:
+            thread_id, prev_status = row
+            conn.execute(
+                "UPDATE support_threads SET status='open', last_message=?, updated_at=?, "
+                'mod_unread=mod_unread+1 WHERE id=?',
+                (text[:120], now, thread_id)
+            )
+        else:
+            prev_status = None
+            cur = conn.execute(
+                "INSERT INTO support_threads (user_id, status, created_at, updated_at, last_message, mod_unread) "
+                "VALUES (?,'open',?,?,?,1)", (me, now, now, text[:120])
+            )
+            thread_id = cur.lastrowid
+        conn.execute(
+            'INSERT INTO support_messages (thread_id, sender_id, sender_role, message, created_at) VALUES (?,?,?,?,?)',
+            (thread_id, me, 'user', text, now)
+        )
+        sender_row  = conn.execute('SELECT username FROM users WHERE id=?', (me,)).fetchone()
+        sender_name = (sender_row[0] if sender_row and sender_row[0] else wallet[:8] + '…')
+        conn.commit()
+    finally:
+        conn.close()
+    preview = text[:60] + ('…' if len(text) > 60 else '')
+    _notify_staff('New support message', sender_name + ': ' + preview, '/admin#support')
+    return jsonify({'ok': True, 'thread_id': thread_id, 'created_at': now,
+                    'reopened': prev_status == 'resolved'})
+
+
+# ── SUPPORT CHAT (moderator-facing shared inbox) ────────────────────────────
+@app.route('/api/admin/support/threads', methods=['GET'])
+@rate_limit(30, 60)
+def admin_support_threads():
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    status_filter = request.args.get('status', 'open')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        q = ('SELECT st.id, u.wallet_address, u.username, st.status, '
+             'st.last_message, st.updated_at, st.mod_unread '
+             'FROM support_threads st JOIN users u ON u.id = st.user_id')
+        params = ()
+        if status_filter in ('open', 'resolved'):
+            q += ' WHERE st.status=?'
+            params = (status_filter,)
+        # Unanswered (mod_unread>0) threads first, newest first within each
+        # group — a mod glancing at the inbox sees what needs a reply before
+        # threads that are merely recent but already answered.
+        q += ' ORDER BY (st.mod_unread > 0) DESC, st.updated_at DESC LIMIT 200'
+        rows = conn.execute(q, params).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'threads': [
+        {'id': r[0], 'wallet': r[1],
+         'wallet_short': (r[1][:4] + '…' + r[1][-4:]) if r[1] and len(r[1]) >= 8 else (r[1] or ''),
+         'username': r[2] or '', 'status': r[3], 'last_message': r[4] or '',
+         'updated_at': r[5], 'unread': r[6]}
+        for r in rows
+    ]})
+
+@app.route('/api/admin/support/threads/<int:thread_id>', methods=['GET'])
+@rate_limit(60, 60)
+def admin_support_thread_messages(thread_id):
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        trow = conn.execute(
+            'SELECT st.status, u.wallet_address, u.username FROM support_threads st '
+            'JOIN users u ON u.id = st.user_id WHERE st.id=?', (thread_id,)
+        ).fetchone()
+        if not trow:
+            return jsonify({'ok': False, 'msg': 'Thread not found'}), 404
+        rows = conn.execute(
+            'SELECT id, sender_role, message, created_at FROM support_messages '
+            'WHERE thread_id=? ORDER BY created_at ASC LIMIT 300', (thread_id,)
+        ).fetchall()
+        conn.execute('UPDATE support_threads SET mod_unread=0 WHERE id=?', (thread_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    status, wallet, username = trow
+    return jsonify({'ok': True, 'status': status, 'wallet': wallet, 'username': username or '',
+                    'messages': [{'id': r[0], 'sender_role': r[1], 'message': r[2], 'created_at': r[3]}
+                                 for r in rows]})
+
+@app.route('/api/admin/support/threads/<int:thread_id>/message', methods=['POST'])
+@rate_limit(30, 60)
+def admin_support_reply(thread_id):
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    wallet = _authenticated_wallet()
+    text = _sanitize(str((request.json or {}).get('message', '')))
+    if not text:
+        return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
+    if len(text) > 1000:
+        return jsonify({'ok': False, 'msg': 'Message too long (max 1000 characters)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        trow = conn.execute('SELECT user_id FROM support_threads WHERE id=?', (thread_id,)).fetchone()
+        if not trow:
+            return jsonify({'ok': False, 'msg': 'Thread not found'}), 404
+        target_user_id = trow[0]
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute(
+            'INSERT INTO support_messages (thread_id, sender_id, sender_role, message, created_at) VALUES (?,?,?,?,?)',
+            (thread_id, me, 'staff', text, now)
+        )
+        conn.execute(
+            'UPDATE support_threads SET last_message=?, updated_at=?, user_unread=user_unread+1 WHERE id=?',
+            (text[:120], now, thread_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    preview = text[:60] + ('…' if len(text) > 60 else '')
+    conn2 = sqlite3.connect(DB_FILE)
+    try:
+        conn2.execute(
+            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            (target_user_id, 'message', 'Support: ' + preview, '/?support=1')
+        )
+        conn2.commit()
+    finally:
+        conn2.close()
+    _send_push_notification(target_user_id, 'Support replied', preview, '/?support=1')
+    return jsonify({'ok': True, 'created_at': now})
+
+@app.route('/api/admin/support/threads/<int:thread_id>/status', methods=['POST'])
+@rate_limit(30, 60)
+def admin_support_set_status(thread_id):
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    new_status = str((request.json or {}).get('status', '')).strip().lower()
+    if new_status not in ('open', 'resolved'):
+        return jsonify({'ok': False, 'msg': 'Invalid status'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute('UPDATE support_threads SET status=? WHERE id=?', (new_status, thread_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            return jsonify({'ok': False, 'msg': 'Thread not found'}), 404
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'status': new_status})
+
 
 @app.route('/api/heartbeat', methods=['POST'])
 @rate_limit(6, 60)

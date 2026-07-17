@@ -845,6 +845,31 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #tips-prev-btn:disabled{opacity:.3;cursor:not-allowed}
 #tips-next-btn{flex:1;background:var(--accent);border:none;color:#0a0b0e;border-radius:8px;padding:10px 18px;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;transition:filter .15s;letter-spacing:.04em}
 #tips-next-btn:hover{filter:brightness(1.1)}
+
+/* ── SUPPORT CHAT ── */
+#support-fab{position:fixed;right:20px;bottom:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#0a0b0e;border:none;font-size:22px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:550;display:flex;align-items:center;justify-content:center;transition:transform .15s}
+#support-fab:hover{transform:scale(1.06)}
+.support-fab-badge{position:absolute;top:-2px;right:-2px;background:var(--red);color:#fff;font-size:10px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px;border:2px solid var(--bg)}
+#support-panel{position:fixed;right:20px;bottom:84px;width:340px;max-width:calc(100vw - 32px);height:460px;max-height:calc(100vh - 120px);background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:16px;box-shadow:0 14px 44px rgba(0,0,0,.65);z-index:549;display:none;flex-direction:column;overflow:hidden}
+#support-panel.open{display:flex}
+.support-panel-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid var(--border2);flex-shrink:0}
+.support-panel-title{font-family:'Orbitron',monospace;font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.06em}
+.support-panel-sub{font-size:10px;color:var(--muted);margin-top:3px}
+.support-close{background:none;border:none;color:var(--dim);font-size:16px;cursor:pointer;padding:2px 4px;line-height:1;transition:color .15s}
+.support-close:hover{color:var(--text)}
+#support-messages{flex:1;overflow-y:auto;padding:14px 16px;display:flex;flex-direction:column;gap:10px}
+.support-msg{max-width:80%;padding:8px 12px;border-radius:12px;font-size:12.5px;line-height:1.5;word-break:break-word}
+.support-msg.user{align-self:flex-end;background:var(--accent);color:#0a0b0e;border-bottom-right-radius:3px}
+.support-msg.staff{align-self:flex-start;background:var(--bg3);color:var(--text);border-bottom-left-radius:3px}
+.support-msg-time{font-size:9px;margin-top:3px;opacity:.65}
+.support-empty{margin:auto;text-align:center;color:var(--muted);font-size:12px;padding:20px;line-height:1.6}
+.support-panel-input{display:flex;gap:8px;padding:12px 14px;border-top:1px solid var(--border2);flex-shrink:0}
+#support-input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:9px 11px;color:var(--text);font-family:'Geist',system-ui,sans-serif;font-size:12.5px;resize:none;outline:none;max-height:80px}
+#support-input:focus{border-color:var(--accent)}
+#support-send-btn{background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;width:36px;height:36px;flex-shrink:0;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;transition:filter .15s}
+#support-send-btn:hover{filter:brightness(1.1)}
+#support-send-btn:disabled{opacity:.5;cursor:not-allowed}
+@media(max-width:480px){#support-panel{right:10px;left:10px;width:auto;bottom:78px}}
 .trade-table-wrap{overflow-x:auto;border:1px solid var(--border2);border-radius:8px}
 .trade-table{width:100%;border-collapse:collapse;font-size:10px;min-width:420px}
 .trade-table th{color:#aaaaaa;text-transform:uppercase;letter-spacing:.08em;font-size:7px;padding:6px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:400;background:var(--bg3)}
@@ -4462,6 +4487,27 @@ __LOW_BALANCE_MODAL__
       <button id="tips-prev-btn" onclick="tipsPrev()">← Prev</button>
       <button id="tips-next-btn" onclick="tipsNext()">Next →</button>
     </div>
+  </div>
+</div>
+
+<!-- SUPPORT CHAT -->
+<button id="support-fab" onclick="toggleSupportChat()" title="Help &amp; Support">
+  💬
+  <span id="support-fab-badge" class="support-fab-badge" style="display:none"></span>
+</button>
+<div id="support-panel">
+  <div class="support-panel-hdr">
+    <div>
+      <div class="support-panel-title">SUPPORT</div>
+      <div class="support-panel-sub" id="support-status-sub">We usually reply within a few hours</div>
+    </div>
+    <button class="support-close" onclick="toggleSupportChat(false)" title="Close">✕</button>
+  </div>
+  <div id="support-messages"></div>
+  <div class="support-panel-input">
+    <textarea id="support-input" placeholder="Type a message…" rows="1"
+      onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSupportMessage();}"></textarea>
+    <button id="support-send-btn" onclick="sendSupportMessage()" title="Send">➤</button>
   </div>
 </div>
 <script>

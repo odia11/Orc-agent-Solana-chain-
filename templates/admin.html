@@ -223,6 +223,39 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .spinner{width:16px;height:16px;border:2px solid var(--bg4);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;display:inline-block}
 .toast{position:fixed;bottom:24px;right:24px;padding:12px 18px;background:#1c2028;border:1px solid var(--bg4);border-radius:11px;font-size:13px;font-weight:500;z-index:999;display:none;box-shadow:0 4px 24px rgba(0,0,0,.4)}
 
+/* ── SUPPORT INBOX ── */
+.sup-nav-badge{margin-left:auto;background:var(--red);color:#fff;font-size:9px;font-weight:700;min-width:16px;height:16px;border-radius:8px;display:flex;align-items:center;justify-content:center;padding:0 4px}
+.sup-shell{display:grid;grid-template-columns:300px 1fr;gap:16px;height:calc(100vh - 130px);min-height:420px}
+.sup-list-pane{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.sup-filter-tabs{display:flex;gap:4px;padding:12px;border-bottom:1px solid var(--bg3);flex-shrink:0}
+.sup-filter-tab{flex:1;background:transparent;border:1px solid var(--bg4);color:var(--muted);border-radius:8px;padding:6px 8px;font-size:11px;font-weight:600;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:all .14s}
+.sup-filter-tab.active{background:rgba(247,185,85,.12);border-color:rgba(247,185,85,.4);color:var(--accent)}
+.sup-thread-list{flex:1;overflow-y:auto}
+.sup-thread-row{display:flex;align-items:flex-start;gap:10px;padding:12px 14px;border-bottom:1px solid var(--bg3);cursor:pointer;transition:background .12s;position:relative}
+.sup-thread-row:hover{background:#14171c}
+.sup-thread-row.active{background:rgba(247,185,85,.08)}
+.sup-thread-info{min-width:0;flex:1}
+.sup-thread-user{font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sup-thread-preview{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:2px}
+.sup-thread-meta{font-size:9.5px;color:var(--muted);margin-top:4px;font-family:'JetBrains Mono',monospace}
+.sup-thread-dot{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;margin-top:4px}
+.sup-thread-status{display:inline-block;font-size:8.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;padding:1px 6px;border-radius:4px;margin-top:4px}
+.sup-thread-status.resolved{background:rgba(86,93,104,.2);color:var(--muted)}
+.sup-thread-status.open{background:rgba(58,210,155,.15);color:var(--green)}
+.sup-chat-pane{background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+.sup-chat-empty{margin:auto;color:var(--muted);font-size:13px}
+.sup-chat-hdr{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--bg3);flex-shrink:0}
+.sup-chat-user{font-size:14px;font-weight:600}
+.sup-chat-wallet{color:var(--muted);margin-top:2px}
+.sup-chat-messages{flex:1;overflow-y:auto;padding:16px 18px;display:flex;flex-direction:column;gap:10px}
+.sup-msg{max-width:70%;padding:9px 13px;border-radius:12px;font-size:13px;line-height:1.55;word-break:break-word}
+.sup-msg.role-user{align-self:flex-start;background:var(--bg3);color:var(--text);border-bottom-left-radius:3px}
+.sup-msg.role-staff{align-self:flex-end;background:rgba(247,185,85,.15);color:var(--text);border:1px solid rgba(247,185,85,.3);border-bottom-right-radius:3px}
+.sup-msg-time{font-size:9.5px;color:var(--muted);margin-top:4px}
+.sup-chat-input-row{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--bg3);flex-shrink:0}
+.sup-chat-input{flex:1;background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Geist',system-ui,sans-serif;font-size:13px;resize:none;outline:none;max-height:90px}
+.sup-chat-input:focus{border-color:var(--accent)}
+
 /* ── MOBILE ── */
 @media(max-width:768px){
   html,body{overflow-x:hidden}
@@ -279,6 +312,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
   .filter-input,.filter-select,.stg-input{font-size:16px}
   .filter-input{width:100%}
   .filter-row{gap:8px}
+
+  /* support inbox: stack list + chat instead of side-by-side */
+  .sup-shell{grid-template-columns:1fr;height:auto}
+  .sup-list-pane{max-height:260px}
+  .sup-chat-pane{min-height:420px}
 }
 </style>
 </head>
@@ -314,6 +352,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
     </button>
     <button class="nav-btn" id="nav-moderation" onclick="showView('moderation')">
       <span class="nav-icon">⚑</span>Moderation<span class="nav-dot"></span>
+    </button>
+    <button class="nav-btn" id="nav-support" onclick="showView('support')">
+      <span class="nav-icon">💬</span>Support<span class="nav-dot"></span><span id="support-nav-badge" class="sup-nav-badge" style="display:none"></span>
     </button>
     <button class="nav-btn" id="nav-security" onclick="showView('security')">
       <span class="nav-icon">🔒</span>Security<span class="nav-dot"></span>
@@ -678,6 +719,38 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       </div>
     </div>
 
+    <!-- ══════════ VIEW: SUPPORT ══════════ -->
+    <div class="view" id="view-support">
+      <div class="sup-shell">
+        <div class="sup-list-pane">
+          <div class="sup-filter-tabs">
+            <button class="sup-filter-tab active" id="sup-filter-open" onclick="_supAdminSetFilter('open')">Open</button>
+            <button class="sup-filter-tab" id="sup-filter-resolved" onclick="_supAdminSetFilter('resolved')">Resolved</button>
+            <button class="sup-filter-tab" id="sup-filter-all" onclick="_supAdminSetFilter('all')">All</button>
+          </div>
+          <div id="sup-thread-list" class="sup-thread-list"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+        <div class="sup-chat-pane">
+          <div id="sup-chat-empty" class="sup-chat-empty">Select a conversation on the left</div>
+          <div id="sup-chat-active" style="display:none;flex-direction:column;height:100%">
+            <div class="sup-chat-hdr">
+              <div>
+                <div class="sup-chat-user" id="sup-chat-user">—</div>
+                <div class="sup-chat-wallet mono-sm" id="sup-chat-wallet">—</div>
+              </div>
+              <button class="btn btn-ghost" id="sup-chat-status-btn" onclick="_supAdminToggleStatus()">Mark Resolved</button>
+            </div>
+            <div id="sup-chat-messages" class="sup-chat-messages"></div>
+            <div class="sup-chat-input-row">
+              <textarea id="sup-chat-input" class="sup-chat-input" rows="1" placeholder="Reply to user…"
+                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_supAdminSendReply();}"></textarea>
+              <button class="btn btn-primary" id="sup-chat-send-btn" onclick="_supAdminSendReply()">Send</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- ══════════ VIEW: SECURITY ══════════ -->
     <div class="view" id="view-security">
       <div class="sec-hdr">
@@ -904,8 +977,8 @@ var _userRole = 'user';
 
 // ── ROLE ACCESS ──
 var _ROLE_TABS = {
-  admin:     ['overview','users','trades','revenue','system','moderation','security','settings'],
-  moderator: ['users','trades','moderation','security'],
+  admin:     ['overview','users','trades','revenue','system','moderation','support','security','settings'],
+  moderator: ['users','trades','moderation','support','security'],
   analyst:   ['overview','trades','revenue','system'],
   user:      []
 };
@@ -917,7 +990,7 @@ var _ROLE_BADGE = {
 
 function _applyRoleUI(role) {
   var allowed = _ROLE_TABS[role] || [];
-  ['overview','users','trades','revenue','system','moderation','security','settings'].forEach(function(name) {
+  ['overview','users','trades','revenue','system','moderation','support','security','settings'].forEach(function(name) {
     var btn = document.getElementById('nav-' + name);
     if (btn) btn.style.display = allowed.indexOf(name) >= 0 ? '' : 'none';
   });
@@ -937,16 +1010,19 @@ async function _initRoleBasedUI() {
   var r = await fetch('/api/admin/whoami', {credentials:'include'}).then(r => r.json()).catch(() => null);
   _userRole = (r && r.ok && r.role) ? r.role : 'user';
   _applyRoleUI(_userRole);
-  var first = (_ROLE_TABS[_userRole] || ['overview'])[0];
-  showView(first);
+  var allowed = _ROLE_TABS[_userRole] || ['overview'];
+  var wanted = location.hash === '#support' && allowed.indexOf('support') >= 0 ? 'support' : allowed[0];
+  showView(wanted);
   _startAutoRefresh();
+  _supStartBadgePoll();
 }
 
 // ── VIEW SWITCHING ──
-var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',security:'Security',settings:'Settings'};
+var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',support:'Support',security:'Security',settings:'Settings'};
 function showView(name) {
   var allowed = _ROLE_TABS[_userRole] || Object.keys(_titles);
   if (allowed.indexOf(name) < 0) return;
+  if (name !== 'support' && _supChatPollTimer) { clearInterval(_supChatPollTimer); _supChatPollTimer = null; }
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
@@ -969,6 +1045,7 @@ function loadView(name) {
   else if (name === 'revenue') loadRevenue();
   else if (name === 'system') loadSystem();
   else if (name === 'moderation') loadModeration();
+  else if (name === 'support') loadSupport();
   else if (name === 'settings') loadSettings();
 }
 
@@ -1270,6 +1347,153 @@ async function loadModeration() {
         : '<div class="tbl-empty">No posts</div>';
     }
   }
+}
+
+// ══════════════════ SUPPORT INBOX ══════════════════
+var _supFilter = 'open';
+var _supThreads = [];
+var _supActiveId = null;
+var _supChatPollTimer = null;
+
+function _supEsc(s) {
+  return String(s == null ? '' : s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function _supRelTime(ts) {
+  if (!ts) return '—';
+  var d = new Date(ts.replace(' ', 'T') + 'Z');
+  var s = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (s < 60) return 'now';
+  if (s < 3600) return Math.floor(s/60) + 'm';
+  if (s < 86400) return Math.floor(s/3600) + 'h';
+  return Math.floor(s/86400) + 'd';
+}
+
+function _supAdminSetFilter(f) {
+  _supFilter = f;
+  ['open','resolved','all'].forEach(function(k) {
+    document.getElementById('sup-filter-' + k).classList.toggle('active', k === f);
+  });
+  loadSupport();
+}
+
+async function loadSupport() {
+  var listEl = document.getElementById('sup-thread-list');
+  listEl.innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  var r = await _a('/api/admin/support/threads?status=' + encodeURIComponent(_supFilter));
+  _supThreads = (r && r.ok) ? (r.threads || []) : [];
+  _supRenderThreadList();
+  var totalUnread = _supThreads.reduce(function(s, t) { return s + (t.unread || 0); }, 0);
+  _supSetNavBadge(totalUnread);
+}
+
+function _supRenderThreadList() {
+  var listEl = document.getElementById('sup-thread-list');
+  if (!_supThreads.length) {
+    listEl.innerHTML = '<div class="tbl-empty">No ' + _supFilter + ' conversations</div>';
+    return;
+  }
+  listEl.innerHTML = _supThreads.map(function(t) {
+    var name = _supEsc(t.username || t.wallet_short || '—');
+    return '<div class="sup-thread-row' + (t.id === _supActiveId ? ' active' : '') + '" onclick="_supAdminOpenThread(' + t.id + ')">' +
+      '<div class="sup-thread-info">' +
+        '<div class="sup-thread-user">' + name + '</div>' +
+        '<div class="sup-thread-preview">' + _supEsc(t.last_message || '') + '</div>' +
+        '<span class="sup-thread-status ' + t.status + '">' + t.status + '</span>' +
+        '<span class="sup-thread-meta">' + _supRelTime(t.updated_at) + '</span>' +
+      '</div>' +
+      (t.unread > 0 ? '<div class="sup-thread-dot"></div>' : '') +
+      '</div>';
+  }).join('');
+}
+
+async function _supAdminOpenThread(id) {
+  _supActiveId = id;
+  _supRenderThreadList();
+  document.getElementById('sup-chat-empty').style.display = 'none';
+  var active = document.getElementById('sup-chat-active');
+  active.style.display = 'flex';
+  await _supAdminLoadThreadMessages();
+  if (_supChatPollTimer) clearInterval(_supChatPollTimer);
+  _supChatPollTimer = setInterval(_supAdminLoadThreadMessages, 5000);
+}
+
+async function _supAdminLoadThreadMessages() {
+  if (!_supActiveId) return;
+  var r = await _a('/api/admin/support/threads/' + _supActiveId);
+  if (!r || !r.ok) return;
+  document.getElementById('sup-chat-user').textContent = r.username || _short(r.wallet);
+  document.getElementById('sup-chat-wallet').textContent = _short(r.wallet);
+  var statusBtn = document.getElementById('sup-chat-status-btn');
+  statusBtn.textContent = r.status === 'resolved' ? 'Reopen' : 'Mark Resolved';
+  statusBtn.className = 'btn ' + (r.status === 'resolved' ? 'btn-ghost' : 'btn-primary');
+  var msgsEl = document.getElementById('sup-chat-messages');
+  var atBottom = msgsEl.scrollTop + msgsEl.clientHeight >= msgsEl.scrollHeight - 40;
+  msgsEl.innerHTML = (r.messages || []).map(function(m) {
+    var cls = m.sender_role === 'staff' ? 'role-staff' : 'role-user';
+    var t = new Date(m.created_at.replace(' ', 'T') + 'Z').toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    return '<div class="sup-msg ' + cls + '">' + _supEsc(m.message) + '<div class="sup-msg-time">' + t + '</div></div>';
+  }).join('') || '<div class="tbl-empty">No messages yet</div>';
+  if (atBottom) msgsEl.scrollTop = msgsEl.scrollHeight;
+  // Thread's mod_unread is cleared server-side by the GET above — reflect that locally.
+  var t = _supThreads.find(function(x) { return x.id === _supActiveId; });
+  if (t && t.unread) { t.unread = 0; _supRenderThreadList(); }
+}
+
+async function _supAdminSendReply() {
+  if (!_supActiveId) return;
+  var inp = document.getElementById('sup-chat-input');
+  var text = inp.value.trim();
+  if (!text) return;
+  var btn = document.getElementById('sup-chat-send-btn');
+  btn.disabled = true;
+  var r = await fetch('/api/admin/support/threads/' + _supActiveId + '/message', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
+    body: JSON.stringify({message: text})
+  }).then(r => r.json()).catch(() => null);
+  btn.disabled = false;
+  if (r && r.ok) {
+    inp.value = '';
+    await _supAdminLoadThreadMessages();
+  } else {
+    toast('Error: ' + (r?.msg || 'Failed to send'), false);
+  }
+}
+
+async function _supAdminToggleStatus() {
+  if (!_supActiveId) return;
+  var t = _supThreads.find(function(x) { return x.id === _supActiveId; });
+  var newStatus = (t && t.status === 'resolved') ? 'open' : 'resolved';
+  var r = await fetch('/api/admin/support/threads/' + _supActiveId + '/status', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
+    body: JSON.stringify({status: newStatus})
+  }).then(r => r.json()).catch(() => null);
+  if (r && r.ok) {
+    toast('✓ Marked ' + newStatus, true);
+    await _supAdminLoadThreadMessages();
+    loadSupport();
+  } else {
+    toast('Error updating status', false);
+  }
+}
+
+function _supSetNavBadge(n) {
+  var b = document.getElementById('support-nav-badge');
+  if (!b) return;
+  b.textContent = n > 9 ? '9+' : n;
+  b.style.display = n > 0 ? 'flex' : 'none';
+}
+var _supBadgeTimer = null;
+function _supStartBadgePoll() {
+  if (_ROLE_TABS[_userRole].indexOf('support') < 0) return;
+  var check = async function() {
+    var r = await _a('/api/admin/support/threads?status=open');
+    if (r && r.ok) _supSetNavBadge((r.threads||[]).reduce(function(s,t){return s+(t.unread||0);}, 0));
+  };
+  check();
+  if (_supBadgeTimer) clearInterval(_supBadgeTimer);
+  _supBadgeTimer = setInterval(check, 30000);
 }
 
 // ══════════════════ SECURITY ══════════════════
