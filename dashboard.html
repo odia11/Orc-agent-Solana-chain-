@@ -846,6 +846,23 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #tips-next-btn{flex:1;background:var(--accent);border:none;color:#0a0b0e;border-radius:8px;padding:10px 18px;font-family:'Share Tech Mono',monospace;font-size:11px;font-weight:700;cursor:pointer;transition:filter .15s;letter-spacing:.04em}
 #tips-next-btn:hover{filter:brightness(1.1)}
 
+/* ── TERMS OF SERVICE GATE ── */
+#tos-modal{display:none;position:fixed;inset:0;background:rgba(10,11,14,.94);backdrop-filter:blur(10px);z-index:700;align-items:center;justify-content:center;padding:1rem}
+#tos-modal.open{display:flex}
+.tos-box{background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:16px;padding:26px 24px 22px;width:100%;max-width:520px;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 14px 44px rgba(0,0,0,.65)}
+.tos-title{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--accent);letter-spacing:.04em;margin-bottom:4px}
+.tos-sub{font-size:10px;color:var(--muted);letter-spacing:.05em;margin-bottom:16px}
+.tos-content{flex:1;overflow-y:auto;font-size:12.5px;color:var(--dim);line-height:1.65;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:14px 16px;margin-bottom:16px;max-height:280px}
+.tos-content h2{font-size:12px;color:var(--text);margin:14px 0 4px;font-weight:700}
+.tos-content h2:first-child{margin-top:0}
+.tos-content p{margin-bottom:6px}
+.tos-checkbox-row{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--text);margin-bottom:16px;cursor:pointer;user-select:none;line-height:1.5}
+.tos-checkbox-row input{margin-top:2px;width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+#tos-accept-btn{width:100%;padding:13px;background:var(--accent);color:#0a0b0e;border:none;border-radius:11px;font-family:'Geist',system-ui,sans-serif;font-size:14px;font-weight:700;cursor:pointer;transition:filter .15s,opacity .15s}
+#tos-accept-btn:hover:not(:disabled){filter:brightness(1.1)}
+#tos-accept-btn:disabled{opacity:.35;cursor:not-allowed}
+@media(max-width:480px){.tos-box{padding:22px 18px 18px}.tos-content{max-height:220px}}
+
 /* ── SUPPORT CHAT ── */
 #support-fab{position:fixed;right:20px;bottom:20px;width:52px;height:52px;border-radius:50%;background:var(--accent);color:#0a0b0e;border:none;font-size:22px;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.45);z-index:550;display:flex;align-items:center;justify-content:center;transition:transform .15s}
 #support-fab:hover{transform:scale(1.06)}
@@ -4487,6 +4504,21 @@ __LOW_BALANCE_MODAL__
       <button id="tips-prev-btn" onclick="tipsPrev()">← Prev</button>
       <button id="tips-next-btn" onclick="tipsNext()">Next →</button>
     </div>
+  </div>
+</div>
+
+<!-- TERMS OF SERVICE GATE — no close button, no click-outside-close; only
+     _acceptTos() (after a successful POST) removes the .open class. -->
+<div id="tos-modal">
+  <div class="tos-box">
+    <div class="tos-title">TERMS OF SERVICE</div>
+    <div class="tos-sub" id="tos-version-label">Version —</div>
+    <div class="tos-content" id="tos-content-body"></div>
+    <label class="tos-checkbox-row">
+      <input type="checkbox" id="tos-checkbox" onchange="document.getElementById('tos-accept-btn').disabled=!this.checked">
+      <span>I have read and agree to the Terms of Service</span>
+    </label>
+    <button id="tos-accept-btn" disabled onclick="_acceptTos()">I Agree</button>
   </div>
 </div>
 

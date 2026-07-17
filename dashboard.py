@@ -1050,6 +1050,18 @@ def init_db():
         FOREIGN KEY (thread_id) REFERENCES support_threads(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_support_messages_thread ON support_messages(thread_id, created_at)')
+    # tos_acceptances — append-only audit log, one row per acceptance. We never
+    # update/delete rows here (even across TOS_VERSION bumps) so there's always
+    # a full history of who accepted what, when; "current" status is just the
+    # most recent row per user compared against TOS_VERSION.
+    c.execute('''CREATE TABLE IF NOT EXISTS tos_acceptances (
+        id          INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id     INTEGER NOT NULL,
+        version     TEXT NOT NULL,
+        accepted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_tos_acceptances_user ON tos_acceptances(user_id, accepted_at)')
     c.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id       INTEGER NOT NULL,
@@ -4066,9 +4078,13 @@ def page_security():
     '''
     return render_template('info.html', page_title='Security', updated=_INFO_UPDATED, content=content)
 
-@app.route('/terms')
-def page_terms():
-    content = '''
+# TOS_VERSION gates re-acceptance: bump this string whenever _TOS_CONTENT_HTML
+# changes in a way that requires every user to accept again. Old acceptance
+# rows stay in tos_acceptances for the audit trail; only the latest row per
+# user is compared against this constant.
+TOS_VERSION = '1.0'
+
+_TOS_CONTENT_HTML = '''
     <h2>Access</h2>
     <p>OrcAgent is open to anyone who connects a supported wallet. Access may
     be limited, paused, or revoked at the platform's discretion.</p>
@@ -4083,7 +4099,61 @@ def page_terms():
     <h2>No warranty</h2>
     <p>OrcAgent is provided "as is," without warranty of any kind.</p>
     '''
-    return render_template('info.html', page_title='Terms of Service', updated=_INFO_UPDATED, content=content)
+
+@app.route('/terms')
+def page_terms():
+    return render_template('info.html', page_title='Terms of Service', updated=_INFO_UPDATED, content=_TOS_CONTENT_HTML)
+
+@app.route('/api/tos/status')
+@rate_limit(60, 60)
+def api_tos_status():
+    """Whether the current session's wallet needs to (re-)accept the Terms of
+    Service. No wallet in session -> nothing to gate (guests aren't logged in)."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': True, 'needs_acceptance': False})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': True, 'needs_acceptance': False})
+        row = conn.execute(
+            'SELECT version FROM tos_acceptances WHERE user_id=? ORDER BY accepted_at DESC LIMIT 1',
+            (uid,)
+        ).fetchone()
+    finally:
+        conn.close()
+    accepted_version = row[0] if row else None
+    return jsonify({
+        'ok': True,
+        'needs_acceptance': accepted_version != TOS_VERSION,
+        'version': TOS_VERSION,
+        'html': _TOS_CONTENT_HTML,
+        'updated': _INFO_UPDATED,
+    })
+
+@app.route('/api/tos/accept', methods=['POST'])
+@rate_limit(10, 60)
+def api_tos_accept():
+    # _authenticated_wallet (not _current_wallet) — accepting the ToS is a
+    # legal action, so a pasted read-only address (no proven key ownership)
+    # must not be able to record acceptance on someone else's behalf.
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        conn.execute(
+            'INSERT INTO tos_acceptances (user_id, version, accepted_at) VALUES (?,?,?)',
+            (uid, TOS_VERSION, datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'version': TOS_VERSION})
 
 @app.route('/leaderboard')
 def leaderboard():

@@ -790,6 +790,44 @@ async function _inviteRespond(action){
   }
 }
 
+// ── TERMS OF SERVICE GATE ─────────────────────────────────────────────────
+// Resolves true if the app may proceed, false if the blocking modal is now
+// showing (launchApp() must stop — _acceptTos() re-invokes launchApp() once
+// acceptance is recorded, and the gate will then pass).
+async function _ensureTosAccepted(){
+  try{
+    const r=await fetch('/api/tos/status').then(x=>x.json());
+    if(!r||!r.ok||!r.needs_acceptance) return true;
+    document.getElementById('tos-version-label').textContent='Version '+r.version+(r.updated?' · Updated '+r.updated:'');
+    document.getElementById('tos-content-body').innerHTML=r.html||'';
+    document.getElementById('tos-checkbox').checked=false;
+    document.getElementById('tos-accept-btn').disabled=true;
+    document.getElementById('tos-modal').classList.add('open');
+    return false;
+  }catch(e){
+    return true; // can't reach the server to check — don't permanently lock a returning user out over a network blip
+  }
+}
+
+async function _acceptTos(){
+  const btn=document.getElementById('tos-accept-btn');
+  const origLabel=btn.textContent;
+  btn.disabled=true; btn.textContent='Saving…';
+  try{
+    if(!_csrfToken) await _initCsrf();
+    const r=await fetch('/api/tos/accept',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}).then(x=>x.json());
+    if(r&&r.ok){
+      document.getElementById('tos-modal').classList.remove('open');
+      launchApp(); // re-run — the gate now passes and the rest of the app loads normally
+      return;
+    }
+    alert(r?.msg||'Could not save your acceptance — please try again.');
+  }catch(e){
+    alert('Network error — please try again.');
+  }
+  btn.disabled=false; btn.textContent=origLabel;
+}
+
 async function launchApp(){
   // ── 1. Verify / silently restore server-side session ────────────
   if(phantomKey){
@@ -808,6 +846,12 @@ async function launchApp(){
         if(typeof sr.has_trading_key==='boolean'){ settingsHasKey=sr.has_trading_key; _updateKeyStatus(); }
       }
     }catch(e){}
+  }
+
+  // ── 1.5. Terms of Service gate — must accept before the app is shown ──
+  if(phantomKey){
+    const _tosOk=await _ensureTosAccepted();
+    if(!_tosOk) return;
   }
 
   // ── 2. Show dashboard ──────────────────────────────────────────
