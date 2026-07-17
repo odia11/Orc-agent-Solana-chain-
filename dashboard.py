@@ -1618,6 +1618,52 @@ _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previou
 cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
 profit_cooldown:  dict = {}  # user_id -> expiry_timestamp — 1-hour pause after 60% profit in 2h
 
+# ── ADAPTIVE HOT-MINT POLLING ──
+# A position is "hot" when its unrealized change is within 5% of the user's own
+# stop-loss/crash-exit value (relative to the threshold itself, e.g. -2.85%..-3.00%
+# for a 3% SL). Hot mints get a shortened get_token_data() cache TTL (2s instead of
+# 30s) and the owning user's scan loop drops to a 2s wait instead of 15s, so a fast
+# crash gets caught within ~2s instead of up to 15s. Capped at HOT_MINT_CAP
+# concurrent mints (systemwide, not per-user) so a correlated market-wide dip can't
+# turn this into an unbounded DexScreener request burst — mints beyond the cap fall
+# back to a 5s TTL tier instead of being dropped outright.
+_hot_mints_lock: threading.Lock = threading.Lock()
+_hot_mints: dict = {}          # mint -> expiry_timestamp (refreshed each time a loop sees it as hot)
+HOT_MINT_CAP        = 10       # max concurrently fast-polled (2s) mints
+HOT_MINT_TTL_FAST   = 2        # seconds — cache TTL for mints within the cap
+HOT_MINT_TTL_MEDIUM = 5        # seconds — cache TTL for mints over the cap (still faster than the 30s default)
+HOT_MINT_ENTRY_TTL  = 30       # seconds — how long a mint stays registered as "hot" after last being seen near trigger
+
+
+def _mark_hot_mint(mint: str) -> None:
+    """Register `mint` as currently near a stop-loss/crash-exit trigger. Idempotent —
+    safe to call every scan cycle from every user loop that holds the position."""
+    with _hot_mints_lock:
+        _hot_mints[mint] = time.time() + HOT_MINT_ENTRY_TTL
+
+
+def _hot_mint_fetch_ttl(mint: str) -> float | None:
+    """Returns the fast-poll TTL for `mint` if it's currently registered hot, else None
+    (meaning: use get_token_data()'s normal 30s cache). Mints beyond HOT_MINT_CAP —
+    ranked by how recently they were marked hot, i.e. most-recently-confirmed-near-trigger
+    first — get the slower HOT_MINT_TTL_MEDIUM tier instead of losing fast polling outright."""
+    now = time.time()
+    with _hot_mints_lock:
+        expired = [m for m, exp in _hot_mints.items() if exp <= now]
+        for m in expired:
+            del _hot_mints[m]
+        if mint not in _hot_mints:
+            return None
+        ranked = sorted(_hot_mints.items(), key=lambda kv: kv[1], reverse=True)
+        top_mints = {m for m, _ in ranked[:HOT_MINT_CAP]}
+        return HOT_MINT_TTL_FAST if mint in top_mints else HOT_MINT_TTL_MEDIUM
+
+
+def _any_hot_mint(mints) -> bool:
+    now = time.time()
+    with _hot_mints_lock:
+        return any(_hot_mints.get(m, 0) > now for m in mints)
+
 def _migrate_trade_size_units(sol_price: float) -> None:
     """One-time migration: min_trade_size/max_trade_size/daily_loss_limit used to be
     SOL-denominated. Now that the Settings UI treats them as USDC, convert any
@@ -1662,12 +1708,15 @@ class _DexCachedResp:
     def json(self):
         return json.loads(self._text)
 
-def _dex_get(url: str, timeout: int = 10):
+def _dex_get(url: str, timeout: int = 10, ttl_override: float | None = None):
     """GET a DexScreener URL with shared headers, 429 backoff, and response cache.
-    Returns the Response (or cached stand-in), or None if unavailable."""
+    Returns the Response (or cached stand-in), or None if unavailable.
+    ttl_override shortens the cache TTL (e.g. for hot-mint fast polling) without
+    adding a second cache — same _dex_resp_cache dict, so concurrent callers across
+    users still collapse into one upstream request per TTL window."""
     global _dex_429_until
     now = time.time()
-    ttl = 10 if 'search?q=' in url else 30
+    ttl = ttl_override if ttl_override is not None else (10 if 'search?q=' in url else 30)
     # Serve from cache if fresh
     cached = _dex_resp_cache.get(url)
     if cached and now - cached[0] < ttl:
@@ -1864,9 +1913,14 @@ def _get_user_sol(wallet: str) -> float:
     except: pass
     return 0.0
 
-def get_token_data(mint):
+def get_token_data(mint, fast: bool = False):
+    """fast=True bypasses the normal 30s DexScreener cache in favor of the
+    HOT_MINT_TTL_FAST/MEDIUM tier for `mint` if it's currently registered in
+    _hot_mints (see _hot_mint_fetch_ttl) — used for near-stop-loss positions
+    that need fresher-than-30s price data. No-op (normal 30s TTL) otherwise."""
     try:
-        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        _ttl = _hot_mint_fetch_ttl(mint) if fast else None
+        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8, ttl_override=_ttl)
         if not r:
             return None
         pairs = r.json().get('pairs', [])
@@ -2669,10 +2723,11 @@ def user_trader_loop(stop_event, config, wallet: str):
     print(f'[trader]   SL     : -{round(stop_loss*100)}%', flush=True)
     print(f'[trader]   exit   : {round(EXIT_PERCENTAGE*100)}% of position', flush=True)
     _scan_interval = config.get('interval', 15)
-    print(f'[trader]   max pos: 5  |  scan interval: {_scan_interval}s', flush=True)
+    print(f'[trader]   max pos: 5  |  scan interval: {_scan_interval}s (2s when a position is within 5% of SL/crash-exit)', flush=True)
     add_user_log(wallet, '[' + short + '] Trader started — TP:+' + str(round(take_profit*100)) +
                  '% SL:-' + str(round(stop_loss*100)) +
-                 '% | entry: ' + _m5_desc + ' 5m OR 1h + not reversing | max 5 pos | scan ' + str(_scan_interval) + 's')
+                 '% | entry: ' + _m5_desc + ' 5m OR 1h + not reversing | max 5 pos | scan ' + str(_scan_interval) +
+                 's (2s near trigger)')
     positions = us['positions']
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
@@ -2756,7 +2811,17 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if stop_event.is_set(): break
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
-                    if mint in live_map:
+                    # A mint already flagged hot (near SL/crash-exit) skips the live-scan
+                    # cache entirely — that snapshot can be up to 120s stale (token_loop's
+                    # own cycle), too slow for a position we're already fast-polling.
+                    _was_hot = _hot_mints.get(mint, 0) > time.time()
+                    if _was_hot:
+                        _td       = get_token_data(mint, fast=True)
+                        price     = float(_td['price']) if _td else 0.0
+                        label     = (_td['symbol'] if _td else '') or pos.get('symbol', mint[:8])
+                        cur_liq   = float(_td.get('liquidity', 0) or 0) if _td else 0.0
+                        cur_vol24 = float(_td.get('volume24h', 0) or 0) if _td else 0.0
+                    elif mint in live_map:
                         _tok      = live_map[mint]
                         price     = _tok['price']
                         label     = _tok['symbol'] or pos.get('symbol', mint[:8])
@@ -2775,6 +2840,21 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if price <= 0:
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
+
+                    # ── Adaptive hot-mint tracking — within 5% of this user's own SL/crash-exit
+                    # value (relative to the threshold, e.g. -2.85%..-3.00% for a 3% SL) means
+                    # the position gets fast-polled (2-5s) instead of waiting for the normal
+                    # scan interval. Registration is shared globally (_mark_hot_mint), so if
+                    # another user holds the same mint it benefits from the same fast poll.
+                    _now_hot = (chg <= -0.95 * stop_loss) or (chg <= -0.95 * crash_exit)
+                    if _now_hot:
+                        _mark_hot_mint(mint)
+                        if not _was_hot:
+                            add_user_log(wallet, '[' + short + '] ⚡ ' + label + ' ' + str(round(chg*100,1)) +
+                                         '% — within 5% of trigger, check interval 15s→2s')
+                    elif _was_hot:
+                        add_user_log(wallet, '[' + short + '] ' + label + ' ' + str(round(chg*100,1)) +
+                                     '% — back outside trigger range, check interval back to normal')
 
                     # ── Rugpull detector — first check, before crash-exit and stop-loss ──
                     _rug_reason = None
@@ -2989,7 +3069,13 @@ def user_trader_loop(stop_event, config, wallet: str):
             except Exception as e:
                 print(f'[bot] {short} LOOP ERROR: {e}', flush=True)
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
-            stop_event.wait(config.get('interval', 15))
+            # Adaptive interval: any currently-held position within 5% of its SL/crash-exit
+            # trigger drops the wait to 2s instead of the normal scan interval, so a fast
+            # crash gets caught within ~2s instead of up to `interval` seconds. Read from the
+            # global registry (not a local flag) so it's correct even if the try block above
+            # raised before reaching the position loop this cycle.
+            _wait_s = 2 if _any_hot_mint(positions.keys()) else config.get('interval', 15)
+            stop_event.wait(_wait_s)
     finally:
         print(f'[bot] {short} loop exited — running set to False', flush=True)
         add_user_log(wallet, '[' + short + '] Trader stopped')
