@@ -485,6 +485,12 @@ function _scrollToBottom() {
 }
 
 /* ── CONVERSATIONS ── */
+function _updateMsgBadge() {
+  var total = _conversations.reduce(function(n,c){ return n + (c.unread||0); }, 0);
+  var badge = document.getElementById('sb-msg-badge');
+  if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
+}
+
 async function loadConversations() {
   try {
     var r = await fetch('/api/messages');
@@ -492,9 +498,7 @@ async function loadConversations() {
     if (d.ok) {
       _conversations = d.conversations || [];
       _renderConvList();
-      var total = _conversations.reduce(function(n,c){ return n + (c.unread||0); }, 0);
-      var badge = document.getElementById('sb-msg-badge');
-      if (badge) { badge.textContent = total || ''; badge.style.display = total ? '' : 'none'; }
+      _updateMsgBadge();
     } else {
       document.getElementById('conv-list').innerHTML = '<div class="msgs-left-empty">Failed to load.</div>';
     }
@@ -741,6 +745,7 @@ async function _deleteConversationConfirmed(peerId, wrapEl) {
     var r = await resp.json();
     if (r.ok) {
       _conversations = _conversations.filter(function(c) { return c.peer_id !== peerId; });
+      _updateMsgBadge();
       wrapEl.remove();
       if (_activePeerId === peerId) {
         _activePeerId = null;

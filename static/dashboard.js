@@ -5866,6 +5866,7 @@ async function _dmDeleteConvoConfirmed(peerId, wrapEl){
     const r=await fetch('/api/messages/thread/'+peerId,{method:'DELETE'}).then(x=>x.json());
     if(r&&r.ok){
       _dmConvos=_dmConvos.filter(c=>c.peer_id!==peerId);
+      _dmUpdateUnreadBadge();
       wrapEl.remove();
       if(_dmPeerId===peerId){
         _dmPeerId=null;
