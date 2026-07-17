@@ -8427,10 +8427,15 @@ def list_conversations():
                     ) AS rn
                 FROM direct_messages
                 WHERE sender_id=? OR receiver_id=?
-            ) WHERE rn=1
+            ) conv WHERE rn=1
               AND NOT EXISTS (
+                  -- conv.peer_id / conv.last_ts must be explicitly qualified here: without
+                  -- the alias, the bare names resolve to dm_hidden_conversations' OWN
+                  -- peer_id column (innermost-scope wins in a correlated subquery), turning
+                  -- "h.peer_id=peer_id" into the always-true "h.peer_id=h.peer_id" and hiding
+                  -- every conversation older than the one just deleted, not just that one.
                   SELECT 1 FROM dm_hidden_conversations h
-                  WHERE h.user_id=? AND h.peer_id=peer_id AND h.hidden_at > last_ts
+                  WHERE h.user_id=? AND h.peer_id=conv.peer_id AND h.hidden_at > conv.last_ts
               )
             ORDER BY last_ts DESC
             LIMIT 100
