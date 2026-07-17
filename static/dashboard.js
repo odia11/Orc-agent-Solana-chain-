@@ -683,8 +683,22 @@ async function _obSaveKey(){
   }
 }
 
+function _clearPerUserBadgesAndCaches(){
+  // Belt-and-suspenders: the reload after disconnect already gets a clean
+  // session-less page, but clear everything immediately too so (a) there's
+  // no flash of a stale badge while the reload/network call is in flight,
+  // and (b) any OTHER open tab that later calls this (or re-reads state)
+  // isn't left showing numbers from the session that just ended.
+  if(typeof _dmSetUnreadBadge==='function') _dmSetUnreadBadge(0);
+  if(typeof _setNotifBadge==='function') _setNotifBadge(0);
+  var _supBadge=document.getElementById('support-fab-badge');
+  if(_supBadge) _supBadge.style.display='none';
+  if(typeof _dmConvos!=='undefined') _dmConvos=[];
+}
+
 function disconnectWallet(){
   var _wp=walletType==='Phantom'?window.solana:(walletType==='Solflare'?window.solflare:(window.solana||window.solflare));
+  _clearPerUserBadgesAndCaches();
   var _doLogout=function(){
     fetch('/api/logout',{method:'POST',credentials:'include'}).finally(function(){
       phantomKey=null; walletType=null; guestMode=false;
