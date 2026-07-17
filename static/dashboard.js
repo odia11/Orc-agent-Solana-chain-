@@ -5703,18 +5703,81 @@ function _dmRenderConvoList(){
       <div class="dm-convo-meta">
         <div class="dm-convo-time">${_dmRelTime(c.last_ts)}</div>
         ${c.unread>0?`<div class="dm-unread-dot">${c.unread}</div>`:''}
-      </div>`;
+      </div>
+      <button class="dm-convo-del-icon" title="Delete conversation" aria-label="Delete conversation">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+      </button>`;
     const delBtn=document.createElement('button');
     delBtn.className='dm-convo-delete-btn';
     delBtn.textContent='Delete';
-    wrap.appendChild(div);
+    // delBtn goes in BEFORE div so the row's own background paints on top of
+    // it at rest — a later DOM sibling always wins paint order when neither
+    // has a z-index, which is what made this bar permanently visible before.
     wrap.appendChild(delBtn);
+    wrap.appendChild(div);
     list.appendChild(wrap);
     _attachSwipeToDelete(wrap, div, delBtn, {
       onOpen:()=>dmOpenConvo(c.peer_id, c.peer_wallet||'', c.peer_username||''),
       onDelete:()=>_dmDeleteConvo(c.peer_id, wrap)
     });
+    const icon=div.querySelector('.dm-convo-del-icon');
+    icon.addEventListener('click',(ev)=>{
+      ev.stopPropagation();
+      _dmOpenDeletePopover(icon, c.peer_id, wrap);
+    });
   });
+}
+
+// ── DESKTOP DELETE: small hover icon + anchored confirm popover (mouse/
+// trackpad only, gated via hover:hover+pointer:fine in CSS). A single
+// shared popover element avoids fighting dm-convo-wrap's overflow:hidden
+// (needed for the swipe mechanic) and is positioned via
+// getBoundingClientRect() so it's immune to ancestor clipping. ──
+let _dmDelPopoverPeerId=null, _dmDelPopoverWrap=null;
+function _dmEnsureDeletePopover(){
+  let pop=document.getElementById('dm-convo-del-popover');
+  if(pop) return pop;
+  pop=document.createElement('div');
+  pop.id='dm-convo-del-popover';
+  pop.className='dm-convo-del-popover';
+  pop.innerHTML=
+    '<div class="dm-convo-del-popover-text">Delete this conversation?</div>'+
+    '<div class="dm-convo-del-popover-actions">'+
+    '<button class="dm-convo-del-cancel" type="button">Cancel</button>'+
+    '<button class="dm-convo-del-confirm" type="button">Delete</button>'+
+    '</div>';
+  document.body.appendChild(pop);
+  pop.querySelector('.dm-convo-del-cancel').addEventListener('click',(ev)=>{ev.stopPropagation();_dmCloseDeletePopover();});
+  pop.querySelector('.dm-convo-del-confirm').addEventListener('click',(ev)=>{
+    ev.stopPropagation();
+    const peerId=_dmDelPopoverPeerId, wrap=_dmDelPopoverWrap;
+    _dmCloseDeletePopover();
+    if(peerId!=null && wrap) _dmDeleteConvoConfirmed(peerId, wrap);
+  });
+  document.addEventListener('click',(ev)=>{
+    if(pop.classList.contains('open') && !pop.contains(ev.target)) _dmCloseDeletePopover();
+  });
+  window.addEventListener('scroll',()=>{ if(pop.classList.contains('open')) _dmCloseDeletePopover(); }, true);
+  return pop;
+}
+function _dmOpenDeletePopover(iconEl, peerId, wrapEl){
+  const pop=_dmEnsureDeletePopover();
+  _dmDelPopoverPeerId=peerId;
+  _dmDelPopoverWrap=wrapEl;
+  const r=iconEl.getBoundingClientRect();
+  pop.classList.add('open');
+  const popW=pop.offsetWidth||210;
+  let left=Math.min(r.right-popW, window.innerWidth-popW-8);
+  left=Math.max(8,left);
+  const top=r.bottom+6;
+  pop.style.left=left+'px';
+  pop.style.top=top+'px';
+}
+function _dmCloseDeletePopover(){
+  const pop=document.getElementById('dm-convo-del-popover');
+  if(pop) pop.classList.remove('open');
+  _dmDelPopoverPeerId=null;
+  _dmDelPopoverWrap=null;
 }
 
 // ── SWIPE-TO-DELETE (touch-only; vanilla touchstart/touchmove/touchend, no
@@ -5794,6 +5857,11 @@ function _attachSwipeToDelete(wrapEl, contentEl, deleteBtnEl, opts){
 
 async function _dmDeleteConvo(peerId, wrapEl){
   if(!confirm('Delete this conversation?\nThis only removes it from your inbox — the other person keeps their copy.')) return;
+  await _dmDeleteConvoConfirmed(peerId, wrapEl);
+}
+// Used by the desktop hover-icon popover, which is itself the confirmation
+// step — a second native confirm() here would silently no-op the delete.
+async function _dmDeleteConvoConfirmed(peerId, wrapEl){
   try{
     const r=await fetch('/api/messages/thread/'+peerId,{method:'DELETE'}).then(x=>x.json());
     if(r&&r.ok){

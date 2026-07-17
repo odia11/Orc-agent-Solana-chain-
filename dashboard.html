@@ -1839,6 +1839,22 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   touch-action:pan-y;
 }
 .dm-convo:hover{background:#131b28}
+.dm-convo-del-icon{flex-shrink:0;width:28px;height:28px;padding:6px;margin-left:2px;border:none;background:transparent;color:#7a828f;border-radius:6px;display:none;align-items:center;justify-content:center;cursor:pointer;opacity:0;pointer-events:none;box-sizing:border-box;transition:opacity .12s,background .12s,color .12s}
+.dm-convo-del-icon svg{width:16px;height:16px;flex-shrink:0}
+@media (hover:hover) and (pointer:fine){
+  .dm-convo-del-icon{display:flex}
+  .dm-convo:hover .dm-convo-del-icon{opacity:1;pointer-events:auto}
+  .dm-convo-del-icon:hover{background:rgba(255,59,59,.14);color:#ff3b3b}
+}
+.dm-convo-del-popover{position:fixed;z-index:800;display:none;min-width:190px;background:#101216;border:1px solid rgba(255,59,59,.35);border-radius:10px;padding:12px;box-shadow:0 8px 24px rgba(0,0,0,.45)}
+.dm-convo-del-popover.open{display:block}
+.dm-convo-del-popover-text{font-size:13px;color:#c7cbd1;margin-bottom:10px}
+.dm-convo-del-popover-actions{display:flex;justify-content:flex-end;gap:8px}
+.dm-convo-del-popover-actions button{border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer}
+.dm-convo-del-cancel{background:#1a1d23;color:#c7cbd1}
+.dm-convo-del-cancel:hover{background:#22262e}
+.dm-convo-del-confirm{background:#ff3b3b;color:#fff}
+.dm-convo-del-confirm:hover{background:#e63333}
 .dm-convo.active{
   background:rgba(0,0,0,.05);
   border-left:3px solid #000000;
