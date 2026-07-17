@@ -252,9 +252,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .sup-msg.role-user{align-self:flex-start;background:var(--bg3);color:var(--text);border-bottom-left-radius:3px}
 .sup-msg.role-staff{align-self:flex-end;background:rgba(247,185,85,.15);color:var(--text);border:1px solid rgba(247,185,85,.3);border-bottom-right-radius:3px}
 .sup-msg-time{font-size:9.5px;color:var(--muted);margin-top:4px}
-.sup-chat-input-row{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--bg3);flex-shrink:0}
+.sup-chat-input-row{display:flex;gap:10px;padding:14px 18px;border-top:1px solid var(--bg3);flex-shrink:0;align-items:flex-end}
 .sup-chat-input{flex:1;background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:10px 12px;color:var(--text);font-family:'Geist',system-ui,sans-serif;font-size:13px;resize:none;outline:none;max-height:90px}
 .sup-chat-input:focus{border-color:var(--accent)}
+#sup-suggest-btn{white-space:nowrap;flex-shrink:0}
+.sup-ai-hint{font-size:10.5px;color:var(--accent);padding:0 18px 6px;flex-shrink:0}
 
 /* ── MOBILE ── */
 @media(max-width:768px){
@@ -741,8 +743,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
               <button class="btn btn-ghost" id="sup-chat-status-btn" onclick="_supAdminToggleStatus()">Mark Resolved</button>
             </div>
             <div id="sup-chat-messages" class="sup-chat-messages"></div>
+            <div id="sup-ai-hint" class="sup-ai-hint" style="display:none">✨ AI draft — review before sending</div>
             <div class="sup-chat-input-row">
+              <button class="btn btn-ghost" id="sup-suggest-btn" onclick="_supAdminSuggestReply()" title="Draft a reply with AI">✨ Suggest</button>
               <textarea id="sup-chat-input" class="sup-chat-input" rows="1" placeholder="Reply to user…"
+                oninput="document.getElementById('sup-ai-hint').style.display='none'"
                 onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();_supAdminSendReply();}"></textarea>
               <button class="btn btn-primary" id="sup-chat-send-btn" onclick="_supAdminSendReply()">Send</button>
             </div>
@@ -1412,6 +1417,8 @@ async function _supAdminOpenThread(id) {
   document.getElementById('sup-chat-empty').style.display = 'none';
   var active = document.getElementById('sup-chat-active');
   active.style.display = 'flex';
+  document.getElementById('sup-chat-input').value = '';
+  document.getElementById('sup-ai-hint').style.display = 'none';
   await _supAdminLoadThreadMessages();
   if (_supChatPollTimer) clearInterval(_supChatPollTimer);
   _supChatPollTimer = setInterval(_supAdminLoadThreadMessages, 5000);
@@ -1454,9 +1461,38 @@ async function _supAdminSendReply() {
   btn.disabled = false;
   if (r && r.ok) {
     inp.value = '';
+    document.getElementById('sup-ai-hint').style.display = 'none';
     await _supAdminLoadThreadMessages();
   } else {
     toast('Error: ' + (r?.msg || 'Failed to send'), false);
+  }
+}
+
+async function _supAdminSuggestReply() {
+  if (!_supActiveId) return;
+  var inp = document.getElementById('sup-chat-input');
+  if (inp.value.trim() && !confirm('Replace your current draft with an AI suggestion?')) return;
+  var btn = document.getElementById('sup-suggest-btn');
+  var hint = document.getElementById('sup-ai-hint');
+  var origLabel = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '✨ Thinking…';
+  hint.style.display = 'none';
+  var r = await fetch('/api/admin/support/threads/' + _supActiveId + '/suggest', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
+    body: '{}'
+  }).then(r => r.json()).catch(() => null);
+  btn.disabled = false;
+  btn.textContent = origLabel;
+  if (r && r.ok) {
+    // Suggestion only fills the textarea — the moderator still has to review it
+    // and press Send themselves; nothing is ever sent automatically.
+    inp.value = r.draft;
+    inp.focus();
+    hint.style.display = 'block';
+  } else {
+    toast('Error: ' + (r?.msg || 'Could not generate a suggestion'), false);
   }
 }
 

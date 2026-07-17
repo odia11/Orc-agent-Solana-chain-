@@ -8626,6 +8626,73 @@ def admin_support_set_status(thread_id):
         conn.close()
     return jsonify({'ok': True, 'status': new_status})
 
+_SUPPORT_AI_SYSTEM_PROMPT = (
+    "You are drafting a reply for a human support moderator on OrcAgent, a Solana "
+    "trading bot platform. Based on the conversation so far, write a short draft reply "
+    "to the user's most recent message.\n\n"
+    "Rules:\n"
+    "- Never make definitive promises about money, refunds, compensation, or damages.\n"
+    "- Never state or imply a technical cause (bug, RPC outage, wallet issue, etc.) unless "
+    "the moderator has already confirmed it earlier in the conversation — if the cause "
+    "is unclear, say the moderator will look into it instead of guessing.\n"
+    "- Keep it concise (2-4 sentences), friendly and professional.\n"
+    "- This is only a DRAFT that a human moderator will review and edit before sending — "
+    "prefer being honestly cautious over sounding confident.\n"
+    "- Reply with the draft message only, no preamble, no quotes."
+)
+
+@app.route('/api/admin/support/threads/<int:thread_id>/suggest', methods=['POST'])
+@rate_limit(10, 60)
+def admin_support_suggest_reply(thread_id):
+    global _ai_disabled_until
+    err = _require_role('admin', 'moderator')
+    if err: return err
+    if not ANTHROPIC_API_KEY:
+        return jsonify({'ok': False, 'msg': 'AI suggestions are not configured (ANTHROPIC_API_KEY not set)'}), 400
+    if time.time() < _ai_disabled_until:
+        return jsonify({'ok': False, 'msg': 'AI temporarily unavailable — check API key'}), 503
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        trow = conn.execute('SELECT id FROM support_threads WHERE id=?', (thread_id,)).fetchone()
+        if not trow:
+            return jsonify({'ok': False, 'msg': 'Thread not found'}), 404
+        rows = conn.execute(
+            'SELECT sender_role, message FROM support_messages '
+            'WHERE thread_id=? ORDER BY created_at ASC LIMIT 50', (thread_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    if not rows:
+        return jsonify({'ok': False, 'msg': 'No messages in this thread yet'}), 400
+    transcript = '\n'.join(
+        ('User: ' if role == 'user' else 'Moderator: ') + msg
+        for role, msg in rows
+    )
+    try:
+        resp = requests.post(
+            _ANTHROPIC_URL,
+            headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+            json={
+                'model': 'claude-haiku-4-5-20251001', 'max_tokens': 300,
+                'system': _SUPPORT_AI_SYSTEM_PROMPT,
+                'messages': [{'role': 'user', 'content':
+                    'Conversation so far:\n\n' + transcript + '\n\nDraft the moderator\'s next reply.'}],
+            },
+            timeout=15,
+        )
+        if resp.status_code == 401:
+            _ai_disabled_until = time.time() + 3600  # 1-hour backoff, not permanent
+            return jsonify({'ok': False, 'msg': 'AI disabled — invalid API key'}), 503
+        if resp.status_code == 429:
+            return jsonify({'ok': False, 'msg': 'AI is rate-limited — try again shortly'}), 503
+        resp.raise_for_status()
+        text = ((resp.json().get('content') or [{}])[0].get('text') or '').strip()
+        if not text:
+            return jsonify({'ok': False, 'msg': 'AI returned an empty draft'}), 502
+        return jsonify({'ok': True, 'draft': text})
+    except requests.exceptions.RequestException as e:
+        return jsonify({'ok': False, 'msg': 'AI request failed: ' + str(e)[:100]}), 502
+
 
 @app.route('/api/heartbeat', methods=['POST'])
 @rate_limit(6, 60)
