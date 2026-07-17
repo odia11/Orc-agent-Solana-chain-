@@ -2852,9 +2852,20 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if not _was_hot:
                             add_user_log(wallet, '[' + short + '] ⚡ ' + label + ' ' + str(round(chg*100,1)) +
                                          '% — within 5% of trigger, check interval 15s→2s')
+                            # Dedicated, grep-able stdout line (separate from the per-user UI
+                            # log above) so production behavior can be verified directly in the
+                            # server logs after deploy — full mint address + explicit UTC
+                            # timestamp, not just the truncated symbol shown in the UI.
+                            print(f"[hot-mint] {datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                                  f"ENTER mint={mint} user={short} chg={round(chg*100,1)}% "
+                                  f"sl=-{round(stop_loss*100,1)}% crash=-{round(crash_exit*100,1)}% "
+                                  f"interval=15s->2s", flush=True)
                     elif _was_hot:
                         add_user_log(wallet, '[' + short + '] ' + label + ' ' + str(round(chg*100,1)) +
                                      '% — back outside trigger range, check interval back to normal')
+                        print(f"[hot-mint] {datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')} "
+                              f"EXIT  mint={mint} user={short} chg={round(chg*100,1)}% "
+                              f"interval=2s->{config.get('interval', 15)}s", flush=True)
 
                     # ── Rugpull detector — first check, before crash-exit and stop-loss ──
                     _rug_reason = None
