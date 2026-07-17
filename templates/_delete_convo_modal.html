@@ -1,12 +1,13 @@
-<!-- Shared "Delete this conversation?" confirm modal — replaces the native
-     confirm() dialog for both swipe-to-delete (mobile) and the desktop
-     hover-icon delete flow, in both messages.html and the embedded DM panel
-     in dashboard.html. Pairs with /static/delete-convo-modal.js. -->
+<!-- Shared delete-confirm modal — originally "Delete this conversation?" for
+     swipe-to-delete (mobile) and the desktop hover-icon delete flow in
+     messages.html / the embedded DM panel, now also reused (with different
+     title/text passed to openDeleteConvoModal) for deleting a single
+     notification. Pairs with /static/delete-convo-modal.js. -->
 <div id="delete-convo-modal" class="s-modal" onclick="if(event.target===this)closeDeleteConvoModal()">
   <div class="s-card" style="max-width:360px">
     <button class="s-close" onclick="closeDeleteConvoModal()">✕</button>
-    <div class="s-title">Delete this conversation?</div>
-    <div class="s-sub" style="letter-spacing:normal;text-transform:none;font-size:11px;line-height:1.5;margin-bottom:20px">
+    <div class="s-title" id="dcm-title">Delete this conversation?</div>
+    <div class="s-sub" id="dcm-text" style="letter-spacing:normal;text-transform:none;font-size:11px;line-height:1.5;margin-bottom:20px">
       This only removes it from your inbox — the other person keeps their copy.
     </div>
     <div style="display:flex;gap:10px">

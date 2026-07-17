@@ -58,6 +58,26 @@
 .ntf-unread-dot{position:absolute;right:4px;top:22px;width:7px;height:7px;border-radius:50%;background:var(--accent)}
 .ntf-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:14px}
 .ntf-empty-icon{font-size:40px;margin-bottom:12px;opacity:.4}
+.ntf-actions{display:flex;align-items:center;gap:2px;flex-shrink:0;align-self:center}
+.ntf-read-btn,.ntf-delete-btn{width:28px;height:28px;border:none;background:transparent;border-radius:7px;cursor:pointer;align-items:center;justify-content:center;transition:opacity .12s,background .12s,color .12s}
+.ntf-read-btn{color:var(--muted);display:flex;opacity:1}
+.ntf-delete-btn{color:var(--muted);display:none;opacity:0}
+@media(hover:hover) and (pointer:fine){
+  .ntf-read-btn{opacity:0}
+  .ntf-row:hover .ntf-read-btn{opacity:1}
+  .ntf-read-btn:hover{background:rgba(247,185,85,.12);color:var(--accent)}
+  .ntf-delete-btn{display:flex}
+  .ntf-row:hover .ntf-delete-btn{opacity:1}
+  .ntf-delete-btn:hover{background:rgba(255,77,106,.14);color:var(--red)}
+}
+/* ── SHARED DELETE-CONFIRM MODAL (matches messages.html / dashboard.html) ── */
+.s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
+.s-modal.open{display:flex}
+.s-card{background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:14px;padding:26px 24px;width:100%;max-width:480px;position:relative;box-shadow:0 0 60px rgba(0,0,0,.5)}
+.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
+.s-close:hover{color:var(--text)}
+.s-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:3px}
+.s-sub{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:18px}
 .mobile-back-bar{display:none}
 @media(max-width:1024px){
   #sidebar{display:none!important}
@@ -74,6 +94,7 @@
   .ntf-mark-all{min-height:44px}
 }
 </style></head><body>
+{% include '_delete_convo_modal.html' %}
 <div class="mobile-back-bar">
   <button onclick="history.back()" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Notifications</span>
@@ -212,6 +233,25 @@ function _parseTradeContent(content){
     positive: positive
   };
 }
+// Shared actions for any REAL personal notification (has a DB id + is_read
+// state). The synthetic kind==='trade' rows (pulled live from the trades
+// table, no id at all) never get these -- there's no notification row to
+// mark read or delete. Mark-as-read icon: always visible on mobile,
+// hover-reveal on desktop. Delete icon: desktop-only (see CSS), never
+// shown on touch/mobile at all.
+function _actionsHtml(n, isUnread){
+  var readBtn = isUnread
+    ? '<button class="ntf-read-btn" title="Mark as read" aria-label="Mark as read" '
+      + 'onclick="event.preventDefault();event.stopPropagation();_markOneRead(' + n.id + ')">'
+      + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+      + '</button>'
+    : '';
+  var deleteBtn = '<button class="ntf-delete-btn" title="Delete" aria-label="Delete notification" '
+    + 'onclick="event.preventDefault();event.stopPropagation();_confirmDeleteNotif(' + n.id + ')">'
+    + '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>'
+    + '</button>';
+  return '<div class="ntf-actions">' + readBtn + deleteBtn + '</div>';
+}
 function _rowHtml(n, kind){
   var isUnread = kind === 'personal' && !n.is_read;
   var iconCls, bodyHtml, timeStr;
@@ -236,12 +276,13 @@ function _rowHtml(n, kind){
     var tradeHref = n.link || '#';
     // The bot no longer auto-posts this trade anywhere — give the user an
     // explicit, one-click way to share it themselves if they want to.
-    return '<div class="ntf-row">'
-      + '<a class="ntf-row-link" href="' + _esc(tradeHref) + '" data-id="' + n.id + '">'
+    return '<div class="ntf-row" data-notif-id="' + n.id + '">'
+      + '<a class="ntf-row-link" href="' + _esc(tradeHref) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
       + '<div class="ntf-icon ' + iconCls + '">' + _ICON_SVG[iconCls] + '</div>'
       + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
       + '</a>'
       + '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" onclick="_shareTrade(this,event)">Share</button>'
+      + _actionsHtml(n, isUnread)
       + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
       + '</div>';
   } else if(type === 'message'){
@@ -252,11 +293,14 @@ function _rowHtml(n, kind){
     bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
   }
   var href = n.link || '#';
-  return '<a class="ntf-row" href="' + _esc(href) + '" data-id="' + n.id + '">'
+  return '<div class="ntf-row" data-notif-id="' + n.id + '">'
+    + '<a class="ntf-row-link" href="' + _esc(href) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
     + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
     + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
+    + '</a>'
+    + _actionsHtml(n, isUnread)
     + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
-    + '</a>';
+    + '</div>';
 }
 function _shareTrade(btn, ev){
   ev.preventDefault();
@@ -308,14 +352,17 @@ function _switchTab(tab){
   });
   _render();
 }
-async function _loadPersonal(){
-  var r = await fetch('/api/notifications/mine').then(function(x){return x.json();}).catch(function(){return null;});
-  _personal = (r && r.ok && r.notifications) ? r.notifications : [];
+function _updateUnreadUI(){
   var unread = _personal.filter(function(n){ return !n.is_read; }).length;
   var sub = document.getElementById('ntf-unread-sub');
   if(sub) sub.textContent = unread ? (unread + ' unread') : 'All caught up';
   var badge = document.getElementById('sb-notif-badge');
   if(badge){ if(unread){ badge.textContent = unread; badge.style.display = ''; } else { badge.style.display = 'none'; } }
+}
+async function _loadPersonal(){
+  var r = await fetch('/api/notifications/mine').then(function(x){return x.json();}).catch(function(){return null;});
+  _personal = (r && r.ok && r.notifications) ? r.notifications : [];
+  _updateUnreadUI();
   _render();
 }
 async function _loadTrades(){
@@ -328,6 +375,47 @@ async function _markAllRead(){
     method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}
   }).catch(function(){});
   _loadPersonal();
+}
+// Marking a single notification as read is triggered both by clicking the
+// row itself (natural "I saw this" signal, alongside its normal navigation)
+// and by the dedicated checkmark icon (for clearing unread state without
+// leaving the page). Updates only the specific row's DOM (not a full
+// _render()) so it never races with the row-link's own default navigation —
+// replacing #ntf-list's innerHTML mid-click can cancel that navigation in
+// some browsers since the clicked <a> would be removed from the document
+// before its default action completes.
+function _markOneRead(id){
+  var n = _personal.find(function(x){ return x.id === id; });
+  if(!n || n.is_read) return;
+  n.is_read = true;
+  _updateUnreadUI();
+  var row = document.querySelector('.ntf-row[data-notif-id="' + id + '"]');
+  if(row){
+    var dot = row.querySelector('.ntf-unread-dot'); if(dot) dot.remove();
+    var btn = row.querySelector('.ntf-read-btn'); if(btn) btn.remove();
+  }
+  fetch('/api/notifications/mine/mark_read_batch', {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body: JSON.stringify({ids:[id]})
+  }).catch(function(){});
+}
+function _confirmDeleteNotif(id){
+  openDeleteConvoModal(function(){ _deleteNotif(id); }, {
+    title: 'Delete this notification?',
+    text: "This can't be undone."
+  });
+}
+async function _deleteNotif(id){
+  var r = await fetch('/api/notifications/mine/' + id, {
+    method:'DELETE', headers:{'X-CSRF-Token':_csrfToken}
+  }).then(function(x){return x.json();}).catch(function(){return null;});
+  if(r && r.ok){
+    _personal = _personal.filter(function(n){ return n.id !== id; });
+    _updateUnreadUI();
+    _render();
+  } else {
+    alert((r && r.msg) || 'Could not delete this notification.');
+  }
 }
 _loadPersonal();
 _loadTrades();
@@ -351,6 +439,7 @@ _loadTrades();
   }).catch(function(){});
 })();
 </script>
+<script src="/static/delete-convo-modal.js?v={{ app_version }}"></script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body></html>

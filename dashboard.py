@@ -4847,6 +4847,25 @@ def notifications_mark_read_batch():
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/notifications/mine/<int:notif_id>', methods=['DELETE'])
+@rate_limit(30, 60)
+def notifications_delete_one(notif_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        # user_id=? scopes the delete to the caller's own notification -- an id
+        # for someone else's row simply matches zero rows, not an error.
+        conn.execute('DELETE FROM notifications WHERE id=? AND user_id=?', (notif_id, me))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/api/notifications/mine/mark_all_read', methods=['POST'])
 def notifications_mark_all_read():
     wallet = _authenticated_wallet()
