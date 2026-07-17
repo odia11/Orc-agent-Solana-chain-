@@ -28,6 +28,25 @@
 .ntf-unread-sub{font-size:13px;color:var(--muted);margin-top:4px}
 .ntf-mark-all{background:none;border:none;color:var(--accent);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);white-space:nowrap}
 .ntf-mark-all:hover{text-decoration:underline}
+.ntf-select-toggle{background:none;border:none;color:var(--muted);font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ui);white-space:nowrap;padding:0}
+.ntf-select-toggle:hover{color:var(--text)}
+.ntf-select-toggle.active{color:var(--accent)}
+.ntf-select-bar{display:none;align-items:center;justify-content:space-between;gap:12px;padding:10px 4px;margin-bottom:6px;border-bottom:1px solid var(--bg3);flex-wrap:wrap}
+.ntf-select-count{font-size:13px;color:var(--sub);font-weight:600;white-space:nowrap}
+.ntf-select-actions{display:flex;gap:8px;flex-wrap:wrap}
+.ntf-select-btn{background:var(--bg3);border:1px solid var(--bg4);color:var(--text);font-size:12.5px;font-weight:600;padding:8px 14px;border-radius:8px;cursor:pointer;font-family:var(--ui);white-space:nowrap;transition:background .15s,opacity .15s;min-height:36px}
+.ntf-select-btn:hover{background:var(--bg4)}
+.ntf-select-btn:disabled{opacity:.45;cursor:default}
+.ntf-select-btn:disabled:hover{background:var(--bg3)}
+.ntf-select-btn.danger{background:rgba(255,77,106,.12);border-color:rgba(255,77,106,.3);color:var(--red)}
+.ntf-select-btn.danger:hover{background:rgba(255,77,106,.2)}
+.ntf-select-btn.danger:disabled:hover{background:rgba(255,77,106,.12)}
+.ntf-select-btn.cancel{background:none;border-color:transparent;color:var(--muted)}
+.ntf-select-btn.cancel:hover{color:var(--text);background:var(--bg3)}
+.ntf-select-checkbox{display:flex;align-items:center;flex-shrink:0;padding-top:8px;cursor:pointer}
+.ntf-select-checkbox input{width:18px;height:18px;accent-color:var(--accent);cursor:pointer}
+.ntf-row-selectable{cursor:pointer}
+.ntf-row-selected{background:rgba(247,185,85,.06)}
 .ntf-body{max-width:640px;padding:0 32px 60px}
 .ntf-tabs{display:flex;gap:22px;border-bottom:1px solid var(--bg3);margin-bottom:8px}
 .ntf-tab{background:none;border:none;border-bottom:2px solid transparent;padding:10px 0 11px;font-size:14px;font-weight:500;color:var(--muted);cursor:pointer;font-family:var(--ui);transition:color .15s,border-color .15s;margin-bottom:-1px}
@@ -94,13 +113,17 @@
   .ntf-body{padding:0 16px 60px;max-width:100%}
   .ntf-tab{min-height:44px}
   .ntf-mark-all{min-height:44px}
+  .ntf-select-toggle{min-height:44px}
+  .ntf-select-btn{min-height:44px;flex:1}
+  .ntf-select-bar{padding:10px 0}
 }
 </style></head><body>
 {% include '_delete_convo_modal.html' %}
 <div class="mobile-back-bar">
   <button onclick="history.back()" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Notifications</span>
-  <button class="ntf-mark-all" style="margin-left:auto" onclick="_markAllRead()">Mark all read</button>
+  <button class="ntf-select-toggle" id="mb-select-toggle" style="margin-left:auto" onclick="_toggleSelectMode()">Select</button>
+  <button class="ntf-mark-all" onclick="_markAllRead()">Mark all read</button>
 </div>
 <div id="app">
   <aside id="sidebar">
@@ -181,13 +204,24 @@
         <div class="ntf-title">Notifications</div>
         <div class="ntf-unread-sub" id="ntf-unread-sub"></div>
       </div>
-      <button class="ntf-mark-all" onclick="_markAllRead()">Mark all read</button>
+      <div style="display:flex;align-items:center;gap:14px">
+        <button class="ntf-select-toggle" id="dt-select-toggle" onclick="_toggleSelectMode()">Select</button>
+        <button class="ntf-mark-all" onclick="_markAllRead()">Mark all read</button>
+      </div>
     </div>
     <div class="ntf-body">
       <div class="ntf-tabs">
         <button class="ntf-tab active" id="tab-all" onclick="_switchTab('all')">All</button>
         <button class="ntf-tab" id="tab-trades" onclick="_switchTab('trades')">Trades</button>
         <button class="ntf-tab" id="tab-social" onclick="_switchTab('social')">Social</button>
+      </div>
+      <div class="ntf-select-bar" id="ntf-select-bar">
+        <span class="ntf-select-count" id="ntf-select-count">0 selected</span>
+        <div class="ntf-select-actions">
+          <button class="ntf-select-btn" id="ntf-bulk-mark-btn" onclick="_bulkMarkRead()" disabled>✓ Mark as read</button>
+          <button class="ntf-select-btn danger" id="ntf-bulk-delete-btn" onclick="_bulkDelete()" disabled>🗑 Delete</button>
+          <button class="ntf-select-btn cancel" onclick="_exitSelectMode()">Cancel</button>
+        </div>
       </div>
       <div class="ntf-list" id="ntf-list">
         <p style="color:var(--muted);text-align:center;padding:40px 0">Loading…</p>
@@ -254,6 +288,43 @@ function _actionsHtml(n, isUnread){
     + '</button>';
   return '<div class="ntf-actions">' + readBtn + deleteBtn + '</div>';
 }
+// Shared wrap/row markup for any REAL personal notification (has a DB id).
+// In select mode: no swipe-delete button (avoid gesture conflicts with the
+// checkbox tap target), no per-row checkmark/trash (bulk actions replace
+// them), the whole row becomes one big tap target that toggles selection
+// instead of navigating. Outside select mode: unchanged from before --
+// .ntf-swipe-delete-btn sits BEFORE .ntf-row in DOM order so the row's own
+// background paints on top of it at rest (a later sibling would otherwise
+// always win the paint order and show through as a permanent bar — the
+// exact bug hit and fixed in Messages).
+function _buildPersonalRow(n, isUnread, iconCls, bodyHtml, href, extraButtonHtml){
+  var timeStr = _esc(_relTime(n.created_at));
+  if(_selectMode){
+    var checked = _selectedIds.has(n.id);
+    return '<div class="ntf-row-wrap" data-notif-id="' + n.id + '">'
+      + '<div class="ntf-row ntf-row-selectable' + (checked ? ' ntf-row-selected' : '') + '" data-notif-id="' + n.id + '" onclick="_toggleSelect(' + n.id + ')">'
+      + '<label class="ntf-select-checkbox" onclick="event.stopPropagation()">'
+      + '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="_toggleSelect(' + n.id + ')" aria-label="Select notification">'
+      + '</label>'
+      + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
+      + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + timeStr + '</div></div>'
+      + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
+      + '</div>'
+      + '</div>';
+  }
+  return '<div class="ntf-row-wrap" data-notif-id="' + n.id + '">'
+    + '<button class="ntf-swipe-delete-btn">Delete</button>'
+    + '<div class="ntf-row" data-notif-id="' + n.id + '">'
+    + '<a class="ntf-row-link" href="' + _esc(href) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
+    + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
+    + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + timeStr + '</div></div>'
+    + '</a>'
+    + (extraButtonHtml || '')
+    + _actionsHtml(n, isUnread)
+    + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
+    + '</div>'
+    + '</div>';
+}
 function _rowHtml(n, kind){
   var isUnread = kind === 'personal' && !n.is_read;
   var iconCls, bodyHtml, timeStr;
@@ -275,26 +346,11 @@ function _rowHtml(n, kind){
     iconCls = p.positive ? 'trade-up' : 'trade-down';
     bodyHtml = '<div class="ntf-text">' + _esc(p.headline) + '</div>'
       + (p.chip ? '<div class="ntf-chip ' + (p.positive?'pos':'neg') + '">' + _esc(p.chip) + '</div>' : '');
-    var tradeHref = n.link || '#';
     // The bot no longer auto-posts this trade anywhere — give the user an
-    // explicit, one-click way to share it themselves if they want to.
-    // .ntf-row-wrap + .ntf-swipe-delete-btn: mobile swipe-to-delete, same
-    // pattern as Messages. The swipe button sits BEFORE .ntf-row in DOM order
-    // so the row's own background paints on top of it at rest (a later
-    // sibling would otherwise always win the paint order and show through as
-    // a permanent bar — the exact bug hit and fixed in Messages).
-    return '<div class="ntf-row-wrap" data-notif-id="' + n.id + '">'
-      + '<button class="ntf-swipe-delete-btn">Delete</button>'
-      + '<div class="ntf-row" data-notif-id="' + n.id + '">'
-      + '<a class="ntf-row-link" href="' + _esc(tradeHref) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
-      + '<div class="ntf-icon ' + iconCls + '">' + _ICON_SVG[iconCls] + '</div>'
-      + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
-      + '</a>'
-      + '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" onclick="_shareTrade(this,event)">Share</button>'
-      + _actionsHtml(n, isUnread)
-      + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
-      + '</div>'
-      + '</div>';
+    // explicit, one-click way to share it themselves if they want to
+    // (hidden in select mode along with the other per-row actions).
+    var shareBtn = _selectMode ? '' : '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" onclick="_shareTrade(this,event)">Share</button>';
+    return _buildPersonalRow(n, isUnread, iconCls, bodyHtml, n.link || '#', shareBtn);
   } else if(type === 'message'){
     iconCls = 'message';
     bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
@@ -302,18 +358,7 @@ function _rowHtml(n, kind){
     iconCls = 'social';
     bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
   }
-  var href = n.link || '#';
-  return '<div class="ntf-row-wrap" data-notif-id="' + n.id + '">'
-    + '<button class="ntf-swipe-delete-btn">Delete</button>'
-    + '<div class="ntf-row" data-notif-id="' + n.id + '">'
-    + '<a class="ntf-row-link" href="' + _esc(href) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
-    + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
-    + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(_relTime(n.created_at)) + '</div></div>'
-    + '</a>'
-    + _actionsHtml(n, isUnread)
-    + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
-    + '</div>'
-    + '</div>';
+  return _buildPersonalRow(n, isUnread, iconCls, bodyHtml, n.link || '#', null);
 }
 function _shareTrade(btn, ev){
   ev.preventDefault();
@@ -363,9 +408,10 @@ function _render(){
   }
   list.innerHTML = rows.map(function(r){ return _rowHtml(r.n, r.kind); }).join('');
   list.querySelectorAll('.ntf-row-wrap').forEach(function(wrap){
+    var delBtn = wrap.querySelector('.ntf-swipe-delete-btn');
+    if (!delBtn) return; // select mode: no swipe-delete button rendered
     var id = parseInt(wrap.dataset.notifId, 10);
     var content = wrap.querySelector('.ntf-row');
-    var delBtn = wrap.querySelector('.ntf-swipe-delete-btn');
     _attachNtfSwipeToDelete(wrap, content, delBtn, {
       onDelete: function(){ _confirmDeleteNotif(id); }
     });
@@ -526,6 +572,97 @@ async function _deleteNotif(id){
     alert((r && r.msg) || 'Could not delete this notification.');
   }
 }
+
+// ── BULK SELECT ──────────────────────────────────────────────────────────
+var _selectMode = false;
+var _selectedIds = new Set();
+
+function _toggleSelectMode(){
+  if(_selectMode) _exitSelectMode(); else _enterSelectMode();
+}
+function _enterSelectMode(){
+  _selectMode = true;
+  _selectedIds = new Set();
+  _ntfSwipeOpenWrap = null; // don't let a leftover swipe-lock block the rebuild below
+  ['mb-select-toggle','dt-select-toggle'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el){ el.textContent = 'Cancel'; el.classList.add('active'); }
+  });
+  var bar = document.getElementById('ntf-select-bar');
+  if(bar) bar.style.display = 'flex';
+  _updateSelectBar();
+  _render();
+}
+function _exitSelectMode(){
+  _selectMode = false;
+  _selectedIds = new Set();
+  ['mb-select-toggle','dt-select-toggle'].forEach(function(id){
+    var el = document.getElementById(id);
+    if(el){ el.textContent = 'Select'; el.classList.remove('active'); }
+  });
+  var bar = document.getElementById('ntf-select-bar');
+  if(bar) bar.style.display = 'none';
+  _render();
+}
+// Targeted DOM update (not a full _render()) for the same reason _markOneRead
+// avoids one -- toggling a single checkbox should feel instant, not reflow
+// the whole list.
+function _toggleSelect(id){
+  if(_selectedIds.has(id)) _selectedIds.delete(id); else _selectedIds.add(id);
+  var row = document.querySelector('.ntf-row[data-notif-id="' + id + '"]');
+  if(row){
+    var checked = _selectedIds.has(id);
+    row.classList.toggle('ntf-row-selected', checked);
+    var cb = row.querySelector('.ntf-select-checkbox input');
+    if(cb) cb.checked = checked;
+  }
+  _updateSelectBar();
+}
+function _updateSelectBar(){
+  var count = _selectedIds.size;
+  var countEl = document.getElementById('ntf-select-count');
+  if(countEl) countEl.textContent = count + ' selected';
+  var markBtn = document.getElementById('ntf-bulk-mark-btn');
+  var delBtn = document.getElementById('ntf-bulk-delete-btn');
+  if(markBtn) markBtn.disabled = count === 0;
+  if(delBtn) delBtn.disabled = count === 0;
+}
+async function _bulkMarkRead(){
+  var ids = Array.from(_selectedIds);
+  if(!ids.length) return;
+  await fetch('/api/notifications/mine/mark_read_batch', {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body: JSON.stringify({ids: ids})
+  }).catch(function(){});
+  var idSet = new Set(ids);
+  _personal.forEach(function(n){ if(idSet.has(n.id)) n.is_read = true; });
+  _updateUnreadUI();
+  _exitSelectMode();
+}
+function _bulkDelete(){
+  var ids = Array.from(_selectedIds);
+  if(!ids.length) return;
+  var count = ids.length;
+  openDeleteConvoModal(function(){ _doBulkDelete(ids); }, {
+    title: 'Delete ' + count + ' notification' + (count === 1 ? '' : 's') + '?',
+    text: "This can't be undone."
+  });
+}
+async function _doBulkDelete(ids){
+  var r = await fetch('/api/notifications/mine/delete_batch', {
+    method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body: JSON.stringify({ids: ids})
+  }).then(function(x){return x.json();}).catch(function(){return null;});
+  if(r && r.ok){
+    var idSet = new Set(ids);
+    _personal = _personal.filter(function(n){ return !idSet.has(n.id); });
+    _updateUnreadUI();
+    _exitSelectMode();
+  } else {
+    alert((r && r.msg) || 'Could not delete the selected notifications.');
+  }
+}
+
 _loadPersonal();
 _loadTrades();
 (function(){

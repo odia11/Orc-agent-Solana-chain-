@@ -4866,6 +4866,29 @@ def notifications_delete_one(notif_id):
         conn.close()
     return jsonify({'ok': True})
 
+@app.route('/api/notifications/mine/delete_batch', methods=['POST'])
+@rate_limit(30, 60)
+def notifications_delete_batch():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    ids = request.get_json(silent=True) or {}
+    id_list = ids.get('ids', [])
+    if not isinstance(id_list, list) or not id_list:
+        return jsonify({'ok': False, 'msg': 'No ids provided'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        placeholders = ','.join('?' * len(id_list))
+        conn.execute(f'DELETE FROM notifications WHERE user_id=? AND id IN ({placeholders})',
+                     [me] + id_list)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 @app.route('/api/notifications/mine/mark_all_read', methods=['POST'])
 def notifications_mark_all_read():
     wallet = _authenticated_wallet()

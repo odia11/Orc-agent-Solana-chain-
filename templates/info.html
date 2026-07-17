@@ -12,7 +12,6 @@
 :root{
   --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;
   --accent:#f7b955;--accent-dim:rgba(247,185,85,.12);--accent-border:rgba(247,185,85,.25);
-  --red:#ff4d6a;--red-dim:rgba(255,77,106,.12);--red-border:rgba(255,77,106,.3);
   --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
   --mono:'JetBrains Mono','Share Tech Mono',monospace;
   --ui:'Geist',system-ui,sans-serif;
@@ -97,16 +96,6 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
 .info-body code{font-family:var(--mono);font-size:12px;background:#16191f;border-radius:4px;padding:1px 5px;color:var(--text)}
 .info-body .callout{background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:14px 16px;color:var(--accent);font-size:13px;margin-bottom:14px}
 .info-body .callout strong{color:var(--accent)}
-
-/* ── DRAFT BANNER (Terms) ── */
-.draft-banner{
-  background:var(--red-dim);border:1px solid var(--red-border);border-radius:10px;
-  padding:14px 16px;margin-bottom:20px;
-  display:flex;gap:10px;align-items:flex-start;
-}
-.draft-banner-icon{font-size:16px;flex-shrink:0;line-height:1.4}
-.draft-banner-text{font-size:12.5px;color:#ffb3c0;line-height:1.55}
-.draft-banner-text strong{color:var(--red)}
 
 /* ── FEE STAT ROW ── */
 .fee-stat-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
@@ -337,13 +326,6 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
   <section class="info-section" id="terms">
     <div class="section-title"><span class="section-icon">§</span> Terms of Service</div>
     <div class="info-body">
-      <div class="draft-banner">
-        <span class="draft-banner-icon">⚠</span>
-        <span class="draft-banner-text"><strong>Draft — not final legal text.</strong>
-        This is a placeholder Terms of Service, provided for transparency
-        while the full terms are being written. It is not a substitute for
-        reviewed legal terms and may change substantially before launch.</span>
-      </div>
       {{ tos_content|safe }}
     </div>
   </section>
