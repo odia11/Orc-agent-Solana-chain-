@@ -85,7 +85,9 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 .new-msg-input::placeholder{color:#565d68}
 .new-msg-input:focus{border-color:rgba(247,185,85,.4)}
 .conv-list{flex:1;overflow-y:auto}
-.conv-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s}
+.conv-row-wrap{position:relative;overflow:hidden}
+.conv-delete-btn{position:absolute;top:0;right:0;height:100%;width:84px;background:#ff3b3b;color:#fff;border:none;font-size:12px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
+.conv-row{display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s;background:#0a0b0e;touch-action:pan-y}
 .conv-row:hover{background:#0e1014}
 .conv-row.active{background:#101216}
 .conv-avatar{width:42px;height:42px;border-radius:50%;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff}
@@ -486,7 +488,7 @@ async function loadConversations() {
 }
 
 function _filterConvs(q) {
-  var rows = document.querySelectorAll('#conv-list .conv-row');
+  var rows = document.querySelectorAll('#conv-list .conv-row-wrap');
   rows.forEach(function(row) {
     var text = row.textContent.toLowerCase();
     row.style.display = (!q || text.indexOf(q.toLowerCase()) >= 0) ? '' : 'none';
@@ -540,20 +542,133 @@ function _renderConvList() {
       : c.last_type === 'trade' ? '📊 Shared a trade'
       : (c.last_msg || '');
     var preview = (c.last_is_mine ? 'you: ' : '') + previewRaw.slice(0, 60);
-    return '<div class="conv-row'+active+'" onclick="_openThread('+c.peer_id+')">'
-      + '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden'+(c.peer_avatar?';cursor:pointer':'')+'"'+(c.peer_avatar?' onclick="event.stopPropagation();_showAvatarLightbox('+_esc(JSON.stringify(c.peer_avatar))+')"':'')+'>'+_esc(ini)+avatarImg
-      +   (c.peer_online ? '<span class="msgs-online-dot" style="position:absolute;bottom:1px;right:1px;border:2px solid #0a0b0e"></span>' : '')
+    return '<div class="conv-row-wrap" data-peer-id="'+c.peer_id+'">'
+      + '<div class="conv-row'+active+'">'
+      +   '<div class="conv-avatar" style="background:'+color+';position:relative;overflow:hidden'+(c.peer_avatar?';cursor:pointer':'')+'"'+(c.peer_avatar?' onclick="event.stopPropagation();_showAvatarLightbox('+_esc(JSON.stringify(c.peer_avatar))+')"':'')+'>'+_esc(ini)+avatarImg
+      +     (c.peer_online ? '<span class="msgs-online-dot" style="position:absolute;bottom:1px;right:1px;border:2px solid #0a0b0e"></span>' : '')
+      +   '</div>'
+      +   '<div class="conv-info">'
+      +     '<div class="conv-name">'+_esc(name)+(c.peer_verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
+      +     '<div class="conv-preview'+(unread?' unread':'')+'">'+_esc(preview)+'</div>'
+      +   '</div>'
+      +   '<div class="conv-meta">'
+      +     '<span class="conv-time">'+_esc(_timeAgo(c.last_ts))+'</span>'
+      +     badge
+      +   '</div>'
       + '</div>'
-      + '<div class="conv-info">'
-      +   '<div class="conv-name">'+_esc(name)+(c.peer_verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
-      +   '<div class="conv-preview'+(unread?' unread':'')+'">'+_esc(preview)+'</div>'
-      + '</div>'
-      + '<div class="conv-meta">'
-      +   '<span class="conv-time">'+_esc(_timeAgo(c.last_ts))+'</span>'
-      +   badge
-      + '</div>'
+      + '<button class="conv-delete-btn">Delete</button>'
       + '</div>';
   }).join('');
+  el.querySelectorAll('.conv-row-wrap').forEach(function(wrap){
+    var peerId = parseInt(wrap.dataset.peerId, 10);
+    var content = wrap.querySelector('.conv-row');
+    var delBtn = wrap.querySelector('.conv-delete-btn');
+    _attachSwipeToDelete(wrap, content, delBtn, {
+      onOpen: function(){
+        var c = _conversations.find(function(x){ return x.peer_id === peerId; });
+        _openThread(peerId, c ? c.peer_username : '', c ? c.peer_wallet : '');
+      },
+      onDelete: function(){ _deleteConversation(peerId, wrap); }
+    });
+  });
+}
+
+// ── SWIPE-TO-DELETE (touch-only; vanilla touchstart/touchmove/touchend, no
+// library) — same approach as the embedded dashboard DM panel: touchmove is
+// {passive:false} so preventDefault() can suppress page scroll, but only once
+// the gesture is confirmed horizontal. A plain tap falls through to onOpen. ──
+var _convSwipeOpenWrap = null;
+function _attachSwipeToDelete(wrapEl, contentEl, deleteBtnEl, opts) {
+  var ACTION_WIDTH = 84;
+  var startX = 0, startY = 0, startTranslate = 0, dragging = false, horizontal = null, moved = false;
+
+  function curTranslate() {
+    var m = /translateX\((-?\d+(?:\.\d+)?)px\)/.exec(contentEl.style.transform);
+    return m ? parseFloat(m[1]) : 0;
+  }
+  function setTranslate(x, animate) {
+    contentEl.style.transition = animate ? 'transform .2s ease' : 'none';
+    contentEl.style.transform = 'translateX(' + x + 'px)';
+  }
+  function closeRow(animate) {
+    setTranslate(0, animate !== false);
+    wrapEl.dataset.swipeOpen = '0';
+    if (_convSwipeOpenWrap === wrapEl) _convSwipeOpenWrap = null;
+  }
+  function openRow() {
+    if (_convSwipeOpenWrap && _convSwipeOpenWrap !== wrapEl) {
+      var otherContent = _convSwipeOpenWrap.querySelector('.conv-row');
+      if (otherContent) { otherContent.style.transition = 'transform .2s ease'; otherContent.style.transform = 'translateX(0)'; }
+      _convSwipeOpenWrap.dataset.swipeOpen = '0';
+    }
+    setTranslate(-ACTION_WIDTH, true);
+    wrapEl.dataset.swipeOpen = '1';
+    _convSwipeOpenWrap = wrapEl;
+  }
+
+  wrapEl.addEventListener('touchstart', function(e) {
+    if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+    startTranslate = curTranslate();
+    dragging = true; horizontal = null; moved = false;
+  }, {passive: true});
+
+  wrapEl.addEventListener('touchmove', function(e) {
+    if (!dragging) return;
+    var dx = e.touches[0].clientX - startX, dy = e.touches[0].clientY - startY;
+    if (horizontal === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) horizontal = Math.abs(dx) > Math.abs(dy);
+    if (horizontal) {
+      e.preventDefault();
+      moved = true;
+      setTranslate(Math.max(-ACTION_WIDTH, Math.min(0, startTranslate + dx)), false);
+    }
+  }, {passive: false});
+
+  function endDrag() {
+    if (!dragging) return;
+    dragging = false;
+    if (horizontal && moved) {
+      if (curTranslate() < -ACTION_WIDTH * 0.35) openRow(); else closeRow();
+    }
+    horizontal = null; moved = false;
+  }
+  wrapEl.addEventListener('touchend', endDrag, {passive: true});
+  wrapEl.addEventListener('touchcancel', endDrag, {passive: true});
+
+  contentEl.addEventListener('click', function() {
+    if (wrapEl.dataset.swipeOpen === '1') { closeRow(); return; }
+    if (opts.onOpen) opts.onOpen();
+  });
+  deleteBtnEl.addEventListener('click', function(ev) {
+    ev.stopPropagation();
+    if (opts.onDelete) opts.onDelete();
+  });
+}
+
+async function _deleteConversation(peerId, wrapEl) {
+  if (!confirm('Delete this conversation?\nThis only removes it from your inbox — the other person keeps their copy.')) return;
+  try {
+    var resp = await fetch('/api/messages/thread/' + peerId, {method: 'DELETE', headers: {'X-CSRF-Token': _csrfToken}});
+    var r = await resp.json();
+    if (r.ok) {
+      _conversations = _conversations.filter(function(c) { return c.peer_id !== peerId; });
+      wrapEl.remove();
+      if (_activePeerId === peerId) {
+        _activePeerId = null;
+        var thread = document.getElementById('msgs-thread');
+        if (thread) thread.style.display = 'none';
+        var placeholder = document.getElementById('msgs-placeholder');
+        if (placeholder) placeholder.style.display = '';
+        var main = document.getElementById('msgs-main');
+        if (main) main.classList.remove('thread-open');
+      }
+      if (!_conversations.length) _renderConvList();
+    } else {
+      alert(r.msg || 'Could not delete this conversation.');
+    }
+  } catch (e) {
+    alert('Network error — please try again.');
+  }
 }
 
 /* ── THREAD ── */

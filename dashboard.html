@@ -1824,6 +1824,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-convo-list::-webkit-scrollbar{width:4px}
 .dm-convo-list::-webkit-scrollbar-track{background:transparent}
 .dm-convo-list::-webkit-scrollbar-thumb{background:#2a2a2a;border-radius:2px}
+.dm-convo-wrap{position:relative;overflow:hidden}
+.dm-convo-delete-btn{position:absolute;top:0;right:0;height:100%;width:84px;background:#ff3b3b;color:#fff;border:none;font-size:12px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
 .dm-convo{
   display:flex;
   align-items:center;
@@ -1833,6 +1835,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   border-bottom:1px solid #111926;
   transition:background .12s;
   position:relative;
+  background:#1c1c1c;
+  touch-action:pan-y;
 }
 .dm-convo:hover{background:#131b28}
 .dm-convo.active{

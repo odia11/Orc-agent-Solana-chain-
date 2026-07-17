@@ -5665,6 +5665,12 @@ async function dmLoadConversations(){
 }
 
 function _dmRenderConvoList(){
+  // A full rebuild wipes any row currently swiped open (its transform/state is
+  // just DOM, not tracked data) — the background poll would otherwise silently
+  // snap a user's in-progress swipe closed while they're deciding whether to
+  // tap Delete. Skip this rebuild cycle instead; it resumes as soon as the row
+  // closes or gets deleted (both clear _dmSwipeOpenWrap).
+  if(_dmSwipeOpenWrap && document.body.contains(_dmSwipeOpenWrap)) return;
   const list=document.getElementById('dm-convo-list');
   let empty=document.getElementById('dm-convo-empty');
   if(!empty){
@@ -5682,9 +5688,11 @@ function _dmRenderConvoList(){
   if(empty.parentNode) empty.parentNode.removeChild(empty);
   list.innerHTML='';
   _dmConvos.forEach(c=>{
+    const wrap=document.createElement('div');
+    wrap.className='dm-convo-wrap';
+    wrap.dataset.peerId=c.peer_id;
     const div=document.createElement('div');
     div.className='dm-convo'+(c.peer_id===_dmPeerId?' active':'');
-    div.dataset.peerId=c.peer_id;
     const name=c.peer_username||_dmShort(c.peer_wallet||'');
     div.innerHTML=`
       <div class="dm-convo-av" id="dm-cav-${c.peer_id}">${_dmInitials(name)}</div>
@@ -5696,9 +5704,114 @@ function _dmRenderConvoList(){
         <div class="dm-convo-time">${_dmRelTime(c.last_ts)}</div>
         ${c.unread>0?`<div class="dm-unread-dot">${c.unread}</div>`:''}
       </div>`;
-    div.onclick=()=>dmOpenConvo(c.peer_id, c.peer_wallet||'', c.peer_username||'');
-    list.appendChild(div);
+    const delBtn=document.createElement('button');
+    delBtn.className='dm-convo-delete-btn';
+    delBtn.textContent='Delete';
+    wrap.appendChild(div);
+    wrap.appendChild(delBtn);
+    list.appendChild(wrap);
+    _attachSwipeToDelete(wrap, div, delBtn, {
+      onOpen:()=>dmOpenConvo(c.peer_id, c.peer_wallet||'', c.peer_username||''),
+      onDelete:()=>_dmDeleteConvo(c.peer_id, wrap)
+    });
   });
+}
+
+// ── SWIPE-TO-DELETE (touch-only; vanilla touchstart/touchmove/touchend, no
+// library) — reveals a red Delete button when swiping a row left. Verified
+// against both iOS Safari and Android Chrome touch semantics: touchmove is
+// registered {passive:false} so preventDefault() can suppress page scroll,
+// but ONLY once the gesture is confirmed horizontal (a small vertical scroll
+// on the row is left alone). A plain tap (no meaningful movement) falls
+// through to onOpen unchanged, so desktop/mouse clicks are unaffected. ──
+let _dmSwipeOpenWrap=null;
+function _attachSwipeToDelete(wrapEl, contentEl, deleteBtnEl, opts){
+  const ACTION_WIDTH=84;
+  let startX=0, startY=0, startTranslate=0, dragging=false, horizontal=null, moved=false;
+
+  function curTranslate(){
+    const m=/translateX\((-?\d+(?:\.\d+)?)px\)/.exec(contentEl.style.transform);
+    return m?parseFloat(m[1]):0;
+  }
+  function setTranslate(x,animate){
+    contentEl.style.transition=animate?'transform .2s ease':'none';
+    contentEl.style.transform='translateX('+x+'px)';
+  }
+  function closeRow(animate){
+    setTranslate(0,animate!==false);
+    wrapEl.dataset.swipeOpen='0';
+    if(_dmSwipeOpenWrap===wrapEl) _dmSwipeOpenWrap=null;
+  }
+  function openRow(){
+    if(_dmSwipeOpenWrap && _dmSwipeOpenWrap!==wrapEl){
+      const otherContent=_dmSwipeOpenWrap.querySelector('.dm-convo');
+      if(otherContent){ otherContent.style.transition='transform .2s ease'; otherContent.style.transform='translateX(0)'; }
+      _dmSwipeOpenWrap.dataset.swipeOpen='0';
+    }
+    setTranslate(-ACTION_WIDTH,true);
+    wrapEl.dataset.swipeOpen='1';
+    _dmSwipeOpenWrap=wrapEl;
+  }
+
+  wrapEl.addEventListener('touchstart',e=>{
+    if(e.touches.length!==1) return;
+    startX=e.touches[0].clientX; startY=e.touches[0].clientY;
+    startTranslate=curTranslate();
+    dragging=true; horizontal=null; moved=false;
+  },{passive:true});
+
+  wrapEl.addEventListener('touchmove',e=>{
+    if(!dragging) return;
+    const dx=e.touches[0].clientX-startX, dy=e.touches[0].clientY-startY;
+    if(horizontal===null && (Math.abs(dx)>6||Math.abs(dy)>6)) horizontal=Math.abs(dx)>Math.abs(dy);
+    if(horizontal){
+      e.preventDefault(); // only suppress scroll once we know this is a horizontal swipe
+      moved=true;
+      setTranslate(Math.max(-ACTION_WIDTH,Math.min(0,startTranslate+dx)),false);
+    }
+  },{passive:false});
+
+  function endDrag(){
+    if(!dragging) return;
+    dragging=false;
+    if(horizontal && moved){
+      if(curTranslate()<-ACTION_WIDTH*0.35) openRow(); else closeRow();
+    }
+    horizontal=null; moved=false;
+  }
+  wrapEl.addEventListener('touchend',endDrag,{passive:true});
+  wrapEl.addEventListener('touchcancel',endDrag,{passive:true});
+
+  contentEl.addEventListener('click',()=>{
+    if(wrapEl.dataset.swipeOpen==='1'){ closeRow(); return; }
+    if(opts.onOpen) opts.onOpen();
+  });
+  deleteBtnEl.addEventListener('click',ev=>{
+    ev.stopPropagation();
+    if(opts.onDelete) opts.onDelete();
+  });
+}
+
+async function _dmDeleteConvo(peerId, wrapEl){
+  if(!confirm('Delete this conversation?\nThis only removes it from your inbox — the other person keeps their copy.')) return;
+  try{
+    const r=await fetch('/api/messages/thread/'+peerId,{method:'DELETE'}).then(x=>x.json());
+    if(r&&r.ok){
+      _dmConvos=_dmConvos.filter(c=>c.peer_id!==peerId);
+      wrapEl.remove();
+      if(_dmPeerId===peerId){
+        _dmPeerId=null;
+        const active=document.getElementById('dm-chat-active'); if(active) active.style.display='none';
+        const placeholder=document.getElementById('dm-chat-placeholder'); if(placeholder) placeholder.style.display='';
+        const layout=document.getElementById('dm-layout'); if(layout) layout.classList.remove('convo-open');
+      }
+      if(!_dmConvos.length) _dmRenderConvoList();
+    } else {
+      alert(r?.msg||'Could not delete this conversation.');
+    }
+  }catch(e){
+    alert('Network error — please try again.');
+  }
 }
 
 async function dmOpenConvo(peerId, peerWallet, peerUsername){

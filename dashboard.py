@@ -1062,6 +1062,17 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_tos_acceptances_user ON tos_acceptances(user_id, accepted_at)')
+    # dm_hidden_conversations — "delete conversation" is per-user, not a real
+    # delete: direct_messages rows are shared with the other party, so hiding
+    # only affects the deleter's own inbox list. A message from the peer newer
+    # than hidden_at makes the conversation reappear (list_conversations checks
+    # this), matching how most chat apps handle "delete for me".
+    c.execute('''CREATE TABLE IF NOT EXISTS dm_hidden_conversations (
+        user_id    INTEGER NOT NULL,
+        peer_id    INTEGER NOT NULL,
+        hidden_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, peer_id)
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS webauthn_credentials (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id       INTEGER NOT NULL,
@@ -8320,9 +8331,13 @@ def list_conversations():
                 FROM direct_messages
                 WHERE sender_id=? OR receiver_id=?
             ) WHERE rn=1
+              AND NOT EXISTS (
+                  SELECT 1 FROM dm_hidden_conversations h
+                  WHERE h.user_id=? AND h.peer_id=peer_id AND h.hidden_at > last_ts
+              )
             ORDER BY last_ts DESC
             LIMIT 100
-        ''', (me, me, me, me, me, me)).fetchall()
+        ''', (me, me, me, me, me, me, me)).fetchall()
     finally:
         conn.close()
     _online_cutoff = datetime.datetime.utcnow() - datetime.timedelta(minutes=3)
@@ -8340,6 +8355,40 @@ def list_conversations():
          'peer_online': _is_online(r[9]), 'peer_verified': bool(r[10])}
         for r in rows
     ]})
+
+@app.route('/api/messages/thread/<int:peer_id>', methods=['DELETE'])
+@rate_limit(30, 60)
+def delete_dm_thread(peer_id):
+    """'Delete conversation' — hides it from the caller's own inbox list only.
+    The messages themselves are untouched (the peer still has them), and the
+    conversation reappears once the peer sends a new message (see the
+    hidden_at check in list_conversations)."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute(
+            'INSERT INTO dm_hidden_conversations (user_id, peer_id, hidden_at) VALUES (?,?,?) '
+            'ON CONFLICT (user_id, peer_id) DO UPDATE SET hidden_at=excluded.hidden_at',
+            (me, peer_id, now)
+        )
+        # Also clear any unread badge contribution from this thread — otherwise
+        # the badge count and the (now-empty) conversation list disagree.
+        conn.execute(
+            'UPDATE direct_messages SET is_read=1 WHERE receiver_id=? AND sender_id=? AND is_read=0',
+            (me, peer_id)
+        )
+        conn.commit()
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': 'Server error: ' + str(e)}), 500
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
 
 @app.route('/api/messages/<int:peer_id>', methods=['GET'])
 @rate_limit(60, 60)
