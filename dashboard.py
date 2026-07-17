@@ -4116,78 +4116,32 @@ def traders():
 
 _INFO_UPDATED = 'July 2026'
 
+@app.route('/info')
+def page_info():
+    """Combined About/Docs/Fees/Security/Terms page — five anchored sections
+    (#about #docs #fees #security #terms) on one page with a sticky section
+    nav, so the old separate footer links can jump straight to their section
+    instead of loading a whole new page."""
+    fee_pct = round(_get_fee_rate() * 100, 2)
+    return render_template('info.html', updated=_INFO_UPDATED, fee_pct=fee_pct, tos_content=_TOS_CONTENT_HTML)
+
+# Old standalone routes now redirect into the combined /info page at the
+# matching anchor — keeps existing bookmarks/links working.
 @app.route('/about')
 def page_about():
-    content = '''
-    <p>OrcAgent is a social trading platform for Solana meme coins.
-    Connect a dedicated wallet, follow traders you trust, and let a rules-based
-    bot execute your strategy automatically.</p>
-    <h2>What you can do</h2>
-    <ul>
-      <li>Automate entries and exits with your own breakout / TP / SL rules</li>
-      <li>Follow other traders and copy their trades in real time</li>
-      <li>Track a live feed of trades and posts from people you follow</li>
-      <li>Chat directly with other traders, share images and trade cards</li>
-    </ul>
-    <div class="callout">OrcAgent is a tool for automating your own trading rules.
-    It is not investment advice.</div>
-    '''
-    return render_template('info.html', page_title='About OrcAgent', updated=_INFO_UPDATED, content=content)
+    return redirect('/info#about')
 
 @app.route('/docs')
 def page_docs():
-    content = '''
-    <h2>Getting started</h2>
-    <ol>
-      <li>Connect a Phantom or Solflare wallet — use a wallet dedicated to
-      OrcAgent, not your main holdings.</li>
-      <li>Fund it with SOL for trading and network fees.</li>
-      <li>Set your Breakout Trigger, Take Profit, Stop Loss and Max Concurrent
-      Positions under <a href="/settings">Bot Settings</a>.</li>
-      <li>Toggle Auto Trading on when you're ready.</li>
-    </ol>
-    <h2>How the bot decides to trade</h2>
-    <p>The bot scans the live market for tokens moving past your configured
-    breakout threshold, checks mint/freeze authority and runs a rug-pull
-    check before entering.</p>
-    <h2>Copy trading</h2>
-    <p>Enable copy trading on a trader's profile to mirror their entries at
-    your own configured position size.</p>
-    '''
-    return render_template('info.html', page_title='Documentation', updated=_INFO_UPDATED, content=content)
+    return redirect('/info#docs')
 
 @app.route('/fees')
 def page_fees():
-    fee_pct = round(_get_fee_rate() * 100, 2)
-    content = f'''
-    <h2>Performance fee</h2>
-    <p>OrcAgent charges a <strong>{fee_pct}%</strong> performance fee, taken
-    only from profitable closed trades. Losing trades and open positions are
-    never charged.</p>
-    <h2>Network fees</h2>
-    <p>Every on-chain trade also pays standard Solana network and
-    swap-routing fees, set by the network, not by OrcAgent.</p>
-    <div class="callout">Fee rates are configurable and may change. The
-    current rate is always shown here.</div>
-    '''
-    return render_template('info.html', page_title='Fees', updated=_INFO_UPDATED, content=content)
+    return redirect('/info#fees')
 
 @app.route('/security')
 def page_security():
-    content = '''
-    <h2>Your wallet</h2>
-    <p>OrcAgent never has access to your seed phrase. Trading keys are
-    encrypted at rest and used only to sign trades you've configured the bot
-    to make.</p>
-    <h2>Session security</h2>
-    <p>Wallet connections use Sign-In With Solana with server-issued,
-    single-use nonces. Optional Face ID / WebAuthn login is available.</p>
-    <h2>Trade safety checks</h2>
-    <p>Before entering a position, the bot validates a token's mint and
-    freeze authority and runs a rug-pull risk check. No automated check
-    eliminates risk.</p>
-    '''
-    return render_template('info.html', page_title='Security', updated=_INFO_UPDATED, content=content)
+    return redirect('/info#security')
 
 # TOS_VERSION gates re-acceptance: bump this string whenever _TOS_CONTENT_HTML
 # changes in a way that requires every user to accept again. Old acceptance
@@ -4213,7 +4167,7 @@ _TOS_CONTENT_HTML = '''
 
 @app.route('/terms')
 def page_terms():
-    return render_template('info.html', page_title='Terms of Service', updated=_INFO_UPDATED, content=_TOS_CONTENT_HTML)
+    return redirect('/info#terms')
 
 @app.route('/api/tos/status')
 @rate_limit(60, 60)

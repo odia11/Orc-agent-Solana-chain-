@@ -3,25 +3,27 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
-<title>{{ page_title }} — OrcAgent</title>
+<title>Info — OrcAgent</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Orbitron:wght@700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
   --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;
   --accent:#f7b955;--accent-dim:rgba(247,185,85,.12);--accent-border:rgba(247,185,85,.25);
+  --red:#ff4d6a;--red-dim:rgba(255,77,106,.12);--red-border:rgba(255,77,106,.3);
   --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
   --mono:'JetBrains Mono','Share Tech Mono',monospace;
   --ui:'Geist',system-ui,sans-serif;
+  --title-font:'Orbitron',monospace;
 }
 html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
 
-/* ── NAVBAR ── */
+/* ── STICKY HEADER STACK ── */
 .navbar{
-  position:sticky;top:0;z-index:50;
-  background:rgba(10,11,14,.82);
+  position:sticky;top:0;z-index:51;
+  background:rgba(10,11,14,.86);
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
   border-bottom:1px solid #16191f;
   display:flex;align-items:center;justify-content:space-between;
@@ -36,33 +38,97 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
 .nav-btn{display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;font-family:var(--ui);font-size:12px;font-weight:600;text-decoration:none;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
 .nav-btn:hover{border-color:#35353d;color:var(--text)}
 
+.section-nav{
+  position:sticky;top:56px;z-index:50;
+  background:rgba(16,18,22,.92);
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  border-bottom:1px solid #16191f;
+  overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+}
+.section-nav::-webkit-scrollbar{display:none}
+.section-nav-inner{
+  max-width:760px;margin:0 auto;
+  display:flex;gap:4px;padding:0 28px;
+}
+.section-nav-link{
+  flex-shrink:0;
+  display:inline-flex;align-items:center;
+  padding:13px 14px;
+  font-family:var(--ui);font-size:12.5px;font-weight:600;
+  color:var(--muted);text-decoration:none;
+  border-bottom:2px solid transparent;
+  transition:color .15s,border-color .15s;
+  white-space:nowrap;
+}
+.section-nav-link:hover{color:var(--sub)}
+.section-nav-link.active{color:var(--accent);border-bottom-color:var(--accent)}
+
 /* ── PAGE ── */
-.page{max-width:760px;margin:0 auto;padding:48px 28px 80px}
+.page{max-width:760px;margin:0 auto;padding:40px 28px 90px}
 
-/* ── HEADER ── */
-.info-header{margin-bottom:36px;padding-bottom:24px;border-bottom:1px solid #16191f}
-.info-title{font-size:28px;font-weight:700;color:var(--text);margin-bottom:6px}
-.info-meta{font-size:12px;color:var(--muted)}
+.page-intro{margin-bottom:8px}
+.page-title{font-family:var(--title-font);font-size:22px;font-weight:700;color:var(--text);margin-bottom:6px;letter-spacing:.02em}
+.page-meta{font-size:12px;color:var(--muted);margin-bottom:36px}
 
-/* ── CONTENT typography ── */
-.info-body h2{font-size:16px;font-weight:600;color:var(--text);margin:28px 0 10px;letter-spacing:.01em}
-.info-body h3{font-size:14px;font-weight:600;color:var(--sub);margin:20px 0 8px}
+/* ── SECTIONS ── */
+.info-section{
+  padding-top:28px;
+  margin-top:28px;
+  border-top:1px solid #16191f;
+  scroll-margin-top:116px; /* clears navbar (56) + section-nav (~52) + a little air */
+}
+.info-section:first-of-type{border-top:none;padding-top:0;margin-top:0}
+.section-title{font-family:var(--title-font);font-size:18px;font-weight:700;color:var(--text);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+.section-icon{font-size:16px}
+
+/* ── CONTENT typography (shared) ── */
+/* h2 is styled here too (not just h3) because _TOS_CONTENT_HTML -- reused
+   verbatim from the ToS acceptance modal, single source of truth -- uses h2
+   for its subheadings and must render correctly without forking that markup. */
+.info-body h2,.info-body h3{font-size:14.5px;font-weight:600;color:var(--text);margin:22px 0 8px;letter-spacing:.01em}
+.info-body h2:first-child,.info-body h3:first-child{margin-top:0}
 .info-body p{color:var(--sub);margin-bottom:14px}
 .info-body ul,.info-body ol{color:var(--sub);padding-left:20px;margin-bottom:14px}
-.info-body li{margin-bottom:6px}
+.info-body li{margin-bottom:7px}
+.info-body li strong{color:var(--text)}
 .info-body a{color:var(--accent);text-decoration:none}
 .info-body a:hover{text-decoration:underline}
 .info-body code{font-family:var(--mono);font-size:12px;background:#16191f;border-radius:4px;padding:1px 5px;color:var(--text)}
-.info-body pre{background:#101216;border:1px solid #16191f;border-radius:10px;padding:16px;overflow-x:auto;margin-bottom:14px}
-.info-body pre code{background:none;padding:0}
 .info-body .callout{background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:10px;padding:14px 16px;color:var(--accent);font-size:13px;margin-bottom:14px}
+.info-body .callout strong{color:var(--accent)}
+
+/* ── DRAFT BANNER (Terms) ── */
+.draft-banner{
+  background:var(--red-dim);border:1px solid var(--red-border);border-radius:10px;
+  padding:14px 16px;margin-bottom:20px;
+  display:flex;gap:10px;align-items:flex-start;
+}
+.draft-banner-icon{font-size:16px;flex-shrink:0;line-height:1.4}
+.draft-banner-text{font-size:12.5px;color:#ffb3c0;line-height:1.55}
+.draft-banner-text strong{color:var(--red)}
+
+/* ── FEE STAT ROW ── */
+.fee-stat-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.fee-stat{flex:1;min-width:140px;background:var(--bg3);border:1px solid #21252c;border-radius:10px;padding:14px 16px}
+.fee-stat-label{font-size:10px;color:var(--muted);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px}
+.fee-stat-value{font-family:var(--mono);font-size:20px;font-weight:700;color:var(--accent)}
+.fee-stat-value.neutral{color:var(--text)}
 
 /* ── MOBILE ── */
 @media(max-width:600px){
-  html,body{overflow-x:hidden}
-  .page{padding:32px 16px 60px}
+  /* overflow-x:hidden on html/body (as in the old single-topic version of this
+     page) implicitly forces overflow-y:auto per spec once only one axis is
+     non-visible -- that turns body into its own scroll container and breaks
+     position:sticky on .navbar/.section-nav (they stop sticking entirely,
+     confirmed via a real hash-anchor page load, not just a click). Scope the
+     horizontal clip to .page instead, which doesn't sit in the sticky chain. */
+  .page{overflow-x:hidden;padding:28px 16px 70px}
   .navbar{padding:0 16px}
-  .info-title{font-size:22px}
+  .section-nav-inner{padding:0 16px}
+  .page-title{font-size:19px}
+  .section-title{font-size:16px}
+  .fee-stat-row{flex-direction:column}
 }
 </style>
 </head>
@@ -81,15 +147,238 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
   </div>
 </nav>
 
-<div class="page">
-  <div class="info-header">
-    <div class="info-title">{{ page_title }}</div>
-    <div class="info-meta">Last updated: {{ updated }}</div>
-  </div>
-  <div class="info-body">
-    {{ content|safe }}
+<div class="section-nav">
+  <div class="section-nav-inner" id="section-nav-inner">
+    <a class="section-nav-link" data-target="about" href="#about">About</a>
+    <a class="section-nav-link" data-target="docs" href="#docs">Docs</a>
+    <a class="section-nav-link" data-target="fees" href="#fees">Fees</a>
+    <a class="section-nav-link" data-target="security" href="#security">Security</a>
+    <a class="section-nav-link" data-target="terms" href="#terms">Terms</a>
   </div>
 </div>
+
+<div class="page">
+  <div class="page-intro">
+    <div class="page-title">Info</div>
+    <div class="page-meta">Last updated: {{ updated }}</div>
+  </div>
+
+  <!-- ═══════════ ABOUT ═══════════ -->
+  <section class="info-section" id="about">
+    <div class="section-title"><span class="section-icon">◆</span> About</div>
+    <div class="info-body">
+      <p>OrcAgent is a social trading platform for Solana meme coins. Connect a
+      dedicated wallet, follow traders you trust, and let a rules-based bot
+      execute your strategy automatically — or trade manually whenever you want
+      full control.</p>
+
+      <h3>How it works</h3>
+      <ol>
+        <li><strong>Connect a wallet.</strong> OrcAgent generates a separate,
+        dedicated <strong>trading wallet</strong> for your bot and manual
+        trades — this is not the same wallet you sign in with, and your seed
+        phrase never leaves your own wallet app.</li>
+        <li><strong>Set your rules.</strong> Choose a breakout trigger, take
+        profit, stop loss, and how many positions the bot can hold at once.</li>
+        <li><strong>The bot scans the market.</strong> It continuously checks
+        live Solana tokens against your rules, runs basic safety checks
+        (mint/freeze authority, rug-pull signals) before entering, and exits
+        automatically when your take-profit or stop-loss is hit.</li>
+        <li><strong>Follow the social layer.</strong> See a live feed of trades
+        and posts from traders you follow, message them directly, and
+        optionally copy their trades at your own position size.</li>
+      </ol>
+
+      <h3>What you can do</h3>
+      <ul>
+        <li>Automate entries and exits with your own breakout / TP / SL rules</li>
+        <li>Trade manually in <a href="/live-market">Live Market</a> using the
+        same live token data the bot sees</li>
+        <li>Follow other traders and copy their trades in real time</li>
+        <li>Track a live feed of trades and posts from people you follow</li>
+        <li>Chat directly with other traders, share images and trade cards</li>
+      </ul>
+
+      <div class="callout"><strong>OrcAgent is a tool for automating your own
+      trading rules.</strong> It is not investment advice, and no automated
+      strategy removes the risk of loss.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ DOCS ═══════════ -->
+  <section class="info-section" id="docs">
+    <div class="section-title"><span class="section-icon">▤</span> Docs</div>
+    <div class="info-body">
+      <h3>Getting started with the bot</h3>
+      <ol>
+        <li>Connect a Phantom or Solflare wallet to sign in — use one that
+        isn't holding your main savings.</li>
+        <li>Fund your dedicated <strong>trading wallet</strong> (shown on the
+        <a href="/wallet">Wallet</a> page) with SOL — this is what the bot
+        actually trades with and pays network fees from.</li>
+        <li>Under <a href="/settings">Bot Settings</a>, set:
+          <ul style="margin-top:6px">
+            <li><strong>Breakout Trigger</strong> — the minimum price move
+            that qualifies a token as an entry candidate.</li>
+            <li><strong>Take Profit / Stop Loss</strong> — the % gain or loss
+            at which the bot automatically closes a position.</li>
+            <li><strong>Max Concurrent Positions</strong> — how many tokens
+            the bot can hold open at the same time.</li>
+          </ul>
+        </li>
+        <li>Toggle Auto Trading on when you're ready. You can pause it at any
+        time — open positions stay open and are still managed by your TP/SL
+        rules while paused.</li>
+      </ol>
+
+      <h3>How the bot decides to trade</h3>
+      <p>The bot scans the live market for tokens moving past your configured
+      breakout threshold, checks mint/freeze authority and runs a rug-pull
+      check before entering. It exits a position automatically once your take
+      profit or stop loss is reached — no manual action needed.</p>
+
+      <h3>Live Market</h3>
+      <p><a href="/live-market">Live Market</a> shows the same real-time,
+      scored token list the bot scans — price change, volume, and risk
+      signals for each token. Tap a token to open the quick trade panel and
+      buy or sell manually, at any time, independent of whether Auto Trading
+      is on. Use it to trade opportunities yourself or to see what the bot is
+      currently watching.</p>
+
+      <h3>Wallet</h3>
+      <p>The <a href="/wallet">Wallet</a> page shows your dedicated trading
+      wallet — a separate address from the one you connected with. Deposit
+      SOL to its address to fund trading and network fees, and withdraw back
+      to your own wallet at any time. Keeping trading funds in this dedicated
+      wallet (rather than your main wallet) limits what the bot can ever
+      touch.</p>
+
+      <h3>Copy trading</h3>
+      <p>Enable copy trading on a trader's profile to automatically mirror
+      their entries at your own configured position size. Your own TP/SL
+      rules still apply to copied positions — copy trading only mirrors
+      entries, not their exit timing.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════ FEES ═══════════ -->
+  <section class="info-section" id="fees">
+    <div class="section-title"><span class="section-icon">%</span> Fees</div>
+    <div class="info-body">
+      <h3>Performance fee</h3>
+      <div class="fee-stat-row">
+        <div class="fee-stat">
+          <div class="fee-stat-label">Current rate</div>
+          <div class="fee-stat-value">{{ fee_pct }}%</div>
+        </div>
+        <div class="fee-stat">
+          <div class="fee-stat-label">Charged on</div>
+          <div class="fee-stat-value neutral">Profit only</div>
+        </div>
+      </div>
+      <p>OrcAgent charges a <strong>{{ fee_pct }}% performance fee</strong>,
+      taken only from profitable closed trades. It's calculated on the profit
+      of that specific trade and sent as a small, separate SOL transaction
+      from your trading wallet right after the position closes — it is not
+      deducted from the sell proceeds themselves.</p>
+      <p>Losing trades and open (not-yet-closed) positions are <strong>never
+      charged</strong>. If a trade closes at a loss or break-even, no fee is
+      taken at all.</p>
+
+      <h3>Network fees</h3>
+      <p>Every on-chain trade also pays standard Solana network and
+      swap-routing fees, set by the network and the swap route, not by
+      OrcAgent. These apply on every trade regardless of whether it's
+      profitable.</p>
+
+      <div class="callout"><strong>Fee rates are configurable and may
+      change.</strong> The rate shown above is read live and is always the
+      one currently in effect.</div>
+    </div>
+  </section>
+
+  <!-- ═══════════ SECURITY ═══════════ -->
+  <section class="info-section" id="security">
+    <div class="section-title"><span class="section-icon">◈</span> Security</div>
+    <div class="info-body">
+      <h3>Your wallet & keys</h3>
+      <p>OrcAgent never has access to your seed phrase — that stays in your
+      own Phantom/Solflare wallet app. The bot instead trades through a
+      separate, server-generated trading wallet. That trading wallet's
+      private key is <strong>encrypted twice</strong> before it's ever
+      stored: once with a server-held encryption key, and again with a
+      second key derived from your own wallet address. Both layers are
+      required to recover a usable key, so a database leak alone is not
+      enough to expose it. The key is only decrypted momentarily, in memory,
+      at the exact moment a trade is signed.</p>
+
+      <h3>Session security</h3>
+      <p>Wallet connections use Sign-In With Solana, with a fresh, server-issued,
+      single-use nonce for every login — nothing about your session can be
+      replayed. Optional Face ID / WebAuthn login is available for returning
+      faster without re-signing every time.</p>
+
+      <h3>Trade safety checks</h3>
+      <p>Before entering a position, the bot validates a token's mint and
+      freeze authority and runs a rug-pull risk check (liquidity, volume, and
+      known scam patterns). These checks reduce exposure to obviously unsafe
+      tokens, but no automated check can eliminate risk entirely — always
+      trade with funds you can afford to lose.</p>
+
+      <h3>What this doesn't protect against</h3>
+      <p>Security here is about protecting your keys and session — it can't
+      protect you from a token itself losing value, from market volatility,
+      or from a signed transaction you approved yourself. Only fund your
+      trading wallet with what you're willing to actively trade with.</p>
+    </div>
+  </section>
+
+  <!-- ═══════════ TERMS ═══════════ -->
+  <section class="info-section" id="terms">
+    <div class="section-title"><span class="section-icon">§</span> Terms of Service</div>
+    <div class="info-body">
+      <div class="draft-banner">
+        <span class="draft-banner-icon">⚠</span>
+        <span class="draft-banner-text"><strong>Draft — not final legal text.</strong>
+        This is a placeholder Terms of Service, provided for transparency
+        while the full terms are being written. It is not a substitute for
+        reviewed legal terms and may change substantially before launch.</span>
+      </div>
+      {{ tos_content|safe }}
+    </div>
+  </section>
+
+</div>
+
+<script>
+(function(){
+  var links = Array.prototype.slice.call(document.querySelectorAll('.section-nav-link'));
+  var sections = links.map(function(l){ return document.getElementById(l.dataset.target); });
+
+  function setActive(id){
+    links.forEach(function(l){ l.classList.toggle('active', l.dataset.target === id); });
+  }
+
+  if ('IntersectionObserver' in window) {
+    var current = 'about';
+    var observer = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (entry.isIntersecting) {
+          current = entry.target.id;
+        }
+      });
+      setActive(current);
+    }, { rootMargin: '-120px 0px -70% 0px', threshold: 0 });
+    sections.forEach(function(s){ if (s) observer.observe(s); });
+  }
+
+  // Highlight immediately on load if the URL already has a hash (e.g. footer link -> /info#fees)
+  var initial = (location.hash || '#about').slice(1);
+  if (links.some(function(l){ return l.dataset.target === initial; })) {
+    setActive(initial);
+  }
+})();
+</script>
 
 </body>
 </html>
