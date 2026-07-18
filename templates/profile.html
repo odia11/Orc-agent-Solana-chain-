@@ -92,6 +92,9 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .pf-display-name{font-size:22px;font-weight:700;color:#eef1f5;letter-spacing:-.02em;overflow-wrap:break-word;word-break:break-word;max-width:100%}
 .pf-verified{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#f7b955;flex-shrink:0}
 .pf-verified svg{display:block}
+.pf-x-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#000;border:1px solid #21252c;flex-shrink:0;text-decoration:none;transition:opacity .15s}
+.pf-x-badge:hover{opacity:.8}
+.pf-x-badge svg{display:block}
 .pf-meta-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .pf-handle-tag{font-size:13px;color:#565d68;font-family:'JetBrains Mono',monospace}
 .pf-meta-sep{color:#21252c;font-size:12px}
@@ -395,6 +398,11 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         <span class="pf-verified" title="Verified">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0b0e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
         </span>
+        {% endif %}
+        {% if x_handle %}
+        <a class="pf-x-badge" href="https://x.com/{{ x_handle }}" target="_blank" rel="noopener noreferrer" title="@{{ x_handle }} on X" aria-label="@{{ x_handle }} on X">
+          <svg width="10" height="10" viewBox="0 0 1200 1227" fill="#fff"><path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z"/></svg>
+        </a>
         {% endif %}
       </div>
       <div class="pf-meta-row">

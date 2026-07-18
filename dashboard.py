@@ -3516,6 +3516,9 @@ def profile():
         following = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE follower_id=?', (user_id,)
         ).fetchone()[0]
+        x_row = conn.execute(
+            'SELECT x_handle FROM x_connections WHERE wallet_address=?', (wallet,)
+        ).fetchone()
         total     = stats['total'] or 0
         wins      = stats['wins']  or 0
         win_rate  = round(wins / total * 100) if total else 0
@@ -3552,6 +3555,7 @@ def profile():
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=True,
+            x_handle=x_row['x_handle'] if x_row else None,
             csrf_token=_get_csrf_token(),
         )
     finally:
@@ -3592,6 +3596,9 @@ def profile_view(wallet_address: str):
         following = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE follower_id=?', (user_id,)
         ).fetchone()[0]
+        x_row = conn.execute(
+            'SELECT x_handle FROM x_connections WHERE wallet_address=?', (wallet_address,)
+        ).fetchone()
         total     = stats['total'] or 0
         wins      = stats['wins']  or 0
         win_rate  = round(wins / total * 100) if total else 0
@@ -3653,6 +3660,7 @@ def profile_view(wallet_address: str):
             is_own_profile=is_own,
             is_following=is_following,
             follows_me=follows_me,
+            x_handle=x_row['x_handle'] if x_row else None,
             csrf_token=_get_csrf_token(),
         )
     finally:
