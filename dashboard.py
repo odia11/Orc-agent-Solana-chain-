@@ -4546,7 +4546,8 @@ def history():
 
 @app.route('/bot')
 def bot_overview_page():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/')
     return render_template(
@@ -4696,7 +4697,8 @@ def admin_page():
 
 @app.route('/messages')
 def messages_page():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
@@ -5074,7 +5076,8 @@ def notifications_mark_all_read():
 
 @app.route('/notifications')
 def notifications_page():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/?next=notifications')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
@@ -11655,7 +11658,8 @@ def api_log():
 @app.route('/api/audit')
 @rate_limit(12, 60)
 def api_audit():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     return jsonify(_audit_state)
@@ -11663,7 +11667,8 @@ def api_audit():
 @app.route('/api/audit/run', methods=['POST'])
 @rate_limit(3, 60)
 def api_audit_run():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
@@ -11818,7 +11823,8 @@ def admin_stats():
 @app.route('/api/admin/fee-stats')
 @rate_limit(20, 60)
 def admin_fee_stats():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
@@ -11842,7 +11848,8 @@ def admin_fee_stats():
 @app.route('/api/admin/collect-fees', methods=['POST'])
 @rate_limit(5, 60)
 def admin_collect_fees():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     result = _recover_uncollected_fees(triggered_by='admin-panel')
@@ -11996,7 +12003,8 @@ def admin_rate_stats():
 @app.route('/api/admin/backups')
 @rate_limit(20, 60)
 def admin_backups():
-    caller = _current_wallet()
+    _log_readonly_attempt()
+    caller = _authenticated_wallet()
     if not caller or not _is_owner(caller):
         return jsonify({'error': 'Unauthorized'}), 403
     backups = []
@@ -12138,7 +12146,8 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
 @rate_limit(5, 60)
 def admin_recover_fees():
     """Collect all unpaid fees (trades.fee_paid=0) and send them to OWNER_WALLET in one TX per user."""
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     result = _recover_uncollected_fees(triggered_by='admin-button')
@@ -12150,7 +12159,8 @@ def admin_recover_fees():
 @app.route('/api/admin/tokens')
 @rate_limit(20, 60)
 def admin_tokens():
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     try:
@@ -12782,7 +12792,8 @@ def admin_clear_ratelimit():
 @rate_limit(5, 60)
 def admin_test():
     """Test live connectivity for Claude API and other integrations."""
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     results = {}
@@ -12818,8 +12829,9 @@ def admin_test_fee():
     """Verify the full fee-transfer path step-by-step.
     If sender == receiver (owner testing with their own key), infrastructure is
     checked without sending — the SPL token program forbids self-transfers."""
+    _log_readonly_attempt()
     import traceback as _tb
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
 
@@ -12907,7 +12919,8 @@ def admin_test_fee():
 def admin_rotate_keys():
     """Re-encrypt all stored private keys with a new ENCRYPTION_KEY.
     After rotating, update the ENCRYPTION_KEY env var and redeploy."""
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     new_enc_key = (request.json or {}).get('new_encryption_key', '').strip()
@@ -12957,7 +12970,8 @@ def admin_rotate_keys():
 @rate_limit(20, 60)
 def admin_security_status():
     """Real-time snapshot of all security checks, consecutive failure count, and trading pause state."""
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
     failures = _run_security_checks()
@@ -13153,7 +13167,8 @@ def admin_test_trade():
     """Execute a $1 USDC test buy using the owner's saved trading key.
     Returns the full subprocess stdout/stderr so you can verify the on-chain path
     without waiting for the bot to find a signal naturally."""
-    wallet = _current_wallet()
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
         return jsonify({'error': 'Unauthorized'}), 403
 
