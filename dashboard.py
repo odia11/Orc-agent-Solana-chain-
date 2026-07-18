@@ -5001,6 +5001,8 @@ def notifications_mark_read_batch():
     conn = sqlite3.connect(DB_FILE)
     try:
         me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
         placeholders = ','.join('?' * len(id_list))
         conn.execute(f'UPDATE notifications SET is_read=1 WHERE user_id=? AND id IN ({placeholders})',
                      [me] + id_list)
@@ -6305,6 +6307,12 @@ def social_feed():
             reply_counts = dict(conn.execute(
                 f'SELECT post_id, COUNT(*) FROM feed_replies WHERE post_id IN ({ph}) GROUP BY post_id',
                 post_ids))
+        liked_by_me = set()
+        my_uid_for_likes = _get_uid(conn, my_wallet)
+        if my_uid_for_likes and post_ids:
+            liked_by_me = {r[0] for r in conn.execute(
+                f'SELECT post_id FROM post_likes WHERE user_id=? AND post_id IN ({ph})',
+                [my_uid_for_likes] + post_ids)}
     finally:
         conn.close()
 
@@ -6336,6 +6344,7 @@ def social_feed():
             'is_own':      bool(is_own),
             'avatar_url':  avatar_url or '',
             'verified':    bool(is_verified),
+            'liked_by_me': post_id in liked_by_me,
         })
     return jsonify(feed)
 
