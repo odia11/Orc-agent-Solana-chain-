@@ -1131,6 +1131,11 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN banner_url TEXT DEFAULT NULL",
+        # NULL for rows predating this column -- those acceptances only ever
+        # recorded a version string, not the actual text. The PDF download
+        # falls back to the CURRENT _TOS_CONTENT_HTML for those, clearly
+        # labeled as such (see api_tos_my_acceptance_pdf).
+        "ALTER TABLE tos_acceptances ADD COLUMN content_html TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -4211,14 +4216,146 @@ def api_tos_accept():
         uid = _get_uid(conn, wallet)
         if not uid:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        # content_html snapshots the exact text being agreed to right now, so a
+        # later in-place edit to _TOS_CONTENT_HTML (with or without a version
+        # bump) can never retroactively change what this specific acceptance
+        # record proves the user saw.
         conn.execute(
-            'INSERT INTO tos_acceptances (user_id, version, accepted_at) VALUES (?,?,?)',
-            (uid, TOS_VERSION, datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
+            'INSERT INTO tos_acceptances (user_id, version, accepted_at, content_html) VALUES (?,?,?,?)',
+            (uid, TOS_VERSION, datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'), _TOS_CONTENT_HTML)
         )
         conn.commit()
     finally:
         conn.close()
     return jsonify({'ok': True, 'version': TOS_VERSION})
+
+@app.route('/api/tos/my-acceptance', methods=['GET'])
+@rate_limit(30, 60)
+def api_tos_my_acceptance():
+    """Read-only summary for the Settings page -- when the current wallet last
+    accepted the Terms, and whether the exact text from that moment is on file
+    (content_html is NULL for acceptances recorded before that column existed)."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT version, accepted_at, content_html FROM tos_acceptances '
+            'WHERE user_id=? ORDER BY accepted_at DESC LIMIT 1',
+            (uid,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': True, 'accepted': False})
+    version, accepted_at, content_html = row
+    return jsonify({
+        'ok': True,
+        'accepted': True,
+        'version': version,
+        'accepted_at': accepted_at,
+        'has_snapshot': content_html is not None,
+    })
+
+_TOS_PDF_STYLES = None
+def _tos_pdf_styles():
+    global _TOS_PDF_STYLES
+    if _TOS_PDF_STYLES is None:
+        from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+        from reportlab.lib.colors import HexColor
+        base = getSampleStyleSheet()
+        _TOS_PDF_STYLES = {
+            'title': ParagraphStyle('TosTitle', parent=base['Title'], fontSize=16, spaceAfter=10),
+            'meta':  ParagraphStyle('TosMeta', parent=base['Normal'], fontSize=9,
+                                     textColor=HexColor('#565d68'), spaceAfter=3),
+            'h2':    ParagraphStyle('TosH2', parent=base['Heading2'], fontSize=12.5, spaceBefore=14, spaceAfter=6),
+            'p':     ParagraphStyle('TosBody', parent=base['Normal'], fontSize=10, leading=14.5, spaceAfter=8),
+            'note':  ParagraphStyle('TosNote', parent=base['Normal'], fontSize=9,
+                                     textColor=HexColor('#946200'), spaceAfter=14, leading=13),
+        }
+    return _TOS_PDF_STYLES
+
+def _parse_tos_html_blocks(html_content: str) -> list:
+    """Splits the simple <h2>/<p>-only ToS markup into (tag, text) blocks for
+    the PDF. This intentionally does not handle arbitrary HTML -- it only
+    needs to cover the shape _TOS_CONTENT_HTML actually uses."""
+    blocks = []
+    for m in re.finditer(r'<h2>(.*?)</h2>|<p>(.*?)</p>', html_content or '', re.S):
+        if m.group(1) is not None:
+            blocks.append(('h2', re.sub(r'\s+', ' ', m.group(1)).strip()))
+        elif m.group(2) is not None:
+            blocks.append(('p', re.sub(r'\s+', ' ', m.group(2)).strip()))
+    return blocks
+
+def _build_tos_pdf(wallet: str, accepted_at: str, version: str, content_html: str, is_snapshot: bool) -> bytes:
+    import io
+    from reportlab.lib.pagesizes import LETTER
+    from reportlab.lib.units import inch
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer
+
+    styles = _tos_pdf_styles()
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=LETTER, topMargin=0.9*inch, bottomMargin=0.9*inch,
+                             leftMargin=0.9*inch, rightMargin=0.9*inch,
+                             title='OrcAgent - Accepted Terms of Service')
+    story = [
+        Paragraph('OrcAgent — Accepted Terms of Service', styles['title']),
+        Paragraph('Wallet: ' + _esc_pdf(wallet), styles['meta']),
+        Paragraph('Accepted at: ' + _esc_pdf(accepted_at) + ' UTC', styles['meta']),
+        Paragraph('Version: ' + _esc_pdf(version), styles['meta']),
+        Spacer(1, 14),
+    ]
+    if not is_snapshot:
+        story.append(Paragraph(
+            '⚠ The exact text in effect on your original acceptance date was not '
+            'archived at that time. This document shows the <b>current</b> Terms of '
+            'Service instead.', styles['note']
+        ))
+    for tag, text in _parse_tos_html_blocks(content_html):
+        story.append(Paragraph(_esc_pdf(text), styles['h2'] if tag == 'h2' else styles['p']))
+    doc.build(story)
+    return buf.getvalue()
+
+def _esc_pdf(s: str) -> str:
+    """ReportLab Paragraphs interpret a small XML-like markup, so raw text
+    must have &/</> escaped (a literal quote like 'as is,\"' is fine as-is --
+    only markup-significant characters need escaping in XML text content)."""
+    s = str(s or '')
+    return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+@app.route('/api/tos/my-acceptance/pdf', methods=['GET'])
+@rate_limit(10, 60)
+def api_tos_my_acceptance_pdf():
+    # Legal document proving what the user agreed to -- require proven key
+    # ownership, same reasoning as accepting the ToS in the first place.
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT version, accepted_at, content_html FROM tos_acceptances '
+            'WHERE user_id=? ORDER BY accepted_at DESC LIMIT 1',
+            (uid,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': False, 'msg': 'No accepted Terms found'}), 404
+    version, accepted_at, content_html = row
+    is_snapshot = content_html is not None
+    pdf_bytes = _build_tos_pdf(wallet, accepted_at, version, content_html or _TOS_CONTENT_HTML, is_snapshot)
+    resp = make_response(pdf_bytes)
+    resp.headers['Content-Type'] = 'application/pdf'
+    resp.headers['Content-Disposition'] = f'attachment; filename="orcagent-terms-v{version}.pdf"'
+    return resp
 
 @app.route('/leaderboard')
 def leaderboard():
