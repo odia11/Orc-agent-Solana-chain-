@@ -8027,7 +8027,7 @@ function _feedToggleLike(btn, postId){
   var cur = parseInt(countEl ? countEl.textContent : '0', 10) || 0;
   function setState(isLiked, count){
     btn.classList.toggle('liked', isLiked);
-    if(heartEl) heartEl.textContent = isLiked ? '❤' : '♡';
+    if(heartEl) heartEl.textContent = isLiked ? '❤️' : '♡';
     if(countEl) countEl.textContent = count;
   }
   /* optimistic update + Instagram-style pop animation on the heart itself */
