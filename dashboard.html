@@ -3161,6 +3161,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .mn-drawer-item svg{width:18px;height:18px;flex-shrink:0;color:inherit}
   .mn-drawer-badge{margin-left:auto;background:#f7b955;color:#0a0b0e;border-radius:8px;font-size:10px;font-weight:700;padding:2px 7px;font-family:'Geist',system-ui,sans-serif}
   .mn-drawer-sep{height:1px;background:#16191f;margin:4px 12px}
+  .mn-drawer-footer{display:flex;flex-wrap:wrap;gap:9px 14px;padding:14px 20px 6px}
+  .mn-drawer-footer a{color:#565d68;font-size:11px;text-decoration:none;min-height:22px;display:inline-flex;align-items:center}
+  .mn-drawer-footer a:active{color:#8a919c}
 
   /* ── Hide left sidebar & desktop header ── */
   #sidebar{display:none!important}
@@ -4723,6 +4726,14 @@ document.addEventListener('DOMContentLoaded', function() {
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
       Disconnect
     </button>
+    <div class="mn-drawer-sep"></div>
+    <div class="mn-drawer-footer">
+      <a href="/info#about" onclick="_mnDrawerClose()">About</a>
+      <a href="/info#docs" onclick="_mnDrawerClose()">Docs</a>
+      <a href="/info#fees" onclick="_mnDrawerClose()">Fees</a>
+      <a href="/info#security" onclick="_mnDrawerClose()">Security</a>
+      <a href="/info#terms" onclick="_mnDrawerClose()">Terms</a>
+    </div>
   </nav>
 </div>
 
