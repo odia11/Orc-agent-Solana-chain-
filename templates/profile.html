@@ -60,7 +60,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .pf-main{flex:1;overflow-y:auto;background:#0a0b0e;min-width:0}
 
 /* ── COVER ── */
-.pf-cover{height:120px;background:linear-gradient(180deg,#101216 0%,#0a0b0e 100%);position:relative;flex-shrink:0}
+.pf-cover{height:200px;background:linear-gradient(180deg,#101216 0%,#0a0b0e 100%);position:relative;flex-shrink:0}
 .pf-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
 .pf-cover-edit-wrap{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2}
 .pf-cover-edit-btn{width:40px;height:40px;background:rgba(10,11,14,.5);backdrop-filter:blur(3px);color:#eef1f5;border:1px solid rgba(255,255,255,.15);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s;opacity:.85}
@@ -200,7 +200,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   .pf-mobile-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:'Geist',system-ui,sans-serif}
 
   /* cover: shorter, avatar centered */
-  .pf-cover{height:80px}
+  .pf-cover{height:140px}
   .pf-avatar-wrap{left:50%;transform:translateX(-50%)}
   /* the avatar's overlap zone starts at cover-top+40px here, so the edit icon
      can't be vertically centered like on desktop without colliding with it —
@@ -259,10 +259,14 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 #avatar-lightbox{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:pointer}
 #avatar-lightbox.open{display:flex}
 #avatar-lightbox-img{max-width:90vw;max-height:90vh;border-radius:12px;object-fit:contain;pointer-events:none}
+#banner-lightbox{display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);align-items:center;justify-content:center;cursor:pointer}
+#banner-lightbox.open{display:flex}
+#banner-lightbox-img{max-width:90vw;max-height:90vh;border-radius:12px;object-fit:contain;pointer-events:none}
 </style>
 </head>
 <body>
 <div id="avatar-lightbox" onclick="_closeAvatarLightbox()"><img id="avatar-lightbox-img" src="" alt=""></div>
+<div id="banner-lightbox" onclick="_closeBannerLightbox()"><img id="banner-lightbox-img" src="" alt=""></div>
 <div id="app">
 
   <!-- SIDEBAR (exact structure from dashboard) -->
@@ -350,7 +354,8 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
     <!-- COVER -->
     <div class="pf-cover">
       <img class="pf-cover-img" id="pf-cover-img" src="{{ banner_url or '' }}" alt="banner"
-           style="{{ '' if banner_url else 'display:none' }}"
+           style="{{ 'cursor:pointer' if banner_url else 'display:none' }}"
+           {% if banner_url %}onclick="_showBannerLightbox({{ banner_url|tojson }})"{% endif %}
            onerror="this.style.display='none'">
       <div class="pf-avatar-wrap">
         {% if avatar_url %}
@@ -787,7 +792,9 @@ document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeFoll
 })();
 function _showAvatarLightbox(url){if(!url)return;document.getElementById('avatar-lightbox-img').src=url;document.getElementById('avatar-lightbox').classList.add('open');}
 function _closeAvatarLightbox(){document.getElementById('avatar-lightbox').classList.remove('open');document.getElementById('avatar-lightbox-img').src='';}
-document.addEventListener('keydown',function(e){if(e.key==='Escape')_closeAvatarLightbox();});
+function _showBannerLightbox(url){if(!url)return;document.getElementById('banner-lightbox-img').src=url;document.getElementById('banner-lightbox').classList.add('open');}
+function _closeBannerLightbox(){document.getElementById('banner-lightbox').classList.remove('open');document.getElementById('banner-lightbox-img').src='';}
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){_closeAvatarLightbox();_closeBannerLightbox();}});
 
 /* ── PROFILE AVATAR (independent of the banner upload) ── */
 function _onAvatarClick(){
@@ -919,6 +926,8 @@ async function _uploadBanner(dataUrl){
       var img = document.getElementById('pf-cover-img');
       img.src = dataUrl;
       img.style.display = '';
+      img.style.cursor = 'pointer';
+      img.onclick = function(){ _showBannerLightbox(dataUrl); };
       var rmBtn = document.getElementById('pf-remove-banner-btn');
       if (rmBtn) rmBtn.style.display = '';
       var chBtn = document.getElementById('pf-change-banner-btn');
@@ -945,6 +954,7 @@ async function _removeBanner(){
       var img = document.getElementById('pf-cover-img');
       img.style.display = 'none';
       img.src = '';
+      img.onclick = null;
       var rmBtn = document.getElementById('pf-remove-banner-btn');
       if (rmBtn) rmBtn.style.display = 'none';
       var chBtn = document.getElementById('pf-change-banner-btn');
