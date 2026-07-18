@@ -1214,14 +1214,17 @@ def get_user_role(wallet: str) -> str:
     return 'user'
 
 
-def _require_role(*allowed_roles):
-    """Return a 403 response tuple if session wallet lacks a required role, else None."""
+def _log_readonly_attempt() -> None:
     if session.get('readonly') and session.get('wallet'):
-        # Pasted-address read-only session hitting a role-gated route — the exact
-        # privilege-escalation pattern fixed in _authenticated_wallet(). Logged so
-        # the admin security audit has real attempts to surface, not just theory.
         _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
                              f'{request.method} {request.path}')
+
+def _require_role(*allowed_roles):
+    """Return a 403 response tuple if session wallet lacks a required role, else None."""
+    # Pasted-address read-only session hitting a role-gated route — the exact
+    # privilege-escalation pattern fixed in _authenticated_wallet(). Logged so
+    # the admin security audit has real attempts to surface, not just theory.
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
@@ -6604,6 +6607,7 @@ def feed_post_create():
 @app.route('/api/feed/post/<int:post_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def feed_post_delete(post_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
@@ -6652,6 +6656,7 @@ def feed_post_edit(post_id):
 @csrf_exempt
 @rate_limit(20, 60)
 def feed_post_delete_v2(post_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
@@ -6675,6 +6680,7 @@ def feed_post_delete_v2(post_id):
 @app.route('/api/trades/<int:trade_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def trade_delete(trade_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
@@ -7078,6 +7084,7 @@ def toggle_feed_reply_like(reply_id):
 @app.route('/api/feed/reply/<int:reply_id>', methods=['DELETE'])
 @rate_limit(30, 60)
 def delete_feed_reply(reply_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
@@ -9146,6 +9153,7 @@ def messages_my_recent_trades():
 @app.route('/api/messages/<int:message_id>', methods=['DELETE'])
 @rate_limit(30, 60)
 def delete_dm(message_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
@@ -9172,6 +9180,7 @@ def delete_dm(message_id):
 @app.route('/api/messages/<int:message_id>', methods=['PUT'])
 @rate_limit(30, 60)
 def edit_dm(message_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
@@ -9300,6 +9309,7 @@ def post_group_chat():
 @app.route('/api/chat/<int:message_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def delete_group_chat(message_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
@@ -9485,6 +9495,7 @@ def wallet_conversations():
 @app.route('/api/messages/<wallet>', methods=['GET'])
 @rate_limit(60, 60)
 def get_wallet_thread(wallet):
+    _log_readonly_attempt()
     me = _authenticated_wallet()
     if not me:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
@@ -9679,6 +9690,7 @@ def post_profile_comment(profile_uid):
 @app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def delete_profile_comment(comment_id):
+    _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
