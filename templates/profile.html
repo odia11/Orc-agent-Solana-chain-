@@ -362,7 +362,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         {% else %}
         <img class="pf-avatar-img" src="{{ avatar_url }}" alt="avatar" style="cursor:pointer"
-             onclick="_showAvatarLightbox({{ avatar_url|tojson }})"
+             onclick="_showAvatarLightbox(this.src)"
              onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
         {% endif %}
         <div class="pf-avatar-fallback" id="pf-avatar-fallback" style="display:none{{ ';cursor:pointer' if is_own_profile|default(false) else '' }}"{{ ' onclick="_onAvatarClick()"'|safe if is_own_profile|default(false) else '' }}>{{ (username or wallet_short)[:2]|upper }}</div>
