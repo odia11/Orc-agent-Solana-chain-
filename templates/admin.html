@@ -10,7 +10,14 @@
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{min-height:100vh;min-height:100dvh;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:14px;-webkit-font-smoothing:antialiased}
-:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--amber:#f7b955;--green:#3ad29b;--red:#f76b62;--text:#eef1f5;--muted:#565d68;--blue:#7c8cff}
+:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--amber:#f7b955;--green:#3ad29b;--red:#f76b62;--text:#eef1f5;--muted:#565d68;--blue:#7c8cff;--border:#16191f;--border2:#21252c}
+
+/* ── SHARED MODAL SHELL (mirrors dashboard.html/messages.html) — used by
+   _confirm_modal.html ── */
+.s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
+.s-modal.open{display:flex}
+.s-card{background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:14px;padding:26px 24px;width:100%;max-width:480px;position:relative;box-shadow:0 0 60px rgba(0,0,0,.5)}
+.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
@@ -1471,7 +1478,7 @@ async function _supAdminSendReply() {
 async function _supAdminSuggestReply() {
   if (!_supActiveId) return;
   var inp = document.getElementById('sup-chat-input');
-  if (inp.value.trim() && !confirm('Replace your current draft with an AI suggestion?')) return;
+  if (inp.value.trim() && !(await openConfirmModal({text:'Replace your current draft with an AI suggestion?'}))) return;
   var btn = document.getElementById('sup-suggest-btn');
   var hint = document.getElementById('sup-ai-hint');
   var origLabel = btn.textContent;
@@ -1791,7 +1798,7 @@ async function applyRoleChange(role) {
 
 // ── Remove member ──
 async function removeMember(wallet) {
-  if (!confirm('Remove access for ' + wallet.slice(0,8) + '…?')) return;
+  if (!(await openConfirmModal({text:'Remove access for ' + wallet.slice(0,8) + '…?', danger:true}))) return;
   var r = await fetch('/api/admin/role/remove', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
@@ -1854,7 +1861,7 @@ function _renderBans(bans, bodyId, countId) {
 
 // ══════════════════ ACTIONS ══════════════════
 async function banUserWallet(wallet, rowId) {
-  if (!confirm('Ban wallet ' + _short(wallet) + '?\nThis permanently removes their account and posts.')) return;
+  if (!(await openConfirmModal({text:'Ban wallet ' + _short(wallet) + '?\nThis permanently removes their account and posts.', danger:true}))) return;
   var r = await fetch('/api/admin/ban', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
@@ -1906,7 +1913,7 @@ async function clearBan(ip) {
   else toast('Error clearing ban', false);
 }
 async function clearAllBans() {
-  if (!confirm('Clear all IP bans and rate limits?')) return;
+  if (!(await openConfirmModal({text:'Clear all IP bans and rate limits?', danger:true}))) return;
   var r = await fetch('/api/admin/clear_ratelimit', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
@@ -1917,7 +1924,7 @@ async function clearAllBans() {
 }
 async function deletePost(btn) {
   var id = btn.dataset.postId;
-  if (!confirm('Delete this post?')) return;
+  if (!(await openConfirmModal({text:'Delete this post?', danger:true}))) return;
   var r = await fetch('/api/admin/post/delete', {
     method:'POST', credentials:'include',
     headers:{'Content-Type':'application/json','X-CSRF-Token':window._csrfToken},
@@ -1946,7 +1953,9 @@ function _startAutoRefresh() {
 // ── INIT ──
 _initRoleBasedUI();
 </script>
+{% include '_confirm_modal.html' %}
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
+<script src="/static/confirm-modal.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body>
 </html>

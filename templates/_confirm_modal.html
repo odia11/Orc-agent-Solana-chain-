@@ -1,0 +1,22 @@
+<!-- Shared generic confirm modal — replaces native confirm() dialogs across
+     the app with a house-style modal (same visual language as the delete-
+     conversation and insufficient-balance modals: dark bg, amber accent).
+     Pairs with /static/confirm-modal.js. Promise-based:
+       if (!(await openConfirmModal({text: 'Delete this?'}))) return;
+     Pass {danger:true} for destructive actions to get a red Confirm button,
+     otherwise it defaults to the standard amber accent button. -->
+<div id="confirm-modal" class="s-modal" onclick="if(event.target===this)closeConfirmModal(false)">
+  <div class="s-card" style="max-width:380px">
+    <button class="s-close" onclick="closeConfirmModal(false)">✕</button>
+    <div id="cm-title" style="font-family:'Geist',system-ui,sans-serif;font-weight:700;font-size:14px;color:var(--text);margin-bottom:8px;line-height:1.4;white-space:pre-line"></div>
+    <div id="cm-text" style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:20px;white-space:pre-line"></div>
+    <div style="display:flex;gap:10px">
+      <button onclick="closeConfirmModal(false)"
+        style="flex:1;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:600;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s"
+        onmouseover="this.style.color='var(--text)'" onmouseout="this.style.color='var(--muted)'">Cancel</button>
+      <button id="cm-confirm-btn" onclick="closeConfirmModal(true)"
+        style="flex:1;padding:11px;border:none;border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s"
+        onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">Confirm</button>
+    </div>
+  </div>
+</div>

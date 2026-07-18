@@ -126,6 +126,13 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .modal-msg.ok{color:var(--green)}
 .modal-msg.err{color:var(--red)}
 
+/* ── SHARED MODAL SHELL (mirrors dashboard.html/messages.html) — used by
+   _confirm_modal.html / _alert_modal.html ── */
+.s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
+.s-modal.open{display:flex}
+.s-card{background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:14px;padding:26px 24px;width:100%;max-width:480px;position:relative;box-shadow:0 0 60px rgba(0,0,0,.5)}
+.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
+
 /* ── X (TWITTER) CARD ── */
 .st-x-connected{display:flex;align-items:center;gap:8px;margin-bottom:16px}
 .st-x-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
@@ -650,7 +657,7 @@ async function _onPushToggle(cb){
   cb.disabled = true;
   if(cb.checked){
     var r = await _enablePushNotifications();
-    if(!r.ok){ cb.checked = false; alert('Could not enable phone notifications: ' + (r.msg || 'unknown error')); }
+    if(!r.ok){ cb.checked = false; openAlertModal({text:'Could not enable phone notifications: ' + (r.msg || 'unknown error')}); }
   } else {
     await _disablePushNotifications();
   }
@@ -817,7 +824,7 @@ function _saveXPref(key, val){
   _post('/api/x/prefs', body).catch(function(){});
 }
 async function _disconnectX(){
-  if(!confirm('Disconnect your X account?')) return;
+  if(!(await openConfirmModal({text:'Disconnect your X account?',danger:true}))) return;
   var d=await _post('/api/x/disconnect',{}).catch(function(){return null;});
   if(d&&d.ok) window.location.reload();
 }
@@ -827,9 +834,13 @@ document.addEventListener('keydown',function(e){
   if(e.key==='Escape') _closeManage();
 });
 </script>
+{% include '_confirm_modal.html' %}
+{% include '_alert_modal.html' %}
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/push-subscribe.js?v={{ app_version }}"></script>
 <script>_initPushToggle();</script>
+<script src="/static/confirm-modal.js?v={{ app_version }}"></script>
+<script src="/static/alert-modal.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body>
 </html>

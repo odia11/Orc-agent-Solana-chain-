@@ -205,8 +205,8 @@ async function _setupFaceID(){
 
 async function _setupFaceId(){
   var wallet=phantomKey;
-  if(!wallet){ alert('Connect a wallet first.'); return; }
-  if(!window.PublicKeyCredential){ alert('WebAuthn not supported on this device.'); return; }
+  if(!wallet){ openAlertModal({text:'Connect a wallet first.'}); return; }
+  if(!window.PublicKeyCredential){ openAlertModal({text:'WebAuthn not supported on this device.'}); return; }
   var btn=document.getElementById('s-faceid-btn');
   var msg=document.getElementById('s-faceid-msg');
   if(btn){ btn.disabled=true; btn.textContent='Setting up…'; }
@@ -253,8 +253,8 @@ async function _setupFaceId(){
   }
 }
 
-function _removeFaceId(){
-  if(!confirm('Remove saved Face ID login from this device?')) return;
+async function _removeFaceId(){
+  if(!(await openConfirmModal({text:'Remove saved Face ID login from this device?',danger:true}))) return;
   localStorage.removeItem('orca_credential_id');
   var msg=document.getElementById('s-faceid-msg');
   if(msg){ msg.style.color='var(--muted)'; msg.textContent='Face ID removed.'; }
@@ -821,9 +821,9 @@ async function _acceptTos(){
       launchApp(); // re-run — the gate now passes and the rest of the app loads normally
       return;
     }
-    alert(r?.msg||'Could not save your acceptance — please try again.');
+    await openAlertModal({text:r?.msg||'Could not save your acceptance — please try again.'});
   }catch(e){
-    alert('Network error — please try again.');
+    await openAlertModal({text:'Network error — please try again.'});
   }
   btn.disabled=false; btn.textContent=origLabel;
 }
@@ -1819,8 +1819,8 @@ function _updateCopyPill(){
   }
 }
 
-function _stopCopyingConfirm(){
-  if(!confirm('Stop copying this trader?')) return;
+async function _stopCopyingConfirm(){
+  if(!(await openConfirmModal({text:'Stop copying this trader?'}))) return;
   fetch('/api/copy-trade/stop',{method:'POST'})
     .then(r=>r.json())
     .then(r=>{ if(r?.ok){ _copySource=null; _updateCopyPill(); showLfToast('🟢','Stopped copying','pos'); } })
@@ -2151,11 +2151,11 @@ async function fetchAdminBans(){
 async function unbanIP(ip){
   const r=await fetch('/api/admin/clear_ratelimit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ip})}).then(x=>x.json()).catch(()=>null);
   if(r?.ok) fetchAdminBans();
-  else alert('Failed to unban: '+(r?.error||'unknown error'));
+  else openAlertModal({text:'Failed to unban: '+(r?.error||'unknown error')});
 }
 
 async function clearAllBans(){
-  if(!confirm('Clear all IP bans and rate-limit counters?')) return;
+  if(!(await openConfirmModal({text:'Clear all IP bans and rate-limit counters?',danger:true}))) return;
   const r=await fetch('/api/admin/clear_ratelimit',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({})}).then(x=>x.json()).catch(()=>null);
   const el=document.getElementById('ad-bans-list');
   if(r?.ok){el.style.color='var(--green)';el.textContent='✓ '+r.msg;setTimeout(fetchAdminBans,1500);}
@@ -3011,7 +3011,7 @@ function _updateKeyStatus(){
   _updateBotIdleBanner();
 }
 async function removeKey(){
-  if(!confirm('Remove your saved trading key?')) return;
+  if(!(await openConfirmModal({text:'Remove your saved trading key?',danger:true}))) return;
   const r=await fetch('/api/settings/key',{method:'DELETE'}).then(r=>r.json()).catch(()=>null);
   if(r?.ok){
     settingsHasKey=false;
@@ -3251,7 +3251,7 @@ async function _botToggle(){
       await _botFetchStatus()
     } else {
       if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
-      if(d.low_balance){ showLowBalanceModal(d) } else { alert(d.msg||'Failed') }
+      if(d.low_balance){ showLowBalanceModal(d) } else { openAlertModal({text:d.msg||'Failed'}) }
     }
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
@@ -3661,7 +3661,7 @@ async function _setPassword(){
 }
 
 async function saveUsername(){
-  if(!phantomKey){alert('Connect a wallet first.');return;}
+  if(!phantomKey){openAlertModal({text:'Connect a wallet first.'});return;}
   const val=document.getElementById('s-username').value.trim();
   const msgEl=document.getElementById('s-username-msg');
   const btn=document.getElementById('s-username-btn');
@@ -3702,7 +3702,7 @@ function _onAvatarFile(input){
 }
 
 async function saveAvatar(){
-  if(!phantomKey){alert('Connect a wallet first.');return;}
+  if(!phantomKey){openAlertModal({text:'Connect a wallet first.'});return;}
   if(!_pendingAvatarData){return;}
   const msgEl=document.getElementById('s-avatar-msg');
   const btn=document.getElementById('s-avatar-btn');
@@ -3734,7 +3734,7 @@ function togglePrivVis(){
 }
 
 async function saveSettings(){
-  if(!phantomKey){alert('Connect a wallet first.');return;}
+  if(!phantomKey){openAlertModal({text:'Connect a wallet first.'});return;}
   const minUsdc  =parseFloat(document.getElementById('s-minusdc').value)||0.01;
   const maxUsdc  =parseFloat(document.getElementById('s-maxusdc').value)||0.5;
   const lossLimit=parseFloat(document.getElementById('s-losslimit').value)||10;
@@ -5242,7 +5242,7 @@ async function sendSupportMessage(){
       body: JSON.stringify({message:text})
     }).then(x=>x.json());
     if(r&&r.ok){ inp.value=''; inp.style.height='auto'; await _supportLoadThread(); }
-    else if(r&&r.msg){ alert(r.msg); }
+    else if(r&&r.msg){ openAlertModal({text:r.msg}); }
   }catch(e){}
   finally{ btn.disabled=false; inp.focus(); }
 }
@@ -5886,10 +5886,10 @@ async function _dmDeleteConvoConfirmed(peerId, wrapEl){
       }
       if(!_dmConvos.length) _dmRenderConvoList();
     } else {
-      alert(r?.msg||'Could not delete this conversation.');
+      openAlertModal({text:r?.msg||'Could not delete this conversation.'});
     }
   }catch(e){
-    alert('Network error — please try again.');
+    openAlertModal({text:'Network error — please try again.'});
   }
 }
 
@@ -6868,7 +6868,7 @@ async function submitPost(){
     var tdd=document.getElementById('composer-trade-dropdown')
     if(tdd) tdd.style.display='none'
     window.location.reload()
-  } else alert('Error: '+JSON.stringify(d))
+  } else openAlertModal({text:'Error: '+JSON.stringify(d)})
 }
 
 var _deletePostId=null
@@ -7030,16 +7030,16 @@ async function _fcEditSave(postId,dbId){
       }
       _fcEditCancel(postId);
     } else {
-      alert(d.msg||'Edit failed');
+      openAlertModal({text:d.msg||'Edit failed'});
       if(saveBtn) saveBtn.disabled=false;
     }
   } catch(ex){
-    alert('Network error — please retry');
+    openAlertModal({text:'Network error — please retry'});
     if(saveBtn) saveBtn.disabled=false;
   }
 }
 
-function copyTrade(id){ alert('Copy trade coming soon') }
+function copyTrade(id){ openAlertModal({text:'Copy trade coming soon'}) }
 async function likePost(id,btn){
   await fetch('/api/feed/like/'+id,{method:'POST'})
   const span=btn.querySelector('span')
@@ -7073,7 +7073,7 @@ function _feedComposerPost(){
         content:d.message, timestamp:d.created_at
       });
       renderHomeFeed();
-    } else { alert(d.msg||'Could not post'); }
+    } else { openAlertModal({text:d.msg||'Could not post'}); }
   }).catch(function(e){ console.error('[composer]',e); }).finally(function(){
     if(btn){ btn.disabled=false; btn.textContent='POST'; }
   });
@@ -8013,10 +8013,10 @@ function _shareToX(event, postId){
   fetch('/api/feed/share-to-x/'+encodeURIComponent(postId), {method:'POST'})
     .then(function(r){ return r.json(); })
     .then(function(d){
-      if(d.ok) alert('✓ Shared to X!');
-      else alert(d.msg || 'Could not share to X');
+      if(d.ok) openAlertModal({text:'✓ Shared to X!'});
+      else openAlertModal({text:d.msg || 'Could not share to X'});
     })
-    .catch(function(){ alert('Network error — could not share to X'); });
+    .catch(function(){ openAlertModal({text:'Network error — could not share to X'}); });
 }
 function _feedToggleLike(btn, postId){
   if(!btn) return;
@@ -8349,7 +8349,7 @@ function _feedSubmitReply(inp, postId){
         if(rcnt) rcnt.textContent = (parseInt(rcnt.textContent,10)||0)+1;
       }
     } else {
-      alert(d.msg||'Could not post reply');
+      openAlertModal({text:d.msg||'Could not post reply'});
     }
   }).catch(function(e){ console.error('[reply]',e); }).finally(function(){
     inp.disabled = false;

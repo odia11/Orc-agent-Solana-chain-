@@ -119,6 +119,7 @@
 }
 </style></head><body>
 {% include '_delete_convo_modal.html' %}
+{% include '_alert_modal.html' %}
 <div class="mobile-back-bar">
   <button onclick="history.back()" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Notifications</span>
@@ -380,7 +381,7 @@ function _shareTrade(btn, ev){
     } else {
       btn.disabled = false;
       btn.textContent = 'Share';
-      alert(d.msg || 'Could not share');
+      openAlertModal({text:d.msg || 'Could not share'});
     }
   }).catch(function(){
     btn.disabled = false;
@@ -569,7 +570,7 @@ async function _deleteNotif(id){
     if (_ntfSwipeOpenWrap && _ntfSwipeOpenWrap.dataset.notifId === String(id)) _ntfSwipeOpenWrap = null;
     _render();
   } else {
-    alert((r && r.msg) || 'Could not delete this notification.');
+    openAlertModal({text:(r && r.msg) || 'Could not delete this notification.'});
   }
 }
 
@@ -659,7 +660,7 @@ async function _doBulkDelete(ids){
     _updateUnreadUI();
     _exitSelectMode();
   } else {
-    alert((r && r.msg) || 'Could not delete the selected notifications.');
+    openAlertModal({text:(r && r.msg) || 'Could not delete the selected notifications.'});
   }
 }
 
@@ -686,6 +687,7 @@ _loadTrades();
 })();
 </script>
 <script src="/static/delete-convo-modal.js?v={{ app_version }}"></script>
+<script src="/static/alert-modal.js?v={{ app_version }}"></script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body></html>

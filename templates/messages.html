@@ -280,6 +280,8 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
 </div>
 {% include '_low_balance_modal.html' %}
 {% include '_delete_convo_modal.html' %}
+{% include '_confirm_modal.html' %}
+{% include '_alert_modal.html' %}
 <div id="app">
 
   <!-- SIDEBAR (exact structure from dashboard) -->
@@ -774,10 +776,10 @@ async function _deleteConversationConfirmed(peerId, wrapEl) {
       }
       if (!_conversations.length) _renderConvList();
     } else {
-      alert(r.msg || 'Could not delete this conversation.');
+      openAlertModal({text:r.msg || 'Could not delete this conversation.'});
     }
   } catch (e) {
-    alert('Network error — please try again.');
+    openAlertModal({text:'Network error — please try again.'});
   }
 }
 
@@ -947,12 +949,12 @@ document.addEventListener('click', function(e) {
   }
 });
 async function _deleteMsg(id) {
-  if (!confirm('Delete this message?')) return;
+  if (!(await openConfirmModal({text:'Delete this message?', danger:true}))) return;
   try {
     var r = await fetch('/api/messages/' + id, {method:'DELETE', headers:{'X-CSRF-Token': _csrfToken}});
     var d = await r.json();
     if (d.ok) { var el = document.querySelector('.msg-wrap[data-mid="'+id+'"]'); if (el) el.remove(); }
-    else { alert(d.msg || 'Delete failed'); }
+    else { openAlertModal({text:d.msg || 'Delete failed'}); }
   } catch(e) { console.error('[messages] delete error', e); }
 }
 
@@ -977,7 +979,7 @@ async function _saveEditMsg(id) {
       body: JSON.stringify({message: text})
     });
     var d = await r.json();
-    if (d.ok) loadThread(_activePeerId); else alert(d.msg || 'Edit failed');
+    if (d.ok) loadThread(_activePeerId); else openAlertModal({text:d.msg || 'Edit failed'});
   } catch(e) { console.error('[messages] edit error', e); }
 }
 
@@ -1096,7 +1098,7 @@ async function _sendTrade(tradeId) {
       if (conv) { conv.last_msg = previewText; conv.last_ts = d.created_at; conv.last_type = 'trade'; conv.last_is_mine = true; }
       _renderConvList();
     } else {
-      alert(d.msg || 'Could not share trade');
+      openAlertModal({text:d.msg || 'Could not share trade'});
     }
   } catch (e) {
     console.error('[messages] send trade error', e);
@@ -1105,8 +1107,8 @@ async function _sendTrade(tradeId) {
 
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
-  if (allowed.indexOf(file.type) === -1) { alert('Only jpg, png, gif or webp images are supported.'); return; }
-  if (file.size > 5 * 1024 * 1024) { alert('Image must be smaller than 5 MB.'); return; }
+  if (allowed.indexOf(file.type) === -1) { openAlertModal({text:'Only jpg, png, gif or webp images are supported.'}); return; }
+  if (file.size > 5 * 1024 * 1024) { openAlertModal({text:'Image must be smaller than 5 MB.'}); return; }
   if (!_activePeerId) return;
 
   var area = document.getElementById('msgs-area');
@@ -1150,7 +1152,7 @@ async function _uploadAndSendImage(file) {
     var p = document.getElementById(pendingId);
     if (p) p.remove();
     URL.revokeObjectURL(localUrl);
-    alert('Failed to send image: ' + e.message);
+    openAlertModal({text:'Failed to send image: ' + e.message});
   }
 }
 
@@ -1258,6 +1260,8 @@ setInterval(loadConversations, 5000);
 </script>
 <script src="/static/low-balance-modal.js?v={{ app_version }}"></script>
 <script src="/static/delete-convo-modal.js?v={{ app_version }}"></script>
+<script src="/static/confirm-modal.js?v={{ app_version }}"></script>
+<script src="/static/alert-modal.js?v={{ app_version }}"></script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body>

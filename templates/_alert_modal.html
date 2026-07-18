@@ -1,0 +1,15 @@
+<!-- Shared generic alert modal — replaces native alert() popups across the
+     app with a house-style modal (same visual language as the delete-
+     conversation and insufficient-balance modals: dark bg, amber accent).
+     Pairs with /static/alert-modal.js:
+       openAlertModal({text: 'Could not delete this notification.'}); -->
+<div id="alert-modal" class="s-modal" onclick="if(event.target===this)closeAlertModal()">
+  <div class="s-card" style="max-width:380px">
+    <button class="s-close" onclick="closeAlertModal()">✕</button>
+    <div id="am-title" style="font-family:'Geist',system-ui,sans-serif;font-weight:700;font-size:14px;color:var(--text);margin-bottom:8px;line-height:1.4;white-space:pre-line"></div>
+    <div id="am-text" style="font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:20px;white-space:pre-line"></div>
+    <button onclick="closeAlertModal()"
+      style="width:100%;padding:11px;background:var(--accent);border:none;border-radius:8px;font-family:'Geist',system-ui,sans-serif;font-size:12px;font-weight:700;color:#0a0b0e;cursor:pointer;transition:opacity .15s"
+      onmouseover="this.style.opacity='.85'" onmouseout="this.style.opacity='1'">OK</button>
+  </div>
+</div>

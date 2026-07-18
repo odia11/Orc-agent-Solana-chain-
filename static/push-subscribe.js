@@ -13,7 +13,7 @@ function _urlBase64ToUint8Array(base64String) {
 }
 async function _enablePushNotifications() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-    alert('Push notifications are not supported on this browser.');
+    openAlertModal({text:'Push notifications are not supported on this browser.'});
     return { ok: false, msg: 'Not supported' };
   }
   try {
