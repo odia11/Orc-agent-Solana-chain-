@@ -7695,7 +7695,7 @@ async function showTokenCard(symbol){
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
         ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#f7b955;font-size:15px">'+esc(symbol.slice(0,2))+'</div>'}
         <div style="flex:1;min-width:0">
-          <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${p.baseToken?.symbol||esc(symbol)}</div>
+          <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${esc(p.baseToken?.symbol||symbol)}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px">
             <span style="font-size:12px;color:#565d68">${p.baseToken?.name||''}</span>
             <span style="background:rgba(247,185,85,0.12);color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
