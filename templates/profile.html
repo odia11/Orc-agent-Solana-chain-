@@ -352,7 +352,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
     <div class="pf-cover">
       <img class="pf-cover-img" id="pf-cover-img" src="{{ banner_url or '' }}" alt="banner"
            style="{{ 'cursor:pointer' if banner_url else 'display:none' }}"
-           {% if banner_url %}onclick="_showBannerLightbox({{ banner_url|tojson }})"{% endif %}
+           {% if banner_url %}onclick="_showBannerLightbox(this.src)"{% endif %}
            onerror="this.style.display='none'">
       <div class="pf-avatar-wrap">
         {% if avatar_url %}
