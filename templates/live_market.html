@@ -301,17 +301,30 @@ function _setTab(tab){
 }
 
 /* ── data loading ── */
+async function _fetchTabData(tab){
+  if(tab==='trending')  return await _fetchTrending();
+  else if(tab==='new')  return await _fetchNew();
+  else                   return await _fetchGainers();
+}
+
 async function _loadTab(tab){
   _setLoading();
   try{
-    var pairs;
-    if(tab==='trending')  pairs = await _fetchTrending();
-    else if(tab==='new')  pairs = await _fetchNew();
-    else                   pairs = await _fetchGainers();
+    var pairs = await _fetchTabData(tab);
     _cache[tab] = pairs;
     _renderTable(pairs);
   }catch(e){
     _setError('Failed to load data');
+  }
+}
+
+async function _silentRefreshTab(tab){
+  try{
+    var pairs = await _fetchTabData(tab);
+    _cache[tab] = pairs;
+    _renderTable(pairs);
+  }catch(e){
+    console.error('[live-market] silent refresh failed', e);
   }
 }
 
@@ -804,8 +817,8 @@ _loadTab('trending');
 })();
 
 setInterval(function(){
-  if(!document.getElementById('lm-search').value && !document.getElementById('lm-search2').value){
-    _loadTab(_activeTab);
+  if(!document.getElementById('lm-search').value && !document.getElementById('lm-search2').value && _openDropIdx < 0){
+    _silentRefreshTab(_activeTab);
   }
 }, 15000);
 </script>
