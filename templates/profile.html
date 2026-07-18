@@ -62,10 +62,10 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 /* ── COVER ── */
 .pf-cover{height:200px;background:linear-gradient(180deg,#101216 0%,#0a0b0e 100%);position:relative;flex-shrink:0}
 .pf-cover-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0}
-.pf-cover-edit-wrap{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);z-index:2}
-.pf-cover-edit-btn{width:40px;height:40px;background:rgba(10,11,14,.5);backdrop-filter:blur(3px);color:#eef1f5;border:1px solid rgba(255,255,255,.15);border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s;opacity:.85}
+.pf-cover-edit-wrap{position:absolute;top:12px;right:12px;z-index:2}
+.pf-cover-edit-btn{width:40px;height:40px;background:#f7b955;backdrop-filter:blur(3px);color:#0a0b0e;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .15s,opacity .15s;opacity:.85}
 .pf-cover-edit-btn:hover{background:rgba(10,11,14,.75);opacity:1}
-.pf-cover-menu{display:none;position:absolute;top:calc(100% + 8px);left:50%;transform:translateX(-50%);background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.pf-cover-menu{display:none;position:absolute;top:calc(100% + 8px);right:0;background:#101216;border:1px solid #21252c;border-radius:10px;padding:4px;min-width:150px;box-shadow:0 8px 24px rgba(0,0,0,.4)}
 .pf-cover-menu.open{display:block}
 .pf-cover-menu button{display:block;width:100%;text-align:left;background:none;border:none;color:#eef1f5;font-size:13px;padding:8px 10px;border-radius:7px;cursor:pointer;font-family:inherit}
 .pf-cover-menu button:hover{background:#16191f}
@@ -202,10 +202,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   /* cover: shorter, avatar centered */
   .pf-cover{height:140px}
   .pf-avatar-wrap{left:50%;transform:translateX(-50%)}
-  /* the avatar's overlap zone starts at cover-top+40px here, so the edit icon
-     can't be vertically centered like on desktop without colliding with it —
-     pin it into the remaining top strip instead, still horizontally centered */
-  .pf-cover-edit-wrap{top:4px;left:50%;transform:translateX(-50%)}
+  .pf-cover-edit-wrap{top:8px;right:8px}
   .pf-cover-edit-btn{width:32px;height:32px}
 
   /* identity */
