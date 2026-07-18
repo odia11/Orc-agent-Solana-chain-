@@ -802,6 +802,12 @@ _loadTab('trending');
   var _urlToken = new URLSearchParams(location.search).get('token');
   if(_urlToken) showTokenCard(_urlToken);
 })();
+
+setInterval(function(){
+  if(!document.getElementById('lm-search').value && !document.getElementById('lm-search2').value){
+    _loadTab(_activeTab);
+  }
+}, 15000);
 </script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
