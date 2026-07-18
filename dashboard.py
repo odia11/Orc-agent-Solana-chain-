@@ -6604,7 +6604,7 @@ def feed_post_create():
 @app.route('/api/feed/post/<int:post_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def feed_post_delete(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -6652,7 +6652,7 @@ def feed_post_edit(post_id):
 @csrf_exempt
 @rate_limit(20, 60)
 def feed_post_delete_v2(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     is_admin = (
@@ -6675,7 +6675,7 @@ def feed_post_delete_v2(post_id):
 @app.route('/api/trades/<int:trade_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def trade_delete(trade_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -7078,7 +7078,7 @@ def toggle_feed_reply_like(reply_id):
 @app.route('/api/feed/reply/<int:reply_id>', methods=['DELETE'])
 @rate_limit(30, 60)
 def delete_feed_reply(reply_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9146,7 +9146,7 @@ def messages_my_recent_trades():
 @app.route('/api/messages/<int:message_id>', methods=['DELETE'])
 @rate_limit(30, 60)
 def delete_dm(message_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9172,7 +9172,7 @@ def delete_dm(message_id):
 @app.route('/api/messages/<int:message_id>', methods=['PUT'])
 @rate_limit(30, 60)
 def edit_dm(message_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     body = request.get_json(silent=True) or {}
@@ -9300,7 +9300,7 @@ def post_group_chat():
 @app.route('/api/chat/<int:message_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def delete_group_chat(message_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9485,7 +9485,7 @@ def wallet_conversations():
 @app.route('/api/messages/<wallet>', methods=['GET'])
 @rate_limit(60, 60)
 def get_wallet_thread(wallet):
-    me = _current_wallet()
+    me = _authenticated_wallet()
     if not me:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     if not is_valid_solana_address(wallet):
@@ -9679,7 +9679,7 @@ def post_profile_comment(profile_uid):
 @app.route('/api/comments/<int:comment_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def delete_profile_comment(comment_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
