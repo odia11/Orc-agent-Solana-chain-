@@ -1363,7 +1363,7 @@ function renderMarket(tokens){
     <div class="mkt-meta-cell"><div class="mkt-stat-lbl">Liq</div><div class="mkt-stat-val">${fmtNum(t.liquidity||0)}</div></div>
   </div>
   <div class="mkt-meta-row">
-    <div class="mkt-meta-cell"><div class="mkt-stat-lbl">MCap</div><div class="mkt-stat-val">${fmtNum(t.fdv||0)}</div></div>
+    <div class="mkt-meta-cell"><div class="mkt-stat-lbl">MCap</div><div class="mkt-stat-val">${fmtNum(t.market_cap||t.fdv||0)}</div></div>
     <div class="mkt-meta-cell"><div class="mkt-stat-lbl">Buys</div><div class="mkt-stat-val" style="color:var(--green)">${fmtTxns(t.txns24h_buys??0)}</div></div>
     <div class="mkt-meta-cell"><div class="mkt-stat-lbl">Sells</div><div class="mkt-stat-val" style="color:var(--red)">${fmtTxns(t.txns24h_sells??0)}</div></div>
     <div class="mkt-meta-cell"><div class="mkt-stat-lbl">Vol 5M</div><div class="mkt-stat-val">${fmtNum(t.volume5m||0)}</div></div>

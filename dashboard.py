@@ -209,7 +209,7 @@ TAKE_PROFIT     = 0.05   # 5%  — universal take profit
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
-MIN_MARKETCAP_USD = 30_000  # tokens below this (fdv) are skipped before any paid/rate-limited check
+MIN_MARKETCAP_USD = 30_000  # tokens below this (market cap) are skipped before any paid/rate-limited check
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -1957,6 +1957,7 @@ def get_token_data(mint, fast: bool = False):
             'volume6h':      float(p.get('volume', {}).get('h6',  0) or 0),
             'volume24h':     float(p.get('volume', {}).get('h24', 0) or 0),
             'fdv':           float(p.get('fdv', 0) or p.get('marketCap', 0) or 0),
+            'market_cap':    float(p.get('marketCap', 0) or p.get('fdv', 0) or 0),
             'txns_buys':     m5_buys  or h1_buys,
             'txns_sells':    m5_sells or h1_sells,
             'txns24h_buys':  h24_buys,
@@ -2222,6 +2223,7 @@ def token_loop():
                     'volume24h':     data['volume24h'],
                     'liquidity':     data['liquidity'],
                     'fdv':           data['fdv'],
+                    'market_cap':    data['market_cap'],
                     'score':         sc,
                     'breakdown':     bd,
                     'pairCreatedAt': data.get('pairCreatedAt', 0),
@@ -2984,7 +2986,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         if _t['mint'] in _blacklisted:
                             _skip_log.append(f'[skip] {_tsym}: blacklisted by user')
                             continue
-                        _mcap = _t.get('fdv', 0) or 0
+                        _mcap = _t.get('market_cap', 0) or 0
                         if _mcap < MIN_MARKETCAP_USD:
                             _skip_log.append(f'[skip] {_tsym}: Skipped: marketcap ${int(_mcap):,} below ${int(MIN_MARKETCAP_USD):,} minimum')
                             continue
@@ -9832,6 +9834,7 @@ def api_pump_scanner():
         'volume24h': t['volume24h'],
         'liquidity': t['liquidity'],
         'fdv':       t['fdv'],
+        'market_cap': t['market_cap'],
     } for t in pumping]
     return jsonify({'ok': True, 'tokens': out})
 
