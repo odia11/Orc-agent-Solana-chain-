@@ -16,6 +16,9 @@ __pycache__/
 # Logs
 *.log
 
+# Runtime state
+heartbeat.txt
+
 # PyInstaller
 build/
 dist/
