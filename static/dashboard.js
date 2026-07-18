@@ -7024,7 +7024,7 @@ async function _fcEditSave(postId,dbId){
       // update the visible text div with escaped + $TOKEN-linked content
       var textEl=document.getElementById('fc-text-'+postId);
       if(textEl){
-        var safe=esc(text).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+        var safe=esc(text).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
         safe = safe.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
         textEl.innerHTML='<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+safe+'</div>';
       }
@@ -7680,7 +7680,7 @@ async function showTokenCard(symbol){
     clearTimeout(_timeout);
     const d=await r.json()
     const p=(d.pairs||[]).find(x=>x.chainId==='solana')
-    if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No Solana pair found for <b style="color:#eef1f5">$'+symbol+'</b></div>';return}
+    if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No Solana pair found for <b style="color:#eef1f5">$'+esc(symbol)+'</b></div>';return}
     const fmt=n=>n==null?'—':parseFloat(n)<0.0001?'$'+parseFloat(n).toExponential(3):'$'+parseFloat(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})
     const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString()
     const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#3ad29b':'#f76b62',bg=n>=0?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:\'JetBrains Mono\',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
@@ -7693,9 +7693,9 @@ async function showTokenCard(symbol){
     body.innerHTML=`
       ${p.info?.header?`<img src="${p.info.header}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:block" onerror="this.style.display='none'">` : ''}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#f7b955;font-size:15px">${symbol.slice(0,2)}</div>'}
+        ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#f7b955;font-size:15px">'+esc(symbol.slice(0,2))+'</div>'}
         <div style="flex:1;min-width:0">
-          <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${p.baseToken?.symbol||symbol}</div>
+          <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${p.baseToken?.symbol||esc(symbol)}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px">
             <span style="font-size:12px;color:#565d68">${p.baseToken?.name||''}</span>
             <span style="background:rgba(247,185,85,0.12);color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
@@ -7841,7 +7841,7 @@ function _renderFeedCard(e){
       var _chartData = null;
       try{ _chartData = JSON.parse(_chartJson); }catch(ex){}
       if(_textPart){
-        var _safeText = esc(_textPart).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+        var _safeText = esc(_textPart).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
         _safeText = _safeText.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
         textBody += '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeText+'</div>';
       }
@@ -7866,7 +7866,7 @@ function _renderFeedCard(e){
           +' data-chart-chg1h="'+_safeNum(_c.chg1h)+'"'
           +' data-chart-chg6h="'+_safeNum(_c.chg6h)+'"'
           +' data-chart-chg24h="'+_safeNum(_c.chg24h)+'"'
-          +' style="background:#101216;border-radius:16px;overflow:hidden;margin:8px 0 10px;cursor:pointer;position:relative" onclick="event.stopPropagation();showTokenCard(\''+esc(_c.symbol||'')+'\')">'
+          +' data-sym="'+esc(_c.symbol||'')+'" style="background:#101216;border-radius:16px;overflow:hidden;margin:8px 0 10px;cursor:pointer;position:relative" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">'
           +'<span class="live-dot" style="position:absolute;top:10px;right:12px;z-index:3;color:#00ff88;font-size:12px">●</span>'
           +'<div style="position:relative;min-height:90px;overflow:hidden;background:#0d1117">'
           +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
@@ -7911,7 +7911,7 @@ function _renderFeedCard(e){
           +'</div>';
       }
     } else if(_rawContent.trim()) {
-      var _safeContent = esc(_rawContent).replace(/\$([^\s<]+)/g,'<span class="token-tag" onclick="event.stopPropagation();showTokenCard(\'$1\')">$$$1</span>');
+      var _safeContent = esc(_rawContent).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
       _safeContent = _safeContent.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
       textBody += '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>';
     }
