@@ -771,6 +771,8 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 
 <script>
 var _walletAddr = '{{ wallet_address }}'
+var _csrf = {{ csrf_token|tojson }};
+var _clientSecret = {{ client_secret|tojson }};
 
 // ── util ──────────────────────────────────────────────────
 function _hash(str){
@@ -876,7 +878,8 @@ function _execSend(){
   if(note) note.style.color='var(--muted)',note.textContent='Processing…'
   fetch('/api/wallet/send',{
     method:'POST',credentials:'include',
-    headers:{'Content-Type':'application/json'},
+    headers:Object.assign({'Content-Type':'application/json','X-CSRF-Token':_csrf},
+                           _clientSecret ? {'X-API-Shared-Secret':_clientSecret} : {}),
     body:JSON.stringify({to:to,amount_sol:amt})
   }).then(function(r){return r.json()}).then(function(d){
     if(d.ok||d.success){

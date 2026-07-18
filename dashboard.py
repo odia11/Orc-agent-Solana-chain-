@@ -115,7 +115,7 @@ def _refresh_session():
 
 # /api/wallet/set is the auth-bootstrap endpoint — it establishes the session so it
 # cannot require a session-scoped CSRF token. Origin check still protects it.
-_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade', '/api/phantom/init', '/api/phantom/decrypt', '/api/wallet/send'})
+_CSRF_EXEMPT_PATHS = frozenset({'/api/wallet/set', '/api/wallet/connect-readonly', '/api/login_password', '/api/connect-wallet', '/api/instant-trade', '/api/phantom/init', '/api/phantom/decrypt'})
 
 def csrf_exempt(f):
     """Decorator: mark a view function as exempt from CSRF token validation.
@@ -4573,6 +4573,8 @@ def wallet_page():
             wallet_address=wallet_address,
             wallet_short=wallet_short,
             is_admin=_is_owner(wallet_address),
+            csrf_token=_get_csrf_token(),
+            client_secret=API_SHARED_SECRET,
         )
     except Exception as e:
         print(f'[wallet] exception: {e}', flush=True)
@@ -6032,7 +6034,6 @@ def wallet_manual_trades():
 
 
 @app.route('/api/wallet/send', methods=['POST'])
-@csrf_exempt
 @rate_limit(3, 60)
 def wallet_send():
     wallet = _authenticated_wallet()
