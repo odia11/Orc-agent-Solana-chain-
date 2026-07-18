@@ -251,7 +251,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
   animation:pulse 2s ease-in-out infinite;
 }
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
-.sb-tok-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #16191f}
+.sb-tok-row{display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #16191f;cursor:pointer}
 .sb-tok-row:last-child{border-bottom:none}
 .sb-tok-init{
   width:30px;height:30px;border-radius:50%;flex-shrink:0;
@@ -578,7 +578,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
     <!-- balance card -->
     <div class="wlt-bal-card">
       <div class="wlt-bal-col">
-        <div class="wlt-bal-lbl">Available</div>
+        <div class="wlt-bal-lbl" style="display:flex;align-items:center;gap:6px">
+          Available
+          <button onclick="loadBalance()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0" title="Refresh">↻</button>
+        </div>
         <div class="wlt-bal-num" id="avail">— SOL</div>
       </div>
       <div class="wlt-bal-col">
@@ -656,7 +659,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
   <div class="sb-card">
     <div class="sb-card-hdr">
       <span class="sb-card-title">Live Market</span>
-      <span class="sb-live-dot"></span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button onclick="_loadSidebarMarket()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0" title="Refresh">↻</button>
+        <span class="sb-live-dot"></span>
+      </div>
     </div>
     <div id="sb-market-list"><div style="color:var(--muted);font-size:12px;padding:6px 0">Loading…</div></div>
     <a class="sb-footer" href="/live-market">Show all markets →</a>
@@ -1286,7 +1292,7 @@ async function _loadSidebarMarket(){
         ?'<img class="sb-tok-logo" src="'+icon+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
           +'<div class="sb-tok-init" style="display:none;background:'+circCol+'">'+init+'</div>'
         :'<div class="sb-tok-init" style="background:'+circCol+'">'+init+'</div>'
-      return '<div class="sb-tok-row">'+logoHtml
+      return '<div class="sb-tok-row" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(\''+sym.replace(/'/g,"\\'")+'\')">'+logoHtml
         +'<div style="flex:1;min-width:0">'
           +'<div class="sb-tok-name">$'+sym+'</div>'
           +'<div class="sb-tok-price">'+priceStr+'</div>'
