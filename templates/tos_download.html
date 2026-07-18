@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<title>Your Accepted Terms — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OrcAgent">
+<link rel="apple-touch-icon" href="/static/favicon.svg?v=2">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
+  --accent:#f7b955;--text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --border:#16191f;--border2:#21252c;
+  --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,sans-serif;
+}
+html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
+.bar{
+  position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;
+  padding:0 16px;padding-top:env(safe-area-inset-top);height:calc(56px + env(safe-area-inset-top));
+  background:rgba(10,11,14,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
+}
+.back-btn{
+  display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--border2);
+  color:var(--text);border-radius:9px;padding:9px 14px;font-family:var(--ui);font-size:13px;
+  font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .15s,background .15s;
+  flex-shrink:0;
+}
+.back-btn:hover,.back-btn:active{border-color:#35353d;background:var(--bg3)}
+.bar-title{font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.content{max-width:520px;margin:0 auto;padding:48px 20px;text-align:center}
+.icon{font-size:40px;margin-bottom:16px}
+h1{font-size:17px;font-weight:700;margin-bottom:8px}
+p{color:var(--sub);font-size:13px;line-height:1.6;margin-bottom:24px}
+.dl-link{
+  display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#0a0b0e;
+  border:none;border-radius:9px;padding:11px 20px;font-size:13px;font-weight:700;
+  font-family:var(--ui);cursor:pointer;text-decoration:none;transition:opacity .15s;
+}
+.dl-link:hover{opacity:.88}
+.note{margin-top:18px;font-size:11.5px;color:var(--muted);font-family:var(--mono)}
+</style>
+</head>
+<body>
+<div class="bar">
+  <a class="back-btn" href="/settings">&larr; Back</a>
+  <span class="bar-title">Your Accepted Terms</span>
+</div>
+<div class="content">
+  <div class="icon">📄</div>
+  <h1>Your PDF is downloading&hellip;</h1>
+  <p>If it didn't start automatically, tap the button below.</p>
+  <a id="manual-dl" class="dl-link" href="/api/tos/my-acceptance/pdf" download>&#11015; Download PDF</a>
+  <div class="note">Tap "&larr; Back" above at any time to return to Settings.</div>
+</div>
+<script>
+  document.getElementById('manual-dl').click();
+</script>
+</body>
+</html>

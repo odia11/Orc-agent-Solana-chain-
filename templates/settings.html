@@ -548,7 +548,7 @@ async function _loadTosAcceptance(){
       '<div class="st-row-sub" style="margin-bottom:14px">Accepted on <strong style="color:var(--text)">'
       + _esc(dateStr) + '</strong> &middot; version ' + _esc(d.version) + '</div>'
       + note
-      + '<a class="st-tos-dl-btn" href="/api/tos/my-acceptance/pdf">⬇ Download PDF</a>';
+      + '<a class="st-tos-dl-btn" href="/tos/download">⬇ Download PDF</a>';
   }catch(e){
     el.innerHTML = '<div class="st-row-sub">Could not load your acceptance record.</div>';
   }

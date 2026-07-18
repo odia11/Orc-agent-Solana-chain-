@@ -4357,6 +4357,17 @@ def api_tos_my_acceptance_pdf():
     resp.headers['Content-Disposition'] = f'attachment; filename="orcagent-terms-v{version}.pdf"'
     return resp
 
+@app.route('/tos/download')
+def tos_download_page():
+    # Standalone wrapper page with a persistent Back button, so tapping
+    # "Download PDF" on mobile never strands the user on a bare PDF response
+    # with no in-app way back (esp. when running as an installed PWA, which
+    # has no browser chrome/back button at all).
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/?connect=1')
+    return render_template('tos_download.html')
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
