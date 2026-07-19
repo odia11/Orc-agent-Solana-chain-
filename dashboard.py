@@ -4886,12 +4886,19 @@ def group_detail_page(group_id):
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT banner_url, avatar_url FROM groups WHERE id=?', (group_id,)).fetchone()
+    finally:
+        conn.close()
     return render_template(
         'group_detail.html',
         wallet=wallet,
         wallet_short=wallet_short,
         is_admin=_is_owner(wallet),
         group_id=group_id,
+        banner_url=(row[0] if row else '') or '',
+        avatar_url=(row[1] if row else '') or '',
         csrf_token=_get_csrf_token(),
         client_secret=API_SHARED_SECRET,
     )
