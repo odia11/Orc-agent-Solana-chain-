@@ -7978,7 +7978,8 @@ function _renderFeedCard(e){
       +'</div>'
     : '';
 
-  return '<div class="fc-card" id="'+esc(cardId)+'" data-post-content="'+esc(e.content||'')+'">'
+  return '<div class="fc-card" id="'+esc(cardId)+'" data-post-content="'+esc(e.content||'')+'" '
+      +'onclick="_fcCardClick(event,\''+esc(safePostId)+'\')" style="cursor:pointer">'
     +menuHtml
     +(e.avatar_url
       ? '<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0;cursor:pointer" onclick="event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(e.avatar_url))+')">'+imgHtml+'</div>'
@@ -8018,7 +8019,7 @@ function _renderFeedCard(e){
     +'<span class="fc-view-count" title="Views">'+esc(_fmtViewCount(e.view_count))+'</span>'
     +'</div>'
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
-    +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
+    +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'" onclick="event.stopPropagation()">'
     +'<div class="fc-reply-inner">'
     +'<div class="fc-reply-emoji-wrap">'
     +'<button class="fc-reply-emoji-btn" onclick="_emojiPickerToggle(event,\'repal-'+esc(safePostId)+'\',\'rinp-'+esc(safePostId)+'\')" title="Emoji">😊</button>'
@@ -8230,6 +8231,12 @@ function _handleNotifDeepLink(){
   if(!m) return;
   _notifDeepLinkDone = true;
   _jumpToPost(decodeURIComponent(m[1]));
+}
+
+function _fcCardClick(ev, postId){
+  if(ev.target.closest('a, button, input, textarea, select')) return;
+  history.pushState(null, '', '#post-'+postId);
+  _jumpToPost(postId);
 }
 
 async function _jumpToPost(postId){
