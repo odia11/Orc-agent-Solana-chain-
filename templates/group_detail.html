@@ -84,6 +84,10 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-composer-tools{display:flex;gap:6px;margin-top:6px}
 .gd-composer-tool-btn{background:none;border:1px solid var(--border2);color:var(--sub);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:var(--ui)}
 .gd-composer-tool-btn:hover{border-color:var(--muted);color:var(--text)}
+.gd-emoji-palette{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:6px;grid-template-columns:repeat(6,1fr);gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:10;width:216px}
+.gd-emoji-palette.open{display:grid}
+.gd-emoji-palette button{background:none;border:none;font-size:18px;cursor:pointer;padding:6px;border-radius:8px;line-height:1}
+.gd-emoji-palette button:hover{background:var(--bg3)}
 
 .gd-poll{border:1px solid var(--border2);border-radius:12px;padding:12px;margin-top:8px}
 .gd-poll-q{font-weight:700;font-size:13.5px;color:var(--text);margin-bottom:10px}
@@ -529,6 +533,10 @@ function _renderComposer(g){
         +'<div class="gd-composer-tools">'
           +'<button class="gd-composer-tool-btn" onclick="document.getElementById(\'gd-image-input\').click()">🖼️ Image</button>'
           +'<button class="gd-composer-tool-btn" onclick="_openPollModal()">📊 Poll</button>'
+          +'<div style="position:relative;display:inline-block">'
+            +'<button type="button" class="gd-composer-tool-btn gd-emoji-btn" onclick="_toggleEmojiPicker(event)">😊 Emoji</button>'
+            +'<div class="gd-emoji-palette" id="gd-emoji-palette"></div>'
+          +'</div>'
           +'<input type="file" id="gd-image-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
         +'</div>'
       +'</div>'
@@ -626,6 +634,10 @@ document.addEventListener('click', function(e){
   if(!e.target.closest('.gd-react-add') && !e.target.closest('.gd-react-picker')){
     document.querySelectorAll('.gd-react-picker.open').forEach(function(p){ p.classList.remove('open'); });
   }
+  if(!e.target.closest('.gd-emoji-btn') && !e.target.closest('.gd-emoji-palette')){
+    var epal = document.getElementById('gd-emoji-palette');
+    if(epal) epal.classList.remove('open');
+  }
 });
 
 function _toggleReaction(postId, emoji){
@@ -714,6 +726,41 @@ function _onComposerKeydown(ev){
   } else if(ev.key === 'Escape'){
     _closeMentionMenu();
   }
+}
+
+var _GD_EMOJI_LIST = ['😀','😂','😍','🥰','😢','😮','😎','🤔','😤','🔥','❤️','💯','👍','👎','🚀','💰','📈','📉','⚡','🎯','💎','🏆','🌙','💀','🤝','👀','🙏','✅','❌','⚠️'];
+
+function _toggleEmojiPicker(ev){
+  ev.stopPropagation();
+  var pal = document.getElementById('gd-emoji-palette');
+  var inp = document.getElementById('gd-composer-inp');
+  if(!pal) return;
+  var wasOpen = pal.classList.contains('open');
+  pal.classList.remove('open');
+  if(wasOpen) return;
+  if(!pal.childElementCount){
+    _GD_EMOJI_LIST.forEach(function(emoji){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = emoji;
+      b.onmousedown = function(e){ e.preventDefault(); };
+      b.onclick = function(e){
+        e.stopPropagation();
+        if(inp){
+          var s = inp.selectionStart, en = inp.selectionEnd, v = inp.value;
+          inp.value = v.slice(0,s) + emoji + v.slice(en);
+          var pos = s + [...emoji].length;
+          inp.setSelectionRange(pos, pos);
+          inp.focus();
+          inp.style.height = 'auto';
+          inp.style.height = inp.scrollHeight + 'px';
+        }
+        pal.classList.remove('open');
+      };
+      pal.appendChild(b);
+    });
+  }
+  pal.classList.add('open');
 }
 
 function _renderPinned(g){
