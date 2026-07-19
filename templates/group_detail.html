@@ -84,18 +84,10 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-composer-tools{display:flex;gap:6px;margin-top:6px}
 .gd-composer-tool-btn{background:none;border:1px solid var(--border2);color:var(--sub);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:var(--ui)}
 .gd-composer-tool-btn:hover{border-color:var(--muted);color:var(--text)}
-
-.gd-poll{border:1px solid var(--border2);border-radius:12px;padding:12px;margin-top:8px}
-.gd-poll-q{font-weight:700;font-size:13.5px;color:var(--text);margin-bottom:10px}
-.gd-poll-opt{position:relative;border:1px solid var(--border2);border-radius:9px;padding:8px 12px;margin-bottom:6px;cursor:pointer;overflow:hidden;font-size:13px}
-.gd-poll-opt-fill{position:absolute;inset:0;background:var(--accent-dim);z-index:0;transition:width .3s}
-.gd-poll-opt-fill.mine{background:rgba(247,185,85,.22)}
-.gd-poll-opt-row{position:relative;z-index:1;display:flex;justify-content:space-between;gap:8px;color:var(--text)}
-.gd-poll-opt-pct{color:var(--muted);font-family:var(--mono);font-size:12px}
-.gd-poll-total{font-size:11.5px;color:var(--muted);margin-top:4px}
-.gd-poll-opt-input{display:flex;gap:6px;margin-bottom:6px}
-.gd-poll-opt-input input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:var(--ui);outline:none}
-.gd-poll-opt-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+.gd-emoji-palette{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:6px;grid-template-columns:repeat(6,1fr);gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:10;width:216px}
+.gd-emoji-palette.open{display:grid}
+.gd-emoji-palette button{background:none;border:none;font-size:18px;cursor:pointer;padding:6px;border-radius:8px;line-height:1}
+.gd-emoji-palette button:hover{background:var(--bg3)}
 
 .gd-mute-actions{display:flex;gap:4px}
 
@@ -186,7 +178,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   <a class="gd-allgroups" href="/groups">← All groups</a>
 
   <div class="gd-banner-wrap" id="gd-banner-wrap">
-    <img class="gd-banner-img" id="gd-banner-img" src="{{ banner_url }}" alt="" style="{{ '' if banner_url else 'display:none' }}" onerror="this.style.display='none'" onclick="_openLightbox(this.src)">
+    <img class="gd-banner-img" id="gd-banner-img" src="" alt="" onerror="this.style.display='none'" onclick="_openLightbox(this.src)">
     <div class="gd-banner-edit-wrap" id="gd-banner-edit-wrap" style="display:none">
       <button class="gd-banner-edit-btn" onclick="_toggleBannerMenu(event)" title="Edit banner">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -201,7 +193,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
   <div class="gd-header">
     <div class="gd-tile-wrap">
-      <div class="gd-tile" id="gd-tile">{% if avatar_url %}<img src="{{ avatar_url }}" alt="" style="cursor:pointer" onclick="_openLightbox(this.src)">{% else %}?{% endif %}</div>
+      <div class="gd-tile" id="gd-tile">?</div>
       <div class="gd-avatar-edit-btn" id="gd-avatar-edit-btn" style="display:none" onclick="document.getElementById('gd-avatar-input').click()" title="Change group icon">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
       </div>
@@ -294,30 +286,13 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   </div>
 </div>
 
-<div class="gd-modal-backdrop" id="gd-poll-backdrop" onclick="_closePollModal(event)">
-  <div class="gd-modal" role="dialog" aria-modal="true">
-    <div class="gd-modal-header">
-      <div class="gd-modal-title">Create a poll</div>
-      <button class="gd-modal-close" onclick="_closePollModal()">✕</button>
-    </div>
-    <input type="text" class="gd-composer-inp" id="gd-poll-question" placeholder="Ask a question…" maxlength="300" style="width:100%">
-    <div id="gd-poll-options"></div>
-    <button class="gd-member-action" onclick="_addPollOption()">+ Add option</button>
-    <div id="gd-poll-error" style="color:#ff4d6a;font-size:12px;display:none"></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px">
-      <button class="gd-member-action" onclick="_closePollModal()">Cancel</button>
-      <button class="gd-join-btn" id="gd-poll-submit-btn" onclick="_submitPoll()">Create poll</button>
-    </div>
-  </div>
-</div>
-
 <div class="gd-modal-backdrop" id="gd-delete-backdrop" onclick="_closeDeleteGroupModal(event)">
   <div class="gd-modal" role="dialog" aria-modal="true">
     <div class="gd-modal-header">
       <div class="gd-modal-title" style="color:#ff4d6a">Delete this group?</div>
       <button class="gd-modal-close" onclick="_closeDeleteGroupModal()">✕</button>
     </div>
-    <div style="font-size:13px;color:var(--sub);line-height:1.5">This permanently deletes <b id="gd-delete-group-name" style="color:var(--text)"></b>, all of its posts, polls, and membership. This can't be undone.</div>
+    <div style="font-size:13px;color:var(--sub);line-height:1.5">This permanently deletes <b id="gd-delete-group-name" style="color:var(--text)"></b>, all of its posts and membership. This can't be undone.</div>
     <div style="display:flex;justify-content:flex-end;gap:8px">
       <button class="gd-member-action" onclick="_closeDeleteGroupModal()">Cancel</button>
       <button class="gd-join-btn" id="gd-delete-confirm-btn" style="background:#ff4d6a;border-color:#ff4d6a" onclick="_confirmDeleteGroup()">Delete group</button>
@@ -383,7 +358,7 @@ function _renderHeader(g){
   var tile = document.getElementById('gd-tile');
   if(g.avatar_url){
     tile.innerHTML = '<img src="'+esc(g.avatar_url)+'" alt="" style="cursor:pointer" onclick="_openLightbox(this.src)">';
-  } else if(!tile.querySelector('img')){
+  } else {
     tile.textContent = (g.token_symbol||'?').slice(0,3).toUpperCase();
     tile.style.background = _tokenTileColor(g.token_symbol);
   }
@@ -528,7 +503,10 @@ function _renderComposer(g){
         +'<div id="gd-attach-preview-wrap"></div>'
         +'<div class="gd-composer-tools">'
           +'<button class="gd-composer-tool-btn" onclick="document.getElementById(\'gd-image-input\').click()">🖼️ Image</button>'
-          +'<button class="gd-composer-tool-btn" onclick="_openPollModal()">📊 Poll</button>'
+          +'<div style="position:relative;display:inline-block">'
+            +'<button type="button" class="gd-composer-tool-btn gd-emoji-btn" onclick="_toggleEmojiPicker(event)">😊 Emoji</button>'
+            +'<div class="gd-emoji-palette" id="gd-emoji-palette"></div>'
+          +'</div>'
           +'<input type="file" id="gd-image-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
         +'</div>'
       +'</div>'
@@ -543,7 +521,7 @@ function _renderMentionText(content){
 function _postHtml(p){
   var isMine = p.user_id === _myUid;
   var canDelete = isMine || (_groupData && _groupData.is_mod);
-  var canPin = _groupData && _groupData.is_mod && !p.poll;
+  var canPin = _groupData && _groupData.is_mod;
   var avatarInner = p.avatar_url
     ? '<img src="'+esc(p.avatar_url)+'" alt="" onerror="this.style.display=\'none\'">'
     : esc((p.username||p.wallet_short||'?')[0].toUpperCase());
@@ -561,7 +539,6 @@ function _postHtml(p){
         +'</div>'
         +'<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>'
         +(p.image_url ? '<img class="gd-post-img" src="'+esc(p.image_url)+'" alt="" onclick="_openLightbox(this.src)">' : '')
-        +_pollHtml(p.poll)
         +'<div class="gd-react-bar" id="gd-react-g'+p.id+'" data-post-id="g'+p.id+'"></div>'
       +'</div>'
     +'</div>';
@@ -569,16 +546,43 @@ function _postHtml(p){
 
 var _REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'];
 
+var _lastPostsSignature = null;
+
 function _loadPosts(){
   fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
     var el = document.getElementById('gd-feed');
     if(!d.ok || !d.posts.length){
+      _lastPostsSignature = '';
       el.innerHTML = '<div class="gd-empty">No posts yet — be the first to share something.</div>';
       return;
     }
+    _lastPostsSignature = d.posts.map(function(p){ return p.id; }).join(',');
     el.innerHTML = d.posts.map(_postHtml).join('');
     _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
   }).catch(function(){});
+}
+
+/* Poll for new posts every 5s, same cadence as DMs -- only touches the DOM
+   when the post list actually changed, so scrolling/open reaction pickers/
+   an in-progress reply aren't disrupted by a refresh that found nothing new. */
+var _postsPollTimer = null;
+function _startPostsPoll(){
+  clearInterval(_postsPollTimer);
+  _postsPollTimer = setInterval(function(){
+    fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+      if(!d.ok) return;
+      var sig = d.posts.map(function(p){ return p.id; }).join(',');
+      if(sig === _lastPostsSignature) return;
+      _lastPostsSignature = sig;
+      var el = document.getElementById('gd-feed');
+      if(!d.posts.length){
+        el.innerHTML = '<div class="gd-empty">No posts yet — be the first to share something.</div>';
+        return;
+      }
+      el.innerHTML = d.posts.map(_postHtml).join('');
+      _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
+    }).catch(function(){});
+  }, 5000);
 }
 
 function _loadReactions(ids){
@@ -625,6 +629,10 @@ function _closeReactPicker(postId){
 document.addEventListener('click', function(e){
   if(!e.target.closest('.gd-react-add') && !e.target.closest('.gd-react-picker')){
     document.querySelectorAll('.gd-react-picker.open').forEach(function(p){ p.classList.remove('open'); });
+  }
+  if(!e.target.closest('.gd-emoji-btn') && !e.target.closest('.gd-emoji-palette')){
+    var epal = document.getElementById('gd-emoji-palette');
+    if(epal) epal.classList.remove('open');
   }
 });
 
@@ -714,6 +722,41 @@ function _onComposerKeydown(ev){
   } else if(ev.key === 'Escape'){
     _closeMentionMenu();
   }
+}
+
+var _GD_EMOJI_LIST = ['😀','😂','😍','🥰','😢','😮','😎','🤔','😤','🔥','❤️','💯','👍','👎','🚀','💰','📈','📉','⚡','🎯','💎','🏆','🌙','💀','🤝','👀','🙏','✅','❌','⚠️'];
+
+function _toggleEmojiPicker(ev){
+  ev.stopPropagation();
+  var pal = document.getElementById('gd-emoji-palette');
+  var inp = document.getElementById('gd-composer-inp');
+  if(!pal) return;
+  var wasOpen = pal.classList.contains('open');
+  pal.classList.remove('open');
+  if(wasOpen) return;
+  if(!pal.childElementCount){
+    _GD_EMOJI_LIST.forEach(function(emoji){
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.textContent = emoji;
+      b.onmousedown = function(e){ e.preventDefault(); };
+      b.onclick = function(e){
+        e.stopPropagation();
+        if(inp){
+          var s = inp.selectionStart, en = inp.selectionEnd, v = inp.value;
+          inp.value = v.slice(0,s) + emoji + v.slice(en);
+          var pos = s + [...emoji].length;
+          inp.setSelectionRange(pos, pos);
+          inp.focus();
+          inp.style.height = 'auto';
+          inp.style.height = inp.scrollHeight + 'px';
+        }
+        pal.classList.remove('open');
+      };
+      pal.appendChild(b);
+    });
+  }
+  pal.classList.add('open');
 }
 
 function _renderPinned(g){
@@ -922,66 +965,6 @@ function _submitPost(){
     }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
 }
 
-/* ── polls ── */
-function _openPollModal(){
-  document.getElementById('gd-poll-question').value = '';
-  document.getElementById('gd-poll-error').style.display = 'none';
-  var opts = document.getElementById('gd-poll-options');
-  opts.innerHTML = '';
-  _addPollOption(); _addPollOption();
-  document.getElementById('gd-poll-backdrop').classList.add('open');
-}
-function _closePollModal(ev){
-  if(ev && ev.target !== ev.currentTarget) return;
-  document.getElementById('gd-poll-backdrop').classList.remove('open');
-}
-function _addPollOption(){
-  var opts = document.getElementById('gd-poll-options');
-  if(opts.children.length >= 6) return;
-  var row = document.createElement('div');
-  row.className = 'gd-poll-opt-input';
-  row.innerHTML = '<input type="text" placeholder="Option" maxlength="120">'
-    + '<button class="gd-poll-opt-remove" onclick="this.parentElement.remove()">✕</button>';
-  opts.appendChild(row);
-}
-function _submitPoll(){
-  var question = document.getElementById('gd-poll-question').value.trim();
-  var opts = Array.from(document.querySelectorAll('#gd-poll-options input')).map(function(i){ return i.value.trim(); }).filter(Boolean);
-  var errEl = document.getElementById('gd-poll-error');
-  if(!question){ errEl.textContent = 'Question is required.'; errEl.style.display=''; return; }
-  if(opts.length < 2){ errEl.textContent = 'At least 2 options are required.'; errEl.style.display=''; return; }
-  errEl.style.display = 'none';
-  var btn = document.getElementById('gd-poll-submit-btn');
-  btn.disabled = true;
-  fetch('/api/groups/'+_groupId+'/polls', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({question:question, options:opts})})
-    .then(function(r){return r.json();}).then(function(d){
-      btn.disabled = false;
-      if(!d.ok){ errEl.textContent = d.msg||'Could not create poll'; errEl.style.display=''; return; }
-      _closePollModal();
-      _loadPosts();
-    }).catch(function(){ btn.disabled=false; errEl.textContent='Network error'; errEl.style.display=''; });
-}
-function _pollHtml(poll){
-  if(!poll) return '';
-  var total = poll.total_votes || 0;
-  var opts = poll.options.map(function(o){
-    var pct = total ? Math.round(o.votes/total*100) : 0;
-    var isMine = poll.my_vote === o.id;
-    return '<div class="gd-poll-opt" onclick="_votePoll('+poll.poll_id+','+o.id+',this)">'
-      +'<div class="gd-poll-opt-fill'+(isMine?' mine':'')+'" style="width:'+pct+'%"></div>'
-      +'<div class="gd-poll-opt-row"><span>'+(isMine?'✓ ':'')+esc(o.text)+'</span><span class="gd-poll-opt-pct">'+pct+'%</span></div>'
-    +'</div>';
-  }).join('');
-  return '<div class="gd-poll">'+opts+'<div class="gd-poll-total">'+total+' vote'+(total===1?'':'s')+'</div></div>';
-}
-function _votePoll(pollId, optionId, el){
-  fetch('/api/groups/polls/'+pollId+'/vote', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({option_id:optionId})})
-    .then(function(r){return r.json();}).then(function(d){
-      if(!d.ok){ _showToast(d.msg||'Could not vote', 'err'); return; }
-      _loadPosts();
-    }).catch(function(){ _showToast('Network error', 'err'); });
-}
-
 /* ── typing indicator ── */
 var _typingPollTimer = null;
 var _typingPingTimer = null;
@@ -1157,6 +1140,7 @@ function _loadGroup(){
     _groupData = d.group;
     _renderHeader(d.group);
     _loadPosts();
+    _startPostsPoll();
   }).catch(function(){});
 }
 
