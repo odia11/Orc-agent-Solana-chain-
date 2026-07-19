@@ -8235,6 +8235,14 @@ function _handleNotifDeepLink(){
 
 function _fcCardClick(ev, postId){
   if(ev.target.closest('a, button, input, textarea, select')) return;
+  var rbox = document.getElementById('rbox-'+postId);
+  if(rbox && rbox.classList.contains('open')){
+    rbox.classList.remove('open');
+    if(location.hash === '#post-'+postId){
+      history.pushState(null, '', location.pathname + location.search);
+    }
+    return;
+  }
   history.pushState(null, '', '#post-'+postId);
   _jumpToPost(postId);
 }
