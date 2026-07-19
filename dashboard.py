@@ -192,12 +192,10 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 BASE         = os.path.dirname(os.path.abspath(__file__))
-DM_IMAGES_DIR    = os.path.join(BASE, 'static', 'dm_images')
-CHAT_IMAGES_DIR  = os.path.join(BASE, 'static', 'chat_images')
-GROUP_IMAGES_DIR = os.path.join(BASE, 'static', 'group_images')
-os.makedirs(DM_IMAGES_DIR,    exist_ok=True)
-os.makedirs(CHAT_IMAGES_DIR,  exist_ok=True)
-os.makedirs(GROUP_IMAGES_DIR, exist_ok=True)
+DM_IMAGES_DIR   = os.path.join(BASE, 'static', 'dm_images')
+CHAT_IMAGES_DIR = os.path.join(BASE, 'static', 'chat_images')
+os.makedirs(DM_IMAGES_DIR,   exist_ok=True)
+os.makedirs(CHAT_IMAGES_DIR, exist_ok=True)
 # Use Railway persistent volume when available so the DB and logs survive redeploys.
 _DATA_DIR    = '/data' if os.path.exists('/data') else BASE
 LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
@@ -999,6 +997,40 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_group_posts_group ON group_posts(group_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS group_polls (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id   INTEGER NOT NULL,
+        post_id    INTEGER,
+        question   TEXT NOT NULL,
+        created_by INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (group_id) REFERENCES groups(id),
+        FOREIGN KEY (post_id) REFERENCES group_posts(id),
+        FOREIGN KEY (created_by) REFERENCES users(id)
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS group_poll_options (
+        id       INTEGER PRIMARY KEY AUTOINCREMENT,
+        poll_id  INTEGER NOT NULL,
+        text     TEXT NOT NULL,
+        position INTEGER NOT NULL DEFAULT 0,
+        FOREIGN KEY (poll_id) REFERENCES group_polls(id)
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS group_poll_votes (
+        poll_id    INTEGER NOT NULL,
+        option_id  INTEGER NOT NULL,
+        user_id    INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(poll_id, user_id),
+        FOREIGN KEY (poll_id) REFERENCES group_polls(id),
+        FOREIGN KEY (option_id) REFERENCES group_poll_options(id),
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS group_typing (
+        group_id   INTEGER NOT NULL,
+        user_id    INTEGER NOT NULL,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (group_id, user_id)
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS group_chat (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id      INTEGER NOT NULL,
@@ -1175,9 +1207,11 @@ def run_migrations():
         "ALTER TABLE trades ADD COLUMN view_count INTEGER DEFAULT 0",
         "ALTER TABLE groups ADD COLUMN avatar_url TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN banner_url TEXT DEFAULT NULL",
+        "ALTER TABLE groups ADD COLUMN pinned_post_id INTEGER DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN rules TEXT DEFAULT NULL",
-        "ALTER TABLE group_posts ADD COLUMN is_pinned INTEGER DEFAULT 0",
+        "ALTER TABLE groups ADD COLUMN announcement_only INTEGER DEFAULT 0",
         "ALTER TABLE group_posts ADD COLUMN image_url TEXT DEFAULT NULL",
+        "ALTER TABLE group_members ADD COLUMN muted_until TIMESTAMP DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -5012,12 +5046,17 @@ def api_group_detail(group_id):
     try:
         row = conn.execute(
             'SELECT id, token_address, token_symbol, name, description, is_private, created_by, '
-            'avatar_url, banner_url, rules '
+            'avatar_url, banner_url, rules, announcement_only, pinned_post_id '
             'FROM groups WHERE id=?', (group_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
         uid = _get_uid(conn, wallet) if wallet else None
         role = _group_role(conn, group_id, uid)
+        is_muted = False
+        if uid:
+            mrow = conn.execute('SELECT muted_until FROM group_members WHERE group_id=? AND user_id=?',
+                                 (group_id, uid)).fetchone()
+            is_muted = bool(mrow and mrow[0] and mrow[0] > datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'))
         group = {
             'id': row[0], 'token_address': row[1], 'token_symbol': row[2], 'name': row[3],
             'description': row[4] or '', 'is_private': bool(row[5]),
@@ -5027,6 +5066,9 @@ def api_group_detail(group_id):
             'avatar_url': row[7] or '',
             'banner_url': row[8] or '',
             'rules': row[9] or '',
+            'announcement_only': bool(row[10]),
+            'pinned_post_id': row[11],
+            'is_muted': is_muted,
             'member_count': _group_member_count(conn, group_id),
         }
         return jsonify({'ok': True, 'group': group})
@@ -5034,50 +5076,49 @@ def api_group_detail(group_id):
         conn.close()
 
 
-@app.route('/api/groups/<int:group_id>', methods=['DELETE'])
-@rate_limit(5, 300)
-def api_group_delete(group_id):
-    _log_readonly_attempt()
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        row = conn.execute('SELECT created_by FROM groups WHERE id=?', (group_id,)).fetchone()
-        if not row:
-            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
-        uid = _get_uid(conn, wallet)
-        if row[0] != uid and not _is_owner(wallet):
-            return jsonify({'ok': False, 'msg': 'Only the group owner can delete this group'}), 403
-        conn.execute('DELETE FROM group_posts WHERE group_id=?', (group_id,))
-        conn.execute('DELETE FROM group_members WHERE group_id=?', (group_id,))
-        conn.execute('DELETE FROM groups WHERE id=?', (group_id,))
-        conn.commit()
-        return jsonify({'ok': True})
-    finally:
-        conn.close()
+def _poll_for_post(conn, post_id, uid):
+    poll_row = conn.execute('SELECT id, question FROM group_polls WHERE post_id=?', (post_id,)).fetchone()
+    if not poll_row:
+        return None
+    poll_id, question = poll_row
+    opt_rows = conn.execute('SELECT id, text FROM group_poll_options WHERE poll_id=? ORDER BY position',
+                             (poll_id,)).fetchall()
+    counts = dict(conn.execute('SELECT option_id, COUNT(*) FROM group_poll_votes WHERE poll_id=? GROUP BY option_id',
+                                (poll_id,)).fetchall())
+    my_vote = None
+    if uid:
+        mv = conn.execute('SELECT option_id FROM group_poll_votes WHERE poll_id=? AND user_id=?',
+                           (poll_id, uid)).fetchone()
+        my_vote = mv[0] if mv else None
+    return {
+        'poll_id': poll_id, 'question': question,
+        'options': [{'id': o[0], 'text': o[1], 'votes': counts.get(o[0], 0)} for o in opt_rows],
+        'my_vote': my_vote,
+        'total_votes': sum(counts.values()),
+    }
 
 
 @app.route('/api/groups/<int:group_id>/posts')
 def api_group_posts(group_id):
+    wallet = _authenticated_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
+        uid = _get_uid(conn, wallet) if wallet else None
         rows = conn.execute('''
             SELECT gp.id, gp.content, gp.created_at, gp.user_id, u.username, u.avatar_url,
-                   u.wallet_address, u.is_verified, gp.is_pinned, gp.image_url
+                   u.wallet_address, u.is_verified, gp.image_url
             FROM group_posts gp
             LEFT JOIN users u ON gp.user_id = u.id
             WHERE gp.group_id = ?
-            ORDER BY gp.is_pinned DESC, gp.created_at DESC
+            ORDER BY gp.created_at DESC
             LIMIT 200
         ''', (group_id,)).fetchall()
         posts = [{
             'id': r[0], 'content': r[1], 'created_at': r[2], 'user_id': r[3],
             'username': r[4], 'avatar_url': r[5],
             'wallet_short': (r[6][:4]+'...'+r[6][-4:]) if r[6] and len(r[6]) >= 8 else (r[6] or ''),
-            'is_verified': bool(r[7]),
-            'is_pinned': bool(r[8]),
-            'image_url': r[9] or '',
+            'is_verified': bool(r[7]), 'image_url': r[8],
+            'poll': _poll_for_post(conn, r[0], uid),
         } for r in rows]
         return jsonify({'ok': True, 'posts': posts})
     finally:
@@ -5092,26 +5133,37 @@ def api_group_post_create(group_id):
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     body = request.json or {}
     content = (body.get('content') or '').strip()
-    image_url = str(body.get('image_url', '') or '').strip()
-    if image_url:
-        _group_img_prefix = '/static/group_images/'
-        if not image_url.startswith(_group_img_prefix):
-            return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
-        if not _UPLOAD_FILENAME_RE.match(image_url[len(_group_img_prefix):]):
-            return jsonify({'ok': False, 'msg': 'Invalid image filename'}), 400
-    if not content and not image_url:
+    image_data = str(body.get('image_data') or '').strip()
+    if not content and not image_data:
         return jsonify({'ok': False, 'msg': 'Empty content'}), 400
     if len(content) > 1000:
         return jsonify({'ok': False, 'msg': 'Too long'}), 400
+    if image_data:
+        _ALLOWED_PREFIXES = (
+            'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+            'data:image/png;base64,',  'data:image/gif;base64,',
+            'data:image/webp;base64,',
+        )
+        if not any(image_data.startswith(p) for p in _ALLOWED_PREFIXES):
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, GIF, or WebP images are accepted'}), 400
+        b64_part = image_data.split(',', 1)[1] if ',' in image_data else ''
+        if len(b64_part) * 3 // 4 > 3 * 1024 * 1024:
+            return jsonify({'ok': False, 'msg': 'Image too large (max 3 MB)'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         uid = _get_uid(conn, wallet)
-        is_member = conn.execute(
-            'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, uid)).fetchone()
-        if not is_member:
+        role = _group_role(conn, group_id, uid)
+        if not role:
             return jsonify({'ok': False, 'msg': 'Join the group to post'}), 403
+        ann_row = conn.execute('SELECT announcement_only FROM groups WHERE id=?', (group_id,)).fetchone()
+        if ann_row and ann_row[0] and role not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Only moderators can post in this group'}), 403
+        mute_row = conn.execute('SELECT muted_until FROM group_members WHERE group_id=? AND user_id=?',
+                                 (group_id, uid)).fetchone()
+        if mute_row and mute_row[0] and mute_row[0] > datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S'):
+            return jsonify({'ok': False, 'msg': 'You are muted in this group'}), 403
         cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content, image_url) VALUES (?,?,?,?)',
-                            (group_id, uid, _sanitize(content), image_url or None))
+                            (group_id, uid, _sanitize(content), image_data or None))
         conn.commit()
         post_id = cur.lastrowid
         author_row = conn.execute('SELECT COALESCE(username,\"\") FROM users WHERE id=?', (uid,)).fetchone()
@@ -5137,45 +5189,6 @@ def api_group_post_create(group_id):
         conn.close()
 
 
-@app.route('/api/groups/<int:group_id>/upload-image', methods=['POST'])
-@rate_limit(10, 60)
-def api_group_upload_image(group_id):
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        uid = _get_uid(conn, wallet)
-        is_member = conn.execute(
-            'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, uid)).fetchone()
-    finally:
-        conn.close()
-    if not is_member:
-        return jsonify({'ok': False, 'msg': 'Join the group to upload images'}), 403
-    f = request.files.get('image')
-    if not f:
-        return jsonify({'ok': False, 'msg': 'No image provided'}), 400
-    ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
-    ALLOWED_EXT  = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
-    MAX_BYTES    = 5 * 1024 * 1024
-    if f.content_type not in ALLOWED_MIME:
-        return jsonify({'ok': False, 'msg': 'Only jpg/png/gif/webp allowed'}), 400
-    data = f.read()
-    if len(data) > MAX_BYTES:
-        return jsonify({'ok': False, 'msg': 'Image too large (max 5 MB)'}), 400
-    if not _verify_image_magic(data):
-        return jsonify({'ok': False, 'msg': 'File content does not match a valid image format'}), 400
-    raw_ext = secure_filename(f.filename or '').rsplit('.', 1)
-    ext = raw_ext[-1].lower() if len(raw_ext) == 2 else ''
-    if ext not in ALLOWED_EXT:
-        ext = f.content_type.split('/')[-1].replace('jpeg', 'jpg')
-    filename  = f'{uuid.uuid4().hex}.{ext}'
-    save_path = os.path.join(GROUP_IMAGES_DIR, filename)
-    with open(save_path, 'wb') as out:
-        out.write(data)
-    return jsonify({'ok': True, 'url': f'/static/group_images/{filename}'})
-
-
 @app.route('/api/groups/<int:group_id>/posts/<int:post_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def api_group_post_delete(group_id, post_id):
@@ -5197,32 +5210,6 @@ def api_group_post_delete(group_id, post_id):
         conn.execute('DELETE FROM group_posts WHERE id=?', (post_id,))
         conn.commit()
         return jsonify({'ok': True})
-    finally:
-        conn.close()
-
-
-@app.route('/api/groups/<int:group_id>/posts/<int:post_id>/pin', methods=['POST'])
-@rate_limit(20, 60)
-def api_group_post_pin(group_id, post_id):
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        uid = _get_uid(conn, wallet)
-        role = _group_role(conn, group_id, uid)
-        if role not in ('owner', 'mod'):
-            return jsonify({'ok': False, 'msg': 'Owner or moderators only'}), 403
-        row = conn.execute('SELECT is_pinned FROM group_posts WHERE id=? AND group_id=?',
-                            (post_id, group_id)).fetchone()
-        if not row:
-            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
-        now_pinned = not row[0]
-        if now_pinned:
-            conn.execute('UPDATE group_posts SET is_pinned=0 WHERE group_id=?', (group_id,))
-        conn.execute('UPDATE group_posts SET is_pinned=? WHERE id=?', (1 if now_pinned else 0, post_id))
-        conn.commit()
-        return jsonify({'ok': True, 'is_pinned': now_pinned})
     finally:
         conn.close()
 
@@ -5370,24 +5357,315 @@ def api_group_banner(group_id):
     return _group_image_upload(group_id, 'banner_url', (request.json or {}).get('banner_data', ''))
 
 
-@app.route('/api/groups/<int:group_id>/rules', methods=['POST'])
-@rate_limit(10, 60)
-def api_group_rules(group_id):
+@app.route('/api/groups/<int:group_id>/pin/<int:post_id>', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_pin_post(group_id, post_id):
     wallet = _authenticated_wallet()
     if not wallet:
-        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Moderators only'}), 403
+        exists = conn.execute('SELECT 1 FROM group_posts WHERE id=? AND group_id=?', (post_id, group_id)).fetchone()
+        if not exists:
+            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+        conn.execute('UPDATE groups SET pinned_post_id=? WHERE id=?', (post_id, group_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/unpin', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_unpin_post(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Moderators only'}), 403
+        conn.execute('UPDATE groups SET pinned_post_id=NULL WHERE id=?', (group_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/rules', methods=['POST'])
+@rate_limit(10, 60)
+def api_group_set_rules(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     rules = str((request.json or {}).get('rules', '') or '').strip()
-    if len(rules) > 2000:
-        return jsonify({'ok': False, 'msg': 'Rules too long (max 2000 chars)'}), 400
+    if len(rules) > 4000:
+        return jsonify({'ok': False, 'msg': 'Too long (max 4000 chars)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Moderators only'}), 403
+        conn.execute('UPDATE groups SET rules=? WHERE id=?', (rules or None, group_id))
+        conn.commit()
+        return jsonify({'ok': True, 'rules': rules})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/settings', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_settings(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) != 'owner':
+            return jsonify({'ok': False, 'msg': 'Owner only'}), 403
+        if 'announcement_only' in body:
+            conn.execute('UPDATE groups SET announcement_only=? WHERE id=?',
+                         (1 if body.get('announcement_only') else 0, group_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/mute/<int:user_id>', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_mute(group_id, user_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    minutes = int((request.json or {}).get('minutes', 60) or 60)
+    minutes = max(1, min(minutes, 60*24*30))
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Moderators only'}), 403
+        target_role = _group_role(conn, group_id, user_id)
+        if target_role in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': "Can't mute a moderator or the owner"}), 400
+        until = (datetime.datetime.utcnow() + datetime.timedelta(minutes=minutes)).strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute('UPDATE group_members SET muted_until=? WHERE group_id=? AND user_id=?',
+                     (until, group_id, user_id))
+        conn.commit()
+        return jsonify({'ok': True, 'muted_until': until})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/mute/<int:user_id>', methods=['DELETE'])
+@rate_limit(20, 60)
+def api_group_unmute(group_id, user_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Moderators only'}), 403
+        conn.execute('UPDATE group_members SET muted_until=NULL WHERE group_id=? AND user_id=?',
+                     (group_id, user_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/kick/<int:user_id>', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_kick(group_id, user_id):
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        my_role = _group_role(conn, group_id, uid)
+        if my_role not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Moderators only'}), 403
+        target_role = _group_role(conn, group_id, user_id)
+        if target_role == 'owner':
+            return jsonify({'ok': False, 'msg': "Can't kick the owner"}), 400
+        if target_role == 'mod' and my_role != 'owner':
+            return jsonify({'ok': False, 'msg': 'Only the owner can kick a moderator'}), 403
+        conn.execute('DELETE FROM group_members WHERE group_id=? AND user_id=?', (group_id, user_id))
+        conn.commit()
+        return jsonify({'ok': True, 'member_count': _group_member_count(conn, group_id)})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/roster')
+def api_group_roster(group_id):
+    """Public (any member) read-only member list -- distinct from /members, which is owner-only
+    and includes moderator-management actions."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'members': []}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not _group_role(conn, group_id, uid):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
+        rows = conn.execute('''
+            SELECT u.id, u.username, u.wallet_address, u.avatar_url, u.is_verified, gm.role
+            FROM group_members gm LEFT JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ?
+            ORDER BY CASE gm.role WHEN 'owner' THEN 0 WHEN 'mod' THEN 1 ELSE 2 END, gm.joined_at ASC
+        ''', (group_id,)).fetchall()
+        members = [{
+            'user_id': r[0], 'username': r[1],
+            'wallet_short': (r[2][:4]+'...'+r[2][-4:]) if r[2] and len(r[2]) >= 8 else (r[2] or ''),
+            'avatar_url': r[3], 'is_verified': bool(r[4]), 'role': r[5],
+        } for r in rows]
+        return jsonify({'ok': True, 'members': members})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/typing', methods=['POST'])
+@rate_limit(60, 60)
+def api_group_typing_ping(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not _group_role(conn, group_id, uid):
+            return jsonify({'ok': False}), 403
+        conn.execute('INSERT INTO group_typing (group_id, user_id) VALUES (?,?) '
+                     'ON CONFLICT(group_id, user_id) DO UPDATE SET updated_at=CURRENT_TIMESTAMP',
+                     (group_id, uid))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/typing')
+def api_group_typing_status(group_id):
+    wallet = _authenticated_wallet()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet) if wallet else None
+        cutoff = (datetime.datetime.utcnow() - datetime.timedelta(seconds=6)).strftime('%Y-%m-%d %H:%M:%S')
+        rows = conn.execute('''
+            SELECT u.username FROM group_typing gt JOIN users u ON gt.user_id = u.id
+            WHERE gt.group_id = ? AND gt.updated_at > ? AND gt.user_id != ?
+        ''', (group_id, cutoff, uid or -1)).fetchall()
+        names = [r[0] for r in rows if r[0]]
+        return jsonify({'ok': True, 'typing': names})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/search')
+def api_group_search(group_id):
+    wallet = _authenticated_wallet()
+    q = (request.args.get('q') or '').strip()
+    if not q:
+        return jsonify({'ok': True, 'posts': []})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet) if wallet else None
+        if not _group_role(conn, group_id, uid):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
+        rows = conn.execute('''
+            SELECT gp.id, gp.content, gp.created_at, gp.user_id, u.username, u.avatar_url,
+                   u.wallet_address, u.is_verified, gp.image_url
+            FROM group_posts gp LEFT JOIN users u ON gp.user_id = u.id
+            WHERE gp.group_id = ? AND gp.content LIKE ?
+            ORDER BY gp.created_at DESC LIMIT 50
+        ''', (group_id, '%'+q+'%')).fetchall()
+        posts = [{
+            'id': r[0], 'content': r[1], 'created_at': r[2], 'user_id': r[3],
+            'username': r[4], 'avatar_url': r[5],
+            'wallet_short': (r[6][:4]+'...'+r[6][-4:]) if r[6] and len(r[6]) >= 8 else (r[6] or ''),
+            'is_verified': bool(r[7]), 'image_url': r[8], 'poll': None,
+        } for r in rows]
+        return jsonify({'ok': True, 'posts': posts})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/polls', methods=['POST'])
+@rate_limit(10, 300)
+def api_group_create_poll(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    question = (body.get('question') or '').strip()
+    options = [o.strip() for o in (body.get('options') or []) if isinstance(o, str) and o.strip()]
+    options = options[:6]
+    if not question or len(question) > 300:
+        return jsonify({'ok': False, 'msg': 'Question is required (max 300 chars)'}), 400
+    if len(options) < 2:
+        return jsonify({'ok': False, 'msg': 'At least 2 options are required'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         uid = _get_uid(conn, wallet)
         role = _group_role(conn, group_id, uid)
-        if role not in ('owner', 'mod'):
-            return jsonify({'ok': False, 'msg': 'Owner or moderators only'}), 403
-        conn.execute('UPDATE groups SET rules=? WHERE id=?', (rules or None, group_id))
+        if not role:
+            return jsonify({'ok': False, 'msg': 'Join the group to post'}), 403
+        ann_row = conn.execute('SELECT announcement_only FROM groups WHERE id=?', (group_id,)).fetchone()
+        if ann_row and ann_row[0] and role not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Only moderators can post in this group'}), 403
+        cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content) VALUES (?,?,?)',
+                            (group_id, uid, _sanitize(question)))
+        post_id = cur.lastrowid
+        pcur = conn.execute('INSERT INTO group_polls (group_id, post_id, question, created_by) VALUES (?,?,?,?)',
+                             (group_id, post_id, _sanitize(question), uid))
+        poll_id = pcur.lastrowid
+        for i, opt in enumerate(options):
+            conn.execute('INSERT INTO group_poll_options (poll_id, text, position) VALUES (?,?,?)',
+                         (poll_id, _sanitize(opt)[:120], i))
         conn.commit()
-        return jsonify({'ok': True, 'rules': rules})
+        return jsonify({'ok': True, 'post_id': post_id, 'poll_id': poll_id})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/polls/<int:poll_id>/vote', methods=['POST'])
+@rate_limit(30, 60)
+def api_group_vote_poll(poll_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    option_id = (request.json or {}).get('option_id')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        poll_row = conn.execute('SELECT group_id FROM group_polls WHERE id=?', (poll_id,)).fetchone()
+        if not poll_row:
+            return jsonify({'ok': False, 'msg': 'Poll not found'}), 404
+        if not _group_role(conn, poll_row[0], uid):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
+        opt_row = conn.execute('SELECT id FROM group_poll_options WHERE id=? AND poll_id=?',
+                                (option_id, poll_id)).fetchone()
+        if not opt_row:
+            return jsonify({'ok': False, 'msg': 'Invalid option'}), 400
+        conn.execute('INSERT INTO group_poll_votes (poll_id, option_id, user_id) VALUES (?,?,?) '
+                     'ON CONFLICT(poll_id, user_id) DO UPDATE SET option_id=excluded.option_id',
+                     (poll_id, option_id, uid))
+        conn.commit()
+        counts = dict(conn.execute(
+            'SELECT option_id, COUNT(*) FROM group_poll_votes WHERE poll_id=? GROUP BY option_id',
+            (poll_id,)).fetchall())
+        return jsonify({'ok': True, 'counts': counts, 'my_vote': option_id})
     finally:
         conn.close()
 

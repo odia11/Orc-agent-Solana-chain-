@@ -61,8 +61,43 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-join-btn:disabled{opacity:.5;cursor:default}
 .gd-mods-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--ui);text-decoration:underline;padding:0}
 .gd-mods-btn:hover{color:var(--text)}
-.gd-delete-group-btn{color:var(--red)}
-.gd-delete-group-btn:hover{color:var(--red);opacity:.8}
+
+.gd-quicklinks{display:flex;gap:14px;margin-top:8px}
+.gd-quicklink{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--ui);padding:0}
+.gd-quicklink:hover{color:var(--text)}
+
+.gd-search-wrap{margin:14px 0}
+.gd-search-inp{width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:11px;padding:10px 14px;color:var(--text);font-size:13.5px;font-family:var(--ui);outline:none}
+.gd-search-inp:focus{border-color:var(--accent-border)}
+
+.gd-typing{font-size:12px;color:var(--muted);font-style:italic;min-height:16px;margin:2px 2px 8px}
+
+.gd-pinned{display:flex;gap:10px;padding:14px;background:var(--accent-dim);border:1px solid var(--accent-border);border-radius:13px;margin-bottom:16px}
+.gd-pinned-label{display:flex;align-items:center;gap:5px;font-size:11px;font-weight:700;color:var(--accent);text-transform:uppercase;letter-spacing:.04em;margin-bottom:4px}
+.gd-pinned-unpin{background:none;border:none;color:var(--muted);font-size:11.5px;cursor:pointer;margin-left:auto}
+.gd-pinned-unpin:hover{color:var(--text)}
+
+.gd-post-img{max-width:100%;border-radius:10px;margin-top:8px;display:block;cursor:pointer}
+.gd-attach-preview{position:relative;display:inline-block;margin:8px 0 0}
+.gd-attach-preview img{max-height:120px;border-radius:10px;display:block}
+.gd-attach-remove{position:absolute;top:-6px;right:-6px;width:20px;height:20px;border-radius:50%;background:var(--bg4);border:1px solid var(--border2);color:var(--text);font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+.gd-composer-tools{display:flex;gap:6px;margin-top:6px}
+.gd-composer-tool-btn{background:none;border:1px solid var(--border2);color:var(--sub);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:var(--ui)}
+.gd-composer-tool-btn:hover{border-color:var(--muted);color:var(--text)}
+
+.gd-poll{border:1px solid var(--border2);border-radius:12px;padding:12px;margin-top:8px}
+.gd-poll-q{font-weight:700;font-size:13.5px;color:var(--text);margin-bottom:10px}
+.gd-poll-opt{position:relative;border:1px solid var(--border2);border-radius:9px;padding:8px 12px;margin-bottom:6px;cursor:pointer;overflow:hidden;font-size:13px}
+.gd-poll-opt-fill{position:absolute;inset:0;background:var(--accent-dim);z-index:0;transition:width .3s}
+.gd-poll-opt-fill.mine{background:rgba(247,185,85,.22)}
+.gd-poll-opt-row{position:relative;z-index:1;display:flex;justify-content:space-between;gap:8px;color:var(--text)}
+.gd-poll-opt-pct{color:var(--muted);font-family:var(--mono);font-size:12px}
+.gd-poll-total{font-size:11.5px;color:var(--muted);margin-top:4px}
+.gd-poll-opt-input{display:flex;gap:6px;margin-bottom:6px}
+.gd-poll-opt-input input{flex:1;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:var(--ui);outline:none}
+.gd-poll-opt-remove{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px}
+
+.gd-mute-actions{display:flex;gap:4px}
 
 .gd-composer{display:flex;gap:10px;align-items:flex-end;margin:20px 0}
 .gd-composer-avatar{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text);flex-shrink:0;overflow:hidden}
@@ -73,13 +108,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-btn{padding:11px 20px;border-radius:11px;background:var(--accent);color:#0a0b0e;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--ui);flex-shrink:0;height:44px}
 .gd-post-btn:disabled{opacity:.4;cursor:default}
 .gd-join-prompt{padding:14px;text-align:center;background:var(--bg2);border:1px solid var(--border);border-radius:13px;font-size:13px;color:var(--sub);margin:20px 0}
-.gd-composer-img-btn{background:none;border:1px solid var(--border2);border-radius:11px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;flex-shrink:0;color:var(--sub);transition:border-color .15s,color .15s}
-.gd-composer-img-btn:hover{border-color:var(--muted);color:var(--text)}
-.gd-composer-img-btn.loading{opacity:.5;cursor:default;pointer-events:none}
-.gd-composer-preview{position:relative;display:inline-block;margin-bottom:8px}
-.gd-composer-preview img{max-height:120px;max-width:200px;border-radius:10px;display:block;object-fit:cover}
-.gd-composer-preview-remove{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#101216;border:1px solid #21252c;color:#eef1f5;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;padding:0}
-.gd-post-img{max-width:100%;max-height:340px;border-radius:12px;margin-top:8px;cursor:pointer;display:block}
 
 .gd-mention-menu{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:4px;min-width:200px;max-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:10}
 .gd-mention-menu.open{display:block}
@@ -101,25 +129,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-text{font-size:13.5px;color:var(--sub);line-height:1.5;margin-top:3px;word-break:break-word;white-space:pre-wrap}
 .gd-post-del{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto;opacity:0;transition:opacity .15s}
 .gd-post:hover .gd-post-del{opacity:1}
-.gd-post-pin{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto;opacity:0;transition:opacity .15s}
-.gd-post:hover .gd-post-pin{opacity:1}
-.gd-post-pin:hover{color:var(--accent)}
-.gd-post-pin:disabled{opacity:.5!important;cursor:default}
-.gd-post-pinned{background:var(--accent-dim)}
-.gd-pin-badge{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px}
 .gd-post-del:hover{color:var(--red)}
 .gd-mention{color:var(--accent);font-weight:600}
-
-.gd-rules{background:var(--bg2);border:1px solid var(--border);border-radius:14px;margin:14px 0;overflow:hidden}
-.gd-rules-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer}
-.gd-rules-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text)}
-.gd-rules-chevron{transition:transform .15s;color:var(--muted);flex-shrink:0}
-.gd-rules.open .gd-rules-chevron{transform:rotate(180deg)}
-.gd-rules-body{display:none;padding:0 16px 16px;font-size:13px;color:var(--sub);line-height:1.6;white-space:pre-wrap;word-break:break-word}
-.gd-rules.open .gd-rules-body{display:block}
-.gd-rules-edit-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
-.gd-rules-edit-btn:hover{color:var(--text)}
-.gd-rules-empty-mod{padding:12px 16px;font-size:12.5px;color:var(--muted);margin:14px 0;background:var(--bg2);border:1px dashed var(--border2);border-radius:14px}
 
 .gd-react-bar{display:flex;align-items:center;gap:5px;margin-top:8px;flex-wrap:wrap}
 .gd-react-pill{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:3px 9px;font-size:12px;cursor:pointer;color:var(--sub);transition:border-color .15s,background .15s;font-family:var(--ui)}
@@ -202,27 +213,29 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
         <span class="gd-verified" id="gd-verified" style="display:none">✓</span>
       </div>
       <div class="gd-meta" id="gd-meta">—</div>
+      <div class="gd-quicklinks">
+        <button class="gd-quicklink" onclick="_openRoster()">👥 Members</button>
+        <button class="gd-quicklink" onclick="_openRules()">📋 Rules</button>
+        <button class="gd-quicklink" onclick="_toggleSearch()">🔍 Search</button>
+      </div>
       <div class="gd-desc" id="gd-desc" style="display:none"></div>
     </div>
     <div class="gd-header-actions">
       <button class="gd-join-btn" id="gd-join-btn" onclick="_toggleJoin()" disabled>…</button>
       <button class="gd-mods-btn" id="gd-mods-btn" style="display:none" onclick="_openModsModal()">Manage moderators</button>
-      <button class="gd-mods-btn gd-delete-group-btn" id="gd-delete-group-btn" style="display:none" onclick="_deleteGroup()">Delete group</button>
+      <button class="gd-mods-btn" id="gd-settings-btn" style="display:none" onclick="_openSettingsModal()">Group settings</button>
     </div>
   </div>
 
-  <div class="gd-rules" id="gd-rules" style="display:none">
-    <div class="gd-rules-hdr" onclick="_toggleRules()">
-      <span class="gd-rules-title">📋 Group Rules <svg class="gd-rules-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
-      <button class="gd-rules-edit-btn" id="gd-rules-edit-btn" style="display:none" onclick="event.stopPropagation();_openRulesModal()">Edit</button>
-    </div>
-    <div class="gd-rules-body" id="gd-rules-body"></div>
+  <div class="gd-search-wrap" id="gd-search-wrap" style="display:none">
+    <input type="text" class="gd-search-inp" id="gd-search-inp" placeholder="Search posts in this group…" oninput="_onGroupSearchInput(this.value)">
   </div>
-  <div class="gd-rules-empty-mod" id="gd-rules-empty-mod" style="display:none">
-    No group rules yet. <button class="gd-rules-edit-btn" onclick="_openRulesModal()">Add rules</button>
-  </div>
+
+  <div id="gd-pinned-wrap"></div>
 
   <div id="gd-composer-wrap"></div>
+
+  <div class="gd-typing" id="gd-typing"></div>
 
   <div class="gd-feed" id="gd-feed">
     <div class="gd-empty">Loading…</div>
@@ -239,14 +252,59 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   </div>
 </div>
 
-<div class="gd-modal-backdrop" id="gd-rules-backdrop" onclick="_closeRulesModal(event)">
+<div class="gd-modal-backdrop" id="gd-roster-backdrop" onclick="_closeRoster(event)">
   <div class="gd-modal" role="dialog" aria-modal="true">
     <div class="gd-modal-header">
-      <div class="gd-modal-title">Edit Group Rules</div>
-      <button class="gd-modal-close" onclick="_closeRulesModal()">✕</button>
+      <div class="gd-modal-title">Members</div>
+      <button class="gd-modal-close" onclick="_closeRoster()">✕</button>
     </div>
-    <textarea id="gd-rules-input" maxlength="2000" placeholder="e.g.&#10;1. Be respectful&#10;2. No spam or scam links&#10;3. Keep discussion on-topic" style="width:100%;min-height:160px;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;color:var(--text);font-family:var(--ui);font-size:13px;resize:vertical;outline:none"></textarea>
-    <button class="gd-post-btn" style="width:100%" onclick="_saveRules()">Save</button>
+    <div id="gd-roster-list"><div class="gd-empty">Loading…</div></div>
+  </div>
+</div>
+
+<div class="gd-modal-backdrop" id="gd-rules-backdrop" onclick="_closeRules(event)">
+  <div class="gd-modal" role="dialog" aria-modal="true">
+    <div class="gd-modal-header">
+      <div class="gd-modal-title">Group rules</div>
+      <button class="gd-modal-close" onclick="_closeRules()">✕</button>
+    </div>
+    <div id="gd-rules-view" style="font-size:13px;color:var(--sub);line-height:1.6;white-space:pre-wrap"></div>
+    <textarea id="gd-rules-edit" class="gd-composer-inp" style="display:none;width:100%;min-height:140px" placeholder="Write the rules for this group…" maxlength="4000"></textarea>
+    <div id="gd-rules-actions" style="display:none;justify-content:flex-end;gap:8px">
+      <button class="gd-member-action" onclick="_cancelEditRules()">Cancel</button>
+      <button class="gd-join-btn" onclick="_saveRules()">Save</button>
+    </div>
+    <button class="gd-mods-btn" id="gd-rules-edit-btn" style="display:none" onclick="_startEditRules()">Edit rules</button>
+  </div>
+</div>
+
+<div class="gd-modal-backdrop" id="gd-settings-backdrop" onclick="_closeSettingsModal(event)">
+  <div class="gd-modal" role="dialog" aria-modal="true">
+    <div class="gd-modal-header">
+      <div class="gd-modal-title">Group settings</div>
+      <button class="gd-modal-close" onclick="_closeSettingsModal()">✕</button>
+    </div>
+    <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--text);cursor:pointer">
+      <span>Announcement-only<br><span style="font-size:11.5px;color:var(--muted);font-weight:400">Only moderators can post</span></span>
+      <input type="checkbox" id="gd-ann-only-toggle" onchange="_toggleAnnouncementOnly(this)" style="width:36px;height:20px;accent-color:#f7b955;flex-shrink:0">
+    </label>
+  </div>
+</div>
+
+<div class="gd-modal-backdrop" id="gd-poll-backdrop" onclick="_closePollModal(event)">
+  <div class="gd-modal" role="dialog" aria-modal="true">
+    <div class="gd-modal-header">
+      <div class="gd-modal-title">Create a poll</div>
+      <button class="gd-modal-close" onclick="_closePollModal()">✕</button>
+    </div>
+    <input type="text" class="gd-composer-inp" id="gd-poll-question" placeholder="Ask a question…" maxlength="300" style="width:100%">
+    <div id="gd-poll-options"></div>
+    <button class="gd-member-action" onclick="_addPollOption()">+ Add option</button>
+    <div id="gd-poll-error" style="color:#ff4d6a;font-size:12px;display:none"></div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="gd-member-action" onclick="_closePollModal()">Cancel</button>
+      <button class="gd-join-btn" id="gd-poll-submit-btn" onclick="_submitPoll()">Create poll</button>
+    </div>
   </div>
 </div>
 
@@ -260,18 +318,12 @@ var _myUsername     = '';
 var _myAvatar       = '';
 var _myUid          = 0;
 var _groupData      = null;
-var _pendingImageUrl = '';
 
 function esc(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 }
 function _apiHeaders(){
   var h = {'Content-Type':'application/json','X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
-  if(_clientSecret) h['X-API-Shared-Secret'] = _clientSecret;
-  return h;
-}
-function _uploadHeaders(){
-  var h = {'X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
   if(_clientSecret) h['X-API-Shared-Secret'] = _clientSecret;
   return h;
 }
@@ -342,7 +394,7 @@ function _renderHeader(g){
   }
 
   document.getElementById('gd-mods-btn').style.display = g.is_owner ? '' : 'none';
-  document.getElementById('gd-delete-group-btn').style.display = g.is_owner ? '' : 'none';
+  document.getElementById('gd-settings-btn').style.display = g.is_owner ? '' : 'none';
 
   var editWrap = document.getElementById('gd-banner-edit-wrap');
   var avatarBtn = document.getElementById('gd-avatar-edit-btn');
@@ -359,51 +411,10 @@ function _renderHeader(g){
     document.getElementById('gd-change-banner-btn').textContent = 'Change banner';
   }
 
+  _renderPinned(g);
   _renderComposer(g);
-  _renderRules(g);
   if(g.token_symbol) _loadPriceChange(g.token_symbol);
-}
-
-function _renderRules(g){
-  var panel    = document.getElementById('gd-rules');
-  var body     = document.getElementById('gd-rules-body');
-  var editBtn  = document.getElementById('gd-rules-edit-btn');
-  var emptyMod = document.getElementById('gd-rules-empty-mod');
-  editBtn.style.display = g.is_mod ? '' : 'none';
-  if(g.rules){
-    body.textContent = g.rules;
-    panel.style.display = '';
-    emptyMod.style.display = 'none';
-  } else {
-    panel.style.display = 'none';
-    emptyMod.style.display = g.is_mod ? '' : 'none';
-  }
-}
-
-function _toggleRules(){
-  document.getElementById('gd-rules').classList.toggle('open');
-}
-
-function _openRulesModal(){
-  document.getElementById('gd-rules-input').value = (_groupData && _groupData.rules) || '';
-  document.getElementById('gd-rules-backdrop').classList.add('open');
-}
-
-function _closeRulesModal(ev){
-  if(ev && ev.target !== ev.currentTarget) return;
-  document.getElementById('gd-rules-backdrop').classList.remove('open');
-}
-
-function _saveRules(){
-  var val = document.getElementById('gd-rules-input').value.trim();
-  fetch('/api/groups/'+_groupId+'/rules', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({rules:val})})
-    .then(function(r){return r.json();}).then(function(d){
-      if(!d.ok){ _showToast(d.msg||'Could not save rules', 'err'); return; }
-      _groupData.rules = val;
-      _renderRules(_groupData);
-      _closeRulesModal();
-      _showToast('Rules saved', 'ok');
-    }).catch(function(){ _showToast('Network error', 'err'); });
+  _startTypingPoll();
 }
 
 function _loadPriceChange(symbol){
@@ -427,53 +438,32 @@ function _renderComposer(g){
     wrap.innerHTML = '<div class="gd-join-prompt">Join this group to post.</div>';
     return;
   }
+  if(g.announcement_only && !g.is_mod){
+    wrap.innerHTML = '<div class="gd-join-prompt">Only moderators can post in this group.</div>';
+    return;
+  }
+  if(g.is_muted){
+    wrap.innerHTML = '<div class="gd-join-prompt">You are muted in this group and can\'t post right now.</div>';
+    return;
+  }
   var avatarInner = _myAvatar
     ? '<img src="'+esc(_myAvatar)+'" alt="">'
     : esc((_myUsername||'?')[0].toUpperCase());
   wrap.innerHTML =
-    '<div class="gd-composer" style="position:relative">'
+    '<div class="gd-composer" style="position:relative;align-items:flex-start">'
       +'<div class="gd-composer-avatar">'+avatarInner+'</div>'
       +'<div style="position:relative;flex:1">'
-        +'<div class="gd-composer-preview" id="gd-composer-preview" style="display:none">'
-          +'<img id="gd-composer-preview-img" src="" alt="">'
-          +'<button type="button" class="gd-composer-preview-remove" onclick="_removeComposerImage()">✕</button>'
-        +'</div>'
-        +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Post to '+esc(g.name)+'…" rows="1" style="width:100%" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';_onComposerInput(this)" onkeydown="_onComposerKeydown(event)"></textarea>'
+        +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Post to '+esc(g.name)+'…" rows="1" style="width:100%" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';_onComposerInput(this);_pingTyping()" onkeydown="_onComposerKeydown(event)"></textarea>'
         +'<div class="gd-mention-menu" id="gd-mention-menu"></div>'
+        +'<div id="gd-attach-preview-wrap"></div>'
+        +'<div class="gd-composer-tools">'
+          +'<button class="gd-composer-tool-btn" onclick="document.getElementById(\'gd-image-input\').click()">🖼️ Image</button>'
+          +'<button class="gd-composer-tool-btn" onclick="_openPollModal()">📊 Poll</button>'
+          +'<input type="file" id="gd-image-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
+        +'</div>'
       +'</div>'
-      +'<button type="button" class="gd-composer-img-btn" id="gd-composer-img-btn" onclick="document.getElementById(\'gd-composer-img-input\').click()" title="Add image">📷</button>'
-      +'<input type="file" id="gd-composer-img-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
       +'<button class="gd-post-btn" id="gd-post-btn" onclick="_submitPost()">Post</button>'
     +'</div>';
-  _pendingImageUrl = '';
-}
-
-function _onComposerImageFile(input){
-  var file = input.files && input.files[0];
-  input.value = '';
-  if(!file) return;
-  var ALLOWED = ['image/jpeg','image/png','image/gif','image/webp'];
-  if(ALLOWED.indexOf(file.type) === -1){ _showToast('Only jpg/png/gif/webp allowed', 'err'); return; }
-  if(file.size > 5*1024*1024){ _showToast('Image too large (max 5 MB)', 'err'); return; }
-  var btn = document.getElementById('gd-composer-img-btn');
-  if(btn) btn.classList.add('loading');
-  var fd = new FormData();
-  fd.append('image', file);
-  fetch('/api/groups/'+_groupId+'/upload-image', {method:'POST', credentials:'include', headers:_uploadHeaders(), body:fd})
-    .then(function(r){return r.json();}).then(function(d){
-      if(btn) btn.classList.remove('loading');
-      if(!d.ok){ _showToast(d.msg||'Upload failed', 'err'); return; }
-      _pendingImageUrl = d.url;
-      var prev = document.getElementById('gd-composer-preview');
-      var img = document.getElementById('gd-composer-preview-img');
-      if(prev && img){ img.src = d.url; prev.style.display = 'inline-block'; }
-    }).catch(function(){ if(btn) btn.classList.remove('loading'); _showToast('Network error', 'err'); });
-}
-
-function _removeComposerImage(){
-  _pendingImageUrl = '';
-  var prev = document.getElementById('gd-composer-preview');
-  if(prev) prev.style.display = 'none';
 }
 
 function _renderMentionText(content){
@@ -482,39 +472,29 @@ function _renderMentionText(content){
 
 function _postHtml(p){
   var isMine = p.user_id === _myUid;
-  var isMod = _groupData && _groupData.is_mod;
-  var canDelete = isMine || isMod;
+  var canDelete = isMine || (_groupData && _groupData.is_mod);
+  var canPin = _groupData && _groupData.is_mod && !p.poll;
   var avatarInner = p.avatar_url
     ? '<img src="'+esc(p.avatar_url)+'" alt="" onerror="this.style.display=\'none\'">'
     : esc((p.username||p.wallet_short||'?')[0].toUpperCase());
   var name = p.username || p.wallet_short || 'Unknown';
   return ''
-    +'<div class="gd-post'+(p.is_pinned?' gd-post-pinned':'')+'" data-post-id="'+p.id+'">'
+    +'<div class="gd-post" data-post-id="'+p.id+'">'
       +'<div class="gd-post-avatar">'+avatarInner+'</div>'
       +'<div class="gd-post-body">'
-        +(p.is_pinned ? '<div class="gd-pin-badge">📌 Pinned</div>' : '')
         +'<div class="gd-post-head">'
           +'<span class="gd-post-name">'+esc(name)+'</span>'
           +(p.is_verified ? '<span class="gd-verified">✓</span>' : '')
           +'<span class="gd-post-time">· '+esc(_timeAgo(p.created_at))+'</span>'
-          +(isMod ? '<button class="gd-post-pin" data-post-id="'+p.id+'" onclick="_togglePin(this)" title="'+(p.is_pinned?'Unpin':'Pin to top')+'">'+(p.is_pinned?'Unpin':'Pin')+'</button>' : '')
+          +(canPin ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_pinPost('+p.id+')" title="Pin this post">Pin</button>' : '')
           +(canDelete ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_deletePost(this)" title="'+(isMine?'Delete':'Remove (moderator)')+'">Delete</button>' : '')
         +'</div>'
-        +(p.content ? '<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>' : '')
+        +'<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>'
         +(p.image_url ? '<img class="gd-post-img" src="'+esc(p.image_url)+'" alt="" onclick="_openLightbox(this.src)">' : '')
+        +_pollHtml(p.poll)
         +'<div class="gd-react-bar" id="gd-react-g'+p.id+'" data-post-id="g'+p.id+'"></div>'
       +'</div>'
     +'</div>';
-}
-
-function _togglePin(btn){
-  var postId = btn.getAttribute('data-post-id');
-  btn.disabled = true;
-  fetch('/api/groups/'+_groupId+'/posts/'+postId+'/pin', {method:'POST', credentials:'include', headers:_apiHeaders()})
-    .then(function(r){return r.json();}).then(function(d){
-      if(!d.ok){ _showToast(d.msg||'Could not update pin', 'err'); btn.disabled=false; return; }
-      _loadPosts();
-    }).catch(function(){ _showToast('Network error', 'err'); btn.disabled=false; });
 }
 
 var _REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'];
@@ -666,13 +646,202 @@ function _onComposerKeydown(ev){
   }
 }
 
+function _renderPinned(g){
+  var wrap = document.getElementById('gd-pinned-wrap');
+  if(!g.pinned_post_id){ wrap.innerHTML = ''; return; }
+  fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok) return;
+    var p = d.posts.find(function(x){ return x.id === g.pinned_post_id; });
+    if(!p){ wrap.innerHTML = ''; return; }
+    var name = p.username || p.wallet_short || 'Unknown';
+    wrap.innerHTML = '<div class="gd-pinned">'
+      +'<div class="gd-post-avatar">'+(p.avatar_url?'<img src="'+esc(p.avatar_url)+'" alt="">':esc(name[0].toUpperCase()))+'</div>'
+      +'<div style="flex:1;min-width:0">'
+        +'<div class="gd-pinned-label">📌 Pinned'+(g.is_mod?'<button class="gd-pinned-unpin" onclick="_unpinPost()">Unpin</button>':'')+'</div>'
+        +'<span class="gd-post-name">'+esc(name)+'</span>'
+        +'<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>'
+      +'</div>'
+    +'</div>';
+  }).catch(function(){});
+}
+function _pinPost(postId){
+  fetch('/api/groups/'+_groupId+'/pin/'+postId, {method:'POST', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not pin', 'err'); return; }
+      _showToast('Post pinned', 'ok');
+      _loadGroup();
+    }).catch(function(){ _showToast('Network error', 'err'); });
+}
+function _unpinPost(){
+  fetch('/api/groups/'+_groupId+'/unpin', {method:'POST', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not unpin', 'err'); return; }
+      _loadGroup();
+    }).catch(function(){ _showToast('Network error', 'err'); });
+}
+
+function _openRoster(){
+  document.getElementById('gd-roster-backdrop').classList.add('open');
+  _loadRoster();
+}
+function _closeRoster(ev){
+  if(ev && ev.target !== ev.currentTarget) return;
+  document.getElementById('gd-roster-backdrop').classList.remove('open');
+}
+function _rosterRowHtml(m){
+  var avatarInner = m.avatar_url ? '<img src="'+esc(m.avatar_url)+'" alt="">' : esc((m.username||m.wallet_short||'?')[0].toUpperCase());
+  var name = m.username || m.wallet_short || 'Unknown';
+  var canMod = _groupData && _groupData.is_mod && m.role !== 'owner' && m.user_id !== _myUid;
+  var actions = '';
+  if(canMod){
+    actions = '<div class="gd-mute-actions">'
+      +'<button class="gd-member-action" onclick="_muteMember('+m.user_id+',this)">Mute</button>'
+      +'<button class="gd-member-action danger" onclick="_kickMember('+m.user_id+',this)">Kick</button>'
+    +'</div>';
+  } else if(m.role !== 'member'){
+    actions = '<span class="gd-member-role">'+(m.role==='owner'?'Owner':'Mod')+'</span>';
+  }
+  return '<div class="gd-member-row">'
+    +'<div class="gd-member-avatar">'+avatarInner+'</div>'
+    +'<div><div class="gd-member-name">'+esc(name)+(m.is_verified?' ✓':'')+'</div></div>'
+    +actions
+    +'</div>';
+}
+function _loadRoster(){
+  fetch('/api/groups/'+_groupId+'/roster', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    var el = document.getElementById('gd-roster-list');
+    if(!d.ok){ el.innerHTML = '<div class="gd-empty">'+esc(d.msg||'Could not load members')+'</div>'; return; }
+    el.innerHTML = d.members.map(_rosterRowHtml).join('');
+  }).catch(function(){});
+}
+function _muteMember(userId, btn){
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId+'/mute/'+userId, {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({minutes:60})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not mute', 'err'); btn.disabled=false; return; }
+      _showToast('Muted for 1 hour', 'ok');
+    }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
+}
+function _kickMember(userId, btn){
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId+'/kick/'+userId, {method:'POST', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not kick', 'err'); btn.disabled=false; return; }
+      _showToast('Member removed', 'ok');
+      _loadRoster();
+      _loadGroup();
+    }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
+}
+
+function _openRules(){
+  document.getElementById('gd-rules-backdrop').classList.add('open');
+  var view = document.getElementById('gd-rules-view');
+  var editBtn = document.getElementById('gd-rules-edit-btn');
+  var rules = (_groupData && _groupData.rules) || '';
+  view.textContent = rules || 'No rules have been set for this group yet.';
+  editBtn.style.display = (_groupData && _groupData.is_mod) ? '' : 'none';
+}
+function _closeRules(ev){
+  if(ev && ev.target !== ev.currentTarget) return;
+  document.getElementById('gd-rules-backdrop').classList.remove('open');
+  _cancelEditRules();
+}
+function _startEditRules(){
+  document.getElementById('gd-rules-view').style.display = 'none';
+  document.getElementById('gd-rules-edit-btn').style.display = 'none';
+  var ta = document.getElementById('gd-rules-edit');
+  ta.value = (_groupData && _groupData.rules) || '';
+  ta.style.display = '';
+  document.getElementById('gd-rules-actions').style.display = 'flex';
+}
+function _cancelEditRules(){
+  document.getElementById('gd-rules-view').style.display = '';
+  document.getElementById('gd-rules-edit-btn').style.display = (_groupData && _groupData.is_mod) ? '' : 'none';
+  document.getElementById('gd-rules-edit').style.display = 'none';
+  document.getElementById('gd-rules-actions').style.display = 'none';
+}
+function _saveRules(){
+  var rules = document.getElementById('gd-rules-edit').value.trim();
+  fetch('/api/groups/'+_groupId+'/rules', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({rules:rules})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not save', 'err'); return; }
+      if(_groupData) _groupData.rules = rules;
+      _showToast('Rules saved', 'ok');
+      _cancelEditRules();
+      document.getElementById('gd-rules-view').textContent = rules || 'No rules have been set for this group yet.';
+    }).catch(function(){ _showToast('Network error', 'err'); });
+}
+
+function _openSettingsModal(){
+  document.getElementById('gd-settings-backdrop').classList.add('open');
+  document.getElementById('gd-ann-only-toggle').checked = !!(_groupData && _groupData.announcement_only);
+}
+function _closeSettingsModal(ev){
+  if(ev && ev.target !== ev.currentTarget) return;
+  document.getElementById('gd-settings-backdrop').classList.remove('open');
+}
+function _toggleAnnouncementOnly(chk){
+  fetch('/api/groups/'+_groupId+'/settings', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({announcement_only:chk.checked})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not update', 'err'); chk.checked = !chk.checked; return; }
+      if(_groupData) _groupData.announcement_only = chk.checked;
+      _showToast(chk.checked ? 'Announcement-only enabled' : 'Announcement-only disabled', 'ok');
+      _renderComposer(_groupData);
+    }).catch(function(){ _showToast('Network error', 'err'); chk.checked = !chk.checked; });
+}
+
+function _toggleSearch(){
+  var wrap = document.getElementById('gd-search-wrap');
+  var open = wrap.style.display !== 'none';
+  wrap.style.display = open ? 'none' : '';
+  if(!open) document.getElementById('gd-search-inp').focus();
+  else { document.getElementById('gd-search-inp').value = ''; _loadPosts(); }
+}
+var _groupSearchTimer = null;
+function _onGroupSearchInput(q){
+  clearTimeout(_groupSearchTimer);
+  _groupSearchTimer = setTimeout(function(){
+    if(!q.trim()){ _loadPosts(); return; }
+    fetch('/api/groups/'+_groupId+'/search?q='+encodeURIComponent(q.trim()), {credentials:'include'})
+      .then(function(r){return r.json();}).then(function(d){
+        var el = document.getElementById('gd-feed');
+        if(!d.ok || !d.posts.length){ el.innerHTML = '<div class="gd-empty">No matching posts.</div>'; return; }
+        el.innerHTML = d.posts.map(_postHtml).join('');
+        _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
+      }).catch(function(){});
+  }, 300);
+}
+
+var _composerImageData = null;
+
+function _onComposerImageFile(input){
+  var file = input.files && input.files[0];
+  if(!file) return;
+  if(file.size > 3*1024*1024){ _showToast('Image too large (max 3 MB)', 'err'); input.value=''; return; }
+  var reader = new FileReader();
+  reader.onload = function(e){
+    _composerImageData = e.target.result;
+    var wrap = document.getElementById('gd-attach-preview-wrap');
+    if(wrap){
+      wrap.innerHTML = '<div class="gd-attach-preview"><img src="'+_composerImageData+'" alt=""><button class="gd-attach-remove" onclick="_removeComposerImage()">✕</button></div>';
+    }
+  };
+  reader.readAsDataURL(file);
+  input.value = '';
+}
+function _removeComposerImage(){
+  _composerImageData = null;
+  var wrap = document.getElementById('gd-attach-preview-wrap');
+  if(wrap) wrap.innerHTML = '';
+}
+
 function _submitPost(){
   var inp = document.getElementById('gd-composer-inp');
   var content = inp.value.trim();
-  if(!content && !_pendingImageUrl) return;
+  if(!content && !_composerImageData) return;
   var btn = document.getElementById('gd-post-btn');
   btn.disabled = true;
-  fetch('/api/groups/'+_groupId+'/posts', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({content:content, image_url:_pendingImageUrl})})
+  fetch('/api/groups/'+_groupId+'/posts', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({content:content, image_data:_composerImageData||''})})
     .then(function(r){return r.json();}).then(function(d){
       btn.disabled = false;
       if(!d.ok){ _showToast(d.msg||'Could not post', 'err'); return; }
@@ -681,6 +850,91 @@ function _submitPost(){
       _removeComposerImage();
       _loadPosts();
     }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
+}
+
+/* ── polls ── */
+function _openPollModal(){
+  document.getElementById('gd-poll-question').value = '';
+  document.getElementById('gd-poll-error').style.display = 'none';
+  var opts = document.getElementById('gd-poll-options');
+  opts.innerHTML = '';
+  _addPollOption(); _addPollOption();
+  document.getElementById('gd-poll-backdrop').classList.add('open');
+}
+function _closePollModal(ev){
+  if(ev && ev.target !== ev.currentTarget) return;
+  document.getElementById('gd-poll-backdrop').classList.remove('open');
+}
+function _addPollOption(){
+  var opts = document.getElementById('gd-poll-options');
+  if(opts.children.length >= 6) return;
+  var row = document.createElement('div');
+  row.className = 'gd-poll-opt-input';
+  row.innerHTML = '<input type="text" placeholder="Option" maxlength="120">'
+    + '<button class="gd-poll-opt-remove" onclick="this.parentElement.remove()">✕</button>';
+  opts.appendChild(row);
+}
+function _submitPoll(){
+  var question = document.getElementById('gd-poll-question').value.trim();
+  var opts = Array.from(document.querySelectorAll('#gd-poll-options input')).map(function(i){ return i.value.trim(); }).filter(Boolean);
+  var errEl = document.getElementById('gd-poll-error');
+  if(!question){ errEl.textContent = 'Question is required.'; errEl.style.display=''; return; }
+  if(opts.length < 2){ errEl.textContent = 'At least 2 options are required.'; errEl.style.display=''; return; }
+  errEl.style.display = 'none';
+  var btn = document.getElementById('gd-poll-submit-btn');
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId+'/polls', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({question:question, options:opts})})
+    .then(function(r){return r.json();}).then(function(d){
+      btn.disabled = false;
+      if(!d.ok){ errEl.textContent = d.msg||'Could not create poll'; errEl.style.display=''; return; }
+      _closePollModal();
+      _loadPosts();
+    }).catch(function(){ btn.disabled=false; errEl.textContent='Network error'; errEl.style.display=''; });
+}
+function _pollHtml(poll){
+  if(!poll) return '';
+  var total = poll.total_votes || 0;
+  var opts = poll.options.map(function(o){
+    var pct = total ? Math.round(o.votes/total*100) : 0;
+    var isMine = poll.my_vote === o.id;
+    return '<div class="gd-poll-opt" onclick="_votePoll('+poll.poll_id+','+o.id+',this)">'
+      +'<div class="gd-poll-opt-fill'+(isMine?' mine':'')+'" style="width:'+pct+'%"></div>'
+      +'<div class="gd-poll-opt-row"><span>'+(isMine?'✓ ':'')+esc(o.text)+'</span><span class="gd-poll-opt-pct">'+pct+'%</span></div>'
+    +'</div>';
+  }).join('');
+  return '<div class="gd-poll">'+opts+'<div class="gd-poll-total">'+total+' vote'+(total===1?'':'s')+'</div></div>';
+}
+function _votePoll(pollId, optionId, el){
+  fetch('/api/groups/polls/'+pollId+'/vote', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({option_id:optionId})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not vote', 'err'); return; }
+      _loadPosts();
+    }).catch(function(){ _showToast('Network error', 'err'); });
+}
+
+/* ── typing indicator ── */
+var _typingPollTimer = null;
+var _typingPingTimer = null;
+function _startTypingPoll(){
+  clearInterval(_typingPollTimer);
+  _typingPollTimer = setInterval(_pollTyping, 3000);
+  _pollTyping();
+}
+function _pollTyping(){
+  fetch('/api/groups/'+_groupId+'/typing', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    var el = document.getElementById('gd-typing');
+    if(!el) return;
+    if(!d.ok || !d.typing || !d.typing.length){ el.textContent = ''; return; }
+    var names = d.typing.slice(0,3);
+    var verb = names.length === 1 ? 'is' : 'are';
+    el.textContent = names.join(', ') + ' ' + verb + ' typing…';
+  }).catch(function(){});
+}
+function _pingTyping(){
+  clearTimeout(_typingPingTimer);
+  _typingPingTimer = setTimeout(function(){
+    fetch('/api/groups/'+_groupId+'/typing', {method:'POST', credentials:'include', headers:_apiHeaders()}).catch(function(){});
+  }, 400);
 }
 
 function _deletePost(btn){
@@ -779,14 +1033,6 @@ function _openModsModal(){
 function _closeModsModal(ev){
   if(ev && ev.target !== ev.currentTarget) return;
   document.getElementById('gd-mods-backdrop').classList.remove('open');
-}
-function _deleteGroup(){
-  if(!confirm('Delete this group permanently?\n\nAll posts and memberships will be removed. This cannot be undone.')) return;
-  fetch('/api/groups/'+_groupId, {method:'DELETE', credentials:'include', headers:_apiHeaders()})
-    .then(function(r){return r.json();}).then(function(d){
-      if(!d.ok){ _showToast(d.msg||'Could not delete group', 'err'); return; }
-      window.location.href = '/groups';
-    }).catch(function(){ _showToast('Network error', 'err'); });
 }
 function _memberRowHtml(m){
   var avatarInner = m.avatar_url
