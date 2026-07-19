@@ -95,6 +95,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-del:hover{color:var(--red)}
 .gd-mention{color:var(--accent);font-weight:600}
 
+.gd-rules{background:var(--bg2);border:1px solid var(--border);border-radius:14px;margin:14px 0;overflow:hidden}
+.gd-rules-hdr{display:flex;align-items:center;justify-content:space-between;padding:12px 16px;cursor:pointer}
+.gd-rules-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:var(--text)}
+.gd-rules-chevron{transition:transform .15s;color:var(--muted);flex-shrink:0}
+.gd-rules.open .gd-rules-chevron{transform:rotate(180deg)}
+.gd-rules-body{display:none;padding:0 16px 16px;font-size:13px;color:var(--sub);line-height:1.6;white-space:pre-wrap;word-break:break-word}
+.gd-rules.open .gd-rules-body{display:block}
+.gd-rules-edit-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
+.gd-rules-edit-btn:hover{color:var(--text)}
+.gd-rules-empty-mod{padding:12px 16px;font-size:12.5px;color:var(--muted);margin:14px 0;background:var(--bg2);border:1px dashed var(--border2);border-radius:14px}
+
 .gd-react-bar{display:flex;align-items:center;gap:5px;margin-top:8px;flex-wrap:wrap}
 .gd-react-pill{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:3px 9px;font-size:12px;cursor:pointer;color:var(--sub);transition:border-color .15s,background .15s;font-family:var(--ui)}
 .gd-react-pill:hover{border-color:var(--muted)}
@@ -184,6 +195,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
     </div>
   </div>
 
+  <div class="gd-rules" id="gd-rules" style="display:none">
+    <div class="gd-rules-hdr" onclick="_toggleRules()">
+      <span class="gd-rules-title">📋 Group Rules <svg class="gd-rules-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></span>
+      <button class="gd-rules-edit-btn" id="gd-rules-edit-btn" style="display:none" onclick="event.stopPropagation();_openRulesModal()">Edit</button>
+    </div>
+    <div class="gd-rules-body" id="gd-rules-body"></div>
+  </div>
+  <div class="gd-rules-empty-mod" id="gd-rules-empty-mod" style="display:none">
+    No group rules yet. <button class="gd-rules-edit-btn" onclick="_openRulesModal()">Add rules</button>
+  </div>
+
   <div id="gd-composer-wrap"></div>
 
   <div class="gd-feed" id="gd-feed">
@@ -198,6 +220,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <button class="gd-modal-close" onclick="_closeModsModal()">✕</button>
     </div>
     <div id="gd-mods-list"><div class="gd-empty">Loading…</div></div>
+  </div>
+</div>
+
+<div class="gd-modal-backdrop" id="gd-rules-backdrop" onclick="_closeRulesModal(event)">
+  <div class="gd-modal" role="dialog" aria-modal="true">
+    <div class="gd-modal-header">
+      <div class="gd-modal-title">Edit Group Rules</div>
+      <button class="gd-modal-close" onclick="_closeRulesModal()">✕</button>
+    </div>
+    <textarea id="gd-rules-input" maxlength="2000" placeholder="e.g.&#10;1. Be respectful&#10;2. No spam or scam links&#10;3. Keep discussion on-topic" style="width:100%;min-height:160px;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:10px 12px;color:var(--text);font-family:var(--ui);font-size:13px;resize:vertical;outline:none"></textarea>
+    <button class="gd-post-btn" style="width:100%" onclick="_saveRules()">Save</button>
   </div>
 </div>
 
@@ -304,7 +337,50 @@ function _renderHeader(g){
   }
 
   _renderComposer(g);
+  _renderRules(g);
   if(g.token_symbol) _loadPriceChange(g.token_symbol);
+}
+
+function _renderRules(g){
+  var panel    = document.getElementById('gd-rules');
+  var body     = document.getElementById('gd-rules-body');
+  var editBtn  = document.getElementById('gd-rules-edit-btn');
+  var emptyMod = document.getElementById('gd-rules-empty-mod');
+  editBtn.style.display = g.is_mod ? '' : 'none';
+  if(g.rules){
+    body.textContent = g.rules;
+    panel.style.display = '';
+    emptyMod.style.display = 'none';
+  } else {
+    panel.style.display = 'none';
+    emptyMod.style.display = g.is_mod ? '' : 'none';
+  }
+}
+
+function _toggleRules(){
+  document.getElementById('gd-rules').classList.toggle('open');
+}
+
+function _openRulesModal(){
+  document.getElementById('gd-rules-input').value = (_groupData && _groupData.rules) || '';
+  document.getElementById('gd-rules-backdrop').classList.add('open');
+}
+
+function _closeRulesModal(ev){
+  if(ev && ev.target !== ev.currentTarget) return;
+  document.getElementById('gd-rules-backdrop').classList.remove('open');
+}
+
+function _saveRules(){
+  var val = document.getElementById('gd-rules-input').value.trim();
+  fetch('/api/groups/'+_groupId+'/rules', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({rules:val})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not save rules', 'err'); return; }
+      _groupData.rules = val;
+      _renderRules(_groupData);
+      _closeRulesModal();
+      _showToast('Rules saved', 'ok');
+    }).catch(function(){ _showToast('Network error', 'err'); });
 }
 
 function _loadPriceChange(symbol){

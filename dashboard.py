@@ -1173,6 +1173,7 @@ def run_migrations():
         "ALTER TABLE trades ADD COLUMN view_count INTEGER DEFAULT 0",
         "ALTER TABLE groups ADD COLUMN avatar_url TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN banner_url TEXT DEFAULT NULL",
+        "ALTER TABLE groups ADD COLUMN rules TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -5007,7 +5008,7 @@ def api_group_detail(group_id):
     try:
         row = conn.execute(
             'SELECT id, token_address, token_symbol, name, description, is_private, created_by, '
-            'avatar_url, banner_url '
+            'avatar_url, banner_url, rules '
             'FROM groups WHERE id=?', (group_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
@@ -5021,6 +5022,7 @@ def api_group_detail(group_id):
             'is_mod': role in ('owner', 'mod'),
             'avatar_url': row[7] or '',
             'banner_url': row[8] or '',
+            'rules': row[9] or '',
             'member_count': _group_member_count(conn, group_id),
         }
         return jsonify({'ok': True, 'group': group})
@@ -5263,6 +5265,28 @@ def api_group_avatar(group_id):
 @rate_limit(10, 60)
 def api_group_banner(group_id):
     return _group_image_upload(group_id, 'banner_url', (request.json or {}).get('banner_data', ''))
+
+
+@app.route('/api/groups/<int:group_id>/rules', methods=['POST'])
+@rate_limit(10, 60)
+def api_group_rules(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    rules = str((request.json or {}).get('rules', '') or '').strip()
+    if len(rules) > 2000:
+        return jsonify({'ok': False, 'msg': 'Rules too long (max 2000 chars)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        role = _group_role(conn, group_id, uid)
+        if role not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Owner or moderators only'}), 403
+        conn.execute('UPDATE groups SET rules=? WHERE id=?', (rules or None, group_id))
+        conn.commit()
+        return jsonify({'ok': True, 'rules': rules})
+    finally:
+        conn.close()
 
 
 @app.route('/api/notifications')
