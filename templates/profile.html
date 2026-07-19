@@ -343,7 +343,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
     <!-- mobile top bar (hidden on desktop via CSS) -->
     <div class="pf-mobile-hdr">
-      <button onclick="history.back()" class="pf-mobile-back">←</button>
+      <button onclick="history.length>1?history.back():location.href='/'" class="pf-mobile-back">←</button>
       <span class="pf-mobile-title">Profile</span>
       <div style="width:44px"></div>
     </div>

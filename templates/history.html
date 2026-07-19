@@ -150,7 +150,7 @@ a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accen
 </head>
 <body>
 <div class="mobile-back-bar">
-  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
+  <button onclick="history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Bot Trade History</span>
 </div>
 <div class="page-wrap">

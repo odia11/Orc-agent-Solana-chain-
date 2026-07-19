@@ -275,7 +275,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
     <!-- mobile top bar -->
     <div class="pf-mobile-hdr">
-      <button onclick="history.back()" class="pf-mobile-back">←</button>
+      <button onclick="history.length>1?history.back():location.href='/'" class="pf-mobile-back">←</button>
       <span class="pf-mobile-title">Settings</span>
       <div style="width:44px"></div>
     </div>

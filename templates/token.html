@@ -228,7 +228,7 @@ a.hdr-btn:hover,button.hdr-btn:hover{border-color:#555555;color:#ffffff}
 <body>
 <div class="page-wrap">
 <div class="mobile-back-bar">
-  <button onclick="history.back()" class="mobile-back-btn">← Back</button>
+  <button onclick="history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">{{ token_symbol or 'Token' }}</span>
 </div>
 

@@ -487,7 +487,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 </head>
 <body>
 <div class="wlt-mobile-hdr">
-  <button onclick="history.back()" class="wlt-mobile-back">← Back</button>
+  <button onclick="history.length>1?history.back():location.href='/'" class="wlt-mobile-back">← Back</button>
   <span class="wlt-mobile-title">Wallet</span>
 </div>
 <div id="app">
