@@ -5078,7 +5078,10 @@ def api_group_post_delete(group_id, post_id):
                             (post_id, group_id)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Post not found'}), 404
-        if row[0] != uid and not _is_owner(wallet):
+        member_row = conn.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
+                                   (group_id, uid)).fetchone()
+        is_group_owner = bool(member_row and member_row[0] == 'owner')
+        if row[0] != uid and not _is_owner(wallet) and not is_group_owner:
             return jsonify({'ok': False, 'msg': 'Not your post'}), 403
         conn.execute('DELETE FROM group_posts WHERE id=?', (post_id,))
         conn.commit()
