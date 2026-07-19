@@ -1302,6 +1302,13 @@ function fmtInt(n){
   if(!n||n===0) return '—';
   return Math.round(n).toLocaleString();
 }
+function _fmtViewCount(n){
+  n = n || 0;
+  var compact = n>=1e6 ? (n/1e6).toFixed(1)+'M' :
+                n>=1e3 ? (n/1e3).toFixed(1)+'K' :
+                String(n);
+  return compact + (n===1 ? ' view' : ' views');
+}
 
 // ── MARKET RENDER ──
 function renderMarket(tokens){
@@ -8008,6 +8015,7 @@ function _renderFeedCard(e){
       +(_fcHasNativeShare ? '<button class="fc-share-item" onclick="event.stopPropagation();_fcShareNative(\''+esc(safePostId)+'\')">Share via…</button>' : '')
     +'</div>'
     +'</div>'
+    +'<span class="fc-view-count" title="Views">'+esc(_fmtViewCount(e.view_count))+'</span>'
     +'</div>'
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'">'
