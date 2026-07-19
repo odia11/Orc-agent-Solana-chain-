@@ -5552,6 +5552,37 @@ def api_group_kick(group_id, user_id):
         conn.close()
 
 
+@app.route('/api/groups/<int:group_id>', methods=['DELETE'])
+@rate_limit(5, 300)
+def api_group_delete(group_id):
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        row = conn.execute('SELECT created_by FROM groups WHERE id=?', (group_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        if row[0] != uid and not _is_owner(wallet):
+            return jsonify({'ok': False, 'msg': 'Only the group owner can delete this group'}), 403
+        poll_ids = [r[0] for r in conn.execute('SELECT id FROM group_polls WHERE group_id=?', (group_id,)).fetchall()]
+        if poll_ids:
+            ph = ','.join('?' * len(poll_ids))
+            conn.execute(f'DELETE FROM group_poll_votes WHERE poll_id IN ({ph})', poll_ids)
+            conn.execute(f'DELETE FROM group_poll_options WHERE poll_id IN ({ph})', poll_ids)
+            conn.execute(f'DELETE FROM group_polls WHERE id IN ({ph})', poll_ids)
+        conn.execute('DELETE FROM group_typing WHERE group_id=?', (group_id,))
+        conn.execute('DELETE FROM group_posts WHERE group_id=?', (group_id,))
+        conn.execute('DELETE FROM group_members WHERE group_id=?', (group_id,))
+        conn.execute('DELETE FROM groups WHERE id=?', (group_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
 @app.route('/api/groups/<int:group_id>/roster')
 def api_group_roster(group_id):
     """Public (any member) read-only member list -- distinct from /members, which is owner-only

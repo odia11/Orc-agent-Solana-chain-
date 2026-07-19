@@ -217,6 +217,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
         <button class="gd-quicklink" onclick="_openRoster()">👥 Members</button>
         <button class="gd-quicklink" onclick="_openRules()">📋 Rules</button>
         <button class="gd-quicklink" onclick="_toggleSearch()">🔍 Search</button>
+        <button class="gd-quicklink" onclick="_shareGroupLink()">🔗 Share</button>
       </div>
       <div class="gd-desc" id="gd-desc" style="display:none"></div>
     </div>
@@ -225,6 +226,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <button class="gd-mods-btn" id="gd-mods-btn" style="display:none" onclick="_openModsModal()">Manage moderators</button>
       <button class="gd-mods-btn" id="gd-settings-btn" style="display:none" onclick="_openSettingsModal()">Group settings</button>
       <button class="gd-mods-btn" id="gd-official-btn" style="display:none" onclick="_toggleOfficial()"></button>
+      <button class="gd-mods-btn" id="gd-delete-btn" style="display:none;color:#ff4d6a" onclick="_openDeleteGroupModal()">Delete group</button>
     </div>
   </div>
 
@@ -305,6 +307,20 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
     <div style="display:flex;justify-content:flex-end;gap:8px">
       <button class="gd-member-action" onclick="_closePollModal()">Cancel</button>
       <button class="gd-join-btn" id="gd-poll-submit-btn" onclick="_submitPoll()">Create poll</button>
+    </div>
+  </div>
+</div>
+
+<div class="gd-modal-backdrop" id="gd-delete-backdrop" onclick="_closeDeleteGroupModal(event)">
+  <div class="gd-modal" role="dialog" aria-modal="true">
+    <div class="gd-modal-header">
+      <div class="gd-modal-title" style="color:#ff4d6a">Delete this group?</div>
+      <button class="gd-modal-close" onclick="_closeDeleteGroupModal()">✕</button>
+    </div>
+    <div style="font-size:13px;color:var(--sub);line-height:1.5">This permanently deletes <b id="gd-delete-group-name" style="color:var(--text)"></b>, all of its posts, polls, and membership. This can't be undone.</div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="gd-member-action" onclick="_closeDeleteGroupModal()">Cancel</button>
+      <button class="gd-join-btn" id="gd-delete-confirm-btn" style="background:#ff4d6a;border-color:#ff4d6a" onclick="_confirmDeleteGroup()">Delete group</button>
     </div>
   </div>
 </div>
@@ -401,6 +417,7 @@ function _renderHeader(g){
 
   document.getElementById('gd-mods-btn').style.display = g.is_owner ? '' : 'none';
   document.getElementById('gd-settings-btn').style.display = g.is_owner ? '' : 'none';
+  document.getElementById('gd-delete-btn').style.display = (g.is_owner || g.is_platform_owner) ? '' : 'none';
   var officialBtn = document.getElementById('gd-official-btn');
   if(g.is_platform_owner){
     officialBtn.style.display = '';
@@ -439,6 +456,35 @@ function _toggleOfficial(){
       _showToast(makeOfficial ? 'Set as the official community group' : 'No longer the official group', 'ok');
       _loadGroup();
     }).catch(function(){ _showToast('Network error', 'err'); });
+}
+
+function _openDeleteGroupModal(){
+  document.getElementById('gd-delete-group-name').textContent = (_groupData && _groupData.name) || 'this group';
+  document.getElementById('gd-delete-backdrop').classList.add('open');
+}
+function _closeDeleteGroupModal(ev){
+  if(ev && ev.target !== ev.currentTarget) return;
+  document.getElementById('gd-delete-backdrop').classList.remove('open');
+}
+function _confirmDeleteGroup(){
+  var btn = document.getElementById('gd-delete-confirm-btn');
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId, {method:'DELETE', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not delete group', 'err'); btn.disabled=false; return; }
+      location.href = '/groups';
+    }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
+}
+
+function _shareGroupLink(){
+  var url = location.origin + '/groups/' + _groupId;
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(function(){
+      _showToast('Link copied — anyone who opens it can join', 'ok');
+    }).catch(function(){ _showToast(url, 'ok'); });
+  } else {
+    _showToast(url, 'ok');
+  }
 }
 
 function _loadPriceChange(symbol){
