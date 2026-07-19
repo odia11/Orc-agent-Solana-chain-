@@ -224,6 +224,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <button class="gd-join-btn" id="gd-join-btn" onclick="_toggleJoin()" disabled>…</button>
       <button class="gd-mods-btn" id="gd-mods-btn" style="display:none" onclick="_openModsModal()">Manage moderators</button>
       <button class="gd-mods-btn" id="gd-settings-btn" style="display:none" onclick="_openSettingsModal()">Group settings</button>
+      <button class="gd-mods-btn" id="gd-official-btn" style="display:none" onclick="_toggleOfficial()"></button>
     </div>
   </div>
 
@@ -372,7 +373,12 @@ function _renderHeader(g){
   }
   document.getElementById('gd-name').textContent = g.name;
   document.title = g.name + ' — OrcAgent';
-  document.getElementById('gd-meta').textContent = g.member_count + ' member'+(g.member_count===1?'':'s')+(g.token_symbol?' · $'+g.token_symbol:'');
+  var verifiedEl = document.getElementById('gd-verified');
+  if(g.is_official){
+    verifiedEl.style.display = '';
+    verifiedEl.title = 'Official OrcAgent community group';
+  }
+  document.getElementById('gd-meta').textContent = g.member_count + ' member'+(g.member_count===1?'':'s')+(g.token_symbol && !g.is_official ? ' · $'+g.token_symbol : '');
   if(g.description){
     var d = document.getElementById('gd-desc');
     d.textContent = g.description;
@@ -395,6 +401,13 @@ function _renderHeader(g){
 
   document.getElementById('gd-mods-btn').style.display = g.is_owner ? '' : 'none';
   document.getElementById('gd-settings-btn').style.display = g.is_owner ? '' : 'none';
+  var officialBtn = document.getElementById('gd-official-btn');
+  if(g.is_platform_owner){
+    officialBtn.style.display = '';
+    officialBtn.textContent = g.is_official ? 'Unset official group' : 'Set as official community group';
+  } else {
+    officialBtn.style.display = 'none';
+  }
 
   var editWrap = document.getElementById('gd-banner-edit-wrap');
   var avatarBtn = document.getElementById('gd-avatar-edit-btn');
@@ -413,8 +426,19 @@ function _renderHeader(g){
 
   _renderPinned(g);
   _renderComposer(g);
-  if(g.token_symbol) _loadPriceChange(g.token_symbol);
+  if(g.token_symbol && !g.is_official) _loadPriceChange(g.token_symbol);
   _startTypingPoll();
+}
+
+function _toggleOfficial(){
+  if(!_groupData) return;
+  var makeOfficial = !_groupData.is_official;
+  fetch('/api/groups/'+_groupId+'/set-official', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({official:makeOfficial})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not update', 'err'); return; }
+      _showToast(makeOfficial ? 'Set as the official community group' : 'No longer the official group', 'ok');
+      _loadGroup();
+    }).catch(function(){ _showToast('Network error', 'err'); });
 }
 
 function _loadPriceChange(symbol){

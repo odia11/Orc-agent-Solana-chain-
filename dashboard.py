@@ -1210,6 +1210,7 @@ def run_migrations():
         "ALTER TABLE groups ADD COLUMN pinned_post_id INTEGER DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN rules TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN announcement_only INTEGER DEFAULT 0",
+        "ALTER TABLE groups ADD COLUMN is_official INTEGER DEFAULT 0",
         "ALTER TABLE group_posts ADD COLUMN image_url TEXT DEFAULT NULL",
         "ALTER TABLE group_members ADD COLUMN muted_until TIMESTAMP DEFAULT NULL",
     ]:
@@ -4913,7 +4914,7 @@ def api_groups_mine():
                    (SELECT COUNT(*) FROM group_members WHERE group_id=g.id) as member_count
             FROM groups g
             JOIN group_members gm ON gm.group_id = g.id
-            WHERE gm.user_id = ?
+            WHERE gm.user_id = ? AND g.is_official = 0
             ORDER BY gm.joined_at DESC
         ''', (uid,)).fetchall()
         groups = [{
@@ -4936,7 +4937,7 @@ def api_groups_discover():
             SELECT g.id, g.token_symbol, g.name, g.description,
                    (SELECT COUNT(*) FROM group_members WHERE group_id=g.id) as member_count
             FROM groups g
-            WHERE g.is_private = 0
+            WHERE g.is_private = 0 AND g.is_official = 0
         '''
         params = []
         if uid:
@@ -5046,7 +5047,7 @@ def api_group_detail(group_id):
     try:
         row = conn.execute(
             'SELECT id, token_address, token_symbol, name, description, is_private, created_by, '
-            'avatar_url, banner_url, rules, announcement_only, pinned_post_id '
+            'avatar_url, banner_url, rules, announcement_only, pinned_post_id, is_official '
             'FROM groups WHERE id=?', (group_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
@@ -5068,7 +5069,9 @@ def api_group_detail(group_id):
             'rules': row[9] or '',
             'announcement_only': bool(row[10]),
             'pinned_post_id': row[11],
+            'is_official': bool(row[12]),
             'is_muted': is_muted,
+            'is_platform_owner': bool(wallet and _is_owner(wallet)),
             'member_count': _group_member_count(conn, group_id),
         }
         return jsonify({'ok': True, 'group': group})
@@ -5438,8 +5441,50 @@ def api_group_settings(group_id):
         conn.close()
 
 
-@app.route('/api/groups/<int:group_id>/mute/<int:user_id>', methods=['POST'])
-@rate_limit(20, 60)
+@app.route('/api/groups/official')
+def api_group_official():
+    """Public: the single platform-wide official community group, if one has been set."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('''
+            SELECT id, token_symbol, name, description, avatar_url
+            FROM groups WHERE is_official=1 LIMIT 1
+        ''').fetchone()
+        if not row:
+            return jsonify({'ok': True, 'group': None})
+        group = {
+            'id': row[0], 'token_symbol': row[1], 'name': row[2],
+            'description': row[3] or '', 'avatar_url': row[4] or '',
+            'member_count': _group_member_count(conn, row[0]),
+        }
+        return jsonify({'ok': True, 'group': group})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/set-official', methods=['POST'])
+@rate_limit(10, 300)
+def api_group_set_official(group_id):
+    """Platform-owner-only: designate this group as THE official community group,
+    unmarking any previous one so there's only ever one at a time."""
+    wallet = _authenticated_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'ok': False, 'msg': 'Platform owner only'}), 403
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        exists = conn.execute('SELECT 1 FROM groups WHERE id=?', (group_id,)).fetchone()
+        if not exists:
+            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        make_official = bool((request.json or {}).get('official', True))
+        if make_official:
+            conn.execute('UPDATE groups SET is_official=0')
+            conn.execute('UPDATE groups SET is_official=1 WHERE id=?', (group_id,))
+        else:
+            conn.execute('UPDATE groups SET is_official=0 WHERE id=?', (group_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 def api_group_mute(group_id, user_id):
     wallet = _authenticated_wallet()
     if not wallet:
