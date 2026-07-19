@@ -380,6 +380,7 @@ def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> st
 # ── INPUT VALIDATION ──
 _SOLANA_ADDR_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 _SOLANA_KEY_RE  = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{44,88}$')
+_FEED_VIEW_ID_RE = re.compile(r'^([pt])(\d+)$')   # feed_posts 'p<id>' / trades 't<id>'
 
 def is_valid_solana_address(addr: str) -> bool:
     return bool(_SOLANA_ADDR_RE.match(addr or ''))
@@ -1136,6 +1137,8 @@ def run_migrations():
         # falls back to the CURRENT _TOS_CONTENT_HTML for those, clearly
         # labeled as such (see api_tos_my_acceptance_pdf).
         "ALTER TABLE tos_acceptances ADD COLUMN content_html TEXT DEFAULT NULL",
+        "ALTER TABLE feed_posts ADD COLUMN view_count INTEGER DEFAULT 0",
+        "ALTER TABLE trades ADD COLUMN view_count INTEGER DEFAULT 0",
     ]:
         try:
             con.execute(sql)
@@ -7086,6 +7089,37 @@ def toggle_feed_reply_like(reply_id):
     finally:
         conn.close()
     return jsonify({'ok': True, 'liked': not existing, 'like_count': count})
+
+@app.route('/api/feed/views', methods=['POST'])
+@csrf_exempt
+@rate_limit(30, 60)
+def feed_views():
+    body = request.get_json(silent=True) or {}
+    ids  = body.get('ids', [])
+    if not isinstance(ids, list):
+        return jsonify({'ok': False, 'msg': 'ids must be a list'}), 400
+    post_ids, trade_ids = [], []
+    for item_id in ids:
+        if not isinstance(item_id, str):
+            continue
+        m = _FEED_VIEW_ID_RE.match(item_id)
+        if not m:
+            continue
+        (post_ids if m.group(1) == 'p' else trade_ids).append(m.group(2))
+    if not post_ids and not trade_ids:
+        return jsonify({'ok': True})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        if post_ids:
+            ph = ','.join('?' * len(post_ids))
+            conn.execute(f'UPDATE feed_posts SET view_count = view_count + 1 WHERE id IN ({ph})', post_ids)
+        if trade_ids:
+            ph = ','.join('?' * len(trade_ids))
+            conn.execute(f'UPDATE trades SET view_count = view_count + 1 WHERE id IN ({ph})', trade_ids)
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
 
 @app.route('/api/feed/reply/<int:reply_id>', methods=['DELETE'])
 @rate_limit(30, 60)
