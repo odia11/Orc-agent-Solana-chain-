@@ -61,6 +61,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-join-btn:disabled{opacity:.5;cursor:default}
 .gd-mods-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--ui);text-decoration:underline;padding:0}
 .gd-mods-btn:hover{color:var(--text)}
+.gd-delete-group-btn{color:var(--red)}
+.gd-delete-group-btn:hover{color:var(--red);opacity:.8}
 
 .gd-composer{display:flex;gap:10px;align-items:flex-end;margin:20px 0}
 .gd-composer-avatar{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text);flex-shrink:0;overflow:hidden}
@@ -205,6 +207,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
     <div class="gd-header-actions">
       <button class="gd-join-btn" id="gd-join-btn" onclick="_toggleJoin()" disabled>…</button>
       <button class="gd-mods-btn" id="gd-mods-btn" style="display:none" onclick="_openModsModal()">Manage moderators</button>
+      <button class="gd-mods-btn gd-delete-group-btn" id="gd-delete-group-btn" style="display:none" onclick="_deleteGroup()">Delete group</button>
     </div>
   </div>
 
@@ -339,6 +342,7 @@ function _renderHeader(g){
   }
 
   document.getElementById('gd-mods-btn').style.display = g.is_owner ? '' : 'none';
+  document.getElementById('gd-delete-group-btn').style.display = g.is_owner ? '' : 'none';
 
   var editWrap = document.getElementById('gd-banner-edit-wrap');
   var avatarBtn = document.getElementById('gd-avatar-edit-btn');
@@ -775,6 +779,14 @@ function _openModsModal(){
 function _closeModsModal(ev){
   if(ev && ev.target !== ev.currentTarget) return;
   document.getElementById('gd-mods-backdrop').classList.remove('open');
+}
+function _deleteGroup(){
+  if(!confirm('Delete this group permanently?\n\nAll posts and memberships will be removed. This cannot be undone.')) return;
+  fetch('/api/groups/'+_groupId, {method:'DELETE', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not delete group', 'err'); return; }
+      window.location.href = '/groups';
+    }).catch(function(){ _showToast('Network error', 'err'); });
 }
 function _memberRowHtml(m){
   var avatarInner = m.avatar_url

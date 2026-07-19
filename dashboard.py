@@ -5034,6 +5034,30 @@ def api_group_detail(group_id):
         conn.close()
 
 
+@app.route('/api/groups/<int:group_id>', methods=['DELETE'])
+@rate_limit(5, 300)
+def api_group_delete(group_id):
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT created_by FROM groups WHERE id=?', (group_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        uid = _get_uid(conn, wallet)
+        if row[0] != uid and not _is_owner(wallet):
+            return jsonify({'ok': False, 'msg': 'Only the group owner can delete this group'}), 403
+        conn.execute('DELETE FROM group_posts WHERE group_id=?', (group_id,))
+        conn.execute('DELETE FROM group_members WHERE group_id=?', (group_id,))
+        conn.execute('DELETE FROM groups WHERE id=?', (group_id,))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
 @app.route('/api/groups/<int:group_id>/posts')
 def api_group_posts(group_id):
     conn = sqlite3.connect(DB_FILE)
