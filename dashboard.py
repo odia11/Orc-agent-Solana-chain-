@@ -6325,6 +6325,19 @@ def social_feed():
             liked_by_me = {r[0] for r in conn.execute(
                 f'SELECT post_id FROM post_likes WHERE user_id=? AND post_id IN ({ph})',
                 [my_uid_for_likes] + post_ids)}
+        # view_count lives on feed_posts/trades directly (not the shared post_id-keyed
+        # tables above), so it needs its own per-kind SELECT rather than one IN query.
+        view_counts = {}
+        p_ids = [str(row[0]) for row in rows if row[4] == 'p']
+        t_ids = [str(row[0]) for row in rows if row[4] == 't']
+        if p_ids:
+            ph_p = ','.join('?' * len(p_ids))
+            for fid, vc in conn.execute(f'SELECT id, view_count FROM feed_posts WHERE id IN ({ph_p})', p_ids):
+                view_counts['p' + str(fid)] = vc
+        if t_ids:
+            ph_t = ','.join('?' * len(t_ids))
+            for tid, vc in conn.execute(f'SELECT id, view_count FROM trades WHERE id IN ({ph_t})', t_ids):
+                view_counts['t' + str(tid)] = vc
     finally:
         conn.close()
 
@@ -6347,6 +6360,7 @@ def social_feed():
             'created_at':  created_at or '',
             'like_count':  like_counts.get(post_id, 0),
             'reply_count': reply_counts.get(post_id, 0),
+            'view_count':  view_counts.get(post_id, 0),
             'username':    display,
             'symbol':      symbol or '',
             'pnl_pct':     pnl_pct or 0,
@@ -6793,6 +6807,7 @@ def get_feed_post(post_id):
                 SELECT fp.id, fp.wallet, fp.content, fp.created_at,
                        (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
                        (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
+                       fp.view_count,
                        u.username, NULL as symbol, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
                        u.avatar_url, u.is_verified
@@ -6807,6 +6822,7 @@ def get_feed_post(post_id):
                        t.timestamp as created_at,
                        (SELECT COUNT(*) FROM post_likes   WHERE post_id = 't'||t.id) as like_count,
                        (SELECT COUNT(*) FROM feed_replies WHERE post_id = 't'||t.id) as reply_count,
+                       t.view_count,
                        u.username,
                        t.token as symbol,
                        CASE WHEN t.entry_price > 0 AND t.exit_price > 0
@@ -6825,7 +6841,7 @@ def get_feed_post(post_id):
         conn.close()
     if not row:
         return jsonify({'ok': False, 'msg': 'Post not found'}), 404
-    rid, wallet, content, created_at, like_count, reply_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
+    rid, wallet, content, created_at, like_count, reply_count, view_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
     short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
     display = username if username else short
     post = {
@@ -6836,6 +6852,7 @@ def get_feed_post(post_id):
         'created_at':  created_at or '',
         'like_count':  like_count or 0,
         'reply_count': reply_count or 0,
+        'view_count':  view_count or 0,
         'username':    display,
         'symbol':      symbol or '',
         'pnl_pct':     pnl_pct or 0,
