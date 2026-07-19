@@ -1171,6 +1171,8 @@ def run_migrations():
         "ALTER TABLE tos_acceptances ADD COLUMN content_html TEXT DEFAULT NULL",
         "ALTER TABLE feed_posts ADD COLUMN view_count INTEGER DEFAULT 0",
         "ALTER TABLE trades ADD COLUMN view_count INTEGER DEFAULT 0",
+        "ALTER TABLE groups ADD COLUMN avatar_url TEXT DEFAULT NULL",
+        "ALTER TABLE groups ADD COLUMN banner_url TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -4989,24 +4991,36 @@ def api_groups_leave(group_id):
         conn.close()
 
 
+def _group_role(conn, group_id, uid):
+    """Returns the member's role in this group ('owner'/'mod'/'member'), or None if not a member."""
+    if not uid:
+        return None
+    row = conn.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
+                        (group_id, uid)).fetchone()
+    return row[0] if row else None
+
+
 @app.route('/api/groups/<int:group_id>')
 def api_group_detail(group_id):
     wallet = _authenticated_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            'SELECT id, token_address, token_symbol, name, description, is_private, created_by '
+            'SELECT id, token_address, token_symbol, name, description, is_private, created_by, '
+            'avatar_url, banner_url '
             'FROM groups WHERE id=?', (group_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
         uid = _get_uid(conn, wallet) if wallet else None
-        is_member = bool(uid and conn.execute(
-            'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, uid)).fetchone())
+        role = _group_role(conn, group_id, uid)
         group = {
             'id': row[0], 'token_address': row[1], 'token_symbol': row[2], 'name': row[3],
             'description': row[4] or '', 'is_private': bool(row[5]),
             'is_owner': bool(uid and row[6] == uid),
-            'is_member': is_member,
+            'is_member': role is not None,
+            'is_mod': role in ('owner', 'mod'),
+            'avatar_url': row[7] or '',
+            'banner_url': row[8] or '',
             'member_count': _group_member_count(conn, group_id),
         }
         return jsonify({'ok': True, 'group': group})
@@ -5078,16 +5092,130 @@ def api_group_post_delete(group_id, post_id):
                             (post_id, group_id)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Post not found'}), 404
-        member_row = conn.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
-                                   (group_id, uid)).fetchone()
-        is_group_owner = bool(member_row and member_row[0] == 'owner')
-        if row[0] != uid and not _is_owner(wallet) and not is_group_owner:
+        role = _group_role(conn, group_id, uid)
+        is_mod_or_owner = role in ('owner', 'mod')
+        if row[0] != uid and not _is_owner(wallet) and not is_mod_or_owner:
             return jsonify({'ok': False, 'msg': 'Not your post'}), 403
         conn.execute('DELETE FROM group_posts WHERE id=?', (post_id,))
         conn.commit()
         return jsonify({'ok': True})
     finally:
         conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/members')
+def api_group_members(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        role = _group_role(conn, group_id, uid)
+        if role != 'owner':
+            return jsonify({'ok': False, 'msg': 'Owner only'}), 403
+        rows = conn.execute('''
+            SELECT u.id, u.username, u.wallet_address, u.avatar_url, gm.role
+            FROM group_members gm
+            LEFT JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ?
+            ORDER BY CASE gm.role WHEN 'owner' THEN 0 WHEN 'mod' THEN 1 ELSE 2 END, gm.joined_at ASC
+        ''', (group_id,)).fetchall()
+        members = [{
+            'user_id': r[0], 'username': r[1],
+            'wallet_short': (r[2][:4]+'...'+r[2][-4:]) if r[2] and len(r[2]) >= 8 else (r[2] or ''),
+            'avatar_url': r[3], 'role': r[4],
+        } for r in rows]
+        return jsonify({'ok': True, 'members': members})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/mods/<int:user_id>', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_promote_mod(group_id, user_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) != 'owner':
+            return jsonify({'ok': False, 'msg': 'Owner only'}), 403
+        target_role = conn.execute('SELECT role FROM group_members WHERE group_id=? AND user_id=?',
+                                    (group_id, user_id)).fetchone()
+        if not target_role:
+            return jsonify({'ok': False, 'msg': 'Not a member of this group'}), 404
+        if target_role[0] == 'owner':
+            return jsonify({'ok': False, 'msg': "Can't change the owner's role"}), 400
+        conn.execute("UPDATE group_members SET role='mod' WHERE group_id=? AND user_id=?",
+                     (group_id, user_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/mods/<int:user_id>', methods=['DELETE'])
+@rate_limit(20, 60)
+def api_group_demote_mod(group_id, user_id):
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if _group_role(conn, group_id, uid) != 'owner':
+            return jsonify({'ok': False, 'msg': 'Owner only'}), 403
+        conn.execute("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=? AND role='mod'",
+                     (group_id, user_id))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+def _group_image_upload(group_id, field, data):
+    """Shared validation + write for group avatar/banner uploads (owner or mod only)."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'})
+    data = str(data or '').strip()
+    if data:
+        _ALLOWED_PREFIXES = (
+            'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+            'data:image/png;base64,',  'data:image/gif;base64,',
+            'data:image/webp;base64,',
+        )
+        if not any(data.startswith(p) for p in _ALLOWED_PREFIXES):
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, GIF, or WebP images are accepted'})
+        b64_part = data.split(',', 1)[1] if ',' in data else ''
+        if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
+            return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        role = _group_role(conn, group_id, uid)
+        if role not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Owner or moderators only'}), 403
+        conn.execute(f'UPDATE groups SET {field}=? WHERE id=?', (data if data else None, group_id))
+        conn.commit()
+        return jsonify({'ok': True, field: data})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/avatar', methods=['POST'])
+@rate_limit(10, 60)
+def api_group_avatar(group_id):
+    return _group_image_upload(group_id, 'avatar_url', (request.json or {}).get('avatar_data', ''))
+
+
+@app.route('/api/groups/<int:group_id>/banner', methods=['POST'])
+@rate_limit(10, 60)
+def api_group_banner(group_id):
+    return _group_image_upload(group_id, 'banner_url', (request.json or {}).get('banner_data', ''))
 
 
 @app.route('/api/notifications')
