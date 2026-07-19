@@ -59,7 +59,29 @@ p{color:var(--sub);font-size:13px;line-height:1.6;margin-bottom:24px}
   <div class="note">Tap "&larr; Back" above at any time to return to Settings.</div>
 </div>
 <script>
-  document.getElementById('manual-dl').click();
+async function _autoDownloadTos(){
+  var link = document.getElementById('manual-dl');
+  try{
+    var r = await fetch(link.href, {credentials:'include'});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    var blob = await r.blob();
+    var filename = 'terms-of-service.pdf';
+    var cd = r.headers.get('Content-Disposition') || '';
+    var m = cd.match(/filename="?([^";]+)"?/);
+    if(m) filename = m[1];
+    var blobUrl = URL.createObjectURL(blob);
+    var tmp = document.createElement('a');
+    tmp.href = blobUrl;
+    tmp.download = filename;
+    document.body.appendChild(tmp);
+    tmp.click();
+    tmp.remove();
+    URL.revokeObjectURL(blobUrl);
+  }catch(e){
+    link.click();
+  }
+}
+_autoDownloadTos();
 </script>
 </body>
 </html>
