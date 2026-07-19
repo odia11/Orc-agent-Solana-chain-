@@ -5073,7 +5073,26 @@ def api_group_post_create(group_id):
         cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content) VALUES (?,?,?)',
                             (group_id, uid, _sanitize(content)))
         conn.commit()
-        return jsonify({'ok': True, 'post_id': cur.lastrowid})
+        post_id = cur.lastrowid
+        author_row = conn.execute('SELECT COALESCE(username,\"\") FROM users WHERE id=?', (uid,)).fetchone()
+        author_name = (author_row[0] if author_row and author_row[0] else wallet[:8]+'…')
+        group_row = conn.execute('SELECT name FROM groups WHERE id=?', (group_id,)).fetchone()
+        group_name = group_row[0] if group_row else 'a group'
+        mentioned = set(m.lower() for m in re.findall(r'@([a-zA-Z0-9_]+)', content))
+        for uname in mentioned:
+            m_row = conn.execute('''
+                SELECT u.id FROM users u
+                JOIN group_members gm ON gm.user_id = u.id
+                WHERE u.username=? COLLATE NOCASE AND u.id != ? AND gm.group_id = ?
+            ''', (uname, uid, group_id)).fetchone()
+            if m_row:
+                link = '/groups/'+str(group_id)
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                    (m_row[0], 'mention', author_name+' mentioned you in '+group_name, link))
+                conn.commit()
+                _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in '+group_name, link)
+        return jsonify({'ok': True, 'post_id': post_id})
     finally:
         conn.close()
 
@@ -5099,6 +5118,34 @@ def api_group_post_delete(group_id, post_id):
         conn.execute('DELETE FROM group_posts WHERE id=?', (post_id,))
         conn.commit()
         return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/members/search')
+def api_group_members_search(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'members': []}), 401
+    q = (request.args.get('q') or '').strip()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not _group_role(conn, group_id, uid):
+            return jsonify({'ok': False, 'members': []}), 403
+        sql = '''
+            SELECT u.id, u.username, u.avatar_url
+            FROM group_members gm JOIN users u ON gm.user_id = u.id
+            WHERE gm.group_id = ? AND u.username IS NOT NULL AND u.username != ''
+        '''
+        params = [group_id]
+        if q:
+            sql += ' AND u.username LIKE ? COLLATE NOCASE'
+            params.append(q + '%')
+        sql += ' ORDER BY u.username COLLATE NOCASE LIMIT 8'
+        rows = conn.execute(sql, params).fetchall()
+        members = [{'user_id': r[0], 'username': r[1], 'avatar_url': r[2]} for r in rows]
+        return jsonify({'ok': True, 'members': members})
     finally:
         conn.close()
 
@@ -7332,10 +7379,15 @@ def toggle_feed_reaction(post_id):
             if owner_uid and owner_uid != me:
                 reactor_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
                 reactor_name = (reactor_row[0] if reactor_row and reactor_row[0] else wallet[:8]+'…')
+                if post_id.startswith('g'):
+                    grow = conn.execute('SELECT group_id FROM group_posts WHERE id=?', (post_id[1:],)).fetchone()
+                    link = '/groups/'+str(grow[0]) if grow else '/groups'
+                else:
+                    link = '/#post-'+post_id
                 conn.execute(
                     'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (owner_uid, 'reaction', reactor_name+': reacted '+emoji+' to your post', '/#post-'+post_id))
-                _send_push_notification(owner_uid, 'New reaction', reactor_name+' reacted '+emoji+' to your post', '/#post-'+post_id)
+                    (owner_uid, 'reaction', reactor_name+': reacted '+emoji+' to your post', link))
+                _send_push_notification(owner_uid, 'New reaction', reactor_name+' reacted '+emoji+' to your post', link)
         conn.commit()
         counts = {row[0]: row[1] for row in conn.execute(
             'SELECT emoji, COUNT(*) FROM post_reactions WHERE post_id=? GROUP BY emoji',
@@ -7395,6 +7447,8 @@ def _post_owner_uid(conn, post_id):
             (post_id[1:],)).fetchone()
     elif post_id.startswith('t'):
         row = conn.execute("SELECT user_id FROM trades WHERE id=?", (post_id[1:],)).fetchone()
+    elif post_id.startswith('g'):
+        row = conn.execute("SELECT user_id FROM group_posts WHERE id=?", (post_id[1:],)).fetchone()
     else:
         row = None
     return row[0] if row else None

@@ -72,6 +72,14 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-btn:disabled{opacity:.4;cursor:default}
 .gd-join-prompt{padding:14px;text-align:center;background:var(--bg2);border:1px solid var(--border);border-radius:13px;font-size:13px;color:var(--sub);margin:20px 0}
 
+.gd-mention-menu{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:4px;min-width:200px;max-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:10}
+.gd-mention-menu.open{display:block}
+.gd-mention-item{display:flex;align-items:center;gap:8px;padding:7px 9px;border-radius:8px;cursor:pointer}
+.gd-mention-item:hover,.gd-mention-item.active{background:var(--bg3)}
+.gd-mention-item-avatar{width:24px;height:24px;border-radius:50%;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--text);overflow:hidden;flex-shrink:0}
+.gd-mention-item-avatar img{width:100%;height:100%;object-fit:cover}
+.gd-mention-item-name{font-size:13px;color:var(--text)}
+
 .gd-feed{background:var(--bg2);border:1px solid var(--border);border-radius:14px;overflow:hidden}
 .gd-post{display:flex;gap:10px;padding:16px;border-bottom:1px solid var(--border)}
 .gd-post:last-child{border-bottom:none}
@@ -85,6 +93,18 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-del{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto;opacity:0;transition:opacity .15s}
 .gd-post:hover .gd-post-del{opacity:1}
 .gd-post-del:hover{color:var(--red)}
+.gd-mention{color:var(--accent);font-weight:600}
+
+.gd-react-bar{display:flex;align-items:center;gap:5px;margin-top:8px;flex-wrap:wrap}
+.gd-react-pill{display:flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--border2);border-radius:999px;padding:3px 9px;font-size:12px;cursor:pointer;color:var(--sub);transition:border-color .15s,background .15s;font-family:var(--ui)}
+.gd-react-pill:hover{border-color:var(--muted)}
+.gd-react-pill.mine{background:var(--accent-dim);border-color:var(--accent-border);color:#f7b955}
+.gd-react-add{background:none;border:1px dashed var(--border2);border-radius:999px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:13px;position:relative}
+.gd-react-add:hover{border-color:var(--muted);color:var(--text)}
+.gd-react-picker{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:6px;gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:5;white-space:nowrap}
+.gd-react-picker.open{display:flex}
+.gd-react-picker button{background:none;border:none;font-size:16px;padding:5px;border-radius:6px;cursor:pointer}
+.gd-react-picker button:hover{background:var(--bg3)}
 
 .gd-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
 
@@ -312,11 +332,18 @@ function _renderComposer(g){
     ? '<img src="'+esc(_myAvatar)+'" alt="">'
     : esc((_myUsername||'?')[0].toUpperCase());
   wrap.innerHTML =
-    '<div class="gd-composer">'
+    '<div class="gd-composer" style="position:relative">'
       +'<div class="gd-composer-avatar">'+avatarInner+'</div>'
-      +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Post to '+esc(g.name)+'…" rows="1" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>'
+      +'<div style="position:relative;flex:1">'
+        +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Post to '+esc(g.name)+'…" rows="1" style="width:100%" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';_onComposerInput(this)" onkeydown="_onComposerKeydown(event)"></textarea>'
+        +'<div class="gd-mention-menu" id="gd-mention-menu"></div>'
+      +'</div>'
       +'<button class="gd-post-btn" id="gd-post-btn" onclick="_submitPost()">Post</button>'
     +'</div>';
+}
+
+function _renderMentionText(content){
+  return esc(content).replace(/@([a-zA-Z0-9_]+)/g, '<span class="gd-mention">@$1</span>');
 }
 
 function _postHtml(p){
@@ -336,10 +363,13 @@ function _postHtml(p){
           +'<span class="gd-post-time">· '+esc(_timeAgo(p.created_at))+'</span>'
           +(canDelete ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_deletePost(this)" title="'+(isMine?'Delete':'Remove (moderator)')+'">Delete</button>' : '')
         +'</div>'
-        +'<div class="gd-post-text">'+esc(p.content)+'</div>'
+        +'<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>'
+        +'<div class="gd-react-bar" id="gd-react-g'+p.id+'" data-post-id="g'+p.id+'"></div>'
       +'</div>'
     +'</div>';
 }
+
+var _REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'];
 
 function _loadPosts(){
   fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
@@ -349,7 +379,143 @@ function _loadPosts(){
       return;
     }
     el.innerHTML = d.posts.map(_postHtml).join('');
+    _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
   }).catch(function(){});
+}
+
+function _loadReactions(ids){
+  if(!ids.length) return;
+  fetch('/api/feed/reactions/batch?ids='+encodeURIComponent(ids.join(',')), {credentials:'include'})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok) return;
+      ids.forEach(function(pid){
+        var data = d.reactions[pid] || {counts:{}, mine:[]};
+        _renderReactionBar(pid, data.counts||{}, data.mine||[]);
+      });
+    }).catch(function(){});
+}
+
+function _renderReactionBar(postId, counts, mine){
+  var bar = document.getElementById('gd-react-'+postId);
+  if(!bar) return;
+  var pills = Object.keys(counts).map(function(emoji){
+    var isMine = mine.indexOf(emoji) !== -1;
+    return '<button class="gd-react-pill'+(isMine?' mine':'')+'" onclick="_toggleReaction(\''+postId+'\',\''+emoji+'\')">'+emoji+' <span>'+counts[emoji]+'</span></button>';
+  }).join('');
+  var pickerBtns = _REACTION_EMOJIS.map(function(e){
+    return '<button onclick="_toggleReaction(\''+postId+'\',\''+e+'\');_closeReactPicker(\''+postId+'\')">'+e+'</button>';
+  }).join('');
+  bar.innerHTML = pills
+    + '<div style="position:relative">'
+      + '<button class="gd-react-add" onclick="_toggleReactPicker(\''+postId+'\',event)">+</button>'
+      + '<div class="gd-react-picker" id="gd-picker-'+postId+'">'+pickerBtns+'</div>'
+    + '</div>';
+}
+
+function _toggleReactPicker(postId, ev){
+  ev.stopPropagation();
+  document.querySelectorAll('.gd-react-picker.open').forEach(function(p){
+    if(p.id !== 'gd-picker-'+postId) p.classList.remove('open');
+  });
+  var picker = document.getElementById('gd-picker-'+postId);
+  if(picker) picker.classList.toggle('open');
+}
+function _closeReactPicker(postId){
+  var picker = document.getElementById('gd-picker-'+postId);
+  if(picker) picker.classList.remove('open');
+}
+document.addEventListener('click', function(e){
+  if(!e.target.closest('.gd-react-add') && !e.target.closest('.gd-react-picker')){
+    document.querySelectorAll('.gd-react-picker.open').forEach(function(p){ p.classList.remove('open'); });
+  }
+});
+
+function _toggleReaction(postId, emoji){
+  fetch('/api/feed/react/'+encodeURIComponent(postId), {
+    method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({emoji:emoji})
+  }).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok){ _showToast(d.msg||'Could not react', 'err'); return; }
+    _renderReactionBar(postId, d.counts||{}, d.mine||[]);
+  }).catch(function(){ _showToast('Network error', 'err'); });
+}
+
+var _mentionTimer = null;
+var _mentionMatches = [];
+var _mentionActiveIdx = -1;
+var _mentionStart = -1;
+
+function _onComposerInput(inp){
+  var pos = inp.selectionStart;
+  var textBefore = inp.value.slice(0, pos);
+  var m = /@([a-zA-Z0-9_]*)$/.exec(textBefore);
+  if(!m){ _closeMentionMenu(); return; }
+  _mentionStart = pos - m[1].length - 1;
+  var q = m[1];
+  clearTimeout(_mentionTimer);
+  _mentionTimer = setTimeout(function(){ _fetchMentions(q); }, 150);
+}
+
+function _fetchMentions(q){
+  fetch('/api/groups/'+_groupId+'/members/search?q='+encodeURIComponent(q), {credentials:'include'})
+    .then(function(r){return r.json();}).then(function(d){
+      _mentionMatches = (d.ok && d.members) ? d.members.filter(function(m){ return m.user_id !== _myUid; }) : [];
+      _mentionActiveIdx = _mentionMatches.length ? 0 : -1;
+      _renderMentionMenu();
+    }).catch(function(){});
+}
+
+function _renderMentionMenu(){
+  var menu = document.getElementById('gd-mention-menu');
+  if(!menu) return;
+  if(!_mentionMatches.length){ menu.classList.remove('open'); return; }
+  menu.innerHTML = _mentionMatches.map(function(m, i){
+    var avatarInner = m.avatar_url ? '<img src="'+esc(m.avatar_url)+'" alt="">' : esc((m.username||'?')[0].toUpperCase());
+    return '<div class="gd-mention-item'+(i===_mentionActiveIdx?' active':'')+'" onmousedown="event.preventDefault();_selectMention('+i+')">'
+      +'<div class="gd-mention-item-avatar">'+avatarInner+'</div>'
+      +'<div class="gd-mention-item-name">'+esc(m.username)+'</div>'
+    +'</div>';
+  }).join('');
+  menu.classList.add('open');
+}
+
+function _closeMentionMenu(){
+  _mentionMatches = [];
+  _mentionActiveIdx = -1;
+  var menu = document.getElementById('gd-mention-menu');
+  if(menu) menu.classList.remove('open');
+}
+
+function _selectMention(idx){
+  var inp = document.getElementById('gd-composer-inp');
+  var m = _mentionMatches[idx];
+  if(!inp || !m) return;
+  var pos = inp.selectionStart;
+  var before = inp.value.slice(0, _mentionStart);
+  var after = inp.value.slice(pos);
+  var insertion = '@'+m.username+' ';
+  inp.value = before + insertion + after;
+  var newPos = (before + insertion).length;
+  inp.focus();
+  inp.setSelectionRange(newPos, newPos);
+  _closeMentionMenu();
+}
+
+function _onComposerKeydown(ev){
+  var menu = document.getElementById('gd-mention-menu');
+  if(!menu || !menu.classList.contains('open')) return;
+  if(ev.key === 'ArrowDown'){
+    ev.preventDefault();
+    _mentionActiveIdx = Math.min(_mentionActiveIdx+1, _mentionMatches.length-1);
+    _renderMentionMenu();
+  } else if(ev.key === 'ArrowUp'){
+    ev.preventDefault();
+    _mentionActiveIdx = Math.max(_mentionActiveIdx-1, 0);
+    _renderMentionMenu();
+  } else if(ev.key === 'Enter' || ev.key === 'Tab'){
+    if(_mentionActiveIdx >= 0){ ev.preventDefault(); _selectMention(_mentionActiveIdx); }
+  } else if(ev.key === 'Escape'){
+    _closeMentionMenu();
+  }
 }
 
 function _submitPost(){
