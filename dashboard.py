@@ -192,10 +192,12 @@ log = logging.getLogger('werkzeug')
 log.setLevel(logging.ERROR)
 
 BASE         = os.path.dirname(os.path.abspath(__file__))
-DM_IMAGES_DIR   = os.path.join(BASE, 'static', 'dm_images')
-CHAT_IMAGES_DIR = os.path.join(BASE, 'static', 'chat_images')
-os.makedirs(DM_IMAGES_DIR,   exist_ok=True)
-os.makedirs(CHAT_IMAGES_DIR, exist_ok=True)
+DM_IMAGES_DIR    = os.path.join(BASE, 'static', 'dm_images')
+CHAT_IMAGES_DIR  = os.path.join(BASE, 'static', 'chat_images')
+GROUP_IMAGES_DIR = os.path.join(BASE, 'static', 'group_images')
+os.makedirs(DM_IMAGES_DIR,    exist_ok=True)
+os.makedirs(CHAT_IMAGES_DIR,  exist_ok=True)
+os.makedirs(GROUP_IMAGES_DIR, exist_ok=True)
 # Use Railway persistent volume when available so the DB and logs survive redeploys.
 _DATA_DIR    = '/data' if os.path.exists('/data') else BASE
 LOG_FILE     = os.path.join(_DATA_DIR, 'trades.log')
@@ -1174,6 +1176,8 @@ def run_migrations():
         "ALTER TABLE groups ADD COLUMN avatar_url TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN banner_url TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN rules TEXT DEFAULT NULL",
+        "ALTER TABLE group_posts ADD COLUMN is_pinned INTEGER DEFAULT 0",
+        "ALTER TABLE group_posts ADD COLUMN image_url TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -5036,11 +5040,11 @@ def api_group_posts(group_id):
     try:
         rows = conn.execute('''
             SELECT gp.id, gp.content, gp.created_at, gp.user_id, u.username, u.avatar_url,
-                   u.wallet_address, u.is_verified
+                   u.wallet_address, u.is_verified, gp.is_pinned, gp.image_url
             FROM group_posts gp
             LEFT JOIN users u ON gp.user_id = u.id
             WHERE gp.group_id = ?
-            ORDER BY gp.created_at DESC
+            ORDER BY gp.is_pinned DESC, gp.created_at DESC
             LIMIT 200
         ''', (group_id,)).fetchall()
         posts = [{
@@ -5048,6 +5052,8 @@ def api_group_posts(group_id):
             'username': r[4], 'avatar_url': r[5],
             'wallet_short': (r[6][:4]+'...'+r[6][-4:]) if r[6] and len(r[6]) >= 8 else (r[6] or ''),
             'is_verified': bool(r[7]),
+            'is_pinned': bool(r[8]),
+            'image_url': r[9] or '',
         } for r in rows]
         return jsonify({'ok': True, 'posts': posts})
     finally:
@@ -5060,8 +5066,16 @@ def api_group_post_create(group_id):
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
-    content = ((request.json or {}).get('content') or '').strip()
-    if not content:
+    body = request.json or {}
+    content = (body.get('content') or '').strip()
+    image_url = str(body.get('image_url', '') or '').strip()
+    if image_url:
+        _group_img_prefix = '/static/group_images/'
+        if not image_url.startswith(_group_img_prefix):
+            return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
+        if not _UPLOAD_FILENAME_RE.match(image_url[len(_group_img_prefix):]):
+            return jsonify({'ok': False, 'msg': 'Invalid image filename'}), 400
+    if not content and not image_url:
         return jsonify({'ok': False, 'msg': 'Empty content'}), 400
     if len(content) > 1000:
         return jsonify({'ok': False, 'msg': 'Too long'}), 400
@@ -5072,8 +5086,8 @@ def api_group_post_create(group_id):
             'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, uid)).fetchone()
         if not is_member:
             return jsonify({'ok': False, 'msg': 'Join the group to post'}), 403
-        cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content) VALUES (?,?,?)',
-                            (group_id, uid, _sanitize(content)))
+        cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content, image_url) VALUES (?,?,?,?)',
+                            (group_id, uid, _sanitize(content), image_url or None))
         conn.commit()
         post_id = cur.lastrowid
         author_row = conn.execute('SELECT COALESCE(username,\"\") FROM users WHERE id=?', (uid,)).fetchone()
@@ -5099,6 +5113,45 @@ def api_group_post_create(group_id):
         conn.close()
 
 
+@app.route('/api/groups/<int:group_id>/upload-image', methods=['POST'])
+@rate_limit(10, 60)
+def api_group_upload_image(group_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        is_member = conn.execute(
+            'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, uid)).fetchone()
+    finally:
+        conn.close()
+    if not is_member:
+        return jsonify({'ok': False, 'msg': 'Join the group to upload images'}), 403
+    f = request.files.get('image')
+    if not f:
+        return jsonify({'ok': False, 'msg': 'No image provided'}), 400
+    ALLOWED_MIME = {'image/jpeg', 'image/png', 'image/gif', 'image/webp'}
+    ALLOWED_EXT  = {'jpg', 'jpeg', 'png', 'gif', 'webp'}
+    MAX_BYTES    = 5 * 1024 * 1024
+    if f.content_type not in ALLOWED_MIME:
+        return jsonify({'ok': False, 'msg': 'Only jpg/png/gif/webp allowed'}), 400
+    data = f.read()
+    if len(data) > MAX_BYTES:
+        return jsonify({'ok': False, 'msg': 'Image too large (max 5 MB)'}), 400
+    if not _verify_image_magic(data):
+        return jsonify({'ok': False, 'msg': 'File content does not match a valid image format'}), 400
+    raw_ext = secure_filename(f.filename or '').rsplit('.', 1)
+    ext = raw_ext[-1].lower() if len(raw_ext) == 2 else ''
+    if ext not in ALLOWED_EXT:
+        ext = f.content_type.split('/')[-1].replace('jpeg', 'jpg')
+    filename  = f'{uuid.uuid4().hex}.{ext}'
+    save_path = os.path.join(GROUP_IMAGES_DIR, filename)
+    with open(save_path, 'wb') as out:
+        out.write(data)
+    return jsonify({'ok': True, 'url': f'/static/group_images/{filename}'})
+
+
 @app.route('/api/groups/<int:group_id>/posts/<int:post_id>', methods=['DELETE'])
 @rate_limit(20, 60)
 def api_group_post_delete(group_id, post_id):
@@ -5120,6 +5173,32 @@ def api_group_post_delete(group_id, post_id):
         conn.execute('DELETE FROM group_posts WHERE id=?', (post_id,))
         conn.commit()
         return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/posts/<int:post_id>/pin', methods=['POST'])
+@rate_limit(20, 60)
+def api_group_post_pin(group_id, post_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        role = _group_role(conn, group_id, uid)
+        if role not in ('owner', 'mod'):
+            return jsonify({'ok': False, 'msg': 'Owner or moderators only'}), 403
+        row = conn.execute('SELECT is_pinned FROM group_posts WHERE id=? AND group_id=?',
+                            (post_id, group_id)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Post not found'}), 404
+        now_pinned = not row[0]
+        if now_pinned:
+            conn.execute('UPDATE group_posts SET is_pinned=0 WHERE group_id=?', (group_id,))
+        conn.execute('UPDATE group_posts SET is_pinned=? WHERE id=?', (1 if now_pinned else 0, post_id))
+        conn.commit()
+        return jsonify({'ok': True, 'is_pinned': now_pinned})
     finally:
         conn.close()
 

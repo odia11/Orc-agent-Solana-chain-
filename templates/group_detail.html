@@ -71,6 +71,13 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-btn{padding:11px 20px;border-radius:11px;background:var(--accent);color:#0a0b0e;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--ui);flex-shrink:0;height:44px}
 .gd-post-btn:disabled{opacity:.4;cursor:default}
 .gd-join-prompt{padding:14px;text-align:center;background:var(--bg2);border:1px solid var(--border);border-radius:13px;font-size:13px;color:var(--sub);margin:20px 0}
+.gd-composer-img-btn{background:none;border:1px solid var(--border2);border-radius:11px;width:44px;height:44px;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:17px;flex-shrink:0;color:var(--sub);transition:border-color .15s,color .15s}
+.gd-composer-img-btn:hover{border-color:var(--muted);color:var(--text)}
+.gd-composer-img-btn.loading{opacity:.5;cursor:default;pointer-events:none}
+.gd-composer-preview{position:relative;display:inline-block;margin-bottom:8px}
+.gd-composer-preview img{max-height:120px;max-width:200px;border-radius:10px;display:block;object-fit:cover}
+.gd-composer-preview-remove{position:absolute;top:-8px;right:-8px;width:22px;height:22px;border-radius:50%;background:#101216;border:1px solid #21252c;color:#eef1f5;cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;padding:0}
+.gd-post-img{max-width:100%;max-height:340px;border-radius:12px;margin-top:8px;cursor:pointer;display:block}
 
 .gd-mention-menu{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:4px;min-width:200px;max-width:260px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:10}
 .gd-mention-menu.open{display:block}
@@ -92,6 +99,12 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-post-text{font-size:13.5px;color:var(--sub);line-height:1.5;margin-top:3px;word-break:break-word;white-space:pre-wrap}
 .gd-post-del{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto;opacity:0;transition:opacity .15s}
 .gd-post:hover .gd-post-del{opacity:1}
+.gd-post-pin{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;margin-left:auto;opacity:0;transition:opacity .15s}
+.gd-post:hover .gd-post-pin{opacity:1}
+.gd-post-pin:hover{color:var(--accent)}
+.gd-post-pin:disabled{opacity:.5!important;cursor:default}
+.gd-post-pinned{background:var(--accent-dim)}
+.gd-pin-badge{font-size:11px;font-weight:700;color:var(--accent);margin-bottom:3px}
 .gd-post-del:hover{color:var(--red)}
 .gd-mention{color:var(--accent);font-weight:600}
 
@@ -244,12 +257,18 @@ var _myUsername     = '';
 var _myAvatar       = '';
 var _myUid          = 0;
 var _groupData      = null;
+var _pendingImageUrl = '';
 
 function esc(s){
   return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
 }
 function _apiHeaders(){
   var h = {'Content-Type':'application/json','X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
+  if(_clientSecret) h['X-API-Shared-Secret'] = _clientSecret;
+  return h;
+}
+function _uploadHeaders(){
+  var h = {'X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
   if(_clientSecret) h['X-API-Shared-Secret'] = _clientSecret;
   return h;
 }
@@ -411,11 +430,46 @@ function _renderComposer(g){
     '<div class="gd-composer" style="position:relative">'
       +'<div class="gd-composer-avatar">'+avatarInner+'</div>'
       +'<div style="position:relative;flex:1">'
+        +'<div class="gd-composer-preview" id="gd-composer-preview" style="display:none">'
+          +'<img id="gd-composer-preview-img" src="" alt="">'
+          +'<button type="button" class="gd-composer-preview-remove" onclick="_removeComposerImage()">✕</button>'
+        +'</div>'
         +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Post to '+esc(g.name)+'…" rows="1" style="width:100%" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';_onComposerInput(this)" onkeydown="_onComposerKeydown(event)"></textarea>'
         +'<div class="gd-mention-menu" id="gd-mention-menu"></div>'
       +'</div>'
+      +'<button type="button" class="gd-composer-img-btn" id="gd-composer-img-btn" onclick="document.getElementById(\'gd-composer-img-input\').click()" title="Add image">📷</button>'
+      +'<input type="file" id="gd-composer-img-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
       +'<button class="gd-post-btn" id="gd-post-btn" onclick="_submitPost()">Post</button>'
     +'</div>';
+  _pendingImageUrl = '';
+}
+
+function _onComposerImageFile(input){
+  var file = input.files && input.files[0];
+  input.value = '';
+  if(!file) return;
+  var ALLOWED = ['image/jpeg','image/png','image/gif','image/webp'];
+  if(ALLOWED.indexOf(file.type) === -1){ _showToast('Only jpg/png/gif/webp allowed', 'err'); return; }
+  if(file.size > 5*1024*1024){ _showToast('Image too large (max 5 MB)', 'err'); return; }
+  var btn = document.getElementById('gd-composer-img-btn');
+  if(btn) btn.classList.add('loading');
+  var fd = new FormData();
+  fd.append('image', file);
+  fetch('/api/groups/'+_groupId+'/upload-image', {method:'POST', credentials:'include', headers:_uploadHeaders(), body:fd})
+    .then(function(r){return r.json();}).then(function(d){
+      if(btn) btn.classList.remove('loading');
+      if(!d.ok){ _showToast(d.msg||'Upload failed', 'err'); return; }
+      _pendingImageUrl = d.url;
+      var prev = document.getElementById('gd-composer-preview');
+      var img = document.getElementById('gd-composer-preview-img');
+      if(prev && img){ img.src = d.url; prev.style.display = 'inline-block'; }
+    }).catch(function(){ if(btn) btn.classList.remove('loading'); _showToast('Network error', 'err'); });
+}
+
+function _removeComposerImage(){
+  _pendingImageUrl = '';
+  var prev = document.getElementById('gd-composer-preview');
+  if(prev) prev.style.display = 'none';
 }
 
 function _renderMentionText(content){
@@ -424,25 +478,39 @@ function _renderMentionText(content){
 
 function _postHtml(p){
   var isMine = p.user_id === _myUid;
-  var canDelete = isMine || (_groupData && _groupData.is_mod);
+  var isMod = _groupData && _groupData.is_mod;
+  var canDelete = isMine || isMod;
   var avatarInner = p.avatar_url
     ? '<img src="'+esc(p.avatar_url)+'" alt="" onerror="this.style.display=\'none\'">'
     : esc((p.username||p.wallet_short||'?')[0].toUpperCase());
   var name = p.username || p.wallet_short || 'Unknown';
   return ''
-    +'<div class="gd-post" data-post-id="'+p.id+'">'
+    +'<div class="gd-post'+(p.is_pinned?' gd-post-pinned':'')+'" data-post-id="'+p.id+'">'
       +'<div class="gd-post-avatar">'+avatarInner+'</div>'
       +'<div class="gd-post-body">'
+        +(p.is_pinned ? '<div class="gd-pin-badge">📌 Pinned</div>' : '')
         +'<div class="gd-post-head">'
           +'<span class="gd-post-name">'+esc(name)+'</span>'
           +(p.is_verified ? '<span class="gd-verified">✓</span>' : '')
           +'<span class="gd-post-time">· '+esc(_timeAgo(p.created_at))+'</span>'
+          +(isMod ? '<button class="gd-post-pin" data-post-id="'+p.id+'" onclick="_togglePin(this)" title="'+(p.is_pinned?'Unpin':'Pin to top')+'">'+(p.is_pinned?'Unpin':'Pin')+'</button>' : '')
           +(canDelete ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_deletePost(this)" title="'+(isMine?'Delete':'Remove (moderator)')+'">Delete</button>' : '')
         +'</div>'
-        +'<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>'
+        +(p.content ? '<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>' : '')
+        +(p.image_url ? '<img class="gd-post-img" src="'+esc(p.image_url)+'" alt="" onclick="_openLightbox(this.src)">' : '')
         +'<div class="gd-react-bar" id="gd-react-g'+p.id+'" data-post-id="g'+p.id+'"></div>'
       +'</div>'
     +'</div>';
+}
+
+function _togglePin(btn){
+  var postId = btn.getAttribute('data-post-id');
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId+'/posts/'+postId+'/pin', {method:'POST', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not update pin', 'err'); btn.disabled=false; return; }
+      _loadPosts();
+    }).catch(function(){ _showToast('Network error', 'err'); btn.disabled=false; });
 }
 
 var _REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'];
@@ -597,15 +665,16 @@ function _onComposerKeydown(ev){
 function _submitPost(){
   var inp = document.getElementById('gd-composer-inp');
   var content = inp.value.trim();
-  if(!content) return;
+  if(!content && !_pendingImageUrl) return;
   var btn = document.getElementById('gd-post-btn');
   btn.disabled = true;
-  fetch('/api/groups/'+_groupId+'/posts', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({content:content})})
+  fetch('/api/groups/'+_groupId+'/posts', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({content:content, image_url:_pendingImageUrl})})
     .then(function(r){return r.json();}).then(function(d){
       btn.disabled = false;
       if(!d.ok){ _showToast(d.msg||'Could not post', 'err'); return; }
       inp.value = '';
       inp.style.height = 'auto';
+      _removeComposerImage();
       _loadPosts();
     }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
 }
