@@ -7628,6 +7628,27 @@ function _initLiveCharts(){
   });
 }
 
+/* ── feed view tracking ── */
+var _feedSeenViews    = new Set();  // post ids already counted this page session
+var _feedPendingViews = new Set();  // observed but not yet flushed to the server
+var _feedViewObserver = new IntersectionObserver(function(entries){
+  entries.forEach(function(entry){
+    if(!entry.isIntersecting) return;
+    var id = entry.target.id.slice('fc-card-'.length);
+    if(_feedSeenViews.has(id)) return;
+    _feedSeenViews.add(id);
+    _feedPendingViews.add(id);
+    _feedViewObserver.unobserve(entry.target);
+  });
+}, {threshold: 0.5});
+
+setInterval(function(){
+  if(!_feedPendingViews.size) return;
+  var ids = Array.from(_feedPendingViews);
+  _feedPendingViews.clear();
+  fetch('/api/feed/views', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:ids})}).catch(function(){});
+}, 4000);
+
 function renderHomeFeed(){
   const el = document.getElementById('center-feed');
   if(!el) return;
@@ -7649,6 +7670,7 @@ function renderHomeFeed(){
   _initLiveCharts();
   el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
     _feedLoadReplies(card.id.slice('fc-card-'.length));
+    _feedViewObserver.observe(card);
   });
 }
 
