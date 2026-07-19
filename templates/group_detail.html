@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="client-secret" content="{{ client_secret }}">
+<title>Group — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OrcAgent">
+<link rel="apple-touch-icon" href="/static/icon-180.png?v=5">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
+  --accent:#f7b955;--accent-dim:rgba(247,185,85,.1);--accent-border:rgba(247,185,85,.28);
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --green:#3ad29b;--red:#ff4d6a;
+  --border:#16191f;--border2:#21252c;
+  --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,sans-serif;
+}
+html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+
+.gd-header{position:sticky;top:0;z-index:20;display:flex;align-items:center;gap:14px;padding:14px 20px;background:var(--bg);border-bottom:1px solid var(--border)}
+.gd-back{display:flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:var(--bg2);border:1px solid var(--border2);color:var(--sub);text-decoration:none;font-size:16px;flex-shrink:0;transition:color .15s,background .15s}
+.gd-back:hover{background:var(--bg3);color:var(--text)}
+.gd-tile{width:44px;height:44px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#0a0b0e;flex-shrink:0}
+.gd-title-wrap{min-width:0;flex:1}
+.gd-title-row{display:flex;align-items:center;gap:6px}
+.gd-name{font-size:16px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.gd-verified{width:15px;height:15px;border-radius:50%;background:var(--accent);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;font-size:9px;color:#0a0b0e;font-weight:700}
+.gd-meta{font-size:12px;color:var(--muted);font-family:var(--mono);margin-top:1px}
+.gd-meta .pos{color:var(--green)}
+.gd-meta .neg{color:var(--red)}
+.gd-join-btn{padding:9px 18px;border-radius:11px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;border:1px solid var(--accent);background:var(--accent);color:#0a0b0e;white-space:nowrap;flex-shrink:0;transition:opacity .15s}
+.gd-join-btn:hover{opacity:.88}
+.gd-join-btn.joined{background:transparent;color:var(--sub);border-color:var(--border2)}
+.gd-join-btn:disabled{opacity:.5;cursor:default}
+
+.gd-body{max-width:680px;margin:0 auto;padding:20px 20px 100px}
+.gd-desc{font-size:13px;color:var(--sub);line-height:1.5;padding-bottom:16px;border-bottom:1px solid var(--border);margin-bottom:18px}
+
+.gd-composer{display:flex;gap:10px;margin-bottom:22px}
+.gd-composer-avatar{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text);flex-shrink:0}
+.gd-composer-inner{flex:1;display:flex;flex-direction:column;gap:8px}
+.gd-composer-inp{width:100%;background:var(--bg2);border:1px solid var(--border2);border-radius:13px;padding:11px 14px;color:var(--text);font-size:14px;font-family:var(--ui);outline:none;resize:none;min-height:44px;max-height:140px;line-height:1.4;transition:border-color .15s}
+.gd-composer-inp::placeholder{color:var(--muted)}
+.gd-composer-inp:focus{border-color:var(--accent-border)}
+.gd-composer-row{display:flex;justify-content:flex-end}
+.gd-post-btn{padding:9px 20px;border-radius:11px;background:var(--accent);color:#0a0b0e;border:none;font-weight:700;font-size:13px;cursor:pointer;font-family:var(--ui)}
+.gd-post-btn:disabled{opacity:.4;cursor:default}
+.gd-join-prompt{padding:14px;text-align:center;background:var(--bg2);border:1px solid var(--border);border-radius:13px;font-size:13px;color:var(--sub);margin-bottom:22px}
+
+.gd-post{display:flex;gap:10px;padding:16px 0;border-bottom:1px solid var(--border)}
+.gd-post:last-child{border-bottom:none}
+.gd-post-avatar{width:38px;height:38px;border-radius:50%;background:var(--bg3);border:1px solid var(--border2);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--text);flex-shrink:0;overflow:hidden}
+.gd-post-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%}
+.gd-post-body{flex:1;min-width:0}
+.gd-post-head{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.gd-post-name{font-weight:700;font-size:13.5px;color:var(--text)}
+.gd-post-time{font-size:12px;color:var(--muted);font-family:var(--mono)}
+.gd-post-text{font-size:14px;color:var(--text);line-height:1.5;margin-top:4px;word-break:break-word;white-space:pre-wrap}
+.gd-post-del{background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;margin-left:auto;opacity:0;transition:opacity .15s}
+.gd-post:hover .gd-post-del{opacity:1}
+.gd-post-del:hover{color:var(--red)}
+
+.gd-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
+
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--border2);border-radius:4px}
+
+@media(max-width:640px){
+  .gd-header{padding:12px 14px}
+  .gd-body{padding:16px 14px 100px}
+  .gd-name{font-size:15px}
+  .gd-composer-inp{font-size:16px}
+}
+</style>
+</head>
+<body>
+
+<header class="gd-header">
+  <a class="gd-back" href="/groups" title="Back">←</a>
+  <div class="gd-tile" id="gd-tile">?</div>
+  <div class="gd-title-wrap">
+    <div class="gd-title-row">
+      <span class="gd-name" id="gd-name">Loading…</span>
+      <span class="gd-verified" id="gd-verified" style="display:none">✓</span>
+    </div>
+    <div class="gd-meta" id="gd-meta">—</div>
+  </div>
+  <button class="gd-join-btn" id="gd-join-btn" onclick="_toggleJoin()" disabled>…</button>
+</header>
+
+<div class="gd-body">
+  <div class="gd-desc" id="gd-desc" style="display:none"></div>
+
+  <div id="gd-composer-wrap"></div>
+
+  <div id="gd-feed">
+    <div class="gd-empty">Loading…</div>
+  </div>
+</div>
+
+<div class="toast" id="toast" style="position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--bg2);border:1px solid var(--border2);border-radius:10px;padding:10px 18px;font-size:12px;color:var(--text);opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;z-index:400;white-space:nowrap;box-shadow:0 4px 20px rgba(0,0,0,.5)"></div>
+
+<script>
+var _groupId       = {{ group_id }};
+var _csrfToken      = (document.querySelector('meta[name="csrf-token"]')    || {}).content || '';
+var _clientSecret   = (document.querySelector('meta[name="client-secret"]') || {}).content || '';
+var _myUsername     = '';
+var _myUid          = 0;
+var _groupData      = null;
+
+function esc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
+function _apiHeaders(){
+  var h = {'Content-Type':'application/json','X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
+  if(_clientSecret) h['X-Client-Secret'] = _clientSecret;
+  return h;
+}
+function _showToast(msg, type){
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.opacity = '1';
+  el.style.transform = 'translateX(-50%) translateY(0)';
+  el.style.borderColor = type==='err' ? 'rgba(255,77,106,.4)' : 'rgba(247,185,85,.4)';
+  el.style.color = type==='err' ? '#ff4d6a' : '#f7b955';
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(function(){ el.style.opacity='0'; el.style.transform='translateX(-50%) translateY(20px)'; }, 2600);
+}
+function _timeAgo(iso){
+  if(!iso) return '';
+  var d = new Date(iso.replace(' ','T')+'Z');
+  var diff = (Date.now()-d.getTime())/1000;
+  if(diff<60) return 'now';
+  if(diff<3600) return Math.floor(diff/60)+'m';
+  if(diff<86400) return Math.floor(diff/3600)+'h';
+  return Math.floor(diff/86400)+'d';
+}
+function _tokenTileColor(sym){
+  var palette = ['#16c784','#f7b955','#7c6cf7','#ff6b8a','#3ad2c9','#e0a53a'];
+  var s = String(sym||'?'); var h = 0;
+  for(var i=0;i<s.length;i++) h = (h*31 + s.charCodeAt(i)) >>> 0;
+  return palette[h % palette.length];
+}
+
+function _renderHeader(g){
+  document.getElementById('gd-tile').textContent = (g.token_symbol||'?').slice(0,3).toUpperCase();
+  document.getElementById('gd-tile').style.background = _tokenTileColor(g.token_symbol);
+  document.getElementById('gd-name').textContent = g.name;
+  document.getElementById('gd-verified').style.display = g.is_owner ? 'none' : 'none';
+  document.title = g.name + ' — OrcAgent';
+  document.getElementById('gd-meta').textContent = g.member_count + ' member'+(g.member_count===1?'':'s')+(g.token_symbol?' · $'+g.token_symbol:'');
+  if(g.description){
+    var d = document.getElementById('gd-desc');
+    d.textContent = g.description;
+    d.style.display = '';
+  }
+  var btn = document.getElementById('gd-join-btn');
+  btn.disabled = false;
+  if(g.is_owner){
+    btn.textContent = 'Owner';
+    btn.disabled = true;
+    btn.classList.add('joined');
+  } else if(g.is_member){
+    btn.textContent = 'Joined';
+    btn.classList.add('joined');
+  } else {
+    btn.textContent = 'Join group';
+    btn.classList.remove('joined');
+  }
+  _renderComposer(g);
+  if(g.token_symbol) _loadPriceChange(g.token_symbol);
+}
+
+function _loadPriceChange(symbol){
+  fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol))
+    .then(function(r){return r.json();}).then(function(d){
+      var pairs = (d && d.pairs) || [];
+      if(!pairs.length) return;
+      var best = pairs.reduce(function(a,b){ return (b.liquidity&&b.liquidity.usd||0) > (a.liquidity&&a.liquidity.usd||0) ? b : a; });
+      var chg = best.priceChange && best.priceChange.h24;
+      if(chg==null) return;
+      var span = document.createElement('span');
+      span.className = chg>=0 ? 'pos' : 'neg';
+      span.textContent = ' · '+(chg>=0?'+':'')+chg.toFixed(1)+'% (24h)';
+      document.getElementById('gd-meta').appendChild(span);
+    }).catch(function(){});
+}
+
+function _renderComposer(g){
+  var wrap = document.getElementById('gd-composer-wrap');
+  if(!g.is_member){
+    wrap.innerHTML = '<div class="gd-join-prompt">Join this group to post.</div>';
+    return;
+  }
+  wrap.innerHTML =
+    '<div class="gd-composer">'
+      +'<div class="gd-composer-avatar">'+esc((_myUsername||'?')[0].toUpperCase())+'</div>'
+      +'<div class="gd-composer-inner">'
+        +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Share an update with the group…" rows="1" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\'"></textarea>'
+        +'<div class="gd-composer-row"><button class="gd-post-btn" id="gd-post-btn" onclick="_submitPost()">Post</button></div>'
+      +'</div>'
+    +'</div>';
+}
+
+function _postHtml(p){
+  var isMine = p.user_id === _myUid;
+  var avatarInner = p.avatar_url
+    ? '<img src="'+esc(p.avatar_url)+'" alt="" onerror="this.style.display=\'none\'">'
+    : esc((p.username||p.wallet_short||'?')[0].toUpperCase());
+  var name = p.username || p.wallet_short || 'Unknown';
+  return ''
+    +'<div class="gd-post" data-post-id="'+p.id+'">'
+      +'<div class="gd-post-avatar">'+avatarInner+'</div>'
+      +'<div class="gd-post-body">'
+        +'<div class="gd-post-head">'
+          +'<span class="gd-post-name">'+esc(name)+'</span>'
+          +(p.is_verified ? '<span class="gd-verified">✓</span>' : '')
+          +'<span class="gd-post-time">'+esc(_timeAgo(p.created_at))+'</span>'
+          +(isMine ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_deletePost(this)">Delete</button>' : '')
+        +'</div>'
+        +'<div class="gd-post-text">'+esc(p.content)+'</div>'
+      +'</div>'
+    +'</div>';
+}
+
+function _loadPosts(){
+  fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    var el = document.getElementById('gd-feed');
+    if(!d.ok || !d.posts.length){
+      el.innerHTML = '<div class="gd-empty">No posts yet — be the first to share something.</div>';
+      return;
+    }
+    el.innerHTML = d.posts.map(_postHtml).join('');
+  }).catch(function(){});
+}
+
+function _submitPost(){
+  var inp = document.getElementById('gd-composer-inp');
+  var content = inp.value.trim();
+  if(!content) return;
+  var btn = document.getElementById('gd-post-btn');
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId+'/posts', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({content:content})})
+    .then(function(r){return r.json();}).then(function(d){
+      btn.disabled = false;
+      if(!d.ok){ _showToast(d.msg||'Could not post', 'err'); return; }
+      inp.value = '';
+      inp.style.height = 'auto';
+      _loadPosts();
+    }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
+}
+
+function _deletePost(btn){
+  var postId = btn.getAttribute('data-post-id');
+  fetch('/api/groups/'+_groupId+'/posts/'+postId, {method:'DELETE', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not delete', 'err'); return; }
+      _loadPosts();
+    }).catch(function(){ _showToast('Network error', 'err'); });
+}
+
+function _toggleJoin(){
+  if(!_groupData || _groupData.is_owner) return;
+  var btn = document.getElementById('gd-join-btn');
+  btn.disabled = true;
+  var isMember = _groupData.is_member;
+  var url = '/api/groups/'+_groupId+'/'+(isMember ? 'leave' : 'join');
+  fetch(url, {method:'POST', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Something went wrong', 'err'); btn.disabled=false; return; }
+      _loadGroup();
+    }).catch(function(){ _showToast('Network error', 'err'); btn.disabled=false; });
+}
+
+function _loadGroup(){
+  fetch('/api/groups/'+_groupId, {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok){
+      document.getElementById('gd-name').textContent = 'Group not found';
+      document.getElementById('gd-join-btn').style.display = 'none';
+      return;
+    }
+    _groupData = d.group;
+    _renderHeader(d.group);
+    _loadPosts();
+  }).catch(function(){});
+}
+
+fetch('/api/me', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+  _myUsername = (d && d.username) || '';
+  _myUid = (d && d.user_id) || 0;
+}).catch(function(){}).then(_loadGroup);
+</script>
+<script src="/static/notif-poll.js?v={{ app_version }}"></script>
+<script src="/static/page-loader.js?v={{ app_version }}"></script>
+</body>
+</html>
