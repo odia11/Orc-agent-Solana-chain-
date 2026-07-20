@@ -3529,7 +3529,7 @@ def api_test_auth():
 
 @app.route('/api/my-trades')
 def api_my_trades():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'error': 'not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -5696,7 +5696,7 @@ def get_notifications():
 @app.route('/api/notifications/mine', methods=['GET'])
 @rate_limit(60, 60)
 def notifications_mine():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -5721,7 +5721,7 @@ def notifications_mine():
 @app.route('/api/notifications/mine/unread_count', methods=['GET'])
 @rate_limit(120, 60)
 def notifications_unread_count():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9500,7 +9500,7 @@ def api_wallet_transactions():
 @app.route('/api/messages/unread', methods=['GET'])
 @rate_limit(60, 60)
 def messages_unread():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9518,7 +9518,7 @@ def messages_unread():
 @app.route('/api/messages', methods=['GET'])
 @rate_limit(60, 60)
 def list_conversations():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9587,7 +9587,7 @@ def delete_dm_thread(peer_id):
     The messages themselves are untouched (the peer still has them), and the
     conversation reappears once the peer sends a new message (see the
     hidden_at check in list_conversations)."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9617,7 +9617,7 @@ def delete_dm_thread(peer_id):
 @app.route('/api/messages/<int:peer_id>', methods=['GET'])
 @rate_limit(60, 60)
 def get_dm_history(peer_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     peer_id = int(peer_id)
@@ -9769,7 +9769,7 @@ def send_dm(peer_id):
 @app.route('/api/support/thread', methods=['GET'])
 @rate_limit(60, 60)
 def support_get_thread():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -9796,7 +9796,7 @@ def support_get_thread():
 @app.route('/api/support/unread', methods=['GET'])
 @rate_limit(60, 60)
 def support_unread():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': True, 'unread': 0})
     conn = sqlite3.connect(DB_FILE)
@@ -10386,7 +10386,7 @@ def share_trade_dm(peer_id):
 @app.route('/api/messages/unread_count', methods=['GET'])
 @rate_limit(120, 60)
 def wallet_unread_count():
-    me = _current_wallet()
+    me = _authenticated_wallet()
     if not me:
         return jsonify({'count': 0})
     conn = sqlite3.connect(DB_FILE)
@@ -10402,7 +10402,7 @@ def wallet_unread_count():
 @app.route('/api/messages/conversations', methods=['GET'])
 @rate_limit(60, 60)
 def wallet_conversations():
-    me = _current_wallet()
+    me = _authenticated_wallet()
     if not me:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
