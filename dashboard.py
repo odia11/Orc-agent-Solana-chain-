@@ -9574,7 +9574,7 @@ def list_conversations():
             return False
     return jsonify({'ok': True, 'conversations': [
         {'peer_id': r[0], 'peer_wallet': r[1], 'peer_username': r[2],
-         'last_msg': r[3], 'last_ts': r[4], 'last_type': r[5], 'last_is_mine': bool(r[6]),
+         'last_msg': ('' if r[5] == 'image' else r[3]), 'last_ts': r[4], 'last_type': r[5], 'last_is_mine': bool(r[6]),
          'unread': r[7], 'peer_avatar': r[8] or '',
          'peer_online': _is_online(r[9]), 'peer_verified': bool(r[10])}
         for r in rows
@@ -9695,12 +9695,17 @@ def send_dm(peer_id):
     message_type = body.get('message_type', 'text')
     trade_id = None
     if message_type == 'image':
-        text = str(body.get('message', ''))
-        _dm_prefix = '/static/dm_images/'
-        if not text.startswith(_dm_prefix):
-            return jsonify({'ok': False, 'msg': 'Invalid image path'}), 400
-        if not _UPLOAD_FILENAME_RE.match(text[len(_dm_prefix):]):
-            return jsonify({'ok': False, 'msg': 'Invalid image filename'}), 400
+        text = str(body.get('message', '')).strip()
+        _ALLOWED_PREFIXES = (
+            'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+            'data:image/png;base64,',  'data:image/gif;base64,',
+            'data:image/webp;base64,',
+        )
+        if not any(text.startswith(p) for p in _ALLOWED_PREFIXES):
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, GIF, or WebP images are accepted'}), 400
+        b64_part = text.split(',', 1)[1] if ',' in text else ''
+        if len(b64_part) * 3 // 4 > 3 * 1024 * 1024:
+            return jsonify({'ok': False, 'msg': 'Image too large (max 3 MB)'}), 400
     elif message_type == 'trade':
         try:
             trade_id = int(body.get('trade_id'))

@@ -906,7 +906,7 @@ function _renderMessages(msgs, forceScroll) {
     var mine = _myUserId != null ? (m.sender_id === _myUserId) : false;
     var bubble;
     if (m.message_type === 'image') {
-      bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="_showImgLightbox('+_esc(JSON.stringify(m.message))+')"></div>';
+      bubble = '<div class="msg-bubble msg-image"><img src="'+_esc(m.message)+'" loading="lazy" onclick="_showImgLightbox(this.src)"></div>';
     } else if (m.message_type === 'trade') {
       var tr = {}; try { tr = JSON.parse(m.message); } catch(e) {}
       var trPnl = tr.pnl || 0, trPos = trPnl >= 0;
@@ -1112,7 +1112,7 @@ async function _sendTrade(tradeId) {
 async function _uploadAndSendImage(file) {
   var allowed = ['image/jpeg','image/png','image/gif','image/webp'];
   if (allowed.indexOf(file.type) === -1) { openAlertModal({text:'Only jpg, png, gif or webp images are supported.'}); return; }
-  if (file.size > 5 * 1024 * 1024) { openAlertModal({text:'Image must be smaller than 5 MB.'}); return; }
+  if (file.size > 3 * 1024 * 1024) { openAlertModal({text:'Image must be smaller than 3 MB.'}); return; }
   if (!_activePeerId) return;
 
   var area = document.getElementById('msgs-area');
@@ -1128,29 +1128,27 @@ async function _uploadAndSendImage(file) {
   if (area) { area.appendChild(pending); _scrollToBottom(); }
 
   try {
-    var fd = new FormData();
-    fd.append('image', file);
-    var up = await fetch('/api/messages/upload-image', {
-      method: 'POST',
-      headers: {'X-CSRF-Token': _csrfToken},
-      body: fd
+    var dataUrl = await new Promise(function(resolve, reject){
+      var reader = new FileReader();
+      reader.onload = function(e){ resolve(e.target.result); };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
     });
-    var ud = await up.json();
-    if (!ud.ok) throw new Error(ud.msg || 'Upload failed');
 
     var r = await fetch('/api/messages/' + _activePeerId, {
       method: 'POST',
       headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
-      body: JSON.stringify({message: ud.url, message_type: 'image'})
+      body: JSON.stringify({message: dataUrl, message_type: 'image'})
     });
     var rd = await r.json();
+    if (!rd.ok) throw new Error(rd.msg || 'Send failed');
     var p = document.getElementById(pendingId);
     if (p) p.remove();
     URL.revokeObjectURL(localUrl);
     await loadThread(_activePeerId, true);
     var conv = _conversations.find(function(c){ return c.peer_id === _activePeerId; });
-    if (conv) { conv.last_msg = ud.url; conv.last_ts = rd.created_at; conv.last_type = 'image'; conv.last_is_mine = true; }
-    else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:ud.url, last_ts:rd.created_at, last_type:'image', last_is_mine:true, unread:0}); }
+    if (conv) { conv.last_msg = dataUrl; conv.last_ts = rd.created_at; conv.last_type = 'image'; conv.last_is_mine = true; }
+    else { _conversations.unshift({peer_id:_activePeerId, peer_wallet:_activePeer.wallet, peer_username:_activePeer.username, last_msg:dataUrl, last_ts:rd.created_at, last_type:'image', last_is_mine:true, unread:0}); }
     _renderConvList();
   } catch(e) {
     var p = document.getElementById(pendingId);
