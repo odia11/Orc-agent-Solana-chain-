@@ -5086,28 +5086,6 @@ def api_group_detail(group_id):
         conn.close()
 
 
-def _poll_for_post(conn, post_id, uid):
-    poll_row = conn.execute('SELECT id, question FROM group_polls WHERE post_id=?', (post_id,)).fetchone()
-    if not poll_row:
-        return None
-    poll_id, question = poll_row
-    opt_rows = conn.execute('SELECT id, text FROM group_poll_options WHERE poll_id=? ORDER BY position',
-                             (poll_id,)).fetchall()
-    counts = dict(conn.execute('SELECT option_id, COUNT(*) FROM group_poll_votes WHERE poll_id=? GROUP BY option_id',
-                                (poll_id,)).fetchall())
-    my_vote = None
-    if uid:
-        mv = conn.execute('SELECT option_id FROM group_poll_votes WHERE poll_id=? AND user_id=?',
-                           (poll_id, uid)).fetchone()
-        my_vote = mv[0] if mv else None
-    return {
-        'poll_id': poll_id, 'question': question,
-        'options': [{'id': o[0], 'text': o[1], 'votes': counts.get(o[0], 0)} for o in opt_rows],
-        'my_vote': my_vote,
-        'total_votes': sum(counts.values()),
-    }
-
-
 @app.route('/api/groups/<int:group_id>/posts')
 def api_group_posts(group_id):
     wallet = _authenticated_wallet()
@@ -5128,7 +5106,6 @@ def api_group_posts(group_id):
             'username': r[4], 'avatar_url': r[5],
             'wallet_short': (r[6][:4]+'...'+r[6][-4:]) if r[6] and len(r[6]) >= 8 else (r[6] or ''),
             'is_verified': bool(r[7]), 'image_url': r[8],
-            'poll': _poll_for_post(conn, r[0], uid),
         } for r in rows]
         return jsonify({'ok': True, 'posts': posts})
     finally:
@@ -5677,80 +5654,13 @@ def api_group_search(group_id):
             'id': r[0], 'content': r[1], 'created_at': r[2], 'user_id': r[3],
             'username': r[4], 'avatar_url': r[5],
             'wallet_short': (r[6][:4]+'...'+r[6][-4:]) if r[6] and len(r[6]) >= 8 else (r[6] or ''),
-            'is_verified': bool(r[7]), 'image_url': r[8], 'poll': None,
+            'is_verified': bool(r[7]), 'image_url': r[8],
         } for r in rows]
         return jsonify({'ok': True, 'posts': posts})
     finally:
         conn.close()
 
 
-@app.route('/api/groups/<int:group_id>/polls', methods=['POST'])
-@rate_limit(10, 300)
-def api_group_create_poll(group_id):
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
-    body = request.json or {}
-    question = (body.get('question') or '').strip()
-    options = [o.strip() for o in (body.get('options') or []) if isinstance(o, str) and o.strip()]
-    options = options[:6]
-    if not question or len(question) > 300:
-        return jsonify({'ok': False, 'msg': 'Question is required (max 300 chars)'}), 400
-    if len(options) < 2:
-        return jsonify({'ok': False, 'msg': 'At least 2 options are required'}), 400
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        uid = _get_uid(conn, wallet)
-        role = _group_role(conn, group_id, uid)
-        if not role:
-            return jsonify({'ok': False, 'msg': 'Join the group to post'}), 403
-        ann_row = conn.execute('SELECT announcement_only FROM groups WHERE id=?', (group_id,)).fetchone()
-        if ann_row and ann_row[0] and role not in ('owner', 'mod'):
-            return jsonify({'ok': False, 'msg': 'Only moderators can post in this group'}), 403
-        cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content) VALUES (?,?,?)',
-                            (group_id, uid, _sanitize(question)))
-        post_id = cur.lastrowid
-        pcur = conn.execute('INSERT INTO group_polls (group_id, post_id, question, created_by) VALUES (?,?,?,?)',
-                             (group_id, post_id, _sanitize(question), uid))
-        poll_id = pcur.lastrowid
-        for i, opt in enumerate(options):
-            conn.execute('INSERT INTO group_poll_options (poll_id, text, position) VALUES (?,?,?)',
-                         (poll_id, _sanitize(opt)[:120], i))
-        conn.commit()
-        return jsonify({'ok': True, 'post_id': post_id, 'poll_id': poll_id})
-    finally:
-        conn.close()
-
-
-@app.route('/api/groups/polls/<int:poll_id>/vote', methods=['POST'])
-@rate_limit(30, 60)
-def api_group_vote_poll(poll_id):
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
-    option_id = (request.json or {}).get('option_id')
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        uid = _get_uid(conn, wallet)
-        poll_row = conn.execute('SELECT group_id FROM group_polls WHERE id=?', (poll_id,)).fetchone()
-        if not poll_row:
-            return jsonify({'ok': False, 'msg': 'Poll not found'}), 404
-        if not _group_role(conn, poll_row[0], uid):
-            return jsonify({'ok': False, 'msg': 'Members only'}), 403
-        opt_row = conn.execute('SELECT id FROM group_poll_options WHERE id=? AND poll_id=?',
-                                (option_id, poll_id)).fetchone()
-        if not opt_row:
-            return jsonify({'ok': False, 'msg': 'Invalid option'}), 400
-        conn.execute('INSERT INTO group_poll_votes (poll_id, option_id, user_id) VALUES (?,?,?) '
-                     'ON CONFLICT(poll_id, user_id) DO UPDATE SET option_id=excluded.option_id',
-                     (poll_id, option_id, uid))
-        conn.commit()
-        counts = dict(conn.execute(
-            'SELECT option_id, COUNT(*) FROM group_poll_votes WHERE poll_id=? GROUP BY option_id',
-            (poll_id,)).fetchall())
-        return jsonify({'ok': True, 'counts': counts, 'my_vote': option_id})
-    finally:
-        conn.close()
 
 
 @app.route('/api/notifications')

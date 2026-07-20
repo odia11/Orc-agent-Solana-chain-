@@ -84,10 +84,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-composer-tools{display:flex;gap:6px;margin-top:6px}
 .gd-composer-tool-btn{background:none;border:1px solid var(--border2);color:var(--sub);border-radius:8px;padding:5px 9px;font-size:12px;cursor:pointer;font-family:var(--ui)}
 .gd-composer-tool-btn:hover{border-color:var(--muted);color:var(--text)}
-.gd-emoji-palette{display:none;position:absolute;bottom:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;padding:6px;grid-template-columns:repeat(6,1fr);gap:2px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:10;width:216px}
-.gd-emoji-palette.open{display:grid}
-.gd-emoji-palette button{background:none;border:none;font-size:18px;cursor:pointer;padding:6px;border-radius:8px;line-height:1}
-.gd-emoji-palette button:hover{background:var(--bg3)}
 
 .gd-mute-actions{display:flex;gap:4px}
 
@@ -178,7 +174,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   <a class="gd-allgroups" href="/groups">← All groups</a>
 
   <div class="gd-banner-wrap" id="gd-banner-wrap">
-    <img class="gd-banner-img" id="gd-banner-img" src="" alt="" onerror="this.style.display='none'" onclick="_openLightbox(this.src)">
+    <img class="gd-banner-img" id="gd-banner-img" src="{{ banner_url }}" alt="" style="{{ '' if banner_url else 'display:none' }}" onerror="this.style.display='none'" onclick="_openLightbox(this.src)">
     <div class="gd-banner-edit-wrap" id="gd-banner-edit-wrap" style="display:none">
       <button class="gd-banner-edit-btn" onclick="_toggleBannerMenu(event)" title="Edit banner">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
@@ -193,7 +189,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
   <div class="gd-header">
     <div class="gd-tile-wrap">
-      <div class="gd-tile" id="gd-tile">?</div>
+      <div class="gd-tile" id="gd-tile">{% if avatar_url %}<img src="{{ avatar_url }}" alt="" style="cursor:pointer" onclick="_openLightbox(this.src)">{% else %}?{% endif %}</div>
       <div class="gd-avatar-edit-btn" id="gd-avatar-edit-btn" style="display:none" onclick="document.getElementById('gd-avatar-input').click()" title="Change group icon">
         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
       </div>
@@ -286,6 +282,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   </div>
 </div>
 
+
 <div class="gd-modal-backdrop" id="gd-delete-backdrop" onclick="_closeDeleteGroupModal(event)">
   <div class="gd-modal" role="dialog" aria-modal="true">
     <div class="gd-modal-header">
@@ -358,7 +355,7 @@ function _renderHeader(g){
   var tile = document.getElementById('gd-tile');
   if(g.avatar_url){
     tile.innerHTML = '<img src="'+esc(g.avatar_url)+'" alt="" style="cursor:pointer" onclick="_openLightbox(this.src)">';
-  } else {
+  } else if(!tile.querySelector('img')){
     tile.textContent = (g.token_symbol||'?').slice(0,3).toUpperCase();
     tile.style.background = _tokenTileColor(g.token_symbol);
   }
@@ -420,6 +417,7 @@ function _renderHeader(g){
   _renderComposer(g);
   if(g.token_symbol && !g.is_official) _loadPriceChange(g.token_symbol);
   _startTypingPoll();
+  _startPostsPoll();
 }
 
 function _toggleOfficial(){
@@ -503,10 +501,6 @@ function _renderComposer(g){
         +'<div id="gd-attach-preview-wrap"></div>'
         +'<div class="gd-composer-tools">'
           +'<button class="gd-composer-tool-btn" onclick="document.getElementById(\'gd-image-input\').click()">🖼️ Image</button>'
-          +'<div style="position:relative;display:inline-block">'
-            +'<button type="button" class="gd-composer-tool-btn gd-emoji-btn" onclick="_toggleEmojiPicker(event)">😊 Emoji</button>'
-            +'<div class="gd-emoji-palette" id="gd-emoji-palette"></div>'
-          +'</div>'
           +'<input type="file" id="gd-image-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
         +'</div>'
       +'</div>'
@@ -546,43 +540,45 @@ function _postHtml(p){
 
 var _REACTION_EMOJIS = ['👍', '❤️', '😂', '🔥', '💰', '🚀', '😢', '😮'];
 
-var _lastPostsSignature = null;
+var _lastPostsSig = null;
 
 function _loadPosts(){
   fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
     var el = document.getElementById('gd-feed');
     if(!d.ok || !d.posts.length){
-      _lastPostsSignature = '';
       el.innerHTML = '<div class="gd-empty">No posts yet — be the first to share something.</div>';
+      _lastPostsSig = '';
       return;
     }
-    _lastPostsSignature = d.posts.map(function(p){ return p.id; }).join(',');
+    _lastPostsSig = d.posts.map(function(p){ return p.id; }).join(',');
     el.innerHTML = d.posts.map(_postHtml).join('');
     _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
   }).catch(function(){});
 }
 
-/* Poll for new posts every 5s, same cadence as DMs -- only touches the DOM
-   when the post list actually changed, so scrolling/open reaction pickers/
-   an in-progress reply aren't disrupted by a refresh that found nothing new. */
+/* Lightweight re-check every 5s (same cadence as DMs) -- only re-renders when the
+   set of posts actually changed, so it doesn't wipe the feed out from under someone
+   mid-scroll or mid-reply every few seconds. */
+function _pollNewPosts(){
+  if(document.getElementById('gd-search-wrap').style.display !== 'none') return; // don't clobber search results
+  fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok) return;
+    var sig = d.posts.map(function(p){ return p.id; }).join(',');
+    if(sig === _lastPostsSig) return;
+    _lastPostsSig = sig;
+    var el = document.getElementById('gd-feed');
+    if(!d.posts.length){
+      el.innerHTML = '<div class="gd-empty">No posts yet — be the first to share something.</div>';
+      return;
+    }
+    el.innerHTML = d.posts.map(_postHtml).join('');
+    _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
+  }).catch(function(){});
+}
 var _postsPollTimer = null;
 function _startPostsPoll(){
   clearInterval(_postsPollTimer);
-  _postsPollTimer = setInterval(function(){
-    fetch('/api/groups/'+_groupId+'/posts', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
-      if(!d.ok) return;
-      var sig = d.posts.map(function(p){ return p.id; }).join(',');
-      if(sig === _lastPostsSignature) return;
-      _lastPostsSignature = sig;
-      var el = document.getElementById('gd-feed');
-      if(!d.posts.length){
-        el.innerHTML = '<div class="gd-empty">No posts yet — be the first to share something.</div>';
-        return;
-      }
-      el.innerHTML = d.posts.map(_postHtml).join('');
-      _loadReactions(d.posts.map(function(p){ return 'g'+p.id; }));
-    }).catch(function(){});
-  }, 5000);
+  _postsPollTimer = setInterval(_pollNewPosts, 5000);
 }
 
 function _loadReactions(ids){
@@ -629,10 +625,6 @@ function _closeReactPicker(postId){
 document.addEventListener('click', function(e){
   if(!e.target.closest('.gd-react-add') && !e.target.closest('.gd-react-picker')){
     document.querySelectorAll('.gd-react-picker.open').forEach(function(p){ p.classList.remove('open'); });
-  }
-  if(!e.target.closest('.gd-emoji-btn') && !e.target.closest('.gd-emoji-palette')){
-    var epal = document.getElementById('gd-emoji-palette');
-    if(epal) epal.classList.remove('open');
   }
 });
 
@@ -722,41 +714,6 @@ function _onComposerKeydown(ev){
   } else if(ev.key === 'Escape'){
     _closeMentionMenu();
   }
-}
-
-var _GD_EMOJI_LIST = ['😀','😂','😍','🥰','😢','😮','😎','🤔','😤','🔥','❤️','💯','👍','👎','🚀','💰','📈','📉','⚡','🎯','💎','🏆','🌙','💀','🤝','👀','🙏','✅','❌','⚠️'];
-
-function _toggleEmojiPicker(ev){
-  ev.stopPropagation();
-  var pal = document.getElementById('gd-emoji-palette');
-  var inp = document.getElementById('gd-composer-inp');
-  if(!pal) return;
-  var wasOpen = pal.classList.contains('open');
-  pal.classList.remove('open');
-  if(wasOpen) return;
-  if(!pal.childElementCount){
-    _GD_EMOJI_LIST.forEach(function(emoji){
-      var b = document.createElement('button');
-      b.type = 'button';
-      b.textContent = emoji;
-      b.onmousedown = function(e){ e.preventDefault(); };
-      b.onclick = function(e){
-        e.stopPropagation();
-        if(inp){
-          var s = inp.selectionStart, en = inp.selectionEnd, v = inp.value;
-          inp.value = v.slice(0,s) + emoji + v.slice(en);
-          var pos = s + [...emoji].length;
-          inp.setSelectionRange(pos, pos);
-          inp.focus();
-          inp.style.height = 'auto';
-          inp.style.height = inp.scrollHeight + 'px';
-        }
-        pal.classList.remove('open');
-      };
-      pal.appendChild(b);
-    });
-  }
-  pal.classList.add('open');
 }
 
 function _renderPinned(g){
@@ -1140,7 +1097,6 @@ function _loadGroup(){
     _groupData = d.group;
     _renderHeader(d.group);
     _loadPosts();
-    _startPostsPoll();
   }).catch(function(){});
 }
 
