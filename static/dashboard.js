@@ -2249,8 +2249,8 @@ function renderPerfPanel(r){
     const p=t.pnl??0, pp=t.pnl_pct??0;
     const cls=p>=0?'td-pos':'td-neg';
     const sign=p>=0?'+':'';
-    const avoidBtn=t.mint?`<button class="avoid-btn" onclick="avoidToken('${esc(t.mint)}','${esc(t.symbol||'???')}')" title="Avoid — bot will skip this token">🚫</button>`:'';
-    return `<tr>
+    const avoidBtn=t.mint?`<button class="avoid-btn" onclick="avoidToken(this.closest('tr').dataset.mint,this.closest('tr').dataset.symbol)" title="Avoid — bot will skip this token">🚫</button>`:'';
+    return `<tr data-mint="${esc(t.mint||'')}" data-symbol="${esc(t.symbol||'???')}">
       <td>${t.ts?new Date(t.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(t.time||'—')}</td>
       <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
@@ -2328,15 +2328,16 @@ function renderPositions(detail){
     const sign=isPos?'+':'-';
     const pnlStr=sign+fmtSolToUsdc(Math.abs(p.pnl||0));
     const pctStr=(isPos?'+':'-')+Math.abs(p.pnl_pct||0).toFixed(1)+'%';
-    const sym=p.mint?`<a href="/token/${esc(p.mint)}" style="color:inherit;text-decoration:none">${esc(p.symbol||'???')}</a>`:esc(p.symbol||'???');
-    return `<div class="pos-mini-card" id="pos-row-${esc(p.mint||'')}">
+    const safeSym=esc(p.symbol||'???');
+    const sym=p.mint?`<a href="/token/${esc(p.mint)}" style="color:inherit;text-decoration:none">${safeSym}</a>`:safeSym;
+    return `<div class="pos-mini-card" id="pos-row-${esc(p.mint||'')}" data-mint="${esc(p.mint||'')}" data-symbol="${safeSym}">
       <div class="pos-mini-sym">${sym}</div>
       <div style="display:flex;align-items:center;gap:6px">
         <div class="${cls} pos-mini-pnl">${pnlStr} <span style="font-size:9px;opacity:.7">${pctStr}</span></div>
         <div id="pos-act-${esc(p.mint||'')}" style="display:flex;gap:3px">
-          <button class="pos-chart-btn" style="padding:2px 7px;font-size:9px" onclick="openPosChart('${esc(p.mint||'')}','${esc(p.symbol||'???')}',${p.current||0})">📈</button>
-          <button class="pos-sell-btn" style="padding:2px 7px;font-size:9px" onclick="_posStartSell('${esc(p.mint||'')}','${esc(p.symbol||'???')}')">✕</button>
-          ${p.mint?`<button class="avoid-btn" style="padding:2px 5px;font-size:9px" onclick="avoidToken('${esc(p.mint)}','${esc(p.symbol||'???')}')" title="Avoid">🚫</button>`:''}
+          <button class="pos-chart-btn" style="padding:2px 7px;font-size:9px" data-current="${p.current||0}" onclick="var c=this.closest('.pos-mini-card');openPosChart(c.dataset.mint,c.dataset.symbol,+this.dataset.current)">📈</button>
+          <button class="pos-sell-btn" style="padding:2px 7px;font-size:9px" onclick="var c=this.closest('.pos-mini-card');_posStartSell(c.dataset.mint,c.dataset.symbol)">✕</button>
+          ${p.mint?`<button class="avoid-btn" style="padding:2px 5px;font-size:9px" onclick="var c=this.closest('.pos-mini-card');avoidToken(c.dataset.mint,c.dataset.symbol)" title="Avoid">🚫</button>`:''}
         </div>
       </div>
     </div>`;
@@ -2348,10 +2349,12 @@ function _posStartSell(mint, symbol) {
   const wrap = document.getElementById('pos-act-' + mint);
   if (!wrap) return;
   wrap.dataset.origHtml = wrap.innerHTML;
+  wrap.dataset.mint = mint;
+  wrap.dataset.symbol = symbol;
   wrap.innerHTML = `<div class="pos-sell-conf">
     <span class="pos-sell-conf-label">Sell ${esc(symbol)}?</span>
-    <button class="pos-sell-confirm-btn" onclick="_posConfirmSell('${esc(mint)}','${esc(symbol)}')">Confirm Sell</button>
-    <button class="pos-sell-cancel-btn" onclick="_posCancelSell('${esc(mint)}')">Cancel</button>
+    <button class="pos-sell-confirm-btn" onclick="_posConfirmSell(this.closest('[data-mint]').dataset.mint,this.closest('[data-mint]').dataset.symbol)">Confirm Sell</button>
+    <button class="pos-sell-cancel-btn" onclick="_posCancelSell(this.closest('[data-mint]').dataset.mint)">Cancel</button>
   </div>`;
 }
 
@@ -2383,13 +2386,13 @@ async function _posConfirmSell(mint, symbol) {
     } else {
       wrap.innerHTML = `<div class="pos-sell-conf">
         <span class="pos-sell-err">✗ ${esc(data.msg || 'Sell failed')}</span>
-        <button class="pos-sell-cancel-btn" onclick="_posCancelSell('${esc(mint)}')">Dismiss</button>
+        <button class="pos-sell-cancel-btn" onclick="_posCancelSell(this.closest('[data-mint]').dataset.mint)">Dismiss</button>
       </div>`;
     }
   } catch(e) {
     wrap.innerHTML = `<div class="pos-sell-conf">
       <span class="pos-sell-err">✗ Network error</span>
-      <button class="pos-sell-cancel-btn" onclick="_posCancelSell('${esc(mint)}')">Dismiss</button>
+      <button class="pos-sell-cancel-btn" onclick="_posCancelSell(this.closest('[data-mint]').dataset.mint)">Dismiss</button>
     </div>`;
   }
 }
@@ -4184,7 +4187,7 @@ async function openFollowView(userId, username, type){
     if(u.is_following) _tvFollowed.add(rawKey); else _tvFollowed.delete(rawKey);
     const isFollowed = _tvFollowed.has(rawKey);
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
+      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" data-key="${followKey}" data-uid="${u.user_id}" data-uname="${esc(u.username)}" onclick="event.stopPropagation();_tvFollowToggle(this,this.dataset.key,+this.dataset.uid,this.dataset.uname)">Follow</button>`
       : '';
     const rowCls = (type==='following' && isFollowed) ? 'tvfl-row is-following' : 'tvfl-row';
     const nameBadge = type==='followers'
@@ -4237,7 +4240,7 @@ async function _loadFollowPanel(wallet, tab){
     // stopPropagation is on the button directly — not a wrapper div — so clicking
     // elsewhere on the row still fires the row onclick
     const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,'${followKey}',${u.user_id},'${esc(u.username).replace(/'/g,"\\'")}')">Follow</button>`
+      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" data-key="${followKey}" data-uid="${u.user_id}" data-uname="${esc(u.username)}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,this.dataset.key,+this.dataset.uid,this.dataset.uname)">Follow</button>`
       : '';
     const rowCls = (tab==='following' && isFollowed) ? 'tvp-fp-row is-following' : 'tvp-fp-row';
     const nameBadge = tab==='followers'
@@ -4533,7 +4536,7 @@ function renderLeaderboard(entries){
     const badgeHtml=earnedBadges.length ? `<div class="badges-row" style="margin-top:3px;gap:3px">${earnedBadges.slice(0,3).map(b=>_badgePillHtml(b,true,true)).join('')}</div>` : '';
     const lbFollowKey=esc(e.username+'|'+(e.wallet_address||''));
     const lbFollowed=uid&&!isMe&&_tvFollowed.has(e.username+'|'+(e.wallet_address||''));
-    const lbFollowBtn=uid&&!isMe?`<button class="tv-follow-btn${lbFollowed?' followed':''}" onclick="event.stopPropagation();_tvFollowToggle(this,'${lbFollowKey}',${uid},'${esc(e.username).replace(/'/g,"\\'")}')"> ${lbFollowed?'✓ Following':'Follow'}</button>`:'';
+    const lbFollowBtn=uid&&!isMe?`<button class="tv-follow-btn${lbFollowed?' followed':''}" data-key="${lbFollowKey}" data-uid="${uid}" data-uname="${esc(e.username)}" onclick="event.stopPropagation();_tvFollowToggle(this,this.dataset.key,+this.dataset.uid,this.dataset.uname)"> ${lbFollowed?'✓ Following':'Follow'}</button>`:'';
     return `<div class="lb-row${isMe?' lb-me':''}" style="cursor:pointer" onclick="openProfileCard(${uid})">
       ${_lbRankHtml(e.rank)}
       ${_lbAvatarHtml(e,uid)}
