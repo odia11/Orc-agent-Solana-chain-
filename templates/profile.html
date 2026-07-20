@@ -24,7 +24,8 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 }
 
 /* ── SIDEBAR (mirrors dashboard) ── */
-#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid #16191f;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid #16191f;display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;scrollbar-width:none;-ms-overflow-style:none}
+#sidebar::-webkit-scrollbar{display:none}
 #sidebar::-webkit-scrollbar{width:4px}
 #sidebar::-webkit-scrollbar-track{background:transparent}
 #sidebar::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}

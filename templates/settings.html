@@ -22,7 +22,8 @@
 html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
 
 /* ── SIDEBAR 260px ── */
-#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0}
+#sidebar{width:260px;min-width:260px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;scrollbar-width:none;-ms-overflow-style:none}
+#sidebar::-webkit-scrollbar{display:none}
 #sidebar::-webkit-scrollbar{width:4px}
 #sidebar::-webkit-scrollbar-track{background:transparent}
 #sidebar::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
