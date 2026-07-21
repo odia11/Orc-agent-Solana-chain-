@@ -508,7 +508,7 @@ function _rowHtml(p, idx){
   var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
 
   var logo = imgUrl
-    ? '<img class="lm-tok-logo" src="'+imgUrl+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+    ? '<img class="lm-tok-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
       +'<div class="lm-tok-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
     : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
 
@@ -631,7 +631,7 @@ async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
         'X-CSRF-Token':_csrf,
         'X-CSRFToken':_csrf,
         'X-Requested-With':'XMLHttpRequest'
-      }, _cs ? {'X-Client-Secret':_cs} : {}),
+      }, _cs ? {'X-API-Shared-Secret':_cs} : {}),
       body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
     });
     var d = await r.json();
@@ -673,7 +673,7 @@ async function showTokenCard(symbol){
     var name   = (p.baseToken&&p.baseToken.name)||'';
     var imgUrl = p.info&&p.info.imageUrl?p.info.imageUrl:'';
     var logo   = imgUrl
-      ? '<img src="'+imgUrl+'" style="width:56px;height:56px;border-radius:14px;object-fit:cover;margin-bottom:10px">'
+      ? '<img src="'+_esc(imgUrl)+'" style="width:56px;height:56px;border-radius:14px;object-fit:cover;margin-bottom:10px">'
       : '<div style="width:56px;height:56px;border-radius:14px;background:#21252c;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#565d68;margin:0 auto 10px;font-family:\'JetBrains Mono\',monospace">'+_esc(sym.slice(0,2))+'</div>';
     var price    = _fmtPrice(p.priceUsd);
     var chg24    = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;

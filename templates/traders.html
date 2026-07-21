@@ -563,7 +563,7 @@ var _activeTab    = 'all';
 
 function _apiHeaders(){
   var h = {'Content-Type':'application/json','X-CSRF-Token':_csrfToken,'X-CSRFToken':_csrfToken};
-  if(_clientSecret) h['X-Client-Secret'] = _clientSecret;
+  if(_clientSecret) h['X-API-Shared-Secret'] = _clientSecret;
   return h;
 }
 

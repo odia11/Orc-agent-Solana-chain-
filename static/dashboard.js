@@ -3189,11 +3189,11 @@ async function loadWalletTokens(){
       const chgColor=chg>0?'#00e676':chg<0?'#ff1744':'#aaa';
       const chgStr=(chg>0?'+':'')+chg.toFixed(2)+'%';
       const valStr=t.value_usd>=0.01?'$'+Number(t.value_usd).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2}):'<$0.01';
-      const amtStr=Number(t.amount>=0.0001?t.amount:0).toLocaleString('en-US',{maximumFractionDigits:4})+' '+(t.symbol||'');
+      const amtStr=Number(t.amount>=0.0001?t.amount:0).toLocaleString('en-US',{maximumFractionDigits:4})+' '+esc(t.symbol||'');
       const logoHtml=t.logo_url
-        ?`<img src="${t.logo_url}" onerror="this.style.display='none';this.nextSibling.style.display='flex'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" alt=""><div style="display:none;width:36px;height:36px;border-radius:50%;background:#2e2e2e;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${(t.symbol||'?')[0].toUpperCase()}</div>`
-        :`<div style="width:36px;height:36px;border-radius:50%;background:#2e2e2e;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${(t.symbol||'?')[0].toUpperCase()}</div>`;
-      return `<div onclick="window.openTokenPanel&&window.openTokenPanel('${t.mint}')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #2e2e2e;cursor:pointer;transition:background .12s" onmouseover="this.style.background='#1c1c1c'" onmouseout="this.style.background=\'\'">${logoHtml}<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#fff">${t.symbol||'?'}</div><div style="font-size:11px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.name||''}</div><div style="font-size:11px;color:#aaa;margin-top:1px">${amtStr}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:#fff">${valStr}</div><div style="font-size:11px;color:${chgColor};margin-top:2px">${chgStr}</div></div></div>`;
+        ?`<img src="${esc(t.logo_url)}" onerror="this.style.display='none';this.nextSibling.style.display='flex'" style="width:36px;height:36px;border-radius:50%;object-fit:cover;flex-shrink:0" alt=""><div style="display:none;width:36px;height:36px;border-radius:50%;background:#2e2e2e;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${esc((t.symbol||'?')[0].toUpperCase())}</div>`
+        :`<div style="width:36px;height:36px;border-radius:50%;background:#2e2e2e;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;flex-shrink:0">${esc((t.symbol||'?')[0].toUpperCase())}</div>`;
+      return `<div onclick="window.openTokenPanel&&window.openTokenPanel('${t.mint}')" style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid #2e2e2e;cursor:pointer;transition:background .12s" onmouseover="this.style.background='#1c1c1c'" onmouseout="this.style.background=\'\'">${logoHtml}<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:700;color:#fff">${esc(t.symbol||'?')}</div><div style="font-size:11px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(t.name||'')}</div><div style="font-size:11px;color:#aaa;margin-top:1px">${amtStr}</div></div><div style="text-align:right;flex-shrink:0"><div style="font-size:13px;font-weight:700;color:#fff">${valStr}</div><div style="font-size:11px;color:${chgColor};margin-top:2px">${chgStr}</div></div></div>`;
     }).join('');
   }catch(e){
     list.innerHTML='<div style="padding:20px;color:#ff1744;text-align:center">'+e.message+'</div>';
@@ -3527,12 +3527,12 @@ function _swapRenderPicker(query){
     var balStr = tok.amount > 0 ? tok.amount.toFixed(4)+' '+tok.symbol : '0 '+tok.symbol;
     var usdStr = tok.value_usd > 0 ? '$'+tok.value_usd.toFixed(2) : '';
     var chip = tok.logo_url
-      ? '<img src="'+tok.logo_url+'" class="sp-tok-chip" style="object-fit:cover" onerror="this.style.display=\'none\'" alt="">'
-      : '<div class="sp-tok-chip" style="background:'+_tokColor(tok.symbol)+'">'+((tok.symbol||'?')[0].toUpperCase())+'</div>';
-    return '<div class="sp-token-row'+active+'" onclick="_swapSelectToken(\''+tok.symbol.replace(/'/g,"\\'")+'\')">'
+      ? '<img src="'+esc(tok.logo_url)+'" class="sp-tok-chip" style="object-fit:cover" onerror="this.style.display=\'none\'" alt="">'
+      : '<div class="sp-tok-chip" style="background:'+_tokColor(tok.symbol)+'">'+esc((tok.symbol||'?')[0].toUpperCase())+'</div>';
+    return '<div class="sp-token-row'+active+'" data-sym="'+esc(tok.symbol)+'" onclick="_swapSelectToken(this.dataset.sym)">'
       +chip
-      +'<div class="sp-tok-info"><div class="sp-tok-sym">'+tok.symbol+'</div><div class="sp-tok-name">'+tok.name+'</div></div>'
-      +'<div class="sp-tok-right"><div class="sp-tok-bal">'+balStr+'</div>'+(usdStr?'<div class="sp-tok-usd">'+usdStr+'</div>':'')+'</div>'
+      +'<div class="sp-tok-info"><div class="sp-tok-sym">'+esc(tok.symbol||'?')+'</div><div class="sp-tok-name">'+esc(tok.name||'')+'</div></div>'
+      +'<div class="sp-tok-right"><div class="sp-tok-bal">'+esc(balStr)+'</div>'+(usdStr?'<div class="sp-tok-usd">'+usdStr+'</div>':'')+'</div>'
       +'</div>';
   }).join('');
 }

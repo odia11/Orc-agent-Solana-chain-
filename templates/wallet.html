@@ -786,6 +786,9 @@ var _csrf = {{ csrf_token|tojson }};
 var _clientSecret = {{ client_secret|tojson }};
 
 // ── util ──────────────────────────────────────────────────
+function esc(s){
+  return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;');
+}
 function _hash(str){
   var h=5381
   for(var i=0;i<str.length;i++) h=((h<<5)+h+str.charCodeAt(i))&0x7fffffff
@@ -1013,13 +1016,13 @@ function _swPickerRender(tokens,q){
     var amtStr=amt>0?(amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(4):amt.toFixed(2)):''
     var usdStr=usd>0?'$'+usd.toFixed(2):''
     var bg='hsl('+(_hash(sym)%360)+',46%,33%)'
-    var init=sym.slice(0,2)
+    var init=esc(sym.slice(0,2))
     var ms=t.mint.replace(/\\/g,'\\\\').replace(/'/g,"\\'")
     return '<div class="sw-picker-row" onclick="_swPickToken(\''+ms+'\')">'
       +'<div class="sw-picker-circ" style="background:'+bg+'">'+init+'</div>'
       +'<div style="flex:1;min-width:0">'
-        +'<div class="sw-picker-ticker">'+sym+'</div>'
-        +'<div class="sw-picker-name">'+name+'</div>'
+        +'<div class="sw-picker-ticker">'+esc(sym)+'</div>'
+        +'<div class="sw-picker-name">'+esc(name)+'</div>'
       +'</div>'
       +(amtStr||usdStr
         ?'<div class="sw-picker-right">'
@@ -1291,15 +1294,15 @@ async function _loadSidebarMarket(){
       var priceStr=price===0?'—':price<0.000001?'$'+price.toExponential(2):price<0.01?'$'+price.toFixed(6):price<1?'$'+price.toFixed(4):'$'+price.toFixed(2)
       var chgStr=(chg>=0?'+':'')+chg.toFixed(2)+'%'
       var icon=tok.icon||''
-      var init=sym.slice(0,2).toUpperCase()
+      var init=esc(sym.slice(0,2).toUpperCase())
       var circCol='hsl('+(_hash(sym)%360)+',46%,33%)'
       var logoHtml=icon
-        ?'<img class="sb-tok-logo" src="'+icon+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+        ?'<img class="sb-tok-logo" src="'+esc(icon)+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
           +'<div class="sb-tok-init" style="display:none;background:'+circCol+'">'+init+'</div>'
         :'<div class="sb-tok-init" style="background:'+circCol+'">'+init+'</div>'
-      return '<div class="sb-tok-row" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(\''+sym.replace(/'/g,"\\'")+'\')">'+logoHtml
+      return '<div class="sb-tok-row" data-sym="'+esc(sym)+'" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(this.dataset.sym)">'+logoHtml
         +'<div style="flex:1;min-width:0">'
-          +'<div class="sb-tok-name">$'+sym+'</div>'
+          +'<div class="sb-tok-name">$'+esc(sym)+'</div>'
           +'<div class="sb-tok-price">'+priceStr+'</div>'
         +'</div>'
         +'<div class="sb-tok-pct" style="color:'+col+'">'+chgStr+'</div>'
@@ -1390,10 +1393,10 @@ function _renderHoldings(spl){
     var usd=parseFloat(x.usd_value||x.value_usd||0)
     var amtStr=amt===0?'0':amt<0.0001?amt.toExponential(2):amt<1?amt.toFixed(6):amt.toFixed(4)
     var logo=x.logo_url||''
-    var init=sym.slice(0,2).toUpperCase()
+    var init=esc(sym.slice(0,2).toUpperCase())
     var circ='<div class="tok-init" style="background:'+_symColor(sym)+'">'+init+'</div>'
     var logoHtml=logo
-      ?'<img class="tok-logo" src="'+logo+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'+circ
+      ?'<img class="tok-logo" src="'+esc(logo)+'" alt="'+init+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'+circ
       :circ
     var avg=parseFloat(x.avg_price||0),cur=parseFloat(x.price_usd||0)
     var pnlHtml=''
@@ -1404,8 +1407,8 @@ function _renderHoldings(spl){
     }
     return '<div class="tok-row">'
       +logoHtml
-      +'<div class="tok-info" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(\''+sym+'\')">'
-        +'<div class="tok-name">'+sym+'</div>'
+      +'<div class="tok-info" data-sym="'+esc(sym)+'" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(this.dataset.sym)">'
+        +'<div class="tok-name">'+esc(sym)+'</div>'
         +'<div class="tok-amount">'+amtStr+'</div>'
       +'</div>'
       +'<div class="tok-trade" onclick="event.stopPropagation()">'
