@@ -146,10 +146,6 @@ def _csrf_check():
     # auth/CORS (instant-trade has its own CORS after_request + session wallet check).
     if request.path in _CSRF_EXEMPT_PATHS:
         return None
-    # Function-level exemption via @csrf_exempt decorator
-    _ep = app.view_functions.get(request.endpoint)
-    if _ep and getattr(_ep, '_csrf_exempt', False):
-        return None
     # ── 0. Shared client secret (only enforced if API_SHARED_SECRET is configured) ──
     if API_SHARED_SECRET:
         sent = request.headers.get('X-API-Shared-Secret', '')
@@ -167,6 +163,11 @@ def _csrf_check():
         origin_bare = origin.split('//')[-1].split(':')[0].removeprefix('www.')
         if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
             return jsonify({'error': 'CSRF check failed'}), 403
+    # Function-level exemption via @csrf_exempt decorator -- skips only the
+    # CSRF-token check below; the origin/client-secret checks above still apply.
+    _ep = app.view_functions.get(request.endpoint)
+    if _ep and getattr(_ep, '_csrf_exempt', False):
+        return None
     # ── 2. CSRF token for authenticated sessions ──────────────────────────────
     if session.get('wallet'):
         tok = (request.headers.get('X-CSRF-Token', '') or
