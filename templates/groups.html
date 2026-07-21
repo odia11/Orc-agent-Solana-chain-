@@ -430,10 +430,11 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       </div>
     </div>
     <div class="modal-field">
-      <label class="modal-label" for="cg-address">Token address <span style="text-transform:none;font-weight:400">(optional)</span></label>
+      <label class="modal-label" for="cg-address">Token address <span style="color:#ff4d6a">*</span></label>
       <div class="modal-inp-wrap">
         <input class="modal-inp" id="cg-address" type="text" placeholder="Solana mint address" style="font-family:var(--mono);font-size:12px;padding-right:14px">
       </div>
+      <div style="font-size:11px;color:var(--muted);margin-top:5px">Required — lets members verify this group is really about that token before joining.</div>
     </div>
     <div class="modal-field">
       <label class="modal-label" for="cg-name">Group name</label>
@@ -602,6 +603,16 @@ function _submitCreateGroup(){
   };
   if(!body.name || !body.token_symbol){
     errEl.textContent = 'Group name and token symbol are required.';
+    errEl.style.display = '';
+    return;
+  }
+  if(!body.token_address){
+    errEl.textContent = 'A Solana mint address is required so members can verify this group matches the real token.';
+    errEl.style.display = '';
+    return;
+  }
+  if(!/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(body.token_address)){
+    errEl.textContent = 'That doesn\'t look like a valid Solana mint address.';
     errEl.style.display = '';
     return;
   }

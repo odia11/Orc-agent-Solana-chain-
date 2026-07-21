@@ -4983,7 +4983,9 @@ def api_groups_create():
         return jsonify({'ok': False, 'msg': 'Token symbol is required'}), 400
     if len(description) > 300:
         return jsonify({'ok': False, 'msg': 'Description too long'}), 400
-    if token_address and not is_valid_solana_address(token_address):
+    if not token_address:
+        return jsonify({'ok': False, 'msg': 'A Solana mint address is required so members can verify this group matches the real token'}), 400
+    if not is_valid_solana_address(token_address):
         return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
