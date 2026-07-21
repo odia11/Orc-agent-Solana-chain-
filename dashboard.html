@@ -423,6 +423,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-composer-pill:hover{background:#16191f;border-color:#2d333c;color:#eef1f5}
 .feed-composer-post{padding:8px 18px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
 .feed-composer-post:hover{opacity:.88}
+.feed-composer-counter{font-size:12px;color:#565d68;font-family:'JetBrains Mono',monospace;white-space:nowrap}
+.feed-composer-counter.warn{color:#f7b955}
+.feed-composer-counter.limit{color:#ff4d6a;font-weight:700}
 @media(max-width:600px){.feed-bot-card{margin:12px 12px 0;gap:10px}}
 /* ── FEED CARDS ── */
 #center-feed{display:flex;flex-direction:column}
@@ -3833,6 +3836,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
       <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade or post an update…" maxlength="500"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}"
+        oninput="_updatePostCharCounter(this)"
         style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
     </div>
 
@@ -3880,6 +3884,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <button class="feed-emoji-btn" type="button" onclick="_toggleFeedEmojiPanel(event)">😀</button>
         <div class="feed-emoji-panel" id="feed-emoji-panel"><button type="button">😀</button><button type="button">😂</button><button type="button">🤣</button><button type="button">😍</button><button type="button">🥰</button><button type="button">😎</button><button type="button">🤔</button><button type="button">😅</button><button type="button">😉</button><button type="button">😢</button><button type="button">😭</button><button type="button">😡</button><button type="button">😱</button><button type="button">😴</button><button type="button">🥳</button><button type="button">🤯</button><button type="button">🙌</button><button type="button">👏</button><button type="button">👍</button><button type="button">👎</button><button type="button">🙏</button><button type="button">🤝</button><button type="button">💪</button><button type="button">👀</button><button type="button">🔥</button><button type="button">💯</button><button type="button">✅</button><button type="button">❌</button><button type="button">🚀</button><button type="button">📈</button><button type="button">📉</button><button type="button">💰</button><button type="button">💎</button><button type="button">❤️</button><button type="button">🎉</button></div>
       </div>
+      <span id="postText-counter" class="feed-composer-counter" style="display:none"></span>
       <div style="flex:1"></div>
       <!-- Post button -->
       <button class="feed-composer-post" onclick="if(checkGuest())return;submitPost()">POST</button>

@@ -6857,6 +6857,19 @@ document.addEventListener('click', function(e){
   ta.setSelectionRange(pos,pos)
   document.getElementById('feed-emoji-panel').classList.remove('open')
 })
+function _updatePostCharCounter(ta){
+  var el = document.getElementById('postText-counter')
+  if(!el) return
+  var max = parseInt(ta.getAttribute('maxlength'),10) || 500
+  var remaining = max - ta.value.length
+  if(ta.value.length === 0){ el.style.display='none'; return }
+  el.style.display=''
+  el.textContent = remaining + (remaining===1 ? ' character left' : ' characters left')
+  el.classList.remove('warn','limit')
+  if(remaining <= 0) el.classList.add('limit')
+  else if(remaining <= 40) el.classList.add('warn')
+}
+
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
@@ -6868,6 +6881,7 @@ async function submitPost(){
   const d=await r.json()
   if(r.ok){
     t.value=''
+    _updatePostCharCounter(t)
     _composerChart=null; _composerTrade=null
     var prev=document.getElementById('composer-chart-preview')
     if(prev) prev.style.display='none'
