@@ -1044,6 +1044,11 @@ def init_db():
         FOREIGN KEY (claimant_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_group_claims_group ON group_ownership_claims(group_id)')
+    # Enforces at most one pending claim per group at the DB level -- the check-then-insert
+    # in api_group_claim() isn't atomic, so this closes the race where two concurrent
+    # requests could both pass the "no pending claim" check and insert duplicate rows.
+    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_claims_one_pending '
+              "ON group_ownership_claims(group_id) WHERE status='pending'")
     c.execute('''CREATE TABLE IF NOT EXISTS group_chat (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id      INTEGER NOT NULL,
@@ -5095,6 +5100,15 @@ def _process_expired_claims(conn, group_id):
     if not claim:
         return
     claim_id, claimant_id, prev_owner_id = claim
+    still_member = conn.execute(
+        'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, claimant_id)).fetchone()
+    if not still_member:
+        # Claimant left the group before the grace period elapsed -- cancel
+        # rather than hand ownership (and the ability to delete the group) to
+        # someone no longer a member.
+        conn.execute("UPDATE group_ownership_claims SET status='cancelled' WHERE id=?", (claim_id,))
+        conn.commit()
+        return
     conn.execute('UPDATE groups SET created_by=?, last_owner_activity=CURRENT_TIMESTAMP WHERE id=?',
                  (claimant_id, group_id))
     conn.execute("UPDATE group_members SET role='owner' WHERE group_id=? AND user_id=?",
@@ -5763,9 +5777,14 @@ def api_group_claim(group_id):
         if existing:
             return jsonify({'ok': False, 'msg': 'A claim is already pending on this group'}), 400
         expires_at = (now + datetime.timedelta(hours=CLAIM_GRACE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
-        conn.execute(
-            'INSERT INTO group_ownership_claims (group_id, claimant_id, prev_owner_id, expires_at) VALUES (?,?,?,?)',
-            (group_id, uid, owner_id, expires_at))
+        try:
+            conn.execute(
+                'INSERT INTO group_ownership_claims (group_id, claimant_id, prev_owner_id, expires_at) VALUES (?,?,?,?)',
+                (group_id, uid, owner_id, expires_at))
+        except sqlite3.IntegrityError:
+            # idx_group_claims_one_pending caught a concurrent claim that snuck in
+            # between the check above and this insert -- same outcome as `existing`.
+            return jsonify({'ok': False, 'msg': 'A claim is already pending on this group'}), 400
         claimant_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (uid,)).fetchone()
         claimant_name = claimant_row[0] if claimant_row and claimant_row[0] else 'A member'
         conn.execute(
