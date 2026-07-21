@@ -1032,6 +1032,18 @@ def init_db():
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (group_id, user_id)
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS group_ownership_claims (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        group_id      INTEGER NOT NULL,
+        claimant_id   INTEGER NOT NULL,
+        prev_owner_id INTEGER NOT NULL,
+        status        TEXT NOT NULL DEFAULT 'pending',
+        claimed_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        expires_at    TIMESTAMP NOT NULL,
+        FOREIGN KEY (group_id) REFERENCES groups(id),
+        FOREIGN KEY (claimant_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_group_claims_group ON group_ownership_claims(group_id)')
     c.execute('''CREATE TABLE IF NOT EXISTS group_chat (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id      INTEGER NOT NULL,
@@ -1212,6 +1224,7 @@ def run_migrations():
         "ALTER TABLE groups ADD COLUMN rules TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN announcement_only INTEGER DEFAULT 0",
         "ALTER TABLE groups ADD COLUMN is_official INTEGER DEFAULT 0",
+        "ALTER TABLE groups ADD COLUMN last_owner_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
         "ALTER TABLE group_posts ADD COLUMN image_url TEXT DEFAULT NULL",
         "ALTER TABLE group_members ADD COLUMN muted_until TIMESTAMP DEFAULT NULL",
     ]:
@@ -5050,11 +5063,63 @@ def _group_role(conn, group_id, uid):
     return row[0] if row else None
 
 
+def _touch_owner_activity(conn, group_id, uid):
+    """Called whenever the owner does something in their group (post, view). Bumps
+    last_owner_activity and auto-cancels any pending ownership claim against them."""
+    owner_row = conn.execute('SELECT created_by FROM groups WHERE id=?', (group_id,)).fetchone()
+    if not owner_row or owner_row[0] != uid:
+        return
+    conn.execute('UPDATE groups SET last_owner_activity=CURRENT_TIMESTAMP WHERE id=?', (group_id,))
+    claim = conn.execute(
+        "SELECT id, claimant_id FROM group_ownership_claims WHERE group_id=? AND status='pending'",
+        (group_id,)).fetchone()
+    if claim:
+        conn.execute("UPDATE group_ownership_claims SET status='cancelled' WHERE id=?", (claim[0],))
+        group_row = conn.execute('SELECT name FROM groups WHERE id=?', (group_id,)).fetchone()
+        group_name = group_row[0] if group_row else 'the group'
+        conn.execute(
+            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            (claim[1], 'group_claim', 'The owner is active again -- your claim on '+group_name+' was cancelled',
+             '/groups/'+str(group_id)))
+    conn.commit()
+
+
+def _process_expired_claims(conn, group_id):
+    """Lazily executes any pending claim on this group whose 48h grace period has
+    passed, transferring ownership. Called on read paths (no cron in this app)."""
+    now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    claim = conn.execute(
+        "SELECT id, claimant_id, prev_owner_id FROM group_ownership_claims "
+        "WHERE group_id=? AND status='pending' AND expires_at <= ?",
+        (group_id, now)).fetchone()
+    if not claim:
+        return
+    claim_id, claimant_id, prev_owner_id = claim
+    conn.execute('UPDATE groups SET created_by=?, last_owner_activity=CURRENT_TIMESTAMP WHERE id=?',
+                 (claimant_id, group_id))
+    conn.execute("UPDATE group_members SET role='owner' WHERE group_id=? AND user_id=?",
+                 (group_id, claimant_id))
+    conn.execute("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=? AND role='owner'",
+                 (group_id, prev_owner_id))
+    conn.execute("UPDATE group_ownership_claims SET status='completed' WHERE id=?", (claim_id,))
+    group_row = conn.execute('SELECT name FROM groups WHERE id=?', (group_id,)).fetchone()
+    group_name = group_row[0] if group_row else 'the group'
+    member_ids = [r[0] for r in conn.execute(
+        'SELECT user_id FROM group_members WHERE group_id=?', (group_id,)).fetchall()]
+    for uid in member_ids:
+        conn.execute(
+            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            (uid, 'group_claim', 'Ownership of '+group_name+' transferred due to inactivity',
+             '/groups/'+str(group_id)))
+    conn.commit()
+
+
 @app.route('/api/groups/<int:group_id>')
 def api_group_detail(group_id):
     wallet = _authenticated_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
+        _process_expired_claims(conn, group_id)
         row = conn.execute(
             'SELECT id, token_address, token_symbol, name, description, is_private, created_by, '
             'avatar_url, banner_url, rules, announcement_only, pinned_post_id, is_official '
@@ -5062,6 +5127,8 @@ def api_group_detail(group_id):
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
         uid = _get_uid(conn, wallet) if wallet else None
+        if uid:
+            _touch_owner_activity(conn, group_id, uid)
         role = _group_role(conn, group_id, uid)
         is_muted = False
         if uid:
@@ -5155,6 +5222,7 @@ def api_group_post_create(group_id):
         cur = conn.execute('INSERT INTO group_posts (group_id, user_id, content, image_url) VALUES (?,?,?,?)',
                             (group_id, uid, _sanitize(content), image_data or None))
         conn.commit()
+        _touch_owner_activity(conn, group_id, uid)
         post_id = cur.lastrowid
         author_row = conn.execute('SELECT COALESCE(username,\"\") FROM users WHERE id=?', (uid,)).fetchone()
         author_name = (author_row[0] if author_row and author_row[0] else wallet[:8]+'…')
@@ -5604,6 +5672,112 @@ def api_group_roster(group_id):
             'avatar_url': r[3], 'is_verified': bool(r[4]), 'role': r[5],
         } for r in rows]
         return jsonify({'ok': True, 'members': members})
+    finally:
+        conn.close()
+
+
+OWNER_INACTIVITY_DAYS = 2
+GROUP_ACTIVITY_WINDOW_DAYS = 2
+CLAIM_GRACE_HOURS = 48
+
+
+@app.route('/api/groups/<int:group_id>/claim-status')
+def api_group_claim_status(group_id):
+    wallet = _authenticated_wallet()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        _process_expired_claims(conn, group_id)
+        uid = _get_uid(conn, wallet) if wallet else None
+        row = conn.execute('SELECT created_by, last_owner_activity FROM groups WHERE id=?', (group_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        owner_id, last_owner_activity = row
+        now = datetime.datetime.utcnow()
+        owner_cutoff = (now - datetime.timedelta(days=OWNER_INACTIVITY_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+        owner_inactive = bool(last_owner_activity and last_owner_activity < owner_cutoff)
+        activity_cutoff = (now - datetime.timedelta(days=GROUP_ACTIVITY_WINDOW_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+        others_active = bool(conn.execute(
+            'SELECT 1 FROM group_posts WHERE group_id=? AND user_id!=? AND created_at > ? LIMIT 1',
+            (group_id, owner_id, activity_cutoff)).fetchone())
+        claim = conn.execute(
+            "SELECT id, claimant_id, expires_at FROM group_ownership_claims WHERE group_id=? AND status='pending'",
+            (group_id,)).fetchone()
+        role = _group_role(conn, group_id, uid)
+        has_mods = bool(conn.execute(
+            "SELECT 1 FROM group_members WHERE group_id=? AND role='mod' LIMIT 1", (group_id,)).fetchone())
+        can_claim = bool(
+            uid and role and uid != owner_id and not claim and owner_inactive and others_active
+            and (role == 'mod' or not has_mods)
+        )
+        return jsonify({
+            'ok': True,
+            'claimable': owner_inactive and others_active and not claim,
+            'can_claim': can_claim,
+            'pending_claim': ({
+                'claimant_id': claim[1],
+                'is_mine': bool(uid and claim[1] == uid),
+                'expires_at': claim[2],
+            } if claim else None),
+        })
+    finally:
+        conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/claim', methods=['POST'])
+@rate_limit(5, 300)
+def api_group_claim(group_id):
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        _process_expired_claims(conn, group_id)
+        uid = _get_uid(conn, wallet)
+        row = conn.execute('SELECT created_by, last_owner_activity, name FROM groups WHERE id=?',
+                            (group_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        owner_id, last_owner_activity, group_name = row
+        if uid == owner_id:
+            return jsonify({'ok': False, 'msg': "You're already the owner"}), 400
+        role = _group_role(conn, group_id, uid)
+        if not role:
+            return jsonify({'ok': False, 'msg': 'Join the group first'}), 403
+        has_mods = bool(conn.execute(
+            "SELECT 1 FROM group_members WHERE group_id=? AND role='mod' LIMIT 1", (group_id,)).fetchone())
+        if has_mods and role != 'mod':
+            return jsonify({'ok': False, 'msg': 'This group has an active moderator -- they get priority to claim it'}), 403
+        now = datetime.datetime.utcnow()
+        owner_cutoff = (now - datetime.timedelta(days=OWNER_INACTIVITY_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+        if not (last_owner_activity and last_owner_activity < owner_cutoff):
+            return jsonify({'ok': False, 'msg': 'The owner has been active recently'}), 400
+        activity_cutoff = (now - datetime.timedelta(days=GROUP_ACTIVITY_WINDOW_DAYS)).strftime('%Y-%m-%d %H:%M:%S')
+        others_active = bool(conn.execute(
+            'SELECT 1 FROM group_posts WHERE group_id=? AND user_id!=? AND created_at > ? LIMIT 1',
+            (group_id, owner_id, activity_cutoff)).fetchone())
+        if not others_active:
+            return jsonify({'ok': False, 'msg': 'This group has no recent activity to claim'}), 400
+        existing = conn.execute(
+            "SELECT 1 FROM group_ownership_claims WHERE group_id=? AND status='pending'", (group_id,)).fetchone()
+        if existing:
+            return jsonify({'ok': False, 'msg': 'A claim is already pending on this group'}), 400
+        expires_at = (now + datetime.timedelta(hours=CLAIM_GRACE_HOURS)).strftime('%Y-%m-%d %H:%M:%S')
+        conn.execute(
+            'INSERT INTO group_ownership_claims (group_id, claimant_id, prev_owner_id, expires_at) VALUES (?,?,?,?)',
+            (group_id, uid, owner_id, expires_at))
+        claimant_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (uid,)).fetchone()
+        claimant_name = claimant_row[0] if claimant_row and claimant_row[0] else 'A member'
+        conn.execute(
+            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            (owner_id, 'group_claim',
+             claimant_name+' claimed ownership of '+group_name+' due to inactivity -- act within 48h to keep it',
+             '/groups/'+str(group_id)))
+        conn.commit()
+        _send_push_notification(owner_id, 'Group ownership claim',
+                                 claimant_name+' claimed '+group_name+' -- act within 48h to keep it',
+                                 '/groups/'+str(group_id))
+        return jsonify({'ok': True, 'expires_at': expires_at})
     finally:
         conn.close()
 

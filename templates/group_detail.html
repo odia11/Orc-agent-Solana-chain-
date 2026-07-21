@@ -63,6 +63,9 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-join-btn:disabled{opacity:.5;cursor:default}
 .gd-mods-btn{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--ui);text-decoration:underline;padding:0}
 .gd-mods-btn:hover{color:var(--text)}
+.gd-claim-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:12px;margin-bottom:16px;font-size:12.5px;color:var(--text);line-height:1.4}
+.gd-claim-banner b{color:#ff4d6a}
+.gd-claim-banner-icon{font-size:16px;flex-shrink:0}
 
 .gd-quicklinks{display:flex;gap:14px;margin-top:8px}
 .gd-quicklink{background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;font-family:var(--ui);padding:0}
@@ -224,6 +227,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
     </div>
     <div class="gd-header-actions">
       <button class="gd-join-btn" id="gd-join-btn" onclick="_toggleJoin()" disabled>…</button>
+      <button class="gd-join-btn" id="gd-claim-btn" style="display:none;background:transparent;border-color:#ff4d6a;color:#ff4d6a" onclick="_claimGroup()">Claim ownership</button>
       <button class="gd-mods-btn" id="gd-mods-btn" style="display:none" onclick="_openModsModal()">Manage moderators</button>
       <button class="gd-mods-btn" id="gd-settings-btn" style="display:none" onclick="_openSettingsModal()">Group settings</button>
       <button class="gd-mods-btn" id="gd-official-btn" style="display:none" onclick="_toggleOfficial()"></button>
@@ -231,6 +235,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
     </div>
   </div>
 
+  <div id="gd-claim-banner"></div>
   <div class="gd-search-wrap" id="gd-search-wrap" style="display:none">
     <input type="text" class="gd-search-inp" id="gd-search-inp" placeholder="Search posts in this group…" oninput="_onGroupSearchInput(this.value)">
   </div>
@@ -440,6 +445,56 @@ function _renderHeader(g){
   _renderComposer(g);
   if(g.token_symbol && !g.is_official) _loadPriceChange(g.token_symbol);
   _startTypingPoll();
+  _loadClaimStatus();
+}
+
+function _fmtHoursLeft(expiresAt){
+  var exp = new Date(expiresAt.replace(' ','T')+'Z');
+  var hrs = Math.max(0, Math.ceil((exp.getTime()-Date.now())/3600000));
+  if(hrs < 1) return 'less than an hour';
+  if(hrs === 1) return '1 hour';
+  if(hrs < 48) return hrs+' hours';
+  return Math.ceil(hrs/24)+' days';
+}
+
+function _loadClaimStatus(){
+  if(!_groupData) return;
+  fetch('/api/groups/'+_groupId+'/claim-status', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(!d.ok) return;
+    var claimBtn = document.getElementById('gd-claim-btn');
+    var banner = document.getElementById('gd-claim-banner');
+    claimBtn.style.display = d.can_claim ? '' : 'none';
+
+    if(d.pending_claim){
+      var left = _fmtHoursLeft(d.pending_claim.expires_at);
+      if(_groupData.is_owner){
+        banner.innerHTML = '<div class="gd-claim-banner"><span class="gd-claim-banner-icon">⚠️</span>'
+          +'<span>Someone claimed ownership of this group due to inactivity. <b>Post or reply within '+esc(left)+'</b> to keep it, otherwise ownership transfers automatically.</span></div>';
+      } else if(d.pending_claim.is_mine){
+        banner.innerHTML = '<div class="gd-claim-banner"><span class="gd-claim-banner-icon">⏳</span>'
+          +'<span>Your ownership claim is pending — if the current owner stays inactive, it transfers to you in <b>'+esc(left)+'</b>.</span></div>';
+      } else {
+        banner.innerHTML = '';
+      }
+    } else if(d.claimable && !_groupData.is_owner){
+      banner.innerHTML = '<div class="gd-claim-banner"><span class="gd-claim-banner-icon">💤</span>'
+        +'<span>This group has an inactive owner.'+(d.can_claim ? ' You can claim ownership below.' : '')+'</span></div>';
+    } else {
+      banner.innerHTML = '';
+    }
+  }).catch(function(){});
+}
+
+function _claimGroup(){
+  var btn = document.getElementById('gd-claim-btn');
+  btn.disabled = true;
+  fetch('/api/groups/'+_groupId+'/claim', {method:'POST', credentials:'include', headers:_apiHeaders()})
+    .then(function(r){return r.json();}).then(function(d){
+      btn.disabled = false;
+      if(!d.ok){ _showToast(d.msg||'Could not claim', 'err'); return; }
+      _showToast('Claim submitted — ownership transfers in 48h if the owner stays inactive', 'ok');
+      _loadClaimStatus();
+    }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
 }
 
 function _toggleOfficial(){
