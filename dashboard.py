@@ -5420,6 +5420,16 @@ def api_group_settings(group_id):
         if 'announcement_only' in body:
             conn.execute('UPDATE groups SET announcement_only=? WHERE id=?',
                          (1 if body.get('announcement_only') else 0, group_id))
+        if 'name' in body:
+            name = (body.get('name') or '').strip()
+            if not name or len(name) > 60:
+                return jsonify({'ok': False, 'msg': 'Group name is required (max 60 chars)'}), 400
+            conn.execute('UPDATE groups SET name=? WHERE id=?', (name, group_id))
+        if 'description' in body:
+            description = (body.get('description') or '').strip()
+            if len(description) > 300:
+                return jsonify({'ok': False, 'msg': 'Description too long (max 300 chars)'}), 400
+            conn.execute('UPDATE groups SET description=? WHERE id=?', (description or None, group_id))
         conn.commit()
         return jsonify({'ok': True})
     finally:

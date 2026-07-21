@@ -283,6 +283,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <div class="gd-modal-title">Group settings</div>
       <button class="gd-modal-close" onclick="_closeSettingsModal()">✕</button>
     </div>
+    <div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px" for="gd-settings-name">Group name</label>
+      <input class="gd-composer-inp" id="gd-settings-name" type="text" maxlength="60" style="width:100%;min-height:auto;padding:9px 12px">
+    </div>
+    <div>
+      <label style="display:block;font-size:12px;color:var(--muted);margin-bottom:6px" for="gd-settings-desc">Description</label>
+      <input class="gd-composer-inp" id="gd-settings-desc" type="text" maxlength="300" style="width:100%;min-height:auto;padding:9px 12px">
+    </div>
+    <div id="gd-settings-error" style="color:#ff4d6a;font-size:12px;display:none"></div>
+    <button class="gd-join-btn" onclick="_saveGroupNameDesc()" style="align-self:flex-end">Save</button>
+    <div style="height:1px;background:var(--border);margin:4px 0"></div>
     <label style="display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:13px;color:var(--text);cursor:pointer">
       <span>Announcement-only<br><span style="font-size:11.5px;color:var(--muted);font-weight:400">Only moderators can post</span></span>
       <input type="checkbox" id="gd-ann-only-toggle" onchange="_toggleAnnouncementOnly(this)" style="width:36px;height:20px;accent-color:#f7b955;flex-shrink:0">
@@ -892,6 +903,22 @@ function _saveRules(){
 function _openSettingsModal(){
   document.getElementById('gd-settings-backdrop').classList.add('open');
   document.getElementById('gd-ann-only-toggle').checked = !!(_groupData && _groupData.announcement_only);
+  document.getElementById('gd-settings-name').value = (_groupData && _groupData.name) || '';
+  document.getElementById('gd-settings-desc').value = (_groupData && _groupData.description) || '';
+  document.getElementById('gd-settings-error').style.display = 'none';
+}
+function _saveGroupNameDesc(){
+  var name = document.getElementById('gd-settings-name').value.trim();
+  var description = document.getElementById('gd-settings-desc').value.trim();
+  var errEl = document.getElementById('gd-settings-error');
+  if(!name){ errEl.textContent = 'Group name is required.'; errEl.style.display=''; return; }
+  errEl.style.display = 'none';
+  fetch('/api/groups/'+_groupId+'/settings', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({name:name, description:description})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ errEl.textContent = d.msg||'Could not save'; errEl.style.display=''; return; }
+      _showToast('Group updated', 'ok');
+      _loadGroup();
+    }).catch(function(){ errEl.textContent='Network error'; errEl.style.display=''; });
 }
 function _closeSettingsModal(ev){
   if(ev && ev.target !== ev.currentTarget) return;
