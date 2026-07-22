@@ -1047,8 +1047,19 @@ def init_db():
     # Enforces at most one pending claim per group at the DB level -- the check-then-insert
     # in api_group_claim() isn't atomic, so this closes the race where two concurrent
     # requests could both pass the "no pending claim" check and insert duplicate rows.
-    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_claims_one_pending '
-              "ON group_ownership_claims(group_id) WHERE status='pending'")
+    # Cancel any pre-existing duplicates first (keeping only the newest per group) so the
+    # unique index below can't fail to create on a DB that already has leftover dupes from
+    # before this constraint existed -- an uncaught IntegrityError here would abort init_db()
+    # partway through, silently skipping every table/index/migration after this point.
+    try:
+        c.execute('''UPDATE group_ownership_claims SET status='cancelled'
+                     WHERE status='pending' AND id NOT IN (
+                         SELECT MAX(id) FROM group_ownership_claims WHERE status='pending' GROUP BY group_id
+                     )''')
+        c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_group_claims_one_pending '
+                  "ON group_ownership_claims(group_id) WHERE status='pending'")
+    except Exception as e:
+        print(f'[init_db] idx_group_claims_one_pending setup failed: {e}', flush=True)
     c.execute('''CREATE TABLE IF NOT EXISTS group_chat (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id      INTEGER NOT NULL,
@@ -5091,41 +5102,49 @@ def _touch_owner_activity(conn, group_id, uid):
 
 def _process_expired_claims(conn, group_id):
     """Lazily executes any pending claim on this group whose 48h grace period has
-    passed, transferring ownership. Called on read paths (no cron in this app)."""
-    now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-    claim = conn.execute(
-        "SELECT id, claimant_id, prev_owner_id FROM group_ownership_claims "
-        "WHERE group_id=? AND status='pending' AND expires_at <= ?",
-        (group_id, now)).fetchone()
-    if not claim:
-        return
-    claim_id, claimant_id, prev_owner_id = claim
-    still_member = conn.execute(
-        'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, claimant_id)).fetchone()
-    if not still_member:
-        # Claimant left the group before the grace period elapsed -- cancel
-        # rather than hand ownership (and the ability to delete the group) to
-        # someone no longer a member.
-        conn.execute("UPDATE group_ownership_claims SET status='cancelled' WHERE id=?", (claim_id,))
+    passed, transferring ownership. Called on read paths (no cron in this app) --
+    wrapped in try/except because this is best-effort maintenance piggybacked onto
+    GET requests: a bug or unexpected data state here must never 500 the page/API
+    call that triggered it. Worst case the claim just stays pending until the next
+    successful attempt."""
+    try:
+        now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+        claim = conn.execute(
+            "SELECT id, claimant_id, prev_owner_id FROM group_ownership_claims "
+            "WHERE group_id=? AND status='pending' AND expires_at <= ?",
+            (group_id, now)).fetchone()
+        if not claim:
+            return
+        claim_id, claimant_id, prev_owner_id = claim
+        still_member = conn.execute(
+            'SELECT 1 FROM group_members WHERE group_id=? AND user_id=?', (group_id, claimant_id)).fetchone()
+        if not still_member:
+            # Claimant left the group before the grace period elapsed -- cancel
+            # rather than hand ownership (and the ability to delete the group) to
+            # someone no longer a member.
+            conn.execute("UPDATE group_ownership_claims SET status='cancelled' WHERE id=?", (claim_id,))
+            conn.commit()
+            return
+        conn.execute('UPDATE groups SET created_by=?, last_owner_activity=CURRENT_TIMESTAMP WHERE id=?',
+                     (claimant_id, group_id))
+        conn.execute("UPDATE group_members SET role='owner' WHERE group_id=? AND user_id=?",
+                     (group_id, claimant_id))
+        conn.execute("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=? AND role='owner'",
+                     (group_id, prev_owner_id))
+        conn.execute("UPDATE group_ownership_claims SET status='completed' WHERE id=?", (claim_id,))
+        group_row = conn.execute('SELECT name FROM groups WHERE id=?', (group_id,)).fetchone()
+        group_name = group_row[0] if group_row else 'the group'
+        member_ids = [r[0] for r in conn.execute(
+            'SELECT user_id FROM group_members WHERE group_id=?', (group_id,)).fetchall()]
+        for uid in member_ids:
+            conn.execute(
+                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                (uid, 'group_claim', 'Ownership of '+group_name+' transferred due to inactivity',
+                 '/groups/'+str(group_id)))
         conn.commit()
-        return
-    conn.execute('UPDATE groups SET created_by=?, last_owner_activity=CURRENT_TIMESTAMP WHERE id=?',
-                 (claimant_id, group_id))
-    conn.execute("UPDATE group_members SET role='owner' WHERE group_id=? AND user_id=?",
-                 (group_id, claimant_id))
-    conn.execute("UPDATE group_members SET role='member' WHERE group_id=? AND user_id=? AND role='owner'",
-                 (group_id, prev_owner_id))
-    conn.execute("UPDATE group_ownership_claims SET status='completed' WHERE id=?", (claim_id,))
-    group_row = conn.execute('SELECT name FROM groups WHERE id=?', (group_id,)).fetchone()
-    group_name = group_row[0] if group_row else 'the group'
-    member_ids = [r[0] for r in conn.execute(
-        'SELECT user_id FROM group_members WHERE group_id=?', (group_id,)).fetchall()]
-    for uid in member_ids:
-        conn.execute(
-            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-            (uid, 'group_claim', 'Ownership of '+group_name+' transferred due to inactivity',
-             '/groups/'+str(group_id)))
-    conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f'[group_claim] _process_expired_claims failed for group {group_id}: {e}', flush=True)
 
 
 @app.route('/api/groups/<int:group_id>')
