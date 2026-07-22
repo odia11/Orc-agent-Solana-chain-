@@ -3914,6 +3914,7 @@ function _fadeIn(el){
 function openTradersView(){
   if(_tradersView) return;
   _tradersView=true;
+  _clearStalePostHash();
   document.getElementById('dash-main').style.display='none';
   const _rrT=document.getElementById('right-rail');if(_rrT) _rrT.style.display='none';
   if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
@@ -4327,8 +4328,13 @@ function _tvpPositionsHtml(positions){
   </table>`;
 }
 
+function _clearStalePostHash(){
+  if(/^#post-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
+}
+
 async function openProfileCard(userId){
   if(!userId) return;
+  _clearStalePostHash();
   if(!_tradersView) openTradersView();
   _tvProfileOpen = true;
   _tvpCurrentProfileId = userId;
@@ -5338,6 +5344,7 @@ function openDMWith(peerId, peerWallet, peerUsername){
 function openMessagesView(){
   if(_dmOpen) return;
   _dmOpen=true;
+  _clearStalePostHash();
   // Close any sub-view that may be active inside .wrap
   if(_tradersView) closeTradersView();
   // Hide .wrap entirely; messages lives outside it as a sibling
@@ -5398,6 +5405,7 @@ let _gcOpen=false,_gcTimer=null,_gcMyId=null,_gcLastId=0,_gcPendingFile=null,_gc
 function openCommunityView(){
   if(_gcOpen) return;
   _gcOpen=true;
+  _clearStalePostHash();
   if(_dmOpen) closeMessagesView();
   if(_tradersView) closeTradersView();
   const wrap=document.getElementById('main-content');
@@ -8325,7 +8333,7 @@ function _renderReplyRow(r, postId){
     : '';
   return '<div class="fc-reply-item" data-reply-id="'+r.id+'">'
     +'<div class="fc-ri-header">'
-    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+(r.avatar_url ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')' : 'openProfileCard('+Number(r.user_id)+')')+'">'+ini+avatarImg+'</div>'
+    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+(r.avatar_url ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')' : (r.wallet ? 'event.stopPropagation();location.href=\'/profile/'+encodeURIComponent(r.wallet)+'\'' : ''))+'">'+ini+avatarImg+'</div>'
     +'<span class="fc-ri-name">'+name+'</span>'
     +youChip
     +'<span class="fc-ri-handle">'+handle+'</span>'
