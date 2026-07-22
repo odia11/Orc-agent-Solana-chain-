@@ -3556,7 +3556,9 @@ function _sbUpdateUser(profileData){
   const dotEl   =document.getElementById('sb-online-dot');
   const iniEl   =document.getElementById('sb-avatar-ini');
   const imgEl   =document.getElementById('sb-avatar-img');
+  const bottomEl=document.getElementById('sb-bottom');
   if(!profileData){ if(nameEl) nameEl.textContent='You'; return; }
+  if(bottomEl) bottomEl.style.display='';
   const uname=profileData.username||profileData.display_name||'';
   if(nameEl)   nameEl.textContent=uname||'You';
   if(handleEl) handleEl.textContent=uname?('@'+uname):(phantomKey?('@'+(phantomKey.slice(0,4)+'…'+phantomKey.slice(-4))):'@—');

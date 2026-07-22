@@ -3672,7 +3672,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
 
       <!-- PROFILE CHIP — pinned to bottom via margin-top:auto on .sb-bottom -->
-      <div class="sb-bottom">
+      <div class="sb-bottom" id="sb-bottom" style="display:none">
         <div class="sb-user-card" id="sb-user-card"
              onclick="if(window._myProfileId)openProfileCard(_myProfileId)"
              onmouseenter="this.style.background='#101216'"
@@ -4378,6 +4378,8 @@ window.__SESSION_SHORT = '__SESSION_SHORT__';
 if (window.__SESSION_WALLET) {
   var _ob = document.getElementById('onboard');
   if (_ob) _ob.style.display = 'none';
+  var _sbb = document.getElementById('sb-bottom');
+  if (_sbb) _sbb.style.display = '';
 }
 </script>
 <script src="/static/low-balance-modal.js?v=__ASSET_VER__"></script>
