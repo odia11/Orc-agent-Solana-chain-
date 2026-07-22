@@ -4799,6 +4799,7 @@ def admin_page():
         users=users,
         posts=posts,
         stats=stats,
+        client_secret=API_SHARED_SECRET,
     ))
     resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     return resp
@@ -13729,7 +13730,7 @@ def admin_invite():
     data        = request.get_json(silent=True) or {}
     invite_addr = str(data.get('wallet', '')).strip()
     role        = str(data.get('role', 'Moderator')).strip()
-    if not invite_addr or len(invite_addr) < 32:
+    if not is_valid_solana_address(invite_addr):
         return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
     if invite_addr == ADMIN_WALLET:
         return jsonify({'ok': False, 'msg': 'Owner wallet cannot be re-invited'}), 400

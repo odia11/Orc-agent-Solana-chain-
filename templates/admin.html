@@ -982,6 +982,25 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 window._csrfToken = '';
 fetch('/api/csrf-token', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){ window._csrfToken = d.token || ''; }).catch(function(){});
 
+// Override fetch globally: inject X-CSRF-Token and X-API-Shared-Secret into all mutating
+// requests, matching the pattern in static/dashboard.js. Without this, every state-changing
+// admin action would silently 403 the moment API_SHARED_SECRET is configured server-side.
+var _clientSecret = {{ client_secret|tojson }};
+(function(){
+  var _origFetch = window.fetch.bind(window);
+  window.fetch = function(url, opts) {
+    opts = Object.assign({}, opts || {});
+    var method = ((opts.method || 'GET') + '').toUpperCase();
+    if (['POST','PUT','PATCH','DELETE'].indexOf(method) !== -1) {
+      var extra = {};
+      if (window._csrfToken) extra['X-CSRF-Token'] = window._csrfToken;
+      if (_clientSecret) extra['X-API-Shared-Secret'] = _clientSecret;
+      opts.headers = Object.assign({}, opts.headers || {}, extra);
+    }
+    return _origFetch(url, opts);
+  };
+})();
+
 // ── STATE ──
 var _loaded = {};
 var _allUsers = [], _allTrades = [], _allRevTx = [];
@@ -1113,7 +1132,7 @@ function _txRow(t, showTx) {
     : '<span class="mono-sm">—</span>';
   return '<div class="tbl-row col-revenue">' +
     '<div class="mono-sm">' + _short(t.wallet||t.user_wallet||'') + '</div>' +
-    '<div class="mono-sm">' + (t.token||'—') + '</div>' +
+    '<div class="mono-sm">' + _escHtml(t.token||'—') + '</div>' +
     '<div class="mono">' + _fmt(t.gross||t.gross_profit||0) + '</div>' +
     '<div class="mono pos">' + _fmt(t.fee||t.fee_amount||0) + '</div>' +
     statusTag +
@@ -1231,7 +1250,7 @@ function renderTrades() {
     var pnlCls = (t.pnl >= 0) ? 'pos' : 'neg';
     return '<div class="tbl-row col-trades">' +
       '<div class="mono-sm">' + _short(t.wallet_full||t.wallet||'') + '</div>' +
-      '<div class="mono-sm">' + (t.token||'—') + '</div>' +
+      '<div class="mono-sm">' + _escHtml(t.token||'—') + '</div>' +
       '<div class="mono">' + _fmt(t.amount||0) + '</div>' +
       '<div class="mono ' + pnlCls + '">' + (t.pnl >= 0 ? '+' : '') + _fmt(t.pnl||0) + '</div>' +
       '<span class="tag ' + (t.pnl >= 0 ? 'tag-green' : 'tag-red') + '">' + (t.pnl >= 0 ? 'profit' : 'loss') + '</span>' +
@@ -1351,8 +1370,8 @@ async function loadModeration() {
       postsBody.innerHTML = posts.posts.length
         ? posts.posts.map(p =>
             '<div class="tbl-row col-posts" id="post-row-' + p.id + '">' +
-            '<div style="font-size:12px;color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + (p.content||'').replace(/"/g,'&quot;') + '">' + (p.content||'') + '</div>' +
-            '<div class="mono-sm">' + (p.author||p.wallet||'—') + '</div>' +
+            '<div style="font-size:12px;color:#c7ccd4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="' + _escHtml(p.content||'') + '">' + _escHtml(p.content||'') + '</div>' +
+            '<div class="mono-sm">' + _escHtml(p.author||p.wallet||'—') + '</div>' +
             '<div class="mono-sm">' + (p.ts||'—') + '</div>' +
             '<div><button class="btn btn-danger" data-post-id="' + p.id + '" onclick="deletePost(this)">Delete</button></div>' +
             '</div>').join('')
@@ -1664,7 +1683,7 @@ async function loadPendingInvites() {
     return '<div class="admin-member-row" style="opacity:.7">' +
       '<div class="admin-member-av" style="background:var(--bg4);color:var(--muted);font-size:11px">?</div>' +
       '<div class="admin-member-info">' +
-        '<div class="admin-member-name">' + short + '</div>' +
+        '<div class="admin-member-name">' + _escHtml(short) + '</div>' +
         '<div class="admin-member-sub">Pending · sent ' + (inv.created_at||'—') + '</div>' +
       '</div>' +
       '<span class="tag ' + tagCls + '" style="flex-shrink:0">' + inv.role + '</span>' +
