@@ -8523,27 +8523,31 @@ def profile_user_trades(user_id: int):
     total_pnl_all = round(float(all_stats[1] or 0), 6) if all_stats else 0.0
     today_pnl     = round(float(today_pnl_row[0] or 0), 6) if today_pnl_row else 0.0
 
-    us = user_states.get(wallet, {})
-    mint_price = {t['mint']: float(t['price'])
-                  for t in state.get('tokens', []) if t.get('mint') and t.get('price')}
     positions = []
-    for mint, pos in us.get('positions', {}).items():
-        if not pos.get('amount') or not pos.get('buy_price'):
-            continue
-        buy    = float(pos['buy_price'])
-        amount = float(pos.get('amount', 0))
-        cur    = mint_price.get(mint)
-        pnl_pct = round((cur - buy) / buy * 100, 2) if cur and buy else None
-        pnl_sol = round(amount * (cur - buy), 6)    if cur and buy and amount else None
-        positions.append({
-            'mint':      mint,
-            'token':     str(pos.get('symbol', mint[:8])),
-            'entry':     round(buy, 8),
-            'current':   round(cur, 8) if cur else None,
-            'pnl_pct':   pnl_pct,
-            'pnl_sol':   pnl_sol,
-            'opened_at': int(pos.get('opened_at', 0)),
-        })
+    try:
+        us = user_states.get(wallet, {})
+        mint_price = {t['mint']: float(t['price'])
+                      for t in state.get('tokens', []) if t.get('mint') and t.get('price')}
+        for mint, pos in us.get('positions', {}).items():
+            if not pos.get('amount') or not pos.get('buy_price'):
+                continue
+            buy    = float(pos['buy_price'])
+            amount = float(pos.get('amount', 0))
+            cur    = mint_price.get(mint)
+            pnl_pct = round((cur - buy) / buy * 100, 2) if cur and buy else None
+            pnl_sol = round(amount * (cur - buy), 6)    if cur and buy and amount else None
+            positions.append({
+                'mint':      mint,
+                'token':     str(pos.get('symbol', mint[:8])),
+                'entry':     round(buy, 8),
+                'current':   round(cur, 8) if cur else None,
+                'pnl_pct':   pnl_pct,
+                'pnl_sol':   pnl_sol,
+                'opened_at': int(pos.get('opened_at', 0)),
+            })
+    except Exception:
+        logging.exception('Failed computing live positions for profile trades, user_id=%s', user_id)
+        positions = []
 
     sol_balance = 0.0
     if wallet and _PROXY_RPCS:

@@ -1863,7 +1863,6 @@ async function _tpcStopCopy(){
 async function fetchTrades(){
   if(!appVisible()) return;
   const r=await fetch('/api/trades').then(r=>r.json()).catch(()=>null);
-  console.log('[api_trades] response:', JSON.stringify(r));
   if(!r) return;
   renderPerfPanel(r);
   if(r.recent){
@@ -4524,7 +4523,6 @@ function renderLeaderboard(entries){
     list.innerHTML='<div class="lb-empty">No trades today yet — be the first!</div>';
     return;
   }
-  if(entries[0]) console.log('[leaderboard] first entry:', JSON.stringify(entries[0]));
   list.innerHTML=entries.map(e=>{
     const isMe=!!(phantomKey&&e.wallet_address===phantomKey);
     const pnlPos=e.total_pnl>=0;
@@ -4570,7 +4568,6 @@ async function fetchPnlChart(){
   if(!appVisible()) return;
   try{
     const r=await fetch('/api/pnl_chart?range='+_pnlcRange).then(r=>r.json());
-    console.log('[pnl_chart] range='+_pnlcRange+' response:', JSON.stringify(r));
     _renderPnlcChart(r.data||[]);
   }catch(e){console.error('[pnl_chart] fetch error:',e);}
 }
@@ -7410,9 +7407,7 @@ async function loadHomeFeed(){
     console.log('[feed] status:', r.status);
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
-    console.log('[feed] items:', Array.isArray(data) ? data.length : data);
     if(Array.isArray(data)){
-      console.log('[feed] first item:', JSON.stringify(data[0]));
       _homeFeedData = data;
       try{
         renderHomeFeed();
