@@ -277,8 +277,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <div class="gd-modal-title">Group rules</div>
       <button class="gd-modal-close" onclick="_closeRules()">✕</button>
     </div>
+    <div id="gd-platform-rules" style="font-size:13px;color:var(--text);line-height:1.6;white-space:pre-wrap;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:12px"></div>
+    <textarea id="gd-platform-rules-edit" class="gd-composer-inp" style="display:none;width:100%;min-height:120px" maxlength="4000"></textarea>
+    <div id="gd-platform-rules-actions" style="display:none;justify-content:flex-end;gap:8px">
+      <button class="gd-member-action" onclick="_cancelEditPlatformRules()">Cancel</button>
+      <button class="gd-join-btn" onclick="_savePlatformRules()">Save (applies to every group)</button>
+    </div>
+    <button class="gd-mods-btn" id="gd-platform-rules-edit-btn" style="display:none" onclick="_startEditPlatformRules()">Edit platform rules (owner only)</button>
+    <div style="height:1px;background:var(--border);margin:2px 0"></div>
+    <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;font-weight:700">This group's rules</div>
     <div id="gd-rules-view" style="font-size:13px;color:var(--sub);line-height:1.6;white-space:pre-wrap"></div>
-    <textarea id="gd-rules-edit" class="gd-composer-inp" style="display:none;width:100%;min-height:140px" placeholder="Write the rules for this group…" maxlength="4000"></textarea>
+    <textarea id="gd-rules-edit" class="gd-composer-inp" style="display:none;width:100%;min-height:140px" placeholder="Write additional rules for this group…" maxlength="4000"></textarea>
     <div id="gd-rules-actions" style="display:none;justify-content:flex-end;gap:8px">
       <button class="gd-member-action" onclick="_cancelEditRules()">Cancel</button>
       <button class="gd-join-btn" onclick="_saveRules()">Save</button>
@@ -926,8 +935,42 @@ function _openRules(){
   var view = document.getElementById('gd-rules-view');
   var editBtn = document.getElementById('gd-rules-edit-btn');
   var rules = (_groupData && _groupData.rules) || '';
-  view.textContent = rules || 'No rules have been set for this group yet.';
+  view.textContent = rules || 'No additional rules have been set for this group yet.';
   editBtn.style.display = (_groupData && _groupData.is_mod) ? '' : 'none';
+  document.getElementById('gd-platform-rules-edit-btn').style.display = (_groupData && _groupData.is_platform_owner) ? '' : 'none';
+  var platEl = document.getElementById('gd-platform-rules');
+  platEl.textContent = 'Loading…';
+  fetch('/api/platform/group-rules', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    platEl.textContent = (d.ok && d.rules) ? d.rules : '';
+    _lastPlatformRules = (d.ok && d.rules) ? d.rules : '';
+  }).catch(function(){ platEl.textContent = ''; });
+}
+var _lastPlatformRules = '';
+function _startEditPlatformRules(){
+  document.getElementById('gd-platform-rules').style.display = 'none';
+  document.getElementById('gd-platform-rules-edit-btn').style.display = 'none';
+  var ta = document.getElementById('gd-platform-rules-edit');
+  ta.value = _lastPlatformRules;
+  ta.style.display = '';
+  document.getElementById('gd-platform-rules-actions').style.display = 'flex';
+}
+function _cancelEditPlatformRules(){
+  document.getElementById('gd-platform-rules').style.display = '';
+  document.getElementById('gd-platform-rules-edit-btn').style.display = (_groupData && _groupData.is_platform_owner) ? '' : 'none';
+  document.getElementById('gd-platform-rules-edit').style.display = 'none';
+  document.getElementById('gd-platform-rules-actions').style.display = 'none';
+}
+function _savePlatformRules(){
+  var rules = document.getElementById('gd-platform-rules-edit').value.trim();
+  if(!rules){ _showToast('Rules text is required', 'err'); return; }
+  fetch('/api/platform/group-rules', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({rules:rules})})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ _showToast(d.msg||'Could not save', 'err'); return; }
+      _lastPlatformRules = rules;
+      document.getElementById('gd-platform-rules').textContent = rules;
+      _showToast('Platform rules updated for every group', 'ok');
+      _cancelEditPlatformRules();
+    }).catch(function(){ _showToast('Network error', 'err'); });
 }
 function _closeRules(ev){
   if(ev && ev.target !== ev.currentTarget) return;
@@ -956,7 +999,7 @@ function _saveRules(){
       if(_groupData) _groupData.rules = rules;
       _showToast('Rules saved', 'ok');
       _cancelEditRules();
-      document.getElementById('gd-rules-view').textContent = rules || 'No rules have been set for this group yet.';
+      document.getElementById('gd-rules-view').textContent = rules || 'No additional rules have been set for this group yet.';
     }).catch(function(){ _showToast('Network error', 'err'); });
 }
 

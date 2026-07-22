@@ -5570,6 +5570,49 @@ def api_group_settings(group_id):
         conn.close()
 
 
+_DEFAULT_PLATFORM_GROUP_RULES = """OrcAgent Rules
+
+1. Be respectful.
+2. No scams, phishing, or pump-and-dumps.
+3. Not financial advice — DYOR.
+4. No spam.
+5. Never share your seed phrase or private key.
+6. Mods have the final say."""
+
+
+@app.route('/api/platform/group-rules')
+def api_platform_group_rules():
+    """Public: the platform-wide baseline rules shown in every group. Only the
+    platform owner can change these -- individual group owners/mods cannot."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute("SELECT value FROM platform_settings WHERE key='group_baseline_rules'").fetchone()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'rules': row[0] if row else _DEFAULT_PLATFORM_GROUP_RULES})
+
+
+@app.route('/api/platform/group-rules', methods=['POST'])
+@rate_limit(10, 300)
+def api_platform_group_rules_save():
+    wallet = _authenticated_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'ok': False, 'msg': 'Platform owner only'}), 403
+    rules = str((request.json or {}).get('rules', '')).strip()
+    if not rules or len(rules) > 4000:
+        return jsonify({'ok': False, 'msg': 'Rules text is required (max 4000 chars)'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute(
+            "INSERT INTO platform_settings (key, value) VALUES ('group_baseline_rules', ?) "
+            "ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=CURRENT_TIMESTAMP",
+            (rules,))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'rules': rules})
+
+
 @app.route('/api/groups/official')
 def api_group_official():
     """Public: the single platform-wide official community group, if one has been set."""
