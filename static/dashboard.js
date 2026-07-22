@@ -8241,12 +8241,23 @@ function _feedToggleReply(btn, postId){
 }
 
 /* ── Notification deep-linking: #post-<id> jumps straight to that post ── */
-var _notifDeepLinkDone = false;
+var _lastDeepLinkHash = null;
+window.addEventListener('hashchange', function(){
+  if(!/^#post-/.test(location.hash)) return;
+  // If we're not currently on the Home view, switching there also runs
+  // loadHomeFeed() -> renderHomeFeed() -> _handleNotifDeepLink(), which
+  // does the actual jump once the feed is loaded.
+  if(_dmOpen || _tradersView || _gcOpen || document.getElementById('dash-wallet')?.style.display==='block'){
+    _sbNav('dashboard');
+  } else {
+    _handleNotifDeepLink();
+  }
+});
 function _handleNotifDeepLink(){
-  if(_notifDeepLinkDone) return;
   var m = /^#post-(.+)$/.exec(location.hash);
   if(!m) return;
-  _notifDeepLinkDone = true;
+  if(location.hash === _lastDeepLinkHash) return;
+  _lastDeepLinkHash = location.hash;
   _jumpToPost(decodeURIComponent(m[1]));
 }
 
