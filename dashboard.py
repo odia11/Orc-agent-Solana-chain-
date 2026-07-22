@@ -5080,9 +5080,25 @@ def _group_role(conn, group_id, uid):
     return row[0] if row else None
 
 
+def _ensure_last_owner_activity_column(conn):
+    """Self-healing guard: the run_migrations() ALTER TABLE only ever executes once,
+    at process start. If a stale process kept serving traffic across a deploy that
+    added this column (an 'Active' deploy status doesn't guarantee a real restart),
+    the migration list it holds in memory never included this line, and the column
+    genuinely never got created. Retrying the ALTER TABLE here is idempotent -- it
+    either succeeds once (self-heals) or hits 'duplicate column' every time after
+    (harmless, caught and ignored)."""
+    try:
+        conn.execute('ALTER TABLE groups ADD COLUMN last_owner_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+        conn.commit()
+    except Exception:
+        pass
+
+
 def _touch_owner_activity(conn, group_id, uid):
     """Called whenever the owner does something in their group (post, view). Bumps
     last_owner_activity and auto-cancels any pending ownership claim against them."""
+    _ensure_last_owner_activity_column(conn)
     owner_row = conn.execute('SELECT created_by FROM groups WHERE id=?', (group_id,)).fetchone()
     if not owner_row or owner_row[0] != uid:
         return
@@ -5162,7 +5178,10 @@ def api_group_detail(group_id):
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
         uid = _get_uid(conn, wallet) if wallet else None
         if uid:
-            _touch_owner_activity(conn, group_id, uid)
+            try:
+                _touch_owner_activity(conn, group_id, uid)
+            except Exception:
+                logging.exception('_touch_owner_activity failed for group %s uid %s', group_id, uid)
         role = _group_role(conn, group_id, uid)
         is_muted = False
         if uid:
