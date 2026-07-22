@@ -5215,6 +5215,11 @@ def api_group_posts(group_id):
     conn = sqlite3.connect(DB_FILE)
     try:
         uid = _get_uid(conn, wallet) if wallet else None
+        priv_row = conn.execute('SELECT is_private FROM groups WHERE id=?', (group_id,)).fetchone()
+        if not priv_row:
+            return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        if priv_row[0] and not _group_role(conn, group_id, uid):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
         rows = conn.execute('''
             SELECT gp.id, gp.content, gp.created_at, gp.user_id, u.username, u.avatar_url,
                    u.wallet_address, u.is_verified, gp.image_url
@@ -5443,6 +5448,12 @@ def _group_image_upload(group_id, field, data):
         b64_part = data.split(',', 1)[1] if ',' in data else ''
         if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
             return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'})
+        try:
+            raw = base64.b64decode(b64_part, validate=True)
+        except (binascii.Error, ValueError):
+            return jsonify({'ok': False, 'msg': 'Invalid image data'})
+        if not _verify_image_magic(raw):
+            return jsonify({'ok': False, 'msg': 'File is not a valid image'})
     conn = sqlite3.connect(DB_FILE)
     try:
         uid = _get_uid(conn, wallet)
@@ -6954,6 +6965,12 @@ def save_avatar():
         b64_part = avatar_data.split(',', 1)[1] if ',' in avatar_data else ''
         if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
             return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'})
+        try:
+            raw = base64.b64decode(b64_part, validate=True)
+        except (binascii.Error, ValueError):
+            return jsonify({'ok': False, 'msg': 'Invalid image data'})
+        if not _verify_image_magic(raw):
+            return jsonify({'ok': False, 'msg': 'File is not a valid image'})
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute('UPDATE users SET avatar_url=? WHERE wallet_address=?',
@@ -6982,6 +6999,12 @@ def save_banner():
         b64_part = banner_data.split(',', 1)[1] if ',' in banner_data else ''
         if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
             return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'})
+        try:
+            raw = base64.b64decode(b64_part, validate=True)
+        except (binascii.Error, ValueError):
+            return jsonify({'ok': False, 'msg': 'Invalid image data'})
+        if not _verify_image_magic(raw):
+            return jsonify({'ok': False, 'msg': 'File is not a valid image'})
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute('UPDATE users SET banner_url=? WHERE wallet_address=?',

@@ -1742,7 +1742,7 @@ function _updateTvMeCard(){
   const bg=_tvAvatarColor(p.username||'?');
   const ini=esc((p.username||'?')[0].toUpperCase());
   const avHtml=p.avatar_url
-    ?`<div class="tv-me-avatar" style="background:${bg}"><img src="${p.avatar_url}" alt="" onerror="this.style.display='none'"><span style="position:relative;z-index:1">${ini}</span></div>`
+    ?`<div class="tv-me-avatar" style="background:${bg}"><img src="${esc(p.avatar_url)}" alt="" onerror="this.style.display='none'"><span style="position:relative;z-index:1">${ini}</span></div>`
     :`<div class="tv-me-avatar" style="background:${bg}">${ini}</div>`;
   const todayPnl=p.today_pnl??0;
   const todayPos=todayPnl>=0;
@@ -3807,7 +3807,7 @@ function _tvAvatarHtml(e){
   const ini=esc(name[0].toUpperCase());
   const bg=_tvAvatarColor(name);
   if(e.avatar_url){
-    return `<div class="tv-avatar" style="background:${bg}"><img src="${e.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
+    return `<div class="tv-avatar" style="background:${bg}"><img src="${esc(e.avatar_url)}" alt="" onerror="this.style.display='none'">${ini}</div>`;
   }
   return `<div class="tv-avatar" style="background:${bg}">${ini}</div>`;
 }
@@ -3982,7 +3982,7 @@ function _tpcAvatarHtml(p, botActive=false){
   const bg=_tvAvatarColor(name);
   const cls='tvp-avatar'+(botActive?' tvp-avatar-active':'');
   if(p.avatar_url){
-    return `<div class="${cls}" style="background:${bg}"><img src="${p.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
+    return `<div class="${cls}" style="background:${bg}"><img src="${esc(p.avatar_url)}" alt="" onerror="this.style.display='none'">${ini}</div>`;
   }
   return `<div class="${cls}" style="background:${bg}">${ini}</div>`;
 }
@@ -4176,7 +4176,7 @@ async function openFollowView(userId, username, type){
   listEl.innerHTML = r.users.map(u=>{
     const bg = _tvAvatarColor(u.username||'?');
     const ini = esc((u.username||'?')[0].toUpperCase());
-    const avImg = u.avatar_url ? `<img src="${u.avatar_url}" alt="" onerror="this.style.display='none'">` : '';
+    const avImg = u.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="" onerror="this.style.display='none'">` : '';
     const pnl = u.pnl_today ?? 0;
     const pnlPos = pnl >= 0;
     const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
@@ -4227,7 +4227,7 @@ async function _loadFollowPanel(wallet, tab){
   listEl.innerHTML = r.users.map(u=>{
     const bg = _tvAvatarColor(u.username||'?');
     const ini = esc((u.username||'?')[0].toUpperCase());
-    const avImg = u.avatar_url ? `<img src="${u.avatar_url}" alt="" onerror="this.style.display='none'">` : '';
+    const avImg = u.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="" onerror="this.style.display='none'">` : '';
     const pnl = u.pnl_today ?? 0;
     const pnlPos = pnl >= 0;
     const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
@@ -4511,7 +4511,7 @@ function _lbAvatarHtml(e, uid){
   const bg=_lbAvatarColor(name);
   const clickAttr=uid?`onclick="event.stopPropagation();openProfileCard(${uid})" style="cursor:pointer;background:${bg}"`:`style="background:${bg}"`;
   if(e.avatar_url){
-    return `<div class="lb-avatar" ${clickAttr}><img src="${e.avatar_url}" alt="" onerror="this.style.display='none'">${ini}</div>`;
+    return `<div class="lb-avatar" ${clickAttr}><img src="${esc(e.avatar_url)}" alt="" onerror="this.style.display='none'">${ini}</div>`;
   }
   return `<div class="lb-avatar" ${clickAttr}>${ini}</div>`;
 }
@@ -6738,9 +6738,12 @@ function tagToken(){
           console.log('results:',d)
           const el=document.getElementById('tokenResults')
           el.innerHTML=d.length?d.map(t=>`
-          <div onclick="selectToken('${t.symbol}')" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;background:#0a0b0e;margin-top:4px">
-            <span style="color:#f7b955;font-weight:700">$${t.symbol}</span>
+          <div class="_tokResult" data-symbol="${esc(t.symbol)}" style="padding:10px;border-radius:8px;cursor:pointer;color:#eef1f5;background:#0a0b0e;margin-top:4px">
+            <span style="color:#f7b955;font-weight:700">$${esc(t.symbol)}</span>
           </div>`).join(''):'<div style="color:#565d68;padding:10px">No tokens found</div>'
+          el.querySelectorAll('._tokResult').forEach(function(node){
+            node.addEventListener('click',function(){ selectToken(this.dataset.symbol) })
+          })
         })
       })
     }
@@ -6751,12 +6754,16 @@ function searchToken(q){
   if(q.length<1) return
   fetch('/api/market/tokens?q='+encodeURIComponent(q))
   .then(r=>r.json()).then(d=>{
-    document.getElementById('tokenResults').innerHTML=d.length?
-    d.map(t=>`<div onclick="selectToken('${t.symbol}','${t.mint}')" style="padding:10px;cursor:pointer;border-bottom:1px solid #16191f">
-      <div style="color:#f7b955;font-weight:700">$${t.symbol}</div>
-      <div style="color:#565d68;font-size:11px;font-family:monospace">${t.mint}</div>
+    const el=document.getElementById('tokenResults')
+    el.innerHTML=d.length?
+    d.map(t=>`<div class="_tokResult" data-symbol="${esc(t.symbol)}" data-mint="${esc(t.mint)}" style="padding:10px;cursor:pointer;border-bottom:1px solid #16191f">
+      <div style="color:#f7b955;font-weight:700">$${esc(t.symbol)}</div>
+      <div style="color:#565d68;font-size:11px;font-family:monospace">${esc(t.mint)}</div>
     </div>`).join('')
     :'<div style="color:#565d68;padding:10px">No tokens found</div>'
+    el.querySelectorAll('._tokResult').forEach(function(node){
+      node.addEventListener('click',function(){ selectToken(this.dataset.symbol,this.dataset.mint) })
+    })
   })
 }
 
@@ -7500,9 +7507,9 @@ function loadInlineSidebar(){
     if(!el) return;
     el.innerHTML=d.slice(0,5).map(t=>`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #16191f">
-      <div style="width:36px;height:36px;border-radius:10px;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${t.symbol?.slice(0,3)}</div>
-      <div style="flex:1"><div style="font-weight:600;font-size:13px">${t.name||t.symbol}</div>
-      <div style="color:#565d68;font-size:11px">${t.symbol}/SOL</div></div>
+      <div style="width:36px;height:36px;border-radius:10px;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px">${esc(t.symbol?.slice(0,3))}</div>
+      <div style="flex:1"><div style="font-weight:600;font-size:13px">${esc(t.name||t.symbol)}</div>
+      <div style="color:#565d68;font-size:11px">${esc(t.symbol)}/SOL</div></div>
       <div style="text-align:right"><div style="font-size:13px;font-weight:600">$${t.price_usd?.toFixed(4)||'--'}</div>
       <div style="font-size:12px;color:${(t.change||0)>=0?'#3ad29b':'#f76b62'}">${(t.change||0)>=0?'+':''}${(t.change||0).toFixed(1)}%</div></div>
     </div>`).join('')
@@ -7514,9 +7521,9 @@ function loadInlineSidebar(){
     el.innerHTML=d.slice(0,4).map((t,i)=>`
     <div style="display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #16191f">
       <span style="color:#565d68;font-size:13px;width:16px">${i+1}</span>
-      <div style="width:36px;height:36px;border-radius:50%;background:#f7b955;color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${(t.username||t.wallet||'?').slice(0,2).toUpperCase()}</div>
-      <div style="flex:1"><div style="font-weight:600;font-size:13px">${t.username||t.wallet?.slice(0,8)}</div>
-      <div style="color:#565d68;font-size:11px">@${t.username||t.wallet?.slice(0,8)}</div></div>
+      <div style="width:36px;height:36px;border-radius:50%;background:#f7b955;color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px">${esc((t.username||t.wallet||'?').slice(0,2).toUpperCase())}</div>
+      <div style="flex:1"><div style="font-weight:600;font-size:13px">${esc(t.username||t.wallet?.slice(0,8))}</div>
+      <div style="color:#565d68;font-size:11px">@${esc(t.username||t.wallet?.slice(0,8))}</div></div>
       <div style="color:#3ad29b;font-family:monospace;font-size:13px;font-weight:700">+${(t.total_pnl_sol||0).toFixed(1)} SOL</div>
     </div>`).join('')
   }).catch(()=>{});
