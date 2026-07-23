@@ -8367,7 +8367,8 @@ function _replyRelTime(created_at){
   return Math.floor(s/86400)+'d';
 }
 
-function _renderReplyRow(r, postId){
+function _renderReplyRow(r, postId, depth){
+  depth = depth || 0;
   var name    = esc(r.username || r.wallet || '?');
   var handle  = r.username ? '@'+esc(r.username) : (r.wallet ? '@'+esc(r.wallet.slice(0,6)+'…') : '');
   var initKey = r.username || r.wallet || '?';
@@ -8382,7 +8383,8 @@ function _renderReplyRow(r, postId){
   var avatarImg = r.avatar_url
     ? '<img src="'+esc(r.avatar_url)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
     : '';
-  return '<div class="fc-reply-item" data-reply-id="'+r.id+'">'
+  var indentStyle = depth>0 ? ' style="margin-left:'+Math.min(depth,3)*28+'px;border-left:2px solid #21252c;padding-left:10px"' : '';
+  return '<div class="fc-reply-item'+(depth>0?' fc-reply-nested':'')+'" data-reply-id="'+r.id+'" data-parent-id="'+(r.parent_reply_id||'')+'"'+indentStyle+'>'
     +'<div class="fc-ri-header">'
     +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+(r.avatar_url ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')' : (r.wallet ? 'event.stopPropagation();location.href=\'/profile/'+encodeURIComponent(r.wallet)+'\'' : ''))+'">'+ini+avatarImg+'</div>'
     +'<span class="fc-ri-name">'+name+'</span>'
@@ -8394,10 +8396,74 @@ function _renderReplyRow(r, postId){
     +'<div class="fc-ri-text">'+esc(r.message).replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>')+'</div>'
     +'<div class="fc-ri-actions">'
     +'<button class="fc-ri-like'+likedCls+'" data-rid="'+r.id+'" onclick="_feedLikeReply('+r.id+',this)">&#9825; <span class="fc-ri-lc">'+likeCnt+'</span></button>'
-    +'<button class="fc-ri-reply-btn">'+_REPLY_ICON_SVG+'<span>Reply</span></button>'
+    +'<button class="fc-ri-reply-btn" onclick="_feedToggleNestedReply('+r.id+',\''+postId.replace(/'/g,"\\'")+'\',this)">'+_REPLY_ICON_SVG+'<span>Reply</span></button>'
     +delBtn
     +'</div>'
+    +'<div class="fc-ri-nested-box" id="rnbox-'+r.id+'" style="display:none"></div>'
     +'</div>';
+}
+
+function _feedToggleNestedReply(parentId, postId, btn){
+  var box = document.getElementById('rnbox-'+parentId);
+  if(!box) return;
+  var isOpen = box.style.display !== 'none';
+  // Close any other open nested composer on this post first, so only one is active.
+  document.querySelectorAll('#rlist-'+postId+' .fc-ri-nested-box').forEach(function(b){ b.style.display='none'; b.innerHTML=''; });
+  if(isOpen) return; // was open -> we just closed it above
+  var inpId = 'rninp-'+parentId;
+  box.innerHTML = '<div class="fc-reply-inner" style="margin-top:8px" onclick="event.stopPropagation()">'
+    +'<input class="fc-reply-inp" id="'+inpId+'" type="text" placeholder="Write a reply…" maxlength="500" '
+      +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitNestedReply(this,\''+postId.replace(/'/g,"\\'")+'\','+parentId+')}">'
+    +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')">Reply</button>'
+    +'</div>';
+  box.style.display = '';
+  var inp = document.getElementById(inpId);
+  if(inp) setTimeout(function(){ inp.focus(); }, 100);
+}
+
+function _feedSubmitNestedReply(inp, postId, parentReplyId){
+  if(!inp) return;
+  var text = inp.value.trim();
+  if(!text) return;
+  inp.disabled = true;
+  var sendBtn = inp.parentNode ? inp.parentNode.querySelector('.fc-reply-send') : null;
+  if(sendBtn){ sendBtn.disabled = true; sendBtn.textContent = '…'; }
+  fetch('/api/feed/reply', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({post_id: postId, message: text, parent_reply_id: parentReplyId})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(d.ok){
+      var parentRow = document.querySelector('#rlist-'+postId+' .fc-reply-item[data-reply-id="'+parentReplyId+'"]');
+      var box = document.getElementById('rnbox-'+parentReplyId);
+      if(box){ box.style.display='none'; box.innerHTML=''; }
+      if(parentRow){
+        var parentDepth = parentRow.dataset.parentId ? 2 : 1; // one level deeper than the parent, capped visually
+        var fakeReply = {
+          id: d.id, user_id: d.user_id,
+          username: d.username, wallet: '',
+          message: d.message, created_at: d.created_at,
+          like_count: 0, liked_by_me: false, is_mine: true,
+          parent_reply_id: parentReplyId
+        };
+        parentRow.insertAdjacentHTML('afterend', _renderReplyRow(fakeReply, postId, parentDepth));
+      }
+      var card = document.getElementById('fc-card-'+postId);
+      if(card){
+        var rcnt = card.querySelector('.fc-reply-count');
+        if(rcnt) rcnt.textContent = (parseInt(rcnt.textContent,10)||0)+1;
+      }
+    } else {
+      openAlertModal({text:d.msg||'Could not post reply'});
+    }
+    inp.disabled = false;
+    if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = 'Reply'; }
+  }).catch(function(){
+    inp.disabled = false;
+    if(sendBtn){ sendBtn.disabled = false; sendBtn.textContent = 'Reply'; }
+    openAlertModal({text:'Network error — could not post reply'});
+  });
 }
 
 function _feedLoadReplies(postId){
@@ -8411,7 +8477,20 @@ function _feedLoadReplies(postId){
         list.innerHTML='<div style="font-size:12px;color:var(--muted);padding:4px 0">No replies yet — be the first.</div>';
         return;
       }
-      list.innerHTML = d.replies.map(function(r){ return _renderReplyRow(r, postId); }).join('');
+      var byParent = {};
+      d.replies.forEach(function(r){
+        var key = r.parent_reply_id || 'root';
+        (byParent[key] = byParent[key] || []).push(r);
+      });
+      var html = '';
+      function renderBranch(parentKey, depth){
+        (byParent[parentKey] || []).forEach(function(r){
+          html += _renderReplyRow(r, postId, depth);
+          renderBranch(r.id, depth+1);
+        });
+      }
+      renderBranch('root', 0);
+      list.innerHTML = html;
     })
     .catch(function(){});
 }

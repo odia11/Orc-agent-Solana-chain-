@@ -1103,12 +1103,14 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_auth_nonces_created ON auth_nonces(created_at)')
     c.execute('''CREATE TABLE IF NOT EXISTS feed_replies (
-        id         INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id    INTEGER NOT NULL,
-        post_id    TEXT NOT NULL,
-        message    TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        FOREIGN KEY (user_id) REFERENCES users(id)
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id          INTEGER NOT NULL,
+        post_id          TEXT NOT NULL,
+        message          TEXT NOT NULL,
+        created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        parent_reply_id  INTEGER DEFAULT NULL,
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (parent_reply_id) REFERENCES feed_replies(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_feed_replies_post ON feed_replies(post_id)')
     c.execute('''CREATE TABLE IF NOT EXISTS feed_reply_likes (
@@ -1259,6 +1261,7 @@ def run_migrations():
         "ALTER TABLE groups ADD COLUMN last_owner_activity TIMESTAMP DEFAULT CURRENT_TIMESTAMP",
         "ALTER TABLE group_posts ADD COLUMN image_url TEXT DEFAULT NULL",
         "ALTER TABLE group_members ADD COLUMN muted_until TIMESTAMP DEFAULT NULL",
+        "ALTER TABLE feed_replies ADD COLUMN parent_reply_id INTEGER DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -8345,21 +8348,33 @@ def post_feed_reply():
     body = request.json or {}
     post_id = str(body.get('post_id', '')).strip()
     message = _sanitize(str(body.get('message', '')).strip())
+    parent_reply_id = body.get('parent_reply_id')
     if not post_id:
         return jsonify({'ok': False, 'msg': 'post_id required'}), 400
     if not message:
         return jsonify({'ok': False, 'msg': 'Message cannot be empty'}), 400
     if len(message) > 500:
         return jsonify({'ok': False, 'msg': 'Message too long (max 500 chars)'}), 400
+    if parent_reply_id is not None:
+        try:
+            parent_reply_id = int(parent_reply_id)
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'msg': 'Invalid parent_reply_id'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if parent_reply_id is not None:
+            parent_row = conn.execute(
+                'SELECT post_id FROM feed_replies WHERE id=?', (parent_reply_id,)
+            ).fetchone()
+            if not parent_row or parent_row[0] != post_id:
+                return jsonify({'ok': False, 'msg': 'Invalid parent_reply_id'}), 400
         now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
-            'INSERT INTO feed_replies (user_id, post_id, message, created_at) VALUES (?,?,?,?)',
-            (me, post_id, message, now)
+            'INSERT INTO feed_replies (user_id, post_id, message, created_at, parent_reply_id) VALUES (?,?,?,?,?)',
+            (me, post_id, message, now, parent_reply_id)
         )
         conn.commit()
         owner_uid = _post_owner_uid(conn, post_id)
@@ -8384,6 +8399,7 @@ def post_feed_reply():
         'avatar_url': row[1] if row else '',
         'message': message,
         'created_at': now,
+        'parent_reply_id': parent_reply_id,
     })
 
 @app.route('/api/feed/replies/<path:post_id>', methods=['GET'])
@@ -8401,7 +8417,8 @@ def get_feed_replies(post_id):
                       r.message,
                       r.created_at,
                       r.user_id,
-                      (SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id = r.id) AS like_count
+                      (SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id = r.id) AS like_count,
+                      r.parent_reply_id
                FROM feed_replies r
                LEFT JOIN users u ON u.id = r.user_id
                WHERE r.post_id = ?
@@ -8431,6 +8448,7 @@ def get_feed_replies(post_id):
             'like_count':   r[7],
             'liked_by_me':  r[0] in liked,
             'is_mine':      me is not None and r[6] == me,
+            'parent_reply_id': r[8],
         }
         for r in rows
     ]})
