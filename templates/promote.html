@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,viewport-fit=cover">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="client-secret" content="{{ client_secret }}">
+<title>Promote your coin — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OrcAgent">
+<link rel="apple-touch-icon" href="/static/icon-180.png?v=5">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--text:#eef1f5;--muted:#565d68;--sub:#8a919c;--green:#3ad29b;--red:#f76b62}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'Geist',system-ui,sans-serif;font-size:14px;line-height:1.4;-webkit-font-smoothing:antialiased}
+.mono{font-family:'JetBrains Mono',monospace}
+
+.pr-header{position:sticky;top:0;z-index:20;background:var(--bg);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bg3)}
+.pr-back{text-decoration:none;color:var(--muted);font-size:13px;white-space:nowrap;transition:color .15s}
+.pr-back:hover{color:var(--text)}
+.pr-title{font-size:15px;font-weight:700;color:var(--text)}
+
+.pr-wrap{max-width:520px;margin:0 auto;padding:28px 16px 48px}
+.pr-intro{font-size:13px;color:var(--sub);line-height:1.5;margin-bottom:20px}
+
+.pr-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:20px}
+.pr-field{margin-bottom:16px}
+.pr-field label{display:block;font-size:11px;letter-spacing:.06em;color:var(--muted);font-weight:600;text-transform:uppercase;margin-bottom:7px}
+.pr-field input{width:100%;background:var(--bg);border:1px solid var(--bg4);border-radius:10px;padding:10px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;transition:border-color .15s}
+.pr-field input:focus{border-color:var(--accent)}
+.pr-field input::placeholder{color:var(--muted)}
+
+.pr-placements{display:flex;flex-direction:column;gap:2px;margin-bottom:6px}
+.pr-check{display:flex;align-items:center;gap:10px;padding:9px 4px;font-size:13px;color:var(--text);cursor:pointer}
+.pr-check input{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+
+.pr-summary{margin-top:18px;padding:13px 15px;background:var(--bg);border:1px solid var(--bg4);border-radius:12px;font-size:12px;color:var(--sub);display:flex;justify-content:space-between;gap:12px}
+.pr-summary b{color:var(--text);font-weight:700}
+
+.pr-submit{width:100%;margin-top:18px;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:inherit;transition:opacity .15s}
+.pr-submit:hover{opacity:.9}
+.pr-submit:disabled{opacity:.45;cursor:default}
+.pr-err{color:var(--red);font-size:12px;margin-top:10px;display:none}
+
+/* payment panel — hidden until a promotion is created */
+#pr-payment{display:none;background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:20px;margin-top:18px}
+#pr-payment h2{font-size:15px;font-weight:700;margin-bottom:6px}
+#pr-payment p{font-size:12px;color:var(--sub);line-height:1.5;margin-bottom:14px}
+.pr-pay-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 14px;background:var(--bg);border:1px solid var(--bg4);border-radius:10px;margin-bottom:10px}
+.pr-pay-label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.pr-pay-val{font-size:13px;color:var(--text);word-break:break-all;text-align:right}
+.pr-pay-amt{font-size:20px;font-weight:700;color:var(--accent)}
+</style>
+</head>
+<body>
+
+<header class="pr-header">
+  <a class="pr-back" href="/">← Back</a>
+  <div class="pr-title">Promote your coin</div>
+</header>
+
+<div class="pr-wrap">
+  <div class="pr-intro">Feature your token across OrcAgent for {{ duration_hours }} hours. Pick where it shows up, pay the fixed listing fee in SOL, and it goes live as soon as the payment is confirmed on-chain.</div>
+
+  <div class="pr-card" id="pr-form-card">
+    <div class="pr-field">
+      <label for="pr-symbol">Token symbol</label>
+      <input id="pr-symbol" type="text" placeholder="e.g. BONK" maxlength="20" autocomplete="off">
+    </div>
+    <div class="pr-field">
+      <label for="pr-name">Token name</label>
+      <input id="pr-name" type="text" placeholder="e.g. Bonk" maxlength="80" autocomplete="off">
+    </div>
+    <div class="pr-field">
+      <label for="pr-mint">Token mint address <span style="text-transform:none;font-weight:400">(optional)</span></label>
+      <input id="pr-mint" type="text" placeholder="Token mint address" maxlength="64" autocomplete="off">
+    </div>
+
+    <div class="pr-placements">
+      <label class="pr-check"><input type="checkbox" id="pr-show-feed" checked> Show in Home feed</label>
+      <label class="pr-check"><input type="checkbox" id="pr-show-market" checked> Show in Live Market</label>
+      <label class="pr-check"><input type="checkbox" id="pr-show-traders" checked> Show in Traders rail</label>
+    </div>
+
+    <div class="pr-summary">
+      <span>Listing fee</span>
+      <b class="mono">{{ price_sol }} SOL · {{ duration_hours }}h</b>
+    </div>
+
+    <button class="pr-submit" id="pr-submit-btn" onclick="_promoteSubmit()">Continue to payment</button>
+    <div class="pr-err" id="pr-err"></div>
+  </div>
+
+  <div id="pr-payment">
+    <h2>Send payment to activate</h2>
+    <p>Send exactly the amount below to the treasury wallet from the wallet you're logged in with. Your promotion goes live automatically once the transaction is confirmed.</p>
+    <div class="pr-pay-row">
+      <span class="pr-pay-label">Amount</span>
+      <span class="pr-pay-val mono pr-pay-amt" id="pr-pay-amount"></span>
+    </div>
+    <div class="pr-pay-row">
+      <span class="pr-pay-label">Treasury wallet</span>
+      <span class="pr-pay-val mono" id="pr-pay-wallet"></span>
+    </div>
+    <button class="pr-submit" id="pr-pay-btn" onclick="_promoteSendPayment()">Pay now</button>
+    <div class="pr-err" id="pr-pay-err"></div>
+    <div id="pr-pay-result" style="margin-top:12px;font-size:13px"></div>
+    {% if is_admin %}
+    <button class="pr-submit" id="pr-simulate-btn" onclick="_promoteSimulateConfirm()" style="margin-top:10px;background:none;color:var(--sub);border:1px solid var(--bg4)">Simulate confirmation (demo)</button>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+'use strict';
+var _promoCsrf   = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+var _promoSecret = (document.querySelector('meta[name="client-secret"]')||{}).content||'';
+
+/* module-scope state for the created promotion, populated on successful create */
+var _promoId = null;
+var _promoTreasuryWallet = null;
+var _promoAmountSol = null;
+
+function _promoShowError(msg){
+  var el = document.getElementById('pr-err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+async function _promoteSubmit(){
+  var errEl = document.getElementById('pr-err');
+  errEl.style.display = 'none';
+
+  var token_symbol = document.getElementById('pr-symbol').value.trim();
+  var token_name   = document.getElementById('pr-name').value.trim();
+  var token_mint   = document.getElementById('pr-mint').value.trim();
+  var show_in_feed    = document.getElementById('pr-show-feed').checked;
+  var show_in_market  = document.getElementById('pr-show-market').checked;
+  var show_in_traders = document.getElementById('pr-show-traders').checked;
+
+  if(!token_symbol){ _promoShowError('Token symbol is required'); return; }
+  if(!token_name){ _promoShowError('Token name is required'); return; }
+
+  var btn = document.getElementById('pr-submit-btn');
+  btn.disabled = true;
+  btn.textContent = 'Creating…';
+
+  try{
+    var headers = {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': _promoCsrf,
+      'X-CSRFToken': _promoCsrf,
+    };
+    if(_promoSecret) headers['X-API-Shared-Secret'] = _promoSecret;
+
+    var r = await fetch('/api/promote/create', {
+      method: 'POST',
+      credentials: 'include',
+      headers: headers,
+      body: JSON.stringify({
+        token_symbol: token_symbol,
+        token_name: token_name,
+        token_mint: token_mint || undefined,
+        show_in_feed: show_in_feed,
+        show_in_market: show_in_market,
+        show_in_traders: show_in_traders,
+      }),
+    });
+    var d = await r.json();
+    if(!d.ok){
+      _promoShowError(d.msg || 'Could not create promotion');
+      return;
+    }
+
+    _promoId = d.promotion_id;
+    _promoTreasuryWallet = d.treasury_wallet;
+    _promoAmountSol = d.amount_sol;
+
+    document.getElementById('pr-pay-amount').textContent = d.amount_sol + ' SOL';
+    document.getElementById('pr-pay-wallet').textContent = d.treasury_wallet;
+    document.getElementById('pr-payment').style.display = 'block';
+    document.getElementById('pr-form-card').style.display = 'none';
+  }catch(e){
+    _promoShowError('Network error — could not create promotion');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Continue to payment';
+  }
+}
+
+function _promoShowPayError(msg){
+  var el = document.getElementById('pr-pay-err');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+/* Copied standalone from _tpcSendSol() in static/dashboard.js — promote.html
+   doesn't load dashboard.js (see the standalone-page convention used by
+   wallet.html/live_market.html/settings.html), so this is its own copy. */
+async function _promoSendSol(amountSol, recipientFullWallet) {
+  const provider = window.solana || window.solflare;
+  if (!provider || !provider.publicKey) throw new Error('No wallet connected');
+  const lamports = Math.floor(parseFloat(amountSol) * 1e9);
+  const resp = await fetch('/api/solana/build_transfer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({from_wallet: provider.publicKey.toString(), to_wallet: recipientFullWallet, lamports})
+  });
+  const data = await resp.json();
+  if (!data.ok) throw new Error(data.msg);
+  const result = await provider.signAndSendTransaction({
+    serialize: () => Uint8Array.from(atob(data.tx_b64), c => c.charCodeAt(0))
+  });
+  return result.signature || result;
+}
+
+async function _promoteSendPayment(){
+  var errEl = document.getElementById('pr-pay-err');
+  errEl.style.display = 'none';
+
+  var btn = document.getElementById('pr-pay-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending…';
+
+  try{
+    var signature = await _promoSendSol(_promoAmountSol, _promoTreasuryWallet);
+
+    var headers = {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': _promoCsrf,
+      'X-CSRFToken': _promoCsrf,
+    };
+    if(_promoSecret) headers['X-API-Shared-Secret'] = _promoSecret;
+
+    var r = await fetch('/api/promote/' + _promoId + '/submit-tx', {
+      method: 'POST',
+      credentials: 'include',
+      headers: headers,
+      body: JSON.stringify({tx_signature: signature}),
+    });
+    var d = await r.json();
+    if(!d.ok){
+      _promoShowPayError(d.msg || 'Could not submit transaction');
+      return;
+    }
+    _promotePollStatus();
+  }catch(e){
+    _promoShowPayError(e.message || 'Payment failed');
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Pay now';
+  }
+}
+
+var _promotePollTimer = null;
+var _promotePollAttempts = 0;
+var PROMOTE_POLL_MAX_ATTEMPTS = 40; // 40 * 3s = ~2 minutes
+
+function _promotePollShowResult(text, colorVar){
+  var el = document.getElementById('pr-pay-result');
+  el.textContent = text;
+  el.style.color = colorVar ? 'var(' + colorVar + ')' : '';
+}
+
+async function _promotePollStatus(){
+  if(_promotePollTimer) clearInterval(_promotePollTimer);
+  _promotePollAttempts = 0;
+  _promotePollShowResult('Waiting for on-chain confirmation…', '--sub');
+
+  async function _tick(){
+    _promotePollAttempts++;
+    try{
+      var r = await fetch('/api/promote/' + _promoId + '/status', {credentials: 'include'});
+      var d = await r.json();
+      if(!d.ok){
+        clearInterval(_promotePollTimer);
+        _promotePollShowResult(d.msg || 'Could not check status', '--red');
+        return;
+      }
+      if(d.status === 'confirmed'){
+        clearInterval(_promotePollTimer);
+        _promotePollShowResult('✓ Payment confirmed — your promotion is live!', '--green');
+        return;
+      }
+      if(d.status === 'failed'){
+        clearInterval(_promotePollTimer);
+        _promotePollShowResult('Payment failed — please try again or contact support.', '--red');
+        return;
+      }
+      if(_promotePollAttempts >= PROMOTE_POLL_MAX_ATTEMPTS){
+        clearInterval(_promotePollTimer);
+        _promotePollShowResult('Still pending after 2 minutes — check back later or contact support.', '--red');
+        return;
+      }
+      _promotePollShowResult('Waiting for on-chain confirmation… (' + _promotePollAttempts + '/' + PROMOTE_POLL_MAX_ATTEMPTS + ')', '--sub');
+    }catch(e){
+      clearInterval(_promotePollTimer);
+      _promotePollShowResult('Network error while checking status.', '--red');
+    }
+  }
+
+  // Assign the interval BEFORE the first tick runs, so _tick's clearInterval
+  // calls (on confirmed/failed/timeout/error) actually stop it — otherwise
+  // clearInterval(_promotePollTimer) would clear `null` on that first check
+  // and the interval would start regardless of its outcome.
+  _promotePollTimer = setInterval(_tick, 3000);
+  _tick(); // fire the first check immediately instead of waiting 3s
+}
+
+async function _promoteSimulateConfirm(){
+  var btn = document.getElementById('pr-simulate-btn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Simulating…'; }
+  try{
+    var headers = {
+      'Content-Type': 'application/json',
+      'X-CSRF-Token': _promoCsrf,
+      'X-CSRFToken': _promoCsrf,
+    };
+    if(_promoSecret) headers['X-API-Shared-Secret'] = _promoSecret;
+
+    var r = await fetch('/api/promote/' + _promoId + '/simulate-confirm', {
+      method: 'POST',
+      credentials: 'include',
+      headers: headers,
+    });
+    var d = await r.json();
+    if(!d.ok){
+      _promoShowPayError(d.msg || 'Could not simulate confirmation');
+      return;
+    }
+    _promotePollStatus();
+  }catch(e){
+    _promoShowPayError('Network error — could not simulate confirmation');
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = 'Simulate confirmation (demo)'; }
+  }
+}
+</script>
+</body>
+</html>

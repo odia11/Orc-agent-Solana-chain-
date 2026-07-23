@@ -941,13 +941,31 @@ async function _loadRightRail(){
   setInterval(_loadRrStats,  60000);
 }
 
+function _rrFeaturedMarketRow(p){
+  var tick=(p.token_symbol||'?').toUpperCase().slice(0,5);
+  var bg=_rrColor(tick);
+  return '<div class="rr-market-row" onclick="window.location=\'/live-market\'">'
+    +'<div class="rr-tok-chip" style="background:'+bg+'">'+tick.slice(0,3)+'</div>'
+    +'<div class="rr-tok-info"><div class="rr-tok-name">'+esc(p.token_name||tick)+' <span class="rr-featured">Featured</span></div>'
+    +'<div class="rr-tok-pair">'+tick+' / SOL</div></div>'
+    +'<div class="rr-tok-right"><div class="rr-tok-price">—</div>'
+    +'<div class="rr-tok-chg">—</div></div>'
+    +'</div>';
+}
+
 async function _loadRrMarket(){
   var el=document.getElementById('rr-market-list'); if(!el) return;
   try{
-    var d=await fetch('/api/market/top').then(function(r){return r.json();}).catch(function(){return null;});
+    var results=await Promise.all([
+      fetch('/api/promote/featured?placement=market').then(function(r){return r.json();}).catch(function(){return null;}),
+      fetch('/api/market/top').then(function(r){return r.json();}).catch(function(){return null;}),
+    ]);
+    var featured=results[0], d=results[1];
+    var promos=(featured&&featured.ok&&featured.promotions)||[];
     var toks=(d&&d.tokens)||[];
-    if(!toks.length){ el.innerHTML='<div class="rr-empty">No market data</div>'; return; }
-    el.innerHTML=toks.slice(0,5).map(function(t){
+    if(!toks.length && !promos.length){ el.innerHTML='<div class="rr-empty">No market data</div>'; return; }
+    var featuredHtml=promos.map(_rrFeaturedMarketRow).join('');
+    var normalHtml=toks.slice(0,5).map(function(t){
       var chg=parseFloat(t.price_change_24h||0);
       var col=chg>=0?'#3ad29b':'#f76b62';
       var tick=(t.symbol||t.ticker||'?').toUpperCase().slice(0,5);
@@ -961,6 +979,7 @@ async function _loadRrMarket(){
         +'<div class="rr-tok-chg" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(1)+'%</div></div>'
         +'</div>';
     }).join('');
+    el.innerHTML=featuredHtml+normalHtml;
   }catch(e){ el.innerHTML='<div class="rr-empty">—</div>'; }
 }
 

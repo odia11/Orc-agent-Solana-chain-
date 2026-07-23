@@ -243,6 +243,27 @@ def _get_fee_rate():
         return FEE_RATE_DEFAULT
 FEE_WALLET       = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'  # hardcoded fee recipient
 
+PROMOTION_PRICE_SOL_DEFAULT = 0.424
+PROMOTION_DURATION_HOURS_DEFAULT = 14
+
+def _get_promotion_price_sol():
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute("SELECT value FROM platform_settings WHERE key='promotion_price_sol'").fetchone()
+        conn.close()
+        return float(row[0]) if row else PROMOTION_PRICE_SOL_DEFAULT
+    except Exception:
+        return PROMOTION_PRICE_SOL_DEFAULT
+
+def _get_promotion_duration_hours():
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute("SELECT value FROM platform_settings WHERE key='promotion_duration_hours'").fetchone()
+        conn.close()
+        return float(row[0]) if row else PROMOTION_DURATION_HOURS_DEFAULT
+    except Exception:
+        return PROMOTION_DURATION_HOURS_DEFAULT
+
 # Ordered list of RPC endpoints for claim_sol / blockhash / send_raw queries.
 # Priority: SOLANA_RPC_URL → HELIUS_RPC → HELIUS_API_KEY → public fallbacks
 def _build_claim_rpcs() -> list:
@@ -926,6 +947,24 @@ def init_db():
         value      TEXT NOT NULL,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS promotions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        wallet TEXT NOT NULL,
+        token_symbol TEXT NOT NULL,
+        token_name TEXT NOT NULL,
+        token_mint TEXT,
+        amount_sol REAL NOT NULL,
+        tx_signature TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        show_in_feed INTEGER NOT NULL DEFAULT 1,
+        show_in_market INTEGER NOT NULL DEFAULT 1,
+        show_in_traders INTEGER NOT NULL DEFAULT 1,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        confirmed_at TEXT,
+        expires_at TEXT
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_promotions_status ON promotions(status)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_promotions_wallet ON promotions(wallet)')
     c.execute('''CREATE TABLE IF NOT EXISTS user_blacklist (
         id        INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id   INTEGER NOT NULL,
@@ -4718,6 +4757,28 @@ def settings_page():
         x_handle=x_handle,
         x_share_trade=x_share_trade,
         x_share_badge=x_share_badge,
+    )
+
+
+@app.route('/promote')
+def promote_page():
+    wallet = _current_wallet()
+    if not wallet:
+        return redirect('/?connect=1')
+    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
+    return render_template(
+        'promote.html',
+        wallet_short=wallet_short,
+        # Deliberately compared against ADMIN_WALLET (not _is_owner()/OWNER_WALLET) —
+        # the simulate-confirm button's visibility must match exactly what
+        # /api/promote/<id>/simulate-confirm actually authorizes, or an admin could
+        # see it and 403, or the real ADMIN_WALLET holder could not see it at all.
+        is_admin=(wallet == ADMIN_WALLET),
+        csrf_token=_get_csrf_token(),
+        client_secret=API_SHARED_SECRET,
+        price_sol=_get_promotion_price_sol(),
+        duration_hours=_get_promotion_duration_hours(),
+        treasury_wallet=ADMIN_WALLET,
     )
 
 
@@ -8584,6 +8645,199 @@ def share_feed_to_x(post_id):
         return jsonify({'ok': False, 'msg': 'Nothing to share'}), 400
     ok = _post_to_x(wallet, text)
     return jsonify({'ok': ok, 'msg': 'Shared to X!' if ok else 'Failed to share to X'})
+
+def _verify_promotion_payment(tx_signature, expected_amount_sol, treasury_wallet):
+    """Real on-chain check: tx_signature must be a confirmed/finalized transaction
+    that moved >= expected_amount_sol*0.99 lamports into treasury_wallet (1% slack
+    for RPC rounding — never trust an unverified client-supplied signature)."""
+    last_err = 'No RPC available'
+    tx = None
+    for rpc in _PROXY_RPCS:
+        try:
+            r = requests.post(rpc, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getTransaction',
+                'params': [tx_signature, {'encoding': 'jsonParsed', 'maxSupportedTransactionVersion': 0}]
+            }, timeout=8)
+            result = r.json().get('result')
+            if result is not None:
+                tx = result
+                break
+        except Exception as e:
+            last_err = str(e)
+    if tx is None:
+        return False  # not found at this RPC's commitment level (default finalized) — or every RPC failed
+
+    meta = tx.get('meta') or {}
+    if meta.get('err') is not None:
+        return False  # transaction landed but failed on-chain
+
+    account_keys = ((tx.get('transaction') or {}).get('message') or {}).get('accountKeys') or []
+    idx = next((i for i, a in enumerate(account_keys) if a.get('pubkey') == treasury_wallet), None)
+    if idx is None:
+        return False  # treasury_wallet not part of this transaction
+
+    pre_balances  = meta.get('preBalances')  or []
+    post_balances = meta.get('postBalances') or []
+    if idx >= len(pre_balances) or idx >= len(post_balances):
+        return False
+
+    received_lamports = post_balances[idx] - pre_balances[idx]
+    expected_lamports  = round(expected_amount_sol * 0.99 * 1e9)  # integer lamports — avoid float boundary flakiness
+    return received_lamports >= expected_lamports
+
+# ── PROMOTIONS ──
+@app.route('/api/promote/create', methods=['POST'])
+@rate_limit(10, 60)
+def api_promote_create():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    token_symbol = _sanitize(str(body.get('token_symbol', '')).strip())
+    token_name = _sanitize(str(body.get('token_name', '')).strip())
+    token_mint = str(body.get('token_mint', '')).strip() or None
+    show_in_feed = bool(body.get('show_in_feed', True))
+    show_in_market = bool(body.get('show_in_market', True))
+    show_in_traders = bool(body.get('show_in_traders', True))
+    if not token_symbol:
+        return jsonify({'ok': False, 'msg': 'token_symbol required'}), 400
+    if not token_name:
+        return jsonify({'ok': False, 'msg': 'token_name required'}), 400
+    amount_sol = _get_promotion_price_sol()
+    duration_hours = _get_promotion_duration_hours()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute(
+            'INSERT INTO promotions (wallet, token_symbol, token_name, token_mint, amount_sol, '
+            'status, show_in_feed, show_in_market, show_in_traders) VALUES (?,?,?,?,?,?,?,?,?)',
+            (wallet, token_symbol, token_name, token_mint, amount_sol, 'pending',
+             int(show_in_feed), int(show_in_market), int(show_in_traders))
+        )
+        conn.commit()
+        promotion_id = cur.lastrowid
+    finally:
+        conn.close()
+    return jsonify({
+        'ok': True,
+        'promotion_id': promotion_id,
+        'treasury_wallet': ADMIN_WALLET,
+        'amount_sol': amount_sol,
+        'duration_hours': duration_hours,
+    })
+
+@app.route('/api/promote/<int:promotion_id>/submit-tx', methods=['POST'])
+@rate_limit(10, 60)
+def api_promote_submit_tx(promotion_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    body = request.json or {}
+    tx_signature = str(body.get('tx_signature', '')).strip()
+    if not tx_signature:
+        return jsonify({'ok': False, 'msg': 'tx_signature required'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT wallet FROM promotions WHERE id=?', (promotion_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Promotion not found'}), 404
+        if row[0] != wallet:
+            return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+        conn.execute('UPDATE promotions SET tx_signature=? WHERE id=?', (tx_signature, promotion_id))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
+@app.route('/api/promote/<int:promotion_id>/status', methods=['GET'])
+@rate_limit(60, 60)
+def api_promote_status(promotion_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT wallet, status, tx_signature, expires_at, amount_sol FROM promotions WHERE id=?',
+            (promotion_id,)
+        ).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Promotion not found'}), 404
+        if row[0] != wallet:
+            return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+        status, tx_signature, expires_at, amount_sol = row[1], row[2], row[3], row[4]
+        if status == 'pending' and tx_signature:
+            if _verify_promotion_payment(tx_signature, amount_sol, ADMIN_WALLET):
+                duration_hours = _get_promotion_duration_hours()
+                conn.execute(
+                    "UPDATE promotions SET status='confirmed', confirmed_at=datetime('now'), "
+                    "expires_at=datetime('now', '+' || ? || ' hours') WHERE id=?",
+                    (duration_hours, promotion_id)
+                )
+                conn.commit()
+                status, tx_signature, expires_at = conn.execute(
+                    'SELECT status, tx_signature, expires_at FROM promotions WHERE id=?',
+                    (promotion_id,)
+                ).fetchone()
+    finally:
+        conn.close()
+    return jsonify({
+        'ok': True,
+        'status': status,
+        'tx_signature': tx_signature,
+        'expires_at': expires_at,
+    })
+
+@app.route('/api/promote/<int:promotion_id>/simulate-confirm', methods=['POST'])
+@rate_limit(10, 60)
+def api_promote_simulate_confirm(promotion_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    if wallet != ADMIN_WALLET:
+        return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT id FROM promotions WHERE id=?', (promotion_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'Promotion not found'}), 404
+        duration_hours = _get_promotion_duration_hours()
+        conn.execute(
+            "UPDATE promotions SET status='confirmed', confirmed_at=datetime('now'), "
+            "expires_at=datetime('now', '+' || ? || ' hours') WHERE id=?",
+            (duration_hours, promotion_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    print(f"SIMULATED promotion confirm by admin: id={promotion_id}", flush=True)
+    return jsonify({'ok': True})
+
+_PROMOTE_PLACEMENT_COLUMNS = {
+    'feed': 'show_in_feed',
+    'market': 'show_in_market',
+    'traders': 'show_in_traders',
+}
+
+@app.route('/api/promote/featured', methods=['GET'])
+@rate_limit(60, 60)
+def api_promote_featured():
+    placement = request.args.get('placement', '')
+    column = _PROMOTE_PLACEMENT_COLUMNS.get(placement)
+    if not column:
+        return jsonify({'ok': False, 'msg': 'Invalid placement'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            f"SELECT token_symbol, token_name, token_mint, expires_at FROM promotions "
+            f"WHERE status='confirmed' AND expires_at > datetime('now') AND {column}=1 "
+            f"ORDER BY confirmed_at DESC"
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'promotions': [
+        {'token_symbol': r[0], 'token_name': r[1], 'token_mint': r[2], 'expires_at': r[3]}
+        for r in rows
+    ]})
 
 # ── PROFILE ──
 @app.route('/api/me', methods=['GET'])
