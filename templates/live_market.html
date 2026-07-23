@@ -32,6 +32,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-amount-input{width:68px;background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield;transition:border-color .15s}
 .lm-amount-input:focus{border-color:var(--accent)}
 .lm-amount-input::-webkit-inner-spin-button,.lm-amount-input::-webkit-outer-spin-button{-webkit-appearance:none}
+.lm-featured-banner{max-width:220px;height:32px;flex-shrink:0;overflow:hidden;border-radius:8px;border:1px solid rgba(247,185,85,.35);background:rgba(247,185,85,.08)}
+.lm-featured-slide{height:100%;display:flex;align-items:center;gap:6px;padding:0 10px;cursor:pointer;white-space:nowrap;overflow:hidden}
+.lm-featured-label{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:1px 5px;flex-shrink:0}
+.lm-featured-name{font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis}
+.lm-featured-sym{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
 .lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
 .lm-back:hover{color:var(--text)}
 
@@ -257,6 +262,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <span class="lm-amount-label">Amount SOL</span>
     <input class="lm-amount-input" id="lm-global-amount" type="number" min="0.001" step="0.1" value="0.1" title="SOL amount for quick buy">
   </div>
+  <div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
+    <div class="lm-featured-slide" id="lm-featured-slide"></div>
+  </div>
 </header>
 
 <div class="lm-search2-wrap">
@@ -384,11 +392,46 @@ async function _fetchFeaturedMarket(){
   return pairs.map(function(p){ return Object.assign({}, p, {isFeatured:true}); });
 }
 
+var _lmFeaturedBannerTimer = null;
+var _lmFeaturedBannerIdx = 0;
+
+function _lmRenderFeaturedBanner(featuredPairs){
+  var el = document.getElementById('lm-featured-banner');
+  var slide = document.getElementById('lm-featured-slide');
+  if(!el || !slide) return;
+  if(_lmFeaturedBannerTimer){ clearInterval(_lmFeaturedBannerTimer); _lmFeaturedBannerTimer = null; }
+  if(!featuredPairs || !featuredPairs.length){
+    el.style.display = 'none';
+    return;
+  }
+  _lmFeaturedBannerIdx = 0;
+  el.style.display = '';
+
+  function renderSlide(){
+    var p = featuredPairs[_lmFeaturedBannerIdx % featuredPairs.length];
+    var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+    var name = (p.baseToken&&p.baseToken.name)||sym;
+    slide.innerHTML = '<span class="lm-featured-label">Featured</span>'
+      +'<span class="lm-featured-name">'+_esc(name)+'</span>'
+      +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>';
+    slide.onclick = function(){ showTokenCard(sym); };
+  }
+  renderSlide();
+
+  if(featuredPairs.length > 1){
+    _lmFeaturedBannerTimer = setInterval(function(){
+      _lmFeaturedBannerIdx = (_lmFeaturedBannerIdx + 1) % featuredPairs.length;
+      renderSlide();
+    }, 4000);
+  }
+}
+
 async function _fetchTrending(){
   var r     = await fetch('/api/dexscreener/token-boosts');
   var items = await r.json();
   var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
   _featuredPairs = await _fetchFeaturedMarket().catch(function(){ return []; });
+  _lmRenderFeaturedBanner(_featuredPairs);
   if(!solana.length) return [];
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
