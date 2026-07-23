@@ -827,7 +827,7 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     +   '<div class="msgs-thread-name">'+_esc(displayName)+(_activePeer.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</div>'
     +   '<div class="msgs-thread-status'+statusCls+'">'+statusHtml+'</div>'
     + '</div>'
-    + '<button class="msgs-copy-trades-btn" id="msgs-copy-btn" title="Copy Trades" onclick="_copyTrades(this,\''+_esc(_activePeer.wallet).replace(/'/g,"\\'")+'\')">⧉<span class="msgs-copy-trades-label"> Copy Trades</span></button>'
+    + '<button class="msgs-copy-trades-btn" id="msgs-copy-btn" title="Copy Trades" data-wallet="'+_esc(_activePeer.wallet)+'" onclick="_copyTrades(this,this.dataset.wallet)">⧉<span class="msgs-copy-trades-label"> Copy Trades</span></button>'
     + '<div class="msgs-more-wrap">'
     +   '<button class="msgs-more-btn" onclick="_toggleMoreMenu(event)" title="More" aria-label="More">⋯</button>'
     +   '<div class="msgs-more-menu" id="msgs-more-menu">'

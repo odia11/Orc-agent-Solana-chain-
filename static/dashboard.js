@@ -4377,10 +4377,10 @@ async function openProfileCard(userId){
   const copyBtnHtml = (!_isSelf && phantomKey)
     ? (isCopyingThis
         ? `<button class="tpc-stop-copy-btn" id="tpc-copy-btn" onclick="_tpcStopCopy()">Stop Copying</button>`
-        : `<button class="tpc-copy-btn" id="tpc-copy-btn" onclick="_tpcStartCopy('${_tpcCurrentFullWallet.replace(/'/g,"\\'")}','${esc(p.username).replace(/'/g,"\\'")}')">Copy Trader</button>`)
+        : `<button class="tpc-copy-btn" id="tpc-copy-btn" data-wallet="${esc(_tpcCurrentFullWallet)}" data-uname="${esc(p.username||'')}" onclick="_tpcStartCopy(this.dataset.wallet,this.dataset.uname)">Copy Trader</button>`)
     : '';
   const msgBtnHtml = (!_isSelf && phantomKey)
-    ? `<button class="tpc-msg-btn" onclick="openDMWith(${userId},'${_tpcCurrentFullWallet.replace(/'/g,"\\'")}','${(p.username||'').replace(/'/g,"\\'")}')">💬 Message</button>`
+    ? `<button class="tpc-msg-btn" data-uid="${userId}" data-wallet="${esc(_tpcCurrentFullWallet)}" data-uname="${esc(p.username||'')}" onclick="openDMWith(Number(this.dataset.uid),this.dataset.wallet,this.dataset.uname)">💬 Message</button>`
     : '';
   const tradesHtml = _tvpTradesHtml(td?.trades);
   const posHtml = _tvpPositionsHtml(td?.positions);

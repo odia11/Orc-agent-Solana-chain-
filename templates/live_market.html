@@ -316,12 +316,22 @@ function _toggleWatch(btn, addr, sym){
     'X-CSRFToken':_csrf
   }, _cs ? {'X-API-Shared-Secret':_cs} : {});
   fetch('/api/watchlist/'+encodeURIComponent(addr), {method:method, credentials:'include', headers:headers, body: method==='POST' ? JSON.stringify({symbol: sym}) : undefined})
-    .then(function(r){return r.json();}).then(function(d){
-      if(!d.ok){ return; }
+    .then(function(r){return r.json().then(function(d){ return {status:r.status, body:d}; }); })
+    .then(function(res){
+      var d = res.body;
+      if(!d.ok){
+        if(res.status===401) _toast('Connect your wallet to use the watchlist', false);
+        else _toast(d.msg||'Could not update watchlist', false);
+        console.error('[watchlist] toggle failed', res.status, d);
+        return;
+      }
       if(isWatched){ _lmWatchSet.delete(addr); btn.classList.remove('active'); btn.title='Add to watchlist'; }
-      else { _lmWatchSet.add(addr); btn.classList.add('active'); btn.title='Remove from watchlist'; }
+      else { _lmWatchSet.add(addr); btn.classList.add('active'); btn.title='Remove from watchlist'; _toast('Added to watchlist ★', true); }
       if(_activeTab==='watchlist' && isWatched) _loadTab('watchlist');
-    }).catch(function(){});
+    }).catch(function(e){
+      console.error('[watchlist] network error', e);
+      _toast('Network error — could not update watchlist', false);
+    });
 }
 
 /* ── tab switching ── */
@@ -650,9 +660,6 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
   if(!dataRow) return;
 
   var inputId = 'lm-drop-amt-'+idx;
-  var eSym  = _esc(sym).replace(/'/g,"\\'");
-  var ePair = _esc(pairAddr).replace(/'/g,"\\'");
-  var eAddr = _esc(tokenAddr).replace(/'/g,"\\'");
 
   var tr = document.createElement('tr');
   tr.id = 'lm-drop-'+idx;
@@ -662,11 +669,21 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
       +'<span class="lm-drop-label">Trade <strong style="color:#f7b955">$'+_esc(sym)+'</strong></span>'
       +'<span class="lm-drop-label">SOL:</span>'
       +'<input class="lm-drop-input" id="'+inputId+'" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
-      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" onclick="event.stopPropagation();_confirmBuy('+idx+',\''+eSym+'\',\''+ePair+'\',\''+eAddr+'\')">Buy</button>'
-      +'<button class="lm-drop-sell-btn" id="lm-drop-sell-'+idx+'" onclick="event.stopPropagation();_quickSell('+idx+',\''+eSym+'\',\''+ePair+'\',\''+eAddr+'\',this)">Sell All</button>'
+      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'">Buy</button>'
+      +'<button class="lm-drop-sell-btn" id="lm-drop-sell-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'">Sell All</button>'
       +'<button class="lm-drop-cancel" onclick="event.stopPropagation();_closeBuyDrop()">✕</button>'
     +'</div>'
     +'</td>';
+  var confirmBtn = tr.querySelector('#lm-drop-confirm-'+idx);
+  confirmBtn.addEventListener('click', function(ev){
+    ev.stopPropagation();
+    _confirmBuy(idx, confirmBtn.dataset.sym, confirmBtn.dataset.pair, confirmBtn.dataset.addr);
+  });
+  var sellBtn = tr.querySelector('#lm-drop-sell-'+idx);
+  sellBtn.addEventListener('click', function(ev){
+    ev.stopPropagation();
+    _quickSell(idx, sellBtn.dataset.sym, sellBtn.dataset.pair, sellBtn.dataset.addr, sellBtn);
+  });
 
   dataRow.insertAdjacentElement('afterend', tr);
   setTimeout(function(){ var el=document.getElementById(inputId); if(el) el.focus(); }, 30);
@@ -789,9 +806,6 @@ async function showTokenCard(symbol){
         +'<div style="font-size:11px;font-weight:600;color:'+col+';font-family:\'JetBrains Mono\',monospace">'+vs+'</div>'
         +'</div>';
     }).join('');
-    var sSym  = _esc(sym).replace(/'/g,"\\'");
-    var sPair = _esc(p.pairAddress||'').replace(/'/g,"\\'");
-    var sAddr = _esc((p.baseToken&&p.baseToken.address)||'').replace(/'/g,"\\'");
     body.innerHTML =
       '<div style="text-align:center;padding-top:8px">'+logo
       +'<div style="font-size:20px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">'+_esc(name||sym)+'</div>'
@@ -804,13 +818,21 @@ async function showTokenCard(symbol){
       +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+statsHtml+'</div>'
       +'<div style="display:flex;gap:6px;margin-bottom:16px">'+tfHtml+'</div>'
       +'<div style="display:flex;align-items:center;gap:8px;margin-top:4px">'
-        +'<button id="lm-buy-btn" onclick="executeTrade(\''+sSym+'\',\''+sPair+'\',\'buy\',document.getElementById(\'lm-trade-amount\').value,\''+sAddr+'\',this)"'
+        +'<button id="lm-buy-btn" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc((p.baseToken&&p.baseToken.address)||'')+'"'
           +' style="flex:1;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Buy</button>'
         +'<input id="lm-trade-amount" type="number" min="0.001" step="0.1" placeholder="SOL" value="0.1"'
           +' style="width:76px;background:#16191f;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;font-size:13px;font-family:\'JetBrains Mono\',monospace;text-align:center;outline:none;-moz-appearance:textfield" onclick="event.stopPropagation()">'
-        +'<button id="lm-sell-btn" onclick="executeTrade(\''+sSym+'\',\''+sPair+'\',\'sell\',document.getElementById(\'lm-trade-amount\').value,\''+sAddr+'\',this)"'
+        +'<button id="lm-sell-btn" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc((p.baseToken&&p.baseToken.address)||'')+'"'
           +' style="flex:1;background:#ff4d6a;color:#fff;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Sell</button>'
       +'</div>';
+    var buyBtn = document.getElementById('lm-buy-btn');
+    buyBtn.addEventListener('click', function(){
+      executeTrade(buyBtn.dataset.sym, buyBtn.dataset.pair, 'buy', document.getElementById('lm-trade-amount').value, buyBtn.dataset.addr, buyBtn);
+    });
+    var sellBtn2 = document.getElementById('lm-sell-btn');
+    sellBtn2.addEventListener('click', function(){
+      executeTrade(sellBtn2.dataset.sym, sellBtn2.dataset.pair, 'sell', document.getElementById('lm-trade-amount').value, sellBtn2.dataset.addr, sellBtn2);
+    });
   }catch(e){
     body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
   }
