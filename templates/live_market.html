@@ -79,6 +79,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
+.lm-featured-badge{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:1px 5px;vertical-align:middle}
 
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
@@ -289,6 +290,7 @@ var _activeTab   = 'trending';
 var _cache       = {};
 var _searchTimer = null;
 var _pairs       = [];
+var _featuredPairs = [];
 var _lmWatchSet  = new Set();
 _lmLoadWatchSet();
 function _lmLoadWatchSet(){
@@ -370,10 +372,23 @@ async function _silentRefreshTab(tab){
   }
 }
 
+async function _fetchFeaturedMarket(){
+  var fr = await fetch('/api/promote/featured?placement=market');
+  var fd = await fr.json();
+  var promos = (fd && fd.ok && fd.promotions) || [];
+  var mints = promos.map(function(p){ return p.token_mint; }).filter(Boolean);
+  if(!mints.length) return [];
+  var pr = await fetch('/api/dexscreener/tokens/'+mints.join(','));
+  var pd = await pr.json();
+  var pairs = _dedupeByAddress(pd.pairs||[], {});
+  return pairs.map(function(p){ return Object.assign({}, p, {isFeatured:true}); });
+}
+
 async function _fetchTrending(){
   var r     = await fetch('/api/dexscreener/token-boosts');
   var items = await r.json();
   var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
+  _featuredPairs = await _fetchFeaturedMarket().catch(function(){ return []; });
   if(!solana.length) return [];
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
@@ -577,7 +592,8 @@ function _renderTable(pairs){
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found</td></tr>');
     return;
   }
-  wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  var rows = [..._featuredPairs, ...pairs];
+  wrap.innerHTML = _buildTable(rows.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 function _chgCell(v, extra){
@@ -612,7 +628,7 @@ function _rowHtml(p, idx){
         +'<button class="lm-watch-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
         +logo
         +'<div>'
-          +'<div class="lm-tok-name">'+_esc(name)+'</div>'
+          +'<div class="lm-tok-name">'+_esc(name)+(p.isFeatured ? ' <span class="lm-featured-badge">Featured</span>' : '')+'</div>'
           +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
         +'</div>'
       +'</div>'

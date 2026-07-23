@@ -77,8 +77,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'G
       <input id="pr-name" type="text" placeholder="e.g. Bonk" maxlength="80" autocomplete="off">
     </div>
     <div class="pr-field">
-      <label for="pr-mint">Token mint address <span style="text-transform:none;font-weight:400">(optional)</span></label>
-      <input id="pr-mint" type="text" placeholder="Token mint address" maxlength="64" autocomplete="off">
+      <label for="pr-mint">Token mint address</label>
+      <input id="pr-mint" type="text" placeholder="Token mint address" maxlength="64" autocomplete="off" required>
     </div>
 
     <div class="pr-placements">
@@ -145,6 +145,7 @@ async function _promoteSubmit(){
 
   if(!token_symbol){ _promoShowError('Token symbol is required'); return; }
   if(!token_name){ _promoShowError('Token name is required'); return; }
+  if(!token_mint){ _promoShowError('Token mint address is required to verify and display your promotion'); return; }
 
   var btn = document.getElementById('pr-submit-btn');
   btn.disabled = true;
@@ -165,7 +166,7 @@ async function _promoteSubmit(){
       body: JSON.stringify({
         token_symbol: token_symbol,
         token_name: token_name,
-        token_mint: token_mint || undefined,
+        token_mint: token_mint,
         show_in_feed: show_in_feed,
         show_in_market: show_in_market,
         show_in_traders: show_in_traders,

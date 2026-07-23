@@ -8703,6 +8703,8 @@ def api_promote_create():
         return jsonify({'ok': False, 'msg': 'token_symbol required'}), 400
     if not token_name:
         return jsonify({'ok': False, 'msg': 'token_name required'}), 400
+    if not token_mint:
+        return jsonify({'ok': False, 'msg': 'token_mint is required'}), 400
     amount_sol = _get_promotion_price_sol()
     duration_hours = _get_promotion_duration_hours()
     conn = sqlite3.connect(DB_FILE)
