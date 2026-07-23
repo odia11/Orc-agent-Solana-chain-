@@ -72,6 +72,12 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 /* token cell */
 .lm-tok-cell{display:flex;align-items:center;gap:10px}
+.lm-util-links{display:flex;gap:16px;padding:0 16px 10px;flex-wrap:wrap}
+.lm-util-link{font-size:12px;color:var(--muted,#565d68);text-decoration:none;font-weight:600;transition:color .15s}
+.lm-util-link:hover{color:#f7b955}
+.lm-watch-star{background:none;border:none;color:var(--bg4,#21252c);font-size:15px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;transition:color .15s}
+.lm-watch-star:hover{color:#565d68}
+.lm-watch-star.active{color:#f7b955}
 .lm-tok-logo{width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0}
 .lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
@@ -264,6 +270,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   <button class="lm-tab active" id="tab-trending" onclick="_setTab('trending')">Trending</button>
   <button class="lm-tab"        id="tab-new"       onclick="_setTab('new')">New Pairs</button>
   <button class="lm-tab"        id="tab-gainers"   onclick="_setTab('gainers')">Gainers</button>
+  <button class="lm-tab"        id="tab-losers"    onclick="_setTab('losers')">Losers</button>
+  <button class="lm-tab"        id="tab-watchlist" onclick="_setTab('watchlist')">★ Watchlist</button>
+</div>
+
+<div class="lm-util-links">
+  <a href="/settings" class="lm-util-link">📲 Get the App</a>
+  <a href="/docs" class="lm-util-link">&lt;/&gt; API</a>
+  <a href="mailto:hello@orcagent.fun?subject=Advertise%20on%20OrcAgent" class="lm-util-link">📢 Advertise</a>
 </div>
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
@@ -284,6 +298,31 @@ var _activeTab   = 'trending';
 var _cache       = {};
 var _searchTimer = null;
 var _pairs       = [];
+var _lmWatchSet  = new Set();
+_lmLoadWatchSet();
+function _lmLoadWatchSet(){
+  fetch('/api/watchlist', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(d.ok) _lmWatchSet = new Set(d.tokens.map(function(t){ return t.token_address; }));
+  }).catch(function(){});
+}
+function _toggleWatch(btn, addr, sym){
+  var isWatched = _lmWatchSet.has(addr);
+  var method = isWatched ? 'DELETE' : 'POST';
+  var _cs   = (typeof _lmClientSecret!=='undefined'?_lmClientSecret:'')||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
+  var _csrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+  var headers = Object.assign({
+    'Content-Type':'application/json',
+    'X-CSRF-Token':_csrf,
+    'X-CSRFToken':_csrf
+  }, _cs ? {'X-API-Shared-Secret':_cs} : {});
+  fetch('/api/watchlist/'+encodeURIComponent(addr), {method:method, credentials:'include', headers:headers, body: method==='POST' ? JSON.stringify({symbol: sym}) : undefined})
+    .then(function(r){return r.json();}).then(function(d){
+      if(!d.ok){ return; }
+      if(isWatched){ _lmWatchSet.delete(addr); btn.classList.remove('active'); btn.title='Add to watchlist'; }
+      else { _lmWatchSet.add(addr); btn.classList.add('active'); btn.title='Remove from watchlist'; }
+      if(_activeTab==='watchlist' && isWatched) _loadTab('watchlist');
+    }).catch(function(){});
+}
 
 /* ── tab switching ── */
 function _setTab(tab){
@@ -293,7 +332,7 @@ function _setTab(tab){
   _lm2LocalResults = [];
   _lm2RemoteResults = [];
   _lm2LastQuery = '';
-  ['trending','new','gainers'].forEach(function(t){
+  ['trending','new','gainers','losers','watchlist'].forEach(function(t){
     document.getElementById('tab-'+t).classList.toggle('active', t===tab);
   });
   if(_cache[tab]){ _renderTable(_cache[tab]); }
@@ -304,6 +343,8 @@ function _setTab(tab){
 async function _fetchTabData(tab){
   if(tab==='trending')  return await _fetchTrending();
   else if(tab==='new')  return await _fetchNew();
+  else if(tab==='losers') return await _fetchLosers();
+  else if(tab==='watchlist') return await _fetchWatchlist();
   else                   return await _fetchGainers();
 }
 
@@ -364,6 +405,28 @@ async function _fetchGainers(){
     return bc-ac;
   });
   return _dedupeByAddress(merged, {});
+}
+
+async function _fetchLosers(){
+  var trending = await _fetchTrending();
+  var fresh    = await _fetchNew();
+  var merged   = trending.concat(fresh);
+  merged.sort(function(a,b){
+    var ac = a.priceChange&&a.priceChange.h24!=null?a.priceChange.h24:Infinity;
+    var bc = b.priceChange&&b.priceChange.h24!=null?b.priceChange.h24:Infinity;
+    return ac-bc;
+  });
+  return _dedupeByAddress(merged, {});
+}
+
+async function _fetchWatchlist(){
+  var wr = await fetch('/api/watchlist', {credentials:'include'});
+  var wd = await wr.json();
+  var addresses = (wd.ok ? wd.tokens : []).map(function(t){ return t.token_address; });
+  if(!addresses.length) return [];
+  var pr = await fetch('/api/dexscreener/tokens/'+addresses.join(','));
+  var pd = await pr.json();
+  return _dedupeByAddress(pd.pairs||[], {});
 }
 
 function _dedupeByAddress(pairs, iconMap){
@@ -483,10 +546,32 @@ function _buildTable(tbodyRows){
 }
 
 /* ── render table ── */
+var _lmTableDelegated = false;
+function _lmBindTableEvents(wrap){
+  if(_lmTableDelegated) return;
+  _lmTableDelegated = true;
+  wrap.addEventListener('click', function(event){
+    var watchBtn = event.target.closest('.lm-watch-star');
+    if(watchBtn){
+      event.stopPropagation();
+      _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
+      return;
+    }
+    var tradeBtn = event.target.closest('.lm-btn-trade');
+    if(tradeBtn){
+      event.stopPropagation();
+      _openBuyDrop(parseInt(tradeBtn.dataset.idx,10), tradeBtn.dataset.sym, tradeBtn.dataset.pair, tradeBtn.dataset.addr, tradeBtn);
+      return;
+    }
+    var row = event.target.closest('.lm-row');
+    if(row) _rowClick(event, row.dataset.sym);
+  });
+}
 function _renderTable(pairs){
   _closeBuyDrop();
   _pairs = pairs;
   var wrap = document.getElementById('lm-table-wrap');
+  _lmBindTableEvents(wrap);
   if(!pairs.length){
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found</td></tr>');
     return;
@@ -513,20 +598,17 @@ function _rowHtml(p, idx){
     : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
 
   var price   = _fmtPrice(p.priceUsd);
-  var mcap    = _fmtNum(p.marketCap||null);
+  var mcap    = _fmtNum(p.marketCap || p.fdv || null);
   var vol     = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
   var liq     = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
   var txns    = p.txns&&p.txns.h24 ? (p.txns.h24.buys+p.txns.h24.sells).toLocaleString() : '—';
   var traders = p.txns&&p.txns.h24&&p.txns.h24.buyers!=null ? p.txns.h24.buyers.toLocaleString() : '—';
   var age     = _fmtAge(p.pairCreatedAt);
 
-  var safeSym  = _esc(sym).replace(/'/g,"\\'");
-  var safeAddr = _esc(addr).replace(/'/g,"\\'");
-  var safePair = _esc(p.pairAddress||'').replace(/'/g,"\\'");
-
-  return '<tr id="lm-row-'+idx+'" onclick="_rowClick(event,\''+safeSym+'\')">'
+  return '<tr id="lm-row-'+idx+'" class="lm-row" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
     +'<td>'
       +'<div class="lm-tok-cell">'
+        +'<button class="lm-watch-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
         +logo
         +'<div>'
           +'<div class="lm-tok-name">'+_esc(name)+'</div>'
@@ -546,7 +628,7 @@ function _rowHtml(p, idx){
     +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null,'td-chg24')
     +'<td class="col-hide">'+liq+'</td>'
     +'<td class="td-act">'
-      +'<button class="lm-btn-trade" onclick="event.stopPropagation();_openBuyDrop('+idx+',\''+safeSym+'\',\''+safePair+'\',\''+safeAddr+'\',this)">Trade</button>'
+      +'<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>'
     +'</td>'
     +'</tr>';
 }
@@ -688,7 +770,7 @@ async function showTokenCard(symbol){
     var statsHtml = [
       {l:'Volume 24h', v:_fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null)},
       {l:'Liquidity',  v:_fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null)},
-      {l:'Market Cap', v:_fmtNum(p.marketCap||null)},
+      {l:'Market Cap', v:_fmtNum(p.marketCap || p.fdv || null)},
       {l:'Buys / Sells',v:p.txns&&p.txns.h24
           ?'<span style="color:#3ad29b">'+p.txns.h24.buys+'</span><span style="color:#565d68"> / </span><span style="color:#ff4d6a">'+p.txns.h24.sells+'</span>'
           :'—'}

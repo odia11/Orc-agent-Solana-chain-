@@ -1207,6 +1207,15 @@ def init_db():
         updated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(user_id, token_address)
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS watchlist (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id       INTEGER NOT NULL,
+        token_address TEXT    NOT NULL,
+        symbol        TEXT    NOT NULL DEFAULT '',
+        created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, token_address)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_watchlist_user ON watchlist(user_id)')
     conn.commit()
     conn.close()
 
@@ -5600,6 +5609,67 @@ def api_platform_group_rules_save():
     finally:
         conn.close()
     return jsonify({'ok': True, 'rules': rules})
+
+
+@app.route('/api/watchlist')
+def api_watchlist_list():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': True, 'tokens': []})
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': True, 'tokens': []})
+        rows = conn.execute(
+            'SELECT token_address, symbol, created_at FROM watchlist WHERE user_id=? ORDER BY created_at DESC',
+            (uid,)).fetchall()
+        return jsonify({'ok': True, 'tokens': [
+            {'token_address': r[0], 'symbol': r[1], 'created_at': r[2]} for r in rows
+        ]})
+    finally:
+        conn.close()
+
+
+@app.route('/api/watchlist/<token_address>', methods=['POST'])
+@rate_limit(60, 60)
+def api_watchlist_add(token_address):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    if not is_valid_solana_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    symbol = str((request.json or {}).get('symbol', '') or '').strip()[:20]
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        conn.execute(
+            'INSERT OR IGNORE INTO watchlist (user_id, token_address, symbol) VALUES (?,?,?)',
+            (uid, token_address, symbol))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/api/watchlist/<token_address>', methods=['DELETE'])
+@rate_limit(60, 60)
+def api_watchlist_remove(token_address):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        conn.execute('DELETE FROM watchlist WHERE user_id=? AND token_address=?', (uid, token_address))
+        conn.commit()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
 
 
 @app.route('/api/groups/official')
