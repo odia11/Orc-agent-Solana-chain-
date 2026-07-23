@@ -72,9 +72,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 /* token cell */
 .lm-tok-cell{display:flex;align-items:center;gap:10px}
-.lm-util-links{display:flex;gap:16px;padding:0 16px 10px;flex-wrap:wrap}
-.lm-util-link{font-size:12px;color:var(--muted,#565d68);text-decoration:none;font-weight:600;transition:color .15s}
-.lm-util-link:hover{color:#f7b955}
 .lm-watch-star{background:none;border:none;color:var(--bg4,#21252c);font-size:15px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;transition:color .15s}
 .lm-watch-star:hover{color:#565d68}
 .lm-watch-star.active{color:#f7b955}
@@ -272,12 +269,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   <button class="lm-tab"        id="tab-gainers"   onclick="_setTab('gainers')">Gainers</button>
   <button class="lm-tab"        id="tab-losers"    onclick="_setTab('losers')">Losers</button>
   <button class="lm-tab"        id="tab-watchlist" onclick="_setTab('watchlist')">★ Watchlist</button>
-</div>
-
-<div class="lm-util-links">
-  <a href="/settings" class="lm-util-link">📲 Get the App</a>
-  <a href="/docs" class="lm-util-link">&lt;/&gt; API</a>
-  <a href="mailto:hello@orcagent.fun?subject=Advertise%20on%20OrcAgent" class="lm-util-link">📢 Advertise</a>
 </div>
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
