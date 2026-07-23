@@ -181,8 +181,6 @@ def _csrf_check():
         if not _validate_csrf(tok):
             _log_security_event('csrf_fail', session.get('wallet', 'unknown'),
                                 f'bad/missing token on {request.path}')
-            print(f'[csrf_fail] path={request.path} wallet={session.get("wallet","?")} '
-                  f'tok_sent={bool(tok)} headers={dict(request.headers)}', flush=True)
             return jsonify({
                 'error': 'CSRF validation failed',
                 'logged_in': bool(session.get('wallet')),
@@ -2842,14 +2840,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         return
 
     _m5_desc = ('≥' + str(m5_min) + '%' if m5_max is None else str(m5_min) + '-' + str(m5_max) + '%')
-    print(f'[trader] {short} session={wallet[:8]}... trading={_trading_wallet[:8]}...', flush=True)
-    print(f'[trader] STRATEGY SETTINGS:', flush=True)
-    print(f'[trader]   entry  : change5m >= {m5_min}% OR change1h >= {m5_min}% + vol rising + not reversing >5%', flush=True)
-    print(f'[trader]   TP     : +{round(take_profit*100)}%', flush=True)
-    print(f'[trader]   SL     : -{round(stop_loss*100)}%', flush=True)
-    print(f'[trader]   exit   : {round(EXIT_PERCENTAGE*100)}% of position', flush=True)
     _scan_interval = config.get('interval', 15)
-    print(f'[trader]   max pos: 5  |  scan interval: {_scan_interval}s (2s when a position is within 5% of SL/crash-exit)', flush=True)
     add_user_log(wallet, '[' + short + '] Trader started — TP:+' + str(round(take_profit*100)) +
                  '% SL:-' + str(round(stop_loss*100)) +
                  '% | entry: ' + _m5_desc + ' 5m OR 1h + not reversing | max 5 pos | scan ' + str(_scan_interval) +
@@ -2886,7 +2877,6 @@ def user_trader_loop(stop_event, config, wallet: str):
             continue  # skip normal stop-loss check — crash exit already handled (or will retry)
         if _chg <= -stop_loss:
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
-            print(f'[trader] {short} STARTUP FORCE SELL {_label} {round(_chg*100,1)}%', flush=True)
             with _use_key(_enc_blob, wallet) as _pk:
                 _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
             if _sell_ok:
@@ -3417,9 +3407,6 @@ def index():
     html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
     html = html.replace('__ASSET_VER__', _APP_VERSION)
     _sw = session.get('wallet', '')
-    print(f'[phantom-debug] index() session_wallet={_sw!r} '
-          f'cookies_received={list(request.cookies.keys())} '
-          f'host={request.headers.get("Host")}', flush=True)
     _ss = (_sw[:4] + '...' + _sw[-4:]) if len(_sw) > 8 else _sw
     html = html.replace('__SESSION_WALLET__', _sw)
     html = html.replace('__SESSION_SHORT__',  _ss)
@@ -3497,10 +3484,6 @@ def api_phantom_decrypt():
         add_user_log(wallet_address, 'Wallet connected (mobile): ' + wallet_address[:6] + '...' + wallet_address[-4:])
         ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
         threading.Thread(target=_check_wallet_multi_ip, args=(wallet_address, ip), daemon=True).start()
-        print(f'[phantom-debug] is_secure={request.is_secure} '
-              f'x_fwd_proto={request.headers.get("X-Forwarded-Proto")} '
-              f'host={request.headers.get("Host")} '
-              f'session_after_set={dict(session)}', flush=True)
         return jsonify({'ok': True, 'wallet_address': wallet_address, 'csrf_token': csrf_tok})
     except Exception as e:
         print(f'[phantom] decrypt ERROR: {e}', flush=True)
@@ -4679,14 +4662,12 @@ def bot_overview_page():
 
 @app.route('/wallet')
 def wallet_page():
-    print(f'[wallet] route hit — session wallet: {session.get("wallet")} | session keys: {list(session.keys())}', flush=True)
     try:
         if 'wallet' not in session:
             print('[wallet] no wallet in session, redirecting', flush=True)
             return redirect('/?connect=1')
         wallet_address = session['wallet']
         wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else ''
-        print(f'[wallet] rendering template for {wallet_address}', flush=True)
         return render_template(
             'wallet.html',
             wallet_address=wallet_address,
@@ -4696,7 +4677,6 @@ def wallet_page():
             client_secret=API_SHARED_SECRET,
         )
     except Exception as e:
-        print(f'[wallet] exception: {e}', flush=True)
         return f'<h1>Wallet Error: {str(e)}</h1>', 500
 
 
@@ -6296,6 +6276,38 @@ def _honeypot():
     _log_security_event('honeypot_hit', 'anonymous', f'{request.method} {request.path} from {ip}')
     return jsonify({'error': 'Not found'}), 404
 
+
+@app.errorhandler(404)
+def _not_found(e):
+    if request.path.startswith('/api/'):
+        return jsonify({'ok': False, 'msg': 'Not found'}), 404
+    return '''<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Page not found — OrcAgent</title>
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.wrap{text-align:center;max-width:400px}
+.logo{width:56px;height:56px;border-radius:16px;background:#f7b955;display:flex;align-items:center;justify-content:center;margin:0 auto 24px;font-size:28px;color:#0a0b0e;font-weight:700}
+.code{font-family:'JetBrains Mono',monospace;font-size:14px;color:#f7b955;letter-spacing:.08em;margin-bottom:8px}
+h1{font-size:22px;font-weight:700;margin-bottom:10px}
+p{color:#8a919c;font-size:14px;line-height:1.5;margin-bottom:28px}
+a{display:inline-block;padding:11px 24px;background:#f7b955;color:#0a0b0e;border-radius:11px;text-decoration:none;font-weight:700;font-size:14px}
+a:hover{opacity:.88}
+</style></head>
+<body>
+<div class="wrap">
+<div class="logo">▲</div>
+<div class="code">404</div>
+<h1>This page doesn't exist</h1>
+<p>The link might be broken, or the page may have moved. Let's get you back on track.</p>
+<a href="/">Back to Home</a>
+</div>
+</body></html>''', 404
+
+
 # ── VERSION ──
 import subprocess as _subprocess, time as _time
 
@@ -7652,7 +7664,6 @@ def api_instant_trade():
         return jsonify({'error': 'Content-Type must be application/json', 'received': request.content_type}), 400
 
     try:
-        print(f'[instant-trade] session keys: {list(session.keys())}, wallet: {session.get("wallet")}', flush=True)
 
         wallet = _authenticated_wallet()
         if not wallet:
@@ -7668,7 +7679,6 @@ def api_instant_trade():
         except (TypeError, ValueError):
             amount_sol = 0.0
 
-        print(f'[instant-trade] side={side!r} token={token_address!r} amount={amount_sol}', flush=True)
 
         if side not in ('buy', 'sell'):
             return jsonify({'error': 'side must be buy or sell'}), 400
@@ -7690,7 +7700,6 @@ def api_instant_trade():
             ).fetchone()
             conn.close()
         except Exception as e:
-            print(f'[instant-trade] DB key fetch error: {e}', flush=True)
             traceback.print_exc()
             return jsonify({'error': f'DB error: {e}'}), 500
         if not row or not row[0]:
@@ -7699,7 +7708,6 @@ def api_instant_trade():
         try:
             private_key = decrypt_private_key(row[0], wallet)
         except Exception as e:
-            print(f'[instant-trade] decrypt error: {e}', flush=True)
             traceback.print_exc()
             return jsonify({'error': 'Could not decrypt private key'}), 500
 
@@ -7710,7 +7718,6 @@ def api_instant_trade():
             env['WALLET_PRIVATE_KEY'] = private_key
             _ext_hit('jupiter')
             amount_str = str(amount_sol) if side == 'buy' else '0'
-            print(f'[instant-trade] launching subprocess: {side} {token_address} {amount_str}', flush=True)
             result = subprocess.run(
                 [sys.executable, os.path.join(BASE, 'orcagent_solana.py'),
                  side, token_address, amount_str],
@@ -7721,13 +7728,11 @@ def api_instant_trade():
         except subprocess.TimeoutExpired:
             return jsonify({'error': 'Trade timed out (>120s)'}), 504
         except Exception as e:
-            print(f'[instant-trade] subprocess launch error: {e}', flush=True)
             traceback.print_exc()
             return jsonify({'error': f'Swap subprocess error: {e}'}), 500
 
         stdout = _redact_keys(result.stdout.strip())
         stderr = _redact_keys(result.stderr.strip())
-        print(f'[instant-trade] returncode={result.returncode} stdout={stdout[-300:]!r} stderr={stderr[-300:]!r}', flush=True)
         add_user_log(wallet, f'instant-trade {side} {symbol}: ' + (stdout[-300:] or stderr[-200:]))
 
         if result.returncode != 0:
@@ -7808,7 +7813,6 @@ def api_instant_trade():
                 conn.commit()
             conn.close()
         except Exception as e:
-            print(f'[instant-trade] DB record error: {e}', flush=True)
             traceback.print_exc()
 
         # Fetch updated SOL balance from RPC (best-effort)
@@ -7834,7 +7838,6 @@ def api_instant_trade():
         })
 
     except Exception as e:
-        print(f'[instant-trade] ERROR: {e}', flush=True)
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
 
@@ -12109,15 +12112,8 @@ def api_claim_sol():
             _kp_probe  = _KP.from_base58_string(_pk_tmp)
             trading_pk = str(_kp_probe.pubkey())
     except Exception as e:
-        print(f'[claim_sol] key decrypt error: {_redact_keys(str(e))}', flush=True)
         return jsonify({'ok': False, 'msg': 'Cannot access trading key — please re-save it in Settings'}), 500
 
-    print(f'[claim_sol] ═══ START ═══', flush=True)
-    print(f'[claim_sol] session_wallet  = {wallet}', flush=True)
-    print(f'[claim_sol] trading_wallet  = {trading_pk}', flush=True)
-    print(f'[claim_sol] wallets_differ  = {wallet != trading_pk}', flush=True)
-    print(f'[claim_sol] RPC candidates  = {CLAIM_SOL_RPCS}', flush=True)
-    print(f'[claim_sol] SPL_PROG        = {SPL_PROG_STR}', flush=True)
 
     def _rpc_token_accounts(owner: str, label: str) -> tuple:
         """Returns (accounts_list, rpc_url_that_worked). Tries CLAIM_SOL_RPCS in order,
@@ -12135,29 +12131,24 @@ def api_claim_sol():
             }
             for rpc in CLAIM_SOL_RPCS:
                 rpc_short = rpc.split('?')[0]
-                print(f'[claim_sol] → getTokenAccountsByOwner  rpc={rpc_short}  owner={owner}  label={label}  program={prog}', flush=True)
                 time.sleep(1)   # avoid burst rate-limiting across successive calls
                 try:
                     r = requests.post(rpc, json=payload, headers=headers, timeout=15)
-                    print(f'[claim_sol]   {rpc_short} HTTP {r.status_code}', flush=True)
                     if r.status_code != 200:
-                        print(f'[claim_sol]   {rpc_short} non-200, body={r.text[:120]}', flush=True)
                         continue
                     resp = r.json()
                     if 'error' in resp:
-                        print(f'[claim_sol]   {rpc_short} JSON-RPC error: {resp["error"]}', flush=True)
                         continue
                     accs = resp.get('result', {}).get('value', [])
-                    print(f'[claim_sol]   {rpc_short} OK → {len(accs)} account(s)', flush=True)
                     for a in accs:
                         a['_token_program'] = prog
                     all_accs.extend(accs)
                     last_working_rpc = rpc
                     break
                 except Exception as ex:
-                    print(f'[claim_sol]   {rpc_short} EXCEPTION: {ex}', flush=True)
+                    continue
             else:
-                print(f'[claim_sol]   all RPCs exhausted for {label} (program={prog})', flush=True)
+                pass
         return all_accs, last_working_rpc
 
     try:
@@ -12169,15 +12160,11 @@ def api_claim_sol():
                 working_rpc = working_rpc2
         else:
             trading_accs = []
-            print(f'[claim_sol]   trading_wallet == session_wallet, skipping duplicate query', flush=True)
     except Exception as e:
-        print(f'[claim_sol] RPC request failed: {e}', flush=True)
         return jsonify({'ok': False, 'msg': 'RPC request failed — please try again shortly'}), 500
 
-    print(f'[claim_sol] working_rpc = {working_rpc.split("?")[0]}', flush=True)
 
     all_accs = session_accs + trading_accs
-    print(f'[claim_sol] total accounts before dedup: {len(all_accs)}', flush=True)
 
     # Filter: close empty accounts (raw==0) and dust accounts (raw < 1000).
     # Dust accounts need a Burn instruction first; CloseAccount requires zero balance.
@@ -12185,12 +12172,10 @@ def api_claim_sol():
     closeable  = []
     skipped    = []
     seen       = set()
-    print(f'[claim_sol] ─── account details ───', flush=True)
     for idx, acc in enumerate(all_accs):
         pub = acc.get('pubkey', '')
         src = 'session' if idx < len(session_accs) else 'trading'
         if pub in seen:
-            print(f'[claim_sol]   [{src}] {pub} → DUPLICATE skipped', flush=True)
             continue
         seen.add(pub)
         try:
@@ -12207,44 +12192,27 @@ def api_claim_sol():
             state          = info.get('state', '?')
             program_id     = acc.get('_token_program', SPL_PROG_STR)
 
-            print(f'[claim_sol]   [{src}] pubkey={pub}', flush=True)
-            print(f'[claim_sol]         mint={mint_str}', flush=True)
-            print(f'[claim_sol]         owner_on_chain={owner_on_chain}', flush=True)
-            print(f'[claim_sol]         program={program_id}', flush=True)
-            print(f'[claim_sol]         state={state}  decimals={decimals}', flush=True)
-            print(f'[claim_sol]         raw_amount={raw_amt}  uiAmount={ui_amt}  uiAmountString={ui_str}', flush=True)
-            print(f'[claim_sol]         lamports={lamports}  ({sol_rent:.6f} SOL rent)', flush=True)
 
             raw_int = int(raw_amt) if raw_amt.isdigit() else 1
             if raw_int == 0:
                 closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': 0, 'mint': mint_str, 'program_id': program_id})
-                print(f'[claim_sol]         → CLOSEABLE (empty)', flush=True)
             elif raw_int < DUST_THRESHOLD:
                 closeable.append({'pubkey': pub, 'lamports': lamports, 'owner': owner_on_chain, 'raw_amt': raw_int, 'mint': mint_str, 'program_id': program_id})
-                print(f'[claim_sol]         → CLOSEABLE (dust: raw={raw_amt} < {DUST_THRESHOLD})', flush=True)
             else:
                 skipped.append({'pubkey': pub, 'amount': raw_amt, 'ui': str(ui_amt), 'mint': mint_str})
-                print(f'[claim_sol]         → SKIPPED (raw={raw_amt} ui={ui_amt})', flush=True)
         except Exception as ex:
-            print(f'[claim_sol]   [{src}] {pub} → PARSE ERROR: {ex}  raw={acc}', flush=True)
 
-    print(f'[claim_sol] ─── summary ───', flush=True)
-    print(f'[claim_sol] total unique accounts   : {len(seen)}', flush=True)
-    print(f'[claim_sol] closeable (empty + dust): {len(closeable)}', flush=True)
-    print(f'[claim_sol] skipped (have tokens)   : {len(skipped)}', flush=True)
+            pass
     for s in skipped:
-        print(f'[claim_sol]   skipped: pubkey={s["pubkey"]}  mint={s["mint"]}  '
-              f'raw={s["amount"]}  ui={s["ui"]}', flush=True)
+        pass
     for c in closeable:
-        print(f'[claim_sol]   closeable: pubkey={c["pubkey"]}  lamports={c["lamports"]}  '
-              f'owner={c["owner"]}  raw_amt={c["raw_amt"]}', flush=True)
 
     # Honour user-selected subset when frontend sends a pubkeys list
+        pass
     _sel = (request.get_json(silent=True) or {}).get('pubkeys') or []
     if _sel:
         _sel_set = set(_sel)
         closeable = [a for a in closeable if a['pubkey'] in _sel_set]
-        print(f'[claim_sol] filtered to {len(closeable)} user-selected account(s)', flush=True)
 
     if not closeable:
         msg = (f'No empty or dust token accounts found — {len(all_accs)} total accounts checked '
@@ -12268,25 +12236,18 @@ def api_claim_sol():
             signer   = kp.pubkey()
 
             if str(signer) != trading_pk:
-                print(f'[claim_sol] ⚠ WARNING: signer ({signer}) != trading_pk computed '
-                      f'earlier ({trading_pk}) — decrypted key may be inconsistent', flush=True)
 
             # Only close accounts where on-chain owner == our signing keypair.
             # Accounts owned by the session (Phantom) wallet need Phantom's key — we don't have it.
+                pass
             our_accs   = [a for a in closeable if a['owner'] == str(signer)]
             other_accs = [a for a in closeable if a['owner'] != str(signer)]
             if other_accs:
-                print(f'[claim_sol] {len(other_accs)} accounts owned by a different key '
-                      f'(owner={other_accs[0]["owner"][:12]}...) — cannot sign, skipping', flush=True)
 
-            print(f'[claim_sol] ─── close phase ───', flush=True)
-            print(f'[claim_sol] signer (trading keypair) = {str(signer)}', flush=True)
-            print(f'[claim_sol] our_accs   (owner==signer)  : {len(our_accs)}', flush=True)
-            print(f'[claim_sol] other_accs (owner!=signer)  : {len(other_accs)}', flush=True)
+                pass
             for a in other_accs:
-                print(f'[claim_sol]   other: pubkey={a["pubkey"]}  owner={a["owner"]}', flush=True)
-            print(f'[claim_sol] destination (rent back) = {str(signer)}', flush=True)
 
+                pass
             for i in range(0, len(our_accs), 5):   # small batches — most reliable
                 batch = our_accs[i:i+5]
                 # Instruction building now lives INSIDE the try block below — a single
@@ -12299,7 +12260,6 @@ def api_claim_sol():
                         # Each account must be closed via the program that actually owns it —
                         # legacy Token accounts and Token-2022 accounts are not interchangeable.
                         acc_prog = _PBK.from_string(a.get('program_id', SPL_PROG_STR))
-                        print(f'[claim_sol] → closing {a["pubkey"]}  lamports={a["lamports"]}  raw_amt={a["raw_amt"]}  program={a.get("program_id", SPL_PROG_STR)}', flush=True)
                         if a['raw_amt'] > 0:
                             # Burn dust first — CloseAccount requires zero balance
                             ixs.append(_IX(
@@ -12332,30 +12292,22 @@ def api_claim_sol():
                                    {'encoding': 'base64', 'skipPreflight': False}],
                     }, timeout=30).json()
                     rpc_short = working_rpc.split('?')[0]
-                    print(f'[claim_sol] sendTransaction via {rpc_short} response: {res}', flush=True)
                     if 'error' in res:
                         last_err = str(res['error'])
                         failed.extend(batch)
-                        print(f'[claim_sol] ✗ TX failed: {last_err}', flush=True)
                     else:
                         sig = str(res.get('result', ''))
                         tx_sigs.append(sig)
-                        print(f'[claim_sol] ✓ {len(batch)} closed TX:{sig[:20]}', flush=True)
                 except Exception as e:
                     last_err = _redact_keys(str(e))
                     failed.extend(batch)
-                    print(f'[claim_sol] ✗ batch exception: {last_err}', flush=True)
     except Exception as e:
         err_msg = _redact_keys(str(e))
-        print(f'[claim_sol] ✗ FATAL error during close phase: {err_msg}', flush=True)
         return jsonify({'ok': False, 'msg': f'Close transaction failed: {err_msg}',
                         'debug': {'error': err_msg, 'trading_wallet': trading_pk}}), 500
 
     closed        = len(our_accs) - len(failed)
     skipped_other = len(other_accs)
-    print(f'[claim_sol] ─── result ───', flush=True)
-    print(f'[claim_sol] our_accs={len(our_accs)}  closed={closed}  failed={len(failed)}  '
-          f'skipped_other_owner={skipped_other}', flush=True)
 
     if closed == 0 and our_accs:
         return jsonify({
