@@ -1079,6 +1079,15 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_post_likes_post ON post_likes(post_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS feed_reposts (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        post_id         TEXT NOT NULL,
+        reposter_wallet TEXT NOT NULL,
+        created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(post_id, reposter_wallet)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_feed_reposts_post ON feed_reposts(post_id)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_feed_reposts_wallet ON feed_reposts(reposter_wallet)')
     c.execute('''CREATE TABLE IF NOT EXISTS post_reactions (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id    INTEGER NOT NULL,
@@ -7468,7 +7477,7 @@ def social_feed():
                        'p' as kind,
                        u.username, NULL as symbol, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
-                       u.avatar_url, u.is_verified
+                       u.avatar_url, u.is_verified, NULL as repost_of
                 FROM feed_posts fp
                 LEFT JOIN users u ON fp.wallet = u.wallet_address
                 UNION ALL
@@ -7481,22 +7490,31 @@ def social_feed():
                             THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                             ELSE 0 END as pnl_pct,
                        (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
-                       u.avatar_url, u.is_verified
+                       u.avatar_url, u.is_verified, NULL as repost_of
                 FROM trades t
                 LEFT JOIN users u ON t.user_id = u.id
+                UNION ALL
+                SELECT fr.id, fr.reposter_wallet as wallet, NULL as content,
+                       fr.created_at,
+                       'r' as kind,
+                       ru.username, NULL as symbol, NULL as pnl_pct,
+                       (fr.reposter_wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
+                       ru.avatar_url, ru.is_verified, fr.post_id as repost_of
+                FROM feed_reposts fr
+                LEFT JOIN users ru ON fr.reposter_wallet = ru.wallet_address
             )
         ''' + where_clause + '''
             ORDER BY
               CASE WHEN created_at LIKE '%T%'
                    THEN replace(replace(created_at,'T',' '),'Z','')
                    ELSE created_at END DESC LIMIT 50
-        ''', (my_wallet, my_wallet) + ((my_uid,) if feed_filter == 'following' else ())).fetchall()
+        ''', (my_wallet, my_wallet, my_wallet) + ((my_uid,) if feed_filter == 'following' else ())).fetchall()
 
         # Batch-fetch like/reply counts for exactly the rows on this page instead
         # of a correlated subquery per row (which forced SQLite to compute counts
         # for every historical post/trade before the outer ORDER BY/LIMIT applied).
-        post_ids = [row[4] + str(row[0]) for row in rows]
-        like_counts, reply_counts = {}, {}
+        post_ids = [row[4] + str(row[0]) for row in rows if row[4] != 'r']
+        like_counts, reply_counts, repost_counts = {}, {}, {}
         if post_ids:
             ph = ','.join('?' * len(post_ids))
             like_counts = dict(conn.execute(
@@ -7505,12 +7523,50 @@ def social_feed():
             reply_counts = dict(conn.execute(
                 f'SELECT post_id, COUNT(*) FROM feed_replies WHERE post_id IN ({ph}) GROUP BY post_id',
                 post_ids))
+            repost_counts = dict(conn.execute(
+                f'SELECT post_id, COUNT(*) FROM feed_reposts WHERE post_id IN ({ph}) GROUP BY post_id',
+                post_ids))
         liked_by_me = set()
+        reposted_by_me = set()
         my_uid_for_likes = _get_uid(conn, my_wallet)
         if my_uid_for_likes and post_ids:
             liked_by_me = {r[0] for r in conn.execute(
                 f'SELECT post_id FROM post_likes WHERE user_id=? AND post_id IN ({ph})',
                 [my_uid_for_likes] + post_ids)}
+        if my_wallet and post_ids:
+            reposted_by_me = {r[0] for r in conn.execute(
+                f'SELECT post_id FROM feed_reposts WHERE reposter_wallet=? AND post_id IN ({ph})',
+                [my_wallet] + post_ids)}
+        # Resolve the original post/trade each repost row points at, so the feed can
+        # render "X reposted" with the original content embedded underneath.
+        repost_targets = [row[13] for row in rows if row[4] == 'r' and row[13]]
+        originals = {}
+        if repost_targets:
+            rp_ids = [pid[1:] for pid in repost_targets if pid.startswith('p')]
+            rt_ids = [pid[1:] for pid in repost_targets if pid.startswith('t')]
+            if rp_ids:
+                ph_rp = ','.join('?' * len(rp_ids))
+                for r2 in conn.execute(f'''
+                    SELECT fp.id, fp.wallet, fp.content, fp.created_at, u.username, u.avatar_url, u.is_verified
+                    FROM feed_posts fp LEFT JOIN users u ON fp.wallet = u.wallet_address
+                    WHERE fp.id IN ({ph_rp})''', rp_ids):
+                    originals['p' + str(r2[0])] = {
+                        'kind': 'p', 'wallet': r2[1] or '', 'content': r2[2] or '', 'created_at': r2[3] or '',
+                        'username': r2[4] or '', 'avatar_url': r2[5] or '', 'verified': bool(r2[6]),
+                    }
+            if rt_ids:
+                ph_rt = ','.join('?' * len(rt_ids))
+                for r2 in conn.execute(f'''
+                    SELECT t.id, u.wallet_address, t.token, t.timestamp, u.username, u.avatar_url, u.is_verified,
+                           t.entry_price, t.exit_price
+                    FROM trades t LEFT JOIN users u ON t.user_id = u.id
+                    WHERE t.id IN ({ph_rt})''', rt_ids):
+                    pnl = round((r2[8] - r2[7]) / r2[7] * 100, 2) if r2[7] and r2[8] else 0
+                    originals['t' + str(r2[0])] = {
+                        'kind': 't', 'wallet': r2[1] or '', 'content': '', 'created_at': r2[3] or '',
+                        'username': r2[4] or '', 'avatar_url': r2[5] or '', 'verified': bool(r2[6]),
+                        'symbol': r2[2] or '', 'pnl_pct': pnl, 'entry_price': r2[7] or 0, 'exit_price': r2[8] or 0,
+                    }
         # view_count lives on feed_posts/trades directly (not the shared post_id-keyed
         # tables above), so it needs its own per-kind SELECT rather than one IN query.
         view_counts = {}
@@ -7529,10 +7585,14 @@ def social_feed():
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, kind, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
+        rid, wallet, content, created_at, kind, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, repost_of = row
         post_id = kind + str(rid)
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
+        # For a repost row, likes/replies/views/repost-count and "did I already
+        # repost this" all refer to the ORIGINAL post it points at, not the
+        # synthetic repost row's own id.
+        target_id = repost_of if kind == 'r' else post_id
         feed.append({
             'id':          rid,
             'wallet':      short,
@@ -7544,19 +7604,23 @@ def social_feed():
             'wallet_full': wallet or '',
             'content':     content or '',
             'created_at':  created_at or '',
-            'like_count':  like_counts.get(post_id, 0),
-            'reply_count': reply_counts.get(post_id, 0),
-            'view_count':  view_counts.get(post_id, 0),
+            'like_count':  like_counts.get(target_id, 0),
+            'reply_count': reply_counts.get(target_id, 0),
+            'view_count':  view_counts.get(target_id, 0),
+            'repost_count': repost_counts.get(target_id, 0),
+            'reposted_by_me': target_id in reposted_by_me,
             'username':    display,
             'symbol':      symbol or '',
             'pnl_pct':     pnl_pct or 0,
             'entry_price': entry_price or 0,
             'exit_price':  exit_price or 0,
-            'type':        'text' if content else 'trade',
+            'type':        'repost' if kind == 'r' else ('text' if content else 'trade'),
             'is_own':      bool(is_own),
             'avatar_url':  avatar_url or '',
             'verified':    bool(is_verified),
-            'liked_by_me': post_id in liked_by_me,
+            'liked_by_me': target_id in liked_by_me,
+            'repost_of':   repost_of,
+            'original':    originals.get(repost_of) if kind == 'r' else None,
         })
     return jsonify(feed)
 
@@ -7935,6 +7999,42 @@ def toggle_feed_like(post_id):
     finally:
         conn.close()
     return jsonify({'ok': True, 'liked': liked, 'count': int(count)})
+
+@app.route('/api/feed/repost/<path:post_id>', methods=['POST'])
+@rate_limit(30, 60)
+def toggle_feed_repost(post_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    if not (post_id.startswith('p') or post_id.startswith('t')):
+        return jsonify({'ok': False, 'msg': 'Invalid post'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        existing = conn.execute(
+            'SELECT id FROM feed_reposts WHERE reposter_wallet=? AND post_id=?', (wallet, post_id)
+        ).fetchone()
+        if existing:
+            conn.execute('DELETE FROM feed_reposts WHERE reposter_wallet=? AND post_id=?', (wallet, post_id))
+            reposted = False
+        else:
+            conn.execute('INSERT INTO feed_reposts (reposter_wallet, post_id) VALUES (?,?)', (wallet, post_id))
+            reposted = True
+            owner_uid = _post_owner_uid(conn, post_id)
+            if owner_uid and owner_uid != me:
+                reposter_row = conn.execute('SELECT COALESCE(username,\"\") FROM users WHERE id=?', (me,)).fetchone()
+                reposter_name = (reposter_row[0] if reposter_row and reposter_row[0] else wallet[:8]+'…')
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                    (owner_uid, 'repost', reposter_name+' reposted your post', '/#post-'+post_id))
+                _send_push_notification(owner_uid, 'New repost', reposter_name+' reposted your post', '/#post-'+post_id)
+        count = conn.execute('SELECT COUNT(*) FROM feed_reposts WHERE post_id=?', (post_id,)).fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'reposted': reposted, 'count': int(count)})
 
 @app.route('/api/feed/likes/<path:post_id>', methods=['GET'])
 @rate_limit(120, 60)

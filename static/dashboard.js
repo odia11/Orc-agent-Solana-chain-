@@ -6965,6 +6965,7 @@ var _REPLY_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none"
 
 /* ── Feed post share menu ── */
 var _SHARE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>';
+var _REPOST_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M17 1l4 4-4 4"></path><path d="M3 11V9a4 4 0 0 1 4-4h14"></path><path d="M7 23l-4-4 4-4"></path><path d="M21 13v2a4 4 0 0 1-4 4H3"></path></svg>';
 var _fcHasNativeShare=(typeof navigator!=='undefined' && typeof navigator.share==='function');
 var _fcActiveShareId=null;
 function _fcShareToggle(postId){
@@ -7834,6 +7835,21 @@ function _fmtPrice(p){
 }
 
 function _renderFeedCard(e){
+  var repostBanner = '';
+  if(e.type === 'repost'){
+    if(!e.original) return ''; // original was deleted since the repost was made
+    var reposterName = esc(e.username || e.wallet || 'Someone');
+    repostBanner = '<div class="fc-repost-banner">'+_REPOST_ICON_SVG+'<span>'+reposterName+' reposted</span></div>';
+    var orig = e.original;
+    e = Object.assign({}, e, orig, {
+      id: (e.repost_of||'').replace(/^[a-z]/,''), // numeric part of the original's id, for legacy fields that expect it
+      type: orig.kind === 't' ? 'trade' : 'text',
+      like_count: e.like_count, reply_count: e.reply_count, view_count: e.view_count,
+      repost_count: e.repost_count, reposted_by_me: e.reposted_by_me, liked_by_me: e.liked_by_me,
+      is_own: (orig.wallet && orig.wallet === (typeof phantomKey!=='undefined'?phantomKey:null)),
+    });
+    e.__safePostIdOverride = (e.repost_of || '');
+  }
   var uid = e.user_id||0;
   var isOpen = e.type==='open';
   var isTrade = (e.type==='trade'||isOpen) && !!(e.token||e.symbol);
@@ -7851,10 +7867,10 @@ function _renderFeedCard(e){
     : (typeof _tvTimeAgoStr==='function' ? _tvTimeAgoStr(e.timestamp||e.created_at||'') : '');
 
   /* ── post id ── */
-  var postId = e.id ? 'p'+e.id
+  var postId = e.__safePostIdOverride ? e.__safePostIdOverride : (e.id ? 'p'+e.id
     : (e.trade_id ? 't'+e.trade_id
     : (e.type==='open' ? 'o'+uid+'_'+(e.token_address||e.token||'x').slice(0,12)
-    : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12)));
+    : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12))));
   var safePostId = postId.replace(/['"\\]/g,'');
   var cardId = 'fc-card-'+postId;
   var isOwn = !!(e.user_id && _myProfileId && e.user_id === _myProfileId);
@@ -8007,7 +8023,8 @@ function _renderFeedCard(e){
       +'</div>'
     : '';
 
-  return '<div class="fc-card" id="'+esc(cardId)+'" data-post-content="'+esc(e.content||'')+'" '
+  return (repostBanner ? '<div class="fc-repost-wrap">'+repostBanner : '')
+    +'<div class="fc-card" id="'+esc(cardId)+'" data-post-content="'+esc(e.content||'')+'" '
       +'onclick="_fcCardClick(event,\''+esc(safePostId)+'\')" style="cursor:pointer">'
     +menuHtml
     +(e.avatar_url
@@ -8026,6 +8043,7 @@ function _renderFeedCard(e){
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
     +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">'+_REPLY_ICON_SVG+'<span class="fc-reply-label">Reply</span><span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
+    +'<button class="fc-action fc-repost-btn'+(e.reposted_by_me ? ' reposted' : '')+'" onclick="event.stopPropagation();_feedToggleRepost(this,\''+esc(safePostId)+'\')" title="'+(e.reposted_by_me?'Undo repost':'Repost')+'">'+_REPOST_ICON_SVG+'<span class="fc-repost-count">'+esc(String(e.repost_count||0))+'</span></button>'
     +'<button class="fc-action'+(e.liked_by_me ? ' liked' : '')+'" id="lkbtn-'+esc(safePostId)+'" '
       +'onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')" '
       +'onmousedown="_fcLikePressStart(\''+esc(safePostId)+'\')" onmouseup="_fcLikePressEnd()" onmouseleave="_fcLikePressEnd()" '
@@ -8060,7 +8078,8 @@ function _renderFeedCard(e){
     +'<div class="fc-replies-list" id="rlist-'+esc(safePostId)+'"></div>'
     +'</div>'
     +'</div>'
-    +'</div>';
+    +'</div>'
+    +(repostBanner ? '</div>' : '');
 }
 
 function _homeCopyTrade(uid, username){
@@ -8077,6 +8096,29 @@ function _shareToX(event, postId){
       else openAlertModal({text:d.msg || 'Could not share to X'});
     })
     .catch(function(){ openAlertModal({text:'Network error — could not share to X'}); });
+}
+function _feedToggleRepost(btn, postId){
+  if(!btn) return;
+  var countEl = btn.querySelector('.fc-repost-count');
+  var wasReposted = btn.classList.contains('reposted');
+  var cur = parseInt(countEl ? countEl.textContent : '0', 10) || 0;
+  function setState(isReposted, count){
+    btn.classList.toggle('reposted', isReposted);
+    btn.title = isReposted ? 'Undo repost' : 'Repost';
+    if(countEl) countEl.textContent = count;
+  }
+  setState(!wasReposted, wasReposted ? Math.max(0,cur-1) : cur+1);
+  fetch('/api/feed/repost/'+encodeURIComponent(postId), {method:'POST'})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(!d.ok){
+        console.error('[repost] failed:', d.msg||'unknown error');
+        setState(wasReposted, cur);
+        return;
+      }
+      setState(d.reposted, d.count);
+      if(d.reposted) showLfToast('🔁','Reposted','pos');
+      if(typeof loadHomeFeed==='function' && !wasReposted) loadHomeFeed();
+    }).catch(function(e){ console.error('[repost]', e); setState(wasReposted, cur); });
 }
 function _feedToggleLike(btn, postId){
   if(!btn) return;

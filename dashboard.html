@@ -474,6 +474,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-action:hover{color:#eef1f5}
 .fc-action.liked{color:var(--red)!important}
 .fc-action.liked:hover{color:var(--red)!important}
+.fc-repost-btn.reposted{color:#3ad29b!important}
+.fc-repost-btn:hover{color:#3ad29b}
+.fc-repost-wrap{margin-bottom:0}
+.fc-repost-banner{display:flex;align-items:center;gap:6px;padding:10px 16px 0;color:#565d68;font-size:12px;font-weight:600}
+.fc-repost-banner svg{flex-shrink:0}
 .fc-heart-ico{display:inline-block}
 @keyframes fc-heart-pop{0%{transform:scale(1)}30%{transform:scale(1.35)}55%{transform:scale(.92)}100%{transform:scale(1)}}
 .fc-heart-ico.fc-heart-pop{animation:fc-heart-pop .35s ease}
@@ -3592,7 +3597,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
       <!-- NAV -->
       <nav class="sb-nav">
-        <button class="sb-nav-item active" id="sbn-dashboard" onclick="_sbNav('dashboard')">
+        <button class="sb-nav-item active" id="sbn-dashboard" onclick="_clearStalePostHash();_sbNav('dashboard')">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
           Home
         </button>
@@ -4660,7 +4665,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- MOBILE BOTTOM NAV (visible <768px only) -->
 <nav id="mobile-nav" aria-label="Mobile navigation">
-  <a class="mn-item active" href="/" onclick="if(window._sbNav){_sbNav('dashboard');return false;}">
+  <a class="mn-item active" href="/" onclick="if(window._sbNav){_clearStalePostHash();_sbNav('dashboard');return false;}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     <span>Home</span>
   </a>
@@ -4690,7 +4695,7 @@ document.addEventListener('DOMContentLoaded', function() {
   <div class="mn-drawer-handle"></div>
   <button class="mn-drawer-cta" id="mn-drawer-trade-btn" onclick="_mnDrawerClose();_botToggle()">&#9654; Start Trading</button>
   <nav class="mn-drawer-nav">
-    <a class="mn-drawer-item" href="/" onclick="_mnDrawerClose();if(window._sbNav){event.preventDefault();_sbNav('dashboard');}">
+    <a class="mn-drawer-item" href="/" onclick="_mnDrawerClose();if(window._sbNav){event.preventDefault();_clearStalePostHash();_sbNav('dashboard');}">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
       Home
     </a>
