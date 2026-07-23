@@ -32,11 +32,15 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-amount-input{width:68px;background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield;transition:border-color .15s}
 .lm-amount-input:focus{border-color:var(--accent)}
 .lm-amount-input::-webkit-inner-spin-button,.lm-amount-input::-webkit-outer-spin-button{-webkit-appearance:none}
-.lm-featured-banner{max-width:220px;height:32px;flex-shrink:0;overflow:hidden;border-radius:8px;border:1px solid rgba(247,185,85,.35);background:rgba(247,185,85,.08)}
+.lm-featured-banner{max-width:340px;height:32px;flex-shrink:0;overflow:hidden;border-radius:8px;border:1px solid rgba(247,185,85,.35);background:rgba(247,185,85,.08)}
 .lm-featured-slide{height:100%;display:flex;align-items:center;gap:6px;padding:0 10px;cursor:pointer;white-space:nowrap;overflow:hidden}
 .lm-featured-label{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:1px 5px;flex-shrink:0}
 .lm-featured-name{font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis}
 .lm-featured-sym{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.lm-featured-price{font-size:11px;font-weight:600;font-family:'JetBrains Mono',monospace;flex-shrink:0;color:var(--text)}
+.lm-featured-mcap{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+@keyframes lmFeaturedSlideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
+.lm-featured-slide.lm-slide-anim{animation:lmFeaturedSlideIn .35s ease}
 .lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
 .lm-back:hover{color:var(--text)}
 
@@ -84,7 +88,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
-.lm-featured-badge{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:1px 5px;vertical-align:middle}
 
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
@@ -411,10 +414,19 @@ function _lmRenderFeaturedBanner(featuredPairs){
     var p = featuredPairs[_lmFeaturedBannerIdx % featuredPairs.length];
     var sym = (p.baseToken&&p.baseToken.symbol)||'?';
     var name = (p.baseToken&&p.baseToken.name)||sym;
+    var price = _fmtPrice(p.priceUsd);
+    var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
+    var priceStyle = chg24==null ? '' : ' style="color:'+(chg24>=0?'var(--green)':'var(--red)')+'"';
     slide.innerHTML = '<span class="lm-featured-label">Featured</span>'
       +'<span class="lm-featured-name">'+_esc(name)+'</span>'
-      +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>';
+      +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>'
+      +'<span class="lm-featured-price"'+priceStyle+'>'+price+'</span>'
+      +'<span class="lm-featured-mcap">'+mcap+'</span>';
     slide.onclick = function(){ showTokenCard(sym); };
+    slide.classList.remove('lm-slide-anim');
+    void slide.offsetWidth; // force reflow so the enter animation restarts on every slide change
+    slide.classList.add('lm-slide-anim');
   }
   renderSlide();
 
@@ -635,8 +647,7 @@ function _renderTable(pairs){
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found</td></tr>');
     return;
   }
-  var rows = [..._featuredPairs, ...pairs];
-  wrap.innerHTML = _buildTable(rows.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 function _chgCell(v, extra){
@@ -671,7 +682,7 @@ function _rowHtml(p, idx){
         +'<button class="lm-watch-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
         +logo
         +'<div>'
-          +'<div class="lm-tok-name">'+_esc(name)+(p.isFeatured ? ' <span class="lm-featured-badge">Featured</span>' : '')+'</div>'
+          +'<div class="lm-tok-name">'+_esc(name)+'</div>'
           +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
         +'</div>'
       +'</div>'
