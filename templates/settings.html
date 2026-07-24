@@ -160,19 +160,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .st-uname-msg.ok{color:var(--green)}
 .st-uname-msg.err{color:var(--red)}
 
-/* ── AVATAR UPLOAD ── */
-.st-av-section{display:flex;align-items:center;gap:16px;margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--border)}
-.st-av-circle{width:80px;height:80px;min-width:80px;border-radius:50%;background:var(--bg3);border:2px solid var(--border2);display:flex;align-items:center;justify-content:center;font-size:28px;font-weight:700;color:#fff;overflow:hidden;position:relative;flex-shrink:0}
-.st-av-circle img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
-.st-av-info{flex:1;min-width:0}
-.st-av-lbl{font-size:14px;font-weight:600;color:var(--text);margin-bottom:3px}
-.st-av-sub{font-size:12px;color:var(--muted);margin-bottom:10px;line-height:1.4}
-.st-av-btn{background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;padding:7px 14px;font-size:12px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s}
-.st-av-btn:hover{opacity:.88}
-.st-av-msg{font-size:12px;margin-top:8px;min-height:14px}
-.st-av-msg.ok{color:var(--green)}
-.st-av-msg.err{color:var(--red)}
-
 /* ── SCROLLBAR ── */
 ::-webkit-scrollbar{width:3px;height:3px}
 ::-webkit-scrollbar-track{background:transparent}
@@ -394,20 +381,6 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
       <div class="st-card">
         <div class="st-card-hdr">🔑 Account &amp; Wallet</div>
 
-        <!-- profile picture -->
-        <div class="st-av-section">
-          <div class="st-av-circle" id="st-av-circle">
-            <span id="st-av-init">?</span>
-          </div>
-          <div class="st-av-info">
-            <div class="st-av-lbl">Profile Picture</div>
-            <div class="st-av-sub">JPG, PNG, GIF or WebP · max 2 MB</div>
-            <input type="file" id="st-av-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onAvatarFile(this)">
-            <button class="st-av-btn" onclick="document.getElementById('st-av-input').click()">Change Photo</button>
-            <div class="st-av-msg" id="st-av-msg"></div>
-          </div>
-        </div>
-
         <!-- username -->
         <div class="st-row" style="border-bottom:none;padding-bottom:0;display:block">
           <div class="st-row-label" style="margin-bottom:2px">Username</div>
@@ -584,8 +557,7 @@ async function _initPage(){
     if(notifs) notifs.checked=!!d.pref_notifications;
     if(scam)   scam.checked  =!!d.pref_scam_filter;
     if(sound)  sound.checked =!!d.pref_sound_alerts;
-    /* avatar + username */
-    _initAvatarPreview(d.avatar_url, d.username||_wallet);
+    /* username */
     if(d.is_verified){
       var sbName=document.querySelector('.sb-user-name');
       if(sbName) sbName.innerHTML='You <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
@@ -760,66 +732,6 @@ async function _saveBio(){
     if(msgEl){msgEl.className='st-uname-msg err';msgEl.textContent='✗ Network error';}
   }finally{
     btn.disabled=false; btn.textContent='Save';
-  }
-}
-
-/* ── avatar ── */
-function _avColor(name){
-  var palette=['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#ef4444','#14b8a6'];
-  var h=0;
-  for(var i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))&0xfffffff;
-  return palette[h%palette.length];
-}
-function _initAvatarPreview(url, name){
-  var circle=document.getElementById('st-av-circle');
-  var init=document.getElementById('st-av-init');
-  if(!circle) return;
-  if(url){
-    if(init) init.style.display='none';
-    var img=circle.querySelector('img');
-    if(!img){ img=document.createElement('img'); circle.appendChild(img); }
-    img.src=url;
-    circle.style.background='';
-  } else {
-    var letter=(name||'?')[0].toUpperCase();
-    if(init){ init.textContent=letter; init.style.display=''; }
-    circle.style.background=_avColor(name||'?');
-  }
-}
-function _onAvatarFile(input){
-  var file=input.files&&input.files[0];
-  if(!file) return;
-  var reader=new FileReader();
-  reader.onload=function(e){
-    var dataUrl=e.target.result;
-    /* live preview */
-    var circle=document.getElementById('st-av-circle');
-    var init=document.getElementById('st-av-init');
-    if(circle){
-      if(init) init.style.display='none';
-      var img=circle.querySelector('img');
-      if(!img){ img=document.createElement('img'); circle.appendChild(img); }
-      img.src=dataUrl;
-      circle.style.background='';
-    }
-    _uploadAvatar(dataUrl);
-  };
-  reader.readAsDataURL(file);
-  input.value='';
-}
-async function _uploadAvatar(dataUrl){
-  var msgEl=document.getElementById('st-av-msg');
-  if(msgEl){ msgEl.className='st-av-msg'; msgEl.textContent='Uploading…'; }
-  try{
-    var d=await _post('/api/avatar',{avatar_data:dataUrl});
-    if(d.ok){
-      if(msgEl){ msgEl.className='st-av-msg ok'; msgEl.textContent='✓ Photo saved'; }
-      setTimeout(function(){ if(msgEl) msgEl.textContent=''; },2500);
-    } else {
-      if(msgEl){ msgEl.className='st-av-msg err'; msgEl.textContent='✗ '+(d.msg||'Upload failed'); }
-    }
-  }catch(e){
-    if(msgEl){ msgEl.className='st-av-msg err'; msgEl.textContent='✗ Network error'; }
   }
 }
 
