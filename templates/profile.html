@@ -248,6 +248,13 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .flm-body{max-height:60vh;overflow-y:auto}
 .flm-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s}
 .flm-row:last-child{border-bottom:none}
+.epm-field{margin-bottom:14px}
+.epm-label{display:block;font-size:12px;font-weight:600;color:#8a919c;margin-bottom:6px}
+.epm-textarea{width:100%;background:#0a0c0f;border:1px solid #21252c;border-radius:8px;padding:9px 12px;color:#eef1f5;font-size:13px;font-family:'Geist',system-ui,sans-serif;outline:none;resize:vertical;min-height:70px}
+.epm-textarea:focus,.spm-input:focus{border-color:rgba(247,185,85,.4)}
+.epm-msg{font-size:12px;min-height:14px}
+.epm-msg.ok{color:#3ad29b}
+.epm-msg.err{color:#ff4d6a}
 .flm-row:hover{background:#14171c}
 .flm-av{width:38px;height:38px;min-width:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:#fff;position:relative;overflow:hidden;flex-shrink:0}
 .flm-av img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
@@ -431,10 +438,10 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
       <div class="pf-action-row">
         {% if is_own_profile|default(false) %}
-        <a href="/settings" class="pf-btn-primary">
+        <button class="pf-btn-primary" onclick="_openEditProfileModal()">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
           Edit Profile
-        </a>
+        </button>
         {% else %}
         <button class="pf-btn-primary" onclick="_followUser()" id="pf-follow-btn" data-following="{{ 'true' if is_following else 'false' }}" style="{{ 'background:#21252c;color:#eef1f5' if is_following else '' }}">
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>{% if not is_following %}<line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>{% endif %}</svg>
@@ -672,8 +679,44 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   </div>
 </div>
 
+<!-- Edit Profile Modal -->
+<div class="flm-back" id="epm-back" onclick="if(event.target===this)_closeEditProfileModal()">
+  <div class="flm-box">
+    <div class="flm-hdr">
+      <span class="flm-title">Edit Profile</span>
+      <button class="flm-close" onclick="_closeEditProfileModal()">✕</button>
+    </div>
+    <div class="flm-body" style="padding:18px">
+      <div style="display:flex;justify-content:center;margin-bottom:18px">
+        {% if avatar_url %}
+        <img class="pf-avatar-img" id="epm-avatar-img" src="{{ avatar_url }}" alt="avatar" style="cursor:pointer"
+             onclick="_onAvatarClick()"
+             onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+        <div class="pf-avatar-fallback" id="epm-avatar-fallback" style="display:none;cursor:pointer" onclick="_onAvatarClick()">{{ (username or wallet_short)[:2]|upper }}</div>
+        {% else %}
+        <div class="pf-avatar-fallback" id="epm-avatar-fallback" style="cursor:pointer" onclick="_onAvatarClick()">{{ (username or wallet_short)[:2]|upper }}</div>
+        {% endif %}
+      </div>
+      <div class="epm-field">
+        <label class="epm-label" for="epm-username">Username</label>
+        <input id="epm-username" class="spm-input" type="text" style="width:100%" value="{{ username or '' }}" maxlength="20" placeholder="@username" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="epm-field">
+        <label class="epm-label" for="epm-bio">Bio</label>
+        <textarea id="epm-bio" class="epm-textarea" maxlength="100" placeholder="Tell people about yourself...">{{ bio or '' }}</textarea>
+      </div>
+      <div class="epm-msg" id="epm-msg"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="pf-btn-secondary" style="flex:1;justify-content:center" onclick="_closeEditProfileModal()">Cancel</button>
+        <button class="pf-btn-primary" id="epm-save-btn" style="flex:1;justify-content:center" onclick="_saveEditProfile()">Save</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 var _csrf = {{ csrf_token|tojson }};
+var _walletShort = {{ wallet_short|tojson }};
 
 function copyWallet() {
   var addr = document.getElementById('pf-addr').textContent.trim();
@@ -770,7 +813,100 @@ async function openFollowListModal(type){
   }
 }
 
-document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeFollowListModal(); closeShareModal(); } });
+var _epmOriginalUsername = '';
+var _epmOriginalBio = '';
+
+function _openEditProfileModal(){
+  var msgEl = document.getElementById('epm-msg');
+  if(msgEl){ msgEl.className='epm-msg'; msgEl.textContent=''; }
+  _epmOriginalUsername = document.getElementById('epm-username').value.trim();
+  _epmOriginalBio = document.getElementById('epm-bio').value.trim();
+  document.getElementById('epm-back').classList.add('open');
+}
+function _closeEditProfileModal(){
+  document.getElementById('epm-back').classList.remove('open');
+}
+
+/* Reflects a successful username/bio save into the page's own DOM (no reload). */
+function _applyProfileEditsToPage(username, bio, usernameChanged, bioChanged){
+  if(usernameChanged){
+    var display = username || _walletShort;
+    var nameEl = document.querySelector('.pf-display-name');
+    if(nameEl) nameEl.textContent = display;
+    var handleEl = document.querySelector('.pf-handle-tag');
+    if(handleEl) handleEl.textContent = username ? '@'+username : _walletShort;
+    var initials = display.slice(0,2).toUpperCase();
+    document.querySelectorAll('.pf-avatar-fallback').forEach(function(el){ el.textContent = initials; });
+  }
+  if(bioChanged){
+    var bioEl = document.querySelector('.pf-bio-text');
+    if(bio){
+      if(!bioEl){
+        bioEl = document.createElement('div');
+        bioEl.className = 'pf-bio-text';
+        var metaRow = document.querySelector('.pf-meta-row');
+        if(metaRow) metaRow.insertAdjacentElement('afterend', bioEl);
+      }
+      bioEl.textContent = bio;
+    } else if(bioEl){
+      bioEl.remove();
+    }
+  }
+}
+
+async function _saveEditProfile(){
+  var msgEl = document.getElementById('epm-msg');
+  var btn = document.getElementById('epm-save-btn');
+  var username = document.getElementById('epm-username').value.trim();
+  var bio = document.getElementById('epm-bio').value.trim();
+  var usernameChanged = username !== _epmOriginalUsername;
+  var bioChanged = bio !== _epmOriginalBio;
+
+  if(!usernameChanged && !bioChanged){
+    _closeEditProfileModal();
+    return;
+  }
+
+  btn.disabled = true;
+  if(msgEl){ msgEl.className='epm-msg'; msgEl.textContent='Saving…'; }
+  try{
+    if(usernameChanged){
+      var ur = await fetch('/api/username', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-CSRF-Token':_csrf},
+        body: JSON.stringify({username: username})
+      });
+      var ud = await ur.json();
+      if(!ud.ok){
+        if(msgEl){ msgEl.className='epm-msg err'; msgEl.textContent='✗ '+(ud.msg||'Could not save username'); }
+        return;
+      }
+    }
+    if(bioChanged){
+      var br = await fetch('/api/bio', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json','X-CSRF-Token':_csrf},
+        body: JSON.stringify({bio: bio})
+      });
+      var bd = await br.json();
+      if(!bd.ok){
+        if(msgEl){ msgEl.className='epm-msg err'; msgEl.textContent='✗ '+(bd.msg||'Could not save bio'); }
+        return;
+      }
+    }
+    _applyProfileEditsToPage(username, bio, usernameChanged, bioChanged);
+    _epmOriginalUsername = username;
+    _epmOriginalBio = bio;
+    if(msgEl){ msgEl.className='epm-msg ok'; msgEl.textContent='✓ Saved'; }
+    setTimeout(function(){ _closeEditProfileModal(); }, 700);
+  }catch(e){
+    if(msgEl){ msgEl.className='epm-msg err'; msgEl.textContent='✗ Network error'; }
+  }finally{
+    btn.disabled = false;
+  }
+}
+
+document.addEventListener('keydown',function(e){ if(e.key==='Escape'){ closeFollowListModal(); closeShareModal(); _closeEditProfileModal(); } });
 
 /* ── SIDEBAR PROFILE ── */
 (function() {
@@ -863,6 +999,21 @@ async function _uploadAvatarProfile(dataUrl){
       var sbIni = document.getElementById('sb-avatar-ini');
       if (sbImg) { sbImg.src = dataUrl; sbImg.style.display = ''; }
       if (sbIni) sbIni.style.display = 'none';
+      // keep the Edit Profile modal's avatar preview in sync too, if it's open
+      var epmImg = document.getElementById('epm-avatar-img');
+      var epmFallback = document.getElementById('epm-avatar-fallback');
+      if (!epmImg && epmFallback && epmFallback.parentNode) {
+        epmImg = document.createElement('img');
+        epmImg.className = 'pf-avatar-img';
+        epmImg.id = 'epm-avatar-img';
+        epmImg.alt = 'avatar';
+        epmImg.style.cursor = 'pointer';
+        epmImg.onclick = _onAvatarClick;
+        epmImg.onerror = function(){ this.style.display='none'; if (epmFallback) epmFallback.style.display='flex'; };
+        epmFallback.parentNode.insertBefore(epmImg, epmFallback);
+      }
+      if (epmImg) { epmImg.src = dataUrl; epmImg.style.display = ''; }
+      if (epmFallback) epmFallback.style.display = 'none';
       _avatarMsg('✓ Photo saved', 'ok');
     } else {
       _avatarMsg('✗ ' + (d.msg || 'Upload failed'), 'err');
