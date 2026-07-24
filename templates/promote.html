@@ -89,7 +89,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'G
 
     <div class="pr-summary">
       <span>Listing fee</span>
-      <b class="mono">{{ price_sol }} SOL · {{ duration_hours }}h</b>
+      <b class="mono">{{ price_sol }} SOL{% if price_usd is not none %} (≈${{ price_usd }}){% endif %} · {{ duration_hours }}h</b>
     </div>
 
     <button class="pr-submit" id="pr-submit-btn" onclick="_promoteSubmit()">Continue to payment</button>
@@ -182,7 +182,7 @@ async function _promoteSubmit(){
     _promoTreasuryWallet = d.treasury_wallet;
     _promoAmountSol = d.amount_sol;
 
-    document.getElementById('pr-pay-amount').textContent = d.amount_sol + ' SOL';
+    document.getElementById('pr-pay-amount').textContent = d.amount_sol + ' SOL' + (d.amount_usd != null ? ' (≈$' + d.amount_usd + ')' : '');
     document.getElementById('pr-pay-wallet').textContent = d.treasury_wallet;
     document.getElementById('pr-payment').style.display = 'block';
     document.getElementById('pr-form-card').style.display = 'none';

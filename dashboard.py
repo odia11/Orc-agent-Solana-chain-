@@ -243,17 +243,21 @@ def _get_fee_rate():
         return FEE_RATE_DEFAULT
 FEE_WALLET       = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'  # hardcoded fee recipient
 
-PROMOTION_PRICE_SOL_DEFAULT = 0.424
+PROMOTION_PRICE_USD_DEFAULT = 70.0
+PROMOTION_PRICE_SOL_FALLBACK = 0.42  # used only if the SOL/USD rate isn't available yet
 PROMOTION_DURATION_HOURS_DEFAULT = 14
 
 def _get_promotion_price_sol():
     try:
         conn = sqlite3.connect(DB_FILE)
-        row = conn.execute("SELECT value FROM platform_settings WHERE key='promotion_price_sol'").fetchone()
+        row = conn.execute("SELECT value FROM platform_settings WHERE key='promotion_price_usd'").fetchone()
         conn.close()
-        return float(row[0]) if row else PROMOTION_PRICE_SOL_DEFAULT
+        usd_price = float(row[0]) if row else PROMOTION_PRICE_USD_DEFAULT
     except Exception:
-        return PROMOTION_PRICE_SOL_DEFAULT
+        usd_price = PROMOTION_PRICE_USD_DEFAULT
+    if not _sol_price_usd:
+        return PROMOTION_PRICE_SOL_FALLBACK
+    return round(usd_price / _sol_price_usd, 3)
 
 def _get_promotion_duration_hours():
     try:
@@ -4777,6 +4781,7 @@ def promote_page():
         csrf_token=_get_csrf_token(),
         client_secret=API_SHARED_SECRET,
         price_sol=_get_promotion_price_sol(),
+        price_usd=round(_get_promotion_price_sol() * _sol_price_usd, 2) if _sol_price_usd else None,
         duration_hours=_get_promotion_duration_hours(),
         treasury_wallet=ADMIN_WALLET,
     )
@@ -8724,6 +8729,7 @@ def api_promote_create():
         'promotion_id': promotion_id,
         'treasury_wallet': ADMIN_WALLET,
         'amount_sol': amount_sol,
+        'amount_usd': round(amount_sol * _sol_price_usd, 2) if _sol_price_usd else None,
         'duration_hours': duration_hours,
     })
 
