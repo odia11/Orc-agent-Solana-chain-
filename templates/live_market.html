@@ -143,7 +143,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 @media(max-width:767px){
   html,body{overflow-x:hidden}
   .lm-modal-close{min-width:44px;min-height:44px}
-  .lm-header{display:none!important}
+  .lm-header{display:block!important;position:static;height:auto;padding:0}
+  .lm-header>*:not(.lm-featured-banner){display:none!important}
+  .lm-featured-banner{width:100%;max-width:none;height:26px}
+  .lm-featured-slide{padding:0 12px}
   .mobile-back-bar{height:52px}
   .lm-tabs{top:52px}
   .lm-back{display:none!important}
