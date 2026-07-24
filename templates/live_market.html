@@ -504,16 +504,29 @@ async function _fetchWatchlist(){
 }
 
 function _dedupeByAddress(pairs, iconMap){
-  var best={};
+  var trustedQuotes = ['SOL','USDC','USDT'];
+  var byAddr = {};
   pairs.forEach(function(p){
     var addr = p.baseToken&&p.baseToken.address;
     if(!addr) return;
-    var liq = (p.liquidity&&p.liquidity.usd)||0;
-    var prev = best[addr];
-    if(!prev || liq > ((prev.liquidity&&prev.liquidity.usd)||0)){
-      best[addr] = p;
-    }
+    (byAddr[addr] = byAddr[addr] || []).push(p);
   });
+
+  var best = {};
+  Object.keys(byAddr).forEach(function(addr){
+    var group = byAddr[addr];
+    var trusted = group.filter(function(p){
+      return trustedQuotes.indexOf(p.quoteToken&&p.quoteToken.symbol) !== -1;
+    });
+    var pool = trusted.length ? trusted : group;
+    var bestP = null, bestLiq = -1;
+    pool.forEach(function(p){
+      var liq = (p.liquidity&&p.liquidity.usd)||0;
+      if(!bestP || liq > bestLiq){ bestP = p; bestLiq = liq; }
+    });
+    best[addr] = bestP;
+  });
+
   var out = Object.keys(best).map(function(addr){
     var p = best[addr];
     if(iconMap[addr]&&!(p.info&&p.info.imageUrl))
