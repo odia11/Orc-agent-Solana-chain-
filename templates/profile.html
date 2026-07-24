@@ -248,6 +248,8 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .flm-body{max-height:60vh;overflow-y:auto}
 .flm-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s}
 .flm-row:last-child{border-bottom:none}
+.st-card-hdr{font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px}
+.st-row-sub{font-size:12px;color:var(--muted);line-height:1.4}
 .epm-field{margin-bottom:14px}
 .epm-label{display:block;font-size:12px;font-weight:600;color:#8a919c;margin-bottom:6px}
 .epm-textarea{width:100%;background:#0a0c0f;border:1px solid #21252c;border-radius:8px;padding:9px 12px;color:#eef1f5;font-size:13px;font-family:'Geist',system-ui,sans-serif;outline:none;resize:vertical;min-height:70px}
@@ -697,13 +699,16 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         <div class="pf-avatar-fallback" id="epm-avatar-fallback" style="cursor:pointer" onclick="_onAvatarClick()">{{ (username or wallet_short)[:2]|upper }}</div>
         {% endif %}
       </div>
+      <div class="st-card-hdr">👥 Profile Info</div>
       <div class="epm-field">
         <label class="epm-label" for="epm-username">Username</label>
         <input id="epm-username" class="spm-input" type="text" style="width:100%" value="{{ username or '' }}" maxlength="20" placeholder="@username" autocomplete="off" spellcheck="false">
+        <div class="st-row-sub" style="margin-top:6px">Letters, numbers, and underscores only · max 20 characters</div>
       </div>
       <div class="epm-field">
         <label class="epm-label" for="epm-bio">Bio</label>
         <textarea id="epm-bio" class="epm-textarea" maxlength="100" placeholder="Tell people about yourself...">{{ bio or '' }}</textarea>
+        <div class="st-row-sub" style="margin-top:6px">Shown on your profile · max 100 characters</div>
       </div>
       <div class="epm-msg" id="epm-msg"></div>
       <div style="display:flex;gap:8px;margin-top:16px">
