@@ -7730,6 +7730,28 @@ function renderHomeFeed(){
   });
 }
 
+var _bottomHoldTimer = null;
+function _checkBottomHold() {
+  var feedEl = document.getElementById('center-feed');
+  if (!feedEl || feedEl.offsetParent === null) {
+    if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
+    return;
+  }
+  var atBottom = (window.innerHeight + window.scrollY) >=
+    (document.documentElement.scrollHeight - 40);
+  if (atBottom) {
+    if (!_bottomHoldTimer) {
+      _bottomHoldTimer = setTimeout(function() {
+        loadHomeFeed(); // refetch + re-render in place instead of a full page reload
+        _bottomHoldTimer = null; // allow the hold-at-bottom check to fire again later
+      }, 2000);
+    }
+  } else {
+    if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
+  }
+}
+window.addEventListener('scroll', _checkBottomHold, { passive: true });
+
 function showToken(symbol){
   window.open('https://dexscreener.com/solana/'+symbol,'_blank')
 }
