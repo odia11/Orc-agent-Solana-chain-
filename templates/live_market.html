@@ -130,6 +130,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative}
 .lm-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;color:var(--muted);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s;font-family:system-ui,sans-serif}
 .lm-modal-close:hover{color:var(--text)}
+.lm-stat-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:12px}
+.lm-stat-label{font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em;font-family:'JetBrains Mono',monospace}
+.lm-stat-value{font-size:13px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace}
 @keyframes tcSpin{to{transform:rotate(360deg)}}
 
 /* ── MOBILE BACK BAR ── */
@@ -869,9 +872,9 @@ async function showTokenCard(symbol){
           ?'<span style="color:#3ad29b">'+p.txns.h24.buys+'</span><span style="color:#565d68"> / </span><span style="color:#ff4d6a">'+p.txns.h24.sells+'</span>'
           :'—'}
     ].map(function(s){
-      return '<div style="background:#16191f;border-radius:10px;padding:10px">'
-        +'<div style="font-size:10px;color:#565d68;margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em;font-family:\'JetBrains Mono\',monospace">'+s.l+'</div>'
-        +'<div style="font-size:13px;font-weight:600;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">'+s.v+'</div>'
+      return '<div class="lm-stat-card">'
+        +'<div class="lm-stat-label">'+s.l+'</div>'
+        +'<div class="lm-stat-value">'+s.v+'</div>'
         +'</div>';
     }).join('');
     var tfHtml = tfs.map(function(tf){
