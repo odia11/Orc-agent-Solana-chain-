@@ -54,9 +54,11 @@
 .ntf-tab.active{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
 .ntf-tab:hover:not(.active){color:#c0c8d4}
 .ntf-list{display:flex;flex-direction:column}
-.ntf-row-wrap{position:relative;overflow:hidden}
+.ntf-day-header{font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.04em;padding:14px 4px 6px}
+.ntf-row-wrap{position:relative;overflow:hidden;margin-bottom:8px}
 .ntf-swipe-delete-btn{position:absolute;top:0;right:0;height:100%;width:84px;background:#ff3b3b;color:#fff;border:none;font-size:12px;font-weight:700;letter-spacing:.02em;display:flex;align-items:center;justify-content:center;cursor:pointer;touch-action:manipulation}
-.ntf-row{display:flex;align-items:flex-start;gap:12px;padding:16px 4px;border-bottom:1px solid var(--bg3);text-decoration:none;color:inherit;position:relative;background:var(--bg);touch-action:pan-y}
+.ntf-row{display:flex;align-items:flex-start;gap:12px;padding:16px 14px;border-radius:12px;text-decoration:none;color:inherit;position:relative;background:var(--bg2);touch-action:pan-y}
+.ntf-row:has(.ntf-unread-dot){background:rgba(247,185,85,.08)}
 .ntf-row:hover{background:#0d0e11}
 .ntf-row-link{display:flex;align-items:flex-start;gap:12px;flex:1;min-width:0;text-decoration:none;color:inherit}
 .ntf-share-btn{flex-shrink:0;align-self:center;background:none;border:1px solid var(--bg4);color:var(--accent);font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;font-family:var(--ui);white-space:nowrap;transition:background .15s;min-height:32px}
@@ -405,6 +407,22 @@ function _shareTrade(btn, ev){
     btn.textContent = 'Share';
   });
 }
+// Same calendar day = Vandaag, day before = Gisteren, within 7 days = Deze
+// week, older = no header at all (keeps the list from growing a wall of
+// "Eerder" labels once history gets long).
+function _ntfDayBucket(ts){
+  if(!ts) return null;
+  var iso = ts.replace(' ','T');
+  if(!iso.endsWith('Z')) iso += 'Z';
+  var d = new Date(iso);
+  if(isNaN(d)) return null;
+  var startOfDay = function(dt){ return new Date(dt.getFullYear(), dt.getMonth(), dt.getDate()); };
+  var days = Math.floor((startOfDay(new Date()) - startOfDay(d)) / 86400000);
+  if(days === 0) return 'Vandaag';
+  if(days === 1) return 'Gisteren';
+  if(days < 7) return 'Deze week';
+  return null;
+}
 function _render(){
   // Skip a rebuild while a row is mid-swipe -- a full innerHTML replace would
   // silently snap it shut. Same guard used in Messages; here nothing polls
@@ -424,7 +442,17 @@ function _render(){
     list.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>No notifications yet</div>';
     return;
   }
-  list.innerHTML = rows.map(function(r){ return _rowHtml(r.n, r.kind); }).join('');
+  var html = '';
+  var lastBucket;
+  rows.forEach(function(r){
+    var bucket = _ntfDayBucket(r.ts);
+    if(bucket !== lastBucket){
+      if(bucket) html += '<div class="ntf-day-header">' + bucket + '</div>';
+      lastBucket = bucket;
+    }
+    html += _rowHtml(r.n, r.kind);
+  });
+  list.innerHTML = html;
   list.querySelectorAll('.ntf-row-wrap').forEach(function(wrap){
     var delBtn = wrap.querySelector('.ntf-swipe-delete-btn');
     if (!delBtn) return; // select mode: no swipe-delete button rendered
