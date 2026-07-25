@@ -70,6 +70,8 @@
 .ntf-icon.social{background:rgba(255,77,106,.14);color:var(--red)}
 .ntf-icon.message{background:rgba(99,102,241,.14);color:var(--indigo)}
 .ntf-icon.system{background:var(--bg3);color:var(--sub)}
+.ntf-avatar{width:38px;height:38px;border-radius:50%;flex-shrink:0;margin-top:2px;background:var(--bg3);border:1px solid var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);overflow:hidden;position:relative}
+.ntf-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .ntf-info{flex:1;min-width:0}
 .ntf-text{font-size:14px;color:var(--text);line-height:1.4}
 .ntf-chip{display:inline-flex;align-items:center;gap:8px;margin-top:8px;padding:6px 12px;border-radius:9px;font-family:var(--mono);font-size:12px;font-weight:700}
@@ -281,6 +283,16 @@ function _parseTradeContent(content){
 // mark read or delete. Mark-as-read icon: always visible on mobile,
 // hover-reveal on desktop. Delete icon: desktop-only (see CSS), never
 // shown on touch/mobile at all.
+// Real actor avatar (with initials fallback) for actor-driven notifications
+// (mention/reply/reaction/follow/etc). Returns null for system events
+// (trade closed, auto-verify, claim expiry) where actor_username/actor_avatar
+// are both NULL -- those keep the generic type icon instead.
+function _ntfActorHtml(n){
+  if(!n.actor_username && !n.actor_avatar) return null;
+  var initial = _esc((n.actor_username || '?').charAt(0).toUpperCase());
+  var img = n.actor_avatar ? '<img src="' + _esc(n.actor_avatar) + '" alt="">' : '';
+  return '<div class="ntf-avatar" title="' + _esc(n.actor_username || '') + '">' + initial + img + '</div>';
+}
 function _actionsHtml(n, isUnread){
   var readBtn = isUnread
     ? '<button class="ntf-read-btn" title="Mark as read" aria-label="Mark as read" '
@@ -312,7 +324,7 @@ function _buildPersonalRow(n, isUnread, iconCls, bodyHtml, href, extraButtonHtml
       + '<label class="ntf-select-checkbox" onclick="event.stopPropagation()">'
       + '<input type="checkbox"' + (checked ? ' checked' : '') + ' onchange="_toggleSelect(' + n.id + ')" aria-label="Select notification">'
       + '</label>'
-      + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
+      + (_ntfActorHtml(n) || '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>')
       + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + timeStr + '</div></div>'
       + (isUnread ? '<div class="ntf-unread-dot"></div>' : '')
       + '</div>'
@@ -322,7 +334,7 @@ function _buildPersonalRow(n, isUnread, iconCls, bodyHtml, href, extraButtonHtml
     + '<button class="ntf-swipe-delete-btn">Delete</button>'
     + '<div class="ntf-row" data-notif-id="' + n.id + '">'
     + '<a class="ntf-row-link" href="' + _esc(href) + '" data-id="' + n.id + '" onclick="_markOneRead(' + n.id + ')">'
-    + '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>'
+    + (_ntfActorHtml(n) || '<div class="ntf-icon ' + iconCls + '">' + (_ICON_SVG[iconCls] || _ICON_SVG.system) + '</div>')
     + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + timeStr + '</div></div>'
     + '</a>'
     + (extraButtonHtml || '')
