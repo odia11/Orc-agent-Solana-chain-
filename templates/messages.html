@@ -271,9 +271,20 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   html,body{overflow-x:hidden}
 }
 .mobile-back-bar{display:none}
+@media(max-width:767px){
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
+}
 </style>
 </head>
 <body>
+
+<div class="mobile-back-bar">
+  <button onclick="history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Messages</span>
+</div>
+
 <div id="avatar-lightbox" onclick="_closeAvatarLightbox()"><img id="avatar-lightbox-img" src="" alt=""></div>
 <div id="img-lightbox" onclick="_closeImgLightbox()">
   <button id="img-lightbox-close" onclick="event.stopPropagation();_closeImgLightbox()" aria-label="Close" title="Close">&times;</button>

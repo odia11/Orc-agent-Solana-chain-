@@ -406,7 +406,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
     </div>
     <div class="topbar-right">
       <button class="refresh-btn" onclick="refreshView()">↺ Refresh</button>
-      <a href="/" class="back-link">← Back to app</a>
+      <a href="/" class="back-link" onclick="if(history.length>1){event.preventDefault();history.back();}">← Back to app</a>
     </div>
   </div>
 
