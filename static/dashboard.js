@@ -7752,6 +7752,60 @@ function _checkBottomHold() {
 }
 window.addEventListener('scroll', _checkBottomHold, { passive: true });
 
+// ── PULL-TO-REFRESH — home feed (mobile, touch only) ──
+(function(){
+  var feedEl = document.getElementById('center-feed');
+  if (!feedEl) return;
+
+  var PTR_THRESHOLD = 70;
+  var _ptrStartY = 0, _ptrActive = false, _ptrPulling = false, _ptrIndicator = null;
+
+  function _ptrEnsureIndicator(){
+    if (_ptrIndicator) return _ptrIndicator;
+    var wrap = document.createElement('div');
+    wrap.id = 'ptr-indicator';
+    wrap.style.cssText = 'display:flex;align-items:center;justify-content:center;height:0;overflow:hidden;transition:height .15s ease';
+    var spin = document.createElement('span');
+    spin.className = 'dm-img-spinner';
+    spin.style.cssText = 'width:20px;height:20px;border-width:2px';
+    wrap.appendChild(spin);
+    feedEl.parentNode.insertBefore(wrap, feedEl);
+    _ptrIndicator = wrap;
+    return wrap;
+  }
+
+  feedEl.addEventListener('touchstart', function(e){
+    if (window.scrollY !== 0) { _ptrActive = false; return; }
+    _ptrStartY = e.touches[0].clientY;
+    _ptrActive = true;
+    _ptrPulling = false;
+  }, { passive: true });
+
+  feedEl.addEventListener('touchmove', function(e){
+    if (!_ptrActive) return;
+    var dy = e.touches[0].clientY - _ptrStartY;
+    if (dy <= 0 || window.scrollY !== 0) { _ptrActive = false; return; }
+    _ptrPulling = true;
+    e.preventDefault(); // suppress native overscroll bounce while our indicator is dragging
+    var indicator = _ptrEnsureIndicator();
+    indicator.style.height = Math.min(dy, PTR_THRESHOLD) + 'px';
+  }, { passive: false });
+
+  feedEl.addEventListener('touchend', async function(){
+    if (!_ptrActive) return;
+    _ptrActive = false;
+    if (_ptrPulling && _ptrIndicator) {
+      var pulled = parseInt(_ptrIndicator.style.height, 10) || 0;
+      if (pulled >= PTR_THRESHOLD) {
+        _ptrIndicator.style.height = PTR_THRESHOLD + 'px'; // hold open, spinner keeps spinning
+        await loadHomeFeed();
+      }
+      _ptrIndicator.style.height = '0px';
+    }
+    _ptrPulling = false;
+  }, { passive: true });
+})();
+
 function showToken(symbol){
   window.open('https://dexscreener.com/solana/'+symbol,'_blank')
 }
