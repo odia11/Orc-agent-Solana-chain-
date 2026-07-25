@@ -1174,6 +1174,10 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_notifications_user ON notifications(user_id, is_read)')
+    try:
+        c.execute('ALTER TABLE notifications ADD COLUMN actor_wallet TEXT DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
     # support_threads/support_messages — one shared thread per user, visible to every
     # admin/moderator (unlike direct_messages, which is a strict 1:1 pair table).
     c.execute('''CREATE TABLE IF NOT EXISTS support_threads (
@@ -2660,8 +2664,8 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         try:
             _nc = sqlite3.connect(DB_FILE)
             _nc.execute(
-                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                (user_id, 'trade', notif_content, '/notifications'))
+                'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                (user_id, 'trade', notif_content, '/notifications', None))
             _nc.commit()
             _send_push_notification(user_id, 'Trade closed', notif_content, '/notifications')
             _nc.close()
@@ -2756,8 +2760,8 @@ def _check_auto_verify(user_id):
             conn.execute('UPDATE users SET is_verified=1 WHERE id=?', (user_id,))
             conn.commit()
             conn.execute(
-                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                (user_id, 'system', "You've been automatically verified for earning 5+ SOL profit in 24h! 🎉", '/profile')
+                'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                (user_id, 'system', "You've been automatically verified for earning 5+ SOL profit in 24h! 🎉", '/profile', None)
             )
             conn.commit()
             _send_push_notification(user_id, "You're verified! ✓", "You earned 5+ SOL profit in 24h and got the verified badge.", '/profile')
@@ -5178,9 +5182,9 @@ def _touch_owner_activity(conn, group_id, uid):
         group_row = conn.execute('SELECT name FROM groups WHERE id=?', (group_id,)).fetchone()
         group_name = group_row[0] if group_row else 'the group'
         conn.execute(
-            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
             (claim[1], 'group_claim', 'The owner is active again -- your claim on '+group_name+' was cancelled',
-             '/groups/'+str(group_id)))
+             '/groups/'+str(group_id), None))
     conn.commit()
 
 
@@ -5222,9 +5226,9 @@ def _process_expired_claims(conn, group_id):
             'SELECT user_id FROM group_members WHERE group_id=?', (group_id,)).fetchall()]
         for uid in member_ids:
             conn.execute(
-                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+                'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
                 (uid, 'group_claim', 'Ownership of '+group_name+' transferred due to inactivity',
-                 '/groups/'+str(group_id)))
+                 '/groups/'+str(group_id), None))
         conn.commit()
     except Exception as e:
         conn.rollback()
@@ -5363,8 +5367,8 @@ def api_group_post_create(group_id):
             if m_row:
                 link = '/groups/'+str(group_id)
                 conn.execute(
-                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (m_row[0], 'mention', author_name+' mentioned you in '+group_name, link))
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (m_row[0], 'mention', author_name+' mentioned you in '+group_name, link, wallet))
                 conn.commit()
                 _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in '+group_name, link)
         return jsonify({'ok': True, 'post_id': post_id})
@@ -6009,10 +6013,10 @@ def api_group_claim(group_id):
         claimant_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (uid,)).fetchone()
         claimant_name = claimant_row[0] if claimant_row and claimant_row[0] else 'A member'
         conn.execute(
-            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
+            'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
             (owner_id, 'group_claim',
              claimant_name+' claimed ownership of '+group_name+' due to inactivity -- act within 48h to keep it',
-             '/groups/'+str(group_id)))
+             '/groups/'+str(group_id), wallet))
         conn.commit()
         _send_push_notification(owner_id, 'Group ownership claim',
                                  claimant_name+' claimed '+group_name+' -- act within 48h to keep it',
@@ -6132,16 +6136,20 @@ def notifications_mine():
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         rows = conn.execute(
-            '''SELECT id, type, content, link, is_read, created_at
-               FROM notifications WHERE user_id=?
-               ORDER BY created_at DESC LIMIT 30''',
+            '''SELECT n.id, n.type, n.content, n.link, n.is_read, n.created_at,
+                      u.avatar_url, u.username
+               FROM notifications n
+               LEFT JOIN users u ON u.wallet_address = n.actor_wallet
+               WHERE n.user_id=?
+               ORDER BY n.created_at DESC LIMIT 30''',
             (me,)
         ).fetchall()
     finally:
         conn.close()
     return jsonify({'ok': True, 'notifications': [
         {'id': r[0], 'type': r[1], 'content': r[2], 'link': r[3],
-         'is_read': bool(r[4]), 'created_at': r[5]}
+         'is_read': bool(r[4]), 'created_at': r[5],
+         'actor_avatar': r[6], 'actor_username': r[7]}
         for r in rows
     ]})
 
@@ -6219,7 +6227,7 @@ def _send_push_notification(user_id, title, body, url='/'):
         daemon=True
     ).start()
 
-def _notify_staff(title: str, body: str, link: str = '/admin#support'):
+def _notify_staff(title: str, body: str, link: str = '/admin#support', actor_wallet: str = None):
     """Fan out a notification + push to every current admin/moderator so a new
     support message doesn't rely on one specific mod having the inbox open."""
     try:
@@ -6239,8 +6247,8 @@ def _notify_staff(title: str, body: str, link: str = '/admin#support'):
                 if not uid:
                     continue
                 conn.execute(
-                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (uid, 'message', body, link)
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (uid, 'message', body, link, actor_wallet)
                 )
                 _send_push_notification(uid, title, body, link)
             conn.commit()
@@ -8011,8 +8019,8 @@ def feed_post_create():
             ).fetchone()
             if m_row:
                 conn.execute(
-                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id)))
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id), wallet))
                 conn.commit()
                 _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id))
         return jsonify({'ok': True, 'id': post_id})
@@ -8169,8 +8177,8 @@ def toggle_feed_repost(post_id):
                 reposter_row = conn.execute('SELECT COALESCE(username,\"\") FROM users WHERE id=?', (me,)).fetchone()
                 reposter_name = (reposter_row[0] if reposter_row and reposter_row[0] else wallet[:8]+'…')
                 conn.execute(
-                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (owner_uid, 'repost', reposter_name+' reposted your post', '/#post-'+post_id))
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (owner_uid, 'repost', reposter_name+' reposted your post', '/#post-'+post_id, wallet))
                 _send_push_notification(owner_uid, 'New repost', reposter_name+' reposted your post', '/#post-'+post_id)
         count = conn.execute('SELECT COUNT(*) FROM feed_reposts WHERE post_id=?', (post_id,)).fetchone()[0]
         conn.commit()
@@ -8336,8 +8344,8 @@ def toggle_feed_reaction(post_id):
                 else:
                     link = '/#post-'+post_id
                 conn.execute(
-                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (owner_uid, 'reaction', reactor_name+': reacted '+emoji+' to your post', link))
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (owner_uid, 'reaction', reactor_name+': reacted '+emoji+' to your post', link, wallet))
                 _send_push_notification(owner_uid, 'New reaction', reactor_name+' reacted '+emoji+' to your post', link)
         conn.commit()
         counts = {row[0]: row[1] for row in conn.execute(
@@ -8449,8 +8457,8 @@ def post_feed_reply():
             replier_name = (replier_row[0] if replier_row and replier_row[0] else wallet[:8]+'…')
             preview = message[:60] + ('…' if len(message) > 60 else '')
             conn.execute(
-                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                (owner_uid, 'reply', replier_name+': replied to your post — '+preview, '/#post-'+post_id))
+                'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                (owner_uid, 'reply', replier_name+': replied to your post — '+preview, '/#post-'+post_id, wallet))
             conn.commit()
             _send_push_notification(owner_uid, 'New reply', replier_name+' replied to your post', '/#post-'+post_id)
         reply_id = cur.lastrowid
@@ -8546,8 +8554,8 @@ def toggle_feed_reply_like(reply_id):
                 liker_name = (liker_row[0] if liker_row and liker_row[0] else wallet[:8]+'…')
                 reply_link = '/#post-'+owner_row[1]
                 conn.execute(
-                    'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                    (owner_row[0], 'reply_like', liker_name+': liked your reply', reply_link))
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (owner_row[0], 'reply_like', liker_name+': liked your reply', reply_link, wallet))
                 conn.commit()
                 _send_push_notification(owner_row[0], 'New like', liker_name+' liked your reply', reply_link)
         count = conn.execute(
@@ -9194,8 +9202,8 @@ def follow_toggle_by_wallet():
             following = True
             follower_name = me_username or (me_wallet[:4] + '...' + me_wallet[-4:])
             c.execute(
-                'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-                (target_id, 'follow', follower_name + ' started following you.', '/profile/' + me_wallet))
+                'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                (target_id, 'follow', follower_name + ' started following you.', '/profile/' + me_wallet, me_wallet))
             _send_push_notification(target_id, 'New follower', follower_name + ' started following you', '/profile/' + me_wallet)
         c.execute('SELECT COUNT(*) FROM follows WHERE following_id=?', (target_id,))
         follower_count = (c.fetchone() or [0])[0]
@@ -10518,8 +10526,8 @@ def send_dm(peer_id):
         else:
             preview = text[:60] + ('…' if len(text) > 60 else '')
         conn.execute(
-            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-            (peer_id, 'message', sender_name + ': ' + preview, '/messages/' + wallet)
+            'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+            (peer_id, 'message', sender_name + ': ' + preview, '/messages/' + wallet, wallet)
         )
         _send_push_notification(peer_id, sender_name, preview, '/messages/' + wallet)
         conn.commit()
@@ -10619,7 +10627,7 @@ def support_send_message():
     finally:
         conn.close()
     preview = text[:60] + ('…' if len(text) > 60 else '')
-    _notify_staff('New support message', sender_name + ': ' + preview, '/admin#support')
+    _notify_staff('New support message', sender_name + ': ' + preview, '/admin#support', actor_wallet=wallet)
     return jsonify({'ok': True, 'thread_id': thread_id, 'created_at': now,
                     'reopened': prev_status == 'resolved'})
 
@@ -10715,8 +10723,8 @@ def admin_support_reply(thread_id):
     conn2 = sqlite3.connect(DB_FILE)
     try:
         conn2.execute(
-            'INSERT INTO notifications (user_id, type, content, link) VALUES (?,?,?,?)',
-            (target_user_id, 'message', 'Support: ' + preview, '/?support=1')
+            'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+            (target_user_id, 'message', 'Support: ' + preview, '/?support=1', wallet)
         )
         conn2.commit()
     finally:
