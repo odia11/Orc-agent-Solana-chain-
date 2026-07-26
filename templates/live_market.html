@@ -83,24 +83,23 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
 
-/* featured/promoted row — union with the regular table, not a separate widget */
-.lm-row-featured{
+/* featured banner — carousel of promoted tokens above the table, restored
+   from the pre-8fa5796 header widget (efb137f), now styled to match the
+   gradient/glow treatment instead of the old flat tint */
+.lm-featured-banner{
+  margin:16px 16px 0;height:44px;border-radius:12px;overflow:hidden;flex-shrink:0;
   background:linear-gradient(to right, rgba(247,185,85,.12), rgba(247,185,85,.03));
   border:1.5px solid rgba(247,185,85,.35);
   box-shadow:0 0 12px rgba(247,185,85,.25);
 }
-.lm-row-featured:hover{
-  background:linear-gradient(to right, rgba(247,185,85,.16), rgba(247,185,85,.05));
-}
-.lm-row-featured .lm-tok-name{
-  color:var(--accent);
-}
-.lm-row-featured .lm-tok-logo,
-.lm-row-featured .lm-tok-logo-ph{
-  width:44px;height:44px;
-}
-.lm-featured-star{color:var(--accent)!important;font-size:14px}
-.lm-featured-tag{font-size:8px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:2px 5px;flex-shrink:0}
+.lm-featured-slide{height:100%;display:flex;align-items:center;gap:10px;padding:0 16px;cursor:pointer;white-space:nowrap;overflow:hidden}
+.lm-featured-label{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:2px 6px;flex-shrink:0}
+.lm-featured-name{font-size:13px;font-weight:700;color:var(--accent);overflow:hidden;text-overflow:ellipsis}
+.lm-featured-sym{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+.lm-featured-price{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace;flex-shrink:0;color:var(--text);margin-left:auto}
+.lm-featured-mcap{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
+@keyframes lmFeaturedSlideIn{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
+.lm-featured-slide.lm-slide-anim{animation:lmFeaturedSlideIn .35s ease}
 
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
@@ -227,6 +226,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   .mobile-back-bar{height:52px}
   .lm-chips-row{top:52px}
   .lm-table-wrap{margin:8px}
+  .lm-featured-banner{margin:8px 8px 0}
   .col-hide{display:none!important}
   .lm-scanning-pill .lm-scan-label{display:none}
 
@@ -389,6 +389,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <span class="lm-chip-search-icon">⌕</span>
     <input class="lm-chip-search" id="lm-chip-search" type="text" placeholder="Filter loaded tokens…" autocomplete="off" oninput="_lmChipSearchDebounce(this.value)">
   </div>
+</div>
+
+<div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
+  <div class="lm-featured-slide" id="lm-featured-slide"></div>
 </div>
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
@@ -611,8 +615,6 @@ function _dedupeByAddress(pairs, iconMap){
    header. Independent of which chip/tab is active: fetched once at page
    load, not tied to the Trending fetch like before. */
 var _featuredPairs   = [];
-var _lmFeaturedIdx   = 0;
-var _lmFeaturedTimer = null;
 
 async function _fetchFeaturedMarket(){
   var fr = await fetch('/api/promote/featured?placement=market');
@@ -626,67 +628,57 @@ async function _fetchFeaturedMarket(){
   return pairs.map(function(p){ return Object.assign({}, p, {isFeatured:true}); });
 }
 
-function _lmStartFeaturedRotation(){
-  if(_lmFeaturedTimer){ clearInterval(_lmFeaturedTimer); _lmFeaturedTimer = null; }
-  if(_featuredPairs.length > 1){
-    _lmFeaturedTimer = setInterval(function(){
-      _lmFeaturedIdx = (_lmFeaturedIdx + 1) % _featuredPairs.length;
-      _lmApplyChipFilter(); // re-render so the featured row picks up the next promotion
+/* featured banner — carousel above the table, restored from the
+   pre-8fa5796 header widget (efb137f). Own rotation timer/index, reads
+   from the same _featuredPairs fetched once in _lmInitFeatured. */
+var _lmFeaturedBannerTimer = null;
+var _lmFeaturedBannerIdx   = 0;
+
+function _lmRenderFeaturedBanner(featuredPairs){
+  var el    = document.getElementById('lm-featured-banner');
+  var slide = document.getElementById('lm-featured-slide');
+  if(!el || !slide) return;
+  if(_lmFeaturedBannerTimer){ clearInterval(_lmFeaturedBannerTimer); _lmFeaturedBannerTimer = null; }
+  if(!featuredPairs || !featuredPairs.length){
+    el.style.display = 'none';
+    return;
+  }
+  _lmFeaturedBannerIdx = 0;
+  el.style.display = '';
+
+  function renderSlide(){
+    var p     = featuredPairs[_lmFeaturedBannerIdx % featuredPairs.length];
+    var sym   = (p.baseToken&&p.baseToken.symbol)||'?';
+    var name  = (p.baseToken&&p.baseToken.name)||sym;
+    var addr  = (p.baseToken&&p.baseToken.address)||'';
+    var price = _fmtPrice(p.priceUsd);
+    var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
+    var priceStyle = chg24==null ? '' : ' style="color:'+(chg24>=0?'var(--green)':'var(--red)')+'"';
+    slide.innerHTML = '<span class="lm-featured-label">Featured</span>'
+      +'<span class="lm-featured-name">'+_esc(name)+'</span>'
+      +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>'
+      +'<span class="lm-featured-price"'+priceStyle+'>'+price+'</span>'
+      +'<span class="lm-featured-mcap">'+mcap+'</span>';
+    slide.onclick = function(){ showTokenCard(sym, addr); };
+    slide.classList.remove('lm-slide-anim');
+    void slide.offsetWidth; // force reflow so the enter animation restarts on every slide change
+    slide.classList.add('lm-slide-anim');
+  }
+  renderSlide();
+
+  if(featuredPairs.length > 1){
+    _lmFeaturedBannerTimer = setInterval(function(){
+      _lmFeaturedBannerIdx = (_lmFeaturedBannerIdx + 1) % featuredPairs.length;
+      renderSlide();
     }, 10000);
   }
 }
 
 async function _lmInitFeatured(){
   _featuredPairs = await _fetchFeaturedMarket().catch(function(){ return []; });
-  _lmFeaturedIdx = 0;
-  _lmStartFeaturedRotation();
-  _lmApplyChipFilter(); // reflect the featured row as soon as it's known, don't wait for the next table refresh
+  _lmRenderFeaturedBanner(_featuredPairs);
 }
-
-/* Same 8-column shape as a regular row (built independently of _rowHtml
-   rather than post-processing its output) so it lines up visually, with a
-   FEATURED tag + star instead of a rank number. idx -1 keeps the inline
-   buy/sell dropdown (_openBuyDrop) working without colliding with any real
-   row's index. */
-function _lmFeaturedRow(p){
-  var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
-  var name = (p.baseToken&&p.baseToken.name)||sym;
-  var addr = (p.baseToken&&p.baseToken.address)||'';
-  var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
-
-  var logo = imgUrl
-    ? '<img class="lm-tok-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
-      +'<div class="lm-tok-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
-    : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
-
-  var price = _fmtPrice(p.priceUsd);
-  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
-  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
-  var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
-
-  return '<tr id="lm-row--1" class="lm-row lm-row-featured" data-idx="-1" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
-    +'<td class="lm-rank-cell lm-featured-star" title="Featured">★</td>'
-    +'<td class="lm-tok-td">'
-      +'<div class="lm-tok-cell">'
-        +'<span class="lm-featured-tag">FEATURED</span>'
-        +logo
-        +'<div>'
-          +'<div class="lm-tok-name">'+_esc(name)+'</div>'
-          +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
-        +'</div>'
-      +'</div>'
-    +'</td>'
-    +'<td class="lm-price-cell">'+price+'</td>'
-    +_chgCell(chg24,'td-chg24')
-    +'<td class="col-hide">'+vol+'</td>'
-    +'<td class="col-hide">'+mcap+'</td>'
-    +'<td class="col-hide">'+_sparkline(p)+'</td>'
-    +'<td class="td-act">'
-      +'<button class="lm-btn-trade" data-action="trade" data-idx="-1" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>'
-    +'</td>'
-    +'</tr>';
-}
-
 
 /* thead — 8 columns */
 var _THEAD = '<thead><tr>'
@@ -788,14 +780,11 @@ function _lmApplyChipFilter(){
   var sorted   = _lmSortedPairs();
   var filtered = _lmChipQuery ? sorted.filter(function(p){ return _lmChipMatchesQuery(p,_lmChipQuery); }) : sorted;
   var wrap = document.getElementById('lm-table-wrap');
-  var featuredPair = _featuredPairs.length ? _featuredPairs[_lmFeaturedIdx % _featuredPairs.length] : null;
-  var showFeatured = featuredPair && (!_lmChipQuery || _lmChipMatchesQuery(featuredPair, _lmChipQuery));
-  var featuredRowHtml = showFeatured ? _lmFeaturedRow(featuredPair) : '';
   if(!filtered.length){
-    wrap.innerHTML = _buildTable(featuredRowHtml + '<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
+    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
-  wrap.innerHTML = _buildTable(featuredRowHtml + filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  wrap.innerHTML = _buildTable(filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 function _chgCell(v, extra){
