@@ -601,7 +601,7 @@ function _lmBindTableEvents(wrap){
       return;
     }
     var row = event.target.closest('.lm-row');
-    if(row) _rowClick(event, row.dataset.sym);
+    if(row) _rowClick(event, row.dataset.sym, row.dataset.addr);
   });
 }
 function _renderTable(pairs){
@@ -740,9 +740,9 @@ function _rowHtml(p, idx){
     +'</tr>';
 }
 
-function _rowClick(e, sym){
+function _rowClick(e, sym, addr){
   if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
-  showTokenCard(sym);
+  showTokenCard(sym, addr);
 }
 
 /* ── inline trade dropdown ── */
@@ -859,6 +859,7 @@ var _lmtdSolBalance = 0;
 var _lmtdChart      = null;
 var _lmtdSeries     = null;
 var _lmtdVolSeries  = null;
+var _lmtdChartPromise = null; // in-flight/consumed /api/chart/ fetch, started in parallel with the pair-search
 var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
 
 function _lmtdFetchBalance(){
@@ -867,7 +868,17 @@ function _lmtdFetchBalance(){
   }).catch(function(){});
 }
 
-async function showTokenCard(symbol){
+/* Raw chart-data fetch only — no DOM/chart-instance interaction, so it's
+   safe to kick off before the chart container even exists (i.e. in parallel
+   with the DexScreener pair-search below). Independent try/catch from that
+   search: a failure here never blocks or breaks the pair-search, and vice
+   versa (see _lmtdRenderChartData). */
+async function _lmtdFetchChartData(addr, tf){
+  var tfParam = _LMTD_TF_MAP[tf] || '5m';
+  return await fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam).then(function(x){return x.json();}).catch(function(){return null;});
+}
+
+async function showTokenCard(symbol, knownAddr){
   var modal = document.getElementById('lm-token-modal');
   var body  = document.getElementById('lm-modal-body');
   modal.style.display = 'flex';
@@ -875,6 +886,10 @@ async function showTokenCard(symbol){
   _lmtdTf     = '5m';
   _lmtdSide   = 'buy';
   _lmtdFetchBalance();
+  // The mint address is already known from the table row at click time —
+  // start the chart fetch right away, in parallel with the pair-search
+  // below, instead of waiting for that search to resolve it first.
+  _lmtdChartPromise = knownAddr ? _lmtdFetchChartData(knownAddr, _lmtdTf) : null;
   body.innerHTML = '<div style="text-align:center;padding:60px 0">'
     +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
     +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
@@ -889,6 +904,12 @@ async function showTokenCard(symbol){
     }
     _lmtdPair   = p;
     _lmtdSymbol = (p.baseToken&&p.baseToken.symbol)||symbol;
+    // No pre-known address (e.g. opened via ?token= URL param, not a row
+    // click) — fall back to starting the chart fetch only now.
+    if(!_lmtdChartPromise){
+      var addr = (p.baseToken&&p.baseToken.address)||'';
+      _lmtdChartPromise = addr ? _lmtdFetchChartData(addr, _lmtdTf) : null;
+    }
     _lmtdRenderModal();
   }catch(e){
     body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
@@ -960,7 +981,12 @@ function _lmtdRenderModal(){
   }
   body.innerHTML = bodyHtml;
   _lmtdInitChart();
-  _lmtdLoadChartData();
+  if(_lmtdChartPromise){
+    _lmtdRenderChartData(_lmtdChartPromise);
+    _lmtdChartPromise = null; // consumed — a later tf switch starts its own fresh fetch
+  } else {
+    _lmtdLoadChartData();
+  }
   if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
 }
 
@@ -1100,13 +1126,15 @@ function _lmtdInitChart(){
   }).observe(container);
 }
 
-async function _lmtdLoadChartData(){
+/* Awaits a chart-data promise (already in flight — started in parallel with
+   the pair-search — or freshly created) and renders it into the existing
+   chart instance. Fully independent of the pair-search path: a failure here
+   only ever affects the chart's own loading/unavailable state. */
+async function _lmtdRenderChartData(dataPromise){
   var loadEl = document.getElementById('lmtd-chart-loading');
-  var addr   = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
   if(loadEl){ loadEl.textContent='Loading chart…'; loadEl.style.display='flex'; }
-  if(!addr || !_lmtdChart) return;
-  var tfParam = _LMTD_TF_MAP[_lmtdTf] || '5m';
-  var r = await fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam).then(function(x){return x.json();}).catch(function(){return null;});
+  if(!_lmtdChart) return;
+  var r = await dataPromise;
   if(r && r.candles && r.candles.length){
     try{
       _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
@@ -1121,6 +1149,14 @@ async function _lmtdLoadChartData(){
     loadEl.textContent = 'Chart unavailable for this token';
     loadEl.style.display = 'flex';
   }
+}
+
+/* Timeframe switch (and any other reload with no pre-started promise to
+   consume) — nothing to parallelize here, so it just fetches then renders. */
+function _lmtdLoadChartData(){
+  var addr = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
+  if(!addr || !_lmtdChart) return;
+  _lmtdRenderChartData(_lmtdFetchChartData(addr, _lmtdTf));
 }
 
 /* ── toast ── */
