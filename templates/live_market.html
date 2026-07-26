@@ -64,6 +64,18 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tab:hover{color:var(--text);border-color:var(--bg3)}
 .lm-tab.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
 
+/* filter chips + client-side search (reuses already-fetched _pairs) */
+.lm-chips-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px 12px;flex-wrap:wrap}
+.lm-chips{display:flex;gap:6px;flex-wrap:wrap}
+.lm-chip{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:20px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
+.lm-chip:hover{color:var(--text);border-color:var(--bg3)}
+.lm-chip.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+.lm-chip-search-wrap{position:relative;flex:1;max-width:220px;min-width:140px}
+.lm-chip-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:7px 12px 7px 30px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.lm-chip-search:focus{border-color:var(--accent)}
+.lm-chip-search::placeholder{color:var(--muted)}
+.lm-chip-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
+
 /* table wrapper */
 .lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:hidden;margin:16px}
 .lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
@@ -309,6 +321,19 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   <button class="lm-tab"        id="tab-watchlist" onclick="_setTab('watchlist')">★ Watchlist</button>
 </div>
 
+<div class="lm-chips-row">
+  <div class="lm-chips" id="lm-chips">
+    <button class="lm-chip active" id="chip-trending" onclick="_lmSetChip('trending')">Trending</button>
+    <button class="lm-chip"        id="chip-gainers"  onclick="_lmSetChip('gainers')">Gainers</button>
+    <button class="lm-chip"        id="chip-new"      onclick="_lmSetChip('new')">New</button>
+    <button class="lm-chip"        id="chip-volume"   onclick="_lmSetChip('volume')">Volume</button>
+  </div>
+  <div class="lm-chip-search-wrap">
+    <span class="lm-chip-search-icon">⌕</span>
+    <input class="lm-chip-search" id="lm-chip-search" type="text" placeholder="Filter loaded tokens…" autocomplete="off" oninput="_lmChipSearchDebounce(this.value)">
+  </div>
+</div>
+
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
 
 <!-- token detail modal -->
@@ -369,9 +394,15 @@ function _setTab(tab){
   _activeTab = tab;
   document.getElementById('lm-search').value = '';
   document.getElementById('lm-search2').value = '';
+  document.getElementById('lm-chip-search').value = '';
   _lm2LocalResults = [];
   _lm2RemoteResults = [];
   _lm2LastQuery = '';
+  _lmChipFilter = 'trending';
+  _lmChipQuery  = '';
+  ['trending','gainers','new','volume'].forEach(function(c){
+    document.getElementById('chip-'+c).classList.toggle('active', c==='trending');
+  });
   ['trending','new','gainers','losers','watchlist'].forEach(function(t){
     document.getElementById('tab-'+t).classList.toggle('active', t===tab);
   });
@@ -677,13 +708,76 @@ function _renderTable(pairs){
   _pairs = pairs;
   var subtitle = document.getElementById('lm-header-subtitle');
   if(subtitle) subtitle.textContent = 'Scanner running · '+pairs.length+' tokens tracked · refreshes every 15s';
+  _lmBindTableEvents(document.getElementById('lm-table-wrap'));
+  _lmApplyChipFilter();
+}
+
+/* ── filter chips + client-side search ──
+   Re-sorts/filters the already-fetched _pairs array in place, client-side,
+   no new fetch. Composes with whichever tab is active: switching tabs
+   resets the chip back to 'trending' (see _setTab). Rank (#) is recomputed
+   from the filtered/sorted array's own index, not the original _pairs
+   index — reuses _rowHtml/_sparkline unchanged. */
+var _lmChipFilter = 'trending';
+var _lmChipQuery  = '';
+var _lmChipTimer  = null;
+
+function _lmSetChip(chip){
+  _lmChipFilter = chip;
+  ['trending','gainers','new','volume'].forEach(function(c){
+    document.getElementById('chip-'+c).classList.toggle('active', c===chip);
+  });
+  _lmApplyChipFilter();
+}
+
+function _lmChipSearchDebounce(q){
+  clearTimeout(_lmChipTimer);
+  _lmChipTimer = setTimeout(function(){
+    _lmChipQuery = q.trim().toLowerCase();
+    _lmApplyChipFilter();
+  }, 300);
+}
+
+function _lmSortedPairs(){
+  var arr = _pairs.slice();
+  if(_lmChipFilter==='gainers'){
+    arr.sort(function(a,b){
+      var av = (a.priceChange&&a.priceChange.h24!=null) ? a.priceChange.h24 : -Infinity;
+      var bv = (b.priceChange&&b.priceChange.h24!=null) ? b.priceChange.h24 : -Infinity;
+      return bv-av;
+    });
+  } else if(_lmChipFilter==='new'){
+    arr.sort(function(a,b){
+      var av = a.pairCreatedAt || -Infinity;
+      var bv = b.pairCreatedAt || -Infinity;
+      return bv-av;
+    });
+  } else if(_lmChipFilter==='volume'){
+    arr.sort(function(a,b){
+      var av = (a.volume&&a.volume.h24!=null) ? a.volume.h24 : 0;
+      var bv = (b.volume&&b.volume.h24!=null) ? b.volume.h24 : 0;
+      return bv-av;
+    });
+  }
+  /* 'trending' — leave in the order the active tab already fetched it */
+  return arr;
+}
+
+function _lmChipMatchesQuery(p, q){
+  var sym  = ((p.baseToken&&p.baseToken.symbol)||'').toLowerCase();
+  var name = ((p.baseToken&&p.baseToken.name)||'').toLowerCase();
+  return sym.indexOf(q)>=0 || name.indexOf(q)>=0;
+}
+
+function _lmApplyChipFilter(){
+  var sorted   = _lmSortedPairs();
+  var filtered = _lmChipQuery ? sorted.filter(function(p){ return _lmChipMatchesQuery(p,_lmChipQuery); }) : sorted;
   var wrap = document.getElementById('lm-table-wrap');
-  _lmBindTableEvents(wrap);
-  if(!pairs.length){
+  if(!filtered.length){
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
-  wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  wrap.innerHTML = _buildTable(filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 function _chgCell(v, extra){
