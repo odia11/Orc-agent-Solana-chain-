@@ -8881,7 +8881,7 @@ def api_me():
     username   = row[1] if row else None
     avatar_url = row[2] if row else None
     us      = get_user_state(wallet)
-    balance = us.get('balance', 0.0)
+    balance = us.get('sol', 0.0)
     return jsonify({
         'ok':       True,
         'user_id':  user_id,
