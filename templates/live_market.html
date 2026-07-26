@@ -258,10 +258,18 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     font-family:'JetBrains Mono',monospace;
   }
 
-  /* RANK cell — its own narrow slot */
-  .lm-rank-cell{
+  /* RANK cell — its own narrow slot.
+     Selector raised to .lm-table tbody td.lm-rank-cell (specificity 0,2,2)
+     to tie — and win via later source order — against the desktop-only
+     .lm-table tbody td:first-child rule (line 66, same 0,2,2), whose
+     padding-left:16px was otherwise leaking into this mobile grid cell
+     and consuming the entire 14-20px column width. */
+  .lm-table tbody td.lm-rank-cell{
     text-align:center;
-    padding:8px 0;
+    padding-top:8px;
+    padding-bottom:8px;
+    padding-left:0;
+    padding-right:4px;
     color:var(--muted);
     font-weight:600;
     font-size:11px;
