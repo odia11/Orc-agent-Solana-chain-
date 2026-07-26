@@ -21,7 +21,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 /* header */
 .lm-header{position:sticky;top:0;z-index:30;background:var(--bg);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bg3)}
-.lm-header-title{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;display:flex;align-items:center;gap:6px;flex-shrink:0}
+.lm-header-title-wrap{display:flex;flex-direction:column;gap:1px;flex-shrink:0}
+.lm-header-title{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;display:flex;align-items:center;gap:6px}
+.lm-header-subtitle{font-size:10px;color:var(--muted);white-space:nowrap;font-family:'JetBrains Mono',monospace}
 .lm-search-wrap{position:relative;flex:1;max-width:280px}
 .lm-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:7px 12px 7px 32px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
 .lm-search:focus{border-color:var(--bg4)}
@@ -67,17 +69,23 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
 
 /* table */
-.lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:680px}
+.lm-table{width:100%;border-collapse:collapse;table-layout:auto;min-width:840px}
 .lm-table thead th{padding:12px 14px;font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.08em;border-bottom:1px solid var(--bg3);white-space:nowrap;text-align:right;background:var(--bg2)}
-.lm-table thead th:first-child{text-align:left;padding-left:16px}
+.lm-table thead th:first-child{text-align:center;padding-left:16px;width:36px}
 .lm-table thead th.th-act{text-align:center}
 .lm-table tbody tr{border-bottom:1px solid var(--bg3);transition:background .15s;cursor:pointer}
 .lm-table tbody tr:last-child{border-bottom:none}
 .lm-table tbody tr:hover{background:#14171c}
 .lm-table tbody td{padding:0 14px;height:60px;font-size:13px;white-space:nowrap;text-align:right;vertical-align:middle;color:var(--muted)}
-.lm-table tbody td:first-child{text-align:left;padding-left:16px}
+.lm-table tbody td:first-child{text-align:center;padding-left:16px}
+.lm-table thead th.th-tok,
+.lm-table tbody td.lm-tok-td{text-align:left;padding-left:8px}
 .lm-price-cell{color:var(--text);font-weight:700}
 .td-act{text-align:center}
+
+/* sparkline (LAST 24H column) */
+.lm-sparkline{display:flex;align-items:flex-end;justify-content:flex-end;gap:2px;height:28px}
+.lm-spark-bar{width:5px;min-height:2px;border-radius:2px}
 
 /* token cell */
 .lm-tok-cell{display:flex;align-items:center;gap:10px}
@@ -165,7 +173,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   .lm-table tbody{display:block}
   .lm-table tbody tr{
     display:grid;
-    grid-template-columns:48px 1fr 90px 70px 80px;
+    grid-template-columns:20px 48px 1fr 90px 70px 80px;
     align-items:center;
     min-height:56px;
     border-bottom:1px solid var(--bg3);
@@ -186,8 +194,17 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     font-family:'JetBrains Mono',monospace;
   }
 
+  /* RANK cell — its own narrow slot */
+  .lm-rank-cell{
+    text-align:center;
+    padding:8px 0;
+    color:var(--muted);
+    font-weight:600;
+    font-size:11px;
+  }
+
   /* TOKEN cell spans logo column (48px) + name column (1fr) */
-  .lm-table tbody td:first-child{
+  .lm-table tbody td.lm-tok-td{
     grid-column:span 2;
     text-align:left;
     padding-left:2px;
@@ -195,7 +212,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     font-family:inherit;
   }
 
-  /* Status rows and dropdown rows span all 5 columns */
+  /* Status rows and dropdown rows span all 6 columns */
   .lm-table tbody tr.lm-status-row td:first-child,
   .lm-table tbody tr.lm-drop-row td:first-child{
     grid-column:1 / -1;
@@ -258,7 +275,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 <header class="lm-header">
   <a class="lm-back" href="/">← Back</a>
-  <div class="lm-header-title">Live Market</div>
+  <div class="lm-header-title-wrap">
+    <div class="lm-header-title">Live Market</div>
+    <div class="lm-header-subtitle" id="lm-header-subtitle">Scanner running · 0 tokens tracked · refreshes every 15s</div>
+  </div>
   <div class="lm-scanning-pill">
     <span class="lm-scan-dot"></span>
     <span class="lm-scan-label">SCANNING</span>
@@ -597,7 +617,7 @@ function _lm2Render(){
   var merged = _dedupeByAddress(_lm2LocalResults.concat(_lm2RemoteResults), {});
   if(!merged.length){
     document.getElementById('lm-table-wrap').innerHTML =
-      _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found for "'+_esc(_lm2LastQuery)+'"</td></tr>');
+      _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found for "'+_esc(_lm2LastQuery)+'"</td></tr>');
     return;
   }
   _renderTable(merged);
@@ -614,20 +634,15 @@ async function _lm2RemoteSearch(q){
   }catch(e){ /* keep whatever local matches are already shown */ }
 }
 
-/* thead — 13 columns */
+/* thead — 8 columns */
 var _THEAD = '<thead><tr>'
-  +'<th>TOKEN</th>'
-  +'<th class="col-hide">MCAP</th>'
+  +'<th class="th-rank">#</th>'
+  +'<th class="th-tok">TOKEN</th>'
   +'<th class="th-price">PRICE</th>'
-  +'<th class="col-hide">AGE</th>'
-  +'<th class="col-hide">TXNS</th>'
+  +'<th class="th-chg24">24H</th>'
   +'<th class="col-hide">VOLUME</th>'
-  +'<th class="col-hide">TRADERS</th>'
-  +'<th class="col-hide">5M</th>'
-  +'<th class="col-hide">1H</th>'
-  +'<th class="col-hide">6H</th>'
-  +'<th class="th-chg24">24H%</th>'
-  +'<th class="col-hide">LIQUIDITY</th>'
+  +'<th class="col-hide">MARKET CAP</th>'
+  +'<th class="col-hide">LAST 24H</th>'
   +'<th class="th-act">TRADE</th>'
   +'</tr></thead>';
 
@@ -660,10 +675,12 @@ function _lmBindTableEvents(wrap){
 function _renderTable(pairs){
   _closeBuyDrop();
   _pairs = pairs;
+  var subtitle = document.getElementById('lm-header-subtitle');
+  if(subtitle) subtitle.textContent = 'Scanner running · '+pairs.length+' tokens tracked · refreshes every 15s';
   var wrap = document.getElementById('lm-table-wrap');
   _lmBindTableEvents(wrap);
   if(!pairs.length){
-    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="13">No tokens found</td></tr>');
+    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
   wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
@@ -674,6 +691,27 @@ function _chgCell(v, extra){
   if(v==null) return '<td class="chg-fl'+x+'">—</td>';
   var s=(v>=0?'+':'')+v.toFixed(2)+'%';
   return '<td class="'+(v>=0?'chg-up':'chg-dn')+x+'">'+s+'</td>';
+}
+
+/* 4-point mini-bar sparkline from the 5m/1h/6h/24h change datapoints
+   already returned per pair — colored by 24h direction, bar height by
+   each point's magnitude relative to the largest of the four. */
+function _sparkline(p){
+  var pc = p.priceChange||{};
+  var vals = [
+    pc.m5 !=null?pc.m5 :0,
+    pc.h1 !=null?pc.h1 :0,
+    pc.h6 !=null?pc.h6 :0,
+    pc.h24!=null?pc.h24:0
+  ];
+  var h24   = pc.h24!=null?pc.h24:0;
+  var color = h24>=0 ? '#3ad29b' : '#ff4d6a';
+  var maxAbs = Math.max.apply(null, vals.map(Math.abs)) || 1;
+  var bars = vals.map(function(v){
+    var pct = Math.max(10, Math.round(Math.abs(v)/maxAbs*100));
+    return '<div class="lm-spark-bar" style="height:'+pct+'%;background:'+color+'"></div>';
+  }).join('');
+  return '<div class="lm-sparkline">'+bars+'</div>';
 }
 
 function _rowHtml(p, idx){
@@ -687,16 +725,14 @@ function _rowHtml(p, idx){
       +'<div class="lm-tok-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
     : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
 
-  var price   = _fmtPrice(p.priceUsd);
-  var mcap    = _fmtNum(p.marketCap || p.fdv || null);
-  var vol     = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
-  var liq     = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
-  var txns    = p.txns&&p.txns.h24 ? (p.txns.h24.buys+p.txns.h24.sells).toLocaleString() : '—';
-  var traders = p.txns&&p.txns.h24&&p.txns.h24.buyers!=null ? p.txns.h24.buyers.toLocaleString() : '—';
-  var age     = _fmtAge(p.pairCreatedAt);
+  var price = _fmtPrice(p.priceUsd);
+  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+  var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
 
   return '<tr id="lm-row-'+idx+'" class="lm-row" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
-    +'<td>'
+    +'<td class="lm-rank-cell">'+(idx+1)+'</td>'
+    +'<td class="lm-tok-td">'
       +'<div class="lm-tok-cell">'
         +'<button class="lm-watch-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
         +logo
@@ -706,17 +742,11 @@ function _rowHtml(p, idx){
         +'</div>'
       +'</div>'
     +'</td>'
-    +'<td class="col-hide">'+mcap+'</td>'
     +'<td class="lm-price-cell">'+price+'</td>'
-    +'<td class="col-hide">'+age+'</td>'
-    +'<td class="col-hide">'+txns+'</td>'
+    +_chgCell(chg24,'td-chg24')
     +'<td class="col-hide">'+vol+'</td>'
-    +'<td class="col-hide">'+traders+'</td>'
-    +_chgCell(p.priceChange&&p.priceChange.m5 !=null?p.priceChange.m5 :null,'col-hide')
-    +_chgCell(p.priceChange&&p.priceChange.h1 !=null?p.priceChange.h1 :null,'col-hide')
-    +_chgCell(p.priceChange&&p.priceChange.h6 !=null?p.priceChange.h6 :null,'col-hide')
-    +_chgCell(p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null,'td-chg24')
-    +'<td class="col-hide">'+liq+'</td>'
+    +'<td class="col-hide">'+mcap+'</td>'
+    +'<td class="col-hide">'+_sparkline(p)+'</td>'
     +'<td class="td-act">'
       +'<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>'
     +'</td>'
@@ -744,7 +774,7 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
   var tr = document.createElement('tr');
   tr.id = 'lm-drop-'+idx;
   tr.className = 'lm-drop-row';
-  tr.innerHTML = '<td colspan="13">'
+  tr.innerHTML = '<td colspan="8">'
     +'<div class="lm-drop-inner">'
       +'<span class="lm-drop-label">Trade <strong style="color:#f7b955">$'+_esc(sym)+'</strong></span>'
       +'<span class="lm-drop-label">SOL:</span>'
@@ -983,11 +1013,11 @@ function _esc(s){
 }
 function _setLoading(){
   document.getElementById('lm-table-wrap').innerHTML =
-    _buildTable('<tr class="lm-status-row"><td colspan="13"><span class="lm-spinner-ring"></span>Loading…</td></tr>');
+    _buildTable('<tr class="lm-status-row"><td colspan="8"><span class="lm-spinner-ring"></span>Loading…</td></tr>');
 }
 function _setError(msg){
   document.getElementById('lm-table-wrap').innerHTML =
-    _buildTable('<tr class="lm-status-row"><td colspan="13" style="color:#ff4d6a">'+msg+'</td></tr>');
+    _buildTable('<tr class="lm-status-row"><td colspan="8" style="color:#ff4d6a">'+msg+'</td></tr>');
 }
 
 /* ── auth headers ── */
