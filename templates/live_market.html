@@ -168,6 +168,16 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lmtd-tf-btn:hover{color:var(--text)}
 .lmtd-tf-btn.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
 
+/* mint-adres regel — volle breedte, tussen tf-tabs en chart; onderdeel van
+   de gedeelde headerHtml (zie _lmtdRenderModal) dus automatisch in zowel
+   Focus als Terminal, geen aparte header-flexrij-ruimte nodig */
+.lmtd-mint-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 20px 14px;padding:8px 12px;background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;font-size:10px;color:var(--muted)}
+.lmtd-mint-label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;font-weight:600;color:var(--muted)}
+.lmtd-mint-addr{font-family:'JetBrains Mono',monospace;letter-spacing:.04em;font-size:11px;color:var(--text)}
+.lmtd-mint-copy{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;padding:0;transition:color .15s;text-transform:uppercase;letter-spacing:.04em}
+.lmtd-mint-copy:hover{color:var(--accent)}
+.lmtd-mint-msg{font-size:9px;color:var(--green);min-width:56px}
+
 /* candlestick chart (LightweightCharts, real OHLC via /api/chart/<mint>) */
 .lmtd-chart-wrap{padding:0 20px}
 .lmtd-chart-container{width:100%;height:340px;position:relative;background:var(--bg3);border-radius:10px;overflow:hidden}
@@ -1126,7 +1136,15 @@ function _lmtdRenderModal(){
       +'<div class="lmtd-hero-price">'+price+'</div>'
       +'<div class="lmtd-hero-chg" style="color:'+chgColor+'">'+chgStr+' (24h)</div>'
     +'</div>'
-    +'<div class="lmtd-tf-tabs">'+tfHtml+'</div>';
+    +'<div class="lmtd-tf-tabs">'+tfHtml+'</div>'
+    +(addr ? (
+      '<div class="lmtd-mint-row">'
+        +'<span class="lmtd-mint-label">Mint</span>'
+        +'<span class="lmtd-mint-addr" id="lmtd-mint-addr" data-full="'+_esc(addr)+'">'+_esc(addr.slice(0,4)+'...'+addr.slice(-4))+'</span>'
+        +'<button class="lmtd-mint-copy" onclick="_lmtdCopyMint()">Copy</button>'
+        +'<span class="lmtd-mint-msg" id="lmtd-mint-msg"></span>'
+      +'</div>'
+    ) : '');
 
   var chartHtml = '<div class="lmtd-chart-container" id="lmtd-chart-container">'
     +'<div class="lmtd-chart-loading" id="lmtd-chart-loading">Loading chart…</div>'
@@ -1154,6 +1172,32 @@ function _lmtdRenderModal(){
     _lmtdLoadChartData();
   }
   if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
+}
+
+/* mint-adres kopiëren — zelfde clipboard+fallback-logica als
+   templates/token.html's copyMint()/_fallbackCopy(), hernoemd naar het
+   _lmtd-namespace van deze modal. Adres wordt verkort getoond
+   (data-full bevat het volledige adres om te kopiëren). */
+function _lmtdCopyMint(){
+  var el  = document.getElementById('lmtd-mint-addr');
+  var msg = document.getElementById('lmtd-mint-msg');
+  if(!el) return;
+  var addr = el.dataset.full || el.textContent;
+  var done = function(){
+    if(msg){ msg.textContent = '✓ Copied'; setTimeout(function(){ msg.textContent = ''; }, 2000); }
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(addr).then(done).catch(function(){ _lmtdFallbackCopyMint(addr); done(); });
+  } else {
+    _lmtdFallbackCopyMint(addr); done();
+  }
+}
+function _lmtdFallbackCopyMint(t){
+  var ta = document.createElement('textarea');
+  ta.value = t; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
 }
 
 /* 5-tile stat row (Focus layout): Volume 24h, Liquidity, Market Cap, Holders, Buys/Sells ratio.
