@@ -149,7 +149,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lmtd-logo{width:40px;height:40px;border-radius:12px;object-fit:cover;flex-shrink:0}
 .lmtd-logo-ph{width:40px;height:40px;border-radius:12px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lmtd-title-wrap{flex:1;min-width:0}
-.lmtd-name{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lmtd-name{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px}
+.lmtd-name-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .lmtd-chain-badge{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:rgba(58,210,155,.9);border-radius:5px;padding:2px 6px;flex-shrink:0}
 .lmtd-live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;flex-shrink:0}
 .lmtd-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite}
@@ -357,6 +358,19 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   .lmtd-stats-focus{grid-template-columns:repeat(2,1fr)}
   .lmtd-terminal{flex-direction:column}
   .lmtd-terminal-chart{flex:1 1 auto;width:100%}
+}
+
+/* Token Detail modal header — SOLANA-badge/LIVE-dot werden al vanaf 375px
+   afgekapt of onzichtbaar (gemeten tot ~428px). Badges verkort i.p.v. naam
+   volledig te tonen; naam krijgt expliciete min-width:0 zodat hij ellipsist
+   i.p.v. de badges weg te duwen (kale tekstnodes in flex krimpen anders niet
+   onder hun eigen volledige breedte). Close-button-inset verkleind zodat de
+   header-padding mee kan zonder overlap met de 44px mobiele tap-target. */
+@media(max-width:428px){
+  .lm-modal-close{top:10px;right:4px}
+  .lmtd-header{padding-right:48px}
+  .lmtd-chain-badge{max-width:30px;overflow:hidden;white-space:nowrap}
+  .lmtd-live-dot-wrap{max-width:10px;overflow:hidden}
 }
 
 /* small phones — free up the token-name column from the 767px fixed grid */
@@ -1096,7 +1110,8 @@ function _lmtdRenderModal(){
     '<div class="lmtd-header">'
       +logo
       +'<div class="lmtd-title-wrap">'
-        +'<div class="lmtd-name">'+_esc(name||sym)
+        +'<div class="lmtd-name">'
+          +'<span class="lmtd-name-text">'+_esc(name||sym)+'</span>'
           +'<span class="lmtd-chain-badge">SOLANA</span>'
           +'<span class="lmtd-live-dot-wrap"><span class="lmtd-live-dot"></span>LIVE</span>'
         +'</div>'
