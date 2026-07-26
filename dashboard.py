@@ -12954,6 +12954,7 @@ def api_market_live():
             'price_change_1h':   _f(pc.get('h1')),
             'price_change_6h':   _f(pc.get('h6')),
             'price_change_24h':  _f(pc.get('h24')),
+            'pair_created_at':   int(p.get('pairCreatedAt')) if p.get('pairCreatedAt') else None,
             'image_url':         info.get('imageUrl'),
         }
 
