@@ -51,7 +51,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-chip-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
 
 /* table wrapper */
-.lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:hidden;margin:16px}
+.lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:visible;margin:16px}
 .lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
 
 /* table */
@@ -84,8 +84,21 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* featured/promoted row — union with the regular table, not a separate widget */
-.lm-row-featured{background:rgba(247,185,85,.06)}
-.lm-row-featured:hover{background:rgba(247,185,85,.1)}
+.lm-row-featured{
+  background:linear-gradient(to right, rgba(247,185,85,.12), rgba(247,185,85,.03));
+  border:1.5px solid rgba(247,185,85,.35);
+  box-shadow:0 0 12px rgba(247,185,85,.25);
+}
+.lm-row-featured:hover{
+  background:linear-gradient(to right, rgba(247,185,85,.16), rgba(247,185,85,.05));
+}
+.lm-row-featured .lm-tok-name{
+  color:var(--accent);
+}
+.lm-row-featured .lm-tok-logo,
+.lm-row-featured .lm-tok-logo-ph{
+  width:44px;height:44px;
+}
 .lm-featured-star{color:var(--accent)!important;font-size:14px}
 .lm-featured-tag{font-size:8px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:2px 5px;flex-shrink:0}
 
