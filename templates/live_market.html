@@ -321,6 +321,25 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   .lmtd-terminal-chart{flex:1 1 auto;width:100%}
 }
 
+/* small phones — free up the token-name column from the 767px fixed grid */
+@media(max-width:400px){
+  .lm-table tbody tr{
+    grid-template-columns:14px 32px 1fr 74px 56px 64px;
+  }
+  .lm-tok-name{
+    max-width:none;
+  }
+  .lm-btn-trade{
+    width:48px;
+  }
+  .lm-price-cell{
+    font-size:11px;
+  }
+  .td-chg24{
+    font-size:11px;
+  }
+}
+
 ::-webkit-scrollbar{height:4px;width:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:4px}
