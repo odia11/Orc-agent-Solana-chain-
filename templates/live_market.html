@@ -225,6 +225,23 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   .lm-header{display:none!important}
   .mobile-back-bar{height:52px}
   .lm-chips-row{top:52px}
+  .lm-chips-row{
+    flex-wrap:nowrap;
+    flex-direction:column;
+    align-items:stretch;
+  }
+  .lm-chips{
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+  }
+  .lm-chip{
+    flex-shrink:0;
+  }
+  .lm-chip-search-wrap{
+    width:100%;
+    max-width:none;
+  }
   .lm-table-wrap{margin:8px}
   .lm-featured-banner{margin:8px 8px 0}
   .col-hide{display:none!important}
