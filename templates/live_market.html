@@ -1108,10 +1108,15 @@ async function _lmtdLoadChartData(){
   var tfParam = _LMTD_TF_MAP[_lmtdTf] || '5m';
   var r = await fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam).then(function(x){return x.json();}).catch(function(){return null;});
   if(r && r.candles && r.candles.length){
-    _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
-    _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
-    _lmtdChart.timeScale().fitContent();
-    if(loadEl) loadEl.style.display='none';
+    try{
+      _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
+      _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
+      _lmtdChart.timeScale().fitContent();
+      if(loadEl) loadEl.style.display='none';
+    }catch(e){
+      console.error('[lmtd] chart.setData failed', e);
+      if(loadEl){ loadEl.textContent='Chart unavailable for this token'; loadEl.style.display='flex'; }
+    }
   } else if(loadEl){
     loadEl.textContent = 'Chart unavailable for this token';
     loadEl.style.display = 'flex';
