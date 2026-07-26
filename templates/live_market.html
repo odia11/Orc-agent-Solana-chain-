@@ -83,6 +83,12 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
 
+/* featured/promoted row — union with the regular table, not a separate widget */
+.lm-row-featured{background:rgba(247,185,85,.06)}
+.lm-row-featured:hover{background:rgba(247,185,85,.1)}
+.lm-featured-star{color:var(--accent)!important;font-size:14px}
+.lm-featured-tag{font-size:8px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:2px 5px;flex-shrink:0}
+
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
 .chg-dn{color:var(--red);font-weight:700}
@@ -565,6 +571,90 @@ function _dedupeByAddress(pairs, iconMap){
   return out.slice(0,50);
 }
 
+/* ── featured/promoted tokens (paid placement, /api/promote/featured) ──
+   Restored from the pre-8fa5796 header widget, but placed as a marked row
+   at the top of the table (union with whatever the active chip/search
+   shows) instead of a separate floating header banner — see PROMPT.md
+   spec, which has no room for a standalone featured widget in the new
+   header. Independent of which chip/tab is active: fetched once at page
+   load, not tied to the Trending fetch like before. */
+var _featuredPairs   = [];
+var _lmFeaturedIdx   = 0;
+var _lmFeaturedTimer = null;
+
+async function _fetchFeaturedMarket(){
+  var fr = await fetch('/api/promote/featured?placement=market');
+  var fd = await fr.json();
+  var promos = (fd && fd.ok && fd.promotions) || [];
+  var mints = promos.map(function(p){ return p.token_mint; }).filter(Boolean);
+  if(!mints.length) return [];
+  var pr = await fetch('/api/dexscreener/tokens/'+mints.join(','));
+  var pd = await pr.json();
+  var pairs = _dedupeByAddress(pd.pairs||[], {});
+  return pairs.map(function(p){ return Object.assign({}, p, {isFeatured:true}); });
+}
+
+function _lmStartFeaturedRotation(){
+  if(_lmFeaturedTimer){ clearInterval(_lmFeaturedTimer); _lmFeaturedTimer = null; }
+  if(_featuredPairs.length > 1){
+    _lmFeaturedTimer = setInterval(function(){
+      _lmFeaturedIdx = (_lmFeaturedIdx + 1) % _featuredPairs.length;
+      _lmApplyChipFilter(); // re-render so the featured row picks up the next promotion
+    }, 10000);
+  }
+}
+
+async function _lmInitFeatured(){
+  _featuredPairs = await _fetchFeaturedMarket().catch(function(){ return []; });
+  _lmFeaturedIdx = 0;
+  _lmStartFeaturedRotation();
+  _lmApplyChipFilter(); // reflect the featured row as soon as it's known, don't wait for the next table refresh
+}
+
+/* Same 8-column shape as a regular row (built independently of _rowHtml
+   rather than post-processing its output) so it lines up visually, with a
+   FEATURED tag + star instead of a rank number. idx -1 keeps the inline
+   buy/sell dropdown (_openBuyDrop) working without colliding with any real
+   row's index. */
+function _lmFeaturedRow(p){
+  var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
+  var name = (p.baseToken&&p.baseToken.name)||sym;
+  var addr = (p.baseToken&&p.baseToken.address)||'';
+  var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
+
+  var logo = imgUrl
+    ? '<img class="lm-tok-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+      +'<div class="lm-tok-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
+    : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+
+  var price = _fmtPrice(p.priceUsd);
+  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+  var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
+
+  return '<tr id="lm-row--1" class="lm-row lm-row-featured" data-idx="-1" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
+    +'<td class="lm-rank-cell lm-featured-star" title="Featured">★</td>'
+    +'<td class="lm-tok-td">'
+      +'<div class="lm-tok-cell">'
+        +'<span class="lm-featured-tag">FEATURED</span>'
+        +logo
+        +'<div>'
+          +'<div class="lm-tok-name">'+_esc(name)+'</div>'
+          +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
+        +'</div>'
+      +'</div>'
+    +'</td>'
+    +'<td class="lm-price-cell">'+price+'</td>'
+    +_chgCell(chg24,'td-chg24')
+    +'<td class="col-hide">'+vol+'</td>'
+    +'<td class="col-hide">'+mcap+'</td>'
+    +'<td class="col-hide">'+_sparkline(p)+'</td>'
+    +'<td class="td-act">'
+      +'<button class="lm-btn-trade" data-action="trade" data-idx="-1" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>'
+    +'</td>'
+    +'</tr>';
+}
+
 
 /* thead — 8 columns */
 var _THEAD = '<thead><tr>'
@@ -666,11 +756,14 @@ function _lmApplyChipFilter(){
   var sorted   = _lmSortedPairs();
   var filtered = _lmChipQuery ? sorted.filter(function(p){ return _lmChipMatchesQuery(p,_lmChipQuery); }) : sorted;
   var wrap = document.getElementById('lm-table-wrap');
+  var featuredPair = _featuredPairs.length ? _featuredPairs[_lmFeaturedIdx % _featuredPairs.length] : null;
+  var showFeatured = featuredPair && (!_lmChipQuery || _lmChipMatchesQuery(featuredPair, _lmChipQuery));
+  var featuredRowHtml = showFeatured ? _lmFeaturedRow(featuredPair) : '';
   if(!filtered.length){
-    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
+    wrap.innerHTML = _buildTable(featuredRowHtml + '<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
-  wrap.innerHTML = _buildTable(filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  wrap.innerHTML = _buildTable(featuredRowHtml + filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 function _chgCell(v, extra){
@@ -860,7 +953,9 @@ var _lmtdChart      = null;
 var _lmtdSeries     = null;
 var _lmtdVolSeries  = null;
 var _lmtdChartPromise = null; // in-flight/consumed /api/chart/ fetch, started in parallel with the pair-search
+var _lmtdActiveMint = ''; // mint the modal is CURRENTLY open on — lets a late-arriving stale fetch recognize itself as stale
 var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
+var _LMTD_CHART_FETCH_TIMEOUT = 12000;
 
 function _lmtdFetchBalance(){
   fetch('/api/wallet/balance', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
@@ -872,10 +967,17 @@ function _lmtdFetchBalance(){
    safe to kick off before the chart container even exists (i.e. in parallel
    with the DexScreener pair-search below). Independent try/catch from that
    search: a failure here never blocks or breaks the pair-search, and vice
-   versa (see _lmtdRenderChartData). */
+   versa (see _lmtdRenderChartData). Races the fetch against a 12s timeout so
+   a hung request can't leave the loading state stuck forever. */
 async function _lmtdFetchChartData(addr, tf){
   var tfParam = _LMTD_TF_MAP[tf] || '5m';
-  return await fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam).then(function(x){return x.json();}).catch(function(){return null;});
+  var fetchPromise = fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam)
+    .then(function(x){return x.json();})
+    .catch(function(){return null;});
+  var timeoutPromise = new Promise(function(resolve){
+    setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
+  });
+  return await Promise.race([fetchPromise, timeoutPromise]);
 }
 
 async function showTokenCard(symbol, knownAddr){
@@ -889,6 +991,7 @@ async function showTokenCard(symbol, knownAddr){
   // The mint address is already known from the table row at click time —
   // start the chart fetch right away, in parallel with the pair-search
   // below, instead of waiting for that search to resolve it first.
+  _lmtdActiveMint = knownAddr || '';
   _lmtdChartPromise = knownAddr ? _lmtdFetchChartData(knownAddr, _lmtdTf) : null;
   body.innerHTML = '<div style="text-align:center;padding:60px 0">'
     +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
@@ -908,6 +1011,7 @@ async function showTokenCard(symbol, knownAddr){
     // click) — fall back to starting the chart fetch only now.
     if(!_lmtdChartPromise){
       var addr = (p.baseToken&&p.baseToken.address)||'';
+      _lmtdActiveMint = addr;
       _lmtdChartPromise = addr ? _lmtdFetchChartData(addr, _lmtdTf) : null;
     }
     _lmtdRenderModal();
@@ -919,6 +1023,7 @@ async function showTokenCard(symbol, knownAddr){
 function _lmtdCloseModal(){
   document.getElementById('lm-token-modal').style.display = 'none';
   if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  _lmtdActiveMint = ''; // any fetch still in flight for the closed token now reads as stale
 }
 
 function _lmtdRenderModal(){
@@ -982,7 +1087,7 @@ function _lmtdRenderModal(){
   body.innerHTML = bodyHtml;
   _lmtdInitChart();
   if(_lmtdChartPromise){
-    _lmtdRenderChartData(_lmtdChartPromise);
+    _lmtdRenderChartData(_lmtdChartPromise, _lmtdActiveMint);
     _lmtdChartPromise = null; // consumed — a later tf switch starts its own fresh fetch
   } else {
     _lmtdLoadChartData();
@@ -1129,12 +1234,17 @@ function _lmtdInitChart(){
 /* Awaits a chart-data promise (already in flight — started in parallel with
    the pair-search — or freshly created) and renders it into the existing
    chart instance. Fully independent of the pair-search path: a failure here
-   only ever affects the chart's own loading/unavailable state. */
-async function _lmtdRenderChartData(dataPromise){
+   only ever affects the chart's own loading/unavailable state.
+   forMint is the mint this fetch was started for — re-checked against
+   _lmtdActiveMint once the data lands, so a slow/stale fetch from a token
+   the user has since navigated away from (switched tokens, or closed the
+   modal) is silently dropped instead of rendering into the wrong chart. */
+async function _lmtdRenderChartData(dataPromise, forMint){
   var loadEl = document.getElementById('lmtd-chart-loading');
   if(loadEl){ loadEl.textContent='Loading chart…'; loadEl.style.display='flex'; }
   if(!_lmtdChart) return;
   var r = await dataPromise;
+  if(forMint !== _lmtdActiveMint) return; // stale — modal has moved on since this fetch started
   if(r && r.candles && r.candles.length){
     try{
       _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
@@ -1156,7 +1266,7 @@ async function _lmtdRenderChartData(dataPromise){
 function _lmtdLoadChartData(){
   var addr = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
   if(!addr || !_lmtdChart) return;
-  _lmtdRenderChartData(_lmtdFetchChartData(addr, _lmtdTf));
+  _lmtdRenderChartData(_lmtdFetchChartData(addr, _lmtdTf), addr);
 }
 
 /* ── toast ── */
@@ -1235,6 +1345,7 @@ var _lmClientSecret = (document.querySelector('meta[name="client-secret"]')||{})
 
 /* ── init ── */
 _loadTab('trending');
+_lmInitFeatured();
 
 (function(){
   var _urlToken = new URLSearchParams(location.search).get('token');
