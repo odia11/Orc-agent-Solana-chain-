@@ -14,6 +14,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" defer></script>
 <style>
 :root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--text:#eef1f5;--muted:#565d68;--green:#3ad29b;--red:#ff4d6a}
 *{box-sizing:border-box;margin:0;padding:0}
@@ -24,25 +25,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-header-title-wrap{display:flex;flex-direction:column;gap:1px;flex-shrink:0}
 .lm-header-title{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap;display:flex;align-items:center;gap:6px}
 .lm-header-subtitle{font-size:10px;color:var(--muted);white-space:nowrap;font-family:'JetBrains Mono',monospace}
-.lm-search-wrap{position:relative;flex:1;max-width:280px}
-.lm-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:7px 12px 7px 32px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
-.lm-search:focus{border-color:var(--bg4)}
-.lm-search::placeholder{color:var(--muted)}
-.lm-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:14px}
-.lm-amount-wrap{display:flex;align-items:center;gap:6px;flex-shrink:0}
-.lm-amount-label{font-size:10px;color:var(--muted);white-space:nowrap;text-transform:uppercase;letter-spacing:.08em}
-.lm-amount-input{width:68px;background:var(--bg2);border:1px solid var(--bg3);border-radius:8px;padding:5px 8px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;-moz-appearance:textfield;transition:border-color .15s}
-.lm-amount-input:focus{border-color:var(--accent)}
-.lm-amount-input::-webkit-inner-spin-button,.lm-amount-input::-webkit-outer-spin-button{-webkit-appearance:none}
-.lm-featured-banner{max-width:340px;height:32px;flex-shrink:0;overflow:hidden;border-radius:8px;border:1px solid rgba(247,185,85,.35);background:rgba(247,185,85,.08)}
-.lm-featured-slide{height:100%;display:flex;align-items:center;gap:6px;padding:0 10px;cursor:pointer;white-space:nowrap;overflow:hidden}
-.lm-featured-label{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:1px 5px;flex-shrink:0}
-.lm-featured-name{font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis}
-.lm-featured-sym{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
-.lm-featured-price{font-size:11px;font-weight:600;font-family:'JetBrains Mono',monospace;flex-shrink:0;color:var(--text)}
-.lm-featured-mcap{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
-@keyframes lmFeaturedSlideIn{from{transform:translateX(100%);opacity:0}to{transform:translateX(0);opacity:1}}
-.lm-featured-slide.lm-slide-anim{animation:lmFeaturedSlideIn .35s ease}
 .lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
 .lm-back:hover{color:var(--text)}
 
@@ -51,21 +33,13 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-scan-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite;flex-shrink:0}
 @keyframes scanBlink{0%,100%{opacity:1}50%{opacity:.25}}
 
-/* search bar (above tabs — visible on mobile too, unlike the header search) */
-.lm-search2-wrap{position:relative;margin:14px 16px 0}
-.lm-search2{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:12px;padding:11px 14px 11px 38px;color:var(--text);font-size:13px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
-.lm-search2:focus{border-color:var(--accent)}
-.lm-search2::placeholder{color:var(--muted)}
-.lm-search2-icon{position:absolute;left:13px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:15px}
+/* watchlist toggle (replaces the old ★ Watchlist tab) */
+.lm-watchlist-toggle{margin-left:auto;flex-shrink:0;background:var(--bg2);border:1px solid var(--bg4);color:var(--muted);width:34px;height:34px;border-radius:10px;font-size:15px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
+.lm-watchlist-toggle:hover{color:var(--text);border-color:var(--bg3)}
+.lm-watchlist-toggle.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
 
-/* tabs */
-.lm-tabs{display:flex;gap:6px;padding:12px 16px;background:var(--bg);position:sticky;top:56px;z-index:20;border-bottom:1px solid var(--bg3);overflow-x:auto;-webkit-overflow-scrolling:touch;flex-wrap:nowrap}
-.lm-tab{padding:7px 16px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.06em;text-transform:uppercase;white-space:nowrap;flex-shrink:0}
-.lm-tab:hover{color:var(--text);border-color:var(--bg3)}
-.lm-tab.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
-
-/* filter chips + client-side search (reuses already-fetched _pairs) */
-.lm-chips-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:0 16px 12px;flex-wrap:wrap}
+/* filter chips + client-side search (drives which tab-data is fetched, plus a pure client-side sort/filter) */
+.lm-chips-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;position:sticky;top:56px;z-index:20;background:var(--bg);border-bottom:1px solid var(--bg3);flex-wrap:wrap}
 .lm-chips{display:flex;gap:6px;flex-wrap:wrap}
 .lm-chip{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:20px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
 .lm-chip:hover{color:var(--text);border-color:var(--bg3)}
@@ -145,15 +119,79 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-spinner-ring{width:24px;height:24px;border:2px solid var(--bg4);border-top-color:var(--accent);border-radius:50%;margin:0 auto 10px;animation:spin .8s linear infinite;display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-/* token modal */
-#lm-token-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2000;align-items:center;justify-content:center;padding:16px}
-.lm-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative}
-.lm-modal-close{position:absolute;top:12px;right:12px;background:none;border:none;color:var(--muted);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s;font-family:system-ui,sans-serif}
+/* token detail modal — Focus / Terminal (see PROMPT.md Live Market + Token Detail spec) */
+#lm-token-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2000;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+.lm-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:18px;width:100%;max-width:900px;position:relative}
+.lm-modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s;font-family:system-ui,sans-serif;z-index:2}
 .lm-modal-close:hover{color:var(--text)}
-.lm-stat-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:12px}
-.lm-stat-label{font-size:10px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.08em;font-family:'JetBrains Mono',monospace}
-.lm-stat-value{font-size:13px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace}
 @keyframes tcSpin{to{transform:rotate(360deg)}}
+
+/* header: token tile, name/ticker, chain badge, LIVE dot, Focus/Terminal toggle */
+.lmtd-header{display:flex;align-items:center;gap:12px;padding:18px 52px 16px 20px;border-bottom:1px solid var(--bg3)}
+.lmtd-logo{width:40px;height:40px;border-radius:12px;object-fit:cover;flex-shrink:0}
+.lmtd-logo-ph{width:40px;height:40px;border-radius:12px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0}
+.lmtd-title-wrap{flex:1;min-width:0}
+.lmtd-name{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lmtd-chain-badge{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:rgba(58,210,155,.9);border-radius:5px;padding:2px 6px;flex-shrink:0}
+.lmtd-live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;flex-shrink:0}
+.lmtd-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite}
+.lmtd-sym{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.lmtd-layout-toggle{display:flex;gap:2px;background:var(--bg3);border-radius:10px;padding:3px;flex-shrink:0}
+.lmtd-layout-btn{padding:6px 14px;font-size:11px;font-weight:700;border:none;background:none;color:var(--muted);border-radius:8px;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase}
+.lmtd-layout-btn.active{background:var(--bg2);color:var(--accent)}
+
+/* shared: price hero + timeframe tabs */
+.lmtd-hero{padding:16px 20px 0}
+.lmtd-hero-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
+.lmtd-hero-chg{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;margin-top:2px}
+.lmtd-tf-tabs{display:flex;gap:6px;padding:14px 20px}
+.lmtd-tf-btn{padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;transition:all .15s;font-family:'JetBrains Mono',monospace}
+.lmtd-tf-btn:hover{color:var(--text)}
+.lmtd-tf-btn.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+
+/* candlestick chart (LightweightCharts, real OHLC via /api/chart/<mint>) */
+.lmtd-chart-wrap{padding:0 20px}
+.lmtd-chart-container{width:100%;height:340px;position:relative;background:var(--bg3);border-radius:10px;overflow:hidden}
+.lmtd-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;background:var(--bg3)}
+
+/* Focus layout: chart + 5-tile stat row + full-width trade CTA */
+.lmtd-stats-focus{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:16px 20px}
+.lmtd-trade-cta{margin:4px 20px 20px}
+.lmtd-trade-cta-btn{width:100%;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s}
+.lmtd-trade-cta-btn:hover{opacity:.88}
+
+/* Terminal layout: chart (65%) + Buy/Sell sidebar (35%) */
+.lmtd-terminal{display:flex;gap:16px;padding:0 20px 20px;align-items:flex-start}
+.lmtd-terminal-chart{flex:0 0 65%;min-width:0}
+.lmtd-terminal-side{flex:1;min-width:0;background:var(--bg3);border-radius:12px;padding:14px}
+.lmtd-side-tabs{display:flex;gap:4px;background:var(--bg2);border-radius:9px;padding:3px;margin-bottom:12px}
+.lmtd-side-tab{flex:1;padding:8px 0;font-size:12px;font-weight:700;border:none;background:none;border-radius:7px;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+.lmtd-side-tab.buy.active{background:rgba(58,210,155,.14);color:var(--green)}
+.lmtd-side-tab.sell.active{background:rgba(255,77,106,.14);color:var(--red)}
+.lmtd-sol-input-wrap{position:relative;margin-bottom:8px}
+.lmtd-sol-input{width:100%;background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:11px 50px 11px 12px;color:var(--text);font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s;-moz-appearance:textfield}
+.lmtd-sol-input:focus{border-color:var(--accent)}
+.lmtd-sol-input-unit{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);font-weight:700}
+.lmtd-pct-row{display:flex;gap:6px;margin-bottom:12px}
+.lmtd-pct-btn{flex:1;background:var(--bg2);border:1px solid var(--bg4);color:var(--muted);border-radius:8px;padding:7px 0;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace}
+.lmtd-pct-btn:hover{color:var(--text);border-color:var(--bg3)}
+.lmtd-action-btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s;margin-bottom:14px}
+.lmtd-action-btn.buy{background:var(--green);color:#06210f}
+.lmtd-action-btn.sell{background:var(--red);color:#2a0a0a}
+.lmtd-action-btn:hover{opacity:.88}
+.lmtd-action-btn:disabled{opacity:.4;cursor:default}
+.lmtd-compact-stats{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--bg4);padding-top:12px}
+.lmtd-compact-stat-row{display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.lmtd-compact-stat-label{color:var(--muted)}
+.lmtd-compact-stat-value{color:var(--text);font-weight:600;font-family:'JetBrains Mono',monospace}
+
+/* shared: stat tile + buys/sells ratio bar */
+.lmtd-stat-tile{background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:10px}
+.lmtd-stat-tile-label{font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;font-family:'JetBrains Mono',monospace}
+.lmtd-stat-tile-value{font-size:13px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace}
+.lmtd-ratio-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:6px;background:var(--bg4)}
+.lmtd-ratio-buy{background:var(--green)}
+.lmtd-ratio-sell{background:var(--red)}
 
 /* ── MOBILE BACK BAR ── */
 .mobile-back-bar{display:none}
@@ -166,14 +204,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 @media(max-width:767px){
   html,body{overflow-x:hidden}
   .lm-modal-close{min-width:44px;min-height:44px}
-  .lm-header{display:block!important;position:static;height:auto;padding:0}
-  .lm-header>*:not(.lm-featured-banner){display:none!important}
-  .lm-featured-banner{width:100%;max-width:none;height:26px}
-  .lm-featured-slide{padding:0 12px}
+  .lm-header{display:none!important}
   .mobile-back-bar{height:52px}
-  .lm-tabs{top:52px}
-  .lm-back{display:none!important}
-  .lm-amount-wrap{display:none}
+  .lm-chips-row{top:52px}
   .lm-table-wrap{margin:8px}
   .col-hide{display:none!important}
   .lm-scanning-pill .lm-scan-label{display:none}
@@ -271,6 +304,15 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
   /* ── Dropdown row ── */
   .lm-drop-inner{flex-wrap:wrap;gap:6px;padding:8px 10px}
+
+  /* ── Token detail modal: stack Terminal, shrink chart, 2-col stat grid ── */
+  #lm-token-modal{padding:0;align-items:stretch}
+  .lm-modal-card{max-width:100%;border-radius:0;min-height:100vh}
+  .lmtd-hero-price{font-size:24px}
+  .lmtd-chart-container{height:220px}
+  .lmtd-stats-focus{grid-template-columns:repeat(2,1fr)}
+  .lmtd-terminal{flex-direction:column}
+  .lmtd-terminal-chart{flex:1 1 auto;width:100%}
 }
 
 ::-webkit-scrollbar{height:4px;width:4px}
@@ -295,31 +337,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <span class="lm-scan-dot"></span>
     <span class="lm-scan-label">SCANNING</span>
   </div>
-  <div class="lm-search-wrap">
-    <span class="lm-search-icon">⌕</span>
-    <input class="lm-search" id="lm-search" type="text" placeholder="Search token…" autocomplete="off" oninput="_lmSearchDebounce(this.value)">
-  </div>
-  <div class="lm-amount-wrap">
-    <span class="lm-amount-label">Amount SOL</span>
-    <input class="lm-amount-input" id="lm-global-amount" type="number" min="0.001" step="0.1" value="0.1" title="SOL amount for quick buy">
-  </div>
-  <div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
-    <div class="lm-featured-slide" id="lm-featured-slide"></div>
-  </div>
+  <button class="lm-watchlist-toggle" id="lm-watchlist-toggle" onclick="_lmToggleWatchlistView()" title="Watchlist">★</button>
 </header>
-
-<div class="lm-search2-wrap">
-  <span class="lm-search2-icon">⌕</span>
-  <input class="lm-search2" id="lm-search2" type="text" placeholder="Search name or $SYMBOL…" autocomplete="off" oninput="_lm2SearchDebounce(this.value)">
-</div>
-
-<div class="lm-tabs" id="lm-tabs">
-  <button class="lm-tab active" id="tab-trending" onclick="_setTab('trending')">Trending</button>
-  <button class="lm-tab"        id="tab-new"       onclick="_setTab('new')">New Pairs</button>
-  <button class="lm-tab"        id="tab-gainers"   onclick="_setTab('gainers')">Gainers</button>
-  <button class="lm-tab"        id="tab-losers"    onclick="_setTab('losers')">Losers</button>
-  <button class="lm-tab"        id="tab-watchlist" onclick="_setTab('watchlist')">★ Watchlist</button>
-</div>
 
 <div class="lm-chips-row">
   <div class="lm-chips" id="lm-chips">
@@ -336,11 +355,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
 
-<!-- token detail modal -->
-<div id="lm-token-modal" onclick="if(event.target===this)this.style.display='none'">
-  <div class="lm-modal-card">
-    <button class="lm-modal-close" onclick="document.getElementById('lm-token-modal').style.display='none'">✕</button>
-    <div id="lm-modal-body" style="padding:20px"></div>
+<!-- token detail modal (Focus / Terminal — see PROMPT.md spec) -->
+<div id="lm-token-modal" onclick="if(event.target===this)_lmtdCloseModal()">
+  <div class="lm-modal-card" onclick="event.stopPropagation()">
+    <button class="lm-modal-close" onclick="_lmtdCloseModal()">✕</button>
+    <div id="lm-modal-body"></div>
   </div>
 </div>
 
@@ -350,9 +369,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 /* ── state ── */
 var _activeTab   = 'trending';
 var _cache       = {};
-var _searchTimer = null;
 var _pairs       = [];
-var _featuredPairs = [];
 var _lmWatchSet  = new Set();
 _lmLoadWatchSet();
 function _lmLoadWatchSet(){
@@ -392,22 +409,37 @@ function _toggleWatch(btn, addr, sym){
 /* ── tab switching ── */
 function _setTab(tab){
   _activeTab = tab;
-  document.getElementById('lm-search').value = '';
-  document.getElementById('lm-search2').value = '';
   document.getElementById('lm-chip-search').value = '';
-  _lm2LocalResults = [];
-  _lm2RemoteResults = [];
-  _lm2LastQuery = '';
-  _lmChipFilter = 'trending';
-  _lmChipQuery  = '';
-  ['trending','gainers','new','volume'].forEach(function(c){
-    document.getElementById('chip-'+c).classList.toggle('active', c==='trending');
-  });
-  ['trending','new','gainers','losers','watchlist'].forEach(function(t){
-    document.getElementById('tab-'+t).classList.toggle('active', t===tab);
-  });
+  _lmChipQuery = '';
   if(_cache[tab]){ _renderTable(_cache[tab]); }
   else { _loadTab(tab); }
+}
+
+/* ── filter chips drive both the fetch (trending/gainers/new — reuse the
+   existing per-tab fetchers via _setTab, unchanged) and, for volume, a pure
+   client-side re-sort of whatever's already loaded (see _lmSortedPairs). ── */
+function _lmSetChip(chip){
+  _lmChipFilter = chip;
+  document.getElementById('lm-watchlist-toggle').classList.remove('active');
+  ['trending','gainers','new','volume'].forEach(function(c){
+    document.getElementById('chip-'+c).classList.toggle('active', c===chip);
+  });
+  if(chip === 'volume'){ _lmApplyChipFilter(); }
+  else { _setTab(chip); }
+}
+
+function _lmToggleWatchlistView(){
+  var btn = document.getElementById('lm-watchlist-toggle');
+  if(btn.classList.contains('active')){
+    btn.classList.remove('active');
+    _lmSetChip('trending');
+  } else {
+    btn.classList.add('active');
+    ['trending','gainers','new','volume'].forEach(function(c){
+      document.getElementById('chip-'+c).classList.remove('active');
+    });
+    _setTab('watchlist');
+  }
 }
 
 /* ── data loading ── */
@@ -440,67 +472,10 @@ async function _silentRefreshTab(tab){
   }
 }
 
-async function _fetchFeaturedMarket(){
-  var fr = await fetch('/api/promote/featured?placement=market');
-  var fd = await fr.json();
-  var promos = (fd && fd.ok && fd.promotions) || [];
-  var mints = promos.map(function(p){ return p.token_mint; }).filter(Boolean);
-  if(!mints.length) return [];
-  var pr = await fetch('/api/dexscreener/tokens/'+mints.join(','));
-  var pd = await pr.json();
-  var pairs = _dedupeByAddress(pd.pairs||[], {});
-  return pairs.map(function(p){ return Object.assign({}, p, {isFeatured:true}); });
-}
-
-var _lmFeaturedBannerTimer = null;
-var _lmFeaturedBannerIdx = 0;
-
-function _lmRenderFeaturedBanner(featuredPairs){
-  var el = document.getElementById('lm-featured-banner');
-  var slide = document.getElementById('lm-featured-slide');
-  if(!el || !slide) return;
-  if(_lmFeaturedBannerTimer){ clearInterval(_lmFeaturedBannerTimer); _lmFeaturedBannerTimer = null; }
-  if(!featuredPairs || !featuredPairs.length){
-    el.style.display = 'none';
-    return;
-  }
-  _lmFeaturedBannerIdx = 0;
-  el.style.display = '';
-
-  function renderSlide(){
-    var p = featuredPairs[_lmFeaturedBannerIdx % featuredPairs.length];
-    var sym = (p.baseToken&&p.baseToken.symbol)||'?';
-    var name = (p.baseToken&&p.baseToken.name)||sym;
-    var price = _fmtPrice(p.priceUsd);
-    var mcap  = _fmtNum(p.marketCap || p.fdv || null);
-    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
-    var priceStyle = chg24==null ? '' : ' style="color:'+(chg24>=0?'var(--green)':'var(--red)')+'"';
-    slide.innerHTML = '<span class="lm-featured-label">Featured</span>'
-      +'<span class="lm-featured-name">'+_esc(name)+'</span>'
-      +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>'
-      +'<span class="lm-featured-price"'+priceStyle+'>'+price+'</span>'
-      +'<span class="lm-featured-mcap">'+mcap+'</span>';
-    slide.onclick = function(){ showTokenCard(sym); };
-    slide.classList.remove('lm-slide-anim');
-    void slide.offsetWidth; // force reflow so the enter animation restarts on every slide change
-    slide.classList.add('lm-slide-anim');
-  }
-  renderSlide();
-
-  if(featuredPairs.length > 1){
-    _lmFeaturedBannerTimer = setInterval(function(){
-      _lmFeaturedBannerIdx = (_lmFeaturedBannerIdx + 1) % featuredPairs.length;
-      renderSlide();
-    }, 10000);
-  }
-}
-
 async function _fetchTrending(){
   var r     = await fetch('/api/dexscreener/token-boosts');
   var items = await r.json();
   var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
-  _featuredPairs = await _fetchFeaturedMarket().catch(function(){ return []; });
-  _lmRenderFeaturedBanner(_featuredPairs);
   if(!solana.length) return [];
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
@@ -590,80 +565,6 @@ function _dedupeByAddress(pairs, iconMap){
   return out.slice(0,50);
 }
 
-/* ── search ── */
-function _lmSearchDebounce(q){
-  clearTimeout(_searchTimer);
-  if(!q.trim()){
-    if(_cache[_activeTab]) _renderTable(_cache[_activeTab]);
-    else _loadTab(_activeTab);
-    return;
-  }
-  _searchTimer = setTimeout(function(){ _doSearch(q); }, 300);
-}
-
-async function _doSearch(q){
-  _setLoading();
-  try{
-    var r = await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q));
-    var d = await r.json();
-    _renderTable(_dedupeByAddress((d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }),{}));
-  }catch(e){ _setError('Search failed'); }
-}
-
-/* ── search bar above the tabs: instant local filter + backend-proxied remote search ── */
-var _lm2Timer         = null;
-var _lm2LocalResults  = [];
-var _lm2RemoteResults = [];
-var _lm2LastQuery     = '';
-
-function _lm2MatchesQuery(p, qLower, qTicker){
-  var sym  = ((p.baseToken&&p.baseToken.symbol)||'').toLowerCase();
-  var name = ((p.baseToken&&p.baseToken.name)||'').toLowerCase();
-  var addr = ((p.baseToken&&p.baseToken.address)||'').toLowerCase();
-  return sym.indexOf(qTicker)>=0 || name.indexOf(qLower)>=0 || (qLower.length>10 && addr===qLower);
-}
-
-function _lm2SearchDebounce(q){
-  clearTimeout(_lm2Timer);
-  if(!q.trim()){
-    _lm2LocalResults = [];
-    _lm2RemoteResults = [];
-    _lm2LastQuery = '';
-    if(_cache[_activeTab]) _renderTable(_cache[_activeTab]);
-    else _loadTab(_activeTab);
-    return;
-  }
-  _lm2LastQuery = q;
-  /* instant local filter against whatever is already loaded for this tab — no network wait */
-  var qLower  = q.trim().toLowerCase();
-  var qTicker = qLower.replace(/^\$/,'');
-  var source  = _cache[_activeTab] || _pairs || [];
-  _lm2LocalResults = source.filter(function(p){ return _lm2MatchesQuery(p, qLower, qTicker); });
-  _lm2Render();
-  /* then, debounced, also search DexScreener (via our proxy) for tokens not in the loaded list */
-  _lm2Timer = setTimeout(function(){ _lm2RemoteSearch(q); }, 300);
-}
-
-function _lm2Render(){
-  var merged = _dedupeByAddress(_lm2LocalResults.concat(_lm2RemoteResults), {});
-  if(!merged.length){
-    document.getElementById('lm-table-wrap').innerHTML =
-      _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found for "'+_esc(_lm2LastQuery)+'"</td></tr>');
-    return;
-  }
-  _renderTable(merged);
-}
-
-async function _lm2RemoteSearch(q){
-  try{
-    var qRemote = q.trim().replace(/^\$/,''); /* DexScreener's search doesn't understand a leading $ */
-    var r = await fetch('/api/dexscreener/search?q='+encodeURIComponent(qRemote));
-    var d = await r.json();
-    var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; });
-    _lm2RemoteResults = pairs;
-    if(q === _lm2LastQuery) _lm2Render(); /* ignore stale responses from fast typing */
-  }catch(e){ /* keep whatever local matches are already shown */ }
-}
 
 /* thead — 8 columns */
 var _THEAD = '<thead><tr>'
@@ -721,14 +622,6 @@ function _renderTable(pairs){
 var _lmChipFilter = 'trending';
 var _lmChipQuery  = '';
 var _lmChipTimer  = null;
-
-function _lmSetChip(chip){
-  _lmChipFilter = chip;
-  ['trending','gainers','new','volume'].forEach(function(c){
-    document.getElementById('chip-'+c).classList.toggle('active', c===chip);
-  });
-  _lmApplyChipFilter();
-}
 
 function _lmChipSearchDebounce(q){
   clearTimeout(_lmChipTimer);
@@ -956,11 +849,33 @@ function _flashRow(idx, green){
 }
 
 /* ── token modal ── */
+/* ── token detail modal: Focus / Terminal (see PROMPT.md spec) ── */
+var _lmtdPair       = null;
+var _lmtdSymbol     = '';
+var _lmtdLayout     = 'focus';
+var _lmtdTf         = '5m';
+var _lmtdSide       = 'buy';
+var _lmtdSolBalance = 0;
+var _lmtdChart      = null;
+var _lmtdSeries     = null;
+var _lmtdVolSeries  = null;
+var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
+
+function _lmtdFetchBalance(){
+  fetch('/api/wallet/balance', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(d.ok) _lmtdSolBalance = d.sol;
+  }).catch(function(){});
+}
+
 async function showTokenCard(symbol){
   var modal = document.getElementById('lm-token-modal');
   var body  = document.getElementById('lm-modal-body');
   modal.style.display = 'flex';
-  body.innerHTML = '<div style="text-align:center;padding:48px 0">'
+  _lmtdLayout = 'focus';
+  _lmtdTf     = '5m';
+  _lmtdSide   = 'buy';
+  _lmtdFetchBalance();
+  body.innerHTML = '<div style="text-align:center;padding:60px 0">'
     +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
     +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
     +'</div>';
@@ -972,75 +887,234 @@ async function showTokenCard(symbol){
       body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
       return;
     }
-    var sym    = (p.baseToken&&p.baseToken.symbol)||symbol;
-    var name   = (p.baseToken&&p.baseToken.name)||'';
-    var imgUrl = p.info&&p.info.imageUrl?p.info.imageUrl:'';
-    var logo   = imgUrl
-      ? '<img src="'+_esc(imgUrl)+'" style="width:56px;height:56px;border-radius:14px;object-fit:cover;margin-bottom:10px">'
-      : '<div style="width:56px;height:56px;border-radius:14px;background:#21252c;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;color:#565d68;margin:0 auto 10px;font-family:\'JetBrains Mono\',monospace">'+_esc(sym.slice(0,2))+'</div>';
-    var price    = _fmtPrice(p.priceUsd);
-    var chg24    = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
-    var chgColor = chg24!=null?(chg24>=0?'#3ad29b':'#ff4d6a'):'#565d68';
-    var chgStr   = chg24!=null?(chg24>=0?'+':'')+chg24.toFixed(2)+'%':'—';
-    var tfs = [
-      {l:'5m',  v:p.priceChange&&p.priceChange.m5 !=null?p.priceChange.m5 :null},
-      {l:'1h',  v:p.priceChange&&p.priceChange.h1 !=null?p.priceChange.h1 :null},
-      {l:'6h',  v:p.priceChange&&p.priceChange.h6 !=null?p.priceChange.h6 :null},
-      {l:'24h', v:chg24}
-    ];
-    var statsHtml = [
-      {l:'Volume 24h', v:_fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null)},
-      {l:'Liquidity',  v:_fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null)},
-      {l:'Market Cap', v:_fmtNum(p.marketCap || p.fdv || null)},
-      {l:'Buys / Sells',v:p.txns&&p.txns.h24
-          ?'<span style="color:#3ad29b">'+p.txns.h24.buys+'</span><span style="color:#565d68"> / </span><span style="color:#ff4d6a">'+p.txns.h24.sells+'</span>'
-          :'—'}
-    ].map(function(s){
-      return '<div class="lm-stat-card">'
-        +'<div class="lm-stat-label">'+s.l+'</div>'
-        +'<div class="lm-stat-value">'+s.v+'</div>'
-        +'</div>';
-    }).join('');
-    var tfHtml = tfs.map(function(tf){
-      var bg  = tf.v!=null?(tf.v>=0?'rgba(58,210,155,.12)':'rgba(255,77,106,.12)'):'#16191f';
-      var col = tf.v!=null?(tf.v>=0?'#3ad29b':'#ff4d6a'):'#565d68';
-      var vs  = tf.v!=null?(tf.v>=0?'+':'')+tf.v.toFixed(2)+'%':'—';
-      return '<div style="flex:1;background:'+bg+';border-radius:8px;padding:8px;text-align:center">'
-        +'<div style="font-size:10px;color:#565d68;margin-bottom:3px;font-family:\'JetBrains Mono\',monospace">'+tf.l+'</div>'
-        +'<div style="font-size:11px;font-weight:600;color:'+col+';font-family:\'JetBrains Mono\',monospace">'+vs+'</div>'
-        +'</div>';
-    }).join('');
-    var chartHtml = '<div style="margin-bottom:16px"><iframe src="https://dexscreener.com/solana/'+_esc(p.pairAddress||'')+'?embed=1&theme=dark&trades=0&info=0" style="width:100%;height:300px;border:none;border-radius:8px"></iframe></div>';
-    body.innerHTML =
-      chartHtml
-      +'<div style="text-align:center;padding-top:8px">'+logo
-      +'<div style="font-size:20px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">'+_esc(name||sym)+'</div>'
-      +'<div style="font-size:12px;color:#565d68;margin-bottom:4px;font-family:\'JetBrains Mono\',monospace">$'+_esc(sym)
-        +' <span style="background:rgba(58,210,155,.1);color:#3ad29b;font-size:10px;padding:2px 7px;border-radius:5px;margin-left:4px;vertical-align:middle">SOLANA</span>'
-        +'</div>'
-      +'<div style="font-size:26px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace;margin-bottom:4px">'+price+'</div>'
-      +'<div style="font-size:14px;font-weight:600;color:'+chgColor+';margin-bottom:20px;font-family:\'JetBrains Mono\',monospace">'+chgStr+' (24h)</div>'
-      +'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px">'+statsHtml+'</div>'
-      +'<div style="display:flex;gap:6px;margin-bottom:16px">'+tfHtml+'</div>'
-      +'<div style="display:flex;align-items:center;gap:8px;margin-top:4px">'
-        +'<button id="lm-buy-btn" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc((p.baseToken&&p.baseToken.address)||'')+'"'
-          +' style="flex:1;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Buy</button>'
-        +'<input id="lm-trade-amount" type="number" min="0.001" step="0.1" placeholder="SOL" value="0.1"'
-          +' style="width:76px;background:#16191f;border:1px solid #21252c;border-radius:10px;padding:10px;color:#eef1f5;font-size:13px;font-family:\'JetBrains Mono\',monospace;text-align:center;outline:none;-moz-appearance:textfield" onclick="event.stopPropagation()">'
-        +'<button id="lm-sell-btn" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc((p.baseToken&&p.baseToken.address)||'')+'"'
-          +' style="flex:1;background:#ff4d6a;color:#fff;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer;font-family:\'JetBrains Mono\',monospace;transition:opacity .15s">Sell</button>'
-      +'</div>';
-    var buyBtn = document.getElementById('lm-buy-btn');
-    buyBtn.addEventListener('click', function(){
-      executeTrade(buyBtn.dataset.sym, buyBtn.dataset.pair, 'buy', document.getElementById('lm-trade-amount').value, buyBtn.dataset.addr, buyBtn);
-    });
-    var sellBtn2 = document.getElementById('lm-sell-btn');
-    sellBtn2.addEventListener('click', function(){
-      executeTrade(sellBtn2.dataset.sym, sellBtn2.dataset.pair, 'sell', document.getElementById('lm-trade-amount').value, sellBtn2.dataset.addr, sellBtn2);
-    });
+    _lmtdPair   = p;
+    _lmtdSymbol = (p.baseToken&&p.baseToken.symbol)||symbol;
+    _lmtdRenderModal();
   }catch(e){
     body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
+  }
+}
+
+function _lmtdCloseModal(){
+  document.getElementById('lm-token-modal').style.display = 'none';
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+}
+
+function _lmtdRenderModal(){
+  var p    = _lmtdPair;
+  var body = document.getElementById('lm-modal-body');
+  var sym  = (p.baseToken&&p.baseToken.symbol)||_lmtdSymbol;
+  var name = (p.baseToken&&p.baseToken.name)||sym;
+  var addr = (p.baseToken&&p.baseToken.address)||'';
+  var imgUrl = p.info&&p.info.imageUrl?p.info.imageUrl:'';
+  var logo = imgUrl
+    ? '<img class="lmtd-logo" src="'+_esc(imgUrl)+'">'
+    : '<div class="lmtd-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+
+  var price    = _fmtPrice(p.priceUsd);
+  var chg24    = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
+  var chgColor = chg24!=null?(chg24>=0?'var(--green)':'var(--red)'):'var(--muted)';
+  var chgStr   = chg24!=null?(chg24>=0?'+':'')+chg24.toFixed(2)+'%':'—';
+
+  var tfHtml = ['1m','5m','15m','1H','4H','1D'].map(function(tf){
+    return '<button class="lmtd-tf-btn'+(tf===_lmtdTf?' active':'')+'" onclick="_lmtdSetTf(\''+tf+'\')">'+tf+'</button>';
+  }).join('');
+
+  var headerHtml =
+    '<div class="lmtd-header">'
+      +logo
+      +'<div class="lmtd-title-wrap">'
+        +'<div class="lmtd-name">'+_esc(name||sym)
+          +'<span class="lmtd-chain-badge">SOLANA</span>'
+          +'<span class="lmtd-live-dot-wrap"><span class="lmtd-live-dot"></span>LIVE</span>'
+        +'</div>'
+        +'<div class="lmtd-sym">$'+_esc(sym)+'</div>'
+      +'</div>'
+      +'<div class="lmtd-layout-toggle">'
+        +'<button class="lmtd-layout-btn'+(_lmtdLayout==='focus'?' active':'')+'" onclick="_lmtdSetLayout(\'focus\')">Focus</button>'
+        +'<button class="lmtd-layout-btn'+(_lmtdLayout==='terminal'?' active':'')+'" onclick="_lmtdSetLayout(\'terminal\')">Terminal</button>'
+      +'</div>'
+    +'</div>'
+    +'<div class="lmtd-hero">'
+      +'<div class="lmtd-hero-price">'+price+'</div>'
+      +'<div class="lmtd-hero-chg" style="color:'+chgColor+'">'+chgStr+' (24h)</div>'
+    +'</div>'
+    +'<div class="lmtd-tf-tabs">'+tfHtml+'</div>';
+
+  var chartHtml = '<div class="lmtd-chart-container" id="lmtd-chart-container">'
+    +'<div class="lmtd-chart-loading" id="lmtd-chart-loading">Loading chart…</div>'
+    +'</div>';
+
+  var bodyHtml;
+  if(_lmtdLayout === 'focus'){
+    bodyHtml = headerHtml
+      +'<div class="lmtd-chart-wrap">'+chartHtml+'</div>'
+      +'<div class="lmtd-stats-focus">'+_lmtdStatTilesHtml(p)+'</div>'
+      +'<div class="lmtd-trade-cta"><button class="lmtd-trade-cta-btn" onclick="_lmtdSetLayout(\'terminal\')">Trade</button></div>';
+  } else {
+    bodyHtml = headerHtml
+      +'<div class="lmtd-terminal">'
+        +'<div class="lmtd-terminal-chart">'+chartHtml+'</div>'
+        +'<div class="lmtd-terminal-side"><div id="lmtd-terminal-side-inner">'+_lmtdSidePanelHtml(p, sym, addr)+'</div></div>'
+      +'</div>';
+  }
+  body.innerHTML = bodyHtml;
+  _lmtdInitChart();
+  _lmtdLoadChartData();
+  if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
+}
+
+/* 5-tile stat row (Focus layout): Volume 24h, Liquidity, Market Cap, Holders, Buys/Sells ratio.
+   Holders has no data source anywhere in this codebase (checked dashboard.py + this file) —
+   shown as "—" rather than fabricated. */
+function _lmtdStatTilesHtml(p){
+  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var liq   = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+  var buys  = p.txns&&p.txns.h24 ? p.txns.h24.buys : 0;
+  var sells = p.txns&&p.txns.h24 ? p.txns.h24.sells : 0;
+  var total = buys+sells;
+  var buyPct = total>0 ? Math.round(buys/total*100) : 50;
+  var buysSellsVal = p.txns&&p.txns.h24
+    ? buys+' / '+sells+'<div class="lmtd-ratio-bar"><div class="lmtd-ratio-buy" style="width:'+buyPct+'%"></div><div class="lmtd-ratio-sell" style="width:'+(100-buyPct)+'%"></div></div>'
+    : '—';
+  return [
+    {l:'Volume 24h',  v:vol},
+    {l:'Liquidity',   v:liq},
+    {l:'Market Cap',  v:mcap},
+    {l:'Holders',     v:'—'},
+    {l:'Buys/Sells',  v:buysSellsVal}
+  ].map(function(t){
+    return '<div class="lmtd-stat-tile">'
+      +'<div class="lmtd-stat-tile-label">'+t.l+'</div>'
+      +'<div class="lmtd-stat-tile-value">'+t.v+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+/* Terminal sidebar: Buy/Sell tab toggle, SOL input, quick-pct chips, action
+   button, compact stats list. Sell only gets a MAX chip — /api/instant-trade
+   always sells the full position server-side (amount is ignored for sell),
+   so 25/50/75% sell buttons would be misleading. */
+function _lmtdSidePanelHtml(p, sym, addr){
+  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var liq   = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+  var buys  = p.txns&&p.txns.h24 ? p.txns.h24.buys : 0;
+  var sells = p.txns&&p.txns.h24 ? p.txns.h24.sells : 0;
+  var pctChipsHtml = _lmtdSide === 'buy'
+    ? [25,50,75,100].map(function(pct){
+        return '<button class="lmtd-pct-btn" onclick="_lmtdSetPct('+pct+')">'+(pct===100?'MAX':pct+'%')+'</button>';
+      }).join('')
+    : '<button class="lmtd-pct-btn" onclick="_lmtdSetPct(100)">MAX</button>';
+  return ''
+    +'<div class="lmtd-side-tabs">'
+      +'<button class="lmtd-side-tab buy'+(_lmtdSide==='buy'?' active':'')+'" onclick="_lmtdSetSide(\'buy\')">Buy</button>'
+      +'<button class="lmtd-side-tab sell'+(_lmtdSide==='sell'?' active':'')+'" onclick="_lmtdSetSide(\'sell\')">Sell</button>'
+    +'</div>'
+    +'<div class="lmtd-sol-input-wrap">'
+      +'<input class="lmtd-sol-input" id="lmtd-sol-input" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
+      +'<span class="lmtd-sol-input-unit">SOL</span>'
+    +'</div>'
+    +'<div class="lmtd-pct-row">'+pctChipsHtml+'</div>'
+    +'<button class="lmtd-action-btn '+_lmtdSide+'" id="lmtd-action-btn">'+(_lmtdSide==='buy'?'Buy':'Sell')+' $'+_esc(sym)+'</button>'
+    +'<div class="lmtd-compact-stats">'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Volume 24h</span><span class="lmtd-compact-stat-value">'+vol+'</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Liquidity</span><span class="lmtd-compact-stat-value">'+liq+'</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Market Cap</span><span class="lmtd-compact-stat-value">'+mcap+'</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Holders</span><span class="lmtd-compact-stat-value">—</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Buys/Sells</span><span class="lmtd-compact-stat-value">'+(p.txns&&p.txns.h24?buys+' / '+sells:'—')+'</span></div>'
+    +'</div>';
+}
+
+function _lmtdWireSidePanel(sym, addr){
+  var btn = document.getElementById('lmtd-action-btn');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    var input     = document.getElementById('lmtd-sol-input');
+    var amount    = input ? input.value : '0.1';
+    var pairAddr  = (_lmtdPair && _lmtdPair.pairAddress) || '';
+    executeTrade(sym, pairAddr, _lmtdSide, amount, addr, btn);
+  });
+}
+
+function _lmtdSetLayout(layout){
+  _lmtdLayout = layout;
+  _lmtdRenderModal(); // Focus/Terminal move the chart to a different container, so it re-inits
+}
+
+function _lmtdSetTf(tf){
+  _lmtdTf = tf;
+  document.querySelectorAll('.lmtd-tf-btn').forEach(function(b){
+    b.classList.toggle('active', b.textContent===tf);
+  });
+  _lmtdLoadChartData(); // reuse the existing chart instance — just reload candles
+}
+
+function _lmtdSetSide(side){
+  var prevInput = document.getElementById('lmtd-sol-input');
+  var prevVal   = prevInput ? prevInput.value : '0.1';
+  _lmtdSide = side;
+  var panel = document.getElementById('lmtd-terminal-side-inner');
+  var p     = _lmtdPair;
+  if(!panel || !p) return;
+  var sym  = (p.baseToken&&p.baseToken.symbol)||_lmtdSymbol;
+  var addr = (p.baseToken&&p.baseToken.address)||'';
+  panel.innerHTML = _lmtdSidePanelHtml(p, sym, addr);
+  document.getElementById('lmtd-sol-input').value = prevVal;
+  _lmtdWireSidePanel(sym, addr);
+}
+
+function _lmtdSetPct(pct){
+  var input = document.getElementById('lmtd-sol-input');
+  if(!input) return;
+  var bal = _lmtdSolBalance || 0;
+  var amt = pct===100 ? Math.max(0, bal-0.01) : bal*pct/100;
+  input.value = amt.toFixed(4);
+}
+
+/* candlestick + volume chart — same LightweightCharts pattern as
+   dashboard.html's _posChart, fed by the existing /api/chart/<mint> endpoint */
+function _lmtdInitChart(){
+  var container = document.getElementById('lmtd-chart-container');
+  if(!container) return;
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  _lmtdChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 340,
+    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
+    grid:{vertLines:{color:'#21252c'},horzLines:{color:'#21252c'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    rightPriceScale:{borderColor:'#21252c'},
+    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
+    handleScroll:true,handleScale:true
+  });
+  _lmtdSeries = _lmtdChart.addCandlestickSeries({
+    upColor:'#3ad29b',downColor:'#ff4d6a',borderVisible:false,
+    wickUpColor:'#3ad29b',wickDownColor:'#ff4d6a'
+  });
+  _lmtdVolSeries = _lmtdChart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'lmtd-vol'});
+  _lmtdChart.priceScale('lmtd-vol').applyOptions({scaleMargins:{top:0.75,bottom:0}});
+  new ResizeObserver(function(){
+    if(container.clientWidth>0) _lmtdChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  }).observe(container);
+}
+
+async function _lmtdLoadChartData(){
+  var loadEl = document.getElementById('lmtd-chart-loading');
+  var addr   = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
+  if(loadEl){ loadEl.textContent='Loading chart…'; loadEl.style.display='flex'; }
+  if(!addr || !_lmtdChart) return;
+  var tfParam = _LMTD_TF_MAP[_lmtdTf] || '5m';
+  var r = await fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam).then(function(x){return x.json();}).catch(function(){return null;});
+  if(r && r.candles && r.candles.length){
+    _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
+    _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
+    _lmtdChart.timeScale().fitContent();
+    if(loadEl) loadEl.style.display='none';
+  } else if(loadEl){
+    loadEl.textContent = 'Chart unavailable for this token';
+    loadEl.style.display = 'flex';
   }
 }
 
@@ -1127,7 +1201,7 @@ _loadTab('trending');
 })();
 
 setInterval(function(){
-  if(!document.getElementById('lm-search').value && !document.getElementById('lm-search2').value && _openDropIdx < 0){
+  if(!document.getElementById('lm-chip-search').value && _openDropIdx < 0){
     _silentRefreshTab(_activeTab);
   }
 }, 15000);
