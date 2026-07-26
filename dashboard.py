@@ -1881,6 +1881,13 @@ _last_good_mints: list = []  # last non-empty result from discover_tokens()
 # search?q= entries TTL 10 s; everything else TTL 30 s
 _dex_resp_cache: dict = {}
 
+# GeckoTerminal candle cache: (pair_address, tf) → (timestamp, candles list)
+# separate from _dex_resp_cache since it's keyed on GeckoTerminal's pool+timeframe,
+# not a DexScreener URL, and stores parsed candle dicts rather than raw response text.
+_chart_cache_lock = threading.Lock()
+_chart_cache: dict = {}
+_CHART_CACHE_TTL   = 30  # seconds
+
 class _DexCachedResp:
     """Minimal requests.Response stand-in for cached DexScreener data."""
     status_code = 200
@@ -13075,7 +13082,16 @@ def api_chart(mint):
         if not pair_address:
             return jsonify({'candles': [], 'error': 'no pair address'})
 
-        # ── Step 2: GeckoTerminal OHLCV ──
+        # ── Step 2: GeckoTerminal OHLCV (cached — GeckoTerminal has no per-URL
+        # cache of its own like _dex_get, and candles for a given pair+timeframe
+        # don't change meaningfully within the TTL window) ──
+        cache_key = (pair_address, tf)
+        now = time.time()
+        with _chart_cache_lock:
+            cached = _chart_cache.get(cache_key)
+        if cached and now - cached[0] < _CHART_CACHE_TTL:
+            return jsonify({'candles': cached[1], 'pair_address': pair_address, 'cached': True})
+
         candles = []
         try:
             gt_url = (
@@ -13107,6 +13123,14 @@ def api_chart(mint):
             print(f'[chart] GeckoTerminal error: {e}', flush=True)
 
         if candles:
+            with _chart_cache_lock:
+                _chart_cache[cache_key] = (now, candles)
+                # Evict stale entries once the cache grows large (mirrors _dex_get's eviction)
+                if len(_chart_cache) > 300:
+                    cutoff = now - 300
+                    stale = [k for k, v in _chart_cache.items() if v[0] < cutoff]
+                    for k in stale:
+                        del _chart_cache[k]
             return jsonify({'candles': candles, 'pair_address': pair_address})
         return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address})
     except Exception as e:
