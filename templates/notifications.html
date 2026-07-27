@@ -247,6 +247,26 @@ var _activeTab = 'all';
 function _esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
+// n.content is a pre-formatted sentence baked in at notification-creation time
+// (e.g. "Alice mentioned you in a post") — there's no separate, structured
+// "actor name" field inside it to attach a badge to. Rather than parsing/
+// guessing where the name ends (formats differ: "Name verb..." vs "Name: verb..."),
+// only splice the badge in when n.content still starts with the actor's
+// CURRENT username (n.actor_username, freshly joined server-side) — the
+// common case, since most notifications are read soon after creation. If the
+// actor has since renamed (or this is a system notification with no actor),
+// the prefix won't match and we fall back to plain escaped text — never a
+// guess, never broken formatting.
+var _NTF_VERIFIED_BADGE_SVG = ' <svg width="13" height="13" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+function _ntfContentHtml(n){
+  var content = n.content || '';
+  if(n.actor_verified && n.actor_username && content.indexOf(n.actor_username) === 0){
+    var name = content.slice(0, n.actor_username.length);
+    var rest = content.slice(n.actor_username.length);
+    return _esc(name) + _NTF_VERIFIED_BADGE_SVG + _esc(rest);
+  }
+  return _esc(content);
+}
 function _relTime(ts){
   if(!ts) return '';
   var iso = ts.replace(' ','T');
@@ -373,10 +393,10 @@ function _rowHtml(n, kind){
     return _buildPersonalRow(n, isUnread, iconCls, bodyHtml, n.link || '#', shareBtn);
   } else if(type === 'message'){
     iconCls = 'message';
-    bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
+    bodyHtml = '<div class="ntf-text">' + _ntfContentHtml(n) + '</div>';
   } else {
     iconCls = 'social';
-    bodyHtml = '<div class="ntf-text">' + _esc(n.content) + '</div>';
+    bodyHtml = '<div class="ntf-text">' + _ntfContentHtml(n) + '</div>';
   }
   return _buildPersonalRow(n, isUnread, iconCls, bodyHtml, n.link || '#', null);
 }

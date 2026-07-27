@@ -6172,7 +6172,7 @@ def notifications_mine():
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         rows = conn.execute(
             '''SELECT n.id, n.type, n.content, n.link, n.is_read, n.created_at,
-                      u.avatar_url, u.username
+                      u.avatar_url, u.username, u.is_verified
                FROM notifications n
                LEFT JOIN users u ON u.wallet_address = n.actor_wallet
                WHERE n.user_id=?
@@ -6184,7 +6184,7 @@ def notifications_mine():
     return jsonify({'ok': True, 'notifications': [
         {'id': r[0], 'type': r[1], 'content': r[2], 'link': r[3],
          'is_read': bool(r[4]), 'created_at': r[5],
-         'actor_avatar': r[6], 'actor_username': r[7]}
+         'actor_avatar': r[6], 'actor_username': r[7], 'actor_verified': bool(r[8])}
         for r in rows
     ]})
 
@@ -9272,7 +9272,7 @@ def get_followers(user_id: int):
     try:
         c = conn.cursor()
         c.execute('''
-            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address, u.is_verified
             FROM follows f
             JOIN users u ON u.id = f.follower_id
             WHERE f.following_id = ?
@@ -9284,10 +9284,11 @@ def get_followers(user_id: int):
     finally:
         conn.close()
     users = []
-    for uid, username, avatar_url, wallet in rows:
+    for uid, username, avatar_url, wallet, is_verified in rows:
         short = (wallet[:6] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '',
-                      'wallet': short, 'wallet_address': wallet or '', 'is_following': uid in viewer_follows})
+                      'wallet': short, 'wallet_address': wallet or '', 'is_following': uid in viewer_follows,
+                      'verified': bool(is_verified)})
     return jsonify({'ok': True, 'users': users})
 
 @app.route('/api/profile/<int:user_id>/following', methods=['GET'])
@@ -9298,7 +9299,7 @@ def get_following(user_id: int):
     try:
         c = conn.cursor()
         c.execute('''
-            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address, u.is_verified
             FROM follows f
             JOIN users u ON u.id = f.following_id
             WHERE f.follower_id = ?
@@ -9310,14 +9311,15 @@ def get_following(user_id: int):
     finally:
         conn.close()
     users = []
-    for uid, username, avatar_url, wallet in rows:
+    for uid, username, avatar_url, wallet, is_verified in rows:
         short = (wallet[:6] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         users.append({'user_id': uid, 'username': username or short, 'avatar_url': avatar_url or '',
-                      'wallet': short, 'wallet_address': wallet or '', 'is_following': uid in viewer_follows})
+                      'wallet': short, 'wallet_address': wallet or '', 'is_following': uid in viewer_follows,
+                      'verified': bool(is_verified)})
     return jsonify({'ok': True, 'users': users})
 
 def _follow_list_rows(rows, today, viewer_wallet=None):
-    """Shared helper: enrich (uid, username, avatar_url, wallet) rows with pnl_today and is_following."""
+    """Shared helper: enrich (uid, username, avatar_url, wallet, is_verified) rows with pnl_today and is_following."""
     if not rows:
         return []
     conn = sqlite3.connect(DB_FILE)
@@ -9325,7 +9327,7 @@ def _follow_list_rows(rows, today, viewer_wallet=None):
         c = conn.cursor()
         viewer_follows = _viewer_follows_set(c, viewer_wallet, [r[0] for r in rows])
         users = []
-        for uid, username, avatar_url, wallet in rows:
+        for uid, username, avatar_url, wallet, is_verified in rows:
             short = (wallet[:4] + '...' + wallet[-4:]) if wallet and len(wallet) >= 8 else (wallet or '')
             c.execute('SELECT COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND date(timestamp)=?', (uid, today))
             pnl_today = round(float((c.fetchone() or (0,))[0]), 4)
@@ -9337,6 +9339,7 @@ def _follow_list_rows(rows, today, viewer_wallet=None):
                 'wallet_address': wallet or '',
                 'pnl_today':      pnl_today,
                 'is_following':   uid in viewer_follows,
+                'verified':       bool(is_verified),
             })
     finally:
         conn.close()
@@ -9356,7 +9359,7 @@ def get_followers_by_wallet(wallet: str):
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         user_id = row[0]
         c.execute('''
-            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address, u.is_verified
             FROM follows f JOIN users u ON u.id = f.follower_id
             WHERE f.following_id = ?
             ORDER BY f.created_at DESC LIMIT 200
@@ -9380,7 +9383,7 @@ def get_following_by_wallet(wallet: str):
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
         user_id = row[0]
         c.execute('''
-            SELECT u.id, u.username, u.avatar_url, u.wallet_address
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address, u.is_verified
             FROM follows f JOIN users u ON u.id = f.following_id
             WHERE f.follower_id = ?
             ORDER BY f.created_at DESC LIMIT 200
