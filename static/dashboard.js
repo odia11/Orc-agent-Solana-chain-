@@ -6154,7 +6154,11 @@ function _emojiPickerToggle(e, palId, inputId){
   var pw=pal.offsetWidth, ph=pal.offsetHeight;
   var left=Math.max(4,Math.min(rect.left+rect.width/2-pw/2, window.innerWidth-pw-4));
   var top=rect.top-ph-8;
-  if(top<4) top=rect.bottom+8;
+  // Doesn't fit above the button -- fall back to below it, but clamp that
+  // fallback too (same Math.max/Math.min pattern as `left` above), or a
+  // low-on-screen trigger (e.g. a reply row near the bottom of a scrolled
+  // feed) can push the picker's bottom rows off the viewport.
+  if(top<4) top=Math.max(4,Math.min(rect.bottom+8, window.innerHeight-ph-4));
   pal.style.left=left+'px';
   pal.style.top=top+'px';
   pal.style.visibility='';
@@ -8375,7 +8379,9 @@ function _feedReactOpen(e, postId){
   var pw=pal.offsetWidth, ph=pal.offsetHeight;
   var left=Math.max(4,Math.min(rect.left+rect.width/2-pw/2, window.innerWidth-pw-4));
   var top=rect.top-ph-8;
-  if(top<4) top=rect.bottom+8;
+  // Same clamp as _emojiPickerToggle() -- without it, a react button low in
+  // the feed can push the picker's bottom rows off the viewport.
+  if(top<4) top=Math.max(4,Math.min(rect.bottom+8, window.innerHeight-ph-4));
   pal.style.left=left+'px';
   pal.style.top=top+'px';
   pal.style.visibility='';
