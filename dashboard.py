@@ -1881,6 +1881,13 @@ _last_good_mints: list = []  # last non-empty result from discover_tokens()
 # search?q= entries TTL 10 s; everything else TTL 30 s
 _dex_resp_cache: dict = {}
 
+# Last-known-good response per URL — same idea as _last_good_mints above, but
+# for raw _dex_get() responses. Never evicted (unlike _dex_resp_cache, which
+# drops old entries once it grows large), so it survives long enough to cover
+# a fresh boot/redeploy whose very first request for a given URL lands during
+# an active 429 backoff, when _dex_resp_cache has nothing cached yet.
+_dex_last_good: dict = {}
+
 # GeckoTerminal candle cache: (pair_address, tf) → (timestamp, candles list)
 # separate from _dex_resp_cache since it's keyed on GeckoTerminal's pool+timeframe,
 # not a DexScreener URL, and stores parsed candle dicts rather than raw response text.
@@ -1911,8 +1918,14 @@ def _dex_get(url: str, timeout: int = 10, ttl_override: float | None = None):
         return _DexCachedResp(cached[1])
     with _dex_lock:
         if now < _dex_429_until:
-            # In backoff — return stale cached data if we have any
-            return _DexCachedResp(cached[1]) if cached else None
+            # In backoff — return stale cached data if we have any, else fall
+            # back to the last-known-good response for this URL (covers a
+            # fresh boot that hasn't cached this URL yet), same idea as
+            # token_loop()'s _last_good_mints fallback.
+            if cached:
+                return _DexCachedResp(cached[1])
+            stale = _dex_last_good.get(url)
+            return _DexCachedResp(stale) if stale else None
     try:
         _ext_hit('dexscreener')
         r = requests.get(url, headers=_DEX_HEADERS, timeout=timeout)
@@ -1920,16 +1933,30 @@ def _dex_get(url: str, timeout: int = 10, ttl_override: float | None = None):
             with _dex_lock:
                 _dex_429_until = time.time() + 60
             add_log('DexScreener rate-limited (429) — backing off 60 s, serving cached data')
-            return _DexCachedResp(cached[1]) if cached else None
+            if cached:
+                return _DexCachedResp(cached[1])
+            stale = _dex_last_good.get(url)
+            return _DexCachedResp(stale) if stale else None
         if r.status_code == 200:
             with _dex_lock:
                 _dex_resp_cache[url] = (time.time(), r.text)
+                # Re-insert (not plain assign) so a repeatedly-hit URL like
+                # token-boosts keeps moving to the end — otherwise the
+                # size-cap eviction below (oldest-inserted-first) would evict
+                # exactly the hot, frequently-refreshed URLs first.
+                _dex_last_good.pop(url, None)
+                _dex_last_good[url] = r.text
                 # Evict entries older than 5 min if cache grows large
                 if len(_dex_resp_cache) > 500:
                     cutoff = time.time() - 300
-                    stale = [k for k, v in _dex_resp_cache.items() if v[0] < cutoff]
-                    for k in stale:
+                    stale_keys = [k for k, v in _dex_resp_cache.items() if v[0] < cutoff]
+                    for k in stale_keys:
                         del _dex_resp_cache[k]
+                # _dex_last_good has no timestamps to age out by — cap its size
+                # instead, dropping the oldest-inserted entry (dict preserves
+                # insertion order) so it can't grow unbounded over a long uptime.
+                if len(_dex_last_good) > 500:
+                    _dex_last_good.pop(next(iter(_dex_last_good)))
         return r
     except Exception:
         return None
@@ -8498,7 +8525,8 @@ def get_feed_replies(post_id):
                       r.created_at,
                       r.user_id,
                       (SELECT COUNT(*) FROM feed_reply_likes WHERE reply_id = r.id) AS like_count,
-                      r.parent_reply_id
+                      r.parent_reply_id,
+                      u.is_verified
                FROM feed_replies r
                LEFT JOIN users u ON u.id = r.user_id
                WHERE r.post_id = ?
@@ -8529,6 +8557,7 @@ def get_feed_replies(post_id):
             'liked_by_me':  r[0] in liked,
             'is_mine':      me is not None and r[6] == me,
             'parent_reply_id': r[8],
+            'verified':     bool(r[9]),
         }
         for r in rows
     ]})
@@ -8901,11 +8930,11 @@ def api_profile_me():
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            'SELECT id, username, avatar_url FROM users WHERE wallet_address=?', (wallet,)
+            'SELECT id, username, avatar_url, is_verified FROM users WHERE wallet_address=?', (wallet,)
         ).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
-        uid, username, avatar_url = row
+        uid, username, avatar_url, is_verified = row
         follower_count  = (conn.execute('SELECT COUNT(*) FROM follows WHERE following_id=?', (uid,)).fetchone() or [0])[0]
         following_count = (conn.execute('SELECT COUNT(*) FROM follows WHERE follower_id=?',  (uid,)).fetchone() or [0])[0]
         today_row = conn.execute(
@@ -8921,6 +8950,7 @@ def api_profile_me():
         'user_id':        uid,
         'username':       display,
         'avatar_url':     avatar_url or '',
+        'verified':       bool(is_verified),
         'wallet':         short,
         'follower_count': int(follower_count),
         'following_count':int(following_count),

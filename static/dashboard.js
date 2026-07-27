@@ -8470,6 +8470,7 @@ function _renderReplyRow(r, postId, depth){
   var bg      = typeof _lbAvatarColor === 'function' ? _lbAvatarColor(initKey) : '#1b4332';
   var ini     = initKey[0].toUpperCase();
   var youChip = r.is_mine ? '<span class="fc-ri-you">You</span>' : '';
+  var verifiedBadge = r.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
   var likedCls= r.liked_by_me ? ' liked' : '';
   var likeCnt = Number(r.like_count)||0;
   var delBtn  = r.is_mine
@@ -8482,7 +8483,7 @@ function _renderReplyRow(r, postId, depth){
   return '<div class="fc-reply-item'+(depth>0?' fc-reply-nested':'')+'" data-reply-id="'+r.id+'" data-parent-id="'+(r.parent_reply_id||'')+'"'+indentStyle+'>'
     +'<div class="fc-ri-header">'
     +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+(r.avatar_url ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')' : (r.wallet ? 'event.stopPropagation();location.href=\'/profile/'+encodeURIComponent(r.wallet)+'\'' : ''))+'">'+ini+avatarImg+'</div>'
-    +'<span class="fc-ri-name">'+name+'</span>'
+    +'<span class="fc-ri-name">'+name+verifiedBadge+'</span>'
     +youChip
     +'<span class="fc-ri-handle">'+handle+'</span>'
     +'<span class="fc-ri-sep">·</span>'
@@ -8540,7 +8541,8 @@ function _feedSubmitNestedReply(inp, postId, parentReplyId){
           username: d.username, wallet: '',
           message: d.message, created_at: d.created_at,
           like_count: 0, liked_by_me: false, is_mine: true,
-          parent_reply_id: parentReplyId
+          parent_reply_id: parentReplyId,
+          verified: !!(_myProfileData && _myProfileData.verified)
         };
         parentRow.insertAdjacentHTML('afterend', _renderReplyRow(fakeReply, postId, parentDepth));
       }
@@ -8640,7 +8642,8 @@ function _feedSubmitReply(inp, postId){
           id: d.id, user_id: d.user_id,
           username: d.username, wallet: '',
           message: d.message, created_at: d.created_at,
-          like_count: 0, liked_by_me: false, is_mine: true
+          like_count: 0, liked_by_me: false, is_mine: true,
+          verified: !!(_myProfileData && _myProfileData.verified)
         };
         list.insertAdjacentHTML('beforeend', _renderReplyRow(fakeReply, postId));
       }
