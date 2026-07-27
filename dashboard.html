@@ -469,6 +469,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-pnl-sub.pos{color:#3ad29b}
 .fc-pnl-sub.neg{color:#f76b62}
 .fc-text{font-size:14.5px;color:#c7ccd4;line-height:1.55;margin-bottom:10px}
+.fc-post-image-wrap{margin-bottom:10px;border-radius:14px;overflow:hidden;border:1px solid #16191f;max-width:420px;cursor:pointer}
+.fc-post-image{display:block;width:100%;max-height:420px;object-fit:cover}
 .fc-actions{display:flex;align-items:center;gap:24px;margin-top:4px}
 .fc-view-count{font-size:11.5px;color:#565d68;font-family:'JetBrains Mono',monospace;margin-left:auto;user-select:none}
 .fc-action{display:flex;align-items:center;gap:5px;color:#565d68;font-size:13px;background:transparent;border:none;cursor:pointer;padding:0;font-family:'Geist',system-ui,sans-serif;transition:color .15s}
@@ -3881,6 +3883,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div id="composer-trade-card"></div>
     </div>
 
+    <!-- image preview (shown after a file is picked) -->
+    <div id="composer-image-preview" style="display:none;margin-bottom:10px;position:relative" onclick="event.stopPropagation()">
+      <button onclick="_clearComposerImage()" style="position:absolute;top:10px;right:10px;background:rgba(10,11,14,.7);border:none;border-radius:50%;width:26px;height:26px;color:#eef1f5;cursor:pointer;font-size:14px;line-height:1;z-index:1">&#10005;</button>
+      <img id="composer-image-preview-img" src="" alt="" style="max-width:100%;max-height:240px;border-radius:14px;display:block;object-fit:cover">
+    </div>
+
+    <input type="file" id="composer-image-input" accept="image/jpeg,image/png,image/webp" style="display:none" onchange="_composerImageSelected(this)">
+
     <div class="feed-composer-actions">
       <!-- Chart chip -->
       <button class="feed-composer-pill" id="chart-pill-btn" onclick="_feedComposerChart()">
@@ -3889,6 +3899,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </button>
       <!-- Share Trade chip (kept for JS) -->
       <button class="feed-composer-pill" id="trade-pill-btn" onclick="_feedComposerTrade()">&#9889; Share Trade</button>
+      <!-- Image chip -->
+      <button class="feed-composer-pill" id="image-pill-btn" onclick="event.stopPropagation();document.getElementById('composer-image-input').click()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/></svg>
+        + Image
+      </button>
       <!-- Emoji picker -->
       <div class="feed-emoji-wrap">
         <button class="feed-emoji-btn" type="button" onclick="_toggleFeedEmojiPanel(event)">😀</button>

@@ -1298,6 +1298,7 @@ def run_migrations():
         # labeled as such (see api_tos_my_acceptance_pdf).
         "ALTER TABLE tos_acceptances ADD COLUMN content_html TEXT DEFAULT NULL",
         "ALTER TABLE feed_posts ADD COLUMN view_count INTEGER DEFAULT 0",
+        "ALTER TABLE feed_posts ADD COLUMN image_url TEXT DEFAULT NULL",
         "ALTER TABLE trades ADD COLUMN view_count INTEGER DEFAULT 0",
         "ALTER TABLE groups ADD COLUMN avatar_url TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN banner_url TEXT DEFAULT NULL",
@@ -7669,7 +7670,7 @@ def social_feed():
                        'p' as kind,
                        u.username, NULL as symbol, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
-                       u.avatar_url, u.is_verified, NULL as repost_of
+                       u.avatar_url, u.is_verified, NULL as repost_of, fp.image_url
                 FROM feed_posts fp
                 LEFT JOIN users u ON fp.wallet = u.wallet_address
                 UNION ALL
@@ -7682,7 +7683,7 @@ def social_feed():
                             THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                             ELSE 0 END as pnl_pct,
                        (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
-                       u.avatar_url, u.is_verified, NULL as repost_of
+                       u.avatar_url, u.is_verified, NULL as repost_of, NULL as image_url
                 FROM trades t
                 LEFT JOIN users u ON t.user_id = u.id
                 UNION ALL
@@ -7691,7 +7692,7 @@ def social_feed():
                        'r' as kind,
                        ru.username, NULL as symbol, NULL as pnl_pct,
                        (fr.reposter_wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
-                       ru.avatar_url, ru.is_verified, fr.post_id as repost_of
+                       ru.avatar_url, ru.is_verified, fr.post_id as repost_of, NULL as image_url
                 FROM feed_reposts fr
                 LEFT JOIN users ru ON fr.reposter_wallet = ru.wallet_address
             )
@@ -7739,12 +7740,13 @@ def social_feed():
             if rp_ids:
                 ph_rp = ','.join('?' * len(rp_ids))
                 for r2 in conn.execute(f'''
-                    SELECT fp.id, fp.wallet, fp.content, fp.created_at, u.username, u.avatar_url, u.is_verified
+                    SELECT fp.id, fp.wallet, fp.content, fp.created_at, u.username, u.avatar_url, u.is_verified, fp.image_url
                     FROM feed_posts fp LEFT JOIN users u ON fp.wallet = u.wallet_address
                     WHERE fp.id IN ({ph_rp})''', rp_ids):
                     originals['p' + str(r2[0])] = {
                         'kind': 'p', 'wallet': r2[1] or '', 'content': r2[2] or '', 'created_at': r2[3] or '',
                         'username': r2[4] or '', 'avatar_url': r2[5] or '', 'verified': bool(r2[6]),
+                        'image_url': r2[7] or '',
                     }
             if rt_ids:
                 ph_rt = ','.join('?' * len(rt_ids))
@@ -7777,7 +7779,7 @@ def social_feed():
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, kind, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, repost_of = row
+        rid, wallet, content, created_at, kind, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, repost_of, image_url = row
         post_id = kind + str(rid)
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
@@ -7810,6 +7812,7 @@ def social_feed():
             'is_own':      bool(is_own),
             'avatar_url':  avatar_url or '',
             'verified':    bool(is_verified),
+            'image_url':   image_url or '',
             'liked_by_me': target_id in liked_by_me,
             'repost_of':   repost_of,
             'original':    originals.get(repost_of) if kind == 'r' else None,
@@ -8030,16 +8033,36 @@ def feed_post_create():
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     body = request.json or {}
     content = _sanitize(str(body.get('content', '')))
-    if not content:
+    image_data = str(body.get('image_data', '')).strip()
+    if not content and not image_data:
         return jsonify({'ok': False, 'msg': 'Content cannot be empty'}), 400
     if len(content) > 500:
         return jsonify({'ok': False, 'msg': 'Too long (max 500)'}), 400
+    if image_data:
+        # Same validation as /api/avatar and /api/banner (base64 data-URI, magic-byte
+        # checked) — GIF deliberately excluded here, unlike those two endpoints; that's
+        # a separate decision for later, not an oversight.
+        _ALLOWED_PREFIXES = (
+            'data:image/jpeg;base64,', 'data:image/jpg;base64,',
+            'data:image/png;base64,',  'data:image/webp;base64,',
+        )
+        if not any(image_data.startswith(p) for p in _ALLOWED_PREFIXES):
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, or WebP images are accepted'}), 400
+        b64_part = image_data.split(',', 1)[1] if ',' in image_data else ''
+        if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
+            return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'}), 400
+        try:
+            raw = base64.b64decode(b64_part, validate=True)
+        except (binascii.Error, ValueError):
+            return jsonify({'ok': False, 'msg': 'Invalid image data'}), 400
+        if not _verify_image_magic(raw):
+            return jsonify({'ok': False, 'msg': 'File is not a valid image'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         now = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
         cur = conn.execute(
-            'INSERT INTO feed_posts (wallet, content, created_at) VALUES (?,?,?)',
-            (wallet, content, now)
+            'INSERT INTO feed_posts (wallet, content, created_at, image_url) VALUES (?,?,?,?)',
+            (wallet, content, now, image_data if image_data else None)
         )
         conn.commit()
         post_id = cur.lastrowid
@@ -8279,7 +8302,7 @@ def get_feed_post(post_id):
                        fp.view_count,
                        u.username, NULL as symbol, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
-                       u.avatar_url, u.is_verified
+                       u.avatar_url, u.is_verified, fp.image_url
                 FROM feed_posts fp
                 LEFT JOIN users u ON fp.wallet = u.wallet_address
                 WHERE fp.id = ?
@@ -8298,7 +8321,7 @@ def get_feed_post(post_id):
                             THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                             ELSE 0 END as pnl_pct,
                        (u.wallet_address = ?) as is_own, t.entry_price, t.exit_price,
-                       u.avatar_url, u.is_verified
+                       u.avatar_url, u.is_verified, NULL as image_url
                 FROM trades t
                 LEFT JOIN users u ON t.user_id = u.id
                 WHERE t.id = ?
@@ -8310,7 +8333,7 @@ def get_feed_post(post_id):
         conn.close()
     if not row:
         return jsonify({'ok': False, 'msg': 'Post not found'}), 404
-    rid, wallet, content, created_at, like_count, reply_count, view_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified = row
+    rid, wallet, content, created_at, like_count, reply_count, view_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, image_url = row
     short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
     display = username if username else short
     post = {
@@ -8331,6 +8354,7 @@ def get_feed_post(post_id):
         'is_own':      bool(is_own),
         'avatar_url':  avatar_url or '',
         'verified':    bool(is_verified),
+        'image_url':   image_url or '',
     }
     return jsonify({'ok': True, 'post': post})
 

@@ -6906,16 +6906,17 @@ function _updatePostCharCounter(ta){
 async function submitPost(){
   const t=document.getElementById('postText')
   var text = t.value.trim()
-  if(!text && !_composerChart && !_composerTrade) return
+  if(!text && !_composerChart && !_composerTrade && !_composerImageData) return
   var content = text
   if(_composerTrade) content = (content ? content+'\n' : '') + '__TRADE__'+JSON.stringify(_composerTrade)
   if(_composerChart) content = (content ? content+'\n' : '') + '__CHART__'+JSON.stringify(_composerChart)
-  const r=await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content})})
+  const r=await fetch('/api/feed/post',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:content, image_data:_composerImageData||''})})
   const d=await r.json()
   if(r.ok){
     t.value=''
     _updatePostCharCounter(t)
     _composerChart=null; _composerTrade=null
+    _clearComposerImage()
     var prev=document.getElementById('composer-chart-preview')
     if(prev) prev.style.display='none'
     var tprev=document.getElementById('composer-trade-preview')
@@ -7139,6 +7140,48 @@ function _feedComposerPost(){
 
 var _composerChart = null;
 var _composerTrade = null;
+var _composerImageData = null;
+
+// Same allowed types/size cap as the server-side check in POST /api/feed/post
+// (which is the actual source of truth) — this is just a fast client-side
+// reject so the user doesn't wait for a round-trip on an obviously bad file.
+// GIF intentionally excluded, same as server-side — separate decision for later.
+var _COMPOSER_IMAGE_TYPES    = ['image/jpeg', 'image/png', 'image/webp'];
+var _COMPOSER_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+
+function _composerImageSelected(input){
+  var file = input.files && input.files[0];
+  input.value = ''; // allow re-picking the same file later (e.g. after removing it)
+  if(!file) return;
+  if(_COMPOSER_IMAGE_TYPES.indexOf(file.type) === -1){
+    openAlertModal({text:'Only JPEG, PNG, or WebP images are accepted'});
+    return;
+  }
+  if(file.size > _COMPOSER_IMAGE_MAX_BYTES){
+    openAlertModal({text:'Image too large (max 2 MB)'});
+    return;
+  }
+  var reader = new FileReader();
+  reader.onload = function(){
+    _composerImageData = reader.result;
+    var img = document.getElementById('composer-image-preview-img');
+    if(img) img.src = _composerImageData;
+    var prev = document.getElementById('composer-image-preview');
+    if(prev) prev.style.display = '';
+  };
+  reader.onerror = function(){
+    openAlertModal({text:'Could not read that image — try a different file'});
+  };
+  reader.readAsDataURL(file);
+}
+
+function _clearComposerImage(){
+  _composerImageData = null;
+  var prev = document.getElementById('composer-image-preview');
+  if(prev) prev.style.display = 'none';
+  var img = document.getElementById('composer-image-preview-img');
+  if(img) img.src = '';
+}
 
 function _renderTradeTerminalCard(t){
   if(!t) return '';
@@ -8135,6 +8178,9 @@ function _renderFeedCard(e){
     +'<div id="fc-text-'+safePostId+'">'
     +textBody
     +'</div>'
+    +(e.image_url
+      ? '<div class="fc-post-image-wrap" onclick="event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(e.image_url))+')"><img class="fc-post-image" src="'+esc(e.image_url)+'" alt="" loading="lazy"></div>'
+      : '')
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
     +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">'+_REPLY_ICON_SVG+'<span class="fc-reply-label">Reply</span><span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
