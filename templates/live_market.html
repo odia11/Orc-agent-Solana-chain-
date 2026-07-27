@@ -1163,6 +1163,56 @@ async function _lmtdFetchChartData(addr, tf){
   return await Promise.race([fetchPromise, timeoutPromise]);
 }
 
+/* Pair-metadata lookup by symbol — routed through the backend's cached,
+   429-backoff-protected DexScreener proxy (/api/dexscreener/search, the
+   same endpoint the global token search uses) instead of an unproxied,
+   uncached, timeout-less direct browser call to DexScreener. Races against
+   the same 12s cap as the chart fetch so a slow/hung upstream can't leave
+   the modal stuck — returns null on timeout or network failure. */
+async function _lmtdSearchPair(symbol){
+  var fetchPromise = fetch('/api/dexscreener/search?q='+encodeURIComponent(symbol))
+    .then(function(x){return x.json();})
+    .catch(function(){return null;});
+  var timeoutPromise = new Promise(function(resolve){
+    setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
+  });
+  return await Promise.race([fetchPromise, timeoutPromise]);
+}
+
+/* Direct mint lookup — used instead of _lmtdSearchPair whenever the mint
+   address is already known (normal row click, or a global-search result).
+   One exact match against /api/token/info/<mint> instead of a symbol
+   search that can return multiple same-named tokens across chains/pools
+   and needs post-filtering. Same cache/backoff (_dex_get) and 12s race as
+   the other lookups here. */
+async function _lmtdFetchTokenInfo(addr){
+  var fetchPromise = fetch('/api/token/info/'+encodeURIComponent(addr))
+    .then(function(x){return x.json();})
+    .catch(function(){return null;});
+  var timeoutPromise = new Promise(function(resolve){
+    setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
+  });
+  return await Promise.race([fetchPromise, timeoutPromise]);
+}
+
+/* Adapts /api/token/info/<mint>'s flat response into the DexScreener
+   pair shape _lmtdRenderModal/_lmtdStatTilesHtml/_lmtdSidePanelHtml
+   already expect, so the rest of the modal needs no changes. */
+function _lmtdPairFromTokenInfo(d){
+  return {
+    baseToken:   {symbol: d.symbol || '', name: d.name || '', address: d.address || ''},
+    info:        {imageUrl: d.image_url || ''},
+    priceUsd:    d.price_usd,
+    priceChange: d.price_change || {},
+    marketCap:   d.market_cap,
+    fdv:         d.fdv,
+    volume:      {h24: d.volume_24h},
+    liquidity:   {usd: d.liquidity_usd},
+    txns:        {h24: {buys: d.buyers_24h, sells: d.sellers_24h}},
+    pairAddress: d.pair_address || '',
+  };
+}
+
 async function showTokenCard(symbol, knownAddr){
   var modal = document.getElementById('lm-token-modal');
   var body  = document.getElementById('lm-modal-body');
@@ -1181,12 +1231,32 @@ async function showTokenCard(symbol, knownAddr){
     +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
     +'</div>';
   try{
-    var r = await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol));
-    var d = await r.json();
-    var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
-    if(!p){
-      body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
-      return;
+    var p;
+    if(knownAddr){
+      // Mint already known — exact single-token lookup, no symbol-search ambiguity.
+      var info = await _lmtdFetchTokenInfo(knownAddr);
+      if(info === null){
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
+        return;
+      }
+      if(!info.ok){
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        return;
+      }
+      p = _lmtdPairFromTokenInfo(info);
+    } else {
+      // No pre-known address (e.g. opened via ?token= URL param) — fall
+      // back to the symbol search.
+      var d = await _lmtdSearchPair(symbol);
+      if(d === null){
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
+        return;
+      }
+      p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+      if(!p){
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        return;
+      }
     }
     _lmtdPair   = p;
     _lmtdSymbol = (p.baseToken&&p.baseToken.symbol)||symbol;
