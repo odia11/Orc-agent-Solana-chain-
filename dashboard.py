@@ -4952,7 +4952,8 @@ def community_messages():
 @app.route('/api/community/message', methods=['POST'])
 @rate_limit(10, 60)
 def post_community():
-    if 'wallet' not in session:
+    wallet = _authenticated_wallet()
+    if not wallet:
         return jsonify({}), 401
     content = (request.json or {}).get('content', '').strip()
     if not content:
@@ -4963,7 +4964,7 @@ def post_community():
     try:
         conn.execute(
             'INSERT INTO community_messages (wallet, content) VALUES (?,?)',
-            [session['wallet'], _sanitize(content)]
+            [wallet, _sanitize(content)]
         )
         conn.commit()
         return jsonify({'ok': True})
@@ -14327,7 +14328,7 @@ def invite_check():
 @app.route('/api/invite/respond', methods=['POST'])
 @csrf_exempt
 def invite_respond():
-    wallet = session.get('wallet', '')
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
     data      = request.get_json(silent=True) or {}
