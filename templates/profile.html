@@ -807,9 +807,10 @@ async function openFollowListModal(type){
       var color = _flmColor(u.wallet_address||u.username||'');
       var img   = u.avatar_url ? '<img src="'+u.avatar_url.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">' : '';
       var handle = u.wallet ? '<div class="flm-handle">'+u.wallet+'</div>' : '';
+      var verifiedBadge = u.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
       return '<div class="flm-row" onclick="closeFollowListModal();window.location.href=\'/profile/'+encodeURIComponent(u.wallet_address||'')+'\'">'
         +'<div class="flm-av" style="background:'+color+'">'+ini+img+'</div>'
-        +'<div style="flex:1;min-width:0"><div class="flm-name">'+u.username+'</div>'+handle+'</div>'
+        +'<div style="flex:1;min-width:0"><div class="flm-name">'+u.username+verifiedBadge+'</div>'+handle+'</div>'
         +'</div>';
     }).join('');
   }catch(e){
