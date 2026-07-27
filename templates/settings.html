@@ -127,6 +127,15 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .modal-msg.ok{color:var(--green)}
 .modal-msg.err{color:var(--red)}
 
+/* ── PRIVATE KEY WARNING (mirrors dashboard.html's #tos-modal gate) ── */
+.manage-warn{background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:12px 14px;font-size:12px;color:var(--sub);line-height:1.55;margin-bottom:14px}
+.manage-warn p{margin-bottom:6px;color:var(--text)}
+.manage-warn ul{margin:0;padding-left:18px}
+.manage-warn li{margin-bottom:4px}
+.manage-warn li:last-child{margin-bottom:0}
+.tos-checkbox-row{display:flex;align-items:flex-start;gap:10px;font-size:12px;color:var(--text);margin-bottom:16px;cursor:pointer;user-select:none;line-height:1.5}
+.tos-checkbox-row input{margin-top:2px;width:16px;height:16px;accent-color:var(--accent);cursor:pointer;flex-shrink:0}
+
 /* ── SHARED MODAL SHELL (mirrors dashboard.html/messages.html) — used by
    _confirm_modal.html / _alert_modal.html ── */
 .s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
@@ -458,9 +467,21 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
     <button class="modal-close" onclick="_closeManage()">✕</button>
     <div class="modal-title">Enter Private Key</div>
     <textarea id="manage-inp" class="modal-textarea" placeholder="Paste your base58 private key here…" autocomplete="new-password" spellcheck="false"></textarea>
+    <div class="manage-warn">
+      <p>Door een private key op te slaan:</p>
+      <ul>
+        <li>wordt dit wallet je <strong>trading-wallet</strong> voor zowel de bot als copy-trade — geen wallet-pop-up meer per trade;</li>
+        <li>bewaart de server de sleutel <strong>versleuteld</strong> (encrypted at rest);</li>
+        <li>ben je zelf verantwoordelijk voor het saldo op dit wallet — gebruik geen wallet met je hoofdvermogen.</li>
+      </ul>
+    </div>
+    <label class="tos-checkbox-row">
+      <input type="checkbox" id="manage-confirm-chk" onchange="document.getElementById('manage-save-btn').disabled=!this.checked">
+      <span>Ik begrijp dit en wil doorgaan</span>
+    </label>
     <div class="modal-btns">
       <button class="modal-btn modal-cancel" onclick="_closeManage()">Cancel</button>
-      <button class="modal-btn modal-save" id="manage-save-btn" onclick="_saveKey()">Save</button>
+      <button class="modal-btn modal-save" id="manage-save-btn" disabled onclick="_saveKey()">Save</button>
     </div>
     <div class="modal-msg" id="manage-msg"></div>
   </div>
@@ -629,6 +650,8 @@ function _copyWallet(){
 /* ── manage modal ── */
 function _openManage(){
   document.getElementById('manage-inp').value='';
+  document.getElementById('manage-confirm-chk').checked=false;
+  document.getElementById('manage-save-btn').disabled=true;
   _msg('manage-msg','','');
   document.getElementById('manage-modal').style.display='flex';
   setTimeout(function(){document.getElementById('manage-inp').focus();},60);
@@ -636,6 +659,8 @@ function _openManage(){
 function _closeManage(){
   document.getElementById('manage-modal').style.display='none';
   document.getElementById('manage-inp').value='';
+  document.getElementById('manage-confirm-chk').checked=false;
+  document.getElementById('manage-save-btn').disabled=true;
 }
 async function _saveKey(){
   var key=document.getElementById('manage-inp').value.trim();
