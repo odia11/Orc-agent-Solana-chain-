@@ -7146,23 +7146,25 @@ var _composerChart = null;
 var _composerTrade = null;
 var _composerImageData = null;
 
-// Same allowed types/size cap as the server-side check in POST /api/feed/post
+// Same allowed types/size caps as the server-side check in POST /api/feed/post
 // (which is the actual source of truth) — this is just a fast client-side
 // reject so the user doesn't wait for a round-trip on an obviously bad file.
-// GIF intentionally excluded, same as server-side — separate decision for later.
-var _COMPOSER_IMAGE_TYPES    = ['image/jpeg', 'image/png', 'image/webp'];
+// GIF gets a higher cap than the static formats, same reasoning as server-side.
+var _COMPOSER_IMAGE_TYPES     = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
 var _COMPOSER_IMAGE_MAX_BYTES = 2 * 1024 * 1024;
+var _COMPOSER_GIF_MAX_BYTES   = 5 * 1024 * 1024;
 
 function _composerImageSelected(input){
   var file = input.files && input.files[0];
   input.value = ''; // allow re-picking the same file later (e.g. after removing it)
   if(!file) return;
   if(_COMPOSER_IMAGE_TYPES.indexOf(file.type) === -1){
-    openAlertModal({text:'Only JPEG, PNG, or WebP images are accepted'});
+    openAlertModal({text:'Only JPEG, PNG, GIF, or WebP images are accepted'});
     return;
   }
-  if(file.size > _COMPOSER_IMAGE_MAX_BYTES){
-    openAlertModal({text:'Image too large (max 2 MB)'});
+  var maxBytes = file.type === 'image/gif' ? _COMPOSER_GIF_MAX_BYTES : _COMPOSER_IMAGE_MAX_BYTES;
+  if(file.size > maxBytes){
+    openAlertModal({text:'Image too large (max ' + (maxBytes/(1024*1024)) + ' MB)'});
     return;
   }
   var reader = new FileReader();

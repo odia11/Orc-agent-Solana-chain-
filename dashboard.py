@@ -8044,17 +8044,20 @@ def feed_post_create():
         return jsonify({'ok': False, 'msg': 'Too long (max 500)'}), 400
     if image_data:
         # Same validation as /api/avatar and /api/banner (base64 data-URI, magic-byte
-        # checked) — GIF deliberately excluded here, unlike those two endpoints; that's
-        # a separate decision for later, not an oversight.
+        # checked). GIF gets a higher size cap than static formats -- an animated GIF
+        # is legitimately bigger than a JPEG/PNG/WebP at equivalent visual quality.
         _ALLOWED_PREFIXES = (
             'data:image/jpeg;base64,', 'data:image/jpg;base64,',
             'data:image/png;base64,',  'data:image/webp;base64,',
+            'data:image/gif;base64,',
         )
         if not any(image_data.startswith(p) for p in _ALLOWED_PREFIXES):
-            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, or WebP images are accepted'}), 400
+            return jsonify({'ok': False, 'msg': 'Only JPEG, PNG, GIF, or WebP images are accepted'}), 400
+        is_gif = image_data.startswith('data:image/gif;base64,')
+        max_bytes = 5 * 1024 * 1024 if is_gif else 2 * 1024 * 1024
         b64_part = image_data.split(',', 1)[1] if ',' in image_data else ''
-        if len(b64_part) * 3 // 4 > 2 * 1024 * 1024:
-            return jsonify({'ok': False, 'msg': 'Image too large (max 2 MB)'}), 400
+        if len(b64_part) * 3 // 4 > max_bytes:
+            return jsonify({'ok': False, 'msg': f'Image too large (max {max_bytes // (1024*1024)} MB)'}), 400
         try:
             raw = base64.b64decode(b64_part, validate=True)
         except (binascii.Error, ValueError):
