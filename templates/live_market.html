@@ -50,6 +50,24 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-chip-search::placeholder{color:var(--muted)}
 .lm-chip-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
 
+/* global token search — hits DexScreener directly (proxied), independent of
+   the loaded/tracked list above; opens the Token Detail modal on a result
+   click, same as a normal row click does */
+.lm-global-search-wrap{position:relative;margin:12px 16px 0}
+.lm-global-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:9px 12px 9px 34px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.lm-global-search:focus{border-color:var(--accent)}
+.lm-global-search::placeholder{color:var(--muted)}
+.lm-global-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
+.lm-global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;max-height:320px;overflow-y:auto;z-index:25;display:none}
+.lm-global-search-results.open{display:block}
+.lm-gsr-item{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--bg3);transition:background .15s}
+.lm-gsr-item:last-child{border-bottom:none}
+.lm-gsr-item:hover{background:var(--bg3)}
+.lm-gsr-sym{font-weight:700;color:var(--text);font-size:12px;flex-shrink:0}
+.lm-gsr-name{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.lm-gsr-price{color:var(--text);font-size:11px;flex-shrink:0}
+.lm-gsr-empty,.lm-gsr-loading{padding:12px;color:var(--muted);font-size:12px;text-align:center}
+
 /* table wrapper */
 .lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:visible;margin:16px}
 .lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
@@ -253,6 +271,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     width:100%;
     max-width:none;
   }
+  .lm-global-search-wrap{
+    margin:10px 8px 0;
+  }
   .lm-table-wrap{margin:8px}
   .lm-featured-banner{margin:8px 8px 0}
   .col-hide{display:none!important}
@@ -426,6 +447,12 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
   <button class="lm-watchlist-toggle" id="lm-watchlist-toggle" onclick="_lmToggleWatchlistView()" title="Watchlist">★</button>
 </header>
+
+<div class="lm-global-search-wrap" id="lm-global-search-wrap">
+  <span class="lm-global-search-icon">⌕</span>
+  <input class="lm-global-search" id="lm-global-search" type="text" placeholder="Search any token by name or address…" autocomplete="off" oninput="_lmGlobalSearchDebounce(this.value)">
+  <div class="lm-global-search-results" id="lm-global-search-results"></div>
+</div>
 
 <div class="lm-chips-row">
   <div class="lm-chips" id="lm-chips">
@@ -834,6 +861,92 @@ function _lmApplyChipFilter(){
     return;
   }
   wrap.innerHTML = _buildTable(filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+}
+
+/* ── global token search — separate from the chip-search above: hits
+   DexScreener (via /api/dexscreener/search, debounced client-side against
+   its own 60/60s rate limit) instead of filtering the loaded list, so it
+   can surface tokens the scanner hasn't picked up. Selecting a result opens
+   the same Token Detail modal a row click would. ── */
+var _lmGsTimer        = null;
+var _lmGsLastQuery    = '';
+var _lmGsResults      = [];
+var LM_GS_MIN_QUERY_LEN = 2;
+var LM_GS_DEBOUNCE_MS   = 350;
+
+function _lmGlobalSearchDebounce(q){
+  clearTimeout(_lmGsTimer);
+  q = q.trim();
+  if(q.length < LM_GS_MIN_QUERY_LEN){
+    _lmGsLastQuery = '';
+    _lmGsResults = [];
+    _lmRenderGlobalResults();
+    return;
+  }
+  _lmGsTimer = setTimeout(function(){ _lmGlobalSearch(q); }, LM_GS_DEBOUNCE_MS);
+}
+
+async function _lmGlobalSearch(q){
+  _lmGsLastQuery = q;
+  _lmRenderGlobalResults('loading');
+  try{
+    var qRemote = q.replace(/^\$/, ''); // DexScreener's search doesn't understand a leading $
+    var r = await fetch('/api/dexscreener/search?q=' + encodeURIComponent(qRemote));
+    var d = await r.json();
+    if(q !== _lmGsLastQuery) return; // stale response from fast typing
+    _lmGsResults = (d.pairs || []).filter(function(p){ return p.chainId === 'solana'; }).slice(0, 20);
+    _lmRenderGlobalResults();
+  }catch(e){
+    if(q !== _lmGsLastQuery) return;
+    _lmGsResults = [];
+    _lmRenderGlobalResults('error');
+  }
+}
+
+function _lmRenderGlobalResults(state){
+  var box = document.getElementById('lm-global-search-results');
+  if(!box) return;
+  if(!_lmGsLastQuery){
+    box.classList.remove('open');
+    box.innerHTML = '';
+    return;
+  }
+  if(state === 'loading'){
+    box.innerHTML = '<div class="lm-gsr-loading">Searching…</div>';
+    box.classList.add('open');
+    return;
+  }
+  if(state === 'error'){
+    box.innerHTML = '<div class="lm-gsr-empty">Search failed — try again</div>';
+    box.classList.add('open');
+    return;
+  }
+  if(!_lmGsResults.length){
+    box.innerHTML = '<div class="lm-gsr-empty">No tokens found for "'+_esc(_lmGsLastQuery)+'"</div>';
+    box.classList.add('open');
+    return;
+  }
+  box.innerHTML = _lmGsResults.map(function(p){
+    var sym   = (p.baseToken && p.baseToken.symbol) || '?';
+    var name  = (p.baseToken && p.baseToken.name) || sym;
+    var addr  = (p.baseToken && p.baseToken.address) || '';
+    var price = _fmtPrice(p.priceUsd);
+    return '<div class="lm-gsr-item" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'">'
+      +'<span class="lm-gsr-sym">$'+_esc(sym)+'</span>'
+      +'<span class="lm-gsr-name">'+_esc(name)+'</span>'
+      +'<span class="lm-gsr-price">'+price+'</span>'
+      +'</div>';
+  }).join('');
+  box.classList.add('open');
+}
+
+function _lmCloseGlobalSearch(){
+  var input = document.getElementById('lm-global-search');
+  var box   = document.getElementById('lm-global-search-results');
+  if(input) input.value = '';
+  if(box){ box.classList.remove('open'); box.innerHTML = ''; }
+  _lmGsLastQuery = '';
+  _lmGsResults = [];
 }
 
 function _chgCell(v, extra){
@@ -1455,6 +1568,23 @@ _lmInitFeatured();
 (function(){
   var _urlToken = new URLSearchParams(location.search).get('token');
   if(_urlToken) showTokenCard(_urlToken);
+})();
+
+(function(){
+  var resultsBox = document.getElementById('lm-global-search-results');
+  if(resultsBox){
+    resultsBox.addEventListener('click', function(e){
+      var item = e.target.closest('.lm-gsr-item');
+      if(!item || !item.dataset.addr) return;
+      var sym = item.dataset.sym, addr = item.dataset.addr;
+      _lmCloseGlobalSearch();
+      showTokenCard(sym, addr);
+    });
+  }
+  document.addEventListener('click', function(e){
+    var wrap = document.getElementById('lm-global-search-wrap');
+    if(wrap && resultsBox && !wrap.contains(e.target)) resultsBox.classList.remove('open');
+  });
 })();
 
 setInterval(function(){
