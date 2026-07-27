@@ -11804,7 +11804,7 @@ def _insufficient_trade_balance(wallet: str, enc_blob: str):
 @rate_limit(5, 60)
 def start_trader():
     ip     = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
@@ -11854,7 +11854,7 @@ def stop_trader():
 @rate_limit(5, 60)
 def bot_start():
     ip     = request.remote_addr or '0.0.0.0'
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
@@ -11896,7 +11896,7 @@ def bot_start():
 @app.route('/api/bot/stop', methods=['POST'])
 @rate_limit(10, 60)
 def bot_stop():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     us = get_user_state(wallet)
