@@ -13947,7 +13947,6 @@ def admin_bans():
 
 
 @app.route('/api/admin/user/ban', methods=['POST'])
-@csrf_exempt
 def admin_ban_user():
     err = _require_role('admin', 'moderator')
     if err: return err
@@ -13966,7 +13965,6 @@ def admin_ban_user():
 
 
 @app.route('/api/admin/user/verify', methods=['POST'])
-@csrf_exempt
 def admin_toggle_verify():
     err = _require_role('admin')
     if err: return err
@@ -13984,7 +13982,6 @@ def admin_toggle_verify():
         conn.close()
 
 @app.route('/api/admin/ban', methods=['POST'])
-@csrf_exempt
 def admin_ban_v2():
     err = _require_role('admin', 'moderator')
     if err: return err
@@ -14022,7 +14019,6 @@ def admin_delete_post():
 
 
 @app.route('/api/admin/trades')
-@csrf_exempt
 @rate_limit(20, 60)
 def admin_trades():
     err = _require_role('admin', 'moderator', 'analyst')
@@ -14060,7 +14056,6 @@ def admin_trades():
 
 
 @app.route('/api/admin/posts')
-@csrf_exempt
 @rate_limit(20, 60)
 def admin_posts():
     err = _require_role('admin', 'moderator', 'analyst')
@@ -14093,7 +14088,6 @@ def admin_posts():
 
 
 @app.route('/api/admin/revenue')
-@csrf_exempt
 @rate_limit(20, 60)
 def admin_revenue():
     err = _require_role('admin', 'moderator', 'analyst')
