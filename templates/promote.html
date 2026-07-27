@@ -140,6 +140,19 @@ var _promoId = null;
 var _promoTreasuryWallet = null;
 var _promoAmountSol = null;
 
+/* Silently restore the wallet-extension connection on page load, same as
+   dashboard.js checks window.solana.isConnected/.publicKey — promote.html is a
+   standalone page (see _promoSendSol below), so window.solana.publicKey starts
+   null here even if the user already has a valid server session and a
+   previously-trusted connection. onlyIfTrusted:true never shows a popup — it
+   either silently succeeds (site was trusted before) or silently rejects. */
+(function _promoRestoreWallet(){
+  var provider = window.solana || window.solflare;
+  if(provider && !(provider.isConnected && provider.publicKey)){
+    provider.connect({onlyIfTrusted: true}).catch(function(){});
+  }
+})();
+
 function _promoShowError(msg){
   var el = document.getElementById('pr-err');
   el.textContent = msg;
