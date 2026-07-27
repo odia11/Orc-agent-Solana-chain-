@@ -7808,7 +7808,11 @@ def social_feed():
             'pnl_pct':     pnl_pct or 0,
             'entry_price': entry_price or 0,
             'exit_price':  exit_price or 0,
-            'type':        'repost' if kind == 'r' else ('text' if content else 'trade'),
+            # 'trade' only when there's actual trade data (symbol) AND no content/image --
+            # NOT simply "content is empty", which used to also catch image-only posts
+            # (empty content is valid for those since the image carries the post) and
+            # got them wrongly filtered out by renderHomeFeed()'s type!=='trade' filter.
+            'type':        'repost' if kind == 'r' else ('trade' if (not content and not image_url and symbol) else 'text'),
             'is_own':      bool(is_own),
             'avatar_url':  avatar_url or '',
             'verified':    bool(is_verified),
