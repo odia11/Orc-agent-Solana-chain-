@@ -510,8 +510,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reply-emoji-wrap{position:relative;flex-shrink:0}
 .fc-reply-emoji-btn{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;color:#565d68;transition:color .15s}
 .fc-reply-emoji-btn:hover{color:#eef1f5}
-.fc-reply-palette{position:absolute;bottom:calc(100% + 8px);left:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:8px;display:none;grid-template-columns:repeat(6,1fr);gap:3px;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,.55);width:192px}
-.fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:4px;border-radius:6px;transition:background .1s;line-height:1;text-align:center}
+.fc-reply-palette{position:absolute;bottom:calc(100% + 8px);left:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:8px;display:none;grid-template-columns:repeat(6,1fr);gap:3px;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,.55);width:220px}
+.fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:6px;border-radius:6px;transition:background .1s;line-height:1.4;text-align:center}
 .fc-reply-palette button:hover{background:rgba(255,255,255,.09)}
 .fc-reply-inp{flex:1;background:var(--bg2);border:1px solid var(--bg3);border-radius:20px;padding:8px 14px;font-size:13px;color:var(--text);outline:none;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
 .fc-reply-inp:focus{border-color:var(--accent)}
@@ -2158,8 +2158,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-emoji-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:0 2px;height:42px;display:flex;align-items:center;flex-shrink:0;opacity:.6;transition:opacity .15s;align-self:flex-end}
 .dm-emoji-btn:hover{opacity:1}
 .dm-emoji-wrap{position:relative;flex-shrink:0;align-self:flex-end}
-.dm-emoji-picker{position:absolute;bottom:calc(100% + 8px);right:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:10px;display:none;grid-template-columns:repeat(6,1fr);gap:4px;z-index:300;width:216px;box-shadow:0 8px 24px rgba(0,0,0,.55)}
-.dm-emoji-picker button,.fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:4px;border-radius:6px;transition:background .1s;line-height:1}
+.dm-emoji-picker{position:absolute;bottom:calc(100% + 8px);right:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:10px;display:none;grid-template-columns:repeat(6,1fr);gap:4px;z-index:300;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.55)}
+.dm-emoji-picker button,.fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:6px;border-radius:6px;transition:background .1s;line-height:1.4}
 .dm-emoji-picker button:hover,.fc-reply-palette button:hover{background:rgba(255,255,255,.08)}
 .dm-img-btn{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:6px 10px;color:#aaaaaa;cursor:pointer;font-size:16px;flex-shrink:0;align-self:flex-end;height:42px;display:flex;align-items:center;justify-content:center;transition:color .15s,border-color .15s;line-height:1}
 .dm-img-btn:hover{color:#ffffff;border-color:#aaaaaa}
@@ -3151,6 +3151,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .fc-reply-inp{min-width:0}
   .fc-reply-send{padding:8px 12px;font-size:11px;flex-shrink:0}
   .fc-reply-box,.fc-reply-box.open{padding-left:12px;padding-right:12px}
+  /* ── Emoji pickers: slightly larger touch targets + more breathing room
+     between adjacent emoji, same idea as the 44px touch-target pattern used
+     elsewhere in this file (.pos-chart-close, .swap-switch-btn) -- a literal
+     44px per emoji isn't practical in a dense 6-column grid without making
+     the popover huge, so this scales it up proportionally instead. ── */
+  .fc-reply-palette,.dm-emoji-picker{width:248px}
+  .fc-reply-palette{gap:4px}
+  .dm-emoji-picker{gap:5px}
+  .fc-reply-palette button,.dm-emoji-picker button{padding:8px;font-size:19px}
   .pos-chart-close{min-width:44px;min-height:44px}
   .swap-switch-btn{min-width:44px;min-height:44px}
   .mn-item{
