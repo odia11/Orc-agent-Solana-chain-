@@ -8477,6 +8477,10 @@ function _handleNotifDeepLink(){
 }
 
 function _fcCardClick(ev, postId){
+  if (document.activeElement && document.activeElement.matches
+      && document.activeElement.matches('textarea, input[type="text"]')) {
+    return; // gebruiker is actief aan het typen, negeer card-klik
+  }
   if(ev.target.closest('a, button, input, textarea, select')) return;
   var rbox = document.getElementById('rbox-'+postId);
   if(rbox && rbox.classList.contains('open')){
