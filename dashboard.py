@@ -6253,6 +6253,7 @@ def _send_push_notification_sync(user_id, title, body, url='/'):
                 vapid_claims=dict(VAPID_CLAIMS),
                 timeout=5
             )
+            print(f"[push] sent OK to user {user_id}", flush=True)
         except WebPushException as ex:
             if ex.response is not None and ex.response.status_code in (404, 410):
                 print(f"[push] subscription {sub_id} for user {user_id} expired ({ex.response.status_code}) -- deleting", flush=True)
