@@ -6241,7 +6241,8 @@ def _send_push_notification_sync(user_id, title, body, url='/'):
             'SELECT id, endpoint, p256dh, auth FROM push_subscriptions WHERE user_id=?', (user_id,)
         ).fetchall()
         conn.close()
-    except Exception:
+    except Exception as e:
+        print(f"[push] failed to fetch subscriptions for user {user_id}: {e}", flush=True)
         return
     for sub_id, endpoint, p256dh, auth in rows:
         try:
@@ -6254,6 +6255,7 @@ def _send_push_notification_sync(user_id, title, body, url='/'):
             )
         except WebPushException as ex:
             if ex.response is not None and ex.response.status_code in (404, 410):
+                print(f"[push] subscription {sub_id} for user {user_id} expired ({ex.response.status_code}) -- deleting", flush=True)
                 try:
                     c2 = sqlite3.connect(DB_FILE)
                     c2.execute('DELETE FROM push_subscriptions WHERE id=?', (sub_id,))
@@ -6261,8 +6263,10 @@ def _send_push_notification_sync(user_id, title, body, url='/'):
                     c2.close()
                 except Exception:
                     pass
-        except Exception:
-            pass
+            else:
+                print(f"[push] failed for user {user_id}: {ex}", flush=True)
+        except Exception as e:
+            print(f"[push] failed for user {user_id}: {e}", flush=True)
 
 def _send_push_notification(user_id, title, body, url='/'):
     threading.Thread(
