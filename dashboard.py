@@ -6304,7 +6304,11 @@ def _notify_staff(title: str, body: str, link: str = '/admin#support', actor_wal
 def _notify_followers(conn, actor_user_id: int, ntype: str,
                        content_fn, link: str, actor_wallet: str):
     """content_fn(actor_name) -> str. Insert notificatie voor
-    elke follower met notify_enabled=1 op deze actor."""
+    elke follower met notify_enabled=1 op deze actor.
+    Stuurt zelf geen push (zelfde scheiding als alle andere
+    notificatie-insert-plekken in dit bestand) -- retourneert
+    de follower_ids zodat de aanroeper zelf _send_push_notification()
+    per follower kan aanroepen."""
     rows = conn.execute(
         'SELECT follower_id FROM follows WHERE following_id=? '
         'AND notify_enabled=1', (actor_user_id,)
@@ -6312,12 +6316,15 @@ def _notify_followers(conn, actor_user_id: int, ntype: str,
     actor = conn.execute('SELECT username FROM users WHERE id=?',
                           (actor_user_id,)).fetchone()
     actor_name = actor[0] if actor else 'Someone'
+    follower_ids = []
     for (follower_id,) in rows:
         conn.execute(
             'INSERT INTO notifications (user_id, type, content, '
             'link, actor_wallet) VALUES (?,?,?,?,?)',
             (follower_id, ntype, content_fn(actor_name), link, actor_wallet)
         )
+        follower_ids.append(follower_id)
+    return follower_ids
 
 @app.route('/sw.js')
 def service_worker_root():
@@ -8119,12 +8126,14 @@ def feed_post_create():
             post_desc = 'posted a photo'
         me = _get_uid(conn, wallet)
         if me:
-            _notify_followers(
+            follower_ids = _notify_followers(
                 conn, me, 'follow_post',
                 lambda actor_name: actor_name + ' ' + post_desc,
                 '/#post-p' + str(post_id), wallet
             )
             conn.commit()
+            for fid in follower_ids:
+                _send_push_notification(fid, 'New post', author_name + ' ' + post_desc, '/#post-p' + str(post_id))
         return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
