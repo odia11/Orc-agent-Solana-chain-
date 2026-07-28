@@ -8477,6 +8477,7 @@ function _feedToggleReply(btn, postId){
   if(!rbox) return;
   var open = rbox.classList.toggle('open');
   if(open){
+    rbox.dataset.openedAt = Date.now();
     var inp = document.getElementById('rinp-'+postId);
     if(inp) setTimeout(function(){ inp.focus(); }, 220);
   }
@@ -8511,6 +8512,8 @@ function _fcCardClick(ev, postId){
   if(ev.target.closest('a, button, input, textarea, select')) return;
   var rbox = document.getElementById('rbox-'+postId);
   if(rbox && rbox.classList.contains('open')){
+    var openedAt = Number(rbox.dataset.openedAt || 0);
+    if (Date.now() - openedAt < 400) return; // net geopend, negeer sluit-tik
     _debugLog('fcCardClick closed box: ' + ev.type);
     rbox.classList.remove('open');
     if(location.hash === '#post-'+postId){
@@ -8545,7 +8548,7 @@ async function _jumpToPost(postId){
   card.classList.add('fc-card-highlight');
   setTimeout(function(){ card.classList.remove('fc-card-highlight'); }, 2200);
   var rbox = document.getElementById('rbox-'+postId);
-  if(rbox) rbox.classList.add('open');
+  if(rbox){ rbox.classList.add('open'); rbox.dataset.openedAt = Date.now(); }
   _feedLoadReplies(postId);
 }
 
