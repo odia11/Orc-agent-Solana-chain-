@@ -7869,12 +7869,28 @@ window.addEventListener('scroll', _checkBottomHold, { passive: true });
 
 // ── TIJDELIJK DEBUG: bevestigen of keyboard-open op mobiel een resize/
 // viewport-event triggert rond het moment dat de reply-box sluit ──
+var _debugOverlay = null;
+var _debugLines = [];
+function _debugLog(msg){
+  if (!_debugOverlay) {
+    _debugOverlay = document.createElement('div');
+    _debugOverlay.id = 'debug-overlay';
+    _debugOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;'
+      + 'background:rgba(0,0,0,0.75);color:#0f0;font:11px/1.4 monospace;'
+      + 'padding:4px 6px;white-space:pre-wrap;pointer-events:none';
+    document.body.appendChild(_debugOverlay);
+  }
+  var ts = new Date().toISOString().slice(11,23);
+  _debugLines.push(ts + ' ' + msg);
+  if (_debugLines.length > 5) _debugLines.shift();
+  _debugOverlay.textContent = _debugLines.join('\n');
+}
 window.addEventListener('resize', function(){
-  console.log('[debug] resize event fired', window.innerHeight);
+  _debugLog('resize: ' + window.innerHeight);
 });
 if (window.visualViewport) {
   window.visualViewport.addEventListener('resize', function(){
-    console.log('[debug] visualViewport resize event fired', window.visualViewport.height, window.innerHeight);
+    _debugLog('vv resize: ' + window.visualViewport.height + ' / ' + window.innerHeight);
   });
 }
 
@@ -8495,7 +8511,7 @@ function _fcCardClick(ev, postId){
   if(ev.target.closest('a, button, input, textarea, select')) return;
   var rbox = document.getElementById('rbox-'+postId);
   if(rbox && rbox.classList.contains('open')){
-    console.log('[debug] fcCardClick closing reply box', ev.type, ev.target, document.activeElement);
+    _debugLog('fcCardClick closed box: ' + ev.type);
     rbox.classList.remove('open');
     if(location.hash === '#post-'+postId){
       history.pushState(null, '', location.pathname + location.search);
