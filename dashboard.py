@@ -6318,6 +6318,7 @@ def _notify_followers(conn, actor_user_id: int, ntype: str,
         'SELECT follower_id FROM follows WHERE following_id=? '
         'AND notify_enabled=1', (actor_user_id,)
     ).fetchall()
+    print(f"[notify] actor {actor_user_id} type={ntype}: {len(rows)} followers with notify on", flush=True)
     actor = conn.execute('SELECT username FROM users WHERE id=?',
                           (actor_user_id,)).fetchone()
     actor_name = actor[0] if actor else 'Someone'
