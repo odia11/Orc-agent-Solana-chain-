@@ -7780,7 +7780,15 @@ function renderHomeFeed(){
 }
 
 var _bottomHoldTimer = null;
+var _bottomHoldLastCheck = 0;
+var _BOTTOM_HOLD_THROTTLE_MS = 100;
 function _checkBottomHold() {
+  // scroll fires far more often than this needs to run (up to display refresh
+  // rate on a fling) -- document.documentElement.scrollHeight below forces a
+  // synchronous layout read, so gate it to ~10x/s instead of every tick.
+  var now = Date.now();
+  if (now - _bottomHoldLastCheck < _BOTTOM_HOLD_THROTTLE_MS) return;
+  _bottomHoldLastCheck = now;
   var feedEl = document.getElementById('center-feed');
   if (!feedEl || feedEl.offsetParent === null) {
     if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
