@@ -8112,6 +8112,19 @@ def feed_post_create():
                     (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id), wallet))
                 conn.commit()
                 _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id))
+        if content:
+            preview = content[:60] + ('…' if len(content) > 60 else '')
+            post_desc = 'posted: ' + preview
+        else:
+            post_desc = 'posted a photo'
+        me = _get_uid(conn, wallet)
+        if me:
+            _notify_followers(
+                conn, me, 'follow_post',
+                lambda actor_name: actor_name + ' ' + post_desc,
+                '/#post-p' + str(post_id), wallet
+            )
+            conn.commit()
         return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
