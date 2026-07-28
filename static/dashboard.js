@@ -7832,7 +7832,11 @@ window.addEventListener('scroll', _checkBottomHold, { passive: true });
   }
 
   feedEl.addEventListener('touchstart', function(e){
-    if (window.scrollY !== 0) { _ptrActive = false; return; }
+    // Don't hijack touches that start inside an open reply box (input focus,
+    // text selection, scrolling a long .fc-replies-list) -- _ptrActive stays
+    // false for this whole touch sequence, so touchmove's guard below skips
+    // it too and never calls preventDefault() on it.
+    if (window.scrollY !== 0 || e.target.closest('.fc-reply-box')) { _ptrActive = false; return; }
     _ptrStartY = e.touches[0].clientY;
     _ptrActive = true;
     _ptrPulling = false;
