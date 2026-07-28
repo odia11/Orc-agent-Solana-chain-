@@ -3761,6 +3761,7 @@ def profile():
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=True,
+            notify_enabled=False,
             x_handle=x_row['x_handle'] if x_row else None,
             csrf_token=_get_csrf_token(),
         )
@@ -3823,13 +3824,16 @@ def profile_view(wallet_address: str):
         is_own = bool(session_wallet and session_wallet == user["wallet_address"])
         is_following = False
         follows_me = False
+        notify_enabled = False
         if session_wallet and not is_own:
             me_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (session_wallet,)).fetchone()
             if me_row:
-                is_following = bool(conn.execute(
-                    'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
+                follow_row = conn.execute(
+                    'SELECT notify_enabled FROM follows WHERE follower_id=? AND following_id=?',
                     (me_row['id'], user_id)
-                ).fetchone())
+                ).fetchone()
+                is_following = bool(follow_row)
+                notify_enabled = bool(follow_row['notify_enabled']) if follow_row else False
                 follows_me = bool(conn.execute(
                     'SELECT 1 FROM follows WHERE follower_id=? AND following_id=?',
                     (user_id, me_row['id'])
@@ -3867,6 +3871,7 @@ def profile_view(wallet_address: str):
             is_own_profile=is_own,
             is_following=is_following,
             follows_me=follows_me,
+            notify_enabled=notify_enabled,
             x_handle=x_row['x_handle'] if x_row else None,
             csrf_token=_get_csrf_token(),
         )

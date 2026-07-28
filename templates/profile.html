@@ -448,6 +448,9 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="8.5" cy="7" r="4"/>{% if not is_following %}<line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/>{% endif %}</svg>
           {{ 'Following' if is_following else 'Follow' }}
         </button>
+        <button class="pf-btn-icon" onclick="_toggleNotify()" id="pf-notify-btn" data-user-id="{{ user_id }}" data-notify="{{ 'true' if notify_enabled else 'false' }}" style="{% if not is_following %}display:none{% elif notify_enabled %}background:#f7b955;border-color:#f7b955;color:#0a0b0e{% endif %}" title="{{ 'Turn off notifications' if notify_enabled else 'Get notified of new posts' }}">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+        </button>
         {% if follows_me %}
         <span class="pf-follows-you">Follows you</span>
         {% endif %}
@@ -775,6 +778,32 @@ function _followUser() {
         btn.style.background = '';
         btn.style.color = '';
         btn.dataset.following = 'false';
+        var notifyBtn = document.getElementById('pf-notify-btn');
+        if (notifyBtn) notifyBtn.style.display = 'none';
+      }
+    }
+  }).catch(function(){});
+}
+
+function _toggleNotify() {
+  var btn = document.getElementById('pf-notify-btn');
+  if (!btn) return;
+  var targetId = btn.dataset.userId;
+  fetch('/api/follow/' + targetId + '/notify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrf}
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    if (d.ok) {
+      if (d.notify_enabled) {
+        btn.style.background = '#f7b955';
+        btn.style.borderColor = '#f7b955';
+        btn.style.color = '#0a0b0e';
+        btn.dataset.notify = 'true';
+      } else {
+        btn.style.background = '';
+        btn.style.borderColor = '';
+        btn.style.color = '';
+        btn.dataset.notify = 'false';
       }
     }
   }).catch(function(){});
