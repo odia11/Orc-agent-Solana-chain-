@@ -7867,6 +7867,17 @@ window.addEventListener('scroll', _checkBottomHold, { passive: true });
   }, { passive: true });
 })();
 
+// ── TIJDELIJK DEBUG: bevestigen of keyboard-open op mobiel een resize/
+// viewport-event triggert rond het moment dat de reply-box sluit ──
+window.addEventListener('resize', function(){
+  console.log('[debug] resize event fired', window.innerHeight);
+});
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', function(){
+    console.log('[debug] visualViewport resize event fired', window.visualViewport.height, window.innerHeight);
+  });
+}
+
 function showToken(symbol){
   window.open('https://dexscreener.com/solana/'+symbol,'_blank')
 }
@@ -8484,6 +8495,7 @@ function _fcCardClick(ev, postId){
   if(ev.target.closest('a, button, input, textarea, select')) return;
   var rbox = document.getElementById('rbox-'+postId);
   if(rbox && rbox.classList.contains('open')){
+    console.log('[debug] fcCardClick closing reply box', ev.type, ev.target, document.activeElement);
     rbox.classList.remove('open');
     if(location.hash === '#post-'+postId){
       history.pushState(null, '', location.pathname + location.search);
