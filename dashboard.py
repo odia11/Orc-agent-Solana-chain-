@@ -1299,6 +1299,7 @@ def run_migrations():
         "ALTER TABLE tos_acceptances ADD COLUMN content_html TEXT DEFAULT NULL",
         "ALTER TABLE feed_posts ADD COLUMN view_count INTEGER DEFAULT 0",
         "ALTER TABLE feed_posts ADD COLUMN image_url TEXT DEFAULT NULL",
+        "ALTER TABLE follows ADD COLUMN notify_enabled INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE trades ADD COLUMN view_count INTEGER DEFAULT 0",
         "ALTER TABLE groups ADD COLUMN avatar_url TEXT DEFAULT NULL",
         "ALTER TABLE groups ADD COLUMN banner_url TEXT DEFAULT NULL",
@@ -6292,6 +6293,24 @@ def _notify_staff(title: str, body: str, link: str = '/admin#support', actor_wal
             conn.close()
     except Exception as e:
         print(f'[support] staff notify failed: {e}', flush=True)
+
+def _notify_followers(conn, actor_user_id: int, ntype: str,
+                       content_fn, link: str, actor_wallet: str):
+    """content_fn(actor_name) -> str. Insert notificatie voor
+    elke follower met notify_enabled=1 op deze actor."""
+    rows = conn.execute(
+        'SELECT follower_id FROM follows WHERE following_id=? '
+        'AND notify_enabled=1', (actor_user_id,)
+    ).fetchall()
+    actor = conn.execute('SELECT username FROM users WHERE id=?',
+                          (actor_user_id,)).fetchone()
+    actor_name = actor[0] if actor else 'Someone'
+    for (follower_id,) in rows:
+        conn.execute(
+            'INSERT INTO notifications (user_id, type, content, '
+            'link, actor_wallet) VALUES (?,?,?,?,?)',
+            (follower_id, ntype, content_fn(actor_name), link, actor_wallet)
+        )
 
 @app.route('/sw.js')
 def service_worker_root():
