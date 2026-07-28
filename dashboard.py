@@ -9256,6 +9256,37 @@ def toggle_follow(target_id: int):
     return jsonify({'ok': True, 'following': following, 'follower_count': int(follower_count)})
 
 
+@app.route('/api/follow/<int:target_user_id>/notify', methods=['POST'])
+@rate_limit(60, 60)
+def toggle_follow_notify(target_user_id: int):
+    """Toggle notify_enabled on an existing follow relationship. No @csrf_exempt
+    -- covered by the global _csrf_check() before_request hook like every other
+    non-exempted POST route (e.g. toggle_follow() just above)."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        row = conn.execute(
+            'SELECT notify_enabled FROM follows WHERE follower_id=? AND following_id=?',
+            (me, target_user_id)
+        ).fetchone()
+        if row is None:
+            return jsonify({'ok': False, 'msg': 'Not following this user'}), 400
+        new_val = 0 if row[0] else 1
+        conn.execute(
+            'UPDATE follows SET notify_enabled=? WHERE follower_id=? AND following_id=?',
+            (new_val, me, target_user_id)
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'notify_enabled': bool(new_val)})
+
+
 @app.route('/api/follow/toggle', methods=['POST'])
 @csrf_exempt
 @rate_limit(60, 60)
