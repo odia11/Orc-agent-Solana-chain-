@@ -13262,14 +13262,21 @@ def api_chart(mint):
     }
     tcfg = _TF.get(tf, _TF['5m'])
     try:
-        # ── Step 1: resolve pool address from DexScreener ──
-        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
-        pairs = r.json().get('pairs', []) if (r and r.status_code == 200) else []
-        if not pairs:
-            return jsonify({'candles': [], 'error': 'no pairs'})
-        pair_address = pairs[0].get('pairAddress', '')
-        if not pair_address:
-            return jsonify({'candles': [], 'error': 'no pair address'})
+        # ── Step 1: resolve pool address ──
+        # The caller (Live Market row click) almost always already knows the pair
+        # address from the table data it just rendered -- skip the DexScreener
+        # round-trip entirely when it's passed in, since that's the slow part of
+        # a cold (uncached) chart load. Falls back to resolving it ourselves for
+        # callers that don't have it yet (deep links, global search).
+        pair_address = request.args.get('pair', '').strip()
+        if not (pair_address and _SOLANA_ADDR_RE.match(pair_address)):
+            r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+            pairs = r.json().get('pairs', []) if (r and r.status_code == 200) else []
+            if not pairs:
+                return jsonify({'candles': [], 'error': 'no pairs'})
+            pair_address = pairs[0].get('pairAddress', '')
+            if not pair_address:
+                return jsonify({'candles': [], 'error': 'no pair address'})
 
         # ── Step 2: GeckoTerminal OHLCV (cached — GeckoTerminal has no per-URL
         # cache of its own like _dex_get, and candles for a given pair+timeframe

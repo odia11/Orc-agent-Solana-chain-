@@ -736,7 +736,7 @@ function _lmRenderFeaturedBanner(featuredPairs){
       +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>'
       +'<span class="lm-featured-price"'+priceStyle+'>'+price+'</span>'
       +'<span class="lm-featured-mcap">'+mcap+'</span>';
-    slide.onclick = function(){ showTokenCard(sym, addr); };
+    slide.onclick = function(){ showTokenCard(sym, addr, p.pairAddress||''); };
     slide.classList.remove('lm-slide-anim');
     void slide.offsetWidth; // force reflow so the enter animation restarts on every slide change
     slide.classList.add('lm-slide-anim');
@@ -791,7 +791,7 @@ function _lmBindTableEvents(wrap){
       return;
     }
     var row = event.target.closest('.lm-row');
-    if(row) _rowClick(event, row.dataset.sym, row.dataset.addr);
+    if(row) _rowClick(event, row.dataset.sym, row.dataset.addr, row.dataset.pair);
   });
 }
 function _renderTable(pairs){
@@ -931,7 +931,7 @@ function _lmRenderGlobalResults(state){
     var name  = (p.baseToken && p.baseToken.name) || sym;
     var addr  = (p.baseToken && p.baseToken.address) || '';
     var price = _fmtPrice(p.priceUsd);
-    return '<div class="lm-gsr-item" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'">'
+    return '<div class="lm-gsr-item" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
       +'<span class="lm-gsr-sym">$'+_esc(sym)+'</span>'
       +'<span class="lm-gsr-name">'+_esc(name)+'</span>'
       +'<span class="lm-gsr-price">'+price+'</span>'
@@ -1016,9 +1016,9 @@ function _rowHtml(p, idx){
     +'</tr>';
 }
 
-function _rowClick(e, sym, addr){
+function _rowClick(e, sym, addr, pairAddr){
   if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
-  showTokenCard(sym, addr);
+  showTokenCard(sym, addr, pairAddr);
 }
 
 /* ── inline trade dropdown ── */
@@ -1154,9 +1154,15 @@ function _lmtdFetchBalance(){
    search: a failure here never blocks or breaks the pair-search, and vice
    versa (see _lmtdRenderChartData). Races the fetch against a 12s timeout so
    a hung request can't leave the loading state stuck forever. */
-async function _lmtdFetchChartData(addr, tf){
+async function _lmtdFetchChartData(addr, tf, pairAddr){
   var tfParam = _LMTD_TF_MAP[tf] || '5m';
-  var fetchPromise = fetch('/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam)
+  var url = '/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam;
+  // pairAddr (already known from the table row that was clicked) lets the
+  // backend skip its own DexScreener round-trip to resolve it -- that's the
+  // slow part of a cold chart load, so passing it through is what actually
+  // makes the chart appear instantly instead of "a few seconds later".
+  if(pairAddr) url += '&pair='+encodeURIComponent(pairAddr);
+  var fetchPromise = fetch(url)
     .then(function(x){return x.json();})
     .catch(function(){return null;});
   var timeoutPromise = new Promise(function(resolve){
@@ -1171,11 +1177,11 @@ async function _lmtdFetchChartData(addr, tf){
    arrives -- the second call reuses the same promise instead of firing a
    second network request, so switching from skeleton to full render never
    re-triggers (or re-delays) the chart. */
-function _lmtdGetChartPromise(addr, tf){
+function _lmtdGetChartPromise(addr, tf, pairAddr){
   if(_lmtdChartFetch && _lmtdChartFetch.mint === addr && _lmtdChartFetch.tf === tf){
     return _lmtdChartFetch.promise;
   }
-  var p = _lmtdFetchChartData(addr, tf);
+  var p = _lmtdFetchChartData(addr, tf, pairAddr);
   _lmtdChartFetch = {mint: addr, tf: tf, promise: p};
   return p;
 }
@@ -1212,15 +1218,12 @@ async function _lmtdFetchTokenInfo(addr){
   return await Promise.race([fetchPromise, timeoutPromise]);
 }
 
-/* Adapts /api/token/info/<mint>'s flat response into the DexScreener
-   pair shape _lmtdRenderModal/_lmtdStatTilesHtml/_lmtdSidePanelHtml
-   already expect, so the rest of the modal needs no changes. */
 /* Placeholder pair shape used to render the modal (chart + header) the
    instant a row is clicked, before any metadata fetch has resolved -- only
-   needs a symbol + mint, both already known from the table row. Everything
-   else renders as '—' via the existing _fmtPrice/_fmtNum null-handling
-   until the real pair data replaces it. */
-function _lmtdSkeletonPair(symbol, addr){
+   needs a symbol + mint + (if already known from the table row) pair
+   address. Everything else renders as '—' via the existing
+   _fmtPrice/_fmtNum null-handling until the real pair data replaces it. */
+function _lmtdSkeletonPair(symbol, addr, pairAddr){
   return {
     baseToken:   {symbol: symbol || '', name: symbol || '', address: addr || ''},
     info:        {imageUrl: ''},
@@ -1231,10 +1234,13 @@ function _lmtdSkeletonPair(symbol, addr){
     volume:      {h24: null},
     liquidity:   {usd: null},
     txns:        {h24: null},
-    pairAddress: '',
+    pairAddress: pairAddr || '',
   };
 }
 
+/* Adapts /api/token/info/<mint>'s flat response into the DexScreener
+   pair shape _lmtdRenderModal/_lmtdStatTilesHtml/_lmtdSidePanelHtml
+   already expect, so the rest of the modal needs no changes. */
 function _lmtdPairFromTokenInfo(d){
   return {
     baseToken:   {symbol: d.symbol || '', name: d.name || '', address: d.address || ''},
@@ -1250,7 +1256,7 @@ function _lmtdPairFromTokenInfo(d){
   };
 }
 
-async function showTokenCard(symbol, knownAddr){
+async function showTokenCard(symbol, knownAddr, knownPair){
   var modal = document.getElementById('lm-token-modal');
   var body  = document.getElementById('lm-modal-body');
   modal.style.display = 'flex';
@@ -1266,8 +1272,10 @@ async function showTokenCard(symbol, knownAddr){
     // _lmtdGetChartPromise(); the metadata fetch below runs fully in
     // parallel and, once it resolves, re-renders with real data — reusing
     // that same chart fetch/result instead of starting a second one.
+    // knownPair (also already on the table row) lets that chart fetch skip
+    // the backend's own pair-address lookup too — see _lmtdFetchChartData.
     _lmtdSymbol = symbol || '';
-    _lmtdPair   = _lmtdSkeletonPair(symbol, knownAddr);
+    _lmtdPair   = _lmtdSkeletonPair(symbol, knownAddr, knownPair);
     _lmtdRenderModal();
   } else {
     body.innerHTML = '<div style="text-align:center;padding:60px 0">'
@@ -1595,7 +1603,8 @@ async function _lmtdRenderChartData(dataPromise, forMint){
 function _lmtdLoadChartData(){
   var addr = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
   if(!addr || !_lmtdChart) return;
-  _lmtdRenderChartData(_lmtdGetChartPromise(addr, _lmtdTf), addr);
+  var pairAddr = (_lmtdPair && _lmtdPair.pairAddress) || '';
+  _lmtdRenderChartData(_lmtdGetChartPromise(addr, _lmtdTf, pairAddr), addr);
 }
 
 /* ── toast ── */
@@ -1689,7 +1698,7 @@ _lmInitFeatured();
       if(!item || !item.dataset.addr) return;
       var sym = item.dataset.sym, addr = item.dataset.addr;
       _lmCloseGlobalSearch();
-      showTokenCard(sym, addr);
+      showTokenCard(sym, addr, item.dataset.pair);
     });
   }
   document.addEventListener('click', function(e){
