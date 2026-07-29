@@ -3712,7 +3712,8 @@ def profile():
         stats = conn.execute(
             'SELECT COUNT(*) AS total, '
             'SUM(CASE WHEN pnl >= 0 THEN 1 ELSE 0 END) AS wins, '
-            'SUM(pnl) AS total_pnl '
+            'SUM(pnl) AS total_pnl, '
+            'AVG(pnl) AS avg_pnl '
             'FROM trades WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0',
             (user_id,)
         ).fetchone()
@@ -3734,6 +3735,7 @@ def profile():
         wins      = stats['wins']  or 0
         win_rate  = round(wins / total * 100) if total else 0
         total_pnl = round(stats['total_pnl'] or 0, 4)
+        avg_pnl   = round(stats['avg_pnl'] or 0, 4)
         wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
         sol_balance = None
         try:
@@ -3761,6 +3763,8 @@ def profile():
             win_rate=win_rate,
             total_pnl=total_pnl,
             pnl_positive=total_pnl >= 0,
+            avg_pnl=avg_pnl,
+            avg_pnl_positive=avg_pnl >= 0,
             followers=followers,
             following=following,
             posts=[dict(p) for p in posts],
@@ -3794,7 +3798,8 @@ def profile_view(wallet_address: str):
         stats = conn.execute(
             'SELECT COUNT(*) AS total, '
             'SUM(CASE WHEN pnl >= 0 THEN 1 ELSE 0 END) AS wins, '
-            'SUM(pnl) AS total_pnl '
+            'SUM(pnl) AS total_pnl, '
+            'AVG(pnl) AS avg_pnl '
             'FROM trades WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0',
             (user_id,)
         ).fetchone()
@@ -3816,6 +3821,7 @@ def profile_view(wallet_address: str):
         wins      = stats['wins']  or 0
         win_rate  = round(wins / total * 100) if total else 0
         total_pnl = round(stats['total_pnl'] or 0, 4)
+        avg_pnl   = round(stats['avg_pnl'] or 0, 4)
         wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else wallet_address
         sw = session_wallet or ''
         sw_short = (sw[:4] + '...' + sw[-4:]) if len(sw) >= 8 else sw
@@ -3869,6 +3875,8 @@ def profile_view(wallet_address: str):
             win_rate=win_rate,
             total_pnl=total_pnl,
             pnl_positive=total_pnl >= 0,
+            avg_pnl=avg_pnl,
+            avg_pnl_positive=avg_pnl >= 0,
             followers=followers,
             following=following,
             posts=[dict(p) for p in posts],
