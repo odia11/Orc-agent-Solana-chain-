@@ -8131,7 +8131,21 @@ def feed_post_create():
                     (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id), wallet))
                 conn.commit()
                 _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id))
-        if content:
+        chart_idx = content.find('__CHART__') if content else -1
+        if chart_idx != -1:
+            text_part = content[:chart_idx].strip()
+            symbol = ''
+            try:
+                chart_data = json.loads(content[chart_idx + len('__CHART__'):])
+                symbol = chart_data.get('symbol', '')
+            except Exception:
+                pass
+            if text_part:
+                preview = text_part[:60] + ('…' if len(text_part) > 60 else '')
+                post_desc = 'posted: ' + preview + (' — chart: ' + symbol if symbol else '')
+            else:
+                post_desc = 'posted a ' + symbol + ' chart' if symbol else 'posted a chart'
+        elif content:
             preview = content[:60] + ('…' if len(content) > 60 else '')
             post_desc = 'posted: ' + preview
         else:
