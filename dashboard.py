@@ -3897,16 +3897,23 @@ _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
 @app.route('/token/<mint_address>')
 def token_detail(mint_address):
-    """Every bot-trade link across the app points here. Used to render its own
-    standalone (and increasingly outdated-looking) page -- now just redirects
-    to the same token card used everywhere else (Live Market's showTokenCard
-    modal), via the ?addr= deep link live_market.html reads on load."""
+    """Every bot-trade link across the app points here. Renders a lean
+    standalone page that's just the shared token card (static/token-card.js,
+    also used as the modal on /live-market) -- no separate UI/styling to
+    maintain, no busy market table behind it."""
     wallet = _current_wallet()
     if not wallet:
         return redirect('/')
     if not _MINT_RE.match(mint_address or ''):
         return redirect('/history')
-    return redirect('/live-market?addr=' + mint_address)
+    mint_short = mint_address[:4] + '…' + mint_address[-4:] if len(mint_address) >= 8 else mint_address
+    return render_template(
+        'token.html',
+        mint_address=mint_address,
+        mint_short=mint_short,
+        csrf_token=_get_csrf_token(),
+        client_secret=API_SHARED_SECRET,
+    )
 
 
 @app.route('/api/token/<mint>/candles')

@@ -1,0 +1,109 @@
+/* ── Shared token detail card (chart + stats + buy/sell) ──
+   Used both as a modal inside Live Market (live_market.html, wrapped in
+   #lm-token-modal) and as the entire page content of the standalone
+   /token/<mint> page (token.html, wrapped directly in .lm-modal-card with
+   no overlay/close button). Rendered by static/token-card.js's
+   showTokenCard()/_lmtdRenderModal() into a #lm-modal-body element that
+   must exist in both host pages. */
+
+.lm-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:18px;width:100%;max-width:900px;position:relative}
+@keyframes tcSpin{to{transform:rotate(360deg)}}
+@keyframes scanBlink{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* header: token tile, name/ticker, chain badge, LIVE dot, Focus/Terminal toggle */
+.lmtd-header{display:flex;align-items:center;gap:12px;padding:18px 52px 16px 20px;border-bottom:1px solid var(--bg3)}
+.lmtd-logo{width:40px;height:40px;border-radius:12px;object-fit:cover;flex-shrink:0}
+.lmtd-logo-ph{width:40px;height:40px;border-radius:12px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);flex-shrink:0}
+.lmtd-title-wrap{flex:1;min-width:0}
+.lmtd-name{font-size:16px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:7px}
+.lmtd-name-text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.lmtd-chain-badge{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:rgba(58,210,155,.9);border-radius:5px;padding:2px 6px;flex-shrink:0}
+.lmtd-live-dot-wrap{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;flex-shrink:0}
+.lmtd-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite}
+.lmtd-sym{font-size:12px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.lmtd-layout-toggle{display:flex;gap:2px;background:var(--bg3);border-radius:10px;padding:3px;flex-shrink:0}
+.lmtd-layout-btn{padding:6px 14px;font-size:11px;font-weight:700;border:none;background:none;color:var(--muted);border-radius:8px;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase}
+.lmtd-layout-btn.active{background:var(--bg2);color:var(--accent)}
+
+/* shared: price hero + timeframe tabs */
+.lmtd-hero{padding:16px 20px 0}
+.lmtd-hero-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
+.lmtd-hero-chg{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;margin-top:2px}
+.lmtd-tf-tabs{display:flex;gap:6px;padding:14px 20px}
+.lmtd-tf-btn{padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;transition:all .15s;font-family:'JetBrains Mono',monospace}
+.lmtd-tf-btn:hover{color:var(--text)}
+.lmtd-tf-btn.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+
+/* mint-adres regel — volle breedte, tussen tf-tabs en chart; onderdeel van
+   de gedeelde headerHtml (zie _lmtdRenderModal) dus automatisch in zowel
+   Focus als Terminal, geen aparte header-flexrij-ruimte nodig */
+.lmtd-mint-row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin:0 20px 14px;padding:8px 12px;background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;font-size:10px;color:var(--muted)}
+.lmtd-mint-label{font-size:9px;text-transform:uppercase;letter-spacing:.1em;font-weight:600;color:var(--muted)}
+.lmtd-mint-addr{font-family:'JetBrains Mono',monospace;letter-spacing:.04em;font-size:11px;color:var(--text)}
+.lmtd-mint-copy{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;padding:0;transition:color .15s;text-transform:uppercase;letter-spacing:.04em}
+.lmtd-mint-copy:hover{color:var(--accent)}
+.lmtd-mint-msg{font-size:9px;color:var(--green);min-width:56px}
+
+/* candlestick chart (LightweightCharts, real OHLC via /api/chart/<mint>) */
+.lmtd-chart-wrap{padding:0 20px}
+.lmtd-chart-container{width:100%;height:340px;position:relative;background:var(--bg3);border-radius:10px;overflow:hidden}
+.lmtd-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:12px;background:var(--bg3)}
+
+/* Focus layout: chart + 5-tile stat row + full-width trade CTA */
+.lmtd-stats-focus{display:grid;grid-template-columns:repeat(5,1fr);gap:8px;padding:16px 20px}
+.lmtd-trade-cta{margin:4px 20px 20px}
+.lmtd-trade-cta-btn{width:100%;background:var(--accent);color:#0a0b0e;border:none;border-radius:12px;padding:14px;font-size:14px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s}
+.lmtd-trade-cta-btn:hover{opacity:.88}
+
+/* Terminal layout: chart (65%) + Buy/Sell sidebar (35%) */
+.lmtd-terminal{display:flex;gap:16px;padding:0 20px 20px;align-items:flex-start}
+.lmtd-terminal-chart{flex:0 0 65%;min-width:0}
+.lmtd-terminal-side{flex:1;min-width:0;background:var(--bg3);border-radius:12px;padding:14px}
+.lmtd-side-tabs{display:flex;gap:4px;background:var(--bg2);border-radius:9px;padding:3px;margin-bottom:12px}
+.lmtd-side-tab{flex:1;padding:8px 0;font-size:12px;font-weight:700;border:none;background:none;border-radius:7px;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace;color:var(--muted)}
+.lmtd-side-tab.buy.active{background:rgba(58,210,155,.14);color:var(--green)}
+.lmtd-side-tab.sell.active{background:rgba(255,77,106,.14);color:var(--red)}
+.lmtd-sol-input-wrap{position:relative;margin-bottom:8px}
+.lmtd-sol-input{width:100%;background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:11px 50px 11px 12px;color:var(--text);font-size:15px;font-weight:700;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s;-moz-appearance:textfield}
+.lmtd-sol-input:focus{border-color:var(--accent)}
+.lmtd-sol-input-unit{position:absolute;right:12px;top:50%;transform:translateY(-50%);font-size:11px;color:var(--muted);font-weight:700}
+.lmtd-pct-row{display:flex;gap:6px;margin-bottom:12px}
+.lmtd-pct-btn{flex:1;background:var(--bg2);border:1px solid var(--bg4);color:var(--muted);border-radius:8px;padding:7px 0;font-size:11px;font-weight:700;cursor:pointer;transition:all .15s;font-family:'JetBrains Mono',monospace}
+.lmtd-pct-btn:hover{color:var(--text);border-color:var(--bg3)}
+.lmtd-action-btn{width:100%;border:none;border-radius:10px;padding:13px;font-size:14px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s;margin-bottom:14px}
+.lmtd-action-btn.buy{background:var(--green);color:#06210f}
+.lmtd-action-btn.sell{background:var(--red);color:#2a0a0a}
+.lmtd-action-btn:hover{opacity:.88}
+.lmtd-action-btn:disabled{opacity:.4;cursor:default}
+.lmtd-compact-stats{display:flex;flex-direction:column;gap:8px;border-top:1px solid var(--bg4);padding-top:12px}
+.lmtd-compact-stat-row{display:flex;align-items:center;justify-content:space-between;font-size:12px}
+.lmtd-compact-stat-label{color:var(--muted)}
+.lmtd-compact-stat-value{color:var(--text);font-weight:600;font-family:'JetBrains Mono',monospace}
+
+/* shared: stat tile + buys/sells ratio bar */
+.lmtd-stat-tile{background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:10px}
+.lmtd-stat-tile-label{font-size:9px;color:var(--muted);margin-bottom:4px;text-transform:uppercase;letter-spacing:.06em;font-family:'JetBrains Mono',monospace}
+.lmtd-stat-tile-value{font-size:13px;font-weight:600;color:var(--text);font-family:'JetBrains Mono',monospace}
+.lmtd-ratio-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;margin-top:6px;background:var(--bg4)}
+.lmtd-ratio-buy{background:var(--green)}
+.lmtd-ratio-sell{background:var(--red)}
+
+@media(max-width:767px){
+  .lm-modal-card{max-width:100%;border-radius:0}
+  .lmtd-hero-price{font-size:24px}
+  .lmtd-chart-container{height:220px}
+  .lmtd-stats-focus{grid-template-columns:repeat(2,1fr)}
+  .lmtd-terminal{flex-direction:column}
+  .lmtd-terminal-chart{flex:1 1 auto;width:100%}
+}
+
+/* Token Detail card header — SOLANA-badge/LIVE-dot werden al vanaf 375px
+   afgekapt of onzichtbaar (gemeten tot ~428px). Badges verkort i.p.v. naam
+   volledig te tonen; naam krijgt expliciete min-width:0 zodat hij ellipsist
+   i.p.v. de badges weg te duwen (kale tekstnodes in flex krimpen anders niet
+   onder hun eigen volledige breedte). */
+@media(max-width:428px){
+  .lmtd-header{padding-right:48px}
+  .lmtd-chain-badge{max-width:30px;overflow:hidden;white-space:nowrap}
+  .lmtd-live-dot-wrap{max-width:10px;overflow:hidden}
+}

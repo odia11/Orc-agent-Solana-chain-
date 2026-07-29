@@ -1,0 +1,574 @@
+// OrcAgent token detail card (chart + stats + buy/sell) -- shared between
+// live_market.html (as a modal, wrapped in #lm-token-modal) and token.html
+// (as the entire page, wrapped directly in .lm-modal-card, no overlay/close
+// button). Both host pages must provide:
+//   - a #lm-modal-body element for showTokenCard()/_lmtdRenderModal() to
+//     render into
+//   - <meta name="csrf-token"> and <meta name="client-secret"> tags for
+//     executeTrade()/_doTrade()
+// Extracted from live_market.html so bug fixes and improvements land in one
+// place instead of drifting between two copies.
+
+async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
+  try{
+    var _cs   = _lmClientSecret||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
+    var _csrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf||'';
+    var r = await fetch('/api/instant-trade',{
+      method:'POST',
+      credentials:'include',
+      headers:Object.assign({
+        'Content-Type':'application/json',
+        'X-CSRF-Token':_csrf,
+        'X-CSRFToken':_csrf,
+        'X-Requested-With':'XMLHttpRequest'
+      }, _cs ? {'X-API-Shared-Secret':_cs} : {}),
+      body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
+    });
+    var d = await r.json();
+    if(r.ok) return true;
+    _toast((d.error||d.message||'Trade failed'), false);
+    return false;
+  }catch(e){
+    _toast('Network error — trade not sent', false);
+    return false;
+  }
+}
+
+/* ── token modal ── */
+/* ── token detail modal: Focus / Terminal (see PROMPT.md spec) ── */
+var _lmtdPair       = null;
+var _lmtdSymbol     = '';
+var _lmtdLayout     = 'focus';
+var _lmtdTf         = '5m';
+var _lmtdSide       = 'buy';
+var _lmtdSolBalance = 0;
+var _lmtdChart      = null;
+var _lmtdSeries     = null;
+var _lmtdVolSeries  = null;
+var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fetch (pending or resolved) for
+                             // the currently-open token, so the skeleton render, the post-metadata re-render,
+                             // and layout switches all reuse the same request instead of re-fetching
+var _lmtdActiveMint = ''; // mint the modal is CURRENTLY open on — lets a late-arriving stale fetch recognize itself as stale
+var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
+var _LMTD_CHART_FETCH_TIMEOUT = 12000;
+
+function _lmtdFetchBalance(){
+  fetch('/api/wallet/balance', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    if(d.ok) _lmtdSolBalance = d.sol;
+  }).catch(function(){});
+}
+
+/* Raw chart-data fetch only — no DOM/chart-instance interaction, so it's
+   safe to kick off before the chart container even exists (i.e. in parallel
+   with the DexScreener pair-search below). Independent try/catch from that
+   search: a failure here never blocks or breaks the pair-search, and vice
+   versa (see _lmtdRenderChartData). Races the fetch against a 12s timeout so
+   a hung request can't leave the loading state stuck forever. */
+async function _lmtdFetchChartData(addr, tf, pairAddr){
+  var tfParam = _LMTD_TF_MAP[tf] || '5m';
+  var url = '/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam;
+  // pairAddr (already known from the table row that was clicked) lets the
+  // backend skip its own DexScreener round-trip to resolve it -- that's the
+  // slow part of a cold chart load, so passing it through is what actually
+  // makes the chart appear instantly instead of "a few seconds later".
+  if(pairAddr) url += '&pair='+encodeURIComponent(pairAddr);
+  var fetchPromise = fetch(url)
+    .then(function(x){return x.json();})
+    .catch(function(){return null;});
+  var timeoutPromise = new Promise(function(resolve){
+    setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
+  });
+  return await Promise.race([fetchPromise, timeoutPromise]);
+}
+
+/* Starts (or reuses an already in-flight/just-finished) chart-data fetch for
+   mint+tf. Called both by the skeleton render (as soon as the mint is known,
+   before any metadata exists) and by the follow-up render once metadata
+   arrives -- the second call reuses the same promise instead of firing a
+   second network request, so switching from skeleton to full render never
+   re-triggers (or re-delays) the chart. */
+function _lmtdGetChartPromise(addr, tf, pairAddr){
+  if(_lmtdChartFetch && _lmtdChartFetch.mint === addr && _lmtdChartFetch.tf === tf){
+    return _lmtdChartFetch.promise;
+  }
+  var p = _lmtdFetchChartData(addr, tf, pairAddr);
+  _lmtdChartFetch = {mint: addr, tf: tf, promise: p};
+  return p;
+}
+
+/* Pair-metadata lookup by symbol — routed through the backend's cached,
+   429-backoff-protected DexScreener proxy (/api/dexscreener/search, the
+   same endpoint the global token search uses) instead of an unproxied,
+   uncached, timeout-less direct browser call to DexScreener. Races against
+   the same 12s cap as the chart fetch so a slow/hung upstream can't leave
+   the modal stuck — returns null on timeout or network failure. */
+async function _lmtdSearchPair(symbol){
+  var fetchPromise = fetch('/api/dexscreener/search?q='+encodeURIComponent(symbol))
+    .then(function(x){return x.json();})
+    .catch(function(){return null;});
+  var timeoutPromise = new Promise(function(resolve){
+    setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
+  });
+  return await Promise.race([fetchPromise, timeoutPromise]);
+}
+
+/* Direct mint lookup — used instead of _lmtdSearchPair whenever the mint
+   address is already known (normal row click, or a global-search result).
+   One exact match against /api/token/info/<mint> instead of a symbol
+   search that can return multiple same-named tokens across chains/pools
+   and needs post-filtering. Same cache/backoff (_dex_get) and 12s race as
+   the other lookups here. */
+async function _lmtdFetchTokenInfo(addr){
+  var fetchPromise = fetch('/api/token/info/'+encodeURIComponent(addr))
+    .then(function(x){return x.json();})
+    .catch(function(){return null;});
+  var timeoutPromise = new Promise(function(resolve){
+    setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
+  });
+  return await Promise.race([fetchPromise, timeoutPromise]);
+}
+
+/* Placeholder pair shape used to render the modal (chart + header) the
+   instant a row is clicked, before any metadata fetch has resolved -- only
+   needs a symbol + mint + (if already known from the table row) pair
+   address. Everything else renders as '—' via the existing
+   _fmtPrice/_fmtNum null-handling until the real pair data replaces it. */
+function _lmtdSkeletonPair(symbol, addr, pairAddr){
+  return {
+    baseToken:   {symbol: symbol || '', name: symbol || '', address: addr || ''},
+    info:        {imageUrl: ''},
+    priceUsd:    null,
+    priceChange: {},
+    marketCap:   null,
+    fdv:         null,
+    volume:      {h24: null},
+    liquidity:   {usd: null},
+    txns:        {h24: null},
+    pairAddress: pairAddr || '',
+  };
+}
+
+/* Adapts /api/token/info/<mint>'s flat response into the DexScreener
+   pair shape _lmtdRenderModal/_lmtdStatTilesHtml/_lmtdSidePanelHtml
+   already expect, so the rest of the modal needs no changes. */
+function _lmtdPairFromTokenInfo(d){
+  return {
+    baseToken:   {symbol: d.symbol || '', name: d.name || '', address: d.address || ''},
+    info:        {imageUrl: d.image_url || ''},
+    priceUsd:    d.price_usd,
+    priceChange: d.price_change || {},
+    marketCap:   d.market_cap,
+    fdv:         d.fdv,
+    volume:      {h24: d.volume_24h},
+    liquidity:   {usd: d.liquidity_usd},
+    txns:        {h24: {buys: d.buyers_24h, sells: d.sellers_24h}},
+    pairAddress: d.pair_address || '',
+  };
+}
+
+async function showTokenCard(symbol, knownAddr, knownPair){
+  var modal = document.getElementById('lm-token-modal');
+  var body  = document.getElementById('lm-modal-body');
+  if(modal) modal.style.display = 'flex'; // no #lm-token-modal on the standalone /token page
+  _lmtdLayout = 'focus';
+  _lmtdTf     = '5m';
+  _lmtdSide   = 'buy';
+  _lmtdFetchBalance();
+  _lmtdActiveMint = knownAddr || '';
+  if(knownAddr){
+    // Mint already known from the table-row click — render the chart (and a
+    // placeholder header/stats) immediately instead of waiting behind the
+    // token-info fetch below. _lmtdRenderModal() starts the chart fetch via
+    // _lmtdGetChartPromise(); the metadata fetch below runs fully in
+    // parallel and, once it resolves, re-renders with real data — reusing
+    // that same chart fetch/result instead of starting a second one.
+    // knownPair (also already on the table row) lets that chart fetch skip
+    // the backend's own pair-address lookup too — see _lmtdFetchChartData.
+    _lmtdSymbol = symbol || '';
+    _lmtdPair   = _lmtdSkeletonPair(symbol, knownAddr, knownPair);
+    _lmtdRenderModal();
+  } else {
+    body.innerHTML = '<div style="text-align:center;padding:60px 0">'
+      +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
+      +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
+      +'</div>';
+  }
+  try{
+    var p;
+    if(knownAddr){
+      // Mint already known — exact single-token lookup, no symbol-search ambiguity.
+      var info = await _lmtdFetchTokenInfo(knownAddr);
+      if(info === null){
+        if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
+        return;
+      }
+      if(!info.ok){
+        if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        return;
+      }
+      p = _lmtdPairFromTokenInfo(info);
+    } else {
+      // No pre-known address (e.g. opened via ?token= URL param) — fall
+      // back to the symbol search.
+      var d = await _lmtdSearchPair(symbol);
+      if(d === null){
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
+        return;
+      }
+      p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+      if(!p){
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        return;
+      }
+    }
+    _lmtdPair   = p;
+    _lmtdSymbol = (p.baseToken&&p.baseToken.symbol)||symbol;
+    // No pre-known address (e.g. opened via ?token= URL param, not a row
+    // click) — _lmtdActiveMint is only set now; _lmtdRenderModal() below
+    // starts the chart fetch itself since nothing was pre-started for it.
+    if(!knownAddr){
+      _lmtdActiveMint = (p.baseToken&&p.baseToken.address)||'';
+    }
+    _lmtdRenderModal();
+  }catch(e){
+    if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
+  }
+}
+
+function _lmtdCloseModal(){
+  document.getElementById('lm-token-modal').style.display = 'none';
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  _lmtdActiveMint = ''; // any fetch still in flight for the closed token now reads as stale
+}
+
+function _lmtdRenderModal(){
+  var p    = _lmtdPair;
+  var body = document.getElementById('lm-modal-body');
+  var sym  = (p.baseToken&&p.baseToken.symbol)||_lmtdSymbol;
+  var name = (p.baseToken&&p.baseToken.name)||sym;
+  var addr = (p.baseToken&&p.baseToken.address)||'';
+  var imgUrl = p.info&&p.info.imageUrl?p.info.imageUrl:'';
+  var logo = imgUrl
+    ? '<img class="lmtd-logo" src="'+_esc(imgUrl)+'">'
+    : '<div class="lmtd-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+
+  var price    = _fmtPrice(p.priceUsd);
+  var chg24    = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
+  var chgColor = chg24!=null?(chg24>=0?'var(--green)':'var(--red)'):'var(--muted)';
+  var chgStr   = chg24!=null?(chg24>=0?'+':'')+chg24.toFixed(2)+'%':'—';
+
+  var tfHtml = ['1m','5m','15m','1H','4H','1D'].map(function(tf){
+    return '<button class="lmtd-tf-btn'+(tf===_lmtdTf?' active':'')+'" onclick="_lmtdSetTf(\''+tf+'\')">'+tf+'</button>';
+  }).join('');
+
+  var headerHtml =
+    '<div class="lmtd-header">'
+      +logo
+      +'<div class="lmtd-title-wrap">'
+        +'<div class="lmtd-name">'
+          +'<span class="lmtd-name-text">'+_esc(name||sym)+'</span>'
+          +'<span class="lmtd-chain-badge">SOLANA</span>'
+          +'<span class="lmtd-live-dot-wrap"><span class="lmtd-live-dot"></span>LIVE</span>'
+        +'</div>'
+        +'<div class="lmtd-sym">$'+_esc(sym)+'</div>'
+      +'</div>'
+      +'<div class="lmtd-layout-toggle">'
+        +'<button class="lmtd-layout-btn'+(_lmtdLayout==='focus'?' active':'')+'" onclick="_lmtdSetLayout(\'focus\')">Focus</button>'
+        +'<button class="lmtd-layout-btn'+(_lmtdLayout==='terminal'?' active':'')+'" onclick="_lmtdSetLayout(\'terminal\')">Terminal</button>'
+      +'</div>'
+    +'</div>'
+    +'<div class="lmtd-hero">'
+      +'<div class="lmtd-hero-price">'+price+'</div>'
+      +'<div class="lmtd-hero-chg" style="color:'+chgColor+'">'+chgStr+' (24h)</div>'
+    +'</div>'
+    +'<div class="lmtd-tf-tabs">'+tfHtml+'</div>'
+    +(addr ? (
+      '<div class="lmtd-mint-row">'
+        +'<span class="lmtd-mint-label">Mint</span>'
+        +'<span class="lmtd-mint-addr" id="lmtd-mint-addr" data-full="'+_esc(addr)+'">'+_esc(addr.slice(0,4)+'...'+addr.slice(-4))+'</span>'
+        +'<button class="lmtd-mint-copy" onclick="_lmtdCopyMint()">Copy</button>'
+        +'<span class="lmtd-mint-msg" id="lmtd-mint-msg"></span>'
+      +'</div>'
+    ) : '');
+
+  var chartHtml = '<div class="lmtd-chart-container" id="lmtd-chart-container">'
+    +'<div class="lmtd-chart-loading" id="lmtd-chart-loading">Loading chart…</div>'
+    +'</div>';
+
+  var bodyHtml;
+  if(_lmtdLayout === 'focus'){
+    bodyHtml = headerHtml
+      +'<div class="lmtd-chart-wrap">'+chartHtml+'</div>'
+      +'<div class="lmtd-stats-focus">'+_lmtdStatTilesHtml(p)+'</div>'
+      +'<div class="lmtd-trade-cta"><button class="lmtd-trade-cta-btn" onclick="_lmtdSetLayout(\'terminal\')">Trade</button></div>';
+  } else {
+    bodyHtml = headerHtml
+      +'<div class="lmtd-terminal">'
+        +'<div class="lmtd-terminal-chart">'+chartHtml+'</div>'
+        +'<div class="lmtd-terminal-side"><div id="lmtd-terminal-side-inner">'+_lmtdSidePanelHtml(p, sym, addr)+'</div></div>'
+      +'</div>';
+  }
+  body.innerHTML = bodyHtml;
+  _lmtdInitChart();
+  _lmtdLoadChartData(); // reuses an in-flight/cached fetch for this mint+tf if one already exists
+  if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
+}
+
+/* mint-adres kopiëren — zelfde clipboard+fallback-logica als
+   templates/token.html's copyMint()/_fallbackCopy(), hernoemd naar het
+   _lmtd-namespace van deze modal. Adres wordt verkort getoond
+   (data-full bevat het volledige adres om te kopiëren). */
+function _lmtdCopyMint(){
+  var el  = document.getElementById('lmtd-mint-addr');
+  var msg = document.getElementById('lmtd-mint-msg');
+  if(!el) return;
+  var addr = el.dataset.full || el.textContent;
+  var done = function(){
+    if(msg){ msg.textContent = '✓ Copied'; setTimeout(function(){ msg.textContent = ''; }, 2000); }
+  };
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    navigator.clipboard.writeText(addr).then(done).catch(function(){ _lmtdFallbackCopyMint(addr); done(); });
+  } else {
+    _lmtdFallbackCopyMint(addr); done();
+  }
+}
+function _lmtdFallbackCopyMint(t){
+  var ta = document.createElement('textarea');
+  ta.value = t; ta.style.cssText = 'position:fixed;opacity:0';
+  document.body.appendChild(ta); ta.select();
+  try{ document.execCommand('copy'); }catch(e){}
+  document.body.removeChild(ta);
+}
+
+/* 5-tile stat row (Focus layout): Volume 24h, Liquidity, Market Cap, Holders, Buys/Sells ratio.
+   Holders has no data source anywhere in this codebase (checked dashboard.py + this file) —
+   shown as "—" rather than fabricated. */
+function _lmtdStatTilesHtml(p){
+  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var liq   = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+  var buys  = p.txns&&p.txns.h24 ? p.txns.h24.buys : 0;
+  var sells = p.txns&&p.txns.h24 ? p.txns.h24.sells : 0;
+  var total = buys+sells;
+  var buyPct = total>0 ? Math.round(buys/total*100) : 50;
+  var buysSellsVal = p.txns&&p.txns.h24
+    ? buys+' / '+sells+'<div class="lmtd-ratio-bar"><div class="lmtd-ratio-buy" style="width:'+buyPct+'%"></div><div class="lmtd-ratio-sell" style="width:'+(100-buyPct)+'%"></div></div>'
+    : '—';
+  return [
+    {l:'Volume 24h',  v:vol},
+    {l:'Liquidity',   v:liq},
+    {l:'Market Cap',  v:mcap},
+    {l:'Holders',     v:'—'},
+    {l:'Buys/Sells',  v:buysSellsVal}
+  ].map(function(t){
+    return '<div class="lmtd-stat-tile">'
+      +'<div class="lmtd-stat-tile-label">'+t.l+'</div>'
+      +'<div class="lmtd-stat-tile-value">'+t.v+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+/* Terminal sidebar: Buy/Sell tab toggle, SOL input, quick-pct chips, action
+   button, compact stats list. Sell only gets a MAX chip — /api/instant-trade
+   always sells the full position server-side (amount is ignored for sell),
+   so 25/50/75% sell buttons would be misleading. */
+function _lmtdSidePanelHtml(p, sym, addr){
+  var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+  var liq   = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+  var mcap  = _fmtNum(p.marketCap || p.fdv || null);
+  var buys  = p.txns&&p.txns.h24 ? p.txns.h24.buys : 0;
+  var sells = p.txns&&p.txns.h24 ? p.txns.h24.sells : 0;
+  var pctChipsHtml = _lmtdSide === 'buy'
+    ? [25,50,75,100].map(function(pct){
+        return '<button class="lmtd-pct-btn" onclick="_lmtdSetPct('+pct+')">'+(pct===100?'MAX':pct+'%')+'</button>';
+      }).join('')
+    : '<button class="lmtd-pct-btn" onclick="_lmtdSetPct(100)">MAX</button>';
+  return ''
+    +'<div class="lmtd-side-tabs">'
+      +'<button class="lmtd-side-tab buy'+(_lmtdSide==='buy'?' active':'')+'" onclick="_lmtdSetSide(\'buy\')">Buy</button>'
+      +'<button class="lmtd-side-tab sell'+(_lmtdSide==='sell'?' active':'')+'" onclick="_lmtdSetSide(\'sell\')">Sell</button>'
+    +'</div>'
+    +'<div class="lmtd-sol-input-wrap">'
+      +'<input class="lmtd-sol-input" id="lmtd-sol-input" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
+      +'<span class="lmtd-sol-input-unit">SOL</span>'
+    +'</div>'
+    +'<div class="lmtd-pct-row">'+pctChipsHtml+'</div>'
+    +'<button class="lmtd-action-btn '+_lmtdSide+'" id="lmtd-action-btn">'+(_lmtdSide==='buy'?'Buy':'Sell')+' $'+_esc(sym)+'</button>'
+    +'<div class="lmtd-compact-stats">'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Volume 24h</span><span class="lmtd-compact-stat-value">'+vol+'</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Liquidity</span><span class="lmtd-compact-stat-value">'+liq+'</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Market Cap</span><span class="lmtd-compact-stat-value">'+mcap+'</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Holders</span><span class="lmtd-compact-stat-value">—</span></div>'
+      +'<div class="lmtd-compact-stat-row"><span class="lmtd-compact-stat-label">Buys/Sells</span><span class="lmtd-compact-stat-value">'+(p.txns&&p.txns.h24?buys+' / '+sells:'—')+'</span></div>'
+    +'</div>';
+}
+
+function _lmtdWireSidePanel(sym, addr){
+  var btn = document.getElementById('lmtd-action-btn');
+  if(!btn) return;
+  btn.addEventListener('click', function(){
+    var input     = document.getElementById('lmtd-sol-input');
+    var amount    = input ? input.value : '0.1';
+    var pairAddr  = (_lmtdPair && _lmtdPair.pairAddress) || '';
+    executeTrade(sym, pairAddr, _lmtdSide, amount, addr, btn);
+  });
+}
+
+function _lmtdSetLayout(layout){
+  _lmtdLayout = layout;
+  _lmtdRenderModal(); // Focus/Terminal move the chart to a different container, so it re-inits
+}
+
+function _lmtdSetTf(tf){
+  _lmtdTf = tf;
+  document.querySelectorAll('.lmtd-tf-btn').forEach(function(b){
+    b.classList.toggle('active', b.textContent===tf);
+  });
+  _lmtdLoadChartData(); // reuse the existing chart instance — just reload candles
+}
+
+function _lmtdSetSide(side){
+  var prevInput = document.getElementById('lmtd-sol-input');
+  var prevVal   = prevInput ? prevInput.value : '0.1';
+  _lmtdSide = side;
+  var panel = document.getElementById('lmtd-terminal-side-inner');
+  var p     = _lmtdPair;
+  if(!panel || !p) return;
+  var sym  = (p.baseToken&&p.baseToken.symbol)||_lmtdSymbol;
+  var addr = (p.baseToken&&p.baseToken.address)||'';
+  panel.innerHTML = _lmtdSidePanelHtml(p, sym, addr);
+  document.getElementById('lmtd-sol-input').value = prevVal;
+  _lmtdWireSidePanel(sym, addr);
+}
+
+function _lmtdSetPct(pct){
+  var input = document.getElementById('lmtd-sol-input');
+  if(!input) return;
+  var bal = _lmtdSolBalance || 0;
+  var amt = pct===100 ? Math.max(0, bal-0.01) : bal*pct/100;
+  input.value = amt.toFixed(4);
+}
+
+/* candlestick + volume chart — same LightweightCharts pattern as
+   dashboard.html's _posChart, fed by the existing /api/chart/<mint> endpoint */
+function _lmtdInitChart(){
+  var container = document.getElementById('lmtd-chart-container');
+  if(!container) return;
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  _lmtdChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 340,
+    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
+    grid:{vertLines:{color:'#21252c'},horzLines:{color:'#21252c'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    rightPriceScale:{borderColor:'#21252c'},
+    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
+    handleScroll:true,handleScale:true
+  });
+  _lmtdSeries = _lmtdChart.addCandlestickSeries({
+    upColor:'#3ad29b',downColor:'#ff4d6a',borderVisible:false,
+    wickUpColor:'#3ad29b',wickDownColor:'#ff4d6a'
+  });
+  _lmtdVolSeries = _lmtdChart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'lmtd-vol'});
+  _lmtdChart.priceScale('lmtd-vol').applyOptions({scaleMargins:{top:0.75,bottom:0}});
+  new ResizeObserver(function(){
+    if(container.clientWidth>0) _lmtdChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  }).observe(container);
+}
+
+/* Awaits a chart-data promise (already in flight — started in parallel with
+   the pair-search — or freshly created) and renders it into the existing
+   chart instance. Fully independent of the pair-search path: a failure here
+   only ever affects the chart's own loading/unavailable state.
+   forMint is the mint this fetch was started for — re-checked against
+   _lmtdActiveMint once the data lands, so a slow/stale fetch from a token
+   the user has since navigated away from (switched tokens, or closed the
+   modal) is silently dropped instead of rendering into the wrong chart. */
+async function _lmtdRenderChartData(dataPromise, forMint){
+  var loadEl = document.getElementById('lmtd-chart-loading');
+  if(loadEl){ loadEl.textContent='Loading chart…'; loadEl.style.display='flex'; }
+  if(!_lmtdChart) return;
+  var r = await dataPromise;
+  if(forMint !== _lmtdActiveMint) return; // stale — modal has moved on since this fetch started
+  if(r && r.candles && r.candles.length){
+    try{
+      _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
+      _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
+      _lmtdChart.timeScale().fitContent();
+      if(loadEl) loadEl.style.display='none';
+    }catch(e){
+      console.error('[lmtd] chart.setData failed', e);
+      if(loadEl){ loadEl.textContent='Chart unavailable for this token'; loadEl.style.display='flex'; }
+    }
+  } else if(loadEl){
+    loadEl.textContent = 'Chart unavailable for this token';
+    loadEl.style.display = 'flex';
+  }
+}
+
+/* Loads candles for the active mint+tf into the chart -- reuses an
+   in-flight/cached fetch via _lmtdGetChartPromise() when one already exists
+   (skeleton render, layout switch), otherwise starts a fresh one (timeframe
+   switch, or the no-pre-known-address path). */
+function _lmtdLoadChartData(){
+  var addr = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
+  if(!addr || !_lmtdChart) return;
+  var pairAddr = (_lmtdPair && _lmtdPair.pairAddress) || '';
+  _lmtdRenderChartData(_lmtdGetChartPromise(addr, _lmtdTf, pairAddr), addr);
+}
+
+/* ── toast ── */
+function _toast(msg, ok){
+  var t = document.createElement('div');
+  t.textContent = msg;
+  t.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%) translateY(20px);'
+    +'background:#101216;color:#eef1f5;border:1px solid #16191f;'
+    +'border-radius:12px;padding:11px 20px;font-size:13px;font-weight:700;'
+    +'font-family:\'JetBrains Mono\',monospace;z-index:9999;pointer-events:none;'
+    +'opacity:0;transition:opacity .2s,transform .2s;white-space:nowrap;box-shadow:0 4px 24px rgba(0,0,0,.5)';
+  document.body.appendChild(t);
+  requestAnimationFrame(function(){
+    t.style.opacity='1'; t.style.transform='translateX(-50%) translateY(0)';
+    setTimeout(function(){
+      t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(12px)';
+      setTimeout(function(){ t.remove(); }, 250);
+    }, 3000);
+  });
+}
+
+/* ── trade execution (modal) ── */
+async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, btn){
+  var amount = parseFloat(amountStr);
+  if(!amount||amount<=0){ _toast('Enter a valid SOL amount', false); return; }
+  var origHtml = btn ? btn.innerHTML : '';
+  var origBg   = btn ? btn.style.background : '';
+  var spinner  = '<span style="display:inline-block;width:12px;height:12px;border:2px solid rgba(0,0,0,.25);border-top-color:rgba(0,0,0,.6);border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle"></span>';
+  if(btn){ btn.innerHTML=spinner; btn.disabled=true; }
+  var ok = await _doTrade(symbol, pairAddress, side, amount, tokenAddress);
+  if(btn){ btn.innerHTML=origHtml; btn.disabled=false; btn.style.background=origBg; }
+  if(ok) _toast(side==='buy' ? 'Buy order executed' : 'Sold', true);
+}
+
+/* ── helpers ── */
+function _fmtPrice(p){
+  if(!p) return '—';
+  p = parseFloat(p);
+  if(isNaN(p)||p<=0) return '—';
+  if(p>=1) return '$'+p.toFixed(2);
+  if(p>=0.0001) return '$'+p.toFixed(6);
+  return '$'+p.toFixed(10).replace(/0+$/,'');
+}
+function _fmtNum(n){
+  if(n==null||isNaN(n)) return '—';
+  if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B';
+  if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M';
+  if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K';
+  return '$'+n.toFixed(2);
+}
+function _esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── auth headers ── */
+var _lmCsrf         = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+var _lmClientSecret = (document.querySelector('meta[name="client-secret"]')||{}).content||'';
