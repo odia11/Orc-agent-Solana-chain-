@@ -4818,8 +4818,8 @@ function _mnDrawerClose(){
   document.body.style.overflow = '';
 }
 function _syncMnDrawerBtn(){
-  var running = !!(document.getElementById('feed-bot-btn') &&
-                   document.getElementById('feed-bot-btn').classList.contains('stop'));
+  var running = !!(document.getElementById('feed-trade-btn') &&
+                   document.getElementById('feed-trade-btn').classList.contains('stop'));
   var btn = document.getElementById('mn-drawer-trade-btn');
   if(btn){
     btn.innerHTML  = running ? '&#9646; Stop Trading' : '&#9654; Start Trading';
