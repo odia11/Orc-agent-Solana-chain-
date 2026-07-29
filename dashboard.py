@@ -2994,6 +2994,22 @@ def user_trader_loop(stop_event, config, wallet: str):
         while not stop_event.is_set():
             try:
                 check_daily_reset_user(us)
+                # Re-read stop-loss/take-profit from the DB every cycle so a change
+                # made in Settings while the bot is already running takes effect on
+                # the next scan -- previously these were only ever read once at
+                # trader-loop startup (above), so an in-flight SL/TP edit silently
+                # had no effect until the user stopped and restarted the bot.
+                try:
+                    _sconn = sqlite3.connect(DB_FILE)
+                    _srow = _sconn.execute(
+                        'SELECT take_profit, stop_loss FROM users WHERE wallet_address=?', (wallet,)
+                    ).fetchone()
+                    _sconn.close()
+                    if _srow:
+                        if _srow[0] is not None: take_profit = float(_srow[0]) / 100
+                        if _srow[1] is not None: stop_loss   = float(_srow[1]) / 100
+                except Exception as _se:
+                    print(f'[bot] {short} settings refresh failed: {_se}', flush=True)
                 daily_loss = us['daily_stats'].get('total_pnl', 0)
                 if daily_loss < -daily_loss_limit:
                     add_user_log(wallet, '[' + short + '] Daily loss limit hit ($' + str(round(daily_loss, 2)) + ') — pausing')
