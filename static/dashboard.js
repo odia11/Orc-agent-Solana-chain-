@@ -828,6 +828,16 @@ async function _acceptTos(){
   btn.disabled=false; btn.textContent=origLabel;
 }
 
+// Runs an init-step promise (or a sync fn's return value) to completion
+// without ever letting it throw/reject into the caller -- so one failing
+// step (slow/rate-limited/broken endpoint, unexpected null, etc.) can never
+// again take the rest of app init down with it. Logs instead of hiding.
+function _safeInit(name, promiseOrValue){
+  return Promise.resolve(promiseOrValue).catch(function(e){
+    console.error('[launchApp] '+name+' failed (continuing):', e);
+  });
+}
+
 async function launchApp(){
   // ── 1. Verify / silently restore server-side session ────────────
   if(phantomKey){
@@ -902,24 +912,31 @@ async function launchApp(){
     if(sellBtn) sellBtn.style.display='none';
   }
   if('Notification' in window) Notification.requestPermission();
-  await fetchState();
-  fetchTrades();
-  fetchPnlChart();
-  fetchLeaderboard();
-  fetchBadges();
-  fetchCopyStatus();
-  fetchMyProfile();
-  dmFetchUnread();
+  // Each init step below is independent (separate API calls, no shared data
+  // dependencies) -- a failure/timeout in any single one (more likely under
+  // heavy traffic: slow responses, rate limits, transient 5xx) must never be
+  // able to stop the others from running, the way an unguarded exception in
+  // renderPositions() once took down the entire rest of this sequence
+  // (including loadHomeFeed) via this same await. _safeInit swallows +
+  // console.errors instead of letting anything here propagate.
+  await _safeInit('fetchState', fetchState());
+  _safeInit('fetchTrades', fetchTrades());
+  _safeInit('fetchPnlChart', fetchPnlChart());
+  _safeInit('fetchLeaderboard', fetchLeaderboard());
+  _safeInit('fetchBadges', fetchBadges());
+  _safeInit('fetchCopyStatus', fetchCopyStatus());
+  _safeInit('fetchMyProfile', fetchMyProfile());
+  _safeInit('dmFetchUnread', dmFetchUnread());
   fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
   if (!window._heartbeatTimer) {
     window._heartbeatTimer = setInterval(function(){
       fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
     }, 45000);
   }
-  fetchPumpScanner();
-  loadHomeFeed();
-  _loadRightRail();
-  _checkAdminInvite();
+  _safeInit('fetchPumpScanner', fetchPumpScanner());
+  _safeInit('loadHomeFeed', loadHomeFeed());
+  _safeInit('_loadRightRail', _loadRightRail());
+  _safeInit('_checkAdminInvite', _checkAdminInvite());
   const _pendingProfile = sessionStorage.getItem('openProfile');
   if(_pendingProfile){
     sessionStorage.removeItem('openProfile');
