@@ -1135,7 +1135,9 @@ var _lmtdSolBalance = 0;
 var _lmtdChart      = null;
 var _lmtdSeries     = null;
 var _lmtdVolSeries  = null;
-var _lmtdChartPromise = null; // in-flight/consumed /api/chart/ fetch, started in parallel with the pair-search
+var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fetch (pending or resolved) for
+                             // the currently-open token, so the skeleton render, the post-metadata re-render,
+                             // and layout switches all reuse the same request instead of re-fetching
 var _lmtdActiveMint = ''; // mint the modal is CURRENTLY open on — lets a late-arriving stale fetch recognize itself as stale
 var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
 var _LMTD_CHART_FETCH_TIMEOUT = 12000;
@@ -1161,6 +1163,21 @@ async function _lmtdFetchChartData(addr, tf){
     setTimeout(function(){ resolve(null); }, _LMTD_CHART_FETCH_TIMEOUT);
   });
   return await Promise.race([fetchPromise, timeoutPromise]);
+}
+
+/* Starts (or reuses an already in-flight/just-finished) chart-data fetch for
+   mint+tf. Called both by the skeleton render (as soon as the mint is known,
+   before any metadata exists) and by the follow-up render once metadata
+   arrives -- the second call reuses the same promise instead of firing a
+   second network request, so switching from skeleton to full render never
+   re-triggers (or re-delays) the chart. */
+function _lmtdGetChartPromise(addr, tf){
+  if(_lmtdChartFetch && _lmtdChartFetch.mint === addr && _lmtdChartFetch.tf === tf){
+    return _lmtdChartFetch.promise;
+  }
+  var p = _lmtdFetchChartData(addr, tf);
+  _lmtdChartFetch = {mint: addr, tf: tf, promise: p};
+  return p;
 }
 
 /* Pair-metadata lookup by symbol — routed through the backend's cached,
@@ -1198,6 +1215,26 @@ async function _lmtdFetchTokenInfo(addr){
 /* Adapts /api/token/info/<mint>'s flat response into the DexScreener
    pair shape _lmtdRenderModal/_lmtdStatTilesHtml/_lmtdSidePanelHtml
    already expect, so the rest of the modal needs no changes. */
+/* Placeholder pair shape used to render the modal (chart + header) the
+   instant a row is clicked, before any metadata fetch has resolved -- only
+   needs a symbol + mint, both already known from the table row. Everything
+   else renders as '—' via the existing _fmtPrice/_fmtNum null-handling
+   until the real pair data replaces it. */
+function _lmtdSkeletonPair(symbol, addr){
+  return {
+    baseToken:   {symbol: symbol || '', name: symbol || '', address: addr || ''},
+    info:        {imageUrl: ''},
+    priceUsd:    null,
+    priceChange: {},
+    marketCap:   null,
+    fdv:         null,
+    volume:      {h24: null},
+    liquidity:   {usd: null},
+    txns:        {h24: null},
+    pairAddress: '',
+  };
+}
+
 function _lmtdPairFromTokenInfo(d){
   return {
     baseToken:   {symbol: d.symbol || '', name: d.name || '', address: d.address || ''},
@@ -1221,26 +1258,34 @@ async function showTokenCard(symbol, knownAddr){
   _lmtdTf     = '5m';
   _lmtdSide   = 'buy';
   _lmtdFetchBalance();
-  // The mint address is already known from the table row at click time —
-  // start the chart fetch right away, in parallel with the pair-search
-  // below, instead of waiting for that search to resolve it first.
   _lmtdActiveMint = knownAddr || '';
-  _lmtdChartPromise = knownAddr ? _lmtdFetchChartData(knownAddr, _lmtdTf) : null;
-  body.innerHTML = '<div style="text-align:center;padding:60px 0">'
-    +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
-    +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
-    +'</div>';
+  if(knownAddr){
+    // Mint already known from the table-row click — render the chart (and a
+    // placeholder header/stats) immediately instead of waiting behind the
+    // token-info fetch below. _lmtdRenderModal() starts the chart fetch via
+    // _lmtdGetChartPromise(); the metadata fetch below runs fully in
+    // parallel and, once it resolves, re-renders with real data — reusing
+    // that same chart fetch/result instead of starting a second one.
+    _lmtdSymbol = symbol || '';
+    _lmtdPair   = _lmtdSkeletonPair(symbol, knownAddr);
+    _lmtdRenderModal();
+  } else {
+    body.innerHTML = '<div style="text-align:center;padding:60px 0">'
+      +'<div style="width:30px;height:30px;border:3px solid #16191f;border-top-color:#f7b955;border-radius:50%;margin:0 auto 14px;animation:tcSpin .8s linear infinite"></div>'
+      +'<div style="color:#565d68;font-size:13px;font-family:\'JetBrains Mono\',monospace">Loading…</div>'
+      +'</div>';
+  }
   try{
     var p;
     if(knownAddr){
       // Mint already known — exact single-token lookup, no symbol-search ambiguity.
       var info = await _lmtdFetchTokenInfo(knownAddr);
       if(info === null){
-        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
+        if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
         return;
       }
       if(!info.ok){
-        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
         return;
       }
       p = _lmtdPairFromTokenInfo(info);
@@ -1261,15 +1306,14 @@ async function showTokenCard(symbol, knownAddr){
     _lmtdPair   = p;
     _lmtdSymbol = (p.baseToken&&p.baseToken.symbol)||symbol;
     // No pre-known address (e.g. opened via ?token= URL param, not a row
-    // click) — fall back to starting the chart fetch only now.
-    if(!_lmtdChartPromise){
-      var addr = (p.baseToken&&p.baseToken.address)||'';
-      _lmtdActiveMint = addr;
-      _lmtdChartPromise = addr ? _lmtdFetchChartData(addr, _lmtdTf) : null;
+    // click) — _lmtdActiveMint is only set now; _lmtdRenderModal() below
+    // starts the chart fetch itself since nothing was pre-started for it.
+    if(!knownAddr){
+      _lmtdActiveMint = (p.baseToken&&p.baseToken.address)||'';
     }
     _lmtdRenderModal();
   }catch(e){
-    body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
+    if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Failed to load token data</div>';
   }
 }
 
@@ -1348,12 +1392,7 @@ function _lmtdRenderModal(){
   }
   body.innerHTML = bodyHtml;
   _lmtdInitChart();
-  if(_lmtdChartPromise){
-    _lmtdRenderChartData(_lmtdChartPromise, _lmtdActiveMint);
-    _lmtdChartPromise = null; // consumed — a later tf switch starts its own fresh fetch
-  } else {
-    _lmtdLoadChartData();
-  }
+  _lmtdLoadChartData(); // reuses an in-flight/cached fetch for this mint+tf if one already exists
   if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
 }
 
@@ -1549,12 +1588,14 @@ async function _lmtdRenderChartData(dataPromise, forMint){
   }
 }
 
-/* Timeframe switch (and any other reload with no pre-started promise to
-   consume) — nothing to parallelize here, so it just fetches then renders. */
+/* Loads candles for the active mint+tf into the chart -- reuses an
+   in-flight/cached fetch via _lmtdGetChartPromise() when one already exists
+   (skeleton render, layout switch), otherwise starts a fresh one (timeframe
+   switch, or the no-pre-known-address path). */
 function _lmtdLoadChartData(){
   var addr = (_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || '';
   if(!addr || !_lmtdChart) return;
-  _lmtdRenderChartData(_lmtdFetchChartData(addr, _lmtdTf), addr);
+  _lmtdRenderChartData(_lmtdGetChartPromise(addr, _lmtdTf), addr);
 }
 
 /* ── toast ── */
