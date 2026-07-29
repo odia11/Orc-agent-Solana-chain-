@@ -1311,6 +1311,11 @@ def run_migrations():
         "ALTER TABLE group_posts ADD COLUMN image_url TEXT DEFAULT NULL",
         "ALTER TABLE group_members ADD COLUMN muted_until TIMESTAMP DEFAULT NULL",
         "ALTER TABLE feed_replies ADD COLUMN parent_reply_id INTEGER DEFAULT NULL",
+        # Wallet of the trader being copied at the moment this position was opened via
+        # _trigger_copy_buy() -- lets a future fee-split feature attribute a copy-trade's
+        # profit back to the original trader (neither open_positions nor trades recorded
+        # this before).
+        "ALTER TABLE open_positions ADD COLUMN copy_of_wallet TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -2503,7 +2508,7 @@ def check_daily_reset_user(us: dict):
 # Write-through helpers: every call site that used to mutate
 # user_states[wallet]['positions'] directly now goes through one of these two,
 # so the in-memory dict and the open_positions table never drift apart.
-def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot'):
+def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot', copy_of_wallet: str = None):
     get_user_state(wallet)['positions'][mint] = pos
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -2511,14 +2516,15 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
             conn.execute('PRAGMA busy_timeout=3000')
             conn.execute(
                 '''INSERT INTO open_positions
-                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, source, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, source, copy_of_wallet, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                    ON CONFLICT(user_id, mint_address) DO UPDATE SET
                        symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
                        spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
-                       opened_at=excluded.opened_at, source=excluded.source, updated_at=CURRENT_TIMESTAMP''',
+                       opened_at=excluded.opened_at, source=excluded.source,
+                       copy_of_wallet=excluded.copy_of_wallet, updated_at=CURRENT_TIMESTAMP''',
                 (user_id, mint, pos.get('symbol', ''), pos.get('amount', 0.0), pos.get('buy_price', 0.0),
-                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0), pos.get('opened_at', 0.0), source))
+                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0), pos.get('opened_at', 0.0), source, copy_of_wallet))
             conn.commit()
         finally:
             conn.close()
@@ -3368,7 +3374,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                 pos['symbol']          = symbol
                 pos['opened_at']       = time.time()
                 pos['entry_liquidity'] = liquidity
-                _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy')
+                _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy', copy_of_wallet=buyer_wallet)
                 add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
             except Exception as e:
                 print(f'[copy-trade] error for {c_wallet[:6]}: {e}', flush=True)
