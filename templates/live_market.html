@@ -1047,11 +1047,21 @@ _lmInitFeatured();
   // every bot-trade link across the app) -- opens via the fast exact-lookup
   // path, same as a normal row click.
   var _urlAddr = _params.get('addr');
-  if(_urlAddr){ showTokenCard(_urlAddr, _urlAddr); return; }
   // ?token= -- symbol only (e.g. wallet.html's token links) -- falls back
   // to the symbol-search path since the address isn't known yet.
   var _urlToken = _params.get('token');
-  if(_urlToken) showTokenCard(_urlToken);
+  if(!_urlAddr && !_urlToken) return;
+  // showTokenCard() -> _lmtdInitChart() needs LightweightCharts, loaded via
+  // a deferred <script> above -- deferred scripts only run once the document
+  // has finished parsing. This inline script runs immediately as the parser
+  // reaches it, which is BEFORE that, so calling showTokenCard() straight
+  // away here raced it (ReferenceError: LightweightCharts is not defined).
+  // Waiting for DOMContentLoaded guarantees the deferred script has already
+  // run by the time we call it.
+  document.addEventListener('DOMContentLoaded', function(){
+    if(_urlAddr){ showTokenCard(_urlAddr, _urlAddr); return; }
+    showTokenCard(_urlToken);
+  });
 })();
 
 (function(){

@@ -58,7 +58,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 <script src="/static/token-card.js?v={{ app_version }}"></script>
 <script>
 'use strict';
-showTokenCard({{ mint_address | tojson }}, {{ mint_address | tojson }});
+// showTokenCard() -> _lmtdInitChart() needs LightweightCharts, loaded via a
+// deferred <script> in <head> -- deferred scripts only run once the document
+// has finished parsing, which is AFTER this inline script. Calling
+// showTokenCard() immediately here raced it (ReferenceError: LightweightCharts
+// is not defined). Waiting for DOMContentLoaded guarantees it has already run.
+document.addEventListener('DOMContentLoaded', function(){
+  showTokenCard({{ mint_address | tojson }}, {{ mint_address | tojson }});
+});
 </script>
 </body>
 </html>
