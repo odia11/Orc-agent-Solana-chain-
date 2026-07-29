@@ -2340,6 +2340,8 @@ function renderPositions(detail){
   if(listEl) listEl.style.display='block';
   const posCount=document.getElementById('pos-count');
   if(posCount) posCount.textContent=detail.length+'/5';
+  if(!listEl) return; // #top-pos-list isn't in the current DOM -- nothing to render into,
+                       // but the rest of fetchState() (live feed, SOL price) must still run
   listEl.innerHTML=detail.map(p=>{
     const isPos=p.pnl>=0;
     const cls=isPos?'td-pos':'td-neg';
