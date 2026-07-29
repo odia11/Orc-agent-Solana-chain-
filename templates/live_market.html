@@ -1686,7 +1686,15 @@ _loadTab('trending');
 _lmInitFeatured();
 
 (function(){
-  var _urlToken = new URLSearchParams(location.search).get('token');
+  var _params = new URLSearchParams(location.search);
+  // ?addr= -- mint address already known (e.g. redirected from /token/<mint>,
+  // every bot-trade link across the app) -- opens via the fast exact-lookup
+  // path, same as a normal row click.
+  var _urlAddr = _params.get('addr');
+  if(_urlAddr){ showTokenCard(_urlAddr, _urlAddr); return; }
+  // ?token= -- symbol only (e.g. wallet.html's token links) -- falls back
+  // to the symbol-search path since the address isn't known yet.
+  var _urlToken = _params.get('token');
   if(_urlToken) showTokenCard(_urlToken);
 })();
 

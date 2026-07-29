@@ -3897,69 +3897,16 @@ _MINT_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 
 @app.route('/token/<mint_address>')
 def token_detail(mint_address):
+    """Every bot-trade link across the app points here. Used to render its own
+    standalone (and increasingly outdated-looking) page -- now just redirects
+    to the same token card used everywhere else (Live Market's showTokenCard
+    modal), via the ?addr= deep link live_market.html reads on load."""
     wallet = _current_wallet()
     if not wallet:
         return redirect('/')
     if not _MINT_RE.match(mint_address or ''):
         return redirect('/history')
-    token_info   = get_token_data(mint_address)
-    token_name   = (token_info or {}).get('name',   '')
-    token_symbol = (token_info or {}).get('symbol', '')
-    trades = []
-    try:
-        conn = sqlite3.connect(DB_FILE)
-        c    = conn.cursor()
-        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
-        row = c.fetchone()
-        if row:
-            user_id = row[0]
-            c.execute(
-                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at
-                   FROM trades
-                   WHERE user_id=?
-                     AND (mint_address=?
-                          OR (mint_address IS NULL AND UPPER(token)=UPPER(?)))
-                   ORDER BY timestamp DESC''',
-                (user_id, mint_address, token_symbol)
-            )
-            for ts, token, entry, exit_p, amount, pnl, opened_at in c.fetchall():
-                pnl    = round(pnl   or 0.0, 6)
-                entry  = entry  or 0.0
-                exit_p = exit_p or 0.0
-                pnl_pct = round((exit_p - entry) / entry * 100, 2) if entry > 0 else 0.0
-                duration = ''
-                if opened_at:
-                    try:
-                        closed_dt = datetime.datetime.strptime((ts or '')[:19], '%Y-%m-%dT%H:%M:%S')
-                        opened_dt = datetime.datetime.utcfromtimestamp(float(opened_at))
-                        secs = max(0, int((closed_dt - opened_dt).total_seconds()))
-                        duration = (f'{secs // 3600}h {(secs % 3600) // 60}m'
-                                    if secs >= 3600 else f'{secs // 60}m {secs % 60}s')
-                    except Exception:
-                        pass
-                trades.append({
-                    'date': (ts or '')[:10], 'time': (ts or '')[11:16],
-                    'token':       token or '—',
-                    'entry_price': round(entry, 6), 'exit_price': round(exit_p, 6),
-                    'pnl': pnl, 'pnl_pct': pnl_pct, 'duration': duration,
-                    'result': 'win' if pnl >= 0 else 'loss',
-                })
-        conn.close()
-    except Exception as e:
-        print(f'[token_detail] DB error: {e}', flush=True)
-    mint_short = mint_address[:4] + '…' + mint_address[-4:] if len(mint_address) >= 8 else mint_address
-    return render_template(
-        'token.html',
-        mint_address=mint_address,
-        mint_short=mint_short,
-        token_name=token_name,
-        token_symbol=token_symbol,
-        token_info=token_info or {},
-        trades=trades,
-        wallet=wallet,
-        wallet_short=(wallet[:4] + '…' + wallet[-4:]) if len(wallet) >= 8 else wallet,
-        is_admin=_is_owner(wallet),
-    )
+    return redirect('/live-market?addr=' + mint_address)
 
 
 @app.route('/api/token/<mint>/candles')
