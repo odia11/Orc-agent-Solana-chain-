@@ -8261,6 +8261,19 @@ def toggle_feed_like(post_id):
         else:
             conn.execute('INSERT INTO post_likes (user_id, post_id) VALUES (?,?)', (me, post_id))
             liked = True
+            owner_uid = _post_owner_uid(conn, post_id)
+            if owner_uid and owner_uid != me:
+                liker_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
+                liker_name = (liker_row[0] if liker_row and liker_row[0] else wallet[:8]+'…')
+                if post_id.startswith('g'):
+                    grow = conn.execute('SELECT group_id FROM group_posts WHERE id=?', (post_id[1:],)).fetchone()
+                    link = '/groups/'+str(grow[0]) if grow else '/groups'
+                else:
+                    link = '/#post-'+post_id
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (owner_uid, 'like', liker_name+' liked your post', link, wallet))
+                _send_push_notification(owner_uid, 'New like', liker_name+' liked your post', link)
         count = conn.execute('SELECT COUNT(*) FROM post_likes WHERE post_id=?', (post_id,)).fetchone()[0]
         conn.commit()
     finally:
