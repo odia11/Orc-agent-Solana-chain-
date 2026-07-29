@@ -7794,6 +7794,17 @@ function _checkBottomHold() {
     if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
     return;
   }
+  // Skip entirely while the user is actively typing inside the feed (e.g. a
+  // reply box) -- on mobile, focusing an input shrinks window.innerHeight
+  // (keyboard) and auto-scrolls the field into view, which can make the
+  // atBottom check below fire spuriously and then wipe the whole feed DOM
+  // (via loadHomeFeed() -> renderHomeFeed()) out from under the open box.
+  var _activeEl = document.activeElement;
+  if (_activeEl && feedEl.contains(_activeEl) &&
+      (_activeEl.tagName === 'TEXTAREA' || _activeEl.tagName === 'INPUT')) {
+    if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
+    return;
+  }
   var atBottom = (window.innerHeight + window.scrollY) >=
     (document.documentElement.scrollHeight - 40);
   if (atBottom) {
@@ -7866,33 +7877,6 @@ window.addEventListener('scroll', _checkBottomHold, { passive: true });
     _ptrPulling = false;
   }, { passive: true });
 })();
-
-// ── TIJDELIJK DEBUG: bevestigen of keyboard-open op mobiel een resize/
-// viewport-event triggert rond het moment dat de reply-box sluit ──
-var _debugOverlay = null;
-var _debugLines = [];
-function _debugLog(msg){
-  if (!_debugOverlay) {
-    _debugOverlay = document.createElement('div');
-    _debugOverlay.id = 'debug-overlay';
-    _debugOverlay.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:999999;'
-      + 'background:rgba(0,0,0,0.75);color:#0f0;font:11px/1.4 monospace;'
-      + 'padding:4px 6px;white-space:pre-wrap;pointer-events:none';
-    document.body.appendChild(_debugOverlay);
-  }
-  var ts = new Date().toISOString().slice(11,23);
-  _debugLines.push(ts + ' ' + msg);
-  if (_debugLines.length > 5) _debugLines.shift();
-  _debugOverlay.textContent = _debugLines.join('\n');
-}
-window.addEventListener('resize', function(){
-  _debugLog('resize: ' + window.innerHeight);
-});
-if (window.visualViewport) {
-  window.visualViewport.addEventListener('resize', function(){
-    _debugLog('vv resize: ' + window.visualViewport.height + ' / ' + window.innerHeight);
-  });
-}
 
 function showToken(symbol){
   window.open('https://dexscreener.com/solana/'+symbol,'_blank')
@@ -8514,7 +8498,6 @@ function _fcCardClick(ev, postId){
   if(rbox && rbox.classList.contains('open')){
     var openedAt = Number(rbox.dataset.openedAt || 0);
     if (Date.now() - openedAt < 400) return; // net geopend, negeer sluit-tik
-    _debugLog('fcCardClick closed box: ' + ev.type);
     rbox.classList.remove('open');
     if(location.hash === '#post-'+postId){
       history.pushState(null, '', location.pathname + location.search);
