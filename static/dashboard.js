@@ -7790,23 +7790,25 @@ function _checkBottomHold() {
   if (now - _bottomHoldLastCheck < _BOTTOM_HOLD_THROTTLE_MS) return;
   _bottomHoldLastCheck = now;
   var feedEl = document.getElementById('center-feed');
-  if (!feedEl || feedEl.offsetParent === null) {
+  var mainEl = document.getElementById('main-content'); // .wrap -- the actual scroll
+  // container (html/body/#app all have overflow:hidden); window itself never
+  // scrolls in this layout, so window.scrollY/scrollHeight are meaningless here.
+  if (!feedEl || !mainEl || feedEl.offsetParent === null) {
     if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
     return;
   }
   // Skip entirely while the user is actively typing inside the feed (e.g. a
-  // reply box) -- on mobile, focusing an input shrinks window.innerHeight
-  // (keyboard) and auto-scrolls the field into view, which can make the
-  // atBottom check below fire spuriously and then wipe the whole feed DOM
-  // (via loadHomeFeed() -> renderHomeFeed()) out from under the open box.
+  // reply box) -- on mobile, focusing an input shrinks the viewport (keyboard)
+  // and auto-scrolls the field into view, which can make the atBottom check
+  // below fire spuriously and then wipe the whole feed DOM (via loadHomeFeed()
+  // -> renderHomeFeed()) out from under the open box.
   var _activeEl = document.activeElement;
   if (_activeEl && feedEl.contains(_activeEl) &&
       (_activeEl.tagName === 'TEXTAREA' || _activeEl.tagName === 'INPUT')) {
     if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
     return;
   }
-  var atBottom = (window.innerHeight + window.scrollY) >=
-    (document.documentElement.scrollHeight - 40);
+  var atBottom = (mainEl.scrollTop + mainEl.clientHeight) >= (mainEl.scrollHeight - 40);
   if (atBottom) {
     if (!_bottomHoldTimer) {
       _bottomHoldTimer = setTimeout(function() {
@@ -7818,12 +7820,13 @@ function _checkBottomHold() {
     if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
   }
 }
-window.addEventListener('scroll', _checkBottomHold, { passive: true });
+document.getElementById('main-content')?.addEventListener('scroll', _checkBottomHold, { passive: true });
 
 // ── PULL-TO-REFRESH — home feed (mobile, touch only) ──
 (function(){
   var feedEl = document.getElementById('center-feed');
-  if (!feedEl) return;
+  var mainEl = document.getElementById('main-content'); // .wrap -- see _checkBottomHold above
+  if (!feedEl || !mainEl) return;
 
   var PTR_THRESHOLD = 70;
   var _ptrStartY = 0, _ptrActive = false, _ptrPulling = false, _ptrIndicator = null;
@@ -7847,7 +7850,7 @@ window.addEventListener('scroll', _checkBottomHold, { passive: true });
     // text selection, scrolling a long .fc-replies-list) -- _ptrActive stays
     // false for this whole touch sequence, so touchmove's guard below skips
     // it too and never calls preventDefault() on it.
-    if (window.scrollY !== 0 || e.target.closest('.fc-reply-box')) { _ptrActive = false; return; }
+    if (mainEl.scrollTop !== 0 || e.target.closest('.fc-reply-box')) { _ptrActive = false; return; }
     _ptrStartY = e.touches[0].clientY;
     _ptrActive = true;
     _ptrPulling = false;
@@ -7856,7 +7859,7 @@ window.addEventListener('scroll', _checkBottomHold, { passive: true });
   feedEl.addEventListener('touchmove', function(e){
     if (!_ptrActive) return;
     var dy = e.touches[0].clientY - _ptrStartY;
-    if (dy <= 0 || window.scrollY !== 0) { _ptrActive = false; return; }
+    if (dy <= 0 || mainEl.scrollTop !== 0) { _ptrActive = false; return; }
     _ptrPulling = true;
     e.preventDefault(); // suppress native overscroll bounce while our indicator is dragging
     var indicator = _ptrEnsureIndicator();
