@@ -12037,6 +12037,57 @@ def bot_start():
     print(f'[bot/start] {short} manually started', flush=True)
     return jsonify({'ok': True, 'status': 'running'})
 
+def _liquidate_all_positions(wallet: str):
+    """Fire-and-forget: sell every open position for `wallet`, called when the
+    user presses Stop Trading. Mirrors api_trade_sell()'s single-token sell
+    logic (same helpers: _execute_user_swap, _record_user_trade,
+    _close_open_position) but runs in a background thread since selling N
+    positions means N real on-chain swaps -- too slow to do inline in the
+    /api/bot/stop request/response cycle."""
+    def _run():
+        short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+        us = get_user_state(wallet)
+        mints = [m for m, p in us['positions'].items() if p.get('amount', 0) > 0]
+        if not mints:
+            return
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row or not row[1]:
+            add_user_log(wallet, f'[stop] {short} cannot auto-sell — no trading key configured')
+            return
+        user_id, enc_blob = row[0], row[1]
+        for mint in mints:
+            pos = us['positions'].get(mint, {})
+            if not pos.get('amount', 0) > 0:
+                continue
+            try:
+                td = get_token_data(mint)
+                exit_price = float(td['price']) if td and td.get('price') else 0.0
+                symbol = pos.get('symbol') or (td.get('symbol', mint[:8]) if td else mint[:8])
+                with _use_key(enc_blob, wallet) as pk:
+                    sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, str(pos['amount']))
+                if sell_ok:
+                    entry = pos.get('buy_price', 0.0)
+                    opened_at = pos.get('opened_at', 0.0)
+                    with _use_key(enc_blob, wallet) as pk:
+                        _record_user_trade(user_id, us, symbol, entry, exit_price,
+                                           pos['amount'], pos.get('spend', 0.0),
+                                           wallet=wallet, private_key=pk, mint=mint,
+                                           exit_reason='STOP TRADING', opened_at=opened_at, source='manual')
+                    _close_open_position(user_id, wallet, mint)
+                    add_user_log(wallet, f'[stop] {short} sold {symbol} (Stop Trading)')
+                else:
+                    add_user_log(wallet, f'[stop] {short} sell failed for {symbol} — position kept open')
+            except Exception as e:
+                print(f'[bot/stop] liquidate error for {wallet[:8]}… {mint[:8]}: {e}', flush=True)
+    threading.Thread(target=_run, daemon=True).start()
+
+
 @app.route('/api/bot/stop', methods=['POST'])
 @rate_limit(10, 60)
 def bot_stop():
@@ -12056,6 +12107,7 @@ def bot_stop():
         pass
     short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     print(f'[bot/stop] {short} manually stopped', flush=True)
+    _liquidate_all_positions(wallet)
     return jsonify({'ok': True, 'status': 'stopped'})
 
 @app.route('/api/bot/status', methods=['GET'])
