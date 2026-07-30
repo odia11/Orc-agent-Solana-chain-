@@ -299,14 +299,24 @@ async function loadOverview() {
   }
 }
 
-async function toggleBot() {
+function _botApplyUI(running) {
+  _botRunning = running;
+  document.getElementById('bot-status-dot').classList.toggle('running', running);
+  document.getElementById('bot-status-text').textContent = running ? 'Bot is running' : 'Bot is idle';
   var btn = document.getElementById('bot-toggle-btn');
+  btn.textContent = running ? '⏹ Stop Trading' : '▶ Start Trading';
+  btn.classList.toggle('running', running);
+  return btn;
+}
+
+async function toggleBot() {
   var errEl = document.getElementById('bot-status-error');
   errEl.style.display = 'none';
+  var prevRunning = _botRunning;
+  var btn = _botApplyUI(!prevRunning);  // optimistic — reconciled or rolled back below
   btn.disabled = true;
-  btn.textContent = _botRunning ? 'Stopping…' : 'Starting…';
   try {
-    var url = _botRunning ? '/api/bot/stop' : '/api/bot/start';
+    var url = prevRunning ? '/api/bot/stop' : '/api/bot/start';
     var r = await fetch(url, {
       method: 'POST', credentials: 'include',
       headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
@@ -314,28 +324,24 @@ async function toggleBot() {
     });
     var d = await r.json().catch(function(){return {}});
     if (d.low_balance) {
-      showLowBalanceModal(d);
+      btn = _botApplyUI(prevRunning);  // rollback
       btn.disabled = false;
-      btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
+      showLowBalanceModal(d);
     } else if (!d.ok && !d.success) {
+      btn = _botApplyUI(prevRunning);  // rollback
+      btn.disabled = false;
       errEl.textContent = d.msg || 'Failed to update bot status';
       errEl.style.display = 'block';
-      btn.disabled = false;
-      btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
     } else {
-      _botRunning = d.status === 'running';
-      document.getElementById('bot-status-dot').classList.toggle('running', _botRunning);
-      document.getElementById('bot-status-text').textContent = _botRunning ? 'Bot is running' : 'Bot is idle';
-      btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
-      btn.classList.toggle('running', _botRunning);
+      btn = _botApplyUI(d.status === 'running');
       btn.disabled = false;
       loadOverview();
     }
   } catch (e) {
+    btn = _botApplyUI(prevRunning);  // rollback
     errEl.textContent = 'Network error — please try again';
     errEl.style.display = 'block';
     btn.disabled = false;
-    btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
   }
 }
 

@@ -3253,18 +3253,27 @@ function _sbSetActive(id){
 var _botRunning=false
 var _botPollTimer=null
 
+function _botApplyUI(running){
+  _botRunning=running
+  var dot=document.getElementById('bot-dot')
+  var lbl=document.getElementById('bot-label')
+  var btn=document.getElementById('bot-toggle-btn')
+  if(dot) dot.style.background=running?'#3ad29b':'#f7b955'
+  if(lbl) lbl.textContent=running?'Bot running':'Bot is idle'
+  if(btn){
+    btn.textContent=running?'⏹ Stop Trading':'▶ Start Trading'
+    btn.classList.toggle('running',running)
+  }
+  return btn
+}
+
 async function _botFetchStatus(){
   if(!phantomKey) return;
   try{
     var r=await fetch('/api/bot/status')
     var d=await r.json()
     if(!d.ok) return
-    _botRunning=!!d.running
-    // dot + label
-    var dot=document.getElementById('bot-dot')
-    var lbl=document.getElementById('bot-label')
-    if(dot) dot.style.background=_botRunning?'#3ad29b':'#f7b955'
-    if(lbl) lbl.textContent=_botRunning?'Bot running':'Bot is idle'
+    _botApplyUI(!!d.running)
     // stats line
     var statsEl=document.getElementById('bot-stats')
     if(statsEl){
@@ -3273,50 +3282,29 @@ async function _botFetchStatus(){
       var wr=parseFloat(d.win_rate||0).toFixed(0)
       statsEl.textContent=sol+' SOL ready · '+open+'/5 open · '+wr+'% win rate'
     }
-    // button state
-    var btn=document.getElementById('bot-toggle-btn')
-    if(btn){
-      if(_botRunning){
-        btn.textContent='⏹ Stop Trading'
-        btn.classList.add('running')
-      } else {
-        btn.textContent='▶ Start Trading'
-        btn.classList.remove('running')
-      }
-    }
   }catch(e){}
 }
 
 async function _botToggle(){
-  var btn=document.getElementById('bot-toggle-btn')
-  if(btn){btn.disabled=true;btn.textContent=_botRunning?'Stopping…':'Starting…'}
+  var prevRunning=_botRunning
+  var url=prevRunning?'/api/bot/stop':'/api/bot/start'
+  var btn=_botApplyUI(!prevRunning)   // optimistic — reconciled or rolled back below
+  if(btn) btn.disabled=true
   try{
-    var url=_botRunning?'/api/bot/stop':'/api/bot/start'
     var r=await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:'{}'})
     var d=await r.json()
     if(d.ok||d.success){
-      _botRunning=d.status==='running'
-      var dot=document.getElementById('bot-dot')
-      var lbl=document.getElementById('bot-label')
-      if(dot) dot.style.background=_botRunning?'#3ad29b':'#f7b955'
-      if(lbl) lbl.textContent=_botRunning?'Bot running':'Bot is idle'
-      if(btn){
-        if(_botRunning){
-          btn.textContent='⏹ Stop Trading'
-          btn.classList.add('running')
-        } else {
-          btn.textContent='▶ Start Trading'
-          btn.classList.remove('running')
-        }
-        btn.disabled=false
-      }
+      btn=_botApplyUI(d.status==='running')
+      if(btn) btn.disabled=false
       _botFetchStatus()
     } else {
-      if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
+      btn=_botApplyUI(prevRunning)   // rollback
+      if(btn) btn.disabled=false
       if(d.low_balance){ showLowBalanceModal(d) } else { openAlertModal({text:d.msg||'Failed'}) }
     }
   }catch(e){
-    if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
+    btn=_botApplyUI(prevRunning)   // rollback
+    if(btn) btn.disabled=false
   }
 }
 
