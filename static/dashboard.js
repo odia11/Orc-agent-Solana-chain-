@@ -7770,7 +7770,7 @@ setInterval(function(){
   if(!_feedPendingViews.size) return;
   var ids = Array.from(_feedPendingViews);
   _feedPendingViews.clear();
-  fetch('/api/feed/views', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:ids})}).catch(function(){});
+  fetch('/api/feed/views', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}, body:JSON.stringify({ids:ids})}).catch(function(){});
 }, 4000);
 
 function renderHomeFeed(){

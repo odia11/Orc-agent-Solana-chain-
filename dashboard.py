@@ -1362,6 +1362,14 @@ def run_migrations():
         created_at TEXT DEFAULT CURRENT_TIMESTAMP,
         status     TEXT NOT NULL DEFAULT 'pending'
     )''')
+    # post_views — dedupes feed/trade views per user so repeat visits don't inflate view_count
+    con.execute('''CREATE TABLE IF NOT EXISTS post_views (
+        user_id    INTEGER NOT NULL,
+        post_type  TEXT NOT NULL,
+        post_id    INTEGER NOT NULL,
+        viewed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        PRIMARY KEY (user_id, post_type, post_id)
+    )''')
     con.commit()
     con.close()
 
@@ -8697,9 +8705,11 @@ def toggle_feed_reply_like(reply_id):
     return jsonify({'ok': True, 'liked': not existing, 'like_count': count})
 
 @app.route('/api/feed/views', methods=['POST'])
-@csrf_exempt
 @rate_limit(30, 60)
 def feed_views():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     body = request.get_json(silent=True) or {}
     ids  = body.get('ids', [])
     if not isinstance(ids, list):
@@ -8716,12 +8726,28 @@ def feed_views():
         return jsonify({'ok': True})
     conn = sqlite3.connect(DB_FILE)
     try:
-        if post_ids:
-            ph = ','.join('?' * len(post_ids))
-            conn.execute(f'UPDATE feed_posts SET view_count = view_count + 1 WHERE id IN ({ph})', post_ids)
-        if trade_ids:
-            ph = ','.join('?' * len(trade_ids))
-            conn.execute(f'UPDATE trades SET view_count = view_count + 1 WHERE id IN ({ph})', trade_ids)
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        new_post_ids, new_trade_ids = [], []
+        for pid in post_ids:
+            cur = conn.execute(
+                'INSERT OR IGNORE INTO post_views (user_id, post_type, post_id) VALUES (?,?,?)',
+                (uid, 'p', pid))
+            if cur.rowcount == 1:
+                new_post_ids.append(pid)
+        for tid in trade_ids:
+            cur = conn.execute(
+                'INSERT OR IGNORE INTO post_views (user_id, post_type, post_id) VALUES (?,?,?)',
+                (uid, 't', tid))
+            if cur.rowcount == 1:
+                new_trade_ids.append(tid)
+        if new_post_ids:
+            ph = ','.join('?' * len(new_post_ids))
+            conn.execute(f'UPDATE feed_posts SET view_count = view_count + 1 WHERE id IN ({ph})', new_post_ids)
+        if new_trade_ids:
+            ph = ','.join('?' * len(new_trade_ids))
+            conn.execute(f'UPDATE trades SET view_count = view_count + 1 WHERE id IN ({ph})', new_trade_ids)
         conn.commit()
     finally:
         conn.close()
