@@ -8761,25 +8761,7 @@ function _feedSubmitReply(inp, postId){
   });
 }
 
-/* ── SYNC feed trade button + dot with hidden #trade-btn state ── */
 document.addEventListener('DOMContentLoaded', function(){
-  var _tbSrc = document.getElementById('trade-btn');
-  var _tbDst = document.getElementById('feed-trade-btn');
-  var _dot   = document.getElementById('feed-bot-dot');
-  var _txt   = document.getElementById('feed-bot-status-text');
-  function _syncFeed(){
-    if(!_tbSrc || !_tbDst) return;
-    var running = _tbSrc.textContent.trim() === '■ STOP';
-    _tbDst.disabled = _tbSrc.disabled;
-    _tbDst.textContent = running ? '⏸ Stop Bot' : '▶ Start Trading';
-    _tbDst.classList.toggle('stop', running);
-    if(_dot) _dot.classList.toggle('running', running);
-    if(_txt) _txt.textContent = running ? 'Bot is trading…' : 'Your bot is idle';
-  }
-  if(_tbSrc){
-    new MutationObserver(_syncFeed).observe(_tbSrc, {attributes:true,childList:true,subtree:true,characterData:true});
-    _syncFeed();
-  }
   /* mirror avatar into composer */
   var _ca = document.getElementById('feed-composer-avatar');
   var _sa = document.getElementById('sb-avatar-img');
