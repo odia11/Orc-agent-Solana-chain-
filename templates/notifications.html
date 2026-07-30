@@ -390,7 +390,7 @@ function _rowHtml(n, kind){
     // The bot no longer auto-posts this trade anywhere — give the user an
     // explicit, one-click way to share it themselves if they want to
     // (hidden in select mode along with the other per-row actions).
-    var shareBtn = _selectMode ? '' : '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" onclick="_shareTrade(this,event)">Share</button>';
+    var shareBtn = _selectMode ? '' : '<button class="ntf-share-btn" data-content="' + _esc(n.content) + '" data-link="' + _esc(n.link || '') + '" onclick="_shareTrade(this,event)">Share</button>';
     return _buildPersonalRow(n, isUnread, iconCls, bodyHtml, n.link || '#', shareBtn);
   } else if(type === 'message'){
     iconCls = 'message';
@@ -408,6 +408,9 @@ function _shareTrade(btn, ev){
   var m = content.match(/^Trade closed:\s*\$?(\S+)\s*([+\-][\d.]+)%\s*\(([+\-][\d.]+)\s*SOL\)/);
   if(!m) return;
   var symbol = m[1], pct = m[2], sol = m[3];
+  var link = btn.getAttribute('data-link') || '';
+  var qIdx = link.indexOf('?');
+  var mint = qIdx >= 0 ? new URLSearchParams(link.slice(qIdx)).get('mint') : null;
   var tradeData = {
     symbol: symbol,
     side: 'SELL',
@@ -415,6 +418,7 @@ function _shareTrade(btn, ev){
     pnl_pct: parseFloat(pct),
     pnl_sol: parseFloat(sol)
   };
+  if(mint) tradeData.token_address = mint;
   var shareText = '__TRADE__' + JSON.stringify(tradeData);
   btn.disabled = true;
   btn.textContent = 'Sharing…';
