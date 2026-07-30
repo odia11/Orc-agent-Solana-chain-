@@ -3245,6 +3245,8 @@ function _botApplyUI(running){
     btn.textContent=running?'⏹ Stop Trading':'▶ Start Trading'
     btn.classList.toggle('running',running)
   }
+  traderOn = running
+  updateBtns()
   return btn
 }
 
