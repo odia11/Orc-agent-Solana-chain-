@@ -7703,7 +7703,7 @@ def social_feed():
             SELECT * FROM (
                 SELECT fp.id, fp.wallet, fp.content, fp.created_at,
                        'p' as kind,
-                       u.username, NULL as symbol, NULL as pnl_pct,
+                       u.username, NULL as symbol, NULL as mint_address, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
                        u.avatar_url, u.is_verified, NULL as repost_of, fp.image_url
                 FROM feed_posts fp
@@ -7714,6 +7714,7 @@ def social_feed():
                        't' as kind,
                        u.username,
                        t.token as symbol,
+                       t.mint_address,
                        CASE WHEN t.entry_price > 0 AND t.exit_price > 0
                             THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                             ELSE 0 END as pnl_pct,
@@ -7725,7 +7726,7 @@ def social_feed():
                 SELECT fr.id, fr.reposter_wallet as wallet, NULL as content,
                        fr.created_at,
                        'r' as kind,
-                       ru.username, NULL as symbol, NULL as pnl_pct,
+                       ru.username, NULL as symbol, NULL as mint_address, NULL as pnl_pct,
                        (fr.reposter_wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
                        ru.avatar_url, ru.is_verified, fr.post_id as repost_of, NULL as image_url
                 FROM feed_reposts fr
@@ -7767,7 +7768,7 @@ def social_feed():
                 [my_wallet] + post_ids)}
         # Resolve the original post/trade each repost row points at, so the feed can
         # render "X reposted" with the original content embedded underneath.
-        repost_targets = [row[13] for row in rows if row[4] == 'r' and row[13]]
+        repost_targets = [row[14] for row in rows if row[4] == 'r' and row[14]]
         originals = {}
         if repost_targets:
             rp_ids = [pid[1:] for pid in repost_targets if pid.startswith('p')]
@@ -7814,7 +7815,7 @@ def social_feed():
 
     feed = []
     for row in rows:
-        rid, wallet, content, created_at, kind, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, repost_of, image_url = row
+        rid, wallet, content, created_at, kind, username, symbol, mint_address, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, repost_of, image_url = row
         post_id = kind + str(rid)
         short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
         display = username if username else short
@@ -7840,6 +7841,7 @@ def social_feed():
             'reposted_by_me': target_id in reposted_by_me,
             'username':    display,
             'symbol':      symbol or '',
+            'token_address': mint_address or '',
             'pnl_pct':     pnl_pct or 0,
             'entry_price': entry_price or 0,
             'exit_price':  exit_price or 0,
@@ -8384,7 +8386,7 @@ def get_feed_post(post_id):
                        (SELECT COUNT(*) FROM post_likes   WHERE post_id = 'p'||fp.id) as like_count,
                        (SELECT COUNT(*) FROM feed_replies WHERE post_id = 'p'||fp.id) as reply_count,
                        fp.view_count,
-                       u.username, NULL as symbol, NULL as pnl_pct,
+                       u.username, NULL as symbol, NULL as mint_address, NULL as pnl_pct,
                        (fp.wallet = ?) as is_own, NULL as entry_price, NULL as exit_price,
                        u.avatar_url, u.is_verified, fp.image_url
                 FROM feed_posts fp
@@ -8401,6 +8403,7 @@ def get_feed_post(post_id):
                        t.view_count,
                        u.username,
                        t.token as symbol,
+                       t.mint_address,
                        CASE WHEN t.entry_price > 0 AND t.exit_price > 0
                             THEN ROUND((t.exit_price - t.entry_price) / t.entry_price * 100, 2)
                             ELSE 0 END as pnl_pct,
@@ -8417,7 +8420,7 @@ def get_feed_post(post_id):
         conn.close()
     if not row:
         return jsonify({'ok': False, 'msg': 'Post not found'}), 404
-    rid, wallet, content, created_at, like_count, reply_count, view_count, username, symbol, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, image_url = row
+    rid, wallet, content, created_at, like_count, reply_count, view_count, username, symbol, mint_address, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, image_url = row
     short = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or '')
     display = username if username else short
     post = {
@@ -8431,6 +8434,7 @@ def get_feed_post(post_id):
         'view_count':  view_count or 0,
         'username':    display,
         'symbol':      symbol or '',
+        'token_address': mint_address or '',
         'pnl_pct':     pnl_pct or 0,
         'entry_price': entry_price or 0,
         'exit_price':  exit_price or 0,
