@@ -2711,13 +2711,15 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         notif_content = (f'Trade closed: ${symbol} '
                          f'{pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL) — {exit_reason}' if exit_reason
                          else f'Trade closed: ${symbol} {pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL)')
+        notif_link = ('/notifications?mint=' + requests.utils.quote(mint, safe='')
+                      if mint else '/notifications')
         try:
             _nc = sqlite3.connect(DB_FILE)
             _nc.execute(
                 'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
-                (user_id, 'trade', notif_content, '/notifications', None))
+                (user_id, 'trade', notif_content, notif_link, None))
             _nc.commit()
-            _send_push_notification(user_id, 'Trade closed', notif_content, '/notifications')
+            _send_push_notification(user_id, 'Trade closed', notif_content, notif_link)
             _nc.close()
         except Exception as _ne:
             print(f'[notif] trade notification failed: {_ne}', flush=True)
