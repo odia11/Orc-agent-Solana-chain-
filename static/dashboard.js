@@ -7230,7 +7230,10 @@ function _renderTradeTerminalCard(t){
     var _amt = parseFloat(t.amount);
     amtStr = '<div style="color:#565d68;font-size:11px;margin-top:3px">'+(_amt>=1000?_amt.toLocaleString('en-US',{maximumFractionDigits:0}):_amt.toFixed(4))+' tokens</div>';
   }
-  return '<div style="background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')">'
+  return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')">'
+    +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
+    +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(13,17,23,0.55),rgba(13,17,23,0.92))"></div>'
+    +'<div style="position:relative;z-index:1">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
     +'<div style="flex:1;min-width:0">'
     +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'
@@ -7243,6 +7246,7 @@ function _renderTradeTerminalCard(t){
     +amtStr
     +'</div>'
     +'<div style="font-size:26px;font-weight:700;color:'+pctCol+';line-height:1;text-align:right;padding-left:14px;align-self:center">'+pctStr+'</div>'
+    +'</div>'
     +'</div>'
     +'</div>';
 }
