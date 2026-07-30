@@ -8807,7 +8807,24 @@ def share_feed_to_x(post_id):
                 symbol = ''
             text = caption if caption else ('Check out $'+symbol+' on OrcAgent' if symbol else '')
         else:
-            text = raw.split('__TRADE__')[0].strip()
+            trade_idx = raw.find('__TRADE__')
+            if trade_idx != -1:
+                caption = raw[:trade_idx].strip()
+                if caption:
+                    text = caption
+                else:
+                    try:
+                        trade_data = json.loads(raw[trade_idx+9:])
+                        symbol  = trade_data.get('symbol', '')
+                        pnl_pct = float(trade_data.get('pnl_pct', 0))
+                        pnl_sol = float(trade_data.get('pnl_sol', 0))
+                        sign    = '+' if pnl_pct >= 0 else ''
+                        text = (f'Just closed ${symbol} {sign}{pnl_pct:.1f}% '
+                                f'({sign}{pnl_sol:.4f} SOL) on @OrcAgent') if symbol else ''
+                    except Exception:
+                        text = ''
+            else:
+                text = raw.strip()
         text = text[:250]
     elif post_id.startswith('t'):
         row = conn.execute('SELECT token FROM trades WHERE id=?', (post_id[1:],)).fetchone()
