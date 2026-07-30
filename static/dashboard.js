@@ -1015,7 +1015,7 @@ async function _loadRrTraders(){
         +'<div class="rr-trader-av" style="background:'+bg+'">'+ini+'</div>'
         +'<div class="rr-trader-info">'
         +'<div class="rr-trader-name">'+esc(t.username||ini)+badge+'</div>'
-        +'<div class="rr-trader-handle">@'+(t.username||t.wallet_address.slice(0,6))+'</div>'
+        +'<div class="rr-trader-handle">@'+esc(t.username||t.wallet_address.slice(0,6))+'</div>'
         +'</div>'
         +'<div class="rr-trader-pnl">'+pnl+'</div>'
         +'</div>';
@@ -3324,7 +3324,7 @@ async function _botLoadPositions(){
       html+='<div class="sb-pnl-pos">'
         +'<div class="sb-pnl-circ">'+initials+'</div>'
         +'<div class="sb-pnl-mid">'
-          +'<div class="sb-pnl-sym">$'+p.symbol+'</div>'
+          +'<div class="sb-pnl-sym">$'+esc(p.symbol||'')+'</div>'
           +'<div class="sb-pnl-sub">'+statusStr+'</div>'
         +'</div>'
         +'<div class="sb-pnl-right">'
@@ -6827,7 +6827,7 @@ function _mentionCheck(el){
     box.style.left = rect.left+'px';
     box.style.top = (rect.top - Math.min(users.length,5)*40 - 8)+'px';
     box.innerHTML = users.map(function(u){
-      return '<div onclick="_mentionSelect(\''+u.username.replace(/'/g,"\\'")+'\')" style="padding:9px 12px;cursor:pointer;color:#eef1f5;border-bottom:1px solid #16191f"><span style="color:#f7b955;font-weight:700">@'+u.username+'</span></div>';
+      return '<div onclick="_mentionSelect(\''+u.username.replace(/'/g,"\\'")+'\')" style="padding:9px 12px;cursor:pointer;color:#eef1f5;border-bottom:1px solid #16191f"><span style="color:#f7b955;font-weight:700">@'+esc(u.username)+'</span></div>';
     }).join('');
     box.style.display='block';
   }).catch(function(){});
@@ -6867,7 +6867,7 @@ function searchUserTag(q){
     const users=(d&&d.users)||[]
     document.getElementById('userTagResults').innerHTML=users.length?
     users.map(u=>`<div onclick="selectUserTag('${u.username.replace(/'/g,"\\'")}')" style="padding:10px;cursor:pointer;border-bottom:1px solid #16191f;color:#eef1f5">
-      <span style="color:#f7b955;font-weight:700">@${u.username}</span>
+      <span style="color:#f7b955;font-weight:700">@${esc(u.username)}</span>
     </div>`).join('')
     :'<div style="color:#565d68;padding:10px">No users found</div>'
   })
@@ -7390,7 +7390,7 @@ function _chartSearch(q){
         var sym = (p.baseToken&&p.baseToken.symbol)||'?';
         var name = (p.baseToken&&p.baseToken.name)||'';
         var safeIdx = i;
-        return '<div onclick="_attachChartEmbed('+i+')" data-pair-idx="'+i+'" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;transition:background .1s" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div><div style="font-weight:700;color:#eef1f5;font-size:13px">'+sym+'</div><div style="color:#565d68;font-size:11px">'+name+'</div></div><div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#eef1f5">'+price+'</div><div style="font-size:11px">'+chgStr+'</div></div></div>';
+        return '<div onclick="_attachChartEmbed('+i+')" data-pair-idx="'+i+'" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;transition:background .1s" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div><div style="font-weight:700;color:#eef1f5;font-size:13px">'+esc(sym)+'</div><div style="color:#565d68;font-size:11px">'+esc(name)+'</div></div><div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#eef1f5">'+price+'</div><div style="font-size:11px">'+chgStr+'</div></div></div>';
       }).join('');
       window._chartSearchPairs = pairs;
     })
@@ -7447,8 +7447,8 @@ function _renderComposerChartPreview(){
   }).join('');
 
   var html = '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">'
-    +'<div><div style="font-size:15px;font-weight:700;color:#eef1f5">$'+c.symbol+'</div>'
-    +'<div style="font-size:11px;color:#565d68">'+c.name+'</div></div>'
+    +'<div><div style="font-size:15px;font-weight:700;color:#eef1f5">$'+esc(c.symbol||'')+'</div>'
+    +'<div style="font-size:11px;color:#565d68">'+esc(c.name||'')+'</div></div>'
     +'<div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:14px;font-weight:700;color:#eef1f5">'+price+'</div>'
     +'<div style="font-size:12px;color:'+chgColor+';font-weight:600">'+chgStr+'</div></div>'
     +'</div>'

@@ -8973,16 +8973,23 @@ def _tc_lookup(id):
                 return None
             try:
                 trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
+                if not isinstance(trade_data, dict):
+                    return None
             except Exception:
                 return None
+            def _tc_safe_float(v, default=0.0):
+                try:
+                    return float(v)
+                except (TypeError, ValueError):
+                    return default
             return {
-                'symbol': trade_data.get('symbol', '') or '',
-                'side':   trade_data.get('side', 'SELL') or 'SELL',
-                'pnl_pct':     float(trade_data.get('pnl_pct', 0) or 0),
-                'pnl_sol':     float(trade_data.get('pnl_sol', 0) or 0),
-                'entry_price': float(trade_data.get('entry_price', 0) or 0),
-                'exit_price':  float(trade_data.get('exit_price', 0) or 0),
-                'mint': trade_data.get('token_address', '') or '',
+                'symbol': str(trade_data.get('symbol') or ''),
+                'side':   str(trade_data.get('side') or 'SELL'),
+                'pnl_pct':     _tc_safe_float(trade_data.get('pnl_pct')),
+                'pnl_sol':     _tc_safe_float(trade_data.get('pnl_sol')),
+                'entry_price': _tc_safe_float(trade_data.get('entry_price')),
+                'exit_price':  _tc_safe_float(trade_data.get('exit_price')),
+                'mint': str(trade_data.get('token_address') or ''),
             }
         return None
     finally:
