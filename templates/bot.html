@@ -315,16 +315,28 @@ async function toggleBot() {
     var d = await r.json().catch(function(){return {}});
     if (d.low_balance) {
       showLowBalanceModal(d);
+      btn.disabled = false;
+      btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
     } else if (!d.ok && !d.success) {
       errEl.textContent = d.msg || 'Failed to update bot status';
       errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
+    } else {
+      _botRunning = d.status === 'running';
+      document.getElementById('bot-status-dot').classList.toggle('running', _botRunning);
+      document.getElementById('bot-status-text').textContent = _botRunning ? 'Bot is running' : 'Bot is idle';
+      btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
+      btn.classList.toggle('running', _botRunning);
+      btn.disabled = false;
+      loadOverview();
     }
   } catch (e) {
     errEl.textContent = 'Network error — please try again';
     errEl.style.display = 'block';
+    btn.disabled = false;
+    btn.textContent = _botRunning ? '⏹ Stop Trading' : '▶ Start Trading';
   }
-  btn.disabled = false;
-  await loadOverview();
 }
 
 loadOverview();
