@@ -7916,22 +7916,23 @@ async function showTokenCard(symbol){
     const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString()
     const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#3ad29b':'#f76b62',bg=n>=0?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:\'JetBrains Mono\',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
     const ch24=parseFloat(p.priceChange?.h24||0)
-    const _links=[...(p.info?.socials||[]),...(p.info?.websites||[]).map(function(w){return{type:'website',url:w.url}}),...(p.info?.links||[])];
+    const _links=[...(p.info?.socials||[]),...(p.info?.websites||[]).map(function(w){return{type:'website',url:w.url}}),...(p.info?.links||[])]
+      .filter(l=>/^https?:\/\//i.test(l.url||''));
     const _li=function(l){var t=(l.type||'').toLowerCase(),u=(l.url||'').toLowerCase();if(t==='twitter'||u.indexOf('twitter.com')>=0||u.indexOf('x.com')>=0)return'\u{1F426}';if(t==='telegram'||u.indexOf('t.me/')>=0)return'✈️';if(t==='discord'||u.indexOf('discord')>=0)return'\u{1F4AC}';return'\u{1F310}';};
     const _lbl=function(l){var s=(l.type||l.label||'link');return s.charAt(0).toUpperCase()+s.slice(1);};
     const _addr=p.pairAddress||'';
     const _addrShort=_addr?(_addr.slice(0,6)+'...'+_addr.slice(-4)):'';
     body.innerHTML=`
-      ${p.info?.header?`<img src="${p.info.header}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:block" onerror="this.style.display='none'">` : ''}
+      ${p.info?.header?`<img src="${esc(p.info.header)}" style="width:100%;max-height:80px;object-fit:cover;border-radius:8px;margin-bottom:14px;display:block" onerror="this.style.display='none'">` : ''}
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px">
-        ${p.info?.imageUrl?`<img src="${p.info.imageUrl}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#f7b955;font-size:15px">'+esc(symbol.slice(0,2))+'</div>'}
+        ${p.info?.imageUrl?`<img src="${esc(p.info.imageUrl)}" style="width:40px;height:40px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`:'<div style="width:40px;height:40px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;color:#f7b955;font-size:15px">'+esc(symbol.slice(0,2))+'</div>'}
         <div style="flex:1;min-width:0">
           <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${esc(p.baseToken?.symbol||symbol)}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px">
-            <span style="font-size:12px;color:#565d68">${p.baseToken?.name||''}</span>
+            <span style="font-size:12px;color:#565d68">${esc(p.baseToken?.name||'')}</span>
             <span style="background:rgba(247,185,85,0.12);color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
-            ${p.dexId?`<span style="background:#1a1f2e;border:1px solid #21252c;color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.04em">${p.dexId.toUpperCase()}</span>`:''}
-            ${(p.labels||[]).map(lb=>`<span style="background:#1a1f2e;border:1px solid #21252c;color:#8a919c;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">${lb}</span>`).join('')}
+            ${p.dexId?`<span style="background:#1a1f2e;border:1px solid #21252c;color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.04em">${esc(p.dexId.toUpperCase())}</span>`:''}
+            ${(p.labels||[]).map(lb=>`<span style="background:#1a1f2e;border:1px solid #21252c;color:#8a919c;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">${esc(lb)}</span>`).join('')}
           </div>
         </div>
       </div>
@@ -7947,7 +7948,7 @@ async function showTokenCard(symbol){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">
         ${pctBadge(p.priceChange?.m5,'5m')}${pctBadge(p.priceChange?.h1,'1h')}${pctBadge(p.priceChange?.h6,'6h')}${pctBadge(p.priceChange?.h24,'24h')}
       </div>
-      ${_links.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${_links.slice(0,6).map(function(l){return '<a href="'+l.url+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#1a1f2e;border:1px solid #21252c;border-radius:20px;padding:4px 10px;font-size:11px;color:#adb5bd;text-decoration:none" onmouseover="this.style.color=\'#f7b955\';this.style.borderColor=\'#f7b955\'" onmouseout="this.style.color=\'#adb5bd\';this.style.borderColor=\'#21252c\'">'+_li(l)+' '+_lbl(l)+'</a>';}).join('')}</div>`:''}
+      ${_links.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px">${_links.slice(0,6).map(function(l){return '<a href="'+esc(l.url||'')+'" target="_blank" rel="noopener" style="display:inline-flex;align-items:center;gap:4px;background:#1a1f2e;border:1px solid #21252c;border-radius:20px;padding:4px 10px;font-size:11px;color:#adb5bd;text-decoration:none" onmouseover="this.style.color=\'#f7b955\';this.style.borderColor=\'#f7b955\'" onmouseout="this.style.color=\'#adb5bd\';this.style.borderColor=\'#21252c\'">'+_li(l)+' '+esc(_lbl(l))+'</a>';}).join('')}</div>`:''}
       ${_addr?`<div style="display:flex;align-items:center;gap:8px;background:#161b22;border-radius:10px;padding:8px 12px;margin-bottom:4px"><span style="font-size:10px;color:#565d68;text-transform:uppercase;letter-spacing:.06em;flex-shrink:0">Pair</span><span style="font-family:\'JetBrains Mono\',monospace;font-size:11px;color:#8a919c;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${_addrShort}</span><button onclick="navigator.clipboard.writeText('${_addr}').then(function(){this.textContent='✓';var b=this;setTimeout(function(){b.textContent='⧉'},1500)}.bind(this)).catch(function(){})" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:13px;padding:2px 6px;flex-shrink:0">⧉</button></div>`:''}
       `
   }catch(e){
@@ -7955,33 +7956,6 @@ async function showTokenCard(symbol){
     var _msg=(e.name==='AbortError')?'Request timed out — check your connection':'Failed to load token data';
     body.innerHTML='<div style="text-align:center;padding:40px 0;color:#f76b62;font-size:13px">'+_msg+'</div>'
   }
-}
-
-function renderPost(item){
-  const init=(item.username||item.wallet||'?').slice(0,2).toUpperCase()
-  const name=item.username||item.wallet?.slice(0,8)||'Unknown'
-  const content=item.content?item.content.replace(/\$([A-Z0-9]+)/g,'<span onclick="showTokenCard(\'$1\')" style="color:#f7b955;cursor:pointer;font-weight:700;text-decoration:underline">$$$1</span>'):''
-  const text=content?`<div style="margin-top:8px;color:#c7ccd4;font-size:14.5px">${content}</div>`:''
-  const pct=(item.pnl_pct||0)
-  const col=pct>=0?'#3ad29b':'#f76b62'
-  const trade=item.symbol?`<div style="margin-top:10px;background:#101216;border:1px solid #21252c;border-radius:15px;padding:14px;display:flex;justify-content:space-between">
-    <span style="color:#f7b955;font-weight:700;font-family:monospace">$${item.symbol}</span>
-    <span style="font-size:22px;font-weight:700;font-family:monospace;color:${col}">${pct>=0?'+':''}${pct.toFixed(1)}%</span>
-  </div>`:''
-  const actions=`<div style="display:flex;gap:24px;margin-top:12px;font-size:13px;color:#565d68">
-    <button onclick="replyPost(${item.id})" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">${_REPLY_ICON_SVG} <span>${item.replies||0}</span></button>
-    <button onclick="copyTrade(${item.id})" style="background:none;border:none;color:#f7b955;cursor:pointer;display:flex;align-items:center;gap:6px">⧉ Copy <span>${item.copies||0}</span></button>
-    <button onclick="likePost(${item.id},this)" style="background:none;border:none;color:#565d68;cursor:pointer;display:flex;align-items:center;gap:6px">♡ <span>${item.likes||0}</span></button>
-    ${(item.is_own||_isAdmin)?`<button onclick="deletePost(${item.id},'${item.type}')" style="background:none;border:none;color:#565d68;cursor:pointer;font-size:14px;margin-left:auto" title="Delete">🗑</button>`:''}
-  </div>`
-  return `<article style="padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px">
-    <div style="width:44px;height:44px;border-radius:50%;background:#f7b955;color:#0a0b0e;display:flex;align-items:center;justify-content:center;font-weight:700;flex-shrink:0">${init}</div>
-    <div style="flex:1">
-      <div style="font-weight:600">${name} <span style="color:#565d68;font-size:13px">· ${item.created_at||''}</span></div>
-      ${text}${trade}
-      ${actions}
-    </div>
-  </article>`
 }
 
 function _feedSparkline(entry, exit, isPos){
