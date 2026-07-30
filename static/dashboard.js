@@ -7776,7 +7776,6 @@ function renderHomeFeed(){
   el.innerHTML = items.map(_renderFeedCard).join('');
   _initLiveCharts();
   el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
-    _feedLoadReplies(card.id.slice('fc-card-'.length));
     _feedViewObserver.observe(card);
   });
 }
@@ -8441,6 +8440,10 @@ function _feedToggleReply(btn, postId){
   var open = rbox.classList.toggle('open');
   if(open){
     rbox.dataset.openedAt = Date.now();
+    if(!rbox.dataset.repliesLoaded){
+      rbox.dataset.repliesLoaded = '1';
+      _feedLoadReplies(postId);
+    }
     var inp = document.getElementById('rinp-'+postId);
     if(inp) setTimeout(function(){ inp.focus(); }, 220);
   }
@@ -8511,7 +8514,10 @@ async function _jumpToPost(postId){
   setTimeout(function(){ card.classList.remove('fc-card-highlight'); }, 2200);
   var rbox = document.getElementById('rbox-'+postId);
   if(rbox){ rbox.classList.add('open'); rbox.dataset.openedAt = Date.now(); }
-  _feedLoadReplies(postId);
+  if(!rbox || !rbox.dataset.repliesLoaded){
+    if(rbox) rbox.dataset.repliesLoaded = '1';
+    _feedLoadReplies(postId);
+  }
 }
 
 function _replyRelTime(created_at){
