@@ -80,20 +80,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #guest-banner .gb-min{background:none;border:none;color:var(--muted);font-size:18px;line-height:1;cursor:pointer;padding:2px 4px;border-radius:4px;margin-left:4px}
 #guest-banner .gb-min:hover{color:var(--text)}
 
-/* ── ORC DANCE ── */
-#orc-overlay{position:fixed;inset:0;z-index:999;display:none;align-items:center;justify-content:center;flex-direction:column;background:rgba(10,11,14,.92);backdrop-filter:blur(10px)}
-#orc-overlay.show{display:flex}
-.orc-stage{position:relative;width:240px;height:240px}
-.orc-body{position:absolute;bottom:0;left:50%;transform:translateX(-50%);animation:orcDance .4s ease-in-out infinite alternate}
-@keyframes orcDance{0%{transform:translateX(-50%) rotate(-8deg) translateY(0)}100%{transform:translateX(-50%) rotate(8deg) translateY(-20px)}}
-.orc-shadow{position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:80px;height:16px;background:rgba(0,0,0,.35);border-radius:50%;animation:shadow .4s ease-in-out infinite alternate}
-@keyframes shadow{0%{width:90px;opacity:.4}100%{width:60px;opacity:.1}}
-.trade-flash{font-family:'Geist',system-ui,sans-serif;font-size:22px;font-weight:700;color:var(--accent);margin-top:1.5rem;animation:flashIn .3s ease-out;letter-spacing:.02em;text-shadow:0 0 24px rgba(247,185,85,.35)}
-.trade-detail{font-size:12px;color:var(--dim);margin-top:.5rem;font-family:'JetBrains Mono',monospace}
-@keyframes flashIn{0%{opacity:0;transform:scale(.7)}100%{opacity:1;transform:scale(1)}}
-.coin{position:absolute;font-size:20px;animation:coinFly 1s ease-out forwards}
-@keyframes coinFly{0%{opacity:1;transform:translateY(0) rotate(0)}100%{opacity:0;transform:translateY(-120px) rotate(720deg)}}
-
 /* ── LAYOUT ── */
 /* Root: flex-column shell, full viewport, dark ground */
 #app{display:flex;flex-direction:column;height:100vh;overflow:hidden;background:#0a0b0e;color:#eef1f5}
@@ -3279,34 +3265,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <button class="ub-btn" onclick="location.reload()">Refresh Now</button>
 </div>
 
-<!-- ORC DANCE OVERLAY -->
-<div id="orc-overlay">
-  <div class="orc-stage">
-    <div id="orc-coins" style="position:absolute;width:100%;height:100%;pointer-events:none"></div>
-    <svg class="orc-body" width="140" height="180" viewBox="0 0 160 200">
-      <ellipse cx="80" cy="130" rx="45" ry="55" fill="#1a4a2a"/>
-      <ellipse cx="80" cy="140" rx="28" ry="35" fill="#2a6a3a"/>
-      <ellipse cx="80" cy="75" rx="42" ry="40" fill="#1a4a2a"/>
-      <ellipse cx="40" cy="60" rx="12" ry="18" fill="#1a4a2a"/>
-      <ellipse cx="120" cy="60" rx="12" ry="18" fill="#1a4a2a"/>
-      <ellipse cx="62" cy="72" rx="10" ry="11" fill="white"/>
-      <ellipse cx="98" cy="72" rx="10" ry="11" fill="white"/>
-      <ellipse cx="64" cy="74" rx="6" ry="7" fill="#000000"/>
-      <ellipse cx="100" cy="74" rx="6" ry="7" fill="#000000"/>
-      <circle cx="66" cy="72" r="2.5" fill="black"/>
-      <circle cx="102" cy="72" r="2.5" fill="black"/>
-      <path d="M 60 88 Q 80 102 100 88" stroke="#000000" stroke-width="3" fill="none" stroke-linecap="round"/>
-      <path d="M 35 120 Q 10 90 20 70" stroke="#1a4a2a" stroke-width="18" fill="none" stroke-linecap="round"/>
-      <path d="M 125 120 Q 150 90 140 70" stroke="#1a4a2a" stroke-width="18" fill="none" stroke-linecap="round"/>
-      <path d="M 60 178 Q 50 195 42 198" stroke="#1a4a2a" stroke-width="16" fill="none" stroke-linecap="round"/>
-      <path d="M 100 178 Q 110 195 118 198" stroke="#1a4a2a" stroke-width="16" fill="none" stroke-linecap="round"/>
-      <text x="80" y="138" text-anchor="middle" font-size="18" fill="#000000" opacity=".7">$</text>
-    </svg>
-    <div class="orc-shadow"></div>
-  </div>
-  <div class="trade-flash" id="orc-trade-text">TRADE EXECUTED!</div>
-  <div class="trade-detail" id="orc-trade-detail"></div>
-</div>
 
 <!-- ONBOARDING -->
 <div id="onboard">

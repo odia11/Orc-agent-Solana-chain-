@@ -1132,23 +1132,6 @@ function updateAuthBtns(){
   document.getElementById('connect-btn').style.display=authed?'none':'';
 }
 
-// ── ORC DANCE ──
-function showOrcDance(text,detail){
-  const o=document.getElementById('orc-overlay');
-  document.getElementById('orc-trade-text').textContent=text;
-  document.getElementById('orc-trade-detail').textContent=detail||'';
-  o.classList.add('show');
-  const c=document.getElementById('orc-coins');c.innerHTML='';
-  const em=['💰','💎','🚀','✨','💸','🤑','⚡'];
-  for(let i=0;i<12;i++){
-    const d=document.createElement('div');d.className='coin';
-    d.textContent=em[Math.floor(Math.random()*em.length)];
-    d.style.cssText='left:'+(Math.random()*200)+'px;top:'+(80+Math.random()*100)+'px;animation-delay:'+(Math.random()*.6)+'s';
-    c.appendChild(d);
-  }
-  setTimeout(()=>o.classList.remove('show'),3500);
-}
-
 // ── STATE ──
 let lastLogCount=0;
 function appVisible(){ return document.getElementById('app').style.display!=='none'; }
@@ -1284,8 +1267,6 @@ async function _lmBuy(addr,sym,btn){
 function checkForTrades(lines){
   if(!lines.length||lastLogCount===0){lastLogCount=lines.length;return;}
   const m=lines[0]?.msg||'';
-  if(m.startsWith('BUY ')&&!m.includes('FAILED'))showOrcDance('BUY EXECUTED! 🚀',m.substring(0,50));
-  else if(m.includes('TAKE PROFIT'))showOrcDance('TAKE PROFIT! 💎',m.substring(0,50));
   if(m.includes('bot paused for 1 hour to protect gains')||m.includes('60% profit')){
     _pushNotif('🔒 Bot paused','60% profit target reached — bot paused for 1 hour to protect gains.');
   }
