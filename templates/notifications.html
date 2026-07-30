@@ -408,7 +408,14 @@ function _shareTrade(btn, ev){
   var m = content.match(/^Trade closed:\s*\$?(\S+)\s*([+\-][\d.]+)%\s*\(([+\-][\d.]+)\s*SOL\)/);
   if(!m) return;
   var symbol = m[1], pct = m[2], sol = m[3];
-  var shareText = 'Just closed $' + symbol + ' ' + pct + '% (' + sol + ' SOL) on OrcAgent 🐋';
+  var tradeData = {
+    symbol: symbol,
+    side: 'SELL',
+    pct: parseFloat(pct),
+    pnl_pct: parseFloat(pct),
+    pnl_sol: parseFloat(sol)
+  };
+  var shareText = '__TRADE__' + JSON.stringify(tradeData);
   btn.disabled = true;
   btn.textContent = 'Sharing…';
   fetch('/api/feed/post', {
