@@ -7231,7 +7231,7 @@ function _renderTradeTerminalCard(t){
     amtStr = '<div style="color:#565d68;font-size:11px;margin-top:3px">'+(_amt>=1000?_amt.toLocaleString('en-US',{maximumFractionDigits:0}):_amt.toFixed(4))+' tokens</div>';
   }
   return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')">'
-    +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
+    +'<div data-cc="banner" class="tc-banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
     +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(13,17,23,0.55),rgba(13,17,23,0.92))"></div>'
     +'<div style="position:relative;z-index:1">'
     +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
@@ -7249,6 +7249,20 @@ function _renderTradeTerminalCard(t){
     +'</div>'
     +'</div>'
     +'</div>';
+}
+
+async function _hydrateTradeBanner(cardEl){
+  var mint = cardEl.dataset.mint;
+  if(!mint) return;
+  try{
+    var r = await fetch('https://api.dexscreener.com/latest/dex/tokens/'+encodeURIComponent(mint));
+    var d = await r.json();
+    var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+    var bannerEl = cardEl.querySelector('[data-cc="banner"]');
+    if(bannerEl && p && p.info && p.info.header && !bannerEl.style.backgroundImage){
+      bannerEl.style.backgroundImage = 'url('+p.info.header+')';
+    }
+  }catch(e){}
 }
 
 function _feedComposerTrade(){
@@ -7739,6 +7753,16 @@ function _initLiveCharts(){
   });
 }
 
+function _initTradeBanners(){
+  document.querySelectorAll('[data-mint]').forEach(function(el){
+    if(!el.dataset.mint) return;
+    var bannerEl = el.querySelector('[data-cc="banner"]');
+    if(bannerEl && !bannerEl.style.backgroundImage){
+      _hydrateTradeBanner(el);
+    }
+  });
+}
+
 /* ── feed view tracking ── */
 var _feedSeenViews    = new Set();  // post ids already counted this page session
 var _feedPendingViews = new Set();  // observed but not yet flushed to the server
@@ -7779,6 +7803,7 @@ function renderHomeFeed(){
   if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
   el.innerHTML = items.map(_renderFeedCard).join('');
   _initLiveCharts();
+  _initTradeBanners();
   el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
     _feedViewObserver.observe(card);
   });
