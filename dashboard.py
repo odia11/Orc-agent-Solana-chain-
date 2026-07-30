@@ -8933,6 +8933,68 @@ def share_feed_to_x(post_id):
     ok = _post_to_x(wallet, text)
     return jsonify({'ok': ok, 'msg': 'Shared to X!' if ok else 'Failed to share to X'})
 
+@app.route('/api/trade-card/<id>.png')
+def trade_card_image(id):
+    """Render a shareable 1200x630 PNG for a trade, from either a native trade
+    row ('t<id>') or a __TRADE__-embedded feed post ('p<id>') — same id scheme
+    as get_single_post/share_feed_to_x."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        if id.startswith('t') and id[1:].isdigit():
+            row = conn.execute(
+                'SELECT token, entry_price, exit_price, pnl, mint_address FROM trades WHERE id=?',
+                (id[1:],)
+            ).fetchone()
+            if not row:
+                return jsonify({'ok': False, 'msg': 'Not found'}), 404
+            symbol, entry_price, exit_price, pnl_sol, mint = row
+            symbol      = symbol or ''
+            side        = 'SELL'
+            entry_price = float(entry_price or 0)
+            exit_price  = float(exit_price or 0)
+            pnl_sol     = float(pnl_sol or 0)
+            pnl_pct     = round((exit_price - entry_price) / entry_price * 100, 2) if entry_price > 0 else 0.0
+            mint        = mint or ''
+        elif id.startswith('p') and id[1:].isdigit():
+            row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (id[1:],)).fetchone()
+            content = (row[0] if row else '') or ''
+            trade_idx = content.find('__TRADE__')
+            if trade_idx == -1:
+                return jsonify({'ok': False, 'msg': 'Not a trade post'}), 404
+            try:
+                trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
+            except Exception:
+                return jsonify({'ok': False, 'msg': 'Invalid trade data'}), 500
+            symbol      = trade_data.get('symbol', '') or ''
+            side        = trade_data.get('side', 'SELL') or 'SELL'
+            pnl_pct     = float(trade_data.get('pnl_pct', 0) or 0)
+            pnl_sol     = float(trade_data.get('pnl_sol', 0) or 0)
+            entry_price = float(trade_data.get('entry_price', 0) or 0)
+            exit_price  = float(trade_data.get('exit_price', 0) or 0)
+            mint        = trade_data.get('token_address', '') or ''
+        else:
+            return jsonify({'ok': False, 'msg': 'Invalid id'}), 400
+    finally:
+        conn.close()
+
+    banner_url = None
+    if mint:
+        try:
+            r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(mint, safe=''), timeout=8)
+            if r and r.status_code == 200:
+                pairs_sol = [p for p in (r.json().get('pairs') or []) if p.get('chainId') == 'solana']
+                if pairs_sol:
+                    best = max(pairs_sol, key=lambda p: float((p.get('liquidity') or {}).get('usd') or 0))
+                    banner_url = (best.get('info') or {}).get('header') or None
+        except Exception:
+            banner_url = None
+
+    png_bytes = _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url)
+    resp = make_response(png_bytes)
+    resp.headers['Content-Type']  = 'image/png'
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
 def _verify_promotion_payment(tx_signature, expected_amount_sol, treasury_wallet):
     """Real on-chain check: tx_signature must be a confirmed/finalized transaction
     that moved >= expected_amount_sol*0.99 lamports into treasury_wallet (1% slack
