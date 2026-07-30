@@ -6132,18 +6132,20 @@ def api_group_search(group_id):
 
 @app.route('/api/notifications')
 def get_notifications():
-    if 'wallet' not in session:
+    wallet = _authenticated_wallet()
+    if not wallet:
         return jsonify([])
     conn = sqlite3.connect(DB_FILE)
     try:
+        user_id = _get_uid(conn, wallet)
         rows = conn.execute('''
             SELECT u.wallet_address, t.token, t.entry_price, t.exit_price, t.pnl, t.timestamp
             FROM trades t
             JOIN users u ON u.id = t.user_id
-            WHERE t.timestamp > datetime("now", "-24 hours")
+            WHERE t.user_id = ? AND t.timestamp > datetime("now", "-24 hours")
             ORDER BY t.timestamp DESC
             LIMIT 30
-        ''').fetchall()
+        ''', (user_id,)).fetchall()
     finally:
         conn.close()
     result = []
