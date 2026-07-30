@@ -3295,7 +3295,22 @@ async function _botToggle(){
     var r=await fetch(url,{method:'POST',credentials:'include',headers:{'Content-Type':'application/json'},body:'{}'})
     var d=await r.json()
     if(d.ok||d.success){
-      await _botFetchStatus()
+      _botRunning=d.status==='running'
+      var dot=document.getElementById('bot-dot')
+      var lbl=document.getElementById('bot-label')
+      if(dot) dot.style.background=_botRunning?'#3ad29b':'#f7b955'
+      if(lbl) lbl.textContent=_botRunning?'Bot running':'Bot is idle'
+      if(btn){
+        if(_botRunning){
+          btn.textContent='⏹ Stop Trading'
+          btn.classList.add('running')
+        } else {
+          btn.textContent='▶ Start Trading'
+          btn.classList.remove('running')
+        }
+        btn.disabled=false
+      }
+      _botFetchStatus()
     } else {
       if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
       if(d.low_balance){ showLowBalanceModal(d) } else { openAlertModal({text:d.msg||'Failed'}) }
@@ -3303,7 +3318,6 @@ async function _botToggle(){
   }catch(e){
     if(btn){btn.disabled=false;btn.textContent=_botRunning?'⏹ Stop Trading':'▶ Start Trading'}
   }
-  if(btn) btn.disabled=false
 }
 
 // Initial fetch + 30s poll
