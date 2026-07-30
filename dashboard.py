@@ -1,5 +1,7 @@
 import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib, traceback
+import io
 from datetime import timedelta
+from PIL import Image, ImageDraw, ImageFont
 import bcrypt as _bcrypt
 try:
     import nacl.public as _nacl_public
@@ -30,6 +32,96 @@ try:
     _PYWEBPUSH_OK = True
 except ImportError:
     _PYWEBPUSH_OK = False
+
+def _tc_build_canvas(banner_url=None):
+    """Build the base 1200x630 canvas for a server-rendered trade card image.
+    Falls back to a flat background if banner_url is missing or fails to load."""
+    W, H = 1200, 630
+    canvas = Image.new('RGB', (W, H), '#0d1117')
+    if banner_url:
+        try:
+            resp = requests.get(banner_url, timeout=5)
+            resp.raise_for_status()
+            banner = Image.open(io.BytesIO(resp.content)).convert('RGB')
+            src_w, src_h = banner.size
+            scale = max(W / src_w, H / src_h)
+            new_w, new_h = round(src_w * scale), round(src_h * scale)
+            banner = banner.resize((new_w, new_h), Image.LANCZOS)
+            left, top = (new_w - W) // 2, (new_h - H) // 2
+            banner = banner.crop((left, top, left + W, top + H))
+            canvas.paste(banner, (0, 0))
+        except Exception:
+            pass
+    return canvas
+
+def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol):
+    """Draw the trade-card overlay (gradient, badge, symbol/prices, PNL) in-place
+    onto img (as produced by _tc_build_canvas). Returns nothing."""
+    W, H = img.size
+    entry_price = float(entry_price or 0)
+    exit_price  = float(exit_price or 0)
+    pnl_pct     = float(pnl_pct or 0)
+    pnl_sol     = float(pnl_sol or 0)
+    is_buy      = (side or 'BUY').upper() != 'SELL'
+    side_col    = (0, 208, 132) if is_buy else (255, 71, 87)     # #00d084 / #ff4757
+    pct_col     = (0, 208, 132) if pnl_pct >= 0 else (255, 71, 87)
+
+    # 1. Dark gradient overlay, transparent -> #0d1117 top to bottom
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    for y in range(H):
+        alpha = int(235 * (y / H))
+        odraw.line([(0, y), (W, y)], fill=(13, 17, 23, alpha))
+    img.paste(overlay, (0, 0), overlay)
+
+    draw = ImageDraw.Draw(img)
+
+    # 2. BUY/SELL badge, top-left
+    badge_font = ImageFont.load_default(size=28)
+    badge_text = 'BUY' if is_buy else 'SELL'
+    bx, by, pad_x, pad_y = 40, 40, 14, 8
+    tb = draw.textbbox((0, 0), badge_text, font=badge_font)
+    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+    draw.rounded_rectangle([bx, by, bx + tw + pad_x * 2, by + th + pad_y * 2],
+                            radius=6, outline=side_col, width=2)
+    draw.text((bx + pad_x, by + pad_y), badge_text, font=badge_font, fill=side_col)
+
+    # 3. $SYMBOL large, entry->exit prices, PNL SOL in amber
+    def _fmt_price(p):
+        if not p:
+            return '—'
+        return f'${p:.8f}'.rstrip('0').rstrip('.') if p < 0.001 else f'${p:.6f}'
+
+    sym_font   = ImageFont.load_default(size=64)
+    price_font = ImageFont.load_default(size=30)
+    sol_font   = ImageFont.load_default(size=32)
+
+    sym_y = by + th + pad_y * 2 + 24
+    draw.text((bx, sym_y), '$' + symbol, font=sym_font, fill=(238, 241, 245))
+
+    price_y = sym_y + 80
+    draw.text((bx, price_y), f'{_fmt_price(entry_price)} → {_fmt_price(exit_price)}',
+               font=price_font, fill=(138, 145, 156))
+
+    sol_y = price_y + 44
+    sol_sign = '+' if pnl_sol >= 0 else ''
+    draw.text((bx, sol_y), f'{sol_sign}{pnl_sol:.4f} SOL', font=sol_font, fill=(247, 185, 85))
+
+    # 4. PNL percentage, large, right-aligned
+    pct_font = ImageFont.load_default(size=90)
+    pct_sign = '+' if pnl_pct >= 0 else ''
+    pct_text = f'{pct_sign}{pnl_pct:.2f}%'
+    tb2 = draw.textbbox((0, 0), pct_text, font=pct_font)
+    ptw = tb2[2] - tb2[0]
+    draw.text((W - 60 - ptw, H // 2 - 45), pct_text, font=pct_font, fill=pct_col)
+
+def _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url=None):
+    img = _tc_build_canvas(banner_url)
+    _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol)
+    buf = io.BytesIO()
+    img.save(buf, format='PNG')
+    return buf.getvalue()
+
 load_dotenv()
 
 app = Flask(__name__)
