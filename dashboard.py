@@ -8933,11 +8933,11 @@ def share_feed_to_x(post_id):
     ok = _post_to_x(wallet, text)
     return jsonify({'ok': ok, 'msg': 'Shared to X!' if ok else 'Failed to share to X'})
 
-@app.route('/api/trade-card/<id>.png')
-def trade_card_image(id):
-    """Render a shareable 1200x630 PNG for a trade, from either a native trade
-    row ('t<id>') or a __TRADE__-embedded feed post ('p<id>') — same id scheme
-    as get_single_post/share_feed_to_x."""
+def _tc_lookup(id):
+    """Resolve a t<id>/p<id> share id (native trade row, or a __TRADE__-embedded
+    feed post — same id scheme as get_single_post/share_feed_to_x) to trade card
+    fields. Returns None if not found/invalid. Shared by /api/trade-card/<id>.png
+    and /share/<id>."""
     conn = sqlite3.connect(DB_FILE)
     try:
         if id.startswith('t') and id[1:].isdigit():
@@ -8946,41 +8946,51 @@ def trade_card_image(id):
                 (id[1:],)
             ).fetchone()
             if not row:
-                return jsonify({'ok': False, 'msg': 'Not found'}), 404
+                return None
             symbol, entry_price, exit_price, pnl_sol, mint = row
-            symbol      = symbol or ''
-            side        = 'SELL'
             entry_price = float(entry_price or 0)
             exit_price  = float(exit_price or 0)
             pnl_sol     = float(pnl_sol or 0)
             pnl_pct     = round((exit_price - entry_price) / entry_price * 100, 2) if entry_price > 0 else 0.0
-            mint        = mint or ''
+            return {
+                'symbol': symbol or '', 'side': 'SELL',
+                'entry_price': entry_price, 'exit_price': exit_price,
+                'pnl_pct': pnl_pct, 'pnl_sol': pnl_sol, 'mint': mint or '',
+            }
         elif id.startswith('p') and id[1:].isdigit():
             row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (id[1:],)).fetchone()
             content = (row[0] if row else '') or ''
             trade_idx = content.find('__TRADE__')
             if trade_idx == -1:
-                return jsonify({'ok': False, 'msg': 'Not a trade post'}), 404
+                return None
             try:
                 trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
             except Exception:
-                return jsonify({'ok': False, 'msg': 'Invalid trade data'}), 500
-            symbol      = trade_data.get('symbol', '') or ''
-            side        = trade_data.get('side', 'SELL') or 'SELL'
-            pnl_pct     = float(trade_data.get('pnl_pct', 0) or 0)
-            pnl_sol     = float(trade_data.get('pnl_sol', 0) or 0)
-            entry_price = float(trade_data.get('entry_price', 0) or 0)
-            exit_price  = float(trade_data.get('exit_price', 0) or 0)
-            mint        = trade_data.get('token_address', '') or ''
-        else:
-            return jsonify({'ok': False, 'msg': 'Invalid id'}), 400
+                return None
+            return {
+                'symbol': trade_data.get('symbol', '') or '',
+                'side':   trade_data.get('side', 'SELL') or 'SELL',
+                'pnl_pct':     float(trade_data.get('pnl_pct', 0) or 0),
+                'pnl_sol':     float(trade_data.get('pnl_sol', 0) or 0),
+                'entry_price': float(trade_data.get('entry_price', 0) or 0),
+                'exit_price':  float(trade_data.get('exit_price', 0) or 0),
+                'mint': trade_data.get('token_address', '') or '',
+            }
+        return None
     finally:
         conn.close()
 
+@app.route('/api/trade-card/<id>.png')
+def trade_card_image(id):
+    """Render a shareable 1200x630 PNG for a trade — see _tc_lookup for the id scheme."""
+    tc = _tc_lookup(id)
+    if not tc:
+        return jsonify({'ok': False, 'msg': 'Not found'}), 404
+
     banner_url = None
-    if mint:
+    if tc['mint']:
         try:
-            r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(mint, safe=''), timeout=8)
+            r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(tc['mint'], safe=''), timeout=8)
             if r and r.status_code == 200:
                 pairs_sol = [p for p in (r.json().get('pairs') or []) if p.get('chainId') == 'solana']
                 if pairs_sol:
@@ -8989,10 +8999,43 @@ def trade_card_image(id):
         except Exception:
             banner_url = None
 
-    png_bytes = _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url)
+    png_bytes = _generate_trade_card_image(
+        tc['symbol'], tc['side'], tc['entry_price'], tc['exit_price'],
+        tc['pnl_pct'], tc['pnl_sol'], banner_url)
     resp = make_response(png_bytes)
     resp.headers['Content-Type']  = 'image/png'
     resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
+@app.route('/share/<id>')
+def share_trade_page(id):
+    """Minimal OG/Twitter-card landing page for a shared trade, so links posted
+    to X/Discord/etc. unfurl with the /api/trade-card/<id>.png image."""
+    tc = _tc_lookup(id)
+    if not tc:
+        return jsonify({'ok': False, 'msg': 'Not found'}), 404
+    symbol    = _html_lib.escape(tc['symbol'] or '?')
+    title     = f'${symbol} closed on OrcAgent'
+    image_url = f'https://orcagent.fun/api/trade-card/{_html_lib.escape(id)}.png'
+    post_link = f'/#post-{_html_lib.escape(id)}'
+    html_doc = f'''<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:image" content="{image_url}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:image" content="{image_url}">
+</head>
+<body style="background:#0d1117;color:#eef1f5;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<a href="{post_link}" style="color:#f7b955;font-size:18px;text-decoration:none">Bekijk op OrcAgent →</a>
+</body>
+</html>'''
+    resp = make_response(html_doc)
+    resp.headers['Content-Type'] = 'text/html; charset=utf-8'
     return resp
 
 def _verify_promotion_payment(tx_signature, expected_amount_sol, treasury_wallet):
