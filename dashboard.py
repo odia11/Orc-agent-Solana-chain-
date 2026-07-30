@@ -241,7 +241,7 @@ def _get_fee_rate():
         return float(row[0]) if row else FEE_RATE_DEFAULT
     except Exception:
         return FEE_RATE_DEFAULT
-FEE_WALLET       = 'BM3A4wVCc4AG4rgHDETa7yCtxCKRvc55ptA9Dx3xYT8i'  # hardcoded fee recipient
+FEE_WALLET       = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'  # fixed fee recipient (independent of admin role)
 
 PROMOTION_PRICE_USD_DEFAULT = 70.0
 PROMOTION_PRICE_SOL_FALLBACK = 0.42  # used only if the SOL/USD rate isn't available yet
