@@ -2772,10 +2772,11 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     if ds.get('best')  is None or pnl_pct > ds['best']:  ds['best']  = pnl_pct
     if ds.get('worst') is None or pnl_pct < ds['worst']: ds['worst'] = pnl_pct
     ds['curve'].append({'t': now.strftime('%H:%M'), 'v': ds['total_pnl']})
+    _trade_id = None
     try:
         conn = sqlite3.connect(DB_FILE)
         try:
-            conn.execute(
+            _cur = conn.execute(
                 '''INSERT INTO trades
                    (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source)
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
@@ -2783,6 +2784,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
                  mint or None, source))
             conn.commit()
+            _trade_id = _cur.lastrowid
         finally:
             conn.close()
     except Exception as e:
@@ -2796,7 +2798,13 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             (wallet,)).fetchone()
         if _xrow and _xrow[0]:
             _sign  = '+' if pnl_pct >= 0 else ''
+            _link  = f'https://orcagent.fun/share/t{_trade_id}' if _trade_id else ''
             _tweet = f'Just closed ${symbol} {_sign}{pnl_pct:.1f}% ({_sign}{pnl:.4f} SOL) on @OrcAgent 🐋'
+            if _link:
+                _room = 280 - len(_link) - 1   # -1 for the joining space
+                if len(_tweet) > _room:
+                    _tweet = _tweet[:_room - 1].rstrip() + '…'
+                _tweet = _tweet + ' ' + _link
             threading.Thread(target=_post_to_x, args=(wallet, _tweet), daemon=True).start()
     if pref_notifications and user_id:
         pnl_sign     = '+' if pnl >= 0 else ''
