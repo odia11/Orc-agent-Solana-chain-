@@ -2811,7 +2811,8 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         notif_content = (f'Trade closed: ${symbol} '
                          f'{pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL) — {exit_reason}' if exit_reason
                          else f'Trade closed: ${symbol} {pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL)')
-        notif_link = ('/notifications?mint=' + requests.utils.quote(mint, safe='')
+        notif_link = ('/notifications?mint=' + requests.utils.quote(mint, safe='') +
+                      f'&entry={entry}&exit={exit_price}'
                       if mint else '/notifications')
         try:
             _nc = sqlite3.connect(DB_FILE)
