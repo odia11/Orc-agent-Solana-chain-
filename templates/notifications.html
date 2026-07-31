@@ -412,7 +412,10 @@ function _shareTrade(btn, ev){
   var symbol = m[1], pct = m[2], sol = m[3];
   var link = btn.getAttribute('data-link') || '';
   var qIdx = link.indexOf('?');
-  var mint = qIdx >= 0 ? new URLSearchParams(link.slice(qIdx)).get('mint') : null;
+  var params = qIdx >= 0 ? new URLSearchParams(link.slice(qIdx)) : null;
+  var mint = params ? params.get('mint') : null;
+  var entry = params ? params.get('entry') : null;
+  var exit_ = params ? params.get('exit') : null;
   var tradeData = {
     symbol: symbol,
     side: 'SELL',
@@ -421,6 +424,8 @@ function _shareTrade(btn, ev){
     pnl_sol: parseFloat(sol)
   };
   if(mint) tradeData.token_address = mint;
+  if(entry) tradeData.entry_price = parseFloat(entry);
+  if(exit_) tradeData.exit_price = parseFloat(exit_);
   var shareText = '__TRADE__' + JSON.stringify(tradeData);
   btn.disabled = true;
   btn.textContent = 'Sharing…';
