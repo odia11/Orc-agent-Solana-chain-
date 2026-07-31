@@ -8225,6 +8225,7 @@ def feed_post_create():
                 conn.commit()
                 _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id))
         chart_idx = content.find('__CHART__') if content else -1
+        trade_idx = content.find('__TRADE__') if content else -1
         if chart_idx != -1:
             text_part = content[:chart_idx].strip()
             symbol = ''
@@ -8238,6 +8239,19 @@ def feed_post_create():
                 post_desc = 'posted: ' + preview + (' — chart: ' + symbol if symbol else '')
             else:
                 post_desc = 'posted a ' + symbol + ' chart' if symbol else 'posted a chart'
+        elif trade_idx != -1:
+            text_part = content[:trade_idx].strip()
+            symbol = ''
+            try:
+                trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
+                symbol = trade_data.get('symbol', '')
+            except Exception:
+                pass
+            if text_part:
+                preview = text_part[:60] + ('…' if len(text_part) > 60 else '')
+                post_desc = 'posted: ' + preview + (' — trade: $' + symbol if symbol else '')
+            else:
+                post_desc = 'posted a $' + symbol + ' trade update' if symbol else 'posted a trade update'
         elif content:
             preview = content[:60] + ('…' if len(content) > 60 else '')
             post_desc = 'posted: ' + preview
