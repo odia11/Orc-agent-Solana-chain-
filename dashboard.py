@@ -12211,6 +12211,7 @@ def _insufficient_trade_balance(wallet: str, enc_blob: str):
     min_spend_sol  = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
     gas_estimate   = 0.005  # matches _GAS_MIN used by the trading loop
     required       = round(min_spend_sol + gas_estimate, 4)
+    required       = max(required, 0.05)
     try:
         with _use_key(enc_blob, wallet) as _pk:
             from solders.keypair import Keypair as _KP_bal
