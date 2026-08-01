@@ -7814,16 +7814,28 @@ def platform_stats():
 @rate_limit(120, 60)
 def social_feed():
     feed_filter = request.args.get('filter', 'all')
+    before = request.args.get('before', '')
+    # Normalize the incoming ISO cursor the same way the CASE expression
+    # normalizes stored created_at values, so the string comparison lines up.
+    before_norm = before.replace('T', ' ').replace('Z', '') if before else ''
     my_wallet = session.get('wallet', '')
     conn = sqlite3.connect(DB_FILE)
-    where_clause = ''
+    conditions = []
+    extra_params = []
     if feed_filter == 'following':
         row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (my_wallet,)).fetchone()
         my_uid = row[0] if row else -1
-        where_clause = '''WHERE wallet IN (
+        conditions.append('''wallet IN (
             SELECT u2.wallet_address FROM follows f
             JOIN users u2 ON f.following_id = u2.id
-            WHERE f.follower_id = ?)'''
+            WHERE f.follower_id = ?)''')
+        extra_params.append(my_uid)
+    if before_norm:
+        conditions.append('''(CASE WHEN created_at LIKE '%T%'
+                   THEN replace(replace(created_at,'T',' '),'Z','')
+                   ELSE created_at END) < ?''')
+        extra_params.append(before_norm)
+    where_clause = ('WHERE ' + ' AND '.join(conditions)) if conditions else ''
     try:
         rows = conn.execute('''
             SELECT * FROM (
@@ -7863,7 +7875,7 @@ def social_feed():
               CASE WHEN created_at LIKE '%T%'
                    THEN replace(replace(created_at,'T',' '),'Z','')
                    ELSE created_at END DESC LIMIT 50
-        ''', (my_wallet, my_wallet, my_wallet) + ((my_uid,) if feed_filter == 'following' else ())).fetchall()
+        ''', (my_wallet, my_wallet, my_wallet) + tuple(extra_params)).fetchall()
 
         # Batch-fetch like/reply counts for exactly the rows on this page instead
         # of a correlated subquery per row (which forced SQLite to compute counts
@@ -7984,7 +7996,11 @@ def social_feed():
             'repost_of':   repost_of,
             'original':    originals.get(repost_of) if kind == 'r' else None,
         })
-    return jsonify(feed)
+    next_cursor = None
+    if feed:
+        last_created = feed[-1]['created_at']
+        next_cursor = last_created.replace('T', ' ').replace('Z', '') if last_created else None
+    return jsonify({'items': feed, 'next_cursor': next_cursor})
 
 _CORS_ALLOWLIST = {'https://www.orcagent.fun', 'https://orcagent.fun'}
 

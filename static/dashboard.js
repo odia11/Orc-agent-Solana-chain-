@@ -7490,6 +7490,8 @@ function _feedTab(btn, tab){
 /* ── HOME FEED ── */
 var _homeFeedFilter = 'foryou';
 var _homeFeedData   = [];
+var _homeFeedNextCursor = null;
+var _homeFeedLoadingMore = false;
 
 function _showAvatarLightbox(url){
   var lb = document.getElementById('avatar-lightbox');
@@ -7515,8 +7517,9 @@ async function loadHomeFeed(){
     console.log('[feed] status:', r.status);
     if(!r.ok) throw new Error('HTTP ' + r.status);
     const data = await r.json();
-    if(Array.isArray(data)){
-      _homeFeedData = data;
+    if(data && Array.isArray(data.items)){
+      _homeFeedData = data.items;
+      _homeFeedNextCursor = data.next_cursor || null;
       try{
         renderHomeFeed();
         _handleNotifDeepLink();
@@ -7532,6 +7535,32 @@ async function loadHomeFeed(){
     console.error('[feed] load error (silent, keeping last known feed):', e);
     if(!_homeFeedData.length && el) el.innerHTML='<div class="fc-loading">Loading…</div>';
     setTimeout(loadHomeFeed, 5000);
+  }
+}
+
+// Infinite scroll: fetches the next (older) page via the cursor returned by
+// the previous request and appends it, instead of replacing _homeFeedData
+// like loadHomeFeed() does.
+async function loadMoreHomeFeed(){
+  if (_homeFeedLoadingMore || !_homeFeedNextCursor) return;
+  _homeFeedLoadingMore = true;
+  const filter = _homeFeedFilter === 'following' ? 'following' : 'all';
+  try{
+    const _ctl = new AbortController();
+    const _tid = setTimeout(()=>_ctl.abort(), 12000);
+    const r = await fetch('/api/social/feed?filter=' + filter + '&before=' + encodeURIComponent(_homeFeedNextCursor), {signal:_ctl.signal});
+    clearTimeout(_tid);
+    if(!r.ok) throw new Error('HTTP ' + r.status);
+    const data = await r.json();
+    if(data && Array.isArray(data.items)){
+      _homeFeedData = _homeFeedData.concat(data.items);
+      _homeFeedNextCursor = data.next_cursor || null;
+      renderHomeFeed();
+    }
+  }catch(e){
+    console.error('[feed] load-more error:', e);
+  }finally{
+    _homeFeedLoadingMore = false;
   }
 }
 
@@ -7840,8 +7869,19 @@ function _checkBottomHold() {
     if (_bottomHoldTimer) { clearTimeout(_bottomHoldTimer); _bottomHoldTimer = null; }
     return;
   }
+  // Infinite scroll: once within ~600px of the bottom and there's a next_cursor
+  // from the last fetch, load the next (older) page and append it. Guarded by
+  // _homeFeedLoadingMore so a fast scroll/fling doesn't fire it more than once
+  // per page fetched.
+  var distanceToBottom = mainEl.scrollHeight - (mainEl.scrollTop + mainEl.clientHeight);
+  if (distanceToBottom < 600 && _homeFeedNextCursor && !_homeFeedLoadingMore) {
+    loadMoreHomeFeed();
+  }
   var atBottom = (mainEl.scrollTop + mainEl.clientHeight) >= (mainEl.scrollHeight - 40);
-  if (atBottom) {
+  // Only fall back to the hold-to-refresh-for-new-posts behavior once there's
+  // no older page left to paginate into -- otherwise this would race with
+  // loadMoreHomeFeed() above and wipe the appended pages back to page 1.
+  if (atBottom && !_homeFeedNextCursor) {
     if (!_bottomHoldTimer) {
       _bottomHoldTimer = setTimeout(function() {
         loadHomeFeed(); // refetch + re-render in place instead of a full page reload
