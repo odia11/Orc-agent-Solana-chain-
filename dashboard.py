@@ -6082,6 +6082,7 @@ def api_group_claim_status(group_id):
     wallet = _authenticated_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
+        _ensure_last_owner_activity_column(conn)
         _process_expired_claims(conn, group_id)
         uid = _get_uid(conn, wallet) if wallet else None
         row = conn.execute('SELECT created_by, last_owner_activity FROM groups WHERE id=?', (group_id,)).fetchone()
@@ -6128,6 +6129,7 @@ def api_group_claim(group_id):
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
+        _ensure_last_owner_activity_column(conn)
         _process_expired_claims(conn, group_id)
         uid = _get_uid(conn, wallet)
         row = conn.execute('SELECT created_by, last_owner_activity, name FROM groups WHERE id=?',
