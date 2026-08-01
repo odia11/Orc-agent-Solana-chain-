@@ -2639,10 +2639,28 @@ def _close_open_position(user_id: int, wallet: str, mint: str):
             conn.execute('PRAGMA busy_timeout=3000')
             conn.execute('DELETE FROM open_positions WHERE user_id=? AND mint_address=?', (user_id, mint))
             conn.commit()
+            remaining = conn.execute(
+                'SELECT COUNT(*) FROM open_positions WHERE user_id=?', (user_id,)
+            ).fetchone()[0]
         finally:
             conn.close()
     except Exception as e:
         print(f'[open_positions] close failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
+        return
+
+    if remaining == 0:
+        us = get_user_state(wallet)
+        if us.get('trader_stop'):
+            us['trader_stop'].set()
+        us['trader_running'] = False
+        try:
+            _dc = sqlite3.connect(DB_FILE)
+            _dc.execute('UPDATE users SET bot_enabled=0 WHERE wallet_address=?', (wallet,))
+            _dc.commit()
+            _dc.close()
+        except Exception:
+            pass
+        print(f'[bot] {wallet[:6]}... auto-stopped — all positions closed', flush=True)
 
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
