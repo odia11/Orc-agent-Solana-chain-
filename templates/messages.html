@@ -951,11 +951,10 @@ function _renderMessages(msgs, forceScroll) {
       var trSolStr = (trPnl >= 0 ? '+' : '') + trPnl.toFixed(4) + ' SOL';
       var trFp = function(n){ n = parseFloat(n||0); return n ? (n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6)) : '—'; };
       bubble = '<div class="msg-bubble msg-trade">'
-        + '<div data-mint="" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;font-family:\'JetBrains Mono\',monospace">'
+        + '<div style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;font-family:\'JetBrains Mono\',monospace">'
         +   '<div style="display:flex;justify-content:space-between;align-items:flex-start">'
         +     '<div style="flex:1;min-width:0">'
         +       '<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'
-        +         '<span style="color:#00d084;font-weight:700;font-size:11px;border:1px solid #00d08433;border-radius:4px;padding:1px 5px">BUY</span>'
         +         '<span style="color:#eef1f5;font-weight:700;font-size:15px">$'+_esc(tr.token||'?')+'</span>'
         +       '</div>'
         +       '<div style="color:#8a919c;font-size:11px;margin-bottom:5px">'+trFp(trEntry)+' → '+trFp(trExit)+'</div>'
