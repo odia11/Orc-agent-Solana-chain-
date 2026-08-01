@@ -3747,7 +3747,7 @@ async function saveAvatar(){
     headers:{'Content-Type':'application/json'},
     body:JSON.stringify({avatar_data:_pendingAvatarData})
   }).then(r=>r.json()).catch(()=>null);
-  btn.textContent='📷 Choose Photo'; btn.disabled=false;
+  btn.innerHTML='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg> Choose Photo'; btn.disabled=false;
   if(r?.ok){
     msgEl.className='s-msg ok';
     msgEl.textContent='✓ Profile picture saved!';
@@ -5652,7 +5652,7 @@ async function _gcUploadAndSendImage(){
   }catch(e){ showTradeWarn('⚠️ Image send failed'); }
   finally{
     gcCancelPreview();
-    if(imgBtn){ imgBtn.innerHTML='📷'; imgBtn.classList.remove('loading'); }
+    if(imgBtn){ imgBtn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'; imgBtn.classList.remove('loading'); }
     setTimeout(()=>{ _gcSendCooldown=false; if(btn) btn.disabled=false; },2000);
   }
 }
@@ -6285,7 +6285,7 @@ async function dmSendImage(file){
   }catch(e){
     showTradeWarn('⚠️ Image send failed');
   }finally{
-    if(btn){ btn.innerHTML='📷'; btn.classList.remove('loading'); }
+    if(btn){ btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>'; btn.classList.remove('loading'); }
     const inp=document.getElementById('dm-img-input');
     if(inp) inp.value='';
   }
