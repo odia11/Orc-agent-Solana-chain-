@@ -7872,7 +7872,7 @@ def social_feed():
             ORDER BY
               CASE WHEN created_at LIKE '%T%'
                    THEN replace(replace(created_at,'T',' '),'Z','')
-                   ELSE created_at END DESC LIMIT 50
+                   ELSE created_at END DESC LIMIT 200
         ''', (my_wallet, my_wallet, my_wallet) + tuple(extra_params)).fetchall()
 
         # Batch-fetch like/reply counts for exactly the rows on this page instead
