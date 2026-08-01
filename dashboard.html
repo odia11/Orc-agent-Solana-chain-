@@ -134,13 +134,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* Tablet (768–1024px): right rail hidden, center fills remaining space */
 @media(max-width:880px){
   .app-body{max-width:none}
-  .wrap{max-width:none;border-right:none;height:calc(100vh - 48px)}
+  .wrap{max-width:none;border-right:none;height:calc(100vh - 48px);max-width:100vw!important;overflow-x:hidden}
   #right-rail{display:none!important}
 }
 /* Mobile (<768px): both rails hidden, center fills full viewport */
 @media(max-width:767px){
   .app-body{max-width:none}
-  .wrap{max-width:none;border-right:none;height:calc(100vh - 48px)}
+  .wrap{max-width:none;border-right:none;height:calc(100vh - 48px);max-width:100vw!important;overflow-x:hidden}
   .stats{grid-template-columns:repeat(2,1fr)}
   .mode-desc{max-width:100%}
   .panel-hdr{font-size:10px}
@@ -3226,6 +3226,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     padding:10px!important;margin-top:2px!important;
     order:99;
   }
+
+  /* ── Trade dropdown rows: keep PnL% visible on narrow screens ── */
+  #composer-trade-list > div{min-width:0}
+  #composer-trade-list > div > span:first-child{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
   /* ── Feed post cards ── */
   .fc-card{padding:14px!important;gap:10px!important}
