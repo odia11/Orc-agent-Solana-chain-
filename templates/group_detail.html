@@ -95,6 +95,14 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .gd-emoji-palette button{background:none;border:none;font-size:18px;cursor:pointer;padding:6px;border-radius:8px;line-height:1}
 .gd-emoji-palette button:hover{background:var(--bg3)}
 
+.gd-trade-dropdown{display:none;position:absolute;top:calc(100% + 6px);left:0;background:#101216;border:1px solid #21252c;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.4);z-index:20;width:220px;max-height:260px;overflow-y:auto}
+.gd-trade-dropdown.open{display:block}
+.gd-trade-dropdown-msg{padding:14px;color:var(--sub);font-size:12px;text-align:center}
+.gd-trade-dropdown-item{padding:10px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;font-family:'JetBrains Mono',monospace;font-size:12px}
+.gd-trade-dropdown-item:last-child{border-bottom:none}
+.gd-trade-dropdown-item:hover{background:#16191f}
+.gd-composer-trade-preview{position:relative;display:block;margin:8px 0 0;max-width:320px}
+
 .gd-mute-actions{display:flex;gap:4px}
 
 .gd-composer{display:flex;gap:10px;align-items:flex-end;margin:20px 0}
@@ -586,11 +594,16 @@ function _renderComposer(g){
         +'<textarea class="gd-composer-inp" id="gd-composer-inp" placeholder="Post to '+esc(g.name)+'…" rows="1" style="width:100%" oninput="this.style.height=\'auto\';this.style.height=this.scrollHeight+\'px\';_onComposerInput(this);_pingTyping()" onkeydown="_onComposerKeydown(event)"></textarea>'
         +'<div class="gd-mention-menu" id="gd-mention-menu"></div>'
         +'<div id="gd-attach-preview-wrap"></div>'
+        +'<div id="gd-trade-preview-wrap"></div>'
         +'<div class="gd-composer-tools">'
           +'<button class="gd-composer-tool-btn" onclick="document.getElementById(\'gd-image-input\').click()">🖼️ Image</button>'
           +'<div style="position:relative;display:inline-block">'
             +'<button type="button" class="gd-composer-tool-btn gd-emoji-btn" onclick="_toggleEmojiPicker(event)">😊 Emoji</button>'
             +'<div class="gd-emoji-palette" id="gd-emoji-palette"></div>'
+          +'</div>'
+          +'<div style="position:relative;display:inline-block">'
+            +'<button type="button" class="gd-composer-tool-btn gd-trade-btn" onclick="_toggleTradeDropdown(event)">📈 Trade</button>'
+            +'<div class="gd-trade-dropdown" id="gd-trade-dropdown"></div>'
           +'</div>'
           +'<input type="file" id="gd-image-input" accept="image/png,image/jpeg,image/gif,image/webp" style="display:none" onchange="_onComposerImageFile(this)">'
         +'</div>'
@@ -603,6 +616,46 @@ function _renderMentionText(content){
   return esc(content).replace(/@([a-zA-Z0-9_]+)/g, '<span class="gd-mention">@$1</span>');
 }
 
+// Self-contained port of _renderTradeTerminalCard() in static/dashboard.js --
+// this page doesn't load dashboard.js (standalone-page convention, see
+// promote.html), so the trade-card markup is duplicated here rather than
+// shared, to keep the same visual language between the home feed and groups.
+function _renderTradeCardHtml(t){
+  if(!t) return '';
+  var isBuy   = (t.side||'BUY').toUpperCase() !== 'SELL';
+  var sideCol = isBuy ? '#00d084' : '#ff4757';
+  var entryN  = parseFloat(t.entry_price || 0);
+  var exitN   = parseFloat(t.exit_price  || 0);
+  var pct     = parseFloat(t.pnl_pct || 0);
+  var pctCol  = pct >= 0 ? '#00d084' : '#ff4757';
+  var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
+  var sol     = parseFloat(t.pnl_sol || 0);
+  var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(4) + ' SOL';
+  var fp = function(n){ n=parseFloat(n||0); return n ? (n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6)) : '—'; };
+  var dur    = t.duration ? '<span style="color:#565d68;font-size:11px"> · '+esc(t.duration)+'</span>' : '';
+  var sym    = esc(t.symbol||'');
+  var amtStr = '';
+  if(t.amount && parseFloat(t.amount) > 0){
+    var amt = parseFloat(t.amount);
+    amtStr = '<div style="color:#565d68;font-size:11px;margin-top:3px">'+(amt>=1000?amt.toLocaleString('en-US',{maximumFractionDigits:0}):amt.toFixed(4))+' tokens</div>';
+  }
+  return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace">'
+    +'<div style="display:flex;justify-content:space-between;align-items:flex-start">'
+    +'<div style="flex:1;min-width:0">'
+    +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">'
+    +'<span style="color:'+sideCol+';font-weight:700;font-size:11px;border:1px solid '+sideCol+'33;border-radius:4px;padding:1px 5px">'+(isBuy?'BUY':'SELL')+'</span>'
+    +'<span style="color:#eef1f5;font-weight:700;font-size:15px">$'+sym+'</span>'
+    +dur
+    +'</div>'
+    +'<div style="color:#8a919c;font-size:11px;margin-bottom:5px">'+fp(entryN)+' → '+fp(exitN)+'</div>'
+    +'<div style="color:#f7b955;font-size:12px;font-weight:600">'+solStr+'</div>'
+    +amtStr
+    +'</div>'
+    +'<div style="font-size:26px;font-weight:700;color:'+pctCol+';line-height:1;text-align:right;padding-left:14px;align-self:center">'+pctStr+'</div>'
+    +'</div>'
+    +'</div>';
+}
+
 function _postHtml(p){
   var isMine = p.user_id === _myUid;
   var canDelete = isMine || (_groupData && _groupData.is_mod);
@@ -611,6 +664,16 @@ function _postHtml(p){
     ? '<img src="'+esc(p.avatar_url)+'" alt="" onerror="this.style.display=\'none\'">'
     : esc((p.username||p.wallet_short||'?')[0].toUpperCase());
   var name = p.username || p.wallet_short || 'Unknown';
+  var textContent = p.content || '';
+  var tradeHtml = '';
+  var tradeIdx = textContent.indexOf('__TRADE__');
+  if(tradeIdx >= 0){
+    var tradeJson = textContent.slice(tradeIdx + 9);
+    var trade = null;
+    try{ trade = JSON.parse(tradeJson); }catch(ex){}
+    if(trade) tradeHtml = _renderTradeCardHtml(trade);
+    textContent = textContent.slice(0, tradeIdx).trim();
+  }
   return ''
     +'<div class="gd-post" data-post-id="'+p.id+'">'
       +'<div class="gd-post-avatar">'+avatarInner+'</div>'
@@ -622,7 +685,8 @@ function _postHtml(p){
           +(canPin ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_pinPost('+p.id+')" title="Pin this post">Pin</button>' : '')
           +(canDelete ? '<button class="gd-post-del" data-post-id="'+p.id+'" onclick="_deletePost(this)" title="'+(isMine?'Delete':'Remove (moderator)')+'">Delete</button>' : '')
         +'</div>'
-        +'<div class="gd-post-text">'+_renderMentionText(p.content)+'</div>'
+        +(textContent ? '<div class="gd-post-text">'+_renderMentionText(textContent)+'</div>' : '')
+        +tradeHtml
         +(p.image_url ? '<img class="gd-post-img" src="'+esc(p.image_url)+'" alt="" onclick="_openLightbox(this.src)">' : '')
         +'<div class="gd-react-bar" id="gd-react-g'+p.id+'" data-post-id="g'+p.id+'"></div>'
       +'</div>'
@@ -718,6 +782,10 @@ document.addEventListener('click', function(e){
   if(!e.target.closest('.gd-emoji-btn') && !e.target.closest('.gd-emoji-palette')){
     var epal = document.getElementById('gd-emoji-palette');
     if(epal) epal.classList.remove('open');
+  }
+  if(!e.target.closest('.gd-trade-btn') && !e.target.closest('.gd-trade-dropdown')){
+    var tdd = document.getElementById('gd-trade-dropdown');
+    if(tdd) tdd.classList.remove('open');
   }
 });
 
@@ -1083,10 +1151,77 @@ function _removeComposerImage(){
   if(wrap) wrap.innerHTML = '';
 }
 
+var _composerTrade = null;
+var _myTradesForComposer = null;
+
+function _toggleTradeDropdown(ev){
+  ev.stopPropagation();
+  var dd = document.getElementById('gd-trade-dropdown');
+  if(!dd) return;
+  var wasOpen = dd.classList.contains('open');
+  dd.classList.remove('open');
+  if(wasOpen) return;
+  dd.classList.add('open');
+  _loadComposerTrades();
+}
+
+function _loadComposerTrades(){
+  var dd = document.getElementById('gd-trade-dropdown');
+  if(!dd) return;
+  dd.innerHTML = '<div class="gd-trade-dropdown-msg">Loading…</div>';
+  fetch('/api/my-trades', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
+    var trades = (d.trades || (Array.isArray(d) ? d : [])).slice(0,5);
+    _myTradesForComposer = trades;
+    if(!trades.length){
+      dd.innerHTML = '<div class="gd-trade-dropdown-msg">No closed trades yet</div>';
+      return;
+    }
+    dd.innerHTML = trades.map(function(t, i){
+      var sym = t.symbol || t.token || '?';
+      var pct = t.pnl_pct != null ? parseFloat(t.pnl_pct)
+                : (t.entry_price && t.exit_price ? (t.exit_price - t.entry_price) / t.entry_price * 100 : 0);
+      var col = pct >= 0 ? '#00d084' : '#ff4757';
+      return '<div class="gd-trade-dropdown-item" onclick="_attachComposerTrade('+i+')">'
+        +'<span style="color:#eef1f5;font-weight:700">$'+esc(sym)+'</span>'
+        +'<span style="color:'+col+';font-weight:600">'+(pct>=0?'+':'')+pct.toFixed(1)+'%</span>'
+        +'</div>';
+    }).join('');
+  }).catch(function(){
+    dd.innerHTML = '<div class="gd-trade-dropdown-msg">Failed to load trades</div>';
+  });
+}
+
+function _attachComposerTrade(idx){
+  var t = _myTradesForComposer && _myTradesForComposer[idx];
+  if(!t) return;
+  var entry = parseFloat(t.entry_price || 0);
+  var exit  = parseFloat(t.exit_price  || 0);
+  var pct   = t.pnl_pct != null ? parseFloat(t.pnl_pct) : (entry>0 ? (exit-entry)/entry*100 : 0);
+  _composerTrade = {
+    symbol: t.symbol || t.token || '?', side: (t.side || 'BUY').toUpperCase(),
+    entry_price: entry, exit_price: exit, pnl_pct: pct,
+    pnl_sol: parseFloat(t.pnl_sol || t.pnl || 0), amount: parseFloat(t.amount || 0),
+    token_address: t.token_address || '',
+  };
+  document.getElementById('gd-trade-dropdown').classList.remove('open');
+  var wrap = document.getElementById('gd-trade-preview-wrap');
+  if(wrap) wrap.innerHTML = '<div class="gd-composer-trade-preview">'
+    +'<button type="button" class="gd-attach-remove" onclick="_removeComposerTrade()">✕</button>'
+    +_renderTradeCardHtml(_composerTrade)
+    +'</div>';
+}
+
+function _removeComposerTrade(){
+  _composerTrade = null;
+  var wrap = document.getElementById('gd-trade-preview-wrap');
+  if(wrap) wrap.innerHTML = '';
+}
+
 function _submitPost(){
   var inp = document.getElementById('gd-composer-inp');
   var content = inp.value.trim();
-  if(!content && !_composerImageData) return;
+  if(!content && !_composerImageData && !_composerTrade) return;
+  if(_composerTrade) content = (content ? content+'\n' : '') + '__TRADE__'+JSON.stringify(_composerTrade);
   var btn = document.getElementById('gd-post-btn');
   btn.disabled = true;
   fetch('/api/groups/'+_groupId+'/posts', {method:'POST', credentials:'include', headers:_apiHeaders(), body:JSON.stringify({content:content, image_data:_composerImageData||''})})
@@ -1096,6 +1231,7 @@ function _submitPost(){
       inp.value = '';
       inp.style.height = 'auto';
       _removeComposerImage();
+      _removeComposerTrade();
       _loadPosts();
     }).catch(function(){ btn.disabled=false; _showToast('Network error', 'err'); });
 }
