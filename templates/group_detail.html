@@ -27,8 +27,9 @@
   --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+html,body{overflow-x:hidden}
 
-.gd-wrap{max-width:680px;margin:0 auto;padding:16px 20px 100px}
+.gd-wrap{max-width:680px;margin:0 auto;padding:16px 20px 100px;box-sizing:border-box;width:100%}
 .gd-allgroups{display:inline-flex;align-items:center;gap:6px;color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;margin-bottom:14px;touch-action:manipulation;-webkit-tap-highlight-color:rgba(247,185,85,.25);position:relative;z-index:5;background:var(--bg2);border:1px solid var(--border2);border-radius:999px;padding:7px 14px 7px 10px;transition:border-color .15s,color .15s,background .15s}
 .gd-allgroups svg{flex-shrink:0;transition:transform .15s}
 .gd-allgroups:hover{color:var(--accent);border-color:var(--accent-border);background:var(--accent-dim)}
@@ -182,6 +183,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
   .gd-header{flex-wrap:wrap}
   .gd-header-actions{width:100%;align-items:flex-start;flex-direction:row;justify-content:space-between}
   .gd-composer-inp{font-size:16px}
+  .gd-mention-menu{min-width:0;max-width:calc(100vw - 24px)}
 }
 </style>
 </head>
