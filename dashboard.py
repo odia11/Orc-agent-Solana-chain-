@@ -15536,11 +15536,13 @@ def _start_backup_scheduler():
         _sched = _BgScheduler(timezone='UTC')
         # Daily at 03:00 UTC
         _sched.add_job(backup_database, _CronTrigger(hour=3, minute=0), id='daily_backup', replace_existing=True)
+        # Hourly, on the hour
+        _sched.add_job(_recover_uncollected_fees, _CronTrigger(minute=0), id='hourly_fee_recovery', replace_existing=True, kwargs={'triggered_by': 'scheduled'})
         # One-shot startup backup after 60 s
         run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         _sched.add_job(backup_database, 'date', run_date=run_at, id='startup_backup')
         _sched.start()
-        print('[backup] scheduler started — daily 03:00 UTC, startup in 60 s', flush=True)
+        print('[backup] scheduler started — daily 03:00 UTC, hourly fee recovery, startup in 60 s', flush=True)
     except Exception as e:
         print(f'[backup] scheduler error: {e}', flush=True)
 
