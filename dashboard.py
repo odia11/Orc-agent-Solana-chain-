@@ -7094,7 +7094,7 @@ def settings_get():
             '''SELECT encrypted_private_key, breakout_trigger, take_profit,
                       stop_loss, max_positions, pref_notifications,
                       pref_scam_filter, pref_sound_alerts, bot_enabled,
-                      avatar_url, username, is_verified, bio
+                      avatar_url, username, is_verified, bio, min_trade_size
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
@@ -7105,7 +7105,8 @@ def settings_get():
                         'breakout_trigger': 3.0, 'take_profit': 15.0,
                         'stop_loss': 8.0, 'max_positions': 3,
                         'pref_notifications': True, 'pref_scam_filter': True,
-                        'pref_sound_alerts': False, 'bot_running': bot_running})
+                        'pref_sound_alerts': False, 'bot_running': bot_running,
+                        'min_trade_size': 1.0})
     return jsonify({
         'ok': True,
         'has_trading_key': bool(row[0]),
@@ -7121,6 +7122,7 @@ def settings_get():
         'username':   row[10] or '',
         'is_verified': bool(row[11]),
         'bio': row[12] or '',
+        'min_trade_size': row[13] if row[13] is not None else 1.0,
     })
 
 @app.route('/api/settings/save', methods=['POST'])
@@ -7162,6 +7164,11 @@ def settings_save():
     if 'pref_sound_alerts' in data:
         updates.append('pref_sound_alerts=?')
         params.append(1 if data['pref_sound_alerts'] else 0)
+    if 'min_trade_size' in data:
+        try:
+            v = float(data['min_trade_size'])
+            updates.append('min_trade_size=?'); params.append(max(1.0, min(v, 10000.0)))
+        except (ValueError, TypeError): pass
     if not updates:
         return jsonify({'ok': True, 'msg': 'Nothing to update'})
     params.append(wallet)
