@@ -8648,6 +8648,10 @@ function _feedToggleNestedReply(parentId, postId, btn){
   if(isOpen) return; // was open -> we just closed it above
   var inpId = 'rninp-'+parentId;
   box.innerHTML = '<div class="fc-reply-inner" style="margin-top:8px" onclick="event.stopPropagation()">'
+    +'<div class="fc-reply-emoji-wrap">'
+    +'<button class="fc-reply-emoji-btn" onclick="_emojiPickerToggle(event,\'nrepal-'+parentId+'\',\''+inpId+'\')" title="Emoji">😊</button>'
+    +'<div class="fc-reply-palette ep-palette" id="nrepal-'+parentId+'"></div>'
+    +'</div>'
     +'<input class="fc-reply-inp" id="'+inpId+'" type="text" placeholder="Write a reply…" maxlength="500" '
       +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitNestedReply(this,\''+postId.replace(/'/g,"\\'")+'\','+parentId+')}">'
     +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')">Reply</button>'
