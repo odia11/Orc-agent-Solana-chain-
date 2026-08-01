@@ -6713,8 +6713,7 @@ def login_password():
         row = conn.execute(
             '''SELECT id, wallet_address, COALESCE(username,''), password_hash,
                       CASE WHEN encrypted_private_key != '' AND encrypted_private_key IS NOT NULL
-                           THEN 1 ELSE 0 END,
-                      COALESCE(is_admin, 0)
+                           THEN 1 ELSE 0 END
                FROM users
                WHERE username = ? OR wallet_address = ?
                LIMIT 1''',
@@ -6727,7 +6726,7 @@ def login_password():
         _record_ip_failure(ip)
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
-    user_id, wallet_address, db_username, password_hash, has_trading_key, is_admin = row
+    user_id, wallet_address, db_username, password_hash, has_trading_key = row
 
     if not password_hash:
         return jsonify({'success': False, 'error': 'No password set — use Phantom or Face ID to login'}), 401
@@ -6753,7 +6752,7 @@ def login_password():
         'wallet':          wallet_address,
         'username':        db_username or '',
         'has_trading_key': bool(has_trading_key),
-        'is_admin':        bool(is_admin),
+        'is_admin':        _is_owner(wallet_address),
         'csrf_token':      csrf_tok,
     })
 
@@ -6872,8 +6871,7 @@ def webauthn_login():
         row = conn.execute(
             '''SELECT wc.user_id, u.wallet_address, COALESCE(u.username, ''),
                       CASE WHEN u.encrypted_private_key != '' AND u.encrypted_private_key IS NOT NULL
-                           THEN 1 ELSE 0 END,
-                      COALESCE(u.is_admin, 0)
+                           THEN 1 ELSE 0 END
                FROM webauthn_credentials wc
                JOIN users u ON u.id = wc.user_id
                WHERE wc.credential_id = ?''',
@@ -6883,7 +6881,7 @@ def webauthn_login():
         conn.close()
     if not row:
         return jsonify({'success': False, 'msg': 'Credential not found — register first'}), 404
-    user_id, wallet_address, username, has_trading_key, is_admin = row
+    user_id, wallet_address, username, has_trading_key = row
     # Restore full session — identical to what /api/wallet/set establishes
     session.permanent           = True
     session['user_id']          = user_id
@@ -6897,7 +6895,7 @@ def webauthn_login():
         'wallet':          wallet_address,
         'username':        username or '',
         'has_trading_key': bool(has_trading_key),
-        'is_admin':        bool(is_admin),
+        'is_admin':        _is_owner(wallet_address),
         'csrf_token':      csrf_tok,
     })
 
