@@ -502,8 +502,28 @@ function _esc(s) {
 }
 
 function _scrollToBottom() {
-  var area = document.getElementById('msgs-area');
-  if (area) area.scrollTop = area.scrollHeight;
+  requestAnimationFrame(function(){
+    requestAnimationFrame(function(){
+      var area = document.getElementById('msgs-area');
+      if (!area) return;
+      // Images (trade cards have none, but photo messages do) can still be
+      // loading at this point -- once one finishes, its real height pushes
+      // the layout down and leaves the view short of the bottom. Re-scroll
+      // when that happens, but only if nothing has moved scrollTop away from
+      // where we last put it -- comparing against the freshly grown
+      // scrollHeight instead would confuse "user scrolled away" with "the
+      // image itself just grew the layout by more than the threshold".
+      var lastSet;
+      var goToBottom = function(){ area.scrollTop = area.scrollHeight; lastSet = area.scrollTop; };
+      goToBottom();
+      area.querySelectorAll('img').forEach(function(img){
+        if (img.complete) return;
+        img.addEventListener('load', function(){
+          if (area.scrollTop === lastSet) goToBottom();
+        }, { once: true });
+      });
+    });
+  });
 }
 
 /* ── CONVERSATIONS ── */
