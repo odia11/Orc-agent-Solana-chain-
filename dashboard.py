@@ -14527,6 +14527,8 @@ def admin_toggle_verify():
     try:
         conn.execute('UPDATE users SET is_verified=? WHERE wallet_address=?', (1 if verified else 0, target))
         conn.commit()
+        _log_security_event('user_verified' if verified else 'user_unverified',
+                             session.get('wallet', ''), f'target={target[:8]}...')
         return jsonify({'ok': True, 'verified': verified})
     finally:
         conn.close()
