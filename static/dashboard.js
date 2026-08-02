@@ -7020,7 +7020,7 @@ document.addEventListener('click',function(ev){
   if(_fcActiveShareId && !ev.target.closest('.fc-share-wrap')) _fcShareClose();
 },true);
 function _fcPostLinkUrl(postId){
-  return location.origin+location.pathname+'?post='+encodeURIComponent(postId);
+  return location.origin+location.pathname+'#post-'+encodeURIComponent(postId);
 }
 function _fcCopyPostLink(btn,postId){
   var url=_fcPostLinkUrl(postId);
