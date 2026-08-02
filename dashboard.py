@@ -14516,11 +14516,11 @@ def admin_ban_user():
 
 @app.route('/api/admin/user/verify', methods=['POST'])
 def admin_toggle_verify():
-    err = _require_role('admin')
-    if err: return err
     body = request.get_json(silent=True) or {}
     target = body.get('wallet', '').strip()
     verified = bool(body.get('verified', True))
+    err = _require_role('admin', 'moderator') if verified else _require_role('admin')
+    if err: return err
     if not target:
         return jsonify({'ok': False, 'msg': 'Missing wallet'}), 400
     conn = sqlite3.connect(DB_FILE)
