@@ -2,6 +2,7 @@
   "name": "OrcAgent",
   "short_name": "OrcAgent",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#0a0b0e",
   "theme_color": "#f7b955",
