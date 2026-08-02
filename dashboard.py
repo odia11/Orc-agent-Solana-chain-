@@ -7218,6 +7218,14 @@ def wallet_set_key():
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Invalid key format — paste the full base58 key from your wallet'})
     try:
+        from solders.keypair import Keypair as _KP_wsk
+        pasted_address = str(_KP_wsk.from_base58_string(private_key_raw).pubkey())
+        if pasted_address == wallet:
+            return jsonify({'ok': False, 'msg': 'This is the wallet you connected with — paste the private key of a separate, dedicated trading wallet instead'})
+    except Exception:
+        pass  # not base58 (e.g. a JSON-array-format key) -- can't derive an address
+              # to compare, so skip the check rather than block a legitimate key
+    try:
         encrypted = encrypt_private_key(private_key_raw, wallet)
         _verify = decrypt_private_key(encrypted, wallet)
         if _verify != private_key_raw:
