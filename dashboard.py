@@ -3719,6 +3719,7 @@ def dashboard_redirect():
     return redirect(target, 302)
 
 @app.route('/api/phantom/init', methods=['POST'])
+@rate_limit(10, 60)
 def api_phantom_init():
     """Generate a NaCl keypair server-side for Phantom v1 deep-link.
     Returns {ok, dapp_pk (b58), token}. Token is used by /api/phantom/decrypt."""
@@ -3739,9 +3740,20 @@ def api_phantom_init():
 
 
 @app.route('/api/phantom/decrypt', methods=['POST'])
+@rate_limit(10, 60)
 def api_phantom_decrypt():
     """Decrypt Phantom v1 callback payload using the stored server-side keypair.
-    Body: {token, phantom_pk, nonce, data} — all b58-encoded strings."""
+    Body: {token, phantom_pk, nonce, data} — all b58-encoded strings.
+
+    SECURITY: this only proves the caller holds SOME NaCl keypair able to
+    decrypt the box — it does NOT prove ownership of the Solana keypair for
+    the 'public_key' the caller put in the decrypted payload (that field is
+    fully attacker-chosen). It must never be used to establish a session by
+    itself. The real proof-of-ownership step (signMessage over a server nonce,
+    verified in set_wallet()/'/api/wallet/set') is not wired up on the mobile
+    deep-link path yet, so mobile Phantom connect is disabled here pending
+    that -- see /api/phantom/decrypt-signature and phantom_callback.html's
+    dormant 'step=sign' branch for the intended flow."""
     if not _NACL_OK:
         return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
     body = request.get_json(silent=True) or {}
@@ -3766,27 +3778,21 @@ def api_phantom_decrypt():
             return jsonify({'ok': False, 'error': 'no public_key in payload'}), 400
         if not is_valid_solana_address(wallet_address):
             return jsonify({'ok': False, 'error': 'invalid wallet address in payload'}), 400
-        print(f'[phantom] decrypt OK wallet={wallet_address[:8]}…', flush=True)
-        # NaCl handshake proved ownership — establish session directly (no nonce/sig needed)
-        session.permanent = True
-        session.modified  = True
-        session['wallet'] = wallet_address
-        csrf_tok = _get_csrf_token()
-        try:
-            get_or_create_user(wallet_address)
-        except Exception:
-            pass
-        threading.Thread(target=fetch_user_balances, args=(wallet_address,), daemon=True).start()
-        add_user_log(wallet_address, 'Wallet connected (mobile): ' + wallet_address[:6] + '...' + wallet_address[-4:])
-        ip = request.headers.get('X-Forwarded-For', request.remote_addr or '').split(',')[0].strip()
-        threading.Thread(target=_check_wallet_multi_ip, args=(wallet_address, ip), daemon=True).start()
-        return jsonify({'ok': True, 'wallet_address': wallet_address, 'csrf_token': csrf_tok})
+        print(f'[phantom] decrypt: got wallet={wallet_address[:8]}… (unverified, not logging in)', flush=True)
+        # Do NOT establish a session here -- decrypting this payload only proves
+        # the caller controls some NaCl keypair, not that they own the Solana
+        # keypair for wallet_address (see docstring). Refuse until the
+        # signMessage-based proof step is wired up.
+        return jsonify({'ok': False, 'error': 'Mobile Phantom connect is temporarily unavailable. '
+                                                'Please open orcagent.fun inside the Phantom app\'s '
+                                                'built-in browser, or use a desktop browser.'}), 503
     except Exception as e:
         print(f'[phantom] decrypt ERROR: {e}', flush=True)
         return jsonify({'ok': False, 'error': str(e)}), 400
 
 
 @app.route('/api/phantom/decrypt-signature', methods=['POST'])
+@rate_limit(10, 60)
 def api_phantom_decrypt_signature():
     """Decrypt a Phantom v1 signMessage callback payload.
     Body: {token, phantom_pk, nonce, data} — all b58-encoded strings.
