@@ -9120,7 +9120,16 @@ def post_permalink(post_id):
         description = _html_lib.escape(f'{sign}{pct:.2f}% by {display} on OrcAgent')
     else:
         title = f'{display} on OrcAgent'
-        text  = (post['content'] or '').strip()
+        embed = _parse_feed_embed(post['content'])
+        if embed['text_part']:
+            text = embed['text_part']
+        elif embed['kind'] == 'trade' and embed['symbol']:
+            sign = '+' if embed['pnl_pct'] >= 0 else ''
+            text = f"${embed['symbol']} {sign}{embed['pnl_pct']:.0f}%"
+        elif embed['kind'] == 'chart' and embed['symbol']:
+            text = f"${embed['symbol']} chart"
+        else:
+            text = ''
         description = _html_lib.escape((text[:197] + '…') if len(text) > 200
                                         else (text or f'A post by {display} on OrcAgent'))
     # image_url for a text/image post is a raw data: URI (see feed_post_create's
