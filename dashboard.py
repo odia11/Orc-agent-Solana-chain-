@@ -9095,10 +9095,15 @@ def share_trade_page(id):
     tc = _tc_lookup(id)
     if not tc:
         return jsonify({'ok': False, 'msg': 'Not found'}), 404
-    symbol    = _html_lib.escape(tc['symbol'] or '?')
-    title     = f'${symbol} closed on OrcAgent'
-    image_url = f'https://orcagent.fun/api/trade-card/{_html_lib.escape(id)}.png'
-    post_link = f'/#post-{_html_lib.escape(id)}'
+    symbol      = _html_lib.escape(tc['symbol'] or '?')
+    title       = f'${symbol} closed on OrcAgent'
+    pnl_pct     = tc.get('pnl_pct', 0) or 0
+    pnl_sol     = tc.get('pnl_sol', 0) or 0
+    sign        = '+' if pnl_pct >= 0 else ''
+    description = _html_lib.escape(f'{sign}{pnl_pct:.2f}% ({sign}{pnl_sol:.4f} SOL) on OrcAgent')
+    image_url   = f'https://orcagent.fun/api/trade-card/{_html_lib.escape(id)}.png'
+    post_link   = f'/#post-{_html_lib.escape(id)}'
+    page_url    = f'https://orcagent.fun/share/{_html_lib.escape(id)}'
     html_doc = f'''<!doctype html>
 <html>
 <head>
@@ -9106,7 +9111,9 @@ def share_trade_page(id):
 <title>{title}</title>
 <meta property="og:type" content="website">
 <meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
 <meta property="og:image" content="{image_url}">
+<meta property="og:url" content="{page_url}">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="{title}">
 <meta name="twitter:image" content="{image_url}">
