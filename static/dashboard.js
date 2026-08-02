@@ -761,13 +761,18 @@ function _guestWallConnect(){
 
 // ── ADMIN INVITE ──
 var _pendingInviteId = null;
+var _adminInviteSeenThisSession = false;
 async function _checkAdminInvite(){
   if(!phantomKey) return;
+  if(_adminInviteSeenThisSession) return;
+  var modal = document.getElementById('admin-invite-modal');
+  if(modal && modal.style.display === 'flex') return;
   var r = await fetch('/api/invite/check',{credentials:'include'}).then(r=>r.json()).catch(()=>null);
   if(!r?.invite) return;
   _pendingInviteId = r.invite.id;
   document.getElementById('aim-role').textContent = r.invite.role;
-  document.getElementById('admin-invite-modal').style.display = 'flex';
+  if(modal) modal.style.display = 'flex';
+  _adminInviteSeenThisSession = true;
 }
 async function _inviteRespond(action){
   var btn = document.getElementById('aim-accept-btn');
@@ -931,6 +936,7 @@ async function launchApp(){
   if (!window._heartbeatTimer) {
     window._heartbeatTimer = setInterval(function(){
       fetch('/api/heartbeat', {method:'POST', headers:{'X-CSRF-Token': _csrfToken}}).catch(function(){});
+      _checkAdminInvite();
     }, 45000);
   }
   _safeInit('fetchPumpScanner', fetchPumpScanner());
