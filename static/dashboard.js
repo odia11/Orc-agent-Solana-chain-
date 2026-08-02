@@ -8597,7 +8597,7 @@ async function _jumpToPost(postId, notifType){
   card.classList.add('fc-card-highlight');
   setTimeout(function(){ card.classList.remove('fc-card-highlight'); }, 2200);
   var rbox = document.getElementById('rbox-'+postId);
-  if(rbox){ rbox.classList.add('open'); rbox.dataset.openedAt = Date.now(); }
+  if(rbox && notifType === 'reply'){ rbox.classList.add('open'); rbox.dataset.openedAt = Date.now(); }
   if(!rbox || !rbox.dataset.repliesLoaded){
     if(rbox) rbox.dataset.repliesLoaded = '1';
     _feedLoadReplies(postId);
