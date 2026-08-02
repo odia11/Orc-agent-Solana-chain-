@@ -1214,7 +1214,7 @@ function renderUsers() {
           ? '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'pause\')">Pause</button>'
           : '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'resume\')">Resume</button>') +
         '<button class="btn btn-danger" onclick="forceAction(\'' + wf + '\',\'close-all\')">Close All</button>' +
-        (_userRole === 'admin'
+        ((_userRole === 'admin' || (_userRole === 'moderator' && !u.is_verified))
           ? '<button class="btn btn-ghost" onclick="toggleVerify(\'' + wf + '\',\'usr-row-' + i + '\',' + (u.is_verified ? 'true' : 'false') + ')">' + (u.is_verified ? 'Unverify' : 'Verify') + '</button>'
           : '') +
       '</div>' +
