@@ -255,7 +255,7 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
   <section class="info-section" id="fees">
     <div class="section-title"><span class="section-icon">%</span> Fees</div>
     <div class="info-body">
-      <h3>Performance fee</h3>
+      <h3>Transaction fee</h3>
       <div class="fee-stat-row">
         <div class="fee-stat">
           <div class="fee-stat-label">Current rate</div>
@@ -263,17 +263,16 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
         </div>
         <div class="fee-stat">
           <div class="fee-stat-label">Charged on</div>
-          <div class="fee-stat-value neutral">Profit only</div>
+          <div class="fee-stat-value neutral">Every sell</div>
         </div>
       </div>
-      <p>OrcAgent charges a <strong>{{ fee_pct }}% performance fee</strong>,
-      taken only from profitable closed trades. It's calculated on the profit
-      of that specific trade and sent as a small, separate SOL transaction
-      from your trading wallet right after the position closes — it is not
+      <p>OrcAgent charges a <strong>{{ fee_pct }}% transaction fee</strong> on
+      every sell, calculated on the SOL amount of that swap — not on the
+      trade's profit. It's sent as a small, separate SOL transaction from
+      your trading wallet right after the position closes; it is not
       deducted from the sell proceeds themselves.</p>
-      <p>Losing trades and open (not-yet-closed) positions are <strong>never
-      charged</strong>. If a trade closes at a loss or break-even, no fee is
-      taken at all.</p>
+      <p>This fee applies whether the trade closes at a profit, a loss, or
+      break-even. Open (not-yet-closed) positions are not charged.</p>
 
       <h3>Network fees</h3>
       <p>Every on-chain trade also pays standard Solana network and

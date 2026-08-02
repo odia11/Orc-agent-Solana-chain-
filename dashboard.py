@@ -324,6 +324,7 @@ print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPIT
 # so local/dev deployments without the env var keep working unchanged.
 API_SHARED_SECRET  = os.environ.get('API_SHARED_SECRET', '')
 FEE_RATE_DEFAULT = 0.05  # 5% performance fee on profitable trades only
+FEE_RATE_TXN     = 0.01  # 1% transaction fee on every closed trade's SOL swap amount, win or lose
 
 def _get_fee_rate():
     try:
@@ -2676,21 +2677,25 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         cooldown_tokens[symbol] = time.time() + 1800
         print(f'[cooldown] {symbol} enters 30-min cooldown (pnl={pnl:.6f} SOL, exit_reason={exit_reason})', flush=True)
 
-    # 5% performance fee on profitable trades only (collected in SOL)
+    # 1% transaction fee on every closed trade, charged on the SOL amount of the sell
+    # swap itself (amount * exit_price) -- not on profit -- so it applies whether the
+    # trade won or lost.
     fee_amount = 0.0
     short_w    = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} SOL  '
-          f'pnl_positive={pnl>0}  has_key={bool(private_key and wallet)}  '
+    swap_sol_amount = round(amount * exit_price, 6)
+    print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} SOL  swap_amount={swap_sol_amount:.6f} SOL  '
+          f'has_key={bool(private_key and wallet)}  '
           f'fee_wallet={FEE_WALLET[:8]}…', flush=True)
 
-    # Collect fees from ALL profitable trades regardless of who the session wallet belongs to.
+    # Collect the 1% transaction fee from every closed trade regardless of who the
+    # session wallet belongs to, and regardless of pnl (win, loss, or break-even all pay
+    # it, since it's charged on the swap amount, not the profit).
     # The fee goes FROM the trading keypair TO FEE_WALLET — these are different addresses,
     # so even the platform owner's trades generate a valid transfer.
-    if pnl > 0.0 and wallet and private_key:
-        _fee_rate = _get_fee_rate()
-        fee_amount = round(pnl * _fee_rate, 6)
+    if wallet and private_key:
+        fee_amount = round(swap_sol_amount * FEE_RATE_TXN, 6)
         print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
-              f'({_fee_rate * 100:.1f}% of {pnl:.6f} SOL profit)', flush=True)
+              f'({FEE_RATE_TXN * 100:.1f}% of {swap_sol_amount:.6f} SOL swap)', flush=True)
 
         if fee_amount > 0:
             _pk   = private_key     # Python string — immutable, ref lives in thread args tuple
@@ -2763,10 +2768,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         else:
             print(f'[fee] {short_w} {symbol} nothing to collect', flush=True)
     else:
-        if pnl <= 0.0:
-            print(f'[fee] {short_w} {symbol} no fee — trade not profitable (pnl={pnl:.6f})', flush=True)
-        elif not private_key:
-            print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
+        print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
 
     trade = {
         'symbol': symbol, 'entry': entry, 'exit': exit_price,
@@ -4460,7 +4462,7 @@ def page_info():
     (#about #docs #fees #security #terms) on one page with a sticky section
     nav, so the old separate footer links can jump straight to their section
     instead of loading a whole new page."""
-    fee_pct = round(_get_fee_rate() * 100, 2)
+    fee_pct = round(FEE_RATE_TXN * 100, 2)
     return render_template('info.html', updated=_INFO_UPDATED, fee_pct=fee_pct, tos_content=_TOS_CONTENT_HTML)
 
 # Old standalone routes now redirect into the combined /info page at the
@@ -14254,7 +14256,9 @@ def admin_backups():
     return jsonify({'ok': True, 'backups': backups, 'backup_dir': BACKUP_DIR})
 
 def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
-    """Send all unpaid fees (fee_paid=0, pnl>0) from each user's trading wallet to OWNER_WALLET.
+    """Send all unpaid fees (fee_paid=0) from each user's trading wallet to FEE_WALLET --
+    applies to winning and losing trades alike, since the fee is a flat % of the swap
+    amount, not of profit.
     Returns a summary dict. Safe to call from a background thread or an API endpoint."""
     if not OWNER_WALLET:
         print('[fee-recovery] OWNER_WALLET not set — skipping', flush=True)
@@ -14268,16 +14272,15 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
         c.execute('''
             SELECT u.wallet_address,
                    u.encrypted_private_key,
-                   GROUP_CONCAT(t.id)            AS trade_ids,
-                   COALESCE(SUM(t.pnl * ?), 0)   AS total_fee
+                   GROUP_CONCAT(t.id)              AS trade_ids,
+                   COALESCE(SUM(t.fee_amount), 0)  AS total_fee
             FROM trades t
             JOIN users u ON u.id = t.user_id
-            WHERE t.pnl > 0
-              AND (t.fee_paid IS NULL OR t.fee_paid = 0)
+            WHERE (t.fee_paid IS NULL OR t.fee_paid = 0)
               AND u.encrypted_private_key IS NOT NULL
               AND u.encrypted_private_key != ""
             GROUP BY u.wallet_address, u.encrypted_private_key
-        ''', (_get_fee_rate(),))
+        ''')
         rows = c.fetchall()
         conn.close()
     except Exception as e:
