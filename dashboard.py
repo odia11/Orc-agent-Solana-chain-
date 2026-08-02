@@ -14801,6 +14801,8 @@ def admin_invite():
         return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
     if invite_addr == ADMIN_WALLET:
         return jsonify({'ok': False, 'msg': 'Owner wallet cannot be re-invited'}), 400
+    if invite_addr == admin_wallet:
+        return jsonify({'ok': False, 'msg': "You can't invite the wallet you're currently logged in with"}), 400
     if role not in ('Moderator', 'Analyst'):
         role = 'Moderator'
     conn = sqlite3.connect(DB_FILE)
@@ -14816,6 +14818,21 @@ def admin_invite():
             (invite_addr, role, admin_wallet)
         )
         conn.commit()
+
+        try:
+            invited_uid = get_or_create_user(invite_addr)
+            if invited_uid:
+                notif_content = f'You were invited as {role} by {admin_wallet[:8]}…'
+                _nc = sqlite3.connect(DB_FILE)
+                _nc.execute(
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (invited_uid, 'admin_invite', notif_content, '/', admin_wallet))
+                _nc.commit()
+                _send_push_notification(invited_uid, 'Admin invite', notif_content, '/')
+                _nc.close()
+        except Exception as _ne:
+            print(f'[admin] invite notification failed: {_ne}', flush=True)
+
         print(f'[admin] invite queued {invite_addr[:8]}… as {role} by {admin_wallet[:8]}…', flush=True)
         return jsonify({
             'ok': True, 'wallet': invite_addr, 'role': role,
