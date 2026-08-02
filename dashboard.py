@@ -9088,6 +9088,17 @@ def trade_card_image(id):
     resp.headers['Cache-Control'] = 'public, max-age=86400'
     return resp
 
+@app.route('/post/<post_id>')
+def post_permalink(post_id):
+    """Path-based permalink for a single feed post/trade-post (what
+    _fcPostLinkUrl() now generates for "Copy link to post"/native share).
+    Redirects into the SPA's existing hash-based deep link, which
+    _handleNotifDeepLink()/_jumpToPost() already know how to scroll to,
+    highlight, and lazy-fetch if it's scrolled out of the loaded feed."""
+    if not re.match(r'^[pt]\d+$', post_id):
+        return jsonify({'ok': False, 'msg': 'Invalid post id'}), 404
+    return redirect(f'/#post-{post_id}')
+
 @app.route('/share/<id>')
 def share_trade_page(id):
     """Minimal OG/Twitter-card landing page for a shared trade, so links posted
