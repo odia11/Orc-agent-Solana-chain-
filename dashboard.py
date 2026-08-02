@@ -115,6 +115,54 @@ def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_so
     ptw = tb2[2] - tb2[0]
     draw.text((W - 60 - ptw, H // 2 - 45), pct_text, font=pct_font, fill=pct_col)
 
+def _tc_draw_chart_content(img, symbol, price, chg24h):
+    """Draw the chart-card overlay for a __CHART__ embed snapshot -- same canvas as
+    _tc_draw_content, but there's no trade here (no entry/exit/pnl_sol), just a
+    symbol, its current price, and the 24h move."""
+    W, H = img.size
+    price   = float(price or 0)
+    chg24h  = float(chg24h or 0)
+    chg_col = (0, 208, 132) if chg24h >= 0 else (255, 71, 87)
+
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    for y in range(H):
+        alpha = int(235 * (y / H))
+        odraw.line([(0, y), (W, y)], fill=(13, 17, 23, alpha))
+    img.paste(overlay, (0, 0), overlay)
+
+    draw = ImageDraw.Draw(img)
+
+    badge_font = ImageFont.load_default(size=28)
+    badge_text = 'CHART'
+    bx, by, pad_x, pad_y = 40, 40, 14, 8
+    tb = draw.textbbox((0, 0), badge_text, font=badge_font)
+    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+    draw.rounded_rectangle([bx, by, bx + tw + pad_x * 2, by + th + pad_y * 2],
+                            radius=6, outline=(247, 185, 85), width=2)
+    draw.text((bx + pad_x, by + pad_y), badge_text, font=badge_font, fill=(247, 185, 85))
+
+    def _fmt_price(p):
+        if not p:
+            return '—'
+        return f'${p:.8f}'.rstrip('0').rstrip('.') if p < 0.001 else f'${p:.6f}'
+
+    sym_font   = ImageFont.load_default(size=64)
+    price_font = ImageFont.load_default(size=32)
+
+    sym_y = by + th + pad_y * 2 + 24
+    draw.text((bx, sym_y), '$' + symbol, font=sym_font, fill=(238, 241, 245))
+
+    price_y = sym_y + 80
+    draw.text((bx, price_y), _fmt_price(price), font=price_font, fill=(138, 145, 156))
+
+    pct_font = ImageFont.load_default(size=90)
+    pct_sign = '+' if chg24h >= 0 else ''
+    pct_text = f'{pct_sign}{chg24h:.2f}%'
+    tb2 = draw.textbbox((0, 0), pct_text, font=pct_font)
+    ptw = tb2[2] - tb2[0]
+    draw.text((W - 60 - ptw, H // 2 - 45), pct_text, font=pct_font, fill=chg_col)
+
 def _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url=None):
     img = _tc_build_canvas(banner_url)
     _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol)
@@ -9015,9 +9063,10 @@ def share_feed_to_x(post_id):
 
 def _tc_lookup(id):
     """Resolve a t<id>/p<id> share id (native trade row, or a __TRADE__-embedded
-    feed post — same id scheme as get_single_post/share_feed_to_x) to trade card
-    fields. Returns None if not found/invalid. Shared by /api/trade-card/<id>.png
-    and /share/<id>."""
+    or __CHART__-embedded feed post — same id scheme as get_single_post/
+    share_feed_to_x) to trade-card fields. Returns None if not found/invalid.
+    The dict's 'kind' is 'trade' or 'chart' -- callers must branch on it, the two
+    kinds carry different fields. Shared by /api/trade-card/<id>.png and /share/<id>."""
     conn = sqlite3.connect(DB_FILE)
     try:
         if id.startswith('t') and id[1:].isdigit():
@@ -9033,6 +9082,7 @@ def _tc_lookup(id):
             pnl_sol     = float(pnl_sol or 0)
             pnl_pct     = round((exit_price - entry_price) / entry_price * 100, 2) if entry_price > 0 else 0.0
             return {
+                'kind': 'trade',
                 'symbol': symbol or '', 'side': 'SELL',
                 'entry_price': entry_price, 'exit_price': exit_price,
                 'pnl_pct': pnl_pct, 'pnl_sol': pnl_sol, 'mint': mint or '',
@@ -9041,28 +9091,49 @@ def _tc_lookup(id):
             row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (id[1:],)).fetchone()
             content = (row[0] if row else '') or ''
             trade_idx = content.find('__TRADE__')
-            if trade_idx == -1:
-                return None
-            try:
-                trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
-                if not isinstance(trade_data, dict):
-                    return None
-            except Exception:
-                return None
-            def _tc_safe_float(v, default=0.0):
+            if trade_idx != -1:
                 try:
-                    return float(v)
-                except (TypeError, ValueError):
-                    return default
-            return {
-                'symbol': str(trade_data.get('symbol') or ''),
-                'side':   str(trade_data.get('side') or 'SELL'),
-                'pnl_pct':     _tc_safe_float(trade_data.get('pnl_pct')),
-                'pnl_sol':     _tc_safe_float(trade_data.get('pnl_sol')),
-                'entry_price': _tc_safe_float(trade_data.get('entry_price')),
-                'exit_price':  _tc_safe_float(trade_data.get('exit_price')),
-                'mint': str(trade_data.get('token_address') or ''),
-            }
+                    trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
+                    if not isinstance(trade_data, dict):
+                        return None
+                except Exception:
+                    return None
+                def _tc_safe_float(v, default=0.0):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return default
+                return {
+                    'kind': 'trade',
+                    'symbol': str(trade_data.get('symbol') or ''),
+                    'side':   str(trade_data.get('side') or 'SELL'),
+                    'pnl_pct':     _tc_safe_float(trade_data.get('pnl_pct')),
+                    'pnl_sol':     _tc_safe_float(trade_data.get('pnl_sol')),
+                    'entry_price': _tc_safe_float(trade_data.get('entry_price')),
+                    'exit_price':  _tc_safe_float(trade_data.get('exit_price')),
+                    'mint': str(trade_data.get('token_address') or ''),
+                }
+            chart_idx = content.find('__CHART__')
+            if chart_idx != -1:
+                try:
+                    chart_data = json.loads(content[chart_idx + len('__CHART__'):])
+                    if not isinstance(chart_data, dict):
+                        return None
+                except Exception:
+                    return None
+                def _tc_safe_float2(v, default=0.0):
+                    try:
+                        return float(v)
+                    except (TypeError, ValueError):
+                        return default
+                return {
+                    'kind': 'chart',
+                    'symbol': str(chart_data.get('symbol') or ''),
+                    'price':  _tc_safe_float2(chart_data.get('price')),
+                    'chg24h': _tc_safe_float2(chart_data.get('chg24h')),
+                    'mint':   str(chart_data.get('mint') or ''),
+                }
+            return None
         return None
     finally:
         conn.close()
@@ -9075,7 +9146,7 @@ def trade_card_image(id):
         return jsonify({'ok': False, 'msg': 'Not found'}), 404
 
     banner_url = None
-    if tc['mint']:
+    if tc.get('mint'):
         try:
             r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(tc['mint'], safe=''), timeout=8)
             if r and r.status_code == 200:
@@ -9086,9 +9157,16 @@ def trade_card_image(id):
         except Exception:
             banner_url = None
 
-    png_bytes = _generate_trade_card_image(
-        tc['symbol'], tc['side'], tc['entry_price'], tc['exit_price'],
-        tc['pnl_pct'], tc['pnl_sol'], banner_url)
+    if tc['kind'] == 'chart':
+        img = _tc_build_canvas(banner_url)
+        _tc_draw_chart_content(img, tc['symbol'], tc['price'], tc['chg24h'])
+        buf = io.BytesIO()
+        img.save(buf, format='PNG')
+        png_bytes = buf.getvalue()
+    else:
+        png_bytes = _generate_trade_card_image(
+            tc['symbol'], tc['side'], tc['entry_price'], tc['exit_price'],
+            tc['pnl_pct'], tc['pnl_sol'], banner_url)
     resp = make_response(png_bytes)
     resp.headers['Content-Type']  = 'image/png'
     resp.headers['Cache-Control'] = 'public, max-age=86400'
@@ -9169,17 +9247,23 @@ def post_permalink(post_id):
 
 @app.route('/share/<id>')
 def share_trade_page(id):
-    """Minimal OG/Twitter-card landing page for a shared trade, so links posted
-    to X/Discord/etc. unfurl with the /api/trade-card/<id>.png image."""
+    """Minimal OG/Twitter-card landing page for a shared trade or chart, so links
+    posted to X/Discord/etc. unfurl with the /api/trade-card/<id>.png image."""
     tc = _tc_lookup(id)
     if not tc:
         return jsonify({'ok': False, 'msg': 'Not found'}), 404
     symbol      = _html_lib.escape(tc['symbol'] or '?')
-    title       = f'${symbol} closed on OrcAgent'
-    pnl_pct     = tc.get('pnl_pct', 0) or 0
-    pnl_sol     = tc.get('pnl_sol', 0) or 0
-    sign        = '+' if pnl_pct >= 0 else ''
-    description = _html_lib.escape(f'{sign}{pnl_pct:.2f}% ({sign}{pnl_sol:.4f} SOL) on OrcAgent')
+    if tc['kind'] == 'chart':
+        title       = f'${symbol} on OrcAgent'
+        chg24h      = tc.get('chg24h', 0) or 0
+        sign        = '+' if chg24h >= 0 else ''
+        description = _html_lib.escape(f'{sign}{chg24h:.2f}% (24h) on OrcAgent')
+    else:
+        title       = f'${symbol} closed on OrcAgent'
+        pnl_pct     = tc.get('pnl_pct', 0) or 0
+        pnl_sol     = tc.get('pnl_sol', 0) or 0
+        sign        = '+' if pnl_pct >= 0 else ''
+        description = _html_lib.escape(f'{sign}{pnl_pct:.2f}% ({sign}{pnl_sol:.4f} SOL) on OrcAgent')
     image_url   = f'https://orcagent.fun/api/trade-card/{_html_lib.escape(id)}.png'
     post_link   = f'/#post-{_html_lib.escape(id)}'
     page_url    = f'https://orcagent.fun/share/{_html_lib.escape(id)}'
