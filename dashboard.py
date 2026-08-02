@@ -8218,6 +8218,42 @@ def api_instant_trade():
         return jsonify({'error': str(e)}), 500
 
 
+def _parse_feed_embed(content):
+    """Parses a feed_posts.content string for a __CHART__/__TRADE__ embed (appended
+    by submitPost() in dashboard.js after the user's own text). Returns the embed
+    kind plus whatever its JSON carried, so callers -- feed_post_create()'s
+    follow-notification text and share_feed_to_x()'s tweet caption -- can each
+    format their own message from the same parsed data instead of duplicating the
+    content.find()/json.loads() parsing themselves.
+    kind is one of: 'chart', 'trade', 'text' (no embed, has content), 'photo'
+    (no embed, no content -- image-only post)."""
+    content = content or ''
+    chart_idx = content.find('__CHART__')
+    trade_idx = content.find('__TRADE__')
+    if chart_idx != -1:
+        symbol = ''
+        try:
+            symbol = json.loads(content[chart_idx + len('__CHART__'):]).get('symbol', '')
+        except Exception:
+            pass
+        return {'kind': 'chart', 'text_part': content[:chart_idx].strip(),
+                'symbol': symbol, 'pnl_pct': 0.0, 'pnl_sol': 0.0}
+    if trade_idx != -1:
+        symbol, pnl_pct, pnl_sol = '', 0.0, 0.0
+        try:
+            trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
+            symbol  = trade_data.get('symbol', '')
+            pnl_pct = float(trade_data.get('pnl_pct', 0))
+            pnl_sol = float(trade_data.get('pnl_sol', 0))
+        except Exception:
+            pass
+        return {'kind': 'trade', 'text_part': content[:trade_idx].strip(),
+                'symbol': symbol, 'pnl_pct': pnl_pct, 'pnl_sol': pnl_sol}
+    if content.strip():
+        return {'kind': 'text', 'text_part': content.strip(), 'symbol': '', 'pnl_pct': 0.0, 'pnl_sol': 0.0}
+    return {'kind': 'photo', 'text_part': '', 'symbol': '', 'pnl_pct': 0.0, 'pnl_sol': 0.0}
+
+
 @app.route('/api/feed/post', methods=['POST'])
 @rate_limit(15, 60)
 def feed_post_create():
@@ -8275,36 +8311,22 @@ def feed_post_create():
                     (m_row[0], 'mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id), wallet))
                 conn.commit()
                 _send_push_notification(m_row[0], 'New mention', author_name+' mentioned you in a post', '/#post-p'+str(post_id))
-        chart_idx = content.find('__CHART__') if content else -1
-        trade_idx = content.find('__TRADE__') if content else -1
-        if chart_idx != -1:
-            text_part = content[:chart_idx].strip()
-            symbol = ''
-            try:
-                chart_data = json.loads(content[chart_idx + len('__CHART__'):])
-                symbol = chart_data.get('symbol', '')
-            except Exception:
-                pass
+        embed = _parse_feed_embed(content)
+        text_part, symbol = embed['text_part'], embed['symbol']
+        if embed['kind'] == 'chart':
             if text_part:
                 preview = text_part[:60] + ('…' if len(text_part) > 60 else '')
                 post_desc = 'posted: ' + preview + (' — chart: ' + symbol if symbol else '')
             else:
                 post_desc = 'posted a ' + symbol + ' chart' if symbol else 'posted a chart'
-        elif trade_idx != -1:
-            text_part = content[:trade_idx].strip()
-            symbol = ''
-            try:
-                trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
-                symbol = trade_data.get('symbol', '')
-            except Exception:
-                pass
+        elif embed['kind'] == 'trade':
             if text_part:
                 preview = text_part[:60] + ('…' if len(text_part) > 60 else '')
                 post_desc = 'posted: ' + preview + (' — trade: $' + symbol if symbol else '')
             else:
                 post_desc = 'posted a $' + symbol + ' trade update' if symbol else 'posted a trade update'
-        elif content:
-            preview = content[:60] + ('…' if len(content) > 60 else '')
+        elif embed['kind'] == 'text':
+            preview = text_part[:60] + ('…' if len(text_part) > 60 else '')
             post_desc = 'posted: ' + preview
         else:
             post_desc = 'posted a photo'
@@ -8966,35 +8988,19 @@ def share_feed_to_x(post_id):
         return jsonify({'ok': False, 'msg': 'Connect X in Settings first'}), 400
     if post_id.startswith('p'):
         row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (post_id[1:],)).fetchone()
-        raw = row[0] if row else ''
-        chart_idx = raw.find('__CHART__')
-        if chart_idx != -1:
-            caption = raw[:chart_idx].strip()
-            try:
-                chart_data = json.loads(raw[chart_idx+9:])
-                symbol = chart_data.get('symbol', '')
-            except Exception:
-                symbol = ''
-            text = caption if caption else ('Check out $'+symbol+' on OrcAgent' if symbol else '')
-        else:
-            trade_idx = raw.find('__TRADE__')
-            if trade_idx != -1:
-                caption = raw[:trade_idx].strip()
-                if caption:
-                    text = caption
-                else:
-                    try:
-                        trade_data = json.loads(raw[trade_idx+9:])
-                        symbol  = trade_data.get('symbol', '')
-                        pnl_pct = float(trade_data.get('pnl_pct', 0))
-                        pnl_sol = float(trade_data.get('pnl_sol', 0))
-                        sign    = '+' if pnl_pct >= 0 else ''
-                        text = (f'Just closed ${symbol} {sign}{pnl_pct:.1f}% '
-                                f'({sign}{pnl_sol:.4f} SOL) on @OrcAgent') if symbol else ''
-                    except Exception:
-                        text = ''
+        embed = _parse_feed_embed(row[0] if row else '')
+        if embed['kind'] == 'chart':
+            text = embed['text_part'] if embed['text_part'] else \
+                   ('Check out $'+embed['symbol']+' on OrcAgent' if embed['symbol'] else '')
+        elif embed['kind'] == 'trade':
+            if embed['text_part']:
+                text = embed['text_part']
             else:
-                text = raw.strip()
+                sign = '+' if embed['pnl_pct'] >= 0 else ''
+                text = (f"Just closed ${embed['symbol']} {sign}{embed['pnl_pct']:.1f}% "
+                        f"({sign}{embed['pnl_sol']:.4f} SOL) on @OrcAgent") if embed['symbol'] else ''
+        else:
+            text = embed['text_part']
         text = text[:250]
     elif post_id.startswith('t'):
         row = conn.execute('SELECT token FROM trades WHERE id=?', (post_id[1:],)).fetchone()
