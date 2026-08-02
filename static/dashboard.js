@@ -8544,7 +8544,14 @@ function _handleNotifDeepLink(){
   if(!m) return;
   if(location.hash === _lastDeepLinkHash) return;
   _lastDeepLinkHash = location.hash;
-  _jumpToPost(decodeURIComponent(m[1]));
+  // Set by _markOneRead() in notifications.html right before its <a href>
+  // navigates here -- the only way a notification's type survives the full
+  // page load from /notifications to / (they're separate pages, not SPA
+  // routes). Not set for a plain in-feed card click, or for a push
+  // notification opened in a new tab (no sessionStorage carry-over there).
+  var notifType = sessionStorage.getItem('_notifJumpType') || null;
+  sessionStorage.removeItem('_notifJumpType');
+  _jumpToPost(decodeURIComponent(m[1]), notifType);
 }
 
 function _fcCardClick(ev, postId){
@@ -8567,7 +8574,7 @@ function _fcCardClick(ev, postId){
   _jumpToPost(postId);
 }
 
-async function _jumpToPost(postId){
+async function _jumpToPost(postId, notifType){
   var card = document.getElementById('fc-card-'+postId);
   if(!card){
     try{

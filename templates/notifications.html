@@ -621,6 +621,7 @@ async function _markAllRead(){
 // before its default action completes.
 function _markOneRead(id){
   var n = _personal.find(function(x){ return x.id === id; });
+  if(n) sessionStorage.setItem('_notifJumpType', n.type || '');
   if(!n || n.is_read) return;
   n.is_read = true;
   _updateUnreadUI();
