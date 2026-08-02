@@ -9092,12 +9092,65 @@ def trade_card_image(id):
 def post_permalink(post_id):
     """Path-based permalink for a single feed post/trade-post (what
     _fcPostLinkUrl() now generates for "Copy link to post"/native share).
-    Redirects into the SPA's existing hash-based deep link, which
-    _handleNotifDeepLink()/_jumpToPost() already know how to scroll to,
-    highlight, and lazy-fetch if it's scrolled out of the loaded feed."""
+    Same OG/Twitter-card unfurl setup as /share/<id>, but for any post
+    type (not just trades). Navigation itself still happens client-side
+    via the SPA's existing #post-<id> hash handling
+    (_handleNotifDeepLink()/_jumpToPost()) -- this page just hands off to
+    it once a crawler/browser has had a chance to read the meta tags."""
     if not re.match(r'^[pt]\d+$', post_id):
         return jsonify({'ok': False, 'msg': 'Invalid post id'}), 404
-    return redirect(f'/#post-{post_id}')
+    result = get_feed_post(post_id)
+    resp, status = result if isinstance(result, tuple) else (result, 200)
+    data = resp.get_json()
+    if status != 200 or not data.get('ok'):
+        return jsonify({'ok': False, 'msg': 'Not found'}), 404
+    post = data['post']
+    display = _html_lib.escape(post['username'] or post['wallet'] or 'Someone')
+    if post['type'] == 'trade':
+        symbol      = _html_lib.escape(post['symbol'] or '?')
+        pct         = post['pnl_pct'] or 0
+        sign        = '+' if pct >= 0 else ''
+        title       = f'${symbol} closed on OrcAgent'
+        description = _html_lib.escape(f'{sign}{pct:.2f}% by {display} on OrcAgent')
+    else:
+        title = f'{display} on OrcAgent'
+        text  = (post['content'] or '').strip()
+        description = _html_lib.escape((text[:197] + '…') if len(text) > 200
+                                        else (text or f'A post by {display} on OrcAgent'))
+    # image_url for a text/image post is a raw data: URI (see feed_post_create's
+    # INSERT), which no social unfurler accepts as og:image -- only use it if it's
+    # an actual path/URL, otherwise fall back to the site icon.
+    raw_image = post['image_url'] or ''
+    if raw_image.startswith('http'):
+        image_url = raw_image
+    elif raw_image.startswith('/'):
+        image_url = f'https://orcagent.fun{raw_image}'
+    else:
+        image_url = 'https://orcagent.fun/static/icon-512.png'
+    safe_id  = _html_lib.escape(post_id)
+    page_url = f'https://orcagent.fun/post/{safe_id}'
+    html_doc = f'''<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{title}</title>
+<meta property="og:type" content="website">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:image" content="{image_url}">
+<meta property="og:url" content="{page_url}">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="{title}">
+<meta name="twitter:image" content="{image_url}">
+<script>location.replace('/#post-{safe_id}');</script>
+</head>
+<body style="background:#0d1117;color:#eef1f5;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<a href="/#post-{safe_id}" style="color:#f7b955;font-size:18px;text-decoration:none">Bekijk op OrcAgent →</a>
+</body>
+</html>'''
+    resp2 = make_response(html_doc)
+    resp2.headers['Content-Type'] = 'text/html; charset=utf-8'
+    return resp2
 
 @app.route('/share/<id>')
 def share_trade_page(id):
