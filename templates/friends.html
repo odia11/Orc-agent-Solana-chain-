@@ -24,6 +24,16 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
 .lm-back:hover{color:var(--text)}
 
+/* portfolio header — wallet SOL + open-position value combined, above
+   Weekly Top Trades; hidden entirely when /api/portfolio-summary 401s
+   (no wallet connected) or errors */
+.fr-portfolio-header{margin:16px 16px 0;background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.fr-portfolio-left{min-width:0}
+.fr-portfolio-total{font-size:24px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
+.fr-portfolio-pnl{font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:2px}
+.fr-portfolio-deposit-btn{flex-shrink:0;background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;text-decoration:none;transition:opacity .15s;white-space:nowrap}
+.fr-portfolio-deposit-btn:hover{opacity:.85}
+
 /* weekly top trades — horizontal-scroll cards, moved here from
    live_market.html (same card/scroll pattern), fed by /api/top-trades-week */
 .fr-weekly-section{margin:16px 16px 0}
@@ -85,6 +95,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
 </header>
 
+<div class="fr-portfolio-header" id="fr-portfolio-header" style="display:none;">
+  <div class="fr-portfolio-left">
+    <div class="fr-portfolio-total" id="fr-portfolio-total">—</div>
+    <div class="fr-portfolio-pnl" id="fr-portfolio-pnl">—</div>
+  </div>
+  <a class="fr-portfolio-deposit-btn" href="/wallet">Deposit</a>
+</div>
+
 <div class="fr-weekly-section" id="fr-weekly-section" style="display:none;">
   <div class="fr-weekly-title">Weekly Top Trades</div>
   <div class="fr-weekly-scroll" id="fr-weekly-scroll"></div>
@@ -130,6 +148,38 @@ function _frWeeklyCardHtml(t, solPriceUsd){
   +'</div>';
 }
 
+/* portfolio header — combines wallet SOL balance + open-position value from
+   /api/portfolio-summary into one USD total, with unrealized PnL below it.
+   A 401 (no wallet) or any fetch error just hides the whole header instead
+   of showing a broken/zeroed-out card. */
+async function _frInitPortfolioHeader(){
+  var header  = document.getElementById('fr-portfolio-header');
+  var totalEl = document.getElementById('fr-portfolio-total');
+  var pnlEl   = document.getElementById('fr-portfolio-pnl');
+  if(!header || !totalEl || !pnlEl) return;
+  try{
+    var r = await fetch('/api/portfolio-summary', {credentials:'include'});
+    var d = await r.json();
+    if(!d.ok){ header.style.display = 'none'; return; }
+
+    var walletUsd = (d.sol_price_usd>0) ? d.sol_balance*d.sol_price_usd : 0;
+    var totalUsd  = walletUsd + (d.positions_value_usd || 0);
+    totalEl.textContent = _fmtNum(totalUsd);
+
+    var pnlUsd = d.total_pnl_usd;
+    if(pnlUsd == null){
+      pnlEl.textContent = '—';
+      pnlEl.style.color = 'var(--muted)';
+    } else {
+      pnlEl.textContent = (pnlUsd>=0?'+':'-') + _fmtNum(Math.abs(pnlUsd));
+      pnlEl.style.color = pnlUsd>=0 ? 'var(--green)' : 'var(--red)';
+    }
+    header.style.display = '';
+  }catch(e){
+    header.style.display = 'none';
+  }
+}
+
 async function _frInitWeeklyTopTrades(){
   var section = document.getElementById('fr-weekly-section');
   var scroll  = document.getElementById('fr-weekly-scroll');
@@ -154,6 +204,7 @@ async function _frInitWeeklyTopTrades(){
   }
 }
 
+_frInitPortfolioHeader();
 _frInitWeeklyTopTrades();
 
 (function(){

@@ -11017,6 +11017,51 @@ def api_wallet_balance():
         return jsonify({'ok': False, 'msg': str(e)}), 500
 
 
+@app.route('/api/portfolio-summary', methods=['GET'])
+@rate_limit(30, 60)
+def api_portfolio_summary():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+        }, timeout=8)
+        lamports = r.json()['result']['value']
+        sol_balance = round(lamports / 1e9, 6)
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)}), 500
+
+    us = get_user_state(wallet)
+    live_map = {t['mint']: t for t in state.get('tokens', [])}
+    total_value_sol = 0.0
+    total_pnl_sol = 0.0
+    for mint, pos in us.get('positions', {}).items():
+        if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
+            continue
+        buy_price = float(pos.get('buy_price', 0))
+        amount    = float(pos.get('amount', 0))
+        live      = live_map.get(mint)
+        cur_price = float(live.get('price', 0) or 0) if live else 0.0
+        if not live:
+            td        = get_token_data(mint)
+            cur_price = float(td['price']) if td else 0.0
+        if cur_price > 0:
+            total_value_sol += amount * cur_price
+            total_pnl_sol   += amount * (cur_price - buy_price)
+
+    sol_price = _sol_price_usd
+    return jsonify({
+        'ok':                  True,
+        'sol_balance':         sol_balance,
+        'sol_price_usd':       sol_price,
+        'positions_value_sol': round(total_value_sol, 6),
+        'positions_value_usd': round(total_value_sol * sol_price, 4) if sol_price else None,
+        'total_pnl_sol':       round(total_pnl_sol, 6),
+        'total_pnl_usd':       round(total_pnl_sol * sol_price, 4) if sol_price else None,
+    })
+
+
 @app.route('/api/wallet/transactions', methods=['GET'])
 @rate_limit(30, 60)
 def api_wallet_transactions():
