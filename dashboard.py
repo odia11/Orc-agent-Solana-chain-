@@ -4285,6 +4285,43 @@ def api_token_holders(mint):
     return jsonify({'ok': True, 'holders': holders, 'total': total})
 
 
+@app.route('/api/top-trades-week', methods=['GET'])
+@rate_limit(60, 60)
+def api_top_trades_week():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'trades': []}), 401
+    cutoff = (datetime.datetime.utcnow() - datetime.timedelta(days=7)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            SELECT u.username, u.avatar_url, u.is_verified,
+                   t.token, t.pnl, t.mint_address, t.timestamp
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.timestamp >= ? AND t.pnl > 0
+            ORDER BY t.pnl DESC
+            LIMIT 10
+        ''', (cutoff,))
+        rows = c.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f'[top-trades-week] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'trades': []}), 500
+
+    trades = [{
+        'username':     username or '',
+        'avatar_url':   avatar_url or '',
+        'is_verified':  bool(is_verified),
+        'token':        token or '',
+        'pnl':          pnl,
+        'mint_address': mint_address or '',
+        'timestamp':    timestamp,
+    } for username, avatar_url, is_verified, token, pnl, mint_address, timestamp in rows]
+    return jsonify({'ok': True, 'trades': trades})
+
+
 def _pnl_card_stats(wallet_addr: str) -> dict | None:
     """Return all-time trade stats for a wallet, or None if no trades exist."""
     try:

@@ -121,6 +121,24 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 @keyframes lmFeaturedSlideIn{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
 .lm-featured-slide.lm-slide-anim{animation:lmFeaturedSlideIn .35s ease}
 
+/* weekly top trades — horizontal-scroll cards above the filter chips, same
+   card/scroll pattern as the featured banner above (gradient/glow border)
+   but a row of individually-scrollable cards instead of one rotating slide */
+.lm-weekly-section{margin:16px 16px 0}
+.lm-weekly-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.lm-weekly-scroll{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.lm-weekly-card{flex:0 0 auto;width:168px;background:linear-gradient(to bottom, rgba(247,185,85,.08), rgba(247,185,85,.02));border:1px solid rgba(247,185,85,.25);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s}
+.lm-weekly-card:hover{border-color:rgba(247,185,85,.5)}
+.lm-weekly-card-top{display:flex;align-items:center;gap:6px;margin-bottom:10px;min-width:0}
+.lm-weekly-avatar{width:22px;height:22px;border-radius:6px;object-fit:cover;flex-shrink:0}
+.lm-weekly-avatar-ph{width:22px;height:22px;border-radius:6px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--muted);flex-shrink:0}
+.lm-weekly-username{font-size:11px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.lm-weekly-verified{color:var(--green);font-size:10px;flex-shrink:0}
+.lm-weekly-card-bottom{display:flex;align-items:center;gap:6px}
+.lm-weekly-token-logo{width:20px;height:20px;border-radius:6px;object-fit:cover;flex-shrink:0}
+.lm-weekly-token-logo-ph{width:20px;height:20px;border-radius:6px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--muted);flex-shrink:0}
+.lm-weekly-pnl{font-size:13px;font-weight:700;color:var(--green);font-family:'JetBrains Mono',monospace}
+
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
 .chg-dn{color:var(--red);font-weight:700}
@@ -367,6 +385,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   <span class="lm-global-search-icon">⌕</span>
   <input class="lm-global-search" id="lm-global-search" type="text" placeholder="Search any token by name or address…" autocomplete="off" oninput="_lmGlobalSearchDebounce(this.value)">
   <div class="lm-global-search-results" id="lm-global-search-results"></div>
+</div>
+
+<div class="lm-weekly-section" id="lm-weekly-section" style="display:none;">
+  <div class="lm-weekly-title">Weekly Top Trades</div>
+  <div class="lm-weekly-scroll" id="lm-weekly-scroll"></div>
 </div>
 
 <div class="lm-chips-row">
@@ -670,6 +693,56 @@ function _lmRenderFeaturedBanner(featuredPairs){
 async function _lmInitFeatured(){
   _featuredPairs = await _fetchFeaturedMarket().catch(function(){ return []; });
   _lmRenderFeaturedBanner(_featuredPairs);
+}
+
+/* weekly top trades — horizontal-scroll cards fed by /api/top-trades-week
+   (individual winning trades, not aggregated per user like /leaderboard).
+   pnl is stored in SOL server-side; converted to USD here using the same
+   sol_price_usd already exposed by /api/wallet/balance (the endpoint
+   static/token-card.js's own balance fetch already calls) instead of
+   introducing a second source for the rate. */
+function _lmWeeklyCardHtml(t, solPriceUsd){
+  var avatar = t.avatar_url
+    ? '<img class="lm-weekly-avatar" src="'+_esc(t.avatar_url)+'">'
+    : '<div class="lm-weekly-avatar-ph">'+_esc((t.username||'?').slice(0,2))+'</div>';
+  var verified = t.is_verified ? '<span class="lm-weekly-verified">✓</span>' : '';
+  var sym      = t.token || '?';
+  var pnlUsd   = solPriceUsd>0 ? '+'+_fmtNum(t.pnl*solPriceUsd) : '—';
+  return '<div class="lm-weekly-card" data-sym="'+_esc(sym)+'" data-addr="'+_esc(t.mint_address||'')+'">'
+    +'<div class="lm-weekly-card-top">'
+      +avatar
+      +'<span class="lm-weekly-username">'+_esc(t.username||'—')+'</span>'
+      +verified
+    +'</div>'
+    +'<div class="lm-weekly-card-bottom">'
+      +'<div class="lm-weekly-token-logo-ph">'+_esc(sym.slice(0,2))+'</div>'
+      +'<span class="lm-weekly-pnl">'+pnlUsd+'</span>'
+    +'</div>'
+  +'</div>';
+}
+
+async function _lmInitWeeklyTopTrades(){
+  var section = document.getElementById('lm-weekly-section');
+  var scroll  = document.getElementById('lm-weekly-scroll');
+  if(!section || !scroll) return;
+  try{
+    var solPriceUsd = 0;
+    try{
+      var br = await fetch('/api/wallet/balance', {credentials:'include'});
+      var bd = await br.json();
+      if(bd.ok) solPriceUsd = bd.sol_price_usd || 0;
+    }catch(e){}
+
+    var r = await fetch('/api/top-trades-week', {credentials:'include'});
+    var d = await r.json();
+    var trades = (d.ok && d.trades) || [];
+    if(!trades.length){ section.style.display = 'none'; return; }
+
+    scroll.innerHTML = trades.map(function(t){ return _lmWeeklyCardHtml(t, solPriceUsd); }).join('');
+    section.style.display = '';
+  }catch(e){
+    section.style.display = 'none';
+  }
 }
 
 /* thead — 8 columns */
@@ -1041,6 +1114,18 @@ function _setError(msg){
 /* ── init ── */
 _loadTab('trending');
 _lmInitFeatured();
+_lmInitWeeklyTopTrades();
+
+(function(){
+  var weeklyScroll = document.getElementById('lm-weekly-scroll');
+  if(weeklyScroll){
+    weeklyScroll.addEventListener('click', function(e){
+      var card = e.target.closest('.lm-weekly-card');
+      if(!card) return;
+      showTokenCard(card.dataset.sym, card.dataset.addr);
+    });
+  }
+})();
 
 (function(){
   var _params = new URLSearchParams(location.search);
