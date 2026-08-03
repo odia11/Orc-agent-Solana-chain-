@@ -11034,8 +11034,11 @@ def api_portfolio_summary():
 
     us = get_user_state(wallet)
     live_map = {t['mint']: t for t in state.get('tokens', [])}
-    total_value_sol = 0.0
-    total_pnl_sol = 0.0
+    # state['tokens'][*]['price'] / get_token_data()['price'] are priceUsd
+    # (see get_token_data, line ~2311) -- so amount*price is already a USD
+    # value, not SOL, despite pos['buy_price'] sharing that same USD unit.
+    total_value_usd = 0.0
+    total_pnl_usd = 0.0
     for mint, pos in us.get('positions', {}).items():
         if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
             continue
@@ -11047,19 +11050,99 @@ def api_portfolio_summary():
             td        = get_token_data(mint)
             cur_price = float(td['price']) if td else 0.0
         if cur_price > 0:
-            total_value_sol += amount * cur_price
-            total_pnl_sol   += amount * (cur_price - buy_price)
+            total_value_usd += amount * cur_price
+            total_pnl_usd   += amount * (cur_price - buy_price)
 
     sol_price = _sol_price_usd
     return jsonify({
         'ok':                  True,
         'sol_balance':         sol_balance,
         'sol_price_usd':       sol_price,
-        'positions_value_sol': round(total_value_sol, 6),
-        'positions_value_usd': round(total_value_sol * sol_price, 4) if sol_price else None,
-        'total_pnl_sol':       round(total_pnl_sol, 6),
-        'total_pnl_usd':       round(total_pnl_sol * sol_price, 4) if sol_price else None,
+        'positions_value_usd': round(total_value_usd, 4),
+        'positions_value_sol': round(total_value_usd / sol_price, 6) if sol_price else None,
+        'total_pnl_usd':       round(total_pnl_usd, 4),
+        'total_pnl_sol':       round(total_pnl_usd / sol_price, 6) if sol_price else None,
     })
+
+
+@app.route('/api/friends/positions', methods=['GET'])
+@rate_limit(30, 60)
+def api_friends_positions():
+    """Open positions of everyone the current user follows, grouped per
+    friend -- the social equivalent of /api/token/<mint>/holders (regel
+    ~4227), but scoped to your follow list instead of one token. Reads
+    open_positions (the persisted cross-user table, not the in-memory
+    user_states used by bot_positions()/portfolio-summary) since this needs
+    to see other users' positions, not just the caller's own."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'friends': []}), 401
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'ok': True, 'friends': []})
+        my_id = row[0]
+        c.execute('SELECT following_id FROM follows WHERE follower_id=?', (my_id,))
+        following_ids = [r[0] for r in c.fetchall()]
+        if not following_ids:
+            conn.close()
+            return jsonify({'ok': True, 'friends': []})
+        placeholders = ','.join('?' * len(following_ids))
+        c.execute(f'''
+            SELECT u.id, u.username, u.avatar_url, u.is_verified,
+                   op.mint_address, op.symbol, op.amount, op.buy_price
+            FROM open_positions op
+            JOIN users u ON u.id = op.user_id
+            WHERE op.user_id IN ({placeholders})
+              AND op.amount > 0 AND op.buy_price > 0
+        ''', following_ids)
+        rows = c.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f'[friends-positions] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'friends': []}), 500
+
+    # Same USD-priced fields as portfolio-summary/bot_positions -- see the
+    # comment in api_portfolio_summary about why no SOL-price conversion
+    # is applied here.
+    live_map = {t['mint']: t for t in state.get('tokens', [])}
+    friends_by_id = {}
+    for uid, username, avatar_url, is_verified, mint, symbol, amount, buy_price in rows:
+        live = live_map.get(mint)
+        cur_price = float(live.get('price', 0) or 0) if live else 0.0
+        if not live:
+            td = get_token_data(mint)
+            cur_price = float(td['price']) if td else 0.0
+        value_usd = round(amount * cur_price, 4) if cur_price > 0 else None
+        pnl_usd   = round(amount * (cur_price - buy_price), 4) if cur_price > 0 else None
+        pnl_pct   = round((cur_price - buy_price) / buy_price * 100, 2) if cur_price > 0 else None
+
+        f = friends_by_id.setdefault(uid, {
+            'user_id': uid, 'username': username or '', 'avatar_url': avatar_url or '',
+            'is_verified': bool(is_verified), 'positions': [],
+            'total_value_usd': 0.0, 'total_pnl_usd': 0.0,
+        })
+        f['positions'].append({
+            'symbol': symbol or '', 'mint_address': mint or '', 'amount': amount,
+            'value_usd': value_usd, 'pnl_usd': pnl_usd, 'pnl_pct': pnl_pct,
+        })
+        if value_usd is not None:
+            f['total_value_usd'] += value_usd
+        if pnl_usd is not None:
+            f['total_pnl_usd'] += pnl_usd
+
+    friends = list(friends_by_id.values())
+    for f in friends:
+        f['positions'].sort(key=lambda p: p['value_usd'] or 0, reverse=True)
+        f['total_value_usd'] = round(f['total_value_usd'], 4)
+        f['total_pnl_usd']   = round(f['total_pnl_usd'], 4)
+    friends.sort(key=lambda f: f['total_value_usd'], reverse=True)
+
+    return jsonify({'ok': True, 'friends': friends})
 
 
 @app.route('/api/wallet/transactions', methods=['GET'])

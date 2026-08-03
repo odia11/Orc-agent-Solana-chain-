@@ -51,6 +51,34 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-weekly-token-logo-ph{width:20px;height:20px;border-radius:6px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--muted);flex-shrink:0}
 .fr-weekly-pnl{font-size:13px;font-weight:700;color:var(--green);font-family:'JetBrains Mono',monospace}
 
+/* following list — the social equivalent of the token-holders tab, but one
+   row per followed friend instead of one row per token holder */
+.fr-section{margin:20px 16px 0}
+.fr-section-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.fr-empty{padding:40px 20px;text-align:center;color:var(--muted);font-size:12px;background:var(--bg2);border:1px solid var(--bg3);border-radius:16px}
+
+.fr-friend-row{display:flex;align-items:flex-start;gap:12px;padding:14px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;margin-bottom:10px}
+.fr-friend-avatar{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}
+.fr-friend-avatar-ph{width:38px;height:38px;border-radius:11px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0}
+.fr-friend-main{flex:1;min-width:0}
+.fr-friend-head{display:flex;align-items:flex-start;justify-content:space-between;gap:8px;margin-bottom:9px;min-width:0}
+.fr-friend-name{font-size:13px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:flex;align-items:center;gap:4px;min-width:0}
+.fr-friend-verified{color:var(--green);font-size:11px;flex-shrink:0}
+.fr-friend-totals{text-align:right;flex-shrink:0;font-family:'JetBrains Mono',monospace}
+.fr-friend-total-value{font-size:13px;font-weight:700;color:var(--text)}
+.fr-friend-total-pnl{font-size:11px;font-weight:700;margin-top:2px}
+.fr-friend-tokens{display:flex;flex-wrap:wrap;gap:6px}
+.fr-friend-token-chip{display:flex;align-items:center;gap:5px;background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;padding:4px 8px;font-size:11px;cursor:pointer;transition:border-color .15s}
+.fr-friend-token-chip:hover{border-color:rgba(247,185,85,.4)}
+.fr-friend-token-sym{font-weight:700;color:var(--text)}
+.fr-friend-token-pnl{font-family:'JetBrains Mono',monospace;font-weight:700}
+
+/* popular-among-friends — tokens held by 2+ followed friends */
+.fr-shared-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bg3);border-radius:12px;margin-bottom:8px;cursor:pointer;transition:border-color .15s}
+.fr-shared-row:hover{border-color:rgba(247,185,85,.4)}
+.fr-shared-sym{font-size:13px;font-weight:700;color:var(--text)}
+.fr-shared-count{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+
 /* token detail modal — card itself (.lm-modal-card, .lmtd-*) lives in
    static/token-card.css, shared with /live-market and the standalone
    /token/<mint> page; this is just the fixed-overlay backdrop + close
@@ -108,7 +136,15 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   <div class="fr-weekly-scroll" id="fr-weekly-scroll"></div>
 </div>
 
-<div id="friends-content"></div>
+<div class="fr-section" id="fr-following-section">
+  <div class="fr-section-title">Following</div>
+  <div id="fr-following-list"></div>
+</div>
+
+<div class="fr-section" id="fr-shared-section" style="display:none;">
+  <div class="fr-section-title">Popular Among Friends</div>
+  <div id="fr-shared-list"></div>
+</div>
 
 <!-- token detail modal (Focus / Terminal / Holders — see static/token-card.js) -->
 <div id="lm-token-modal" onclick="if(event.target===this)_lmtdCloseModal()">
@@ -204,8 +240,89 @@ async function _frInitWeeklyTopTrades(){
   }
 }
 
+/* following list — social equivalent of the token holders-tab: one row per
+   followed friend, each with their held tokens as chips (symbol + PnL),
+   fed by /api/friends/positions. */
+function _frFriendTokenChipHtml(p){
+  var pnlColor = (p.pnl_usd==null) ? 'var(--muted)' : (p.pnl_usd>=0 ? 'var(--green)' : 'var(--red)');
+  var pnlStr   = p.pnl_usd==null ? '—' : (p.pnl_usd>=0?'+':'-')+_fmtNum(Math.abs(p.pnl_usd));
+  return '<div class="fr-friend-token-chip" data-sym="'+_esc(p.symbol)+'" data-addr="'+_esc(p.mint_address)+'">'
+    +'<span class="fr-friend-token-sym">$'+_esc(p.symbol)+'</span>'
+    +'<span class="fr-friend-token-pnl" style="color:'+pnlColor+'">'+pnlStr+'</span>'
+  +'</div>';
+}
+
+function _frFriendRowHtml(f){
+  var avatar = f.avatar_url
+    ? '<img class="fr-friend-avatar" src="'+_esc(f.avatar_url)+'">'
+    : '<div class="fr-friend-avatar-ph">'+_esc((f.username||'?').slice(0,2))+'</div>';
+  var verified = f.is_verified ? '<span class="fr-friend-verified">✓</span>' : '';
+  var pnlColor = f.total_pnl_usd>=0 ? 'var(--green)' : 'var(--red)';
+  var pnlStr   = (f.total_pnl_usd>=0?'+':'-')+_fmtNum(Math.abs(f.total_pnl_usd));
+  return '<div class="fr-friend-row">'
+    +avatar
+    +'<div class="fr-friend-main">'
+      +'<div class="fr-friend-head">'
+        +'<div class="fr-friend-name">'+_esc(f.username||'—')+verified+'</div>'
+        +'<div class="fr-friend-totals">'
+          +'<div class="fr-friend-total-value">'+_fmtNum(f.total_value_usd)+'</div>'
+          +'<div class="fr-friend-total-pnl" style="color:'+pnlColor+'">'+pnlStr+'</div>'
+        +'</div>'
+      +'</div>'
+      +'<div class="fr-friend-tokens">'+f.positions.map(_frFriendTokenChipHtml).join('')+'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+function _frSharedRowHtml(s){
+  return '<div class="fr-shared-row" data-sym="'+_esc(s.symbol)+'" data-addr="'+_esc(s.mint_address)+'">'
+    +'<span class="fr-shared-sym">$'+_esc(s.symbol)+'</span>'
+    +'<span class="fr-shared-count">'+s.count+' friends hold this</span>'
+  +'</div>';
+}
+
+/* Popular Among Friends is derived client-side from the same
+   /api/friends/positions payload -- grouping by mint across every friend's
+   positions and keeping mints held by 2+ of them -- rather than a second
+   endpoint, since the data's already on the page. */
+async function _frInitFriendsPositions(){
+  var followingList = document.getElementById('fr-following-list');
+  var sharedSection  = document.getElementById('fr-shared-section');
+  var sharedList     = document.getElementById('fr-shared-list');
+  if(!followingList) return;
+  try{
+    var r = await fetch('/api/friends/positions', {credentials:'include'});
+    var d = await r.json();
+    var friends = (d.ok && d.friends) || [];
+    if(!friends.length){
+      followingList.innerHTML = '<div class="fr-empty">Follow some traders to see what they\'re holding here.</div>';
+      return;
+    }
+    followingList.innerHTML = friends.map(_frFriendRowHtml).join('');
+
+    var byMint = {};
+    friends.forEach(function(f){
+      f.positions.forEach(function(p){
+        if(!p.mint_address) return;
+        var e = byMint[p.mint_address] || (byMint[p.mint_address] = {symbol: p.symbol, mint_address: p.mint_address, count: 0});
+        e.count++;
+      });
+    });
+    var shared = Object.keys(byMint).map(function(k){ return byMint[k]; })
+      .filter(function(s){ return s.count >= 2; })
+      .sort(function(a,b){ return b.count - a.count; });
+    if(shared.length){
+      sharedList.innerHTML = shared.map(_frSharedRowHtml).join('');
+      sharedSection.style.display = '';
+    }
+  }catch(e){
+    followingList.innerHTML = '<div class="fr-empty">Could not load friends\' positions.</div>';
+  }
+}
+
 _frInitPortfolioHeader();
 _frInitWeeklyTopTrades();
+_frInitFriendsPositions();
 
 (function(){
   var weeklyScroll = document.getElementById('fr-weekly-scroll');
@@ -216,6 +333,18 @@ _frInitWeeklyTopTrades();
       showTokenCard(card.dataset.sym, card.dataset.addr);
     });
   }
+})();
+
+(function(){
+  var followingList = document.getElementById('fr-following-list');
+  var sharedList     = document.getElementById('fr-shared-list');
+  function _frOpenFromClick(e){
+    var el = e.target.closest('.fr-friend-token-chip, .fr-shared-row');
+    if(!el) return;
+    showTokenCard(el.dataset.sym, el.dataset.addr);
+  }
+  if(followingList) followingList.addEventListener('click', _frOpenFromClick);
+  if(sharedList)     sharedList.addEventListener('click', _frOpenFromClick);
 })();
 </script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
