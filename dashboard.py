@@ -4301,9 +4301,15 @@ def api_top_trades_week():
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE t.timestamp >= ? AND t.pnl > 0
+              AND t.pnl = (
+                  SELECT MAX(t2.pnl) FROM trades t2
+                  WHERE t2.user_id = t.user_id
+                    AND t2.timestamp >= ? AND t2.pnl > 0
+              )
+            GROUP BY t.user_id
             ORDER BY t.pnl DESC
             LIMIT 10
-        ''', (cutoff,))
+        ''', (cutoff, cutoff))
         rows = c.fetchall()
         conn.close()
     except Exception as e:
