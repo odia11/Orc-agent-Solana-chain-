@@ -4222,6 +4222,69 @@ def api_token_co_traders(mint):
     return jsonify({'ok': True, 'users': result})
 
 
+@app.route('/api/token/<mint>/holders', methods=['GET'])
+@rate_limit(60, 60)
+def api_token_holders(mint):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'holders': [], 'total': 0}), 401
+    if not _MINT_RE.match(mint or ''):
+        return jsonify({'ok': False, 'holders': [], 'total': 0}), 400
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            SELECT op.user_id, u.username, u.avatar_url, u.is_verified,
+                   op.amount, op.buy_price, op.opened_at, op.symbol
+            FROM open_positions op
+            JOIN users u ON op.user_id = u.id
+            WHERE op.mint_address = ?
+            ORDER BY op.amount * op.buy_price DESC
+            LIMIT 50
+        ''', (mint,))
+        rows = c.fetchall()
+        total = c.execute(
+            'SELECT COUNT(*) FROM open_positions WHERE mint_address = ?', (mint,)
+        ).fetchone()[0]
+
+        now = time.time()
+        holders = []
+        for user_id, username, avatar_url, is_verified, amount, buy_price, opened_at, symbol in rows:
+            post = None
+            if symbol:
+                # Restricted to this holder's own wallet, so each holder only
+                # ever sees their own most recent cashtag post (or null).
+                post_row = c.execute('''
+                    SELECT id, content, created_at
+                    FROM feed_posts
+                    WHERE content LIKE ?
+                      AND wallet = (SELECT wallet_address FROM users WHERE id = ?)
+                    ORDER BY created_at DESC LIMIT 1
+                ''', ('%$' + symbol + '%', user_id)).fetchone()
+                if post_row:
+                    pid, content, created_at = post_row
+                    like_count = c.execute(
+                        "SELECT COUNT(*) FROM post_likes WHERE post_id = ?", ('p' + str(pid),)
+                    ).fetchone()[0]
+                    post = {'id': pid, 'content': content, 'created_at': created_at, 'like_count': like_count}
+            holders.append({
+                'username':      username or '',
+                'avatar_url':    avatar_url or '',
+                'is_verified':   bool(is_verified),
+                'amount':        amount,
+                'buy_price':     buy_price,
+                'opened_at':     opened_at,
+                'hold_duration': round(now - opened_at, 2) if opened_at else None,
+                'post':          post,
+            })
+        conn.close()
+    except Exception as e:
+        print(f'[holders] DB error for {mint[:8]}: {e}', flush=True)
+        return jsonify({'ok': False, 'holders': [], 'total': 0}), 500
+
+    return jsonify({'ok': True, 'holders': holders, 'total': total})
+
+
 def _pnl_card_stats(wallet_addr: str) -> dict | None:
     """Return all-time trade stats for a wallet, or None if no trades exist."""
     try:

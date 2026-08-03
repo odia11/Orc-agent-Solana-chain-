@@ -51,6 +51,8 @@ var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fet
 var _lmtdActiveMint = ''; // mint the modal is CURRENTLY open on — lets a late-arriving stale fetch recognize itself as stale
 var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
 var _LMTD_CHART_FETCH_TIMEOUT = 12000;
+var _lmtdLastClose   = null; // most recent candle close -- "current price" for the Holders tab, independent of the priceUsd shown in the hero
+var _lmtdHoldersTotal = null; // total from the last /holders fetch; null until loaded, reset per token in showTokenCard()
 
 function _lmtdFetchBalance(){
   fetch('/api/wallet/balance', {credentials:'include'}).then(function(r){return r.json();}).then(function(d){
@@ -173,6 +175,7 @@ async function showTokenCard(symbol, knownAddr, knownPair){
   _lmtdLayout = 'focus';
   _lmtdTf     = '5m';
   _lmtdSide   = 'buy';
+  _lmtdHoldersTotal = null;
   _lmtdFetchBalance();
   _lmtdActiveMint = knownAddr || '';
   if(knownAddr){
@@ -275,6 +278,7 @@ function _lmtdRenderModal(){
       +'<div class="lmtd-layout-toggle">'
         +'<button class="lmtd-layout-btn'+(_lmtdLayout==='focus'?' active':'')+'" onclick="_lmtdSetLayout(\'focus\')">Focus</button>'
         +'<button class="lmtd-layout-btn'+(_lmtdLayout==='terminal'?' active':'')+'" onclick="_lmtdSetLayout(\'terminal\')">Terminal</button>'
+        +'<button class="lmtd-layout-btn'+(_lmtdLayout==='holders'?' active':'')+'" id="lmtd-holders-tab-btn" onclick="_lmtdSetLayout(\'holders\')">Holders'+(_lmtdHoldersTotal!=null?' ('+_lmtdHoldersTotal+')':'')+'</button>'
       +'</div>'
     +'</div>'
     +'<div class="lmtd-hero">'
@@ -301,17 +305,23 @@ function _lmtdRenderModal(){
       +'<div class="lmtd-chart-wrap">'+chartHtml+'</div>'
       +'<div class="lmtd-stats-focus">'+_lmtdStatTilesHtml(p)+'</div>'
       +'<div class="lmtd-trade-cta"><button class="lmtd-trade-cta-btn" onclick="_lmtdSetLayout(\'terminal\')">Trade</button></div>';
-  } else {
+  } else if(_lmtdLayout === 'terminal'){
     bodyHtml = headerHtml
       +'<div class="lmtd-terminal">'
         +'<div class="lmtd-terminal-chart">'+chartHtml+'</div>'
         +'<div class="lmtd-terminal-side"><div id="lmtd-terminal-side-inner">'+_lmtdSidePanelHtml(p, sym, addr)+'</div></div>'
       +'</div>';
+  } else { // holders
+    bodyHtml = headerHtml
+      +'<div class="lmtd-holders-wrap" id="lmtd-holders-wrap"><div class="lmtd-holders-loading">Loading holders…</div></div>';
   }
   body.innerHTML = bodyHtml;
-  _lmtdInitChart();
-  _lmtdLoadChartData(); // reuses an in-flight/cached fetch for this mint+tf if one already exists
+  if(_lmtdLayout !== 'holders'){
+    _lmtdInitChart();
+    _lmtdLoadChartData(); // reuses an in-flight/cached fetch for this mint+tf if one already exists
+  }
   if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
+  if(_lmtdLayout === 'holders') _lmtdRenderHoldersTab(addr);
 }
 
 /* mint-adres kopiëren — zelfde clipboard+fallback-logica als
@@ -449,6 +459,89 @@ function _lmtdSetPct(pct){
   input.value = amt.toFixed(4);
 }
 
+/* ── holders tab ── */
+function _lmtdFmtDuration(secs){
+  if(secs==null) return '—';
+  secs = Math.max(0, Math.floor(secs));
+  var d = Math.floor(secs/86400);
+  var h = Math.floor((secs%86400)/3600);
+  var m = Math.floor((secs%3600)/60);
+  if(d>0) return d+'d '+h+'h';
+  if(h>0) return h+'h '+m+'m';
+  if(m>0) return m+'m';
+  return secs+'s';
+}
+
+function _lmtdUpdateHoldersTabLabel(){
+  var btn = document.getElementById('lmtd-holders-tab-btn');
+  if(btn) btn.textContent = 'Holders'+(_lmtdHoldersTotal!=null ? ' ('+_lmtdHoldersTotal+')' : '');
+}
+
+function _lmtdHolderRowHtml(h, curPrice){
+  var avatar = h.avatar_url
+    ? '<img class="lmtd-holder-avatar" src="'+_esc(h.avatar_url)+'">'
+    : '<div class="lmtd-holder-avatar-ph">'+_esc((h.username||'?').slice(0,2))+'</div>';
+  var verified = h.is_verified ? '<span class="lmtd-holder-verified">✓</span>' : '';
+  var posValue = (curPrice>0 && h.amount!=null) ? _fmtNum(h.amount*curPrice) : '—';
+  var pnlPct   = (curPrice>0 && h.buy_price>0) ? (curPrice-h.buy_price)/h.buy_price*100 : null;
+  var pnlStr   = pnlPct==null ? '—' : (pnlPct>=0?'+':'')+pnlPct.toFixed(2)+'%';
+  var pnlColor = pnlPct==null ? 'var(--muted)' : (pnlPct>=0?'var(--green)':'var(--red)');
+  var postHtml = h.post
+    ? '<div class="lmtd-holder-post">'+_esc(h.post.content)+' <span class="lmtd-holder-post-likes">♥ '+h.post.like_count+'</span></div>'
+    : '';
+  return '<div class="lmtd-holder-row">'
+    +'<div class="lmtd-holder-left">'
+      +avatar
+      +'<div class="lmtd-holder-info">'
+        +'<div class="lmtd-holder-name">'+_esc(h.username||'—')+verified+'</div>'
+        +'<div class="lmtd-holder-duration">'+_lmtdFmtDuration(h.hold_duration)+'</div>'
+        +postHtml
+      +'</div>'
+    +'</div>'
+    +'<div class="lmtd-holder-right">'
+      +'<div class="lmtd-holder-value">'+posValue+'</div>'
+      +'<div class="lmtd-holder-pnl" style="color:'+pnlColor+'">'+pnlStr+'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+/* Fetches /api/token/<mint>/holders and renders one row per holder -- also
+   updates the "Holders (N)" tab label as soon as the total is known.
+   curPrice comes from the chart's last candle close (_lmtdLastClose), not
+   the DexScreener priceUsd used elsewhere in the modal, per spec. */
+async function _lmtdHoldersHtml(addr){
+  try{
+    var r = await fetch('/api/token/'+encodeURIComponent(addr)+'/holders');
+    var d = await r.json();
+    if(!d.ok){
+      _lmtdHoldersTotal = 0;
+      _lmtdUpdateHoldersTabLabel();
+      return '<div class="lmtd-holders-empty">Could not load holders</div>';
+    }
+    _lmtdHoldersTotal = d.total || 0;
+    _lmtdUpdateHoldersTabLabel();
+    if(!d.holders || !d.holders.length){
+      return '<div class="lmtd-holders-empty">No holders found for this token yet</div>';
+    }
+    var curPrice = _lmtdLastClose || 0;
+    return d.holders.map(function(h){ return _lmtdHolderRowHtml(h, curPrice); }).join('');
+  }catch(e){
+    _lmtdHoldersTotal = 0;
+    _lmtdUpdateHoldersTabLabel();
+    return '<div class="lmtd-holders-empty">Could not load holders</div>';
+  }
+}
+
+/* Injects the holders list into the tab -- guards against the modal having
+   moved to a different token or layout while the fetch was in flight (same
+   staleness pattern as _lmtdRenderChartData). */
+async function _lmtdRenderHoldersTab(addr){
+  var html = await _lmtdHoldersHtml(addr);
+  if(_lmtdLayout !== 'holders' || addr !== _lmtdActiveMint) return;
+  var wrap = document.getElementById('lmtd-holders-wrap');
+  if(wrap) wrap.innerHTML = html;
+}
+
 /* candlestick + volume chart — same LightweightCharts pattern as
    dashboard.html's _posChart, fed by the existing /api/chart/<mint> endpoint */
 function _lmtdInitChart(){
@@ -494,6 +587,7 @@ async function _lmtdRenderChartData(dataPromise, forMint){
     try{
       _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
       _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
+      _lmtdLastClose = r.candles[r.candles.length-1].c;
       _lmtdChart.timeScale().fitContent();
       if(loadEl) loadEl.style.display='none';
     }catch(e){
