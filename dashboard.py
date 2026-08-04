@@ -3739,6 +3739,56 @@ def api_phantom_init():
     return jsonify({'ok': True, 'dapp_pk': _b58enc(dapp_pk_bytes), 'token': token})
 
 
+@app.route('/api/phantom/sign-init', methods=['POST'])
+@rate_limit(10, 60)
+def api_phantom_sign_init():
+    """Build the encrypted payload for a Phantom v1 signMessage deep-link,
+    reusing the same dapp keypair and Phantom's own public key/session from
+    the connect step (see api_phantom_decrypt(), which now persists both
+    into _phantom_sessions[token] for this to read). Mirrors
+    api_phantom_decrypt()'s NaCl box, but the encrypt side instead of decrypt.
+    Body: {token, message}.
+    Returns {ok, dapp_pk, nonce, payload, token} (all b58 except token)."""
+    if not _NACL_OK:
+        return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
+    body    = request.get_json(silent=True) or {}
+    token   = body.get('token', '')
+    message = body.get('message', '')
+    if not all([token, message]):
+        return jsonify({'ok': False, 'error': 'missing params'}), 400
+    session_data = _phantom_sessions.get(token)
+    if not session_data:
+        print(f'[phantom] sign-init — token not found: {token[:8]}…', flush=True)
+        return jsonify({'ok': False, 'error': 'session expired or invalid'}), 404
+    if time.time() - session_data['created'] > 600:
+        return jsonify({'ok': False, 'error': 'session expired'}), 400
+    phantom_pk_b58  = session_data.get('phantom_pk', '')
+    phantom_session = session_data.get('session', '')
+    if not phantom_pk_b58:
+        return jsonify({'ok': False, 'error': 'no connect session on file for this token'}), 400
+    try:
+        dapp_sk_obj    = _nacl_public.PrivateKey(session_data['sk'])
+        phantom_pk_obj = _nacl_public.PublicKey(_b58dec(phantom_pk_b58))
+        box            = _nacl_public.Box(dapp_sk_obj, phantom_pk_obj)
+        payload_obj    = {
+            'message': _b58enc(message.encode('utf-8')),
+            'session': phantom_session,
+            'display': 'utf8',
+        }
+        encrypted = box.encrypt(json.dumps(payload_obj).encode('utf-8'))
+        print(f'[phantom] sign-init OK token={token[:8]}…', flush=True)
+        return jsonify({
+            'ok':      True,
+            'dapp_pk': _b58enc(bytes(dapp_sk_obj.public_key)),
+            'nonce':   _b58enc(encrypted.nonce),
+            'payload': _b58enc(encrypted.ciphertext),
+            'token':   token,
+        })
+    except Exception as e:
+        print(f'[phantom] sign-init ERROR: {e}', flush=True)
+        return jsonify({'ok': False, 'error': str(e)}), 400
+
+
 @app.route('/api/phantom/decrypt', methods=['POST'])
 @rate_limit(10, 60)
 def api_phantom_decrypt():
@@ -3781,6 +3831,11 @@ def api_phantom_decrypt():
         payload        = json.loads(decrypted.decode('utf-8'))
         wallet_address = payload.get('public_key', '')
         phantom_session = payload.get('session', '')
+        # Persisted so /api/phantom/sign-init can later rebuild the same box
+        # (message, session, display) for the signMessage step, per Phantom's
+        # deeplink spec (reuse the connect session's key, not a fresh one).
+        session_data['phantom_pk'] = phantom_pk_b58
+        session_data['session']    = phantom_session
         if not wallet_address:
             return jsonify({'ok': False, 'error': 'no public_key in payload'}), 400
         if not is_valid_solana_address(wallet_address):
