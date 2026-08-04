@@ -61,8 +61,11 @@ var _b58enc=(function(){
       return;
     }
     try{
-      sessionStorage.setItem('_orca_phantom_wallet', walletAddress);
-      sessionStorage.setItem('_orca_phantom_nonce', nr.nonce);
+      // localStorage, not sessionStorage: Phantom's app-switch redirect can
+      // land back in a new tab/webview on some Android setups, which would
+      // lose sessionStorage. Cleaned up on the read side below either way.
+      localStorage.setItem('_orca_phantom_wallet', walletAddress);
+      localStorage.setItem('_orca_phantom_nonce', nr.nonce);
     }catch(e){}
 
     var sr = await fetch('/api/phantom/sign-init', {
@@ -110,10 +113,10 @@ var _b58enc=(function(){
     // Retrieve wallet address and auth nonce stored before signMessage redirect
     var walletAddress = null, authNonce = null;
     try{
-      walletAddress = sessionStorage.getItem('_orca_phantom_wallet');
-      authNonce     = sessionStorage.getItem('_orca_phantom_nonce');
-      sessionStorage.removeItem('_orca_phantom_wallet');
-      sessionStorage.removeItem('_orca_phantom_nonce');
+      walletAddress = localStorage.getItem('_orca_phantom_wallet');
+      authNonce     = localStorage.getItem('_orca_phantom_nonce');
+      localStorage.removeItem('_orca_phantom_wallet');
+      localStorage.removeItem('_orca_phantom_nonce');
     }catch(e){}
 
     if(!walletAddress || !authNonce){ fail('Session data lost — please reconnect.'); return; }
