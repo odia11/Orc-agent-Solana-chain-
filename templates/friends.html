@@ -79,6 +79,20 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-shared-sym{font-size:13px;font-weight:700;color:var(--text)}
 .fr-shared-count{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
 
+/* suggested traders — shown in place of the Following list when the user
+   follows nobody yet, sourced from /api/leaderboard (today's top traders) */
+.fr-empty-heading{padding:0 0 10px;text-align:center;color:var(--muted);font-size:12px}
+.fr-suggest-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.fr-suggest-card{display:flex;flex-direction:column;align-items:center;text-align:center;gap:6px;padding:14px 10px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;min-width:0}
+.fr-suggest-avatar{width:40px;height:40px;border-radius:11px;object-fit:cover}
+.fr-suggest-avatar-ph{width:40px;height:40px;border-radius:11px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted)}
+.fr-suggest-name{font-size:12px;font-weight:700;color:var(--text);display:flex;align-items:center;gap:4px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-suggest-verified{color:var(--green);font-size:10px;flex-shrink:0}
+.fr-suggest-pnl{font-size:12px;font-weight:700;font-family:'JetBrains Mono',monospace}
+.fr-suggest-follow-btn{width:100%;background:var(--accent);color:#0a0b0e;border:none;border-radius:8px;padding:7px 0;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;cursor:pointer;transition:opacity .15s}
+.fr-suggest-follow-btn:hover{opacity:.85}
+.fr-suggest-follow-btn:disabled{opacity:.5;cursor:default}
+
 /* tokens list — Trending / Most held by friends / New, mobile card style
    (no table), below Popular Among Friends */
 .fr-tok-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
@@ -317,6 +331,44 @@ function _frSharedRowHtml(s){
   +'</div>';
 }
 
+/* Suggested traders -- replaces the plain "Follow some traders..." empty
+   state with the top 4 from /api/leaderboard (today's pnl leaderboard,
+   same endpoint/pattern traders.html and profile.html already use for
+   follow buttons: POST /api/follow/toggle, {wallet}). total_pnl there is
+   USD despite nowhere labeling it so (see _record_user_trade()'s pnl
+   calc, which is USD like everywhere else in this app) -- formatted
+   with _fmtNum, not a SOL suffix. */
+function _frSuggestedCardHtml(t){
+  var avatar = t.avatar_url
+    ? '<img class="fr-suggest-avatar" src="'+_esc(t.avatar_url)+'">'
+    : '<div class="fr-suggest-avatar-ph">'+_esc((t.username||'?').slice(0,2))+'</div>';
+  var verified = (t.badges||[]).indexOf('verified')>=0 ? '<span class="fr-suggest-verified">✓</span>' : '';
+  var pnlColor = t.total_pnl>=0 ? 'var(--green)' : 'var(--red)';
+  var pnlStr   = (t.total_pnl>=0?'+':'-')+_fmtNum(Math.abs(t.total_pnl));
+  return '<div class="fr-suggest-card">'
+    +avatar
+    +'<div class="fr-suggest-name">'+_esc(t.username||'—')+verified+'</div>'
+    +'<div class="fr-suggest-pnl" style="color:'+pnlColor+'">'+pnlStr+'</div>'
+    +'<button class="fr-suggest-follow-btn" data-wallet="'+_esc(t.wallet_address)+'">Volgen</button>'
+  +'</div>';
+}
+
+async function _frRenderSuggestedTraders(container){
+  try{
+    var r   = await fetch('/api/leaderboard', {credentials:'include'});
+    var top = await r.json();
+    top = (Array.isArray(top) ? top : []).slice(0,4);
+    if(!top.length){
+      container.innerHTML = '<div class="fr-empty">Follow some traders to see what they\'re holding here.</div>';
+      return;
+    }
+    container.innerHTML = '<div class="fr-empty-heading">Nog niemand gevolgd — probeer deze top traders:</div>'
+      +'<div class="fr-suggest-grid">'+top.map(_frSuggestedCardHtml).join('')+'</div>';
+  }catch(e){
+    container.innerHTML = '<div class="fr-empty">Follow some traders to see what they\'re holding here.</div>';
+  }
+}
+
 /* Shared data source for Following / Popular Among Friends / the Tokens
    list's "Most held by friends" chip and per-row friend-avatar stacks --
    fetched once (cached in _frFriendsDataPromise) since all consumers need
@@ -356,7 +408,7 @@ async function _frInitFriendsPositions(){
   if(!followingList) return;
   var friends = await _frGetFriendsData();
   if(!friends.length){
-    followingList.innerHTML = '<div class="fr-empty">Follow some traders to see what they\'re holding here.</div>';
+    await _frRenderSuggestedTraders(followingList);
     return;
   }
   followingList.innerHTML = friends.map(_frFriendRowHtml).join('');
@@ -580,7 +632,33 @@ _frInitTokensList();
     if(!el) return;
     showTokenCard(el.dataset.sym, el.dataset.addr);
   }
+  async function _frOnFollowClick(e){
+    var btn = e.target.closest('.fr-suggest-follow-btn');
+    if(!btn) return;
+    btn.disabled = true;
+    btn.textContent = '…';
+    try{
+      var r = await fetch('/api/follow/toggle', {
+        method: 'POST', credentials: 'include',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({wallet: btn.dataset.wallet})
+      });
+      var d = await r.json();
+      if(d.ok && d.following){
+        _frFriendsByMint = {};        // force a clean re-populate, not an append
+        _frFriendsDataPromise = null; // force a fresh /api/friends/positions fetch
+        _frInitFriendsPositions();
+      } else {
+        btn.disabled = false;
+        btn.textContent = 'Volgen';
+      }
+    }catch(err){
+      btn.disabled = false;
+      btn.textContent = 'Volgen';
+    }
+  }
   if(followingList) followingList.addEventListener('click', _frOpenFromClick);
+  if(followingList) followingList.addEventListener('click', _frOnFollowClick);
   if(sharedList)     sharedList.addEventListener('click', _frOpenFromClick);
 })();
 
