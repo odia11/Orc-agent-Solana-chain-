@@ -3747,14 +3747,17 @@ def api_phantom_sign_init():
     the connect step (see api_phantom_decrypt(), which now persists both
     into _phantom_sessions[token] for this to read). Mirrors
     api_phantom_decrypt()'s NaCl box, but the encrypt side instead of decrypt.
-    Body: {token, message}.
+    Body: {token, message, nonce}. 'nonce' is the bare /api/auth/nonce value
+    (NOT the NaCl box nonce) -- persisted so /api/phantom/decrypt-signature
+    can hand it back to the frontend later without a localStorage round-trip.
     Returns {ok, dapp_pk, nonce, payload, token} (all b58 except token)."""
     if not _NACL_OK:
         return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
     body    = request.get_json(silent=True) or {}
     token   = body.get('token', '')
     message = body.get('message', '')
-    if not all([token, message]):
+    auth_nonce = body.get('nonce', '')
+    if not all([token, message, auth_nonce]):
         return jsonify({'ok': False, 'error': 'missing params'}), 400
     session_data = _phantom_sessions.get(token)
     if not session_data:
@@ -3762,6 +3765,7 @@ def api_phantom_sign_init():
         return jsonify({'ok': False, 'error': 'session expired or invalid'}), 404
     if time.time() - session_data['created'] > 600:
         return jsonify({'ok': False, 'error': 'session expired'}), 400
+    session_data['auth_nonce'] = auth_nonce
     phantom_pk_b58  = session_data.get('phantom_pk', '')
     phantom_session = session_data.get('session', '')
     if not phantom_pk_b58:
@@ -3840,6 +3844,7 @@ def api_phantom_decrypt():
             return jsonify({'ok': False, 'error': 'no public_key in payload'}), 400
         if not is_valid_solana_address(wallet_address):
             return jsonify({'ok': False, 'error': 'invalid wallet address in payload'}), 400
+        session_data['wallet_address'] = wallet_address
         print(f'[phantom] decrypt: got wallet={wallet_address[:8]}… (unverified, not logging in)', flush=True)
         # Still does NOT establish a Flask session here -- see docstring. This
         # only hands wallet_address/session back to the frontend so it can
@@ -3857,7 +3862,10 @@ def api_phantom_decrypt_signature():
     """Decrypt a Phantom v1 signMessage callback payload.
     Body: {token, phantom_pk, nonce, data} — all b58-encoded strings.
     The decrypted payload contains a 'signature' field (b58).
-    Returns {ok, signature}."""
+    Returns {ok, signature, wallet_address, auth_nonce} -- the latter two
+    come from _phantom_sessions[token] (set by api_phantom_decrypt() and
+    api_phantom_sign_init() respectively), replacing the localStorage
+    handoff phantom_callback.html used to do between its two steps."""
     if not _NACL_OK:
         return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
     body = request.get_json(silent=True) or {}
@@ -3881,7 +3889,12 @@ def api_phantom_decrypt_signature():
         if not signature_b58:
             return jsonify({'ok': False, 'error': 'no signature in payload'}), 400
         print(f'[phantom] decrypt-sig OK sig={signature_b58[:12]}…', flush=True)
-        return jsonify({'ok': True, 'signature': signature_b58})
+        return jsonify({
+            'ok':             True,
+            'signature':      signature_b58,
+            'wallet_address': session_data.get('wallet_address', ''),
+            'auth_nonce':     session_data.get('auth_nonce', ''),
+        })
     except Exception as e:
         print(f'[phantom] decrypt-sig ERROR: {e}', flush=True)
         return jsonify({'ok': False, 'error': str(e)}), 400
