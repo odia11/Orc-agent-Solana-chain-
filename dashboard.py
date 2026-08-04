@@ -3461,15 +3461,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                             add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
                                          ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (rug risk)')
                             continue
-                        trade_pct = 0.60 if sc >= 7 else user_trade_pct
-                        spend = us_sol * trade_pct
-                        # min/max trade size are USDC-denominated in the UI — convert to
-                        # SOL at the current price before clamping the SOL-denominated spend.
-                        if _sol_price_usd > 0:
-                            min_spend_sol = min_trade_usdc / _sol_price_usd
-                            max_spend_sol = max_trade_usdc / _sol_price_usd
-                            spend = min(max(spend, min_spend_sol), max_spend_sol)
-                        spend = round(spend, 4)
+                        # Fixed stake: the user's min_trade_size (USDC, converted to SOL
+                        # at the current price) times a score factor -- no more
+                        # percentage-of-balance sizing or max_trade_size clamp here.
+                        # The spend<=us_sol check below is the only remaining cap.
+                        factor = 2 if sc >= 7 else 1
+                        min_spend_sol = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
+                        spend = round(min_spend_sol * factor, 4)
                         if spend >= 0.001 and spend <= us_sol:
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
