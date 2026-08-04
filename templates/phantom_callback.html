@@ -99,23 +99,24 @@ var _b58enc=(function(){
 
   // ── STEP: sign ── signMessage callback → decrypt signature → wallet/set ──────
   if(p.get('step') === 'sign'){
-    var token     = p.get('token');
-    var phantomPk = p.get('phantom_encryption_public_key');
-    var nonce     = p.get('nonce');
-    var data      = p.get('data');
+    var token = p.get('token');
+    var nonce = p.get('nonce');
+    var data  = p.get('data');
 
     console.log('[phantom-cb] sign step — token:', token ? token.slice(0,8)+'…' : 'MISSING');
 
-    if(!token || !phantomPk || !nonce || !data){ fail('Incomplete sign callback — please try again.'); return; }
+    if(!token || !nonce || !data){ fail('Incomplete sign callback — please try again.'); return; }
 
-    // Decrypt signature from Phantom's encrypted response -- also returns
-    // wallet_address/auth_nonce (server-side session data keyed by token),
-    // replacing the old localStorage handoff between this page's two steps.
+    // Decrypt signature from Phantom's encrypted response -- phantom_pk
+    // comes from the server-side session now (set during connect), not
+    // this callback's own query params; also returns wallet_address/
+    // auth_nonce (same server-side session), replacing the old localStorage
+    // handoff between this page's two steps.
     msg.textContent = 'Verifying signature…';
     var sigR = await fetch('/api/phantom/decrypt-signature',{
       method: 'POST', credentials: 'include',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({token:token, phantom_pk:phantomPk, nonce:nonce, data:data})
+      body: JSON.stringify({token:token, nonce:nonce, data:data})
     }).then(function(r){ return r.json(); }).catch(function(){ return null; });
 
     if(!sigR || !sigR.ok || !sigR.signature){

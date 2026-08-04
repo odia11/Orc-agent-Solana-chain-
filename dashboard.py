@@ -3860,7 +3860,9 @@ def api_phantom_decrypt():
 @rate_limit(10, 60)
 def api_phantom_decrypt_signature():
     """Decrypt a Phantom v1 signMessage callback payload.
-    Body: {token, phantom_pk, nonce, data} — all b58-encoded strings.
+    Body: {token, nonce, data} — all b58-encoded strings. phantom_pk comes
+    from _phantom_sessions[token] (set by api_phantom_decrypt() during
+    connect), not the request body.
     The decrypted payload contains a 'signature' field (b58).
     Returns {ok, signature, wallet_address, auth_nonce} -- the latter two
     come from _phantom_sessions[token] (set by api_phantom_decrypt() and
@@ -3870,15 +3872,17 @@ def api_phantom_decrypt_signature():
         return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
     body = request.get_json(silent=True) or {}
     token          = body.get('token', '')
-    phantom_pk_b58 = body.get('phantom_pk', '')
     nonce_b58      = body.get('nonce', '')
     data_b58       = body.get('data', '')
-    if not all([token, phantom_pk_b58, nonce_b58, data_b58]):
+    if not all([token, nonce_b58, data_b58]):
         return jsonify({'ok': False, 'error': 'missing params'}), 400
     session_data = _phantom_sessions.pop(token, None)
     if not session_data:
         print(f'[phantom] decrypt-sig — token not found: {token[:8]}…', flush=True)
         return jsonify({'ok': False, 'error': 'session expired or invalid'}), 400
+    # Same value api_phantom_decrypt() used to build the connect-step box --
+    # the client no longer needs to send it.
+    phantom_pk_b58 = session_data.get('phantom_pk', '')
     try:
         phantom_pk_obj = _nacl_public.PublicKey(_b58dec(phantom_pk_b58))
         dapp_sk_obj    = _nacl_public.PrivateKey(session_data['sk'])
