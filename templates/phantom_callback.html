@@ -43,6 +43,49 @@ var _b58enc=(function(){
     setTimeout(function(){ window.location.href = '/'; }, 5000);
   }
 
+  /* Local copy of static/dashboard.js's _phantomMobileV1SignMessage() --
+     that one can't be called from here directly: this page never loads
+     dashboard.js (it's a deliberately minimal, self-contained page, same
+     reason it has its own _b58enc above instead of sharing dashboard.js's),
+     and its _setNote() helper targets #wallet-install-msg/#ob-phantom-note,
+     which don't exist on this page (only #msg). Same request sequence,
+     adapted to use msg/fail() instead. token is the SAME init token from
+     the connect callback -- still valid since api_phantom_decrypt() no
+     longer pops it server-side. */
+  async function _phantomMobileV1SignMessage(walletAddress, phantomPk, session, token){
+    msg.textContent = 'Requesting signature…';
+    var nr = await fetch('/api/auth/nonce', {credentials: 'include'})
+      .then(function(r){ return r.json(); }).catch(function(){ return null; });
+    if(!nr || !nr.ok || !nr.nonce || !nr.message){
+      fail('Could not start signature request — please try again.');
+      return;
+    }
+    try{
+      sessionStorage.setItem('_orca_phantom_wallet', walletAddress);
+      sessionStorage.setItem('_orca_phantom_nonce', nr.nonce);
+    }catch(e){}
+
+    var sr = await fetch('/api/phantom/sign-init', {
+      method: 'POST', credentials: 'include',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({token:token, message:nr.message})
+    }).then(function(r){ return r.json(); }).catch(function(){ return null; });
+
+    if(!sr || !sr.ok || !sr.dapp_pk || !sr.nonce || !sr.payload){
+      fail('Could not prepare signature request: '+((sr && sr.error) || 'unknown'));
+      return;
+    }
+    var _cbUrl = 'https://orcagent.fun/phantom-callback?step=sign&token='+encodeURIComponent(sr.token)+'&_cb='+Date.now();
+    console.log('[phantom-cb] sign-init ok, token=', sr.token.slice(0,8)+'…');
+    var signParams = new URLSearchParams({
+      dapp_encryption_public_key: sr.dapp_pk,
+      nonce: sr.nonce,
+      redirect_link: _cbUrl,
+      payload: sr.payload
+    });
+    window.location.href = 'https://phantom.app/ul/v1/signMessage?'+signParams.toString();
+  }
+
   var p = new URLSearchParams(window.location.search);
   console.log('[phantom-cb] URL:', window.location.href);
   p.forEach(function(v,k){
@@ -131,8 +174,12 @@ var _b58enc=(function(){
     return;
   }
 
-  msg.textContent = 'Connected! Redirecting…';
-  setTimeout(function(){ window.location.href = '/'; }, 300);
+  // Decrypting the connect payload alone never proves Solana-keypair
+  // ownership (see api_phantom_decrypt()'s docstring) -- proceed straight
+  // into the SignMessage step instead of redirecting home; set_wallet()
+  // is what actually logs the user in, once the sign-step's signature
+  // verifies.
+  _phantomMobileV1SignMessage(dr.wallet_address, phantomPk, dr.session, token);
 })();
 </script>
 </body>
