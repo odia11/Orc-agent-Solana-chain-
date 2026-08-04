@@ -3745,15 +3745,17 @@ def api_phantom_decrypt():
     """Decrypt Phantom v1 callback payload using the stored server-side keypair.
     Body: {token, phantom_pk, nonce, data} — all b58-encoded strings.
 
+    Returns {ok, wallet_address, session} on success -- 'session' is Phantom's
+    own token from the decrypted payload, needed by the signMessage step.
     SECURITY: this only proves the caller holds SOME NaCl keypair able to
     decrypt the box — it does NOT prove ownership of the Solana keypair for
     the 'public_key' the caller put in the decrypted payload (that field is
     fully attacker-chosen). It must never be used to establish a session by
-    itself. The real proof-of-ownership step (signMessage over a server nonce,
-    verified in set_wallet()/'/api/wallet/set') is not wired up on the mobile
-    deep-link path yet, so mobile Phantom connect is disabled here pending
-    that -- see /api/phantom/decrypt-signature and phantom_callback.html's
-    dormant 'step=sign' branch for the intended flow."""
+    itself -- and it doesn't: no Flask session is set anywhere in this
+    function. The real proof-of-ownership step (signMessage over a server
+    nonce, verified in set_wallet()/'/api/wallet/set') is what actually
+    establishes the login session -- see /api/phantom/decrypt-signature and
+    phantom_callback.html's 'step=sign' branch for that flow."""
     if not _NACL_OK:
         return jsonify({'ok': False, 'error': 'nacl unavailable'}), 500
     body = request.get_json(silent=True) or {}
@@ -3763,7 +3765,11 @@ def api_phantom_decrypt():
     data_b58    = body.get('data', '')
     if not all([token, phantom_pk_b58, nonce_b58, data_b58]):
         return jsonify({'ok': False, 'error': 'missing params'}), 400
-    session_data = _phantom_sessions.pop(token, None)
+    # Not popped -- the signMessage step (api_phantom_decrypt_signature) needs
+    # to reuse this same dapp keypair/shared secret, per Phantom's deeplink
+    # spec (signMessage must reuse the connect session's key, not a fresh
+    # one). Already swept after 600s by the expiry check in api_phantom_init.
+    session_data = _phantom_sessions.get(token)
     if not session_data:
         print(f'[phantom] decrypt — token not found: {token[:8]}…', flush=True)
         return jsonify({'ok': False, 'error': 'session expired or invalid'}), 400
@@ -3774,18 +3780,17 @@ def api_phantom_decrypt():
         decrypted      = box.decrypt(_b58dec(data_b58), _b58dec(nonce_b58))
         payload        = json.loads(decrypted.decode('utf-8'))
         wallet_address = payload.get('public_key', '')
+        phantom_session = payload.get('session', '')
         if not wallet_address:
             return jsonify({'ok': False, 'error': 'no public_key in payload'}), 400
         if not is_valid_solana_address(wallet_address):
             return jsonify({'ok': False, 'error': 'invalid wallet address in payload'}), 400
         print(f'[phantom] decrypt: got wallet={wallet_address[:8]}… (unverified, not logging in)', flush=True)
-        # Do NOT establish a session here -- decrypting this payload only proves
-        # the caller controls some NaCl keypair, not that they own the Solana
-        # keypair for wallet_address (see docstring). Refuse until the
-        # signMessage-based proof step is wired up.
-        return jsonify({'ok': False, 'error': 'Mobile Phantom connect is temporarily unavailable. '
-                                                'Please open orcagent.fun inside the Phantom app\'s '
-                                                'built-in browser, or use a desktop browser.'}), 503
+        # Still does NOT establish a Flask session here -- see docstring. This
+        # only hands wallet_address/session back to the frontend so it can
+        # proceed to the signMessage step; set_wallet() is what verifies and
+        # logs in.
+        return jsonify({'ok': True, 'wallet_address': wallet_address, 'session': phantom_session})
     except Exception as e:
         print(f'[phantom] decrypt ERROR: {e}', flush=True)
         return jsonify({'ok': False, 'error': str(e)}), 400
@@ -4283,6 +4288,52 @@ def api_token_holders(mint):
         return jsonify({'ok': False, 'holders': [], 'total': 0}), 500
 
     return jsonify({'ok': True, 'holders': holders, 'total': total})
+
+
+@app.route('/api/token/<mint>/feed', methods=['GET'])
+@rate_limit(60, 60)
+def api_token_feed(mint):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'posts': []}), 401
+    if not _MINT_RE.match(mint or ''):
+        return jsonify({'ok': False, 'posts': []}), 400
+    symbol = _sanitize(request.args.get('sym', '').strip())[:32]
+    if not symbol:
+        return jsonify({'ok': False, 'posts': []}), 400
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('''
+            SELECT fp.id, u.username, u.avatar_url, u.is_verified,
+                   fp.content, fp.created_at
+            FROM feed_posts fp
+            JOIN users u ON u.wallet_address = fp.wallet
+            WHERE fp.content LIKE ?
+            ORDER BY fp.created_at DESC
+            LIMIT 30
+        ''', ('%$' + symbol + '%',))
+        rows = c.fetchall()
+
+        posts = []
+        for pid, username, avatar_url, is_verified, content, created_at in rows:
+            like_count = c.execute(
+                "SELECT COUNT(*) FROM post_likes WHERE post_id = ?", ('p' + str(pid),)
+            ).fetchone()[0]
+            posts.append({
+                'username':    username or '',
+                'avatar_url':  avatar_url or '',
+                'is_verified': bool(is_verified),
+                'content':     content or '',
+                'created_at':  created_at,
+                'like_count':  like_count,
+            })
+        conn.close()
+    except Exception as e:
+        print(f'[token-feed] DB error for {mint[:8]}: {e}', flush=True)
+        return jsonify({'ok': False, 'posts': []}), 500
+
+    return jsonify({'ok': True, 'posts': posts})
 
 
 @app.route('/api/top-trades-week', methods=['GET'])
