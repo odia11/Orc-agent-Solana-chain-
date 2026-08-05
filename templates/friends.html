@@ -1017,9 +1017,11 @@ async function _frLoadChartArea(addr){
         chartEl.innerHTML = livePrices.length >= 2
           ? _frBuildAreaChartSvg(livePrices, 400, 100)
           : _frBuildAreaChartSvg([livePrices[0], livePrices[0]], 400, 100); // single point -> flat start line
-      } else {
+      } else if(!_frTokenDetailLivePricePoints.length){
         chartEl.innerHTML = '<div class="fr-token-modal-chart-empty">Chart appears once there\'s trading activity</div>';
       }
+      // else: current_price fetch failed/missing this tick but we already have
+      // live points from earlier polls -- leave the existing chart as-is
     } else {
       chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 100);
     }
