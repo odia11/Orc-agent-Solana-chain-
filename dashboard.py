@@ -14325,7 +14325,7 @@ def api_chart(mint):
     # Young tokens often don't have enough daily/4h/1h candles yet -- fall
     # back to a finer granularity within this chain until there's enough
     # points to draw a chart, or the finest option has been tried.
-    _TF_FALLBACK_CHAIN = ['D', '4h', '1h', '15m']
+    _TF_FALLBACK_CHAIN = ['D', '4h', '1h', '15m', '5m', '1m']
     tcfg = _TF.get(tf, _TF['5m'])
     try:
         # ── Step 1: resolve pool address ──
