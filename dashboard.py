@@ -10738,6 +10738,12 @@ def _gt_transform_pools(payload: dict) -> list:
             'marketCap':     _f(attrs.get('market_cap_usd')) or _f(attrs.get('fdv_usd')) or 0,
             'pairCreatedAt': created_ms,
             'dexId':         dex_id,
+            # Not in the original field list, but friends.html's existing
+            # card renderer (_frTokCardHtml) and token-detail view read
+            # these directly -- without them price/logo/chart-hint break.
+            'priceUsd':      attrs.get('base_token_price_usd'),
+            'pairAddress':   attrs.get('address') or '',
+            'info':          {'imageUrl': base_attrs.get('image_url') or ''},
         })
     return out
 

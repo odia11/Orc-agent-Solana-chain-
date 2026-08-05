@@ -689,17 +689,15 @@ async function _frFetchTrendingPairs(){
 /* Raw token-profiles pool, deduped, no age/marketcap/anything filter --
    shared source for New, Trending v2, and Surging so each chip decides
    its own filtering on top instead of duplicating the fetch/dedupe. */
+/* GeckoTerminal's own new_pools feed -- actual pool-creation events, not
+   DexScreener's "latest submitted profiles" (which lags/misses tokens
+   nobody bothered to submit a profile for). Already flat-shaped and
+   deduped server-side (see _gt_transform_pools in dashboard.py), so no
+   _frDedupeByAddress pass needed here. */
 async function _frFetchRawTokenProfiles(){
-  var r     = await fetch('/api/dexscreener/token-profiles');
-  var items = await r.json();
-  var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
-  if(!solana.length) return [];
-  var iconMap = {};
-  solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
-  var addresses = solana.map(function(i){ return i.tokenAddress; }).join(',');
-  var pr = await fetch('/api/dexscreener/tokens/'+addresses);
-  var pd = await pr.json();
-  return _frDedupeByAddress(pd.pairs||[], iconMap);
+  var r = await fetch('/api/geckoterminal/pools/new');
+  var d = await r.json();
+  return d.pairs || [];
 }
 
 async function _frFetchNewPairs(){
@@ -713,20 +711,15 @@ async function _frFetchNewPairs(){
     .sort(function(a,b){ return b.pairCreatedAt - a.pairCreatedAt; });
 }
 
-/* Trending v2 -- same raw token-profiles pool as New/Surging (fresher/wider
-   than the old token-boosts-based _frFetchTrendingPairs), sorted by 24h
-   volume descending instead of relying on DexScreener's own "boosted"
-   ordering. Deliberately skips New's age/marketcap filter -- "trending"
-   means highest volume right now, not "recently created".
-   _frFetchTrendingPairs() itself is left in place -- nothing calls it
-   anymore, kept in case that changes again. */
+/* Trending v2 -- GeckoTerminal's own trending_pools feed, in the order
+   GeckoTerminal's trending algorithm returns it (no re-sort here anymore --
+   that algorithm already accounts for volume/momentum, unlike the old
+   token-boosts-based _frFetchTrendingPairs, which is left in place but no
+   longer called from anywhere). */
 async function _frFetchTrendingPairsV2(){
-  var pairs = await _frFetchRawTokenProfiles();
-  return pairs.slice().sort(function(a,b){
-    var av = (a.volume && a.volume.h24) || 0;
-    var bv = (b.volume && b.volume.h24) || 0;
-    return bv - av;
-  });
+  var r = await fetch('/api/geckoterminal/pools/trending');
+  var d = await r.json();
+  return d.pairs || [];
 }
 
 /* Cheap "looks rugged" heuristic -- thin liquidity or near-zero 24h volume,
