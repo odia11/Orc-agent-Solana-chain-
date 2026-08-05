@@ -366,6 +366,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <button class="fr-tok-chip"        id="fr-tok-chip-held"      onclick="_frTokSetChip('held')">Most held by friends</button>
     <button class="fr-tok-chip"        id="fr-tok-chip-new"       onclick="_frTokSetChip('new')">New</button>
     <button class="fr-tok-chip"        id="fr-tok-chip-graduated" onclick="_frTokSetChip('graduated')">Graduated</button>
+    <button class="fr-tok-chip"        id="fr-tok-chip-surging"   onclick="_frTokSetChip('surging')">🔥 Surging</button>
   </div>
   <div class="fr-graduated-banner" id="fr-graduated-banner" style="display:none;">
     <span class="fr-graduated-banner-icon">⚠️</span>
@@ -690,12 +691,36 @@ async function _frFetchNewPairs(){
   return _frDedupeByAddress(pd.pairs||[], iconMap);
 }
 
+/* Cheap "looks rugged" heuristic -- thin liquidity or near-zero 24h volume,
+   either one is enough to hide a token from the Graduated list (a real
+   AMM pool with no liquidity/trading left is exactly the graduated-but-
+   abandoned/rugged case this chip should filter out). */
+function _frIsRugged(p){
+  var liqUsd = (p.liquidity && p.liquidity.usd) || 0;
+  var vol24  = (p.volume && p.volume.h24) || 0;
+  return liqUsd < 1000 || vol24 < 100;
+}
+
 /* "Graduated" -- pump.fun tokens that left the bonding curve for a real
    AMM (dexId !== 'pumpfun'). Reuses the trending pool rather than a
-   separate fetch/dedupe pass. */
+   separate fetch/dedupe pass. Rugged/abandoned pools are filtered out
+   before they ever reach the list. */
 async function _frFetchGraduatedPairs(){
   var pairs = await _frFetchTrendingPairs();
-  return pairs.filter(function(p){ return p.dexId !== 'pumpfun'; });
+  return pairs.filter(function(p){ return p.dexId !== 'pumpfun' && !_frIsRugged(p); });
+}
+
+/* "🔥 Surging" -- up >=15% in the last 15 minutes, reusing the trending
+   pool like Graduated does. _frIsRugged() is applied here too -- thin
+   liquidity makes a token trivially easy to pump, so without this filter
+   the chip would end up promoting exactly the pump-and-dumps it should
+   avoid. */
+async function _frFetchSurgingPairs(){
+  var pairs = await _frFetchTrendingPairs();
+  return pairs.filter(function(p){
+    var chg15 = p.priceChange && p.priceChange.m15;
+    return chg15 != null && chg15 >= 15 && !_frIsRugged(p);
+  });
 }
 
 async function _frFetchMostHeldPairs(){
@@ -773,6 +798,7 @@ async function _frTokRenderChip(chip){
       if(chip==='trending')       pairs = await _frFetchTrendingPairs();
       else if(chip==='new')       pairs = await _frFetchNewPairs();
       else if(chip==='graduated') pairs = await _frFetchGraduatedPairs();
+      else if(chip==='surging')   pairs = await _frFetchSurgingPairs();
       else                        pairs = await _frFetchMostHeldPairs();
       _frTokPairsCache[chip] = pairs;
     }catch(e){
@@ -792,7 +818,7 @@ function _frTokSetChip(chip){
   _frTokChipFilter = chip;
   var banner = document.getElementById('fr-graduated-banner');
   if(banner) banner.style.display = chip==='graduated' ? 'flex' : 'none';
-  ['trending','held','new','graduated'].forEach(function(c){
+  ['trending','held','new','graduated','surging'].forEach(function(c){
     document.getElementById('fr-tok-chip-'+c).classList.toggle('active', c===chip);
   });
   _frTokRenderChip(chip);
