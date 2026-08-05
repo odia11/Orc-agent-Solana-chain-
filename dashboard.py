@@ -11225,6 +11225,38 @@ def api_portfolio_summary():
     })
 
 
+_PH_TF_HOURS = {'1h': 1, '4h': 4, 'd': 24, 'all': 24 * 7}
+
+
+@app.route('/api/portfolio-history', methods=['GET'])
+@rate_limit(30, 60)
+def api_portfolio_history():
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    tf = request.args.get('tf', 'd')
+    hours_back = _PH_TF_HOURS.get(tf, _PH_TF_HOURS['d'])
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if not row:
+            conn.close()
+            return jsonify({'ok': True, 'snapshots': [], 'tf': tf})
+        rows = conn.execute(
+            "SELECT total_value_usd, strftime('%s', timestamp) FROM portfolio_snapshots "
+            "WHERE user_id=? AND timestamp >= datetime('now', ?) "
+            "ORDER BY timestamp ASC",
+            (row[0], f'-{hours_back} hours')
+        ).fetchall()
+        conn.close()
+    except Exception as e:
+        print(f'[portfolio-history] DB error: {e}', flush=True)
+        return jsonify({'ok': False, 'snapshots': [], 'tf': tf}), 500
+
+    snapshots = [{'t': int(ts), 'v': v} for v, ts in rows]
+    return jsonify({'ok': True, 'snapshots': snapshots, 'tf': tf})
+
+
 @app.route('/api/friends/positions', methods=['GET'])
 @rate_limit(30, 60)
 def api_friends_positions():

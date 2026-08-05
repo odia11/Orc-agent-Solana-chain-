@@ -24,16 +24,27 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
 .lm-back:hover{color:var(--text)}
 
-/* portfolio header — wallet SOL + open-position value combined, above
-   Weekly Top Trades; hidden entirely when /api/portfolio-summary 401s
-   (no wallet connected) or errors */
-.fr-portfolio-header{margin:16px 16px 0;background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+/* portfolio chart section — default view above Weekly Top Trades: wallet
+   SOL + open-position value combined, 24h change, and an edge-to-edge
+   history chart (from /api/portfolio-history, backed by the hourly
+   portfolio_snapshots table). Hidden entirely when /api/portfolio-summary
+   401s (no wallet connected) or errors. Reuses _frBuildAreaChartSvg() and
+   its .fr-token-modal-chart-* / .fr-chart-stop-* classes as-is (unscoped
+   globals, not modal-specific) so the rendered SVG looks identical to the
+   token-detail chart without duplicating that CSS. */
+.fr-portfolio-chart-section{margin:16px 16px 0;background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:16px 18px 18px;overflow:hidden}
+.fr-portfolio-chart-top{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .fr-portfolio-left{min-width:0}
 .fr-portfolio-total{font-size:44px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.1}
 .fr-portfolio-pnl{font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:4px}
 .fr-portfolio-pnl-label{color:var(--muted);font-weight:500;margin-left:4px}
 .fr-portfolio-deposit-btn{flex-shrink:0;background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;text-decoration:none;transition:opacity .15s;white-space:nowrap}
 .fr-portfolio-deposit-btn:hover{opacity:.85}
+.fr-portfolio-chart{width:calc(100% + 36px);margin:14px -18px 0;height:110px;overflow:hidden}
+.fr-portfolio-tf-pills{display:flex;gap:6px;margin-top:14px}
+.fr-portfolio-tf-pill{flex:1;padding:6px 0;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;transition:all .15s;font-family:'JetBrains Mono',monospace}
+.fr-portfolio-tf-pill:hover{color:var(--text)}
+.fr-portfolio-tf-pill.active{background:rgba(58,210,155,.12);color:var(--green);border-color:rgba(58,210,155,.25)}
 
 /* weekly top trades — horizontal-scroll cards, moved here from
    live_market.html (same card/scroll pattern), fed by /api/top-trades-week */
@@ -124,31 +135,29 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-tok-price{font-size:14px;font-weight:700;color:var(--text)}
 .fr-tok-chg{font-size:12px;font-weight:700;margin-top:2px}
 
-/* standalone token-detail modal shell — header (tile + name/ticker + LIVE
-   dot + close), price/24h-change, an edge-to-edge area chart + timeframe
-   pills, a 3-col stat bar, a "friends who hold this" list, and a
-   Buy/Sell button pair (visual placeholder, no handlers yet). Deliberately
-   separate from #lm-token-modal (the Focus/Terminal/Holders modal from
-   static/token-card.js) and from dashboard.html's #tokenCard/#tc-body.
-   Reuses @keyframes scanBlink from static/token-card.css (already
-   loaded) for the LIVE-dot pulse. */
-#fr-token-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2100;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
-.fr-token-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:18px;width:100%;max-width:420px;position:relative}
-.fr-token-modal-header{display:flex;align-items:center;gap:12px;padding:18px 52px 18px 18px;border-bottom:1px solid var(--bg3);position:relative}
+/* token-detail view — swaps into #fr-portfolio-header in place of
+   #fr-portfolio-view (see _frShowTokenDetail/_frShowPortfolioView): tile +
+   name/ticker + LIVE dot, price/24h-change, an edge-to-edge area chart +
+   timeframe pills, a 3-col stat bar, a "friends who hold this" list, and a
+   Buy/Sell pair. No longer a separate overlay -- inline content within the
+   same fixed card. #lm-token-modal (Focus/Terminal/Holders, from
+   static/token-card.js) and dashboard.html's #tokenCard/#tc-body are
+   unrelated and untouched. Reuses @keyframes scanBlink from
+   static/token-card.css (already loaded) for the LIVE-dot pulse. */
+.fr-token-back-btn{background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-bottom:16px;font-family:'JetBrains Mono',monospace;display:flex;align-items:center;gap:4px;transition:color .15s}
+.fr-token-back-btn:hover{color:var(--text)}
+.fr-token-view-header{display:flex;align-items:center;gap:12px}
 .fr-token-modal-tile-img,.fr-token-modal-tile-ph{width:40px;height:40px;border-radius:12px;flex-shrink:0}
 .fr-token-modal-tile-img{object-fit:cover}
 .fr-token-modal-tile-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted)}
 .fr-token-modal-title-wrap{flex:1;min-width:0}
 .fr-token-modal-name{font-size:15px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .fr-token-modal-sym{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
-.fr-token-modal-live{position:absolute;top:14px;right:52px;display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;flex-shrink:0}
+.fr-token-modal-live{margin-left:auto;display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;flex-shrink:0}
 .fr-token-modal-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite}
-.fr-token-modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s}
-.fr-token-modal-close:hover{color:var(--text)}
-.fr-token-modal-body{padding:22px 20px 20px}
-.fr-token-modal-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
+.fr-token-modal-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace;margin-top:16px}
 .fr-token-modal-chg{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;margin-top:4px}
-.fr-token-modal-chart{width:calc(100% + 40px);margin:14px -20px 0;height:90px;overflow:hidden}
+.fr-token-modal-chart{width:calc(100% + 36px);margin:14px -18px 0;height:90px;overflow:hidden}
 .fr-token-modal-chart-svg{width:100%;height:100%;display:block}
 .fr-token-modal-chart-line{stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}
 .fr-chart-stop-a{stop-color:var(--accent);stop-opacity:.35}
@@ -235,12 +244,73 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
 </header>
 
-<div class="fr-portfolio-header" id="fr-portfolio-header" style="display:none;">
-  <div class="fr-portfolio-left">
-    <div class="fr-portfolio-total" id="fr-portfolio-total">—</div>
-    <div class="fr-portfolio-pnl" id="fr-portfolio-pnl">—</div>
+<div class="fr-portfolio-chart-section" id="fr-portfolio-header" style="display:none;">
+  <div id="fr-portfolio-view">
+    <div class="fr-portfolio-chart-top">
+      <div class="fr-portfolio-left">
+        <div class="fr-portfolio-total" id="fr-portfolio-total">—</div>
+        <div class="fr-portfolio-pnl" id="fr-portfolio-pnl">—</div>
+      </div>
+      <a class="fr-portfolio-deposit-btn" href="/wallet">Deposit</a>
+    </div>
+    <div class="fr-portfolio-chart" id="fr-portfolio-chart"></div>
+    <div class="fr-portfolio-tf-pills" id="fr-portfolio-tf-pills">
+      <button class="fr-portfolio-tf-pill" data-key="1h" onclick="_frSetPortfolioTf('1h')">1H</button>
+      <button class="fr-portfolio-tf-pill" data-key="4h" onclick="_frSetPortfolioTf('4h')">4H</button>
+      <button class="fr-portfolio-tf-pill active" data-key="d" onclick="_frSetPortfolioTf('d')">1D</button>
+      <button class="fr-portfolio-tf-pill" data-key="all" onclick="_frSetPortfolioTf('all')">ALL</button>
+    </div>
   </div>
-  <a class="fr-portfolio-deposit-btn" href="/wallet">Deposit</a>
+
+  <div id="fr-token-view" style="display:none;">
+    <button class="fr-token-back-btn" onclick="_frShowPortfolioView()">← Terug naar portefeuille</button>
+    <div class="fr-token-view-header">
+      <div id="fr-token-modal-tile"><div class="fr-token-modal-tile-ph">?</div></div>
+      <div class="fr-token-modal-title-wrap">
+        <div class="fr-token-modal-name" id="fr-token-modal-name">—</div>
+        <div class="fr-token-modal-sym" id="fr-token-modal-sym">—</div>
+      </div>
+      <span class="fr-token-modal-live"><span class="fr-token-modal-live-dot"></span>LIVE</span>
+    </div>
+    <div class="fr-token-modal-price" id="fr-token-modal-price">—</div>
+    <div class="fr-token-modal-chg" id="fr-token-modal-chg"></div>
+    <div class="fr-token-modal-chart" id="fr-token-modal-chart"></div>
+    <div class="fr-token-modal-tf-pills" id="fr-token-modal-tf-pills">
+      <button class="fr-token-modal-tf-pill" data-key="1h" onclick="_frSetChartTf('1h')">1H</button>
+      <button class="fr-token-modal-tf-pill" data-key="4h" onclick="_frSetChartTf('4h')">4H</button>
+      <button class="fr-token-modal-tf-pill active" data-key="d" onclick="_frSetChartTf('d')">1D</button>
+      <button class="fr-token-modal-tf-pill" data-key="all" onclick="_frSetChartTf('all')">ALL</button>
+    </div>
+    <div class="fr-token-modal-chart-note" id="fr-token-modal-chart-note" style="display:none;"></div>
+    <div class="fr-token-modal-stats">
+      <div class="fr-token-modal-stat">
+        <div class="fr-token-modal-stat-label">Market Cap</div>
+        <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-mcap">—</div>
+      </div>
+      <div class="fr-token-modal-stat">
+        <div class="fr-token-modal-stat-label">OrcAgent Holders</div>
+        <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-holders">—</div>
+      </div>
+      <div class="fr-token-modal-stat">
+        <div class="fr-token-modal-stat-label">Friends</div>
+        <div class="fr-token-modal-stat-value fr-token-modal-stat-accent" id="fr-token-modal-stat-friends">—</div>
+      </div>
+    </div>
+    <div class="fr-token-modal-friends-section" id="fr-token-modal-friends-section" style="display:none;">
+      <div class="fr-token-modal-friends-title">Friends who hold this</div>
+      <div id="fr-token-modal-friends-list"></div>
+    </div>
+    <div class="fr-token-modal-actions">
+      <button class="fr-token-modal-buy-btn" id="fr-token-modal-buy-btn" onclick="_frOpenBuyDrop()">Buy</button>
+      <button class="fr-token-modal-sell-btn" id="fr-token-modal-sell-btn" onclick="_frQuickSell()">Sell</button>
+    </div>
+    <div class="fr-token-modal-buy-drop" id="fr-token-modal-buy-drop">
+      <span class="fr-token-modal-buy-drop-label">SOL:</span>
+      <input class="fr-token-modal-buy-drop-input" id="fr-token-modal-buy-drop-input" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">
+      <button class="fr-token-modal-buy-drop-confirm" id="fr-token-modal-buy-drop-confirm" onclick="_frConfirmBuy()">Confirm</button>
+      <button class="fr-token-modal-buy-drop-cancel" onclick="_frCloseBuyDrop()">✕</button>
+    </div>
+  </div>
 </div>
 
 <div class="fr-weekly-section" id="fr-weekly-section" style="display:none;">
@@ -271,62 +341,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <span>Just-graduated tokens are early and can move fast in either direction. Anyone can launch a token permissionlessly, including bad actors — always do your own research before trading.</span>
   </div>
   <div id="fr-tok-list"></div>
-</div>
-
-<!-- standalone token-detail modal (header + price + chart + stats + friends
-     + Buy/Sell placeholders, see _frShowTokenDetail) -->
-<div id="fr-token-modal" onclick="if(event.target===this)_frCloseTokenDetail()">
-  <div class="fr-token-modal-card" onclick="event.stopPropagation()">
-    <div class="fr-token-modal-header">
-      <div id="fr-token-modal-tile"><div class="fr-token-modal-tile-ph">?</div></div>
-      <div class="fr-token-modal-title-wrap">
-        <div class="fr-token-modal-name" id="fr-token-modal-name">—</div>
-        <div class="fr-token-modal-sym" id="fr-token-modal-sym">—</div>
-      </div>
-      <span class="fr-token-modal-live"><span class="fr-token-modal-live-dot"></span>LIVE</span>
-      <button class="fr-token-modal-close" onclick="_frCloseTokenDetail()">✕</button>
-    </div>
-    <div class="fr-token-modal-body">
-      <div class="fr-token-modal-price" id="fr-token-modal-price">—</div>
-      <div class="fr-token-modal-chg" id="fr-token-modal-chg"></div>
-      <div class="fr-token-modal-chart" id="fr-token-modal-chart"></div>
-      <div class="fr-token-modal-tf-pills" id="fr-token-modal-tf-pills">
-        <button class="fr-token-modal-tf-pill" data-key="1h" onclick="_frSetChartTf('1h')">1H</button>
-        <button class="fr-token-modal-tf-pill" data-key="4h" onclick="_frSetChartTf('4h')">4H</button>
-        <button class="fr-token-modal-tf-pill active" data-key="d" onclick="_frSetChartTf('d')">1D</button>
-        <button class="fr-token-modal-tf-pill" data-key="all" onclick="_frSetChartTf('all')">ALL</button>
-      </div>
-      <div class="fr-token-modal-chart-note" id="fr-token-modal-chart-note" style="display:none;"></div>
-      <div class="fr-token-modal-stats">
-        <div class="fr-token-modal-stat">
-          <div class="fr-token-modal-stat-label">Market Cap</div>
-          <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-mcap">—</div>
-        </div>
-        <div class="fr-token-modal-stat">
-          <div class="fr-token-modal-stat-label">OrcAgent Holders</div>
-          <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-holders">—</div>
-        </div>
-        <div class="fr-token-modal-stat">
-          <div class="fr-token-modal-stat-label">Friends</div>
-          <div class="fr-token-modal-stat-value fr-token-modal-stat-accent" id="fr-token-modal-stat-friends">—</div>
-        </div>
-      </div>
-      <div class="fr-token-modal-friends-section" id="fr-token-modal-friends-section" style="display:none;">
-        <div class="fr-token-modal-friends-title">Friends who hold this</div>
-        <div id="fr-token-modal-friends-list"></div>
-      </div>
-      <div class="fr-token-modal-actions">
-        <button class="fr-token-modal-buy-btn" id="fr-token-modal-buy-btn" onclick="_frOpenBuyDrop()">Buy</button>
-        <button class="fr-token-modal-sell-btn" id="fr-token-modal-sell-btn" onclick="_frQuickSell()">Sell</button>
-      </div>
-      <div class="fr-token-modal-buy-drop" id="fr-token-modal-buy-drop">
-        <span class="fr-token-modal-buy-drop-label">SOL:</span>
-        <input class="fr-token-modal-buy-drop-input" id="fr-token-modal-buy-drop-input" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">
-        <button class="fr-token-modal-buy-drop-confirm" id="fr-token-modal-buy-drop-confirm" onclick="_frConfirmBuy()">Confirm</button>
-        <button class="fr-token-modal-buy-drop-cancel" onclick="_frCloseBuyDrop()">✕</button>
-      </div>
-    </div>
-  </div>
 </div>
 
 <!-- token detail modal (Focus / Terminal / Holders — see static/token-card.js) -->
@@ -379,7 +393,8 @@ async function _frInitPortfolioHeader(){
   try{
     var r = await fetch('/api/portfolio-summary', {credentials:'include'});
     var d = await r.json();
-    if(!d.ok){ header.style.display = 'none'; return; }
+    if(!d.ok){ _frPortfolioLoaded = false; header.style.display = 'none'; return; }
+    _frPortfolioLoaded = true;
 
     var walletUsd = (d.sol_price_usd>0) ? d.sol_balance*d.sol_price_usd : 0;
     var totalUsd  = walletUsd + (d.positions_value_usd || 0);
@@ -395,7 +410,9 @@ async function _frInitPortfolioHeader(){
       pnlEl.style.color = pnlUsd>=0 ? 'var(--green)' : 'var(--red)';
     }
     header.style.display = '';
+    _frLoadPortfolioChart(_frPortfolioChartTf);
   }catch(e){
+    _frPortfolioLoaded = false;
     header.style.display = 'none';
   }
 }
@@ -772,6 +789,9 @@ var _frTokenDetailActiveAddr = '';
 var _frTokenDetailPairAddr   = '';
 var _frChartActiveTf         = 'd'; // key into _FR_CHART_TF_MAP, not the raw API tf param
 var _frChartPollTimer        = null;
+var _frPortfolioLoaded       = false; // did /api/portfolio-summary ever succeed -- controls
+                                       // whether "back" reveals the portfolio view or hides
+                                       // the whole section again (no wallet connected)
 var _FR_CHART_TF_MAP = {'1h':'1h', '4h':'4h', 'd':'D', 'all':'D'};
 var _FR_CHART_TF_LABEL = {'1m':'1m', '5m':'5m', '15m':'15m', '1h':'1h', '4h':'4h', 'D':'1D'};
 
@@ -796,6 +816,36 @@ function _frBuildAreaChartSvg(closes, w, h){
     +'<path class="fr-token-modal-chart-fill" d="'+areaPath+'" fill="url(#frChartGrad)"/>'
     +'<path class="fr-token-modal-chart-line" d="'+linePath+'" fill="none"/>'
   +'</svg>';
+}
+
+/* Portfolio-level history chart -- separate state from the token-detail
+   modal's own chart (_frChartActiveTf etc.), reuses the same
+   _frBuildAreaChartSvg() builder against /api/portfolio-history instead
+   of /api/chart. Snapshots are hourly (portfolio_snapshots), so the pill
+   options are time *windows*, not finer granularities -- same kind of
+   compromise as the token chart's own "ALL" pill. */
+var _frPortfolioChartTf = 'd';
+
+async function _frLoadPortfolioChart(tfKey){
+  var chartEl = document.getElementById('fr-portfolio-chart');
+  if(!chartEl) return;
+  try{
+    var r = await fetch('/api/portfolio-history?tf='+tfKey, {credentials:'include'});
+    var d = await r.json();
+    if(_frPortfolioChartTf !== tfKey) return; // stale -- user switched pills again mid-fetch
+    var closes = (d.snapshots||[]).map(function(s){ return s.v; });
+    chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 110);
+  }catch(e){
+    console.error('[fr-portfolio-chart] fetch failed', e);
+  }
+}
+
+function _frSetPortfolioTf(key){
+  _frPortfolioChartTf = key;
+  document.querySelectorAll('.fr-portfolio-tf-pill').forEach(function(b){
+    b.classList.toggle('active', b.dataset.key === key);
+  });
+  _frLoadPortfolioChart(key);
 }
 
 async function _frLoadChartArea(addr){
@@ -954,16 +1004,22 @@ async function _frQuickSell(){
   if(ok) _toast('Sold $'+_frTokenDetailSym, true);
 }
 
-function _frCloseTokenDetail(){
+function _frShowPortfolioView(){
   _frTokenDetailActiveAddr = '';
   _frStopChartPoll();
   _frCloseBuyDrop();
-  var modal = document.getElementById('fr-token-modal');
-  if(modal) modal.style.display = 'none';
+  var section       = document.getElementById('fr-portfolio-header');
+  var portfolioView = document.getElementById('fr-portfolio-view');
+  var tokenView     = document.getElementById('fr-token-view');
+  if(tokenView) tokenView.style.display = 'none';
+  if(portfolioView) portfolioView.style.display = '';
+  if(section) section.style.display = _frPortfolioLoaded ? '' : 'none';
 }
 
 async function _frShowTokenDetail(sym, addr){
-  var modal         = document.getElementById('fr-token-modal');
+  var section        = document.getElementById('fr-portfolio-header');
+  var portfolioView  = document.getElementById('fr-portfolio-view');
+  var tokenView      = document.getElementById('fr-token-view');
   var tileEl        = document.getElementById('fr-token-modal-tile');
   var nameEl        = document.getElementById('fr-token-modal-name');
   var symEl         = document.getElementById('fr-token-modal-sym');
@@ -974,7 +1030,7 @@ async function _frShowTokenDetail(sym, addr){
   var holdersEl     = document.getElementById('fr-token-modal-stat-holders');
   var friendsStatEl = document.getElementById('fr-token-modal-stat-friends');
   var friendsSection = document.getElementById('fr-token-modal-friends-section');
-  if(!modal) return;
+  if(!section || !tokenView) return;
 
   _frTokenDetailActiveAddr = addr;
   _frTokenDetailSym        = sym || '';
@@ -996,7 +1052,9 @@ async function _frShowTokenDetail(sym, addr){
   friendsStatEl.textContent = '—';
   _frCloseBuyDrop();
   friendsSection.style.display = 'none';
-  modal.style.display = 'flex';
+  section.style.display = '';           // force the fixed section visible even with no wallet
+  if(portfolioView) portfolioView.style.display = 'none';
+  tokenView.style.display = '';
 
   try{
     var r  = await fetch('/api/dexscreener/tokens/'+encodeURIComponent(addr));
