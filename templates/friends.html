@@ -151,6 +151,13 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-graduated-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:12px;margin-bottom:10px;font-size:12.5px;color:var(--text);line-height:1.4}
 .fr-graduated-banner-icon{font-size:16px;flex-shrink:0}
 
+/* token-detail safety badge -- same visual language as .fr-graduated-banner
+   (info-only, never blocks the Buy/Sell buttons below it), just with a
+   safe/green variant added since this one can also report "all clear". */
+.fr-token-modal-safety{display:flex;align-items:center;gap:8px;padding:10px 12px;border-radius:10px;margin-top:16px;font-size:12px;font-weight:600;line-height:1.4}
+.fr-token-modal-safety.risky{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);color:var(--text)}
+.fr-token-modal-safety.safe{background:rgba(58,210,155,.1);border:1px solid rgba(58,210,155,.3);color:var(--text)}
+
 .fr-tok-card{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;margin-bottom:8px;cursor:pointer;transition:border-color .15s;min-width:0}
 .fr-tok-card:hover{border-color:rgba(247,185,85,.4)}
 .fr-tok-logo{width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0}
@@ -336,6 +343,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <div class="fr-token-modal-friends-section" id="fr-token-modal-friends-section" style="display:none;">
       <div class="fr-token-modal-friends-title">Friends who hold this</div>
       <div id="fr-token-modal-friends-list"></div>
+    </div>
+    <div class="fr-token-modal-safety" id="fr-token-modal-safety" style="display:none;">
+      <span id="fr-token-modal-safety-icon"></span>
+      <span id="fr-token-modal-safety-text"></span>
     </div>
     <div class="fr-token-modal-actions">
       <button class="fr-token-modal-buy-btn" id="fr-token-modal-buy-btn" onclick="_frOpenBuyDrop()">Buy</button>
@@ -922,6 +933,12 @@ var _frTokenDetailActiveAddr = '';
 var _frTokenDetailPairAddr   = '';
 var _frChartActiveTf         = 'd'; // key into _FR_CHART_TF_MAP, not the raw API tf param
 var _frChartPollTimer        = null;
+/* Live-price line for brand-new tokens with <2 real candles yet -- one
+   [timestamp, price] pushed per _frLoadChartArea() call (poll tick or tf
+   switch) using api_chart's current_price fallback, reset per token in
+   _frShowTokenDetail(). Auto-replaced by the real candle chart the moment
+   enough OHLCV history exists. */
+var _frTokenDetailLivePricePoints = [];
 var _frPortfolioLoaded       = false; // did /api/portfolio-summary ever succeed -- controls
                                        // whether "back" reveals the portfolio view or hides
                                        // the whole section again (no wallet connected)
@@ -994,7 +1011,15 @@ async function _frLoadChartArea(addr){
     if(_frTokenDetailActiveAddr !== addr) return; // stale -- closed/switched since
     var closes = (d.candles||[]).map(function(c){ return c.c; });
     if(closes.length < 2){
-      chartEl.innerHTML = '<div class="fr-token-modal-chart-empty">Chart appears once there\'s trading activity</div>';
+      if(d.current_price > 0){
+        _frTokenDetailLivePricePoints.push([Date.now(), d.current_price]);
+        var livePrices = _frTokenDetailLivePricePoints.map(function(p){ return p[1]; });
+        chartEl.innerHTML = livePrices.length >= 2
+          ? _frBuildAreaChartSvg(livePrices, 400, 100)
+          : _frBuildAreaChartSvg([livePrices[0], livePrices[0]], 400, 100); // single point -> flat start line
+      } else {
+        chartEl.innerHTML = '<div class="fr-token-modal-chart-empty">Chart appears once there\'s trading activity</div>';
+      }
     } else {
       chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 100);
     }
@@ -1093,6 +1118,39 @@ async function _frLoadTokenStatsAndFriends(addr, p){
   friendsSection.style.display = '';
 }
 
+/* Safety badge -- fetched independently of the DexScreener pair lookup
+   (fires immediately when the modal opens, not gated on that succeeding).
+   Purely informational, same as the Graduated banner -- never disables
+   Buy/Sell, just tells the user what it found. */
+async function _frLoadTokenSafety(addr){
+  var badge  = document.getElementById('fr-token-modal-safety');
+  var iconEl = document.getElementById('fr-token-modal-safety-icon');
+  var textEl = document.getElementById('fr-token-modal-safety-text');
+  if(!badge || !textEl) return;
+  try{
+    var r = await fetch('/api/token/'+encodeURIComponent(addr)+'/safety');
+    var d = await r.json();
+    if(_frTokenDetailActiveAddr !== addr || !d.ok){ badge.style.display = 'none'; return; }
+    badge.classList.remove('risky', 'safe');
+    if(d.is_risky){
+      var reasons = [];
+      if(d.mint_authority_active)   reasons.push('Mint authority active');
+      if(d.freeze_authority_active) reasons.push('Freeze authority active');
+      if(d.lp_locked_pct < 50)      reasons.push('Only '+d.lp_locked_pct.toFixed(0)+'% LP locked');
+      badge.classList.add('risky');
+      iconEl.textContent = '⚠️';
+      textEl.textContent = reasons.join(' · ') || 'Risky token';
+    } else {
+      badge.classList.add('safe');
+      iconEl.textContent = '✓';
+      textEl.textContent = 'Mint revoked · '+d.lp_locked_pct.toFixed(0)+'% LP locked';
+    }
+    badge.style.display = 'flex';
+  }catch(e){
+    badge.style.display = 'none';
+  }
+}
+
 /* Buy/Sell -- reuses _doTrade()/_toast() from static/token-card.js (already
    loaded here; same functions live_market.html's inline trade dropdown and
    the Focus/Terminal modal's Terminal side panel both call), so trade
@@ -1172,6 +1230,7 @@ async function _frShowTokenDetail(sym, addr){
   _frTokenDetailActiveAddr = addr;
   _frTokenDetailSym        = sym || '';
   _frTokenDetailPairAddr   = '';
+  _frTokenDetailLivePricePoints = [];
   _frChartActiveTf = 'd';
   document.querySelectorAll('.fr-token-modal-tf-pill').forEach(function(b){
     b.classList.toggle('active', b.dataset.key === 'd');
@@ -1187,11 +1246,14 @@ async function _frShowTokenDetail(sym, addr){
   mcapEl.textContent = '—';
   holdersEl.textContent = '—';
   friendsStatEl.textContent = '—';
+  var safetyBadgeEl = document.getElementById('fr-token-modal-safety');
+  if(safetyBadgeEl) safetyBadgeEl.style.display = 'none';
   _frCloseBuyDrop();
   friendsSection.style.display = 'none';
   section.style.display = '';           // force the fixed section visible even with no wallet
   if(portfolioView) portfolioView.style.display = 'none';
   tokenView.style.display = '';
+  _frLoadTokenSafety(addr);
 
   try{
     var r  = await fetch('/api/dexscreener/tokens/'+encodeURIComponent(addr));

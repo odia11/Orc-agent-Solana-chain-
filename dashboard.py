@@ -4417,6 +4417,28 @@ def api_token_feed(mint):
 
     return jsonify({'ok': True, 'posts': posts})
 
+@app.route('/api/token/<mint>/safety', methods=['GET'])
+@rate_limit(30, 60)
+def api_token_safety(mint):
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False}), 401
+    if not _MINT_RE.match(mint or ''):
+        return jsonify({'ok': False}), 400
+    safety = _check_mint_safety(mint)
+    lp     = _check_lp_locked(mint)
+    mint_authority_active   = bool(safety.get('mint_authority_active'))
+    freeze_authority_active = bool(safety.get('freeze_authority_active'))
+    lp_locked_pct = float(lp.get('lp_locked_pct') or 0)
+    is_risky = mint_authority_active or freeze_authority_active or lp_locked_pct < 50
+    return jsonify({
+        'ok':                      True,
+        'mint_authority_active':   mint_authority_active,
+        'freeze_authority_active': freeze_authority_active,
+        'lp_locked_pct':           lp_locked_pct,
+        'is_risky':                is_risky,
+    })
+
 
 @app.route('/api/top-trades-week', methods=['GET'])
 @rate_limit(60, 60)
@@ -14399,6 +14421,23 @@ def api_chart(mint):
                         del _chart_cache[k]
             return candles_local
 
+        def _fetch_current_price():
+            """Direct pool-price lookup -- fallback for when there aren't
+            enough OHLCV candles yet (brand-new pool) but the frontend still
+            wants a live number to plot while it waits for real candles."""
+            try:
+                r = requests.get(
+                    f'https://api.geckoterminal.com/api/v2/networks/solana/pools/{pair_address}',
+                    timeout=8, headers={'Accept': 'application/json;version=20230302'}
+                )
+                if r.status_code == 200:
+                    attrs = (r.json().get('data') or {}).get('attributes') or {}
+                    price = attrs.get('base_token_price_usd')
+                    return float(price) if price is not None else None
+            except Exception as e:
+                print(f'[chart] current_price fetch error: {e}', flush=True)
+            return None
+
         if tf in _TF_FALLBACK_CHAIN:
             chain = _TF_FALLBACK_CHAIN[_TF_FALLBACK_CHAIN.index(tf):]
         else:
@@ -14412,9 +14451,11 @@ def api_chart(mint):
             if len(candles) >= 5 or i == len(chain) - 1:
                 break
 
+        current_price = candles[-1]['c'] if candles else _fetch_current_price()
+
         if candles:
-            return jsonify({'candles': candles, 'pair_address': pair_address, 'tf_used': tf_used})
-        return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address, 'tf_used': tf_used})
+            return jsonify({'candles': candles, 'pair_address': pair_address, 'tf_used': tf_used, 'current_price': current_price})
+        return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address, 'tf_used': tf_used, 'current_price': current_price})
     except Exception as e:
         print(f'[chart] unhandled error: {e}', flush=True)
         return jsonify({'candles': [], 'error': 'Chart data unavailable'})
