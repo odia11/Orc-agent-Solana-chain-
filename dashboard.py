@@ -4310,9 +4310,9 @@ def api_token_co_traders(mint):
 def api_token_holders(mint):
     wallet = _current_wallet()
     if not wallet:
-        return jsonify({'ok': False, 'holders': [], 'total': 0}), 401
+        return jsonify({'ok': False, 'holders': [], 'total': 0, 'platform_holders': 0}), 401
     if not _MINT_RE.match(mint or ''):
-        return jsonify({'ok': False, 'holders': [], 'total': 0}), 400
+        return jsonify({'ok': False, 'holders': [], 'total': 0, 'platform_holders': 0}), 400
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
@@ -4363,9 +4363,13 @@ def api_token_holders(mint):
         conn.close()
     except Exception as e:
         print(f'[holders] DB error for {mint[:8]}: {e}', flush=True)
-        return jsonify({'ok': False, 'holders': [], 'total': 0}), 500
+        return jsonify({'ok': False, 'holders': [], 'total': 0, 'platform_holders': 0}), 500
 
-    return jsonify({'ok': True, 'holders': holders, 'total': total})
+    # 'total'/'holders' here count OrcAgent users with an open_positions row
+    # for this mint, NOT real on-chain holders. 'total' is kept for
+    # static/token-card.js's existing "Holders (N)" tab label (back-compat);
+    # new callers should read 'platform_holders' instead, which is clearer.
+    return jsonify({'ok': True, 'holders': holders, 'total': total, 'platform_holders': total})
 
 
 @app.route('/api/token/<mint>/feed', methods=['GET'])

@@ -301,7 +301,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
           <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-mcap">—</div>
         </div>
         <div class="fr-token-modal-stat">
-          <div class="fr-token-modal-stat-label">Holders</div>
+          <div class="fr-token-modal-stat-label">OrcAgent Holders</div>
           <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-holders">—</div>
         </div>
         <div class="fr-token-modal-stat">
@@ -864,7 +864,7 @@ async function _frLoadTokenStatsAndFriends(addr, p){
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(_frTokenDetailActiveAddr !== addr) return;
-      holdersEl.textContent = (d.ok && d.total!=null) ? d.total : '—';
+      holdersEl.textContent = (d.ok && d.platform_holders!=null) ? d.platform_holders : '—';
     })
     .catch(function(){ if(_frTokenDetailActiveAddr === addr) holdersEl.textContent = '—'; });
 
