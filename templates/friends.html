@@ -766,6 +766,9 @@ async function _frFetchGraduatedPairs(){
    avoid. */
 async function _frFetchSurgingPairs(){
   var pairs = await _frFetchRawTokenProfiles();
+  console.log('[surging-debug] pool size=', pairs.length,
+    'with m15=', pairs.filter(function(p){ return p.priceChange && p.priceChange.m15 != null; }).length,
+    'raw m15 values=', pairs.map(function(p){ return p.priceChange && p.priceChange.m15; }));
   return pairs.filter(function(p){
     var chg15 = p.priceChange && p.priceChange.m15;
     return chg15 != null && chg15 >= 4 && !_frIsRugged(p);
