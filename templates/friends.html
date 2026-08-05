@@ -374,7 +374,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <button class="fr-tok-chip"        id="fr-tok-chip-surging"   onclick="_frTokSetChip('surging')">🔥 Surging</button>
   </div>
   <div class="fr-tok-autorefresh" id="fr-tok-autorefresh" style="display:none;">
-    <span class="fr-tok-autorefresh-dot"></span>Auto-refreshing every 45s
+    <span class="fr-tok-autorefresh-dot"></span>Auto-refreshing every 15s
   </div>
   <div class="fr-graduated-banner" id="fr-graduated-banner" style="display:none;">
     <span class="fr-graduated-banner-icon">⚠️</span>
@@ -696,7 +696,28 @@ async function _frFetchNewPairs(){
   var addresses = solana.map(function(i){ return i.tokenAddress; }).join(',');
   var pr = await fetch('/api/dexscreener/tokens/'+addresses);
   var pd = await pr.json();
-  return _frDedupeByAddress(pd.pairs||[], iconMap);
+  var pairs  = _frDedupeByAddress(pd.pairs||[], iconMap);
+  var cutoff = Date.now() - 24*60*60*1000;
+  return pairs
+    .filter(function(p){
+      return p.pairCreatedAt && p.pairCreatedAt >= cutoff
+        && (p.marketCap || p.fdv || 0) >= 15000;
+    })
+    .sort(function(a,b){ return b.pairCreatedAt - a.pairCreatedAt; });
+}
+
+/* Trending v2 -- same token-profiles source as the New tab (fresher/wider
+   pool than the old token-boosts-based _frFetchTrendingPairs), sorted by
+   24h volume descending instead of relying on DexScreener's own "boosted"
+   ordering. _frFetchTrendingPairs() itself is left in place -- Surging
+   (_frFetchSurgingPairs) still calls it directly. */
+async function _frFetchTrendingPairsV2(){
+  var pairs = await _frFetchNewPairs();
+  return pairs.slice().sort(function(a,b){
+    var av = (a.volume && a.volume.h24) || 0;
+    var bv = (b.volume && b.volume.h24) || 0;
+    return bv - av;
+  });
 }
 
 /* Cheap "looks rugged" heuristic -- thin liquidity or near-zero 24h volume,
@@ -726,13 +747,14 @@ async function _frFetchGraduatedPairs(){
     .sort(function(a,b){ return b.pairCreatedAt - a.pairCreatedAt; });
 }
 
-/* "🔥 Surging" -- up >=15% in the last 15 minutes, reusing the trending
-   pool like Graduated does. _frIsRugged() is applied here too -- thin
-   liquidity makes a token trivially easy to pump, so without this filter
-   the chip would end up promoting exactly the pump-and-dumps it should
-   avoid. */
+/* "🔥 Surging" -- up >=4% in the last 15 minutes, sourced from the same
+   token-profiles pool as New/Graduated instead of the paid/boosted
+   trending pool -- broader, not pay-to-play. _frIsRugged() is applied
+   too -- thin liquidity makes a token trivially easy to pump, so without
+   this filter the chip would end up promoting exactly the pump-and-dumps
+   it should avoid. */
 async function _frFetchSurgingPairs(){
-  var pairs = await _frFetchTrendingPairs();
+  var pairs = await _frFetchNewPairs();
   return pairs.filter(function(p){
     var chg15 = p.priceChange && p.priceChange.m15;
     return chg15 != null && chg15 >= 4 && !_frIsRugged(p);
@@ -811,7 +833,7 @@ async function _frTokRenderChip(chip){
   var pairs = _frTokPairsCache[chip];
   if(!pairs){
     try{
-      if(chip==='trending')       pairs = await _frFetchTrendingPairs();
+      if(chip==='trending')       pairs = await _frFetchTrendingPairsV2();
       else if(chip==='new')       pairs = await _frFetchNewPairs();
       else if(chip==='graduated') pairs = await _frFetchGraduatedPairs();
       else if(chip==='surging')   pairs = await _frFetchSurgingPairs();
@@ -850,7 +872,7 @@ function _frTokStartAutoRefresh(chip){
   _frTokAutoRefreshTimer = setInterval(function(){
     delete _frTokPairsCache[chip];
     _frTokRenderChip(chip);
-  }, 45000);
+  }, 15000);
 }
 
 function _frTokSetChip(chip){
