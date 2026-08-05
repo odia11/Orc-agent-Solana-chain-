@@ -767,11 +767,11 @@ async function _frFetchGraduatedPairs(){
 async function _frFetchSurgingPairs(){
   var pairs = await _frFetchRawTokenProfiles();
   console.log('[surging-debug] pool size=', pairs.length,
-    'with m15=', pairs.filter(function(p){ return p.priceChange && p.priceChange.m15 != null; }).length,
-    'raw m15 values=', pairs.map(function(p){ return p.priceChange && p.priceChange.m15; }));
+    'with m5=', pairs.filter(function(p){ return p.priceChange && p.priceChange.m5 != null; }).length,
+    'raw m5 values=', pairs.map(function(p){ return p.priceChange && p.priceChange.m5; }));
   return pairs.filter(function(p){
-    var chg15 = p.priceChange && p.priceChange.m15;
-    return chg15 != null && chg15 >= 4 && !_frIsRugged(p);
+    var chg5 = p.priceChange && p.priceChange.m5;
+    return chg5 != null && chg5 >= 4 && !_frIsRugged(p);
   });
 }
 
