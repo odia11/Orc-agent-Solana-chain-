@@ -727,7 +727,7 @@ async function _frFetchSurgingPairs(){
   var pairs = await _frFetchTrendingPairs();
   return pairs.filter(function(p){
     var chg15 = p.priceChange && p.priceChange.m15;
-    return chg15 != null && chg15 >= 15 && !_frIsRugged(p);
+    return chg15 != null && chg15 >= 4 && !_frIsRugged(p);
   });
 }
 
