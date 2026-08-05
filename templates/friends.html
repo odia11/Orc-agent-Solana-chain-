@@ -765,7 +765,7 @@ async function _frFetchSurgingPairs(){
     'raw m5 values=', pairs.map(function(p){ return p.priceChange && p.priceChange.m5; }));
   return pairs.filter(function(p){
     var chg5 = p.priceChange && p.priceChange.m5;
-    return chg5 != null && chg5 >= 4 && !_frIsRugged(p);
+    return chg5 != null && chg5 >= 4 && (p.marketCap || 0) >= 10000 && !_frIsRugged(p);
   });
 }
 
