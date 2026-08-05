@@ -24,6 +24,33 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
 .lm-back:hover{color:var(--text)}
 
+/* ≥900px: 2-column page layout -- main column (chart section + tokens
+   list) beside a capped-width side column (weekly + following + shared),
+   using explicit numeric grid-area placement so the 5 sections stay in
+   their exact current DOM order/sibling relationship (no JS reordering,
+   no new nesting inside each section -- just one shared grid parent).
+   Below 900px .fr-layout-grid is a plain block div with zero effect, so
+   nothing here changes existing narrow-viewport behavior. Centered
+   max-width lives here too, since this is the element that would
+   otherwise overstretch on very wide screens (the 2fr column has no
+   upper bound on its own). */
+@media(min-width:900px){
+  .fr-layout-grid{
+    display:grid;
+    grid-template-columns:2fr minmax(0,320px);
+    column-gap:20px;
+    row-gap:20px;
+    max-width:1200px;
+    margin:16px auto 0;
+    padding:0 16px;
+  }
+  .fr-layout-grid > #fr-portfolio-header{grid-area:1/1;margin:0}
+  .fr-layout-grid > #fr-tokens-section{grid-area:2/1;margin:0}
+  .fr-layout-grid > #fr-weekly-section{grid-area:1/2;margin:0}
+  .fr-layout-grid > #fr-following-section{grid-area:2/2;margin:0}
+  .fr-layout-grid > #fr-shared-section{grid-area:3/2;margin:0}
+}
+
 /* portfolio chart section — default view above Weekly Top Trades: wallet
    SOL + open-position value combined, 24h change, and an edge-to-edge
    history chart (from /api/portfolio-history, backed by the hourly
@@ -244,6 +271,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
 </header>
 
+<div class="fr-layout-grid">
 <div class="fr-portfolio-chart-section" id="fr-portfolio-header" style="display:none;">
   <div id="fr-portfolio-view">
     <div class="fr-portfolio-chart-top">
@@ -341,6 +369,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <span>Just-graduated tokens are early and can move fast in either direction. Anyone can launch a token permissionlessly, including bad actors — always do your own research before trading.</span>
   </div>
   <div id="fr-tok-list"></div>
+</div>
 </div>
 
 <!-- token detail modal (Focus / Terminal / Holders — see static/token-card.js) -->
