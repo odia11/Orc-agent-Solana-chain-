@@ -709,13 +709,21 @@ function _frIsRugged(p){
   return liqUsd < 1000 || vol24 < 100;
 }
 
-/* "Graduated" -- pump.fun tokens that left the bonding curve for a real
-   AMM (dexId !== 'pumpfun'). Reuses the trending pool rather than a
-   separate fetch/dedupe pass. Rugged/abandoned pools are filtered out
-   before they ever reach the list. */
+/* "Graduated" -- tokens created in the last 15 minutes (pairCreatedAt) that
+   already left the bonding curve for a real AMM (dexId !== 'pumpfun').
+   Sourced from the same token-profiles pool as the New tab (_frFetchNewPairs)
+   rather than trending, since "just graduated" is a freshness signal, not a
+   popularity one -- trending pairs skew toward tokens that graduated hours/
+   days ago. Rugged/abandoned pools are filtered out, newest first. */
 async function _frFetchGraduatedPairs(){
-  var pairs = await _frFetchTrendingPairs();
-  return pairs.filter(function(p){ return p.dexId !== 'pumpfun' && !_frIsRugged(p); });
+  var pairs  = await _frFetchNewPairs();
+  var cutoff = Date.now() - 15*60*1000;
+  return pairs
+    .filter(function(p){
+      return p.pairCreatedAt && p.pairCreatedAt >= cutoff
+        && p.dexId !== 'pumpfun' && !_frIsRugged(p);
+    })
+    .sort(function(a,b){ return b.pairCreatedAt - a.pairCreatedAt; });
 }
 
 /* "🔥 Surging" -- up >=15% in the last 15 minutes, reusing the trending
