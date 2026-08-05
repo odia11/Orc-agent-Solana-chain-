@@ -966,6 +966,14 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_open_positions_user ON open_positions(user_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS portfolio_snapshots (
+        id              INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id         INTEGER NOT NULL,
+        total_value_usd REAL NOT NULL,
+        timestamp       TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_portfolio_snapshots_user ON portfolio_snapshots(user_id)')
     # Migrations: add columns introduced after initial deploy
     try:
         c.execute('ALTER TABLE trades ADD COLUMN fee_amount REAL DEFAULT 0')
@@ -11181,6 +11189,26 @@ def api_portfolio_summary():
             total_pnl_usd   += amount * (cur_price - buy_price)
 
     sol_price = _sol_price_usd
+    wallet_usd = sol_balance * sol_price if sol_price else 0.0
+    total_current_value_usd = wallet_usd + total_value_usd
+
+    pnl_24h_usd = None
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if row:
+            snap = conn.execute(
+                "SELECT total_value_usd FROM portfolio_snapshots "
+                "WHERE user_id=? AND timestamp <= datetime('now','-24 hours') "
+                "ORDER BY timestamp DESC LIMIT 1",
+                (row[0],)
+            ).fetchone()
+            if snap:
+                pnl_24h_usd = round(total_current_value_usd - snap[0], 4)
+        conn.close()
+    except Exception as e:
+        print(f'[portfolio-summary] pnl_24h lookup failed: {e}', flush=True)
+
     return jsonify({
         'ok':                  True,
         'sol_balance':         sol_balance,
@@ -11189,6 +11217,7 @@ def api_portfolio_summary():
         'positions_value_sol': round(total_value_usd / sol_price, 6) if sol_price else None,
         'total_pnl_usd':       round(total_pnl_usd, 4),
         'total_pnl_sol':       round(total_pnl_usd / sol_price, 6) if sol_price else None,
+        'pnl_24h_usd':         pnl_24h_usd,
     })
 
 
@@ -14925,6 +14954,65 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
     }
 
 
+def _snapshot_portfolios(triggered_by: str = 'manual') -> dict:
+    """Record each user's current total portfolio value (SOL balance +
+    open positions, at current prices) into portfolio_snapshots -- the same
+    USD-value calc as api_portfolio_summary() (regel ~11149-11192), just run
+    for every user with a wallet on file instead of just the caller.
+    get_user_state(wallet) hydrates positions from open_positions on first
+    touch (see _hydrate_positions_from_db), so this reflects persisted
+    positions correctly even for users this process hasn't touched yet.
+    Safe to call from a background thread or an API endpoint."""
+    print(f'[portfolio-snapshot] ── START ({triggered_by}) ──', flush=True)
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c    = conn.cursor()
+        c.execute("SELECT id, wallet_address FROM users WHERE wallet_address IS NOT NULL AND wallet_address != ''")
+        rows = c.fetchall()
+        conn.close()
+    except Exception as e:
+        print(f'[portfolio-snapshot] DB query failed: {e}', flush=True)
+        return {'ok': False, 'error': str(e), 'saved': 0, 'total': 0}
+
+    sol_price = _sol_price_usd
+    live_map  = {t['mint']: t for t in state.get('tokens', [])}
+    saved     = 0
+
+    for user_id, wallet in rows:
+        try:
+            r = requests.post(SOLANA_RPC, json={
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+            }, timeout=8)
+            sol_balance = r.json()['result']['value'] / 1e9
+
+            us = get_user_state(wallet)
+            total_value_usd = sol_balance * sol_price if sol_price else 0.0
+            for mint, pos in us.get('positions', {}).items():
+                if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
+                    continue
+                amount    = float(pos.get('amount', 0))
+                live      = live_map.get(mint)
+                cur_price = float(live.get('price', 0) or 0) if live else 0.0
+                if not live:
+                    td        = get_token_data(mint)
+                    cur_price = float(td['price']) if td else 0.0
+                if cur_price > 0:
+                    total_value_usd += amount * cur_price
+
+            conn2 = sqlite3.connect(DB_FILE)
+            conn2.execute(
+                'INSERT INTO portfolio_snapshots (user_id, total_value_usd) VALUES (?, ?)',
+                (user_id, round(total_value_usd, 4)))
+            conn2.commit()
+            conn2.close()
+            saved += 1
+        except Exception as e:
+            print(f'[portfolio-snapshot] user_id={user_id} FAILED: {e}', flush=True)
+
+    print(f'[portfolio-snapshot] ── DONE  saved={saved}/{len(rows)} ──', flush=True)
+    return {'ok': True, 'saved': saved, 'total': len(rows)}
+
+
 @app.route('/api/admin/recover-fees', methods=['POST'])
 @rate_limit(5, 60)
 def admin_recover_fees():
@@ -16152,11 +16240,13 @@ def _start_backup_scheduler():
         _sched.add_job(backup_database, _CronTrigger(hour=3, minute=0), id='daily_backup', replace_existing=True)
         # Hourly, on the hour
         _sched.add_job(_recover_uncollected_fees, _CronTrigger(minute=0), id='hourly_fee_recovery', replace_existing=True, kwargs={'triggered_by': 'scheduled'})
+        # Hourly, on the hour
+        _sched.add_job(_snapshot_portfolios, _CronTrigger(minute=0), id='hourly_portfolio_snapshot', replace_existing=True, kwargs={'triggered_by': 'scheduled'})
         # One-shot startup backup after 60 s
         run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         _sched.add_job(backup_database, 'date', run_date=run_at, id='startup_backup')
         _sched.start()
-        print('[backup] scheduler started — daily 03:00 UTC, hourly fee recovery, startup in 60 s', flush=True)
+        print('[backup] scheduler started — daily 03:00 UTC, hourly fee recovery, hourly portfolio snapshot, startup in 60 s', flush=True)
     except Exception as e:
         print(f'[backup] scheduler error: {e}', flush=True)
 

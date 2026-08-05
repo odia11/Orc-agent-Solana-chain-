@@ -29,8 +29,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
    (no wallet connected) or errors */
 .fr-portfolio-header{margin:16px 16px 0;background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:16px 18px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .fr-portfolio-left{min-width:0}
-.fr-portfolio-total{font-size:24px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
-.fr-portfolio-pnl{font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:2px}
+.fr-portfolio-total{font-size:44px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace;line-height:1.1}
+.fr-portfolio-pnl{font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;margin-top:4px}
+.fr-portfolio-pnl-label{color:var(--muted);font-weight:500;margin-left:4px}
 .fr-portfolio-deposit-btn{flex-shrink:0;background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;padding:10px 20px;font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;text-decoration:none;transition:opacity .15s;white-space:nowrap}
 .fr-portfolio-deposit-btn:hover{opacity:.85}
 
@@ -99,6 +100,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-tok-chip{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:20px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
 .fr-tok-chip:hover{color:var(--text);border-color:var(--bg3)}
 .fr-tok-chip.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+
+/* same info-banner treatment as group_detail.html's .gd-claim-banner */
+.fr-graduated-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:12px;margin-bottom:10px;font-size:12.5px;color:var(--text);line-height:1.4}
+.fr-graduated-banner-icon{font-size:16px;flex-shrink:0}
 
 .fr-tok-card{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;margin-bottom:8px;cursor:pointer;transition:border-color .15s;min-width:0}
 .fr-tok-card:hover{border-color:rgba(247,185,85,.4)}
@@ -255,9 +260,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 <div class="fr-section" id="fr-tokens-section">
   <div class="fr-section-title">Tokens</div>
   <div class="fr-tok-chips" id="fr-tok-chips">
-    <button class="fr-tok-chip active" id="fr-tok-chip-trending" onclick="_frTokSetChip('trending')">Trending</button>
-    <button class="fr-tok-chip"        id="fr-tok-chip-held"     onclick="_frTokSetChip('held')">Most held by friends</button>
-    <button class="fr-tok-chip"        id="fr-tok-chip-new"      onclick="_frTokSetChip('new')">New</button>
+    <button class="fr-tok-chip active" id="fr-tok-chip-trending"  onclick="_frTokSetChip('trending')">Trending</button>
+    <button class="fr-tok-chip"        id="fr-tok-chip-held"      onclick="_frTokSetChip('held')">Most held by friends</button>
+    <button class="fr-tok-chip"        id="fr-tok-chip-new"       onclick="_frTokSetChip('new')">New</button>
+    <button class="fr-tok-chip"        id="fr-tok-chip-graduated" onclick="_frTokSetChip('graduated')">Graduated</button>
+  </div>
+  <div class="fr-graduated-banner" id="fr-graduated-banner" style="display:none;">
+    <span class="fr-graduated-banner-icon">⚠️</span>
+    <span>Just-graduated tokens are early and can move fast in either direction. Anyone can launch a token permissionlessly, including bad actors — always do your own research before trading.</span>
   </div>
   <div id="fr-tok-list"></div>
 </div>
@@ -373,12 +383,13 @@ async function _frInitPortfolioHeader(){
     var totalUsd  = walletUsd + (d.positions_value_usd || 0);
     totalEl.textContent = _fmtNum(totalUsd);
 
-    var pnlUsd = d.total_pnl_usd;
+    var pnlUsd = d.pnl_24h_usd;
     if(pnlUsd == null){
-      pnlEl.textContent = '—';
+      pnlEl.innerHTML = '—';
       pnlEl.style.color = 'var(--muted)';
     } else {
-      pnlEl.textContent = (pnlUsd>=0?'+':'-') + _fmtNum(Math.abs(pnlUsd));
+      pnlEl.innerHTML = (pnlUsd>=0?'+':'-') + _fmtNum(Math.abs(pnlUsd))
+        + '<span class="fr-portfolio-pnl-label">24h</span>';
       pnlEl.style.color = pnlUsd>=0 ? 'var(--green)' : 'var(--red)';
     }
     header.style.display = '';
@@ -624,6 +635,14 @@ async function _frFetchNewPairs(){
   return _frDedupeByAddress(pd.pairs||[], iconMap);
 }
 
+/* "Graduated" -- pump.fun tokens that left the bonding curve for a real
+   AMM (dexId !== 'pumpfun'). Reuses the trending pool rather than a
+   separate fetch/dedupe pass. */
+async function _frFetchGraduatedPairs(){
+  var pairs = await _frFetchTrendingPairs();
+  return pairs.filter(function(p){ return p.dexId !== 'pumpfun'; });
+}
+
 async function _frFetchMostHeldPairs(){
   await _frGetFriendsData(); // ensures _frFriendsByMint is populated
   var mints = Object.keys(_frFriendsByMint);
@@ -696,9 +715,10 @@ async function _frTokRenderChip(chip){
   var pairs = _frTokPairsCache[chip];
   if(!pairs){
     try{
-      if(chip==='trending')     pairs = await _frFetchTrendingPairs();
-      else if(chip==='new')     pairs = await _frFetchNewPairs();
-      else                      pairs = await _frFetchMostHeldPairs();
+      if(chip==='trending')       pairs = await _frFetchTrendingPairs();
+      else if(chip==='new')       pairs = await _frFetchNewPairs();
+      else if(chip==='graduated') pairs = await _frFetchGraduatedPairs();
+      else                        pairs = await _frFetchMostHeldPairs();
       _frTokPairsCache[chip] = pairs;
     }catch(e){
       if(_frTokChipFilter === chip) list.innerHTML = '<div class="fr-empty">Could not load tokens.</div>';
@@ -715,7 +735,9 @@ async function _frTokRenderChip(chip){
 
 function _frTokSetChip(chip){
   _frTokChipFilter = chip;
-  ['trending','held','new'].forEach(function(c){
+  var banner = document.getElementById('fr-graduated-banner');
+  if(banner) banner.style.display = chip==='graduated' ? 'flex' : 'none';
+  ['trending','held','new','graduated'].forEach(function(c){
     document.getElementById('fr-tok-chip-'+c).classList.toggle('active', c===chip);
   });
   _frTokRenderChip(chip);
