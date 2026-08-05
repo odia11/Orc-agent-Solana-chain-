@@ -174,6 +174,16 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-token-modal-buy-btn,.fr-token-modal-sell-btn{flex:1;border-radius:10px;padding:13px;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;cursor:pointer}
 .fr-token-modal-buy-btn{background:var(--green);color:#06210f;border:none}
 .fr-token-modal-sell-btn{background:none;color:var(--red);border:1.5px solid var(--red)}
+.fr-token-modal-buy-btn:disabled,.fr-token-modal-sell-btn:disabled{opacity:.5;cursor:default}
+.fr-token-modal-buy-drop{display:none;align-items:center;gap:8px;margin-top:10px}
+.fr-token-modal-buy-drop-label{font-size:11px;color:var(--muted);white-space:nowrap}
+.fr-token-modal-buy-drop-input{flex:1;min-width:0;background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;padding:8px 10px;color:var(--text);font-size:13px;font-family:'JetBrains Mono',monospace;text-align:center;outline:none;transition:border-color .15s;-moz-appearance:textfield}
+.fr-token-modal-buy-drop-input:focus{border-color:var(--green)}
+.fr-token-modal-buy-drop-confirm{background:var(--green);color:#06210f;border:none;border-radius:8px;padding:8px 16px;font-size:12px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;white-space:nowrap;transition:opacity .15s}
+.fr-token-modal-buy-drop-confirm:hover{opacity:.85}
+.fr-token-modal-buy-drop-confirm:disabled{opacity:.5;cursor:default}
+.fr-token-modal-buy-drop-cancel{background:none;border:none;color:var(--muted);font-size:14px;cursor:pointer;padding:6px;transition:color .15s}
+.fr-token-modal-buy-drop-cancel:hover{color:var(--text)}
 
 /* token detail modal — card itself (.lm-modal-card, .lmtd-*) lives in
    static/token-card.css, shared with /live-market and the standalone
@@ -294,8 +304,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
         <div id="fr-token-modal-friends-list"></div>
       </div>
       <div class="fr-token-modal-actions">
-        <button class="fr-token-modal-buy-btn">Buy</button>
-        <button class="fr-token-modal-sell-btn">Sell</button>
+        <button class="fr-token-modal-buy-btn" id="fr-token-modal-buy-btn" onclick="_frOpenBuyDrop()">Buy</button>
+        <button class="fr-token-modal-sell-btn" id="fr-token-modal-sell-btn" onclick="_frQuickSell()">Sell</button>
+      </div>
+      <div class="fr-token-modal-buy-drop" id="fr-token-modal-buy-drop">
+        <span class="fr-token-modal-buy-drop-label">SOL:</span>
+        <input class="fr-token-modal-buy-drop-input" id="fr-token-modal-buy-drop-input" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">
+        <button class="fr-token-modal-buy-drop-confirm" id="fr-token-modal-buy-drop-confirm" onclick="_frConfirmBuy()">Confirm</button>
+        <button class="fr-token-modal-buy-drop-cancel" onclick="_frCloseBuyDrop()">✕</button>
       </div>
     </div>
   </div>
@@ -855,9 +871,58 @@ async function _frLoadTokenStatsAndFriends(addr, p){
   friendsSection.style.display = '';
 }
 
+/* Buy/Sell -- reuses _doTrade()/_toast() from static/token-card.js (already
+   loaded here; same functions live_market.html's inline trade dropdown and
+   the Focus/Terminal modal's Terminal side panel both call), so trade
+   execution/CSRF-header logic isn't duplicated a third time. Buy reveals an
+   inline SOL-amount input + confirm (mirrors live_market.html's
+   _openBuyDrop/_confirmBuy); Sell is one-click "sell the whole position"
+   (amount_sol:0, mirrors _quickSell()/the Terminal panel's MAX-sell),
+   matching how every other sell control in this app already works -- no
+   partial-sell UI, since /api/instant-trade doesn't support one either. */
+var _frTokenDetailSym = '';
+
+function _frOpenBuyDrop(){
+  var drop = document.getElementById('fr-token-modal-buy-drop');
+  if(!drop) return;
+  var opening = drop.style.display !== 'flex';
+  drop.style.display = opening ? 'flex' : 'none';
+  if(opening){
+    var inp = document.getElementById('fr-token-modal-buy-drop-input');
+    if(inp) setTimeout(function(){ inp.focus(); }, 30);
+  }
+}
+
+function _frCloseBuyDrop(){
+  var drop = document.getElementById('fr-token-modal-buy-drop');
+  if(drop) drop.style.display = 'none';
+}
+
+async function _frConfirmBuy(){
+  var inputEl    = document.getElementById('fr-token-modal-buy-drop-input');
+  var confirmBtn = document.getElementById('fr-token-modal-buy-drop-confirm');
+  var amount     = parseFloat(inputEl ? inputEl.value : '0.1');
+  if(!amount || amount <= 0){ _toast('Enter a valid SOL amount', false); return; }
+  if(confirmBtn){ confirmBtn.textContent='…'; confirmBtn.disabled=true; }
+  var ok = await _doTrade(_frTokenDetailSym, _frTokenDetailPairAddr, 'buy', amount, _frTokenDetailActiveAddr);
+  if(confirmBtn){ confirmBtn.textContent='Confirm'; confirmBtn.disabled=false; }
+  _frCloseBuyDrop();
+  if(ok) _toast('Bought $'+_frTokenDetailSym, true);
+}
+
+async function _frQuickSell(){
+  var btn = document.getElementById('fr-token-modal-sell-btn');
+  var origHtml = btn ? btn.innerHTML : '';
+  if(btn){ btn.innerHTML='…'; btn.disabled=true; }
+  var ok = await _doTrade(_frTokenDetailSym, _frTokenDetailPairAddr, 'sell', 0, _frTokenDetailActiveAddr);
+  if(btn){ btn.innerHTML=origHtml; btn.disabled=false; }
+  if(ok) _toast('Sold $'+_frTokenDetailSym, true);
+}
+
 function _frCloseTokenDetail(){
   _frTokenDetailActiveAddr = '';
   _frStopChartPoll();
+  _frCloseBuyDrop();
   var modal = document.getElementById('fr-token-modal');
   if(modal) modal.style.display = 'none';
 }
@@ -877,6 +942,7 @@ async function _frShowTokenDetail(sym, addr){
   if(!modal) return;
 
   _frTokenDetailActiveAddr = addr;
+  _frTokenDetailSym        = sym || '';
   _frTokenDetailPairAddr   = '';
   _frChartActiveTf = 'd';
   document.querySelectorAll('.fr-token-modal-tf-pill').forEach(function(b){
@@ -891,6 +957,7 @@ async function _frShowTokenDetail(sym, addr){
   mcapEl.textContent = '—';
   holdersEl.textContent = '—';
   friendsStatEl.textContent = '—';
+  _frCloseBuyDrop();
   friendsSection.style.display = 'none';
   modal.style.display = 'flex';
 
@@ -901,6 +968,7 @@ async function _frShowTokenDetail(sym, addr){
     if(_frTokenDetailActiveAddr !== addr || !p) return;
     var name   = (p.baseToken&&p.baseToken.name)   || sym;
     var symbol = (p.baseToken&&p.baseToken.symbol) || sym;
+    _frTokenDetailSym = symbol;
     var imgUrl = (p.info&&p.info.imageUrl) || '';
     tileEl.innerHTML = imgUrl
       ? '<img class="fr-token-modal-tile-img" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
