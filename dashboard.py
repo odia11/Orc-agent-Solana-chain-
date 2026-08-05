@@ -5034,6 +5034,7 @@ def leaderboard():
         entries.append({
             'rank':        rank,
             'wallet':      anon,
+            'wallet_full': wallet,
             'total_pnl':   round(float(total_pnl   or 0), 4),
             'win_rate':    round(float(win_rate     or 0), 1),
             'trade_count': int  (trade_count        or 0),
