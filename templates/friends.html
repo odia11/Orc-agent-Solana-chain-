@@ -193,6 +193,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-token-modal-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace;margin-top:16px}
 .fr-token-modal-chg{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;margin-top:4px}
 .fr-token-modal-chart{width:calc(100% + 36px);margin:14px -18px 0;height:90px;overflow:hidden}
+.fr-token-modal-chart-empty{height:100%;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;text-align:center;padding:0 20px}
 .fr-token-modal-chart-svg{width:100%;height:100%;display:block}
 .fr-token-modal-chart-line{stroke:var(--green);stroke-width:2;vector-effect:non-scaling-stroke}
 .fr-chart-stop-a{stop-color:var(--accent);stop-opacity:.35}
@@ -992,7 +993,11 @@ async function _frLoadChartArea(addr){
     var d = await r.json();
     if(_frTokenDetailActiveAddr !== addr) return; // stale -- closed/switched since
     var closes = (d.candles||[]).map(function(c){ return c.c; });
-    chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 100);
+    if(closes.length < 2){
+      chartEl.innerHTML = '<div class="fr-token-modal-chart-empty">Chart appears once there\'s trading activity</div>';
+    } else {
+      chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 100);
+    }
     if(noteEl){
       if(d.tf_used && d.tf_used !== tfParam){
         noteEl.textContent = 'Showing '+(_FR_CHART_TF_LABEL[d.tf_used]||d.tf_used)+' data — not enough '
