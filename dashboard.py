@@ -10676,6 +10676,100 @@ def api_dex_tokens_batch(addresses):
         return jsonify(r.json())
     return jsonify({'pairs': []}), 502
 
+# GeckoTerminal trending/new pools cache -- separate from _dex_resp_cache /
+# _dex_429_until since those are explicitly documented as DexScreener-only
+# (sharing that 429-backoff cooldown would make a GeckoTerminal rate-limit
+# also block unrelated DexScreener calls, and vice versa).
+_GT_POOLS_CACHE_LOCK = threading.Lock()
+_GT_POOLS_CACHE: dict = {}
+_GT_POOLS_CACHE_TTL  = 30  # seconds
+_GT_POOLS_KIND_MAP = {'trending': 'trending_pools', 'new': 'new_pools'}
+
+def _gt_transform_pools(payload: dict) -> list:
+    """Reshape a GeckoTerminal trending_pools/new_pools JSON:API response
+    (data[] + included[]) into the flat DexScreener-pair-like shape
+    friends.html's chip-fetch functions already work with."""
+    included    = payload.get('included') or []
+    tokens_by_id = {i['id']: i for i in included if i.get('type') == 'token'}
+
+    def _f(v):
+        try:
+            return float(v)
+        except (TypeError, ValueError):
+            return None
+
+    out = []
+    for pool in (payload.get('data') or []):
+        attrs = pool.get('attributes') or {}
+        rel   = pool.get('relationships') or {}
+
+        base_rel   = ((rel.get('base_token') or {}).get('data') or {})
+        base_attrs = tokens_by_id.get(base_rel.get('id'), {}).get('attributes') or {}
+        dex_id     = ((rel.get('dex') or {}).get('data') or {}).get('id') or ''
+
+        price_change = attrs.get('price_change_percentage') or {}
+        volume       = attrs.get('volume_usd') or {}
+
+        created_ms = None
+        created_at = attrs.get('pool_created_at')
+        if created_at:
+            try:
+                dt = datetime.datetime.strptime(created_at, '%Y-%m-%dT%H:%M:%SZ')
+                created_ms = int(dt.replace(tzinfo=datetime.timezone.utc).timestamp() * 1000)
+            except Exception:
+                created_ms = None
+
+        out.append({
+            'baseToken': {
+                'address': base_attrs.get('address') or '',
+                'symbol':  base_attrs.get('symbol') or '',
+                'name':    base_attrs.get('name') or '',
+            },
+            'liquidity':     {'usd': _f(attrs.get('reserve_in_usd')) or 0},
+            'volume': {
+                'h24': _f(volume.get('h24')) or 0,
+                'm5':  _f(volume.get('m5')) or 0,
+            },
+            'priceChange': {
+                'm5':  _f(price_change.get('m5')),
+                'm15': _f(price_change.get('m15')),
+                'h24': _f(price_change.get('h24')),
+            },
+            'marketCap':     _f(attrs.get('market_cap_usd')) or _f(attrs.get('fdv_usd')) or 0,
+            'pairCreatedAt': created_ms,
+            'dexId':         dex_id,
+        })
+    return out
+
+@app.route('/api/geckoterminal/pools/<kind>')
+@rate_limit(30, 60)
+def api_geckoterminal_pools(kind):
+    gt_kind = _GT_POOLS_KIND_MAP.get(kind)
+    if not gt_kind:
+        return jsonify({'pairs': [], 'error': 'invalid kind'}), 400
+
+    now = time.time()
+    with _GT_POOLS_CACHE_LOCK:
+        cached = _GT_POOLS_CACHE.get(kind)
+    if cached and now - cached[0] < _GT_POOLS_CACHE_TTL:
+        return jsonify({'pairs': cached[1]})
+
+    stale = cached[1] if cached else []
+    try:
+        url = f'https://api.geckoterminal.com/api/v2/networks/solana/{gt_kind}?include=base_token,dex'
+        r = requests.get(url, timeout=10, headers={'Accept': 'application/json;version=20230302'})
+        if r.status_code != 200:
+            print(f'[geckoterminal-pools] {r.status_code} for kind={kind}', flush=True)
+            return jsonify({'pairs': stale}), 502
+        pairs = _gt_transform_pools(r.json())
+    except Exception as e:
+        print(f'[geckoterminal-pools] error kind={kind}: {e}', flush=True)
+        return jsonify({'pairs': stale}), 502
+
+    with _GT_POOLS_CACHE_LOCK:
+        _GT_POOLS_CACHE[kind] = (now, pairs)
+    return jsonify({'pairs': pairs})
+
 @app.route('/api/dexscreener/search', methods=['GET'])
 @rate_limit(60, 60)
 def api_dex_search():
