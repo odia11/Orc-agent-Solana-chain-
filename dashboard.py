@@ -14286,15 +14286,17 @@ def api_chart(mint):
             except Exception as e:
                 print(f'[chart] GeckoTerminal error (tf={tf_key}): {e}', flush=True)
 
-            if candles_local:
-                with _chart_cache_lock:
-                    _chart_cache[cache_key_local] = (now, candles_local)
-                    # Evict stale entries once the cache grows large (mirrors _dex_get's eviction)
-                    if len(_chart_cache) > 300:
-                        cutoff = now - 300
-                        stale = [k for k, v in _chart_cache.items() if v[0] < cutoff]
-                        for k in stale:
-                            del _chart_cache[k]
+            # Cache the result even on failure/empty (429s, GeckoTerminal errors) --
+            # otherwise every request for a rate-limited pair retries immediately
+            # instead of backing off, which just makes the rate limiting worse.
+            with _chart_cache_lock:
+                _chart_cache[cache_key_local] = (now, candles_local)
+                # Evict stale entries once the cache grows large (mirrors _dex_get's eviction)
+                if len(_chart_cache) > 300:
+                    cutoff = now - 300
+                    stale = [k for k, v in _chart_cache.items() if v[0] < cutoff]
+                    for k in stale:
+                        del _chart_cache[k]
             return candles_local
 
         if tf in _TF_FALLBACK_CHAIN:
