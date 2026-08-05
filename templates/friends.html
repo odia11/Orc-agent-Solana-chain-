@@ -686,7 +686,10 @@ async function _frFetchTrendingPairs(){
   return _frDedupeByAddress(pd.pairs||[], iconMap);
 }
 
-async function _frFetchNewPairs(){
+/* Raw token-profiles pool, deduped, no age/marketcap/anything filter --
+   shared source for New, Trending v2, and Surging so each chip decides
+   its own filtering on top instead of duplicating the fetch/dedupe. */
+async function _frFetchRawTokenProfiles(){
   var r     = await fetch('/api/dexscreener/token-profiles');
   var items = await r.json();
   var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
@@ -696,7 +699,11 @@ async function _frFetchNewPairs(){
   var addresses = solana.map(function(i){ return i.tokenAddress; }).join(',');
   var pr = await fetch('/api/dexscreener/tokens/'+addresses);
   var pd = await pr.json();
-  var pairs  = _frDedupeByAddress(pd.pairs||[], iconMap);
+  return _frDedupeByAddress(pd.pairs||[], iconMap);
+}
+
+async function _frFetchNewPairs(){
+  var pairs  = await _frFetchRawTokenProfiles();
   var cutoff = Date.now() - 24*60*60*1000;
   return pairs
     .filter(function(p){
@@ -706,13 +713,15 @@ async function _frFetchNewPairs(){
     .sort(function(a,b){ return b.pairCreatedAt - a.pairCreatedAt; });
 }
 
-/* Trending v2 -- same token-profiles source as the New tab (fresher/wider
-   pool than the old token-boosts-based _frFetchTrendingPairs), sorted by
-   24h volume descending instead of relying on DexScreener's own "boosted"
-   ordering. _frFetchTrendingPairs() itself is left in place -- Surging
-   (_frFetchSurgingPairs) still calls it directly. */
+/* Trending v2 -- same raw token-profiles pool as New/Surging (fresher/wider
+   than the old token-boosts-based _frFetchTrendingPairs), sorted by 24h
+   volume descending instead of relying on DexScreener's own "boosted"
+   ordering. Deliberately skips New's age/marketcap filter -- "trending"
+   means highest volume right now, not "recently created".
+   _frFetchTrendingPairs() itself is left in place -- nothing calls it
+   anymore, kept in case that changes again. */
 async function _frFetchTrendingPairsV2(){
-  var pairs = await _frFetchNewPairs();
+  var pairs = await _frFetchRawTokenProfiles();
   return pairs.slice().sort(function(a,b){
     var av = (a.volume && a.volume.h24) || 0;
     var bv = (b.volume && b.volume.h24) || 0;
@@ -748,13 +757,15 @@ async function _frFetchGraduatedPairs(){
 }
 
 /* "🔥 Surging" -- up >=4% in the last 15 minutes, sourced from the same
-   token-profiles pool as New/Graduated instead of the paid/boosted
-   trending pool -- broader, not pay-to-play. _frIsRugged() is applied
-   too -- thin liquidity makes a token trivially easy to pump, so without
-   this filter the chip would end up promoting exactly the pump-and-dumps
-   it should avoid. */
+   raw token-profiles pool as New/Trending v2 instead of the paid/boosted
+   trending pool -- broader, not pay-to-play. Deliberately skips New's
+   age/marketcap filter -- a token can start surging well after its first
+   24h or below the $15k floor. _frIsRugged() is applied too -- thin
+   liquidity makes a token trivially easy to pump, so without this filter
+   the chip would end up promoting exactly the pump-and-dumps it should
+   avoid. */
 async function _frFetchSurgingPairs(){
-  var pairs = await _frFetchNewPairs();
+  var pairs = await _frFetchRawTokenProfiles();
   return pairs.filter(function(p){
     var chg15 = p.priceChange && p.priceChange.m15;
     return chg15 != null && chg15 >= 4 && !_frIsRugged(p);
