@@ -77,7 +77,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
    live_market.html (same card/scroll pattern), fed by /api/top-trades-week */
 .fr-weekly-section{margin:16px 16px 0}
 .fr-weekly-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
-.fr-weekly-scroll{display:flex;gap:10px;overflow-x:auto;-webkit-overflow-scrolling:touch;padding-bottom:2px}
+.fr-weekly-scroll{overflow:hidden;padding-bottom:2px}
+.fr-weekly-track{display:flex;gap:10px;width:max-content;animation:frWeeklyScrollLoop 36s linear infinite}
+.fr-weekly-scroll:hover .fr-weekly-track{animation-play-state:paused}
+@keyframes frWeeklyScrollLoop{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .fr-weekly-card{flex:0 0 auto;width:168px;background:linear-gradient(to bottom, rgba(247,185,85,.08), rgba(247,185,85,.02));border:1px solid rgba(247,185,85,.25);border-radius:12px;padding:10px;cursor:pointer;transition:border-color .15s}
 .fr-weekly-card:hover{border-color:rgba(247,185,85,.5)}
 .fr-weekly-card-top{display:flex;align-items:center;gap:6px;margin-bottom:10px;min-width:0}
@@ -397,7 +400,7 @@ function _frWeeklyCardHtml(t, solPriceUsd){
   var verified = t.is_verified ? '<span class="fr-weekly-verified">✓</span>' : '';
   var sym      = t.token || '?';
   var pnlUsd   = solPriceUsd>0 ? '+'+_fmtNum(t.pnl*solPriceUsd) : '—';
-  return '<div class="fr-weekly-card" data-sym="'+_esc(sym)+'" data-addr="'+_esc(t.mint_address||'')+'">'
+  return '<div class="fr-weekly-card" data-sym="'+_esc(sym)+'" data-addr="'+_esc(t.mint_address||'')+'" data-wallet="'+_esc(t.wallet_address||'')+'">'
     +'<div class="fr-weekly-card-top">'
       +avatar
       +'<span class="fr-weekly-username">'+_esc(t.username||'—')+'</span>'
@@ -463,7 +466,11 @@ async function _frInitWeeklyTopTrades(){
     var trades = (d.ok && d.trades) || [];
     if(!trades.length){ section.style.display = 'none'; return; }
 
-    scroll.innerHTML = trades.map(function(t){ return _frWeeklyCardHtml(t, solPriceUsd); }).join('');
+    // Duplicate the card list once so translateX(-50%) in the CSS loop
+    // (frWeeklyScrollLoop) lands back on an identical set -- seamless
+    // right-to-left auto-scroll with no JS-driven animation loop.
+    var cardsHtml = trades.map(function(t){ return _frWeeklyCardHtml(t, solPriceUsd); }).join('');
+    scroll.innerHTML = '<div class="fr-weekly-track">'+cardsHtml+cardsHtml+'</div>';
     section.style.display = '';
   }catch(e){
     section.style.display = 'none';
@@ -1129,8 +1136,8 @@ _frInitTokensList();
   if(weeklyScroll){
     weeklyScroll.addEventListener('click', function(e){
       var card = e.target.closest('.fr-weekly-card');
-      if(!card) return;
-      _frShowTokenDetail(card.dataset.sym, card.dataset.addr);
+      if(!card || !card.dataset.wallet) return;
+      location.href = '/profile/'+encodeURIComponent(card.dataset.wallet);
     });
   }
 })();

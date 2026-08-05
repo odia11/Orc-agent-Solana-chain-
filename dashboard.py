@@ -4429,7 +4429,7 @@ def api_top_trades_week():
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
         c.execute('''
-            SELECT u.username, u.avatar_url, u.is_verified,
+            SELECT u.username, u.avatar_url, u.is_verified, u.wallet_address,
                    t.token, t.pnl, t.mint_address, t.timestamp
             FROM trades t
             JOIN users u ON u.id = t.user_id
@@ -4453,11 +4453,12 @@ def api_top_trades_week():
         'username':     username or '',
         'avatar_url':   avatar_url or '',
         'is_verified':  bool(is_verified),
+        'wallet_address': wallet_address or '',
         'token':        token or '',
         'pnl':          pnl,
         'mint_address': mint_address or '',
         'timestamp':    timestamp,
-    } for username, avatar_url, is_verified, token, pnl, mint_address, timestamp in rows]
+    } for username, avatar_url, is_verified, wallet_address, token, pnl, mint_address, timestamp in rows]
     return jsonify({'ok': True, 'trades': trades})
 
 
