@@ -157,6 +157,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-token-modal-tf-pill{flex:1;padding:6px 0;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;transition:all .15s;font-family:'JetBrains Mono',monospace}
 .fr-token-modal-tf-pill:hover{color:var(--text)}
 .fr-token-modal-tf-pill.active{background:rgba(58,210,155,.12);color:var(--green);border-color:rgba(58,210,155,.25)}
+.fr-token-modal-chart-note{margin-top:8px;font-size:11px;color:var(--muted);text-align:center}
 .fr-token-modal-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
 .fr-token-modal-stat{background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:10px;text-align:center}
 .fr-token-modal-stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;font-family:'JetBrains Mono',monospace}
@@ -295,6 +296,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
         <button class="fr-token-modal-tf-pill active" data-key="d" onclick="_frSetChartTf('d')">1D</button>
         <button class="fr-token-modal-tf-pill" data-key="all" onclick="_frSetChartTf('all')">ALL</button>
       </div>
+      <div class="fr-token-modal-chart-note" id="fr-token-modal-chart-note" style="display:none;"></div>
       <div class="fr-token-modal-stats">
         <div class="fr-token-modal-stat">
           <div class="fr-token-modal-stat-label">Market Cap</div>
@@ -771,6 +773,7 @@ var _frTokenDetailPairAddr   = '';
 var _frChartActiveTf         = 'd'; // key into _FR_CHART_TF_MAP, not the raw API tf param
 var _frChartPollTimer        = null;
 var _FR_CHART_TF_MAP = {'1h':'1h', '4h':'4h', 'd':'D', 'all':'D'};
+var _FR_CHART_TF_LABEL = {'1m':'1m', '5m':'5m', '15m':'15m', '1h':'1h', '4h':'4h', 'D':'1D'};
 
 function _frBuildAreaChartSvg(closes, w, h){
   if(!closes || closes.length < 2) return '';
@@ -797,6 +800,7 @@ function _frBuildAreaChartSvg(closes, w, h){
 
 async function _frLoadChartArea(addr){
   var chartEl = document.getElementById('fr-token-modal-chart');
+  var noteEl  = document.getElementById('fr-token-modal-chart-note');
   if(!chartEl || !addr) return;
   var tfParam = _FR_CHART_TF_MAP[_frChartActiveTf] || 'D';
   try{
@@ -807,6 +811,15 @@ async function _frLoadChartArea(addr){
     if(_frTokenDetailActiveAddr !== addr) return; // stale -- closed/switched since
     var closes = (d.candles||[]).map(function(c){ return c.c; });
     chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 100);
+    if(noteEl){
+      if(d.tf_used && d.tf_used !== tfParam){
+        noteEl.textContent = 'Showing '+(_FR_CHART_TF_LABEL[d.tf_used]||d.tf_used)+' data — not enough '
+          +(_FR_CHART_TF_LABEL[tfParam]||tfParam)+' history yet';
+        noteEl.style.display = '';
+      } else {
+        noteEl.style.display = 'none';
+      }
+    }
   }catch(e){
     console.error('[fr-token-detail] chart fetch failed', e);
   }
@@ -976,6 +989,8 @@ async function _frShowTokenDetail(sym, addr){
   priceEl.textContent = '—';
   chgEl.textContent = '';
   if(chartEl) chartEl.innerHTML = '';
+  var chartNoteEl = document.getElementById('fr-token-modal-chart-note');
+  if(chartNoteEl) chartNoteEl.style.display = 'none';
   mcapEl.textContent = '—';
   holdersEl.textContent = '—';
   friendsStatEl.textContent = '—';

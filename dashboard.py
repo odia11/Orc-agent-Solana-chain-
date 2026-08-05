@@ -14188,6 +14188,10 @@ def api_chart(mint):
         '4h':  {'gt_tf': 'hour',   'gt_agg': 4,  'limit': 42},
         'D':   {'gt_tf': 'day',    'gt_agg': 1,  'limit': 30},
     }
+    # Young tokens often don't have enough daily/4h/1h candles yet -- fall
+    # back to a finer granularity within this chain until there's enough
+    # points to draw a chart, or the finest option has been tried.
+    _TF_FALLBACK_CHAIN = ['D', '4h', '1h', '15m']
     tcfg = _TF.get(tf, _TF['5m'])
     try:
         # ── Step 1: resolve pool address ──
@@ -14209,54 +14213,72 @@ def api_chart(mint):
         # ── Step 2: GeckoTerminal OHLCV (cached — GeckoTerminal has no per-URL
         # cache of its own like _dex_get, and candles for a given pair+timeframe
         # don't change meaningfully within the TTL window) ──
-        cache_key = (pair_address, tf)
         now = time.time()
-        with _chart_cache_lock:
-            cached = _chart_cache.get(cache_key)
-        if cached and now - cached[0] < _CHART_CACHE_TTL:
-            return jsonify({'candles': cached[1], 'pair_address': pair_address, 'cached': True})
 
-        candles = []
-        try:
-            gt_url = (
-                f'https://api.geckoterminal.com/api/v2/networks/solana'
-                f'/pools/{pair_address}/ohlcv/{tcfg["gt_tf"]}'
-                f'?aggregate={tcfg["gt_agg"]}&limit={tcfg["limit"]}'
-                f'&currency=usd&token=base'
-            )
-            rg = requests.get(gt_url, timeout=10, headers={'Accept': 'application/json;version=20230302'})
-            if rg.status_code == 200:
-                items = (rg.json().get('data') or {}).get('attributes', {}).get('ohlcv_list', [])
-                for row in items:
-                    # row = [timestamp_ms, open, high, low, close, volume]
-                    if len(row) < 6: continue
-                    c_val = float(row[4] or 0)
-                    if c_val <= 0: continue
-                    candles.append({
-                        't': int(row[0]) // 1000 if int(row[0]) > 1e10 else int(row[0]),
-                        'o': float(row[1] or c_val),
-                        'h': float(row[2] or c_val),
-                        'l': float(row[3] or c_val),
-                        'c': c_val,
-                        'v': float(row[5] or 0),
-                    })
-                candles.sort(key=lambda x: x['t'])
-            else:
-                print(f'[chart] GeckoTerminal {rg.status_code} for {pair_address[:8]}', flush=True)
-        except Exception as e:
-            print(f'[chart] GeckoTerminal error: {e}', flush=True)
+        def _fetch_candles_for_tf(tf_key):
+            tcfg_local = _TF[tf_key]
+            cache_key_local = (pair_address, tf_key)
+            with _chart_cache_lock:
+                cached_local = _chart_cache.get(cache_key_local)
+            if cached_local and now - cached_local[0] < _CHART_CACHE_TTL:
+                return cached_local[1]
+            candles_local = []
+            try:
+                gt_url = (
+                    f'https://api.geckoterminal.com/api/v2/networks/solana'
+                    f'/pools/{pair_address}/ohlcv/{tcfg_local["gt_tf"]}'
+                    f'?aggregate={tcfg_local["gt_agg"]}&limit={tcfg_local["limit"]}'
+                    f'&currency=usd&token=base'
+                )
+                rg = requests.get(gt_url, timeout=10, headers={'Accept': 'application/json;version=20230302'})
+                if rg.status_code == 200:
+                    items = (rg.json().get('data') or {}).get('attributes', {}).get('ohlcv_list', [])
+                    for row in items:
+                        # row = [timestamp_ms, open, high, low, close, volume]
+                        if len(row) < 6: continue
+                        c_val = float(row[4] or 0)
+                        if c_val <= 0: continue
+                        candles_local.append({
+                            't': int(row[0]) // 1000 if int(row[0]) > 1e10 else int(row[0]),
+                            'o': float(row[1] or c_val),
+                            'h': float(row[2] or c_val),
+                            'l': float(row[3] or c_val),
+                            'c': c_val,
+                            'v': float(row[5] or 0),
+                        })
+                    candles_local.sort(key=lambda x: x['t'])
+                else:
+                    print(f'[chart] GeckoTerminal {rg.status_code} for {pair_address[:8]} tf={tf_key}', flush=True)
+            except Exception as e:
+                print(f'[chart] GeckoTerminal error (tf={tf_key}): {e}', flush=True)
+
+            if candles_local:
+                with _chart_cache_lock:
+                    _chart_cache[cache_key_local] = (now, candles_local)
+                    # Evict stale entries once the cache grows large (mirrors _dex_get's eviction)
+                    if len(_chart_cache) > 300:
+                        cutoff = now - 300
+                        stale = [k for k, v in _chart_cache.items() if v[0] < cutoff]
+                        for k in stale:
+                            del _chart_cache[k]
+            return candles_local
+
+        if tf in _TF_FALLBACK_CHAIN:
+            chain = _TF_FALLBACK_CHAIN[_TF_FALLBACK_CHAIN.index(tf):]
+        else:
+            chain = [tf if tf in _TF else '5m']
+
+        candles  = []
+        tf_used  = chain[0]
+        for i, tf_key in enumerate(chain):
+            candles = _fetch_candles_for_tf(tf_key)
+            tf_used = tf_key
+            if len(candles) >= 5 or i == len(chain) - 1:
+                break
 
         if candles:
-            with _chart_cache_lock:
-                _chart_cache[cache_key] = (now, candles)
-                # Evict stale entries once the cache grows large (mirrors _dex_get's eviction)
-                if len(_chart_cache) > 300:
-                    cutoff = now - 300
-                    stale = [k for k, v in _chart_cache.items() if v[0] < cutoff]
-                    for k in stale:
-                        del _chart_cache[k]
-            return jsonify({'candles': candles, 'pair_address': pair_address})
-        return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address})
+            return jsonify({'candles': candles, 'pair_address': pair_address, 'tf_used': tf_used})
+        return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address, 'tf_used': tf_used})
     except Exception as e:
         print(f'[chart] unhandled error: {e}', flush=True)
         return jsonify({'candles': [], 'error': 'Chart data unavailable'})
