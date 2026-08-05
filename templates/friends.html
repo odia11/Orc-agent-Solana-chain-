@@ -142,6 +142,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-tok-chip:hover{color:var(--text);border-color:var(--bg3)}
 .fr-tok-chip.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
 
+/* auto-refresh indicator -- same LIVE-dot pulse pattern as
+   .fr-token-modal-live-dot (@keyframes scanBlink, static/token-card.css) */
+.fr-tok-autorefresh{display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;margin-bottom:10px}
+.fr-tok-autorefresh-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite;flex-shrink:0}
+
 /* same info-banner treatment as group_detail.html's .gd-claim-banner */
 .fr-graduated-banner{display:flex;align-items:center;gap:10px;padding:12px 14px;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:12px;margin-bottom:10px;font-size:12.5px;color:var(--text);line-height:1.4}
 .fr-graduated-banner-icon{font-size:16px;flex-shrink:0}
@@ -367,6 +372,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <button class="fr-tok-chip"        id="fr-tok-chip-new"       onclick="_frTokSetChip('new')">New</button>
     <button class="fr-tok-chip"        id="fr-tok-chip-graduated" onclick="_frTokSetChip('graduated')">Graduated</button>
     <button class="fr-tok-chip"        id="fr-tok-chip-surging"   onclick="_frTokSetChip('surging')">🔥 Surging</button>
+  </div>
+  <div class="fr-tok-autorefresh" id="fr-tok-autorefresh" style="display:none;">
+    <span class="fr-tok-autorefresh-dot"></span>Auto-refreshing every 45s
   </div>
   <div class="fr-graduated-banner" id="fr-graduated-banner" style="display:none;">
     <span class="fr-graduated-banner-icon">⚠️</span>
@@ -814,6 +822,29 @@ async function _frTokRenderChip(chip){
   list.innerHTML = pairs.map(_frTokCardHtml).join('');
 }
 
+/* Graduated/Surging are the two chips whose underlying data is genuinely
+   time-sensitive (fresh migrations, momentum that fades in minutes) --
+   auto-refresh only those, to avoid firing background requests for chips
+   nobody is actively viewing. Cache is cleared before each refresh so
+   _frTokRenderChip's own cache-check doesn't just re-render stale data. */
+var _frTokAutoRefreshTimer = null;
+
+function _frTokStopAutoRefresh(){
+  if(_frTokAutoRefreshTimer){ clearInterval(_frTokAutoRefreshTimer); _frTokAutoRefreshTimer = null; }
+  var ind = document.getElementById('fr-tok-autorefresh');
+  if(ind) ind.style.display = 'none';
+}
+
+function _frTokStartAutoRefresh(chip){
+  _frTokStopAutoRefresh();
+  var ind = document.getElementById('fr-tok-autorefresh');
+  if(ind) ind.style.display = 'flex';
+  _frTokAutoRefreshTimer = setInterval(function(){
+    delete _frTokPairsCache[chip];
+    _frTokRenderChip(chip);
+  }, 45000);
+}
+
 function _frTokSetChip(chip){
   _frTokChipFilter = chip;
   var banner = document.getElementById('fr-graduated-banner');
@@ -821,6 +852,8 @@ function _frTokSetChip(chip){
   ['trending','held','new','graduated','surging'].forEach(function(c){
     document.getElementById('fr-tok-chip-'+c).classList.toggle('active', c===chip);
   });
+  if(chip==='graduated' || chip==='surging') _frTokStartAutoRefresh(chip);
+  else _frTokStopAutoRefresh();
   _frTokRenderChip(chip);
 }
 
