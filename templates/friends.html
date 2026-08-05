@@ -119,6 +119,62 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .fr-tok-price{font-size:14px;font-weight:700;color:var(--text)}
 .fr-tok-chg{font-size:12px;font-weight:700;margin-top:2px}
 
+/* standalone token-detail modal shell — header (tile + name/ticker + LIVE
+   dot + close), price/24h-change, an edge-to-edge area chart + timeframe
+   pills, a 3-col stat bar, a "friends who hold this" list, and a
+   Buy/Sell button pair (visual placeholder, no handlers yet). Deliberately
+   separate from #lm-token-modal (the Focus/Terminal/Holders modal from
+   static/token-card.js) and from dashboard.html's #tokenCard/#tc-body.
+   Reuses @keyframes scanBlink from static/token-card.css (already
+   loaded) for the LIVE-dot pulse. */
+#fr-token-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:2100;align-items:flex-start;justify-content:center;padding:40px 16px;overflow-y:auto}
+.fr-token-modal-card{background:var(--bg2);border:1px solid var(--bg3);border-radius:18px;width:100%;max-width:420px;position:relative}
+.fr-token-modal-header{display:flex;align-items:center;gap:12px;padding:18px 52px 18px 18px;border-bottom:1px solid var(--bg3);position:relative}
+.fr-token-modal-tile-img,.fr-token-modal-tile-ph{width:40px;height:40px;border-radius:12px;flex-shrink:0}
+.fr-token-modal-tile-img{object-fit:cover}
+.fr-token-modal-tile-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted)}
+.fr-token-modal-title-wrap{flex:1;min-width:0}
+.fr-token-modal-name{font-size:15px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-token-modal-sym{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:2px}
+.fr-token-modal-live{position:absolute;top:14px;right:52px;display:flex;align-items:center;gap:5px;font-size:9px;font-weight:700;letter-spacing:.06em;color:var(--green);text-transform:uppercase;flex-shrink:0}
+.fr-token-modal-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:scanBlink 1.4s ease-in-out infinite}
+.fr-token-modal-close{position:absolute;top:14px;right:14px;background:none;border:none;color:var(--muted);width:28px;height:28px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:color .15s}
+.fr-token-modal-close:hover{color:var(--text)}
+.fr-token-modal-body{padding:22px 20px 20px}
+.fr-token-modal-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
+.fr-token-modal-chg{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;margin-top:4px}
+.fr-token-modal-chart{width:calc(100% + 40px);margin:14px -20px 0;height:90px;overflow:hidden}
+.fr-token-modal-chart-svg{width:100%;height:100%;display:block}
+.fr-token-modal-chart-line{stroke:var(--accent);stroke-width:2;vector-effect:non-scaling-stroke}
+.fr-chart-stop-a{stop-color:var(--accent);stop-opacity:.35}
+.fr-chart-stop-b{stop-color:var(--accent);stop-opacity:0}
+.fr-token-modal-tf-pills{display:flex;gap:6px;margin-top:14px}
+.fr-token-modal-tf-pill{flex:1;padding:6px 0;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;transition:all .15s;font-family:'JetBrains Mono',monospace}
+.fr-token-modal-tf-pill:hover{color:var(--text)}
+.fr-token-modal-tf-pill.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+.fr-token-modal-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:16px}
+.fr-token-modal-stat{background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:10px;text-align:center}
+.fr-token-modal-stat-label{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:4px;font-family:'JetBrains Mono',monospace}
+.fr-token-modal-stat-value{font-size:13px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
+.fr-token-modal-stat-accent{color:var(--accent)}
+.fr-token-modal-friends-section{margin-top:18px}
+.fr-token-modal-friends-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin-bottom:8px}
+.fr-token-modal-friend-row{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--bg3)}
+.fr-token-modal-friend-row:last-child{border-bottom:none}
+.fr-token-modal-friend-avatar,.fr-token-modal-friend-avatar-ph{width:30px;height:30px;border-radius:9px;flex-shrink:0}
+.fr-token-modal-friend-avatar{object-fit:cover}
+.fr-token-modal-friend-avatar-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+.fr-token-modal-friend-main{flex:1;min-width:0}
+.fr-token-modal-friend-name{font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fr-token-modal-friend-entry{font-size:10px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:1px}
+.fr-token-modal-friend-right{text-align:right;flex-shrink:0;font-family:'JetBrains Mono',monospace}
+.fr-token-modal-friend-value{font-size:12px;font-weight:700;color:var(--text)}
+.fr-token-modal-friend-pct{font-size:11px;font-weight:700;margin-top:1px}
+.fr-token-modal-actions{display:flex;gap:10px;margin-top:20px}
+.fr-token-modal-buy-btn,.fr-token-modal-sell-btn{flex:1;border-radius:10px;padding:13px;font-size:14px;font-weight:700;font-family:'JetBrains Mono',monospace;cursor:pointer}
+.fr-token-modal-buy-btn{background:var(--green);color:#06210f;border:none}
+.fr-token-modal-sell-btn{background:none;color:var(--red);border:1.5px solid var(--red)}
+
 /* token detail modal — card itself (.lm-modal-card, .lmtd-*) lives in
    static/token-card.css, shared with /live-market and the standalone
    /token/<mint> page; this is just the fixed-overlay backdrop + close
@@ -194,6 +250,55 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <button class="fr-tok-chip"        id="fr-tok-chip-new"      onclick="_frTokSetChip('new')">New</button>
   </div>
   <div id="fr-tok-list"></div>
+</div>
+
+<!-- standalone token-detail modal (header + price + chart + stats + friends
+     + Buy/Sell placeholders, see _frShowTokenDetail) -->
+<div id="fr-token-modal" onclick="if(event.target===this)_frCloseTokenDetail()">
+  <div class="fr-token-modal-card" onclick="event.stopPropagation()">
+    <div class="fr-token-modal-header">
+      <div id="fr-token-modal-tile"><div class="fr-token-modal-tile-ph">?</div></div>
+      <div class="fr-token-modal-title-wrap">
+        <div class="fr-token-modal-name" id="fr-token-modal-name">—</div>
+        <div class="fr-token-modal-sym" id="fr-token-modal-sym">—</div>
+      </div>
+      <span class="fr-token-modal-live"><span class="fr-token-modal-live-dot"></span>LIVE</span>
+      <button class="fr-token-modal-close" onclick="_frCloseTokenDetail()">✕</button>
+    </div>
+    <div class="fr-token-modal-body">
+      <div class="fr-token-modal-price" id="fr-token-modal-price">—</div>
+      <div class="fr-token-modal-chg" id="fr-token-modal-chg"></div>
+      <div class="fr-token-modal-chart" id="fr-token-modal-chart"></div>
+      <div class="fr-token-modal-tf-pills" id="fr-token-modal-tf-pills">
+        <button class="fr-token-modal-tf-pill" data-key="1h" onclick="_frSetChartTf('1h')">1H</button>
+        <button class="fr-token-modal-tf-pill" data-key="4h" onclick="_frSetChartTf('4h')">4H</button>
+        <button class="fr-token-modal-tf-pill active" data-key="d" onclick="_frSetChartTf('d')">1D</button>
+        <button class="fr-token-modal-tf-pill" data-key="all" onclick="_frSetChartTf('all')">ALL</button>
+      </div>
+      <div class="fr-token-modal-stats">
+        <div class="fr-token-modal-stat">
+          <div class="fr-token-modal-stat-label">Market Cap</div>
+          <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-mcap">—</div>
+        </div>
+        <div class="fr-token-modal-stat">
+          <div class="fr-token-modal-stat-label">Holders</div>
+          <div class="fr-token-modal-stat-value" id="fr-token-modal-stat-holders">—</div>
+        </div>
+        <div class="fr-token-modal-stat">
+          <div class="fr-token-modal-stat-label">Friends</div>
+          <div class="fr-token-modal-stat-value fr-token-modal-stat-accent" id="fr-token-modal-stat-friends">—</div>
+        </div>
+      </div>
+      <div class="fr-token-modal-friends-section" id="fr-token-modal-friends-section" style="display:none;">
+        <div class="fr-token-modal-friends-title">Friends who hold this</div>
+        <div id="fr-token-modal-friends-list"></div>
+      </div>
+      <div class="fr-token-modal-actions">
+        <button class="fr-token-modal-buy-btn">Buy</button>
+        <button class="fr-token-modal-sell-btn">Sell</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- token detail modal (Focus / Terminal / Holders — see static/token-card.js) -->
@@ -608,6 +713,220 @@ async function _frInitTokensList(){
   _frTokRenderChip('trending');
 }
 
+/* Standalone token-detail modal -- opens immediately with a skeleton
+   (placeholder tile + sym), fetches the pair via the same DexScreener
+   batch-lookup + best-pair-selection already used for the Tokens list
+   (/api/dexscreener/tokens/<addr>, _frDedupeByAddress), then in parallel:
+   loads an edge-to-edge area chart from /api/chart/<addr>?tf=... (close
+   values only), the holder count from /api/token/<addr>/holders, and the
+   "friends who hold this" list filtered out of the already-cached
+   /api/friends/positions data (_frGetFriendsData()) -- no extra fetch for
+   that last one. No true "ALL" timeframe exists server-side -- /api/chart's
+   widest option is tf=D (~30 daily candles, see its _TF dict); the ALL
+   pill reuses that same tf, it is not a distinct longer-range fetch.
+   Buy/Sell buttons are visual placeholders only, no handlers yet.
+   _frTokenDetailActiveAddr guards against a slow fetch resolving after
+   the user has since closed the modal or opened a different token --
+   same staleness pattern static/token-card.js uses for its own modal. */
+var _frTokenDetailActiveAddr = '';
+var _frTokenDetailPairAddr   = '';
+var _frChartActiveTf         = 'd'; // key into _FR_CHART_TF_MAP, not the raw API tf param
+var _frChartPollTimer        = null;
+var _FR_CHART_TF_MAP = {'1h':'1h', '4h':'4h', 'd':'D', 'all':'D'};
+
+function _frBuildAreaChartSvg(closes, w, h){
+  if(!closes || closes.length < 2) return '';
+  var min = Math.min.apply(null, closes);
+  var max = Math.max.apply(null, closes);
+  var range = (max - min) || 1;
+  var stepX = w / (closes.length - 1);
+  var pts = closes.map(function(c, i){
+    var x = i * stepX;
+    var y = h - ((c - min) / range) * h;
+    return x.toFixed(2)+','+y.toFixed(2);
+  });
+  var linePath = 'M'+pts.join(' L');
+  var areaPath = linePath+' L'+w+','+h+' L0,'+h+' Z';
+  return '<svg class="fr-token-modal-chart-svg" viewBox="0 0 '+w+' '+h+'" preserveAspectRatio="none">'
+    +'<defs><linearGradient id="frChartGrad" x1="0" y1="0" x2="0" y2="1">'
+      +'<stop offset="0%" class="fr-chart-stop-a"/>'
+      +'<stop offset="100%" class="fr-chart-stop-b"/>'
+    +'</linearGradient></defs>'
+    +'<path class="fr-token-modal-chart-fill" d="'+areaPath+'" fill="url(#frChartGrad)"/>'
+    +'<path class="fr-token-modal-chart-line" d="'+linePath+'" fill="none"/>'
+  +'</svg>';
+}
+
+async function _frLoadChartArea(addr){
+  var chartEl = document.getElementById('fr-token-modal-chart');
+  if(!chartEl || !addr) return;
+  var tfParam = _FR_CHART_TF_MAP[_frChartActiveTf] || 'D';
+  try{
+    var url = '/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam;
+    if(_frTokenDetailPairAddr) url += '&pair='+encodeURIComponent(_frTokenDetailPairAddr);
+    var r = await fetch(url);
+    var d = await r.json();
+    if(_frTokenDetailActiveAddr !== addr) return; // stale -- closed/switched since
+    var closes = (d.candles||[]).map(function(c){ return c.c; });
+    chartEl.innerHTML = _frBuildAreaChartSvg(closes, 400, 100);
+  }catch(e){
+    console.error('[fr-token-detail] chart fetch failed', e);
+  }
+}
+
+function _frSetChartTf(key){
+  _frChartActiveTf = key;
+  document.querySelectorAll('.fr-token-modal-tf-pill').forEach(function(b){
+    b.classList.toggle('active', b.dataset.key === key);
+  });
+  _frLoadChartArea(_frTokenDetailActiveAddr);
+}
+
+function _frStopChartPoll(){
+  if(_frChartPollTimer){ clearInterval(_frChartPollTimer); _frChartPollTimer = null; }
+}
+
+function _frStartChartPoll(addr){
+  _frStopChartPoll();
+  _frChartPollTimer = setInterval(function(){ _frLoadChartArea(addr); }, 10000);
+}
+
+function _frTokenModalFriendRowHtml(h, curPrice, curMcap){
+  var pos = h.position;
+  var avatar = h.avatar_url
+    ? '<img class="fr-token-modal-friend-avatar" src="'+_esc(h.avatar_url)+'">'
+    : '<div class="fr-token-modal-friend-avatar-ph">'+_esc((h.username||'?').slice(0,2))+'</div>';
+  var entryMcapStr = '—';
+  if(curPrice>0 && curMcap>0 && pos.buy_price>0){
+    entryMcapStr = 'Entry mcap: '+_fmtNum((pos.buy_price/curPrice) * curMcap);
+  }
+  var pnlColor = (pos.pnl_pct==null) ? 'var(--muted)' : (pos.pnl_pct>=0 ? 'var(--green)' : 'var(--red)');
+  var pnlStr   = pos.pnl_pct==null ? '—' : (pos.pnl_pct>=0?'+':'')+pos.pnl_pct.toFixed(2)+'%';
+  var valueStr = pos.value_usd!=null ? _fmtNum(pos.value_usd) : '—';
+  return '<div class="fr-token-modal-friend-row">'
+    +avatar
+    +'<div class="fr-token-modal-friend-main">'
+      +'<div class="fr-token-modal-friend-name">'+_esc(h.username||'—')+'</div>'
+      +'<div class="fr-token-modal-friend-entry">'+entryMcapStr+'</div>'
+    +'</div>'
+    +'<div class="fr-token-modal-friend-right">'
+      +'<div class="fr-token-modal-friend-value">'+valueStr+'</div>'
+      +'<div class="fr-token-modal-friend-pct" style="color:'+pnlColor+'">'+pnlStr+'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+async function _frLoadTokenStatsAndFriends(addr, p){
+  var holdersEl      = document.getElementById('fr-token-modal-stat-holders');
+  var friendsEl      = document.getElementById('fr-token-modal-stat-friends');
+  var friendsSection = document.getElementById('fr-token-modal-friends-section');
+  var friendsList    = document.getElementById('fr-token-modal-friends-list');
+
+  fetch('/api/token/'+encodeURIComponent(addr)+'/holders')
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(_frTokenDetailActiveAddr !== addr) return;
+      holdersEl.textContent = (d.ok && d.total!=null) ? d.total : '—';
+    })
+    .catch(function(){ if(_frTokenDetailActiveAddr === addr) holdersEl.textContent = '—'; });
+
+  var curPrice = parseFloat(p.priceUsd) || 0;
+  var curMcap  = p.marketCap || p.fdv || 0;
+  var friends = await _frGetFriendsData();
+  if(_frTokenDetailActiveAddr !== addr) return;
+
+  var holding = [];
+  friends.forEach(function(f){
+    var pos = null;
+    for(var i=0;i<f.positions.length;i++){
+      if(f.positions[i].mint_address === addr){ pos = f.positions[i]; break; }
+    }
+    if(pos) holding.push({username: f.username, avatar_url: f.avatar_url, position: pos});
+  });
+  friendsEl.textContent = holding.length;
+
+  if(!holding.length){
+    friendsSection.style.display = 'none';
+    return;
+  }
+  friendsList.innerHTML = holding.map(function(h){
+    return _frTokenModalFriendRowHtml(h, curPrice, curMcap);
+  }).join('');
+  friendsSection.style.display = '';
+}
+
+function _frCloseTokenDetail(){
+  _frTokenDetailActiveAddr = '';
+  _frStopChartPoll();
+  var modal = document.getElementById('fr-token-modal');
+  if(modal) modal.style.display = 'none';
+}
+
+async function _frShowTokenDetail(sym, addr){
+  var modal         = document.getElementById('fr-token-modal');
+  var tileEl        = document.getElementById('fr-token-modal-tile');
+  var nameEl        = document.getElementById('fr-token-modal-name');
+  var symEl         = document.getElementById('fr-token-modal-sym');
+  var priceEl       = document.getElementById('fr-token-modal-price');
+  var chgEl         = document.getElementById('fr-token-modal-chg');
+  var chartEl       = document.getElementById('fr-token-modal-chart');
+  var mcapEl        = document.getElementById('fr-token-modal-stat-mcap');
+  var holdersEl     = document.getElementById('fr-token-modal-stat-holders');
+  var friendsStatEl = document.getElementById('fr-token-modal-stat-friends');
+  var friendsSection = document.getElementById('fr-token-modal-friends-section');
+  if(!modal) return;
+
+  _frTokenDetailActiveAddr = addr;
+  _frTokenDetailPairAddr   = '';
+  _frChartActiveTf = 'd';
+  document.querySelectorAll('.fr-token-modal-tf-pill').forEach(function(b){
+    b.classList.toggle('active', b.dataset.key === 'd');
+  });
+  tileEl.innerHTML = '<div class="fr-token-modal-tile-ph">'+_esc((sym||'?').slice(0,2))+'</div>';
+  nameEl.textContent = sym || '—';
+  symEl.textContent  = sym ? '$'+sym : '—';
+  priceEl.textContent = '—';
+  chgEl.textContent = '';
+  if(chartEl) chartEl.innerHTML = '';
+  mcapEl.textContent = '—';
+  holdersEl.textContent = '—';
+  friendsStatEl.textContent = '—';
+  friendsSection.style.display = 'none';
+  modal.style.display = 'flex';
+
+  try{
+    var r  = await fetch('/api/dexscreener/tokens/'+encodeURIComponent(addr));
+    var pd = await r.json();
+    var p  = _frDedupeByAddress(pd.pairs||[], {})[0];
+    if(_frTokenDetailActiveAddr !== addr || !p) return;
+    var name   = (p.baseToken&&p.baseToken.name)   || sym;
+    var symbol = (p.baseToken&&p.baseToken.symbol) || sym;
+    var imgUrl = (p.info&&p.info.imageUrl) || '';
+    tileEl.innerHTML = imgUrl
+      ? '<img class="fr-token-modal-tile-img" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+        +'<div class="fr-token-modal-tile-ph" style="display:none">'+_esc(symbol.slice(0,2))+'</div>'
+      : '<div class="fr-token-modal-tile-ph">'+_esc(symbol.slice(0,2))+'</div>';
+    nameEl.textContent = name;
+    symEl.textContent  = '$'+symbol;
+    priceEl.textContent = _fmtPrice(p.priceUsd);
+    var chg24 = p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null;
+    if(chg24==null){
+      chgEl.textContent = '—';
+      chgEl.style.color = 'var(--muted)';
+    } else {
+      chgEl.textContent = (chg24>=0?'+':'')+chg24.toFixed(2)+'% (24h)';
+      chgEl.style.color = chg24>=0 ? 'var(--green)' : 'var(--red)';
+    }
+    mcapEl.textContent = _fmtNum(p.marketCap || p.fdv || null);
+    _frTokenDetailPairAddr = p.pairAddress || '';
+    _frLoadChartArea(addr);
+    _frStartChartPoll(addr);
+    _frLoadTokenStatsAndFriends(addr, p);
+  }catch(e){
+    console.error('[fr-token-detail] fetch failed', e);
+  }
+}
+
 _frInitPortfolioHeader();
 _frInitWeeklyTopTrades();
 _frInitFriendsPositions();
@@ -619,7 +938,7 @@ _frInitTokensList();
     weeklyScroll.addEventListener('click', function(e){
       var card = e.target.closest('.fr-weekly-card');
       if(!card) return;
-      showTokenCard(card.dataset.sym, card.dataset.addr);
+      _frShowTokenDetail(card.dataset.sym, card.dataset.addr);
     });
   }
 })();
@@ -630,7 +949,7 @@ _frInitTokensList();
   function _frOpenFromClick(e){
     var el = e.target.closest('.fr-friend-token-chip, .fr-shared-row');
     if(!el) return;
-    showTokenCard(el.dataset.sym, el.dataset.addr);
+    _frShowTokenDetail(el.dataset.sym, el.dataset.addr);
   }
   async function _frOnFollowClick(e){
     var btn = e.target.closest('.fr-suggest-follow-btn');
@@ -668,7 +987,7 @@ _frInitTokensList();
     tokList.addEventListener('click', function(e){
       var card = e.target.closest('.fr-tok-card');
       if(!card) return;
-      showTokenCard(card.dataset.sym, card.dataset.addr);
+      _frShowTokenDetail(card.dataset.sym, card.dataset.addr);
     });
   }
 })();

@@ -11255,6 +11255,7 @@ def api_friends_positions():
         })
         f['positions'].append({
             'symbol': symbol or '', 'mint_address': mint or '', 'amount': amount,
+            'buy_price': buy_price,
             'value_usd': value_usd, 'pnl_usd': pnl_usd, 'pnl_pct': pnl_pct,
         })
         if value_usd is not None:
