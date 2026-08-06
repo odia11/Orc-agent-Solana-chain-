@@ -44,6 +44,12 @@
 .lmtd-mint-copy:hover{color:var(--accent)}
 .lmtd-mint-msg{font-size:9px;color:var(--green);min-width:56px}
 
+/* token-detail safety badge -- same visual language/thresholds as the
+   removed friends.html's .fr-token-modal-safety (git 75ad403~1) */
+.lmtd-safety{display:none;align-items:center;gap:8px;margin:0 20px 14px;padding:10px 12px;border-radius:10px;font-size:12px;font-weight:600;line-height:1.4}
+.lmtd-safety.risky{background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);color:var(--text)}
+.lmtd-safety.safe{background:rgba(58,210,155,.1);border:1px solid rgba(58,210,155,.3);color:var(--text)}
+
 /* candlestick chart (LightweightCharts, real OHLC via /api/chart/<mint>) */
 .lmtd-chart-wrap{padding:0 20px}
 .lmtd-chart-container{width:100%;height:340px;position:relative;background:var(--bg3);border-radius:10px;overflow:hidden}

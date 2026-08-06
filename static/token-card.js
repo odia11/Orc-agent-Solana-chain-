@@ -178,6 +178,7 @@ async function showTokenCard(symbol, knownAddr, knownPair){
   _lmtdHoldersTotal = null;
   _lmtdFetchBalance();
   _lmtdActiveMint = knownAddr || '';
+  if(knownAddr) _lmtdLoadTokenSafety(knownAddr);
   if(knownAddr){
     // Mint already known from the table-row click — render the chart (and a
     // placeholder header/stats) immediately instead of waiting behind the
@@ -231,6 +232,7 @@ async function showTokenCard(symbol, knownAddr, knownPair){
     // starts the chart fetch itself since nothing was pre-started for it.
     if(!knownAddr){
       _lmtdActiveMint = (p.baseToken&&p.baseToken.address)||'';
+      if(_lmtdActiveMint) _lmtdLoadTokenSafety(_lmtdActiveMint);
     }
     _lmtdRenderModal();
   }catch(e){
@@ -293,6 +295,10 @@ function _lmtdRenderModal(){
         +'<button class="lmtd-mint-copy" onclick="_lmtdCopyMint()">Copy</button>'
         +'<span class="lmtd-mint-msg" id="lmtd-mint-msg"></span>'
       +'</div>'
+      +'<div class="lmtd-safety" id="lmtd-safety">'
+        +'<span id="lmtd-safety-icon"></span>'
+        +'<span id="lmtd-safety-text"></span>'
+      +'</div>'
     ) : '');
 
   var chartHtml = '<div class="lmtd-chart-container" id="lmtd-chart-container">'
@@ -316,12 +322,60 @@ function _lmtdRenderModal(){
       +'<div class="lmtd-holders-wrap" id="lmtd-holders-wrap"><div class="lmtd-holders-loading">Loading holders…</div></div>';
   }
   body.innerHTML = bodyHtml;
+  _lmtdRenderSafetyBadge(); // reapplies cached safety data if the fetch (fired once from showTokenCard) already resolved -- headerHtml, and the badge in it, gets rebuilt on every layout switch
   if(_lmtdLayout !== 'holders'){
     _lmtdInitChart();
     _lmtdLoadChartData(); // reuses an in-flight/cached fetch for this mint+tf if one already exists
   }
   if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
   if(_lmtdLayout === 'holders') _lmtdRenderHoldersTab(addr);
+}
+
+/* Safety badge -- fetched independently of the DexScreener pair lookup
+   (fires immediately from showTokenCard(), not gated on that succeeding).
+   Purely informational, never disables Buy/Sell. Same visual language and
+   thresholds as the removed friends.html's token-detail safety badge
+   (git 75ad403~1: _frLoadTokenSafety). Cached per-mint since headerHtml
+   (and the badge DOM inside it) gets rebuilt on every layout switch. */
+var _lmtdSafetyMint = '';
+var _lmtdSafetyData = null;
+function _lmtdRenderSafetyBadge(){
+  var badge  = document.getElementById('lmtd-safety');
+  var iconEl = document.getElementById('lmtd-safety-icon');
+  var textEl = document.getElementById('lmtd-safety-text');
+  if(!badge || !textEl) return;
+  if(_lmtdSafetyMint !== _lmtdActiveMint || !_lmtdSafetyData){
+    badge.style.display = 'none';
+    return;
+  }
+  var d = _lmtdSafetyData;
+  badge.classList.remove('risky', 'safe');
+  if(d.is_risky){
+    var reasons = [];
+    if(d.mint_authority_active)   reasons.push('Mint authority active');
+    if(d.freeze_authority_active) reasons.push('Freeze authority active');
+    if(d.lp_locked_pct < 50)      reasons.push('Only '+d.lp_locked_pct.toFixed(0)+'% LP locked');
+    badge.classList.add('risky');
+    iconEl.textContent = '⚠️';
+    textEl.textContent = reasons.join(' · ') || 'Risky token';
+  } else {
+    badge.classList.add('safe');
+    iconEl.textContent = '✓';
+    textEl.textContent = 'Mint revoked · '+d.lp_locked_pct.toFixed(0)+'% LP locked';
+  }
+  badge.style.display = 'flex';
+}
+async function _lmtdLoadTokenSafety(addr){
+  _lmtdSafetyMint = '';
+  _lmtdSafetyData = null;
+  try{
+    var r = await fetch('/api/token/'+encodeURIComponent(addr)+'/safety');
+    var d = await r.json();
+    if(_lmtdActiveMint !== addr || !d.ok) return;
+    _lmtdSafetyMint = addr;
+    _lmtdSafetyData = d;
+    _lmtdRenderSafetyBadge();
+  }catch(e){}
 }
 
 /* mint-adres kopiëren — zelfde clipboard+fallback-logica als
