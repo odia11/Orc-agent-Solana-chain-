@@ -3364,6 +3364,8 @@ function _sbNav(section){
     if(_dmOpen) closeMessagesView();
     else if(_tradersView) closeTradersView();
     else if(_gcOpen) closeCommunityView();
+    // hide any other dash-section left visible by a previous nav (e.g. leaderboard/wallet)
+    document.querySelectorAll('.dash-section').forEach(function(s){ if(s.id!=='dash-main') s.style.display='none'; });
     // always ensure main content is visible (guards against edge-case blanks)
     const _mc=document.getElementById('main-content');
     if(_mc) _mc.style.display='';
