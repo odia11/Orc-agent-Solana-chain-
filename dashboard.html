@@ -3255,6 +3255,69 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .fc-trade-badge{font-size:9px!important;padding:2px 5px!important}
 }
 
+/* ── LEADERBOARD (dash-leaderboard) — ported from templates/leaderboard.html ── */
+.podium{display:flex;gap:14px;margin-bottom:24px}
+.podium-card{flex:1;border-radius:16px;padding:24px 20px;text-align:center;position:relative;overflow:hidden;display:flex;flex-direction:column;align-items:center}
+.podium-card::after{content:'';position:absolute;inset:0;border-radius:16px;pointer-events:none}
+.podium-card.gold{background:rgba(247,185,85,.06);border:1px solid rgba(247,185,85,.45)}
+.podium-card.silver{background:rgba(200,200,212,.04);border:1px solid rgba(200,200,212,.32)}
+.podium-card.bronze{background:rgba(205,140,82,.04);border:1px solid rgba(205,140,82,.32)}
+.podium-top-line{position:absolute;top:0;left:20%;right:20%;height:2px;border-radius:0 0 4px 4px}
+.podium-card.gold .podium-top-line{background:linear-gradient(90deg,transparent,var(--accent),transparent)}
+.podium-card.silver .podium-top-line{background:linear-gradient(90deg,transparent,#c8c8d4,transparent)}
+.podium-card.bronze .podium-top-line{background:linear-gradient(90deg,transparent,#cd8c52,transparent)}
+.podium-medal{font-size:38px;line-height:1;margin-bottom:8px}
+.podium-place{font-size:10px;font-weight:700;letter-spacing:.14em;margin-bottom:12px}
+.podium-card.gold .podium-place{color:var(--accent)}
+.podium-card.silver .podium-place{color:#c8c8d4}
+.podium-card.bronze .podium-place{color:#cd8c52}
+.podium-wallet{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:11px;color:var(--muted);margin-bottom:14px;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.podium-wallet.is-me{color:var(--accent);font-weight:700}
+.podium-wallet a{color:inherit;text-decoration:none}
+.podium-wallet a:hover{text-decoration:underline}
+.podium-pnl{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:28px;font-weight:700;line-height:1;margin-bottom:6px}
+.podium-pnl.pos{color:var(--green)}
+.podium-pnl.neg{color:var(--red)}
+.podium-meta{font-size:11px;color:var(--muted)}
+.rank-banner{background:rgba(247,185,85,.12);border:1px solid rgba(247,185,85,.25);border-radius:12px;padding:14px 20px;margin-bottom:20px;font-size:13px;color:var(--accent);display:flex;align-items:center;gap:10px}
+.rank-banner-check{font-size:16px;flex-shrink:0}
+.table-wrap{overflow-x:auto;border-radius:14px;border:1px solid var(--border)}
+.lb-table{width:100%;border-collapse:collapse}
+.lb-table thead th{padding:12px 14px;text-align:left;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.1em;text-transform:uppercase;border-bottom:1px solid var(--border);white-space:nowrap;background:var(--bg2)}
+.lb-table thead th:first-child{text-align:center;width:56px}
+.lb-table tbody td{padding:14px 14px;border-bottom:1px solid var(--border);font-size:13px;color:#8a919c;vertical-align:middle;white-space:nowrap;transition:background .12s}
+.lb-table tbody tr:last-child td{border-bottom:none}
+.lb-table tbody tr:hover td{background:#0d0f12}
+.td-rank{text-align:center;font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;color:var(--muted)}
+.td-rank.top1{font-size:22px}
+.td-rank.top2{font-size:18px}
+.td-rank.top3{font-size:15px}
+.td-wallet{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:12px;color:var(--text)}
+.td-wallet.is-me{color:var(--accent);font-weight:700}
+.td-wallet a{color:inherit;text-decoration:none}
+.td-wallet a:hover{text-decoration:underline}
+.me-chip{display:inline-block;background:rgba(247,185,85,.12);border:1px solid rgba(247,185,85,.25);border-radius:20px;padding:1px 8px;font-size:9px;color:var(--accent);font-weight:700;margin-left:7px;vertical-align:middle}
+.td-pnl{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;font-weight:700}
+.td-pnl.pos{color:var(--green)}
+.td-pnl.neg{color:var(--red)}
+.td-wr{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px}
+.td-wr.pos{color:var(--green)}
+.td-wr.neg{color:var(--red)}
+.td-num{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;color:#8a919c}
+.td-best{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;color:var(--green)}
+.row-me td{background:rgba(247,185,85,.04)}
+.row-gold td{background:rgba(247,185,85,.03)}
+.row-silver td{background:rgba(200,200,212,.02)}
+.row-bronze td{background:rgba(205,140,82,.02)}
+.empty{text-align:center;padding:72px 24px;color:var(--muted);font-size:13px;border:1px solid var(--border);border-radius:14px;background:var(--bg2)}
+.empty-icon{font-size:36px;margin-bottom:14px}
+@media(max-width:768px){
+  .podium{flex-direction:column;gap:10px}
+  .podium-pnl{font-size:22px}
+  .lb-table thead th:nth-child(6),
+  .lb-table tbody td:nth-child(6){display:none}
+}
+
 </style>
 </head>
 <body>
@@ -4310,6 +4373,38 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
     </div>
   </div><!-- /dash-wallet -->
+
+  <div id="dash-leaderboard" class="dash-section" style="display:none">
+    <div class="page">
+      <div id="lb-rank-banner"></div>
+
+      <div id="lb-podium" class="podium"></div>
+
+      <div class="table-wrap">
+        <table class="lb-table">
+          <thead>
+            <tr>
+              <th>Rank</th>
+              <th>Wallet</th>
+              <th>Total PNL</th>
+              <th>Win Rate</th>
+              <th>Trades</th>
+              <th>Best Trade</th>
+            </tr>
+          </thead>
+          <tbody id="lb-table-tbody">
+            <tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div id="lb-empty" class="empty" style="display:none">
+        <div class="empty-icon">🏆</div>
+        No trades on the board yet.<br>
+        Start the bot — your first trade will appear here.
+      </div>
+    </div>
+  </div><!-- /dash-leaderboard -->
 
   <!-- ── RIGHT DISCOVERY RAIL ── -->
   <aside id="right-rail">
