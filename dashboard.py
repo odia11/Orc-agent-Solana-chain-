@@ -1423,6 +1423,8 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN badges TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN copy_source TEXT DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN referral_code TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN referred_by TEXT DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN referral_balance REAL NOT NULL DEFAULT 0",
         "ALTER TABLE direct_messages ADD COLUMN message_type TEXT DEFAULT 'text'",
         "ALTER TABLE users ADD COLUMN webauthn_ready INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN password_hash TEXT DEFAULT NULL",
@@ -1519,6 +1521,16 @@ def run_migrations():
         viewed_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         PRIMARY KEY (user_id, post_type, post_id)
     )''')
+    # referral_earnings — one row per trade fee split off to the referrer of the trader
+    con.execute('''CREATE TABLE IF NOT EXISTS referral_earnings (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        referrer_wallet  TEXT NOT NULL,
+        referred_wallet  TEXT NOT NULL,
+        trade_fee_sol    REAL NOT NULL,
+        earned_sol       REAL NOT NULL,
+        created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )''')
+    con.execute('CREATE INDEX IF NOT EXISTS idx_referral_earnings_referrer ON referral_earnings(referrer_wallet)')
     con.commit()
     con.close()
 
@@ -1903,13 +1915,35 @@ def _use_key(enc_blob: str, wallet: str):
                 pass
         _k = None
 
-def get_or_create_user(wallet: str) -> int:
+_REFERRAL_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # no 0/O/1/I -- avoids visual ambiguity
+
+def _generate_referral_code(cursor) -> str:
+    """Short unique referral code (e.g. 'K7QX9F2A'). Retries on collision against
+    the live table since codes are short enough for one to occasionally clash."""
+    for _ in range(10):
+        code = ''.join(secrets.choice(_REFERRAL_CODE_ALPHABET) for _ in range(8))
+        cursor.execute('SELECT 1 FROM users WHERE referral_code=?', (code,))
+        if not cursor.fetchone():
+            return code
+    return secrets.token_hex(6).upper()  # pathological-collision fallback
+
+def get_or_create_user(wallet: str, ref_code: str = None) -> int:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
     conn.commit()
-    c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+    c.execute('SELECT id, referral_code, referred_by FROM users WHERE wallet_address=?', (wallet,))
     row = c.fetchone()
+    if row and not row[1]:
+        code = _generate_referral_code(c)
+        c.execute('UPDATE users SET referral_code=? WHERE wallet_address=?', (code, wallet))
+        conn.commit()
+    if row and not row[2] and ref_code:
+        c.execute('SELECT wallet_address FROM users WHERE referral_code=?', (ref_code,))
+        ref_row = c.fetchone()
+        if ref_row and ref_row[0] != wallet:
+            c.execute('UPDATE users SET referred_by=? WHERE wallet_address=?', (ref_row[0], wallet))
+            conn.commit()
     conn.close()
     return row[0] if row else None
 
@@ -2807,6 +2841,28 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                             conn2.execute(
                                 'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
                                 (uid, trade_ts))
+
+                        # Referral payout: 20% of the fee the platform just actually collected
+                        # goes to whoever referred this trader, if anyone. Gated on tx_sig (not
+                        # on fee_amount being computed) so a referrer is never credited for a fee
+                        # transfer that failed -- see insufficient-balance/exception paths above.
+                        try:
+                            ref_row = conn2.execute(
+                                'SELECT referred_by FROM users WHERE wallet_address=?', (wlt,)).fetchone()
+                            if ref_row and ref_row[0]:
+                                referrer = ref_row[0]
+                                earned   = round(fee * 0.20, 6)
+                                conn2.execute(
+                                    'INSERT INTO referral_earnings '
+                                    '(referrer_wallet, referred_wallet, trade_fee_sol, earned_sol) VALUES (?,?,?,?)',
+                                    (referrer, wlt, fee, earned))
+                                conn2.execute(
+                                    'UPDATE users SET referral_balance = referral_balance + ? WHERE wallet_address=?',
+                                    (earned, referrer))
+                                print(f'[referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} SOL '
+                                      f'(20% of {fee:.6f} SOL fee)', flush=True)
+                        except Exception as ref_e:
+                            print(f'[referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
                     conn2.commit()
                     conn2.close()
                     print(f'[fee] recorded in fees table: status={status} fee_tx={fee_tx[:30]}', flush=True)
@@ -5225,6 +5281,61 @@ def wallet_page():
         return f'<h1>Wallet Error: {str(e)}</h1>', 500
 
 
+@app.route('/referrals')
+def referrals_page():
+    try:
+        wallet = _current_wallet()
+        if not wallet:
+            return redirect('/?connect=1')
+        wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else ''
+
+        # Backfills referral_code for sessions that predate this feature.
+        get_or_create_user(wallet)
+
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT referral_code, referral_balance FROM users WHERE wallet_address=?', (wallet,)
+            ).fetchone()
+            referral_code    = row[0] if row else None
+            referral_balance = row[1] if row and row[1] is not None else 0.0
+
+            referred_count = conn.execute(
+                'SELECT COUNT(*) FROM users WHERE referred_by=?', (wallet,)
+            ).fetchone()[0]
+
+            earnings_rows = conn.execute(
+                '''SELECT referred_wallet, earned_sol, created_at FROM referral_earnings
+                   WHERE referrer_wallet=? ORDER BY created_at DESC LIMIT 100''', (wallet,)
+            ).fetchall()
+        finally:
+            conn.close()
+
+        earnings = [{
+            'wallet_short': (w[:4] + '...' + w[-4:]) if len(w) >= 8 else w,
+            'earned_sol':   earned,
+            'created_at':   created_at,
+        } for w, earned, created_at in earnings_rows]
+
+        referral_balance_usd = (round(referral_balance * _sol_price_usd, 2)
+                                 if _sol_price_usd else None)
+
+        return render_template(
+            'referrals.html',
+            wallet_address=wallet,
+            wallet_short=wallet_short,
+            referral_code=referral_code,
+            referral_link=f'https://orcagent.fun/?ref={referral_code}' if referral_code else '',
+            referred_count=referred_count,
+            referral_balance=referral_balance,
+            referral_balance_usd=referral_balance_usd,
+            earnings=earnings,
+            csrf_token=_get_csrf_token(),
+        )
+    except Exception as e:
+        return f'<h1>Referrals Error: {str(e)}</h1>', 500
+
+
 @app.route('/settings')
 def settings_page():
     wallet = _current_wallet()
@@ -7013,7 +7124,9 @@ def get_csrf_token_endpoint():
 @app.route('/api/wallet/connect-readonly', methods=['POST'])
 @rate_limit(10, 60)
 def connect_wallet_readonly():
-    address = (request.json or {}).get('address', '').strip()
+    body    = request.json or {}
+    address = body.get('address', '').strip()
+    ref_code = str(body.get('ref_code', '')).strip()[:16]
     if not address:
         return jsonify({'ok': False, 'msg': 'Address required'}), 400
     if not is_valid_solana_address(address):
@@ -7023,7 +7136,7 @@ def connect_wallet_readonly():
     session['readonly'] = True
     csrf_tok = _get_csrf_token()
     try:
-        get_or_create_user(address)
+        get_or_create_user(address, ref_code or None)
     except Exception:
         pass
     add_user_log(address, 'Wallet connected (read-only): ' + address[:6] + '...' + address[-4:])
@@ -7234,8 +7347,9 @@ def webauthn_login():
 @app.route('/api/wallet/set', methods=['POST'])
 @rate_limit(10, 60)
 def set_wallet():
-    ip      = request.remote_addr or '0.0.0.0'
-    address = (request.json or {}).get('address', '').strip()
+    ip       = request.remote_addr or '0.0.0.0'
+    address  = (request.json or {}).get('address', '').strip()
+    ref_code = str((request.json or {}).get('ref_code', '')).strip()[:16]
     if address:
         if not is_valid_solana_address(address):
             return jsonify({'ok': False, 'msg': 'Invalid Solana wallet address'}), 400
@@ -7288,7 +7402,7 @@ def set_wallet():
         # Generate (or retrieve) CSRF token for this session now that the session exists
         csrf_tok = _get_csrf_token()
         try:
-            get_or_create_user(address)
+            get_or_create_user(address, ref_code or None)
         except: pass
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])

@@ -21,6 +21,19 @@ let guestMode = false;
   }
 })();
 
+/* ── Referral code capture: ?ref=<code> in the URL survives (via localStorage)
+   until the wallet-connect flow actually completes, which can happen much
+   later -- e.g. after a round trip to the Phantom mobile app. ── */
+(function(){
+  var m=/[?&]ref=([^&]+)/.exec(window.location.search);
+  if(m){
+    try{ localStorage.setItem('orcagent_ref_code', decodeURIComponent(m[1])); }catch(e){}
+  }
+})();
+function _getStoredRefCode(){
+  try{ return localStorage.getItem('orcagent_ref_code')||''; }catch(e){ return ''; }
+}
+
 /* ── CONNECT SCREEN HELPERS ── */
 function _toggleManual(){
   var sec=document.getElementById('ob-manual-section');
@@ -42,7 +55,7 @@ async function connectReadonlyAddress(){
   try{
     var r=await fetch('/api/wallet/connect-readonly',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({address:addr})
+      body:JSON.stringify({address:addr, ref_code:_getStoredRefCode()})
     }).then(function(x){ return x.json(); });
     if(r.ok){
       phantomKey=r.wallet; walletType='readonly'; _isReadonly=true;
@@ -350,7 +363,7 @@ async function _connectWalletSignedInner(provider, address){
     var r = await fetch('/api/wallet/set',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({address:address, signature:sigB58, nonce:nr.nonce})
+      body:JSON.stringify({address:address, signature:sigB58, nonce:nr.nonce, ref_code:_getStoredRefCode()})
     }).then(function(x){return x.json();}).catch(function(){return null;});
 
     return r || {ok:false, msg:'Network error'};

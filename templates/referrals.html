@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>Referrals — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OrcAgent">
+<link rel="apple-touch-icon" href="/static/icon-180.png?v=5">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Geist:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Geist:wght@400;500;600;700&display=swap"></noscript>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;
+  --bg2:#101216;
+  --bg3:#16191f;
+  --bg4:#21252c;
+  --border:#21252c;
+  --divider:#16191f;
+  --accent:#f7b955;
+  --amber:#f7b955;
+  --green:#3ad29b;
+  --red:#f76b62;
+  --text:#eef1f5;
+  --muted:#565d68;
+  --sub:#8a919c;
+  --mono:'JetBrains Mono',monospace;
+  --ui:'Geist',sans-serif;
+}
+
+/* ── app shell ── */
+html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;-webkit-font-smoothing:antialiased}
+#app{display:flex;height:100%;overflow:hidden}
+
+/* ── left rail ── */
+#ref-sb{
+  width:260px;min-width:260px;height:100vh;
+  position:sticky;top:0;flex-shrink:0;
+  display:flex;flex-direction:column;
+  border-right:1px solid var(--divider);
+  background:var(--bg);
+  overflow-y:auto;
+;scrollbar-width:none;-ms-overflow-style:none}
+#ref-sb::-webkit-scrollbar{display:none}
+.sb-logo{padding:20px 18px 14px;display:flex;align-items:center;gap:10px;text-decoration:none}
+.sb-logo-shape{
+  width:36px;height:36px;min-width:36px;border-radius:11px;
+  background:var(--accent);flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
+.sb-logo-text{font-size:14px;font-weight:700;color:var(--text);letter-spacing:.02em}
+.sb-divider{margin:2px 16px 6px;border:none;border-top:1px solid var(--divider)}
+.sb-nav{padding:0 10px;display:flex;flex-direction:column;gap:2px}
+.sb-nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 12px;border-radius:9px;
+  font-size:13px;font-weight:500;color:var(--sub);
+  text-decoration:none;border:none;background:transparent;
+  width:100%;text-align:left;cursor:pointer;
+  transition:background .13s,color .13s;
+  white-space:nowrap;
+}
+.sb-nav-item:hover{background:var(--divider);color:var(--text)}
+.sb-nav-item.active{background:rgba(247,185,85,.1);color:var(--text);font-weight:600}
+.sb-nav-item.active::after{content:'';width:5px;height:5px;border-radius:50%;background:var(--amber);margin-left:auto;flex-shrink:0}
+.sb-nav-icon{width:18px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+
+/* ── center column ── */
+.ref-center{flex:1;min-width:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column}
+
+/* ── center header ── */
+.ref-hdr{
+  display:flex;align-items:flex-start;justify-content:space-between;
+  padding:28px 28px 0;flex-shrink:0;gap:16px;
+}
+.ref-title{font-size:20px;font-weight:600;color:var(--text);margin-bottom:4px}
+.ref-sub{font-size:13px;color:var(--muted)}
+.net-pill{
+  display:inline-flex;align-items:center;gap:6px;
+  font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.08em;
+  color:var(--green);border:1px solid rgba(58,210,155,.35);
+  border-radius:20px;padding:5px 12px;white-space:nowrap;flex-shrink:0;margin-top:4px;
+}
+.net-dot{width:7px;height:7px;border-radius:50%;background:var(--green);flex-shrink:0}
+
+/* ── content area ── */
+.ref-content{padding:20px 28px 60px;display:flex;flex-direction:column;gap:14px;max-width:720px}
+
+/* ── referral code / link card ── */
+.dep-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:18px}
+.dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.dep-title{font-size:13px;font-weight:600;color:var(--text)}
+.dep-network{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.06em}
+.ref-code-big{
+  font-family:var(--mono);font-size:28px;font-weight:700;color:var(--accent);
+  letter-spacing:.06em;margin-bottom:14px;
+}
+.dep-label{font-size:10px;font-weight:600;letter-spacing:.08em;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
+.dep-addr{
+  font-family:var(--mono);font-size:12px;color:var(--sub);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  background:#16191f;border:1px solid #21252c;border-radius:8px;padding:10px 12px;
+  margin-bottom:10px;
+}
+.dep-btns{display:flex;gap:7px}
+.dep-btn{
+  flex:1;padding:9px 0;border-radius:8px;cursor:pointer;
+  font-family:var(--ui);font-size:12px;font-weight:600;
+  text-align:center;text-decoration:none;display:inline-block;
+  transition:opacity .15s,border-color .15s,color .15s;border:none;
+}
+.dep-copy{background:var(--amber);color:#0a0b0e;border:1px solid var(--amber)!important}
+.dep-copy:hover{opacity:.85}
+
+/* ── stat cards ── */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px}
+.stat-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:16px 17px;display:flex;flex-direction:column;gap:6px}
+.stat-lbl{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;font-weight:600}
+.stat-val{font-family:var(--mono);font-size:24px;font-weight:700;color:var(--text)}
+.stat-sub{font-family:var(--mono);font-size:12px;color:var(--muted)}
+
+/* ── earnings list ── */
+.act-card{background:#101216;border:1px solid #16191f;border-radius:14px;overflow:hidden}
+.act-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 14px;border-bottom:1px solid #16191f}
+.act-title{font-size:13px;font-weight:600;color:var(--text)}
+.act-row{display:flex;align-items:center;gap:12px;padding:14px 18px;border-bottom:1px solid #16191f}
+.act-row:last-child{border-bottom:none}
+.act-tile{
+  width:40px;height:40px;border-radius:10px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;font-size:16px;font-weight:700;
+  background:rgba(58,210,155,.1);color:var(--green);
+}
+.act-main{flex:1;min-width:0}
+.act-type{font-size:14px;font-weight:600;color:var(--text);font-family:var(--mono)}
+.act-sub{font-size:12px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+.act-right{text-align:right;flex-shrink:0}
+.act-amt{font-family:var(--mono);font-size:13px;font-weight:700;color:var(--green)}
+
+/* ── state msg ── */
+.state-msg{padding:28px 18px;color:var(--muted);font-size:13px;text-align:center}
+
+/* ── toast ── */
+.w-toast{
+  position:fixed;bottom:28px;left:50%;transform:translateX(-50%);
+  padding:10px 20px;border-radius:10px;font-size:13px;font-family:var(--mono);
+  z-index:9999;white-space:nowrap;pointer-events:none;transition:opacity .25s;
+}
+
+/* ── scrollbar ── */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
+
+/* ── responsive ── */
+@media(max-width:1100px){ #ref-sb{width:200px;min-width:200px} }
+@media(max-width:900px){ #ref-sb{display:none} }
+@media(max-width:600px){
+  html,body{height:auto;overflow:auto;overflow-x:hidden}
+  #app{display:block;height:auto;overflow:visible}
+  .ref-center{height:auto;overflow-y:visible}
+  .ref-hdr{padding:18px 16px 0}
+  .ref-content{padding:16px 14px 60px}
+  .ref-code-big{font-size:22px}
+  .stat-val{font-size:19px}
+}
+/* ── MOBILE BACK BAR ── */
+.mobile-back-bar{display:none}
+@media(max-width:767px){
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
+}
+</style>
+</head>
+<body>
+<div class="mobile-back-bar">
+  <button onclick="location.href='/'" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Referrals</span>
+</div>
+<div id="app">
+
+<!-- ── LEFT RAIL ── -->
+<aside id="ref-sb">
+  <a class="sb-logo" href="/">
+    <div class="sb-logo-shape"></div>
+    <span class="sb-logo-text">OrcAgent</span>
+  </a>
+  <hr class="sb-divider">
+  <nav class="sb-nav">
+    <a class="sb-nav-item" href="/">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+      Home
+    </a>
+    <a class="sb-nav-item" href="/wallet">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 12h2"/></svg></span>
+      Wallet
+    </a>
+    <a class="sb-nav-item active" href="/referrals">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span>
+      Referrals
+    </a>
+    <a class="sb-nav-item" href="/settings">
+      <span class="sb-nav-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+      Settings
+    </a>
+  </nav>
+  <div style="padding:12px;border-top:1px solid var(--divider);margin-top:auto;flex-shrink:0">
+    <div style="display:flex;align-items:center;gap:10px;padding:10px;border-radius:14px;border:1px solid var(--divider);cursor:pointer" onclick="window.location='/profile'">
+      <div style="width:38px;height:38px;min-width:38px;border-radius:50%;background:#f7b955;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#0a0b0e;flex-shrink:0">{{ wallet_address[:2] }}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-size:13px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">You</div>
+        <div style="font-size:11px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ wallet_short }}</div>
+      </div>
+    </div>
+  </div>
+</aside>
+
+<!-- ── CENTER COLUMN ── -->
+<div class="ref-center">
+
+  <!-- header -->
+  <div class="ref-hdr">
+    <div>
+      <div class="ref-title">Referrals</div>
+      <div class="ref-sub">Earn 20% of the trading fees from people you invite</div>
+    </div>
+    <span class="net-pill"><span class="net-dot"></span>SOLANA · MAINNET</span>
+  </div>
+
+  <!-- scrollable content -->
+  <div class="ref-content">
+
+    <!-- referral code / link card -->
+    <div class="dep-card">
+      <div class="dep-header">
+        <div class="dep-title">Your referral code</div>
+        <div class="dep-network">20% FEE SHARE</div>
+      </div>
+      <div class="ref-code-big" id="ref-code-big">{{ referral_code or '—' }}</div>
+      <div class="dep-label">SHAREABLE LINK</div>
+      <div class="dep-addr" id="ref-link">{{ referral_link }}</div>
+      <div class="dep-btns">
+        <button class="dep-btn dep-copy" onclick="_copyRefLink()">Copy Link</button>
+      </div>
+    </div>
+
+    <!-- stats -->
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-lbl">Referred Users</div>
+        <div class="stat-val">{{ referred_count }}</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-lbl">Referral Balance</div>
+        <div class="stat-val">{{ '%.4f'|format(referral_balance) }} SOL</div>
+        {% if referral_balance_usd is not none %}
+        <div class="stat-sub">≈ ${{ '%.2f'|format(referral_balance_usd) }}</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- earnings list -->
+    <div class="act-card">
+      <div class="act-hdr">
+        <div class="act-title">Referral earnings</div>
+      </div>
+      {% if earnings %}
+      {% for e in earnings %}
+      <div class="act-row">
+        <div class="act-tile">%</div>
+        <div class="act-main">
+          <div class="act-type">{{ e.wallet_short }}</div>
+          <div class="act-sub">{{ e.created_at }}</div>
+        </div>
+        <div class="act-right">
+          <div class="act-amt">+{{ '%.6f'|format(e.earned_sol) }} SOL</div>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="state-msg">No referral earnings yet — share your link to start earning</div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+
+</div>
+
+<script>
+var _refLink = {{ referral_link|tojson }};
+
+function _copyRefLink(){
+  if(!_refLink) return;
+  navigator.clipboard.writeText(_refLink).then(function(){
+    _refToast('Link copied', true);
+  }).catch(function(){
+    var el = document.createElement('textarea');
+    el.value = _refLink; el.style.cssText = 'position:fixed;opacity:0';
+    document.body.appendChild(el); el.select();
+    try{ document.execCommand('copy'); _refToast('Link copied', true); }
+    catch(e){ _refToast('Copy failed', false); }
+    document.body.removeChild(el);
+  });
+}
+
+function _refToast(msg, ok){
+  var t = document.createElement('div');
+  t.className = 'w-toast';
+  t.style.background = ok ? '#0a2a1a' : '#2a0a0a';
+  t.style.color = ok ? '#00d084' : '#ff4757';
+  t.style.border = '1px solid ' + (ok ? '#00d084' : '#ff4757');
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ t.style.opacity = '0'; setTimeout(function(){ t.remove(); }, 260); }, 3000);
+}
+</script>
+</body>
+</html>

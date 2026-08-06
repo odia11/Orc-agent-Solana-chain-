@@ -131,10 +131,12 @@ var _b58enc=(function(){
 
     // Authenticate: wallet/set with address + nonce + signature proof
     msg.textContent = 'Completing sign-in…';
+    var _refCode = '';
+    try{ _refCode = localStorage.getItem('orcagent_ref_code')||''; }catch(e){}
     var wr = await fetch('/api/wallet/set',{
       method: 'POST', credentials: 'include',
       headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({address:sigR.wallet_address, nonce:sigR.auth_nonce, signature:sigR.signature})
+      body: JSON.stringify({address:sigR.wallet_address, nonce:sigR.auth_nonce, signature:sigR.signature, ref_code:_refCode})
     }).then(function(r){ return r.json(); }).catch(function(){ return null; });
 
     if(wr && (wr.ok || wr.success)){
