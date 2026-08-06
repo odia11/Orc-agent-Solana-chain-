@@ -5143,17 +5143,6 @@ def live_market():
                            client_secret=API_SHARED_SECRET)
 
 
-@app.route('/friends')
-def friends_page():
-    session_wallet = _current_wallet()
-    wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
-                    if len(session_wallet) >= 8 else '')
-    return render_template('friends.html',
-                           wallet_short=wallet_short,
-                           csrf_token=_get_csrf_token(),
-                           client_secret=API_SHARED_SECRET)
-
-
 @app.route('/history')
 def history():
     wallet = _current_wallet()
