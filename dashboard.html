@@ -3318,6 +3318,92 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .lb-table tbody td:nth-child(6){display:none}
 }
 
+/* ── SETTINGS (dash-settings) — ported from templates/settings.html ── */
+.st-content{max-width:620px;padding:24px 24px 80px;margin:0 auto}
+.st-title{font-size:18px;font-weight:700;letter-spacing:-.02em;margin-bottom:20px;color:var(--text)}
+.st-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:20px;margin-bottom:14px}
+.st-card-hdr{font-size:14px;font-weight:700;color:var(--text);margin-bottom:16px}
+.st-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border)}
+.st-row:last-of-type{border-bottom:none;padding-bottom:0}
+.st-row-left{flex:1;min-width:0}
+.st-row-label{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px}
+.st-row-sub{font-size:12px;color:var(--muted);line-height:1.4}
+.st-amber-inp{width:60px;background:#1a1d23;border:1px solid var(--accent);color:var(--accent);font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:14px;font-weight:600;border-radius:8px;padding:6px 8px;text-align:center;outline:none;-moz-appearance:textfield;transition:opacity .15s;flex-shrink:0}
+.st-amber-inp:focus{opacity:.85}
+.st-amber-inp::-webkit-inner-spin-button,.st-amber-inp::-webkit-outer-spin-button{-webkit-appearance:none}
+.st-save-row{padding-top:16px;display:flex;align-items:center;gap:10px}
+.st-save-btn{background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;padding:9px 22px;font-size:13px;font-weight:700;font-family:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;cursor:pointer;transition:opacity .15s}
+.st-save-btn:hover{opacity:.88}
+.st-save-btn:disabled{opacity:.45;cursor:not-allowed}
+.st-save-msg{font-size:12px;color:var(--muted)}
+.st-save-msg.ok{color:var(--green)}
+.st-save-msg.err{color:var(--red)}
+.st-tog-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 0;border-bottom:1px solid var(--border)}
+.st-tog-row:last-child{border-bottom:none;padding-bottom:0}
+.st-tog-label{font-size:14px;font-weight:600;color:var(--text);margin-bottom:2px}
+.st-tog-sub{font-size:12px;color:var(--muted);line-height:1.4}
+.st-toggle{flex-shrink:0;cursor:pointer;position:relative}
+.st-toggle input{position:absolute;opacity:0;width:0;height:0}
+.st-track{display:block;width:44px;height:24px;border-radius:12px;background:#2a2d35;transition:background .2s;position:relative}
+.st-track::after{content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:9px;background:#8a919c;transition:transform .2s,background .2s}
+.st-toggle input:checked+.st-track{background:var(--accent)}
+.st-toggle input:checked+.st-track::after{transform:translateX(20px);background:#fff}
+.st-wallet-row{display:flex;align-items:center;gap:10px;background:var(--bg);border:1px solid var(--border2);border-radius:9px;padding:10px 12px;margin-bottom:14px}
+.st-wallet-addr{font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:12px;color:#8a919c;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.st-copy-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px;line-height:1;flex-shrink:0;transition:color .15s}
+.st-copy-btn:hover{color:var(--accent)}
+.st-wallet-btns{display:flex;gap:8px}
+.st-manage-btn{flex:1;padding:9px;background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;font-size:13px;font-weight:700;font-family:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;cursor:pointer;transition:opacity .15s}
+.st-manage-btn:hover{opacity:.88}
+.st-key-status{font-size:12px;color:var(--muted);margin-bottom:12px;display:flex;align-items:center;gap:6px}
+.st-key-status.has-key{color:var(--green)}
+.st-key-dot{width:6px;height:6px;border-radius:50%;background:currentColor;flex-shrink:0}
+.modal-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:500;align-items:center;justify-content:center;padding:20px}
+.modal-box{background:#101216;border:1px solid var(--border2);border-radius:16px;padding:24px;width:100%;max-width:400px;position:relative}
+.modal-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:2px;transition:color .15s}
+.modal-close:hover{color:var(--text)}
+.modal-title{font-size:16px;font-weight:700;color:var(--text);margin-bottom:16px}
+.modal-textarea{width:100%;background:var(--bg);border:1px solid var(--border2);border-radius:9px;color:var(--text);font-family:'JetBrains Mono','Share Tech Mono',monospace;font-size:13px;padding:12px;outline:none;transition:border-color .15s;resize:none;height:96px;line-height:1.5;margin-bottom:14px;display:block}
+.modal-textarea:focus{border-color:rgba(247,185,85,.4)}
+.modal-textarea::placeholder{color:var(--muted)}
+.modal-btns{display:flex;gap:8px}
+.modal-btn{flex:1;padding:10px;border-radius:9px;font-size:13px;font-weight:700;font-family:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;cursor:pointer;transition:all .15s;text-align:center;border:none}
+.modal-cancel{background:transparent;color:#8a919c;border:1px solid var(--border2)!important}
+.modal-cancel:hover{border-color:var(--muted)!important;color:var(--text)}
+.modal-save{background:var(--accent);color:#0a0b0e}
+.modal-save:hover{opacity:.88}
+.modal-save:disabled{opacity:.45;cursor:not-allowed}
+.modal-msg{font-size:12px;min-height:16px;margin-top:10px}
+.modal-msg.ok{color:var(--green)}
+.modal-msg.err{color:var(--red)}
+/* .tos-checkbox-row is intentionally not redeclared -- dashboard.html already
+   has an identical rule (line ~866) from its own #tos-modal gate. */
+.manage-warn{background:var(--bg3);border:1px solid var(--border2);border-radius:9px;padding:12px 14px;font-size:12px;color:#8a919c;line-height:1.55;margin-bottom:14px}
+.manage-warn p{margin-bottom:6px;color:var(--text)}
+.manage-warn ul{margin:0;padding-left:18px}
+.manage-warn li{margin-bottom:4px}
+.manage-warn li:last-child{margin-bottom:0}
+.st-x-connected{display:flex;align-items:center;gap:8px;margin-bottom:16px}
+.st-x-dot{width:8px;height:8px;border-radius:50%;background:var(--green);flex-shrink:0}
+.st-x-handle{font-size:14px;font-weight:700;color:var(--text)}
+.st-x-connect-btn{display:inline-flex;align-items:center;gap:7px;background:#000;color:#fff;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;cursor:pointer;transition:opacity .15s;text-decoration:none}
+.st-x-connect-btn:hover{opacity:.85}
+.st-x-disconnect{background:none;border:1px solid var(--border2);color:var(--red);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:600;font-family:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;cursor:pointer;transition:border-color .15s;margin-top:14px}
+.st-x-disconnect:hover{border-color:var(--red)}
+.st-tos-note{background:rgba(247,185,85,.08);border:1px solid rgba(247,185,85,.25);border-radius:8px;padding:10px 12px;font-size:11.5px;color:var(--accent);line-height:1.5;margin-bottom:14px}
+.st-tos-dl-btn{display:inline-flex;align-items:center;gap:7px;background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;padding:9px 16px;font-size:13px;font-weight:700;font-family:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;cursor:pointer;transition:opacity .15s;text-decoration:none}
+.st-tos-dl-btn:hover{opacity:.88}
+@media(max-width:900px){
+  .st-content{padding:20px 20px 80px}
+}
+@media(max-width:767px){
+  .st-content{padding:12px 12px 80px;max-width:100%}
+  .st-title{display:none}
+  .st-amber-inp{width:56px;font-size:13px}
+  .st-save-btn,.st-manage-btn{min-height:44px}
+  .modal-btn{min-height:44px}
+}
+
 </style>
 </head>
 <body>
@@ -4404,6 +4490,188 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
     </div>
   </div><!-- /dash-leaderboard -->
+
+  <div id="dash-settings" class="dash-section" style="display:none">
+    <div class="st-content">
+      <div class="st-title">Settings</div>
+
+      <!-- ── CARD 1: Trading Strategy ── -->
+      <div class="st-card">
+        <div class="st-card-hdr">⚡ Trading Strategy</div>
+
+        <div class="st-row">
+          <div class="st-row-left">
+            <div class="st-row-label">Breakout trigger</div>
+            <div class="st-row-sub">% move to enter a position</div>
+          </div>
+          <input id="s-breakout" class="st-amber-inp" type="number" value="3" min="0.1" max="100" step="0.1">
+        </div>
+
+        <div class="st-row">
+          <div class="st-row-left">
+            <div class="st-row-label">Min Trade Size (USDC)</div>
+            <div class="st-row-sub">Inzet per trade (bij een sterk signaal tot 2x hoger)</div>
+          </div>
+          <input id="ds-minusdc" class="st-amber-inp" type="number" value="1" min="1" max="10000" step="1">
+        </div>
+
+        <div class="st-row">
+          <div class="st-row-left">
+            <div class="st-row-label">Take profit</div>
+            <div class="st-row-sub">% gain to close in profit</div>
+          </div>
+          <input id="s-tp" class="st-amber-inp" type="number" value="15" min="0.1" max="1000" step="0.1">
+        </div>
+
+        <div class="st-row">
+          <div class="st-row-left">
+            <div class="st-row-label">Stop loss</div>
+            <div class="st-row-sub">% drop before cutting the trade</div>
+          </div>
+          <input id="s-sl" class="st-amber-inp" type="number" value="8" min="0.1" max="100" step="0.1">
+        </div>
+
+        <div class="st-row">
+          <div class="st-row-left">
+            <div class="st-row-label">Max concurrent positions</div>
+            <div class="st-row-sub">Open trades held at once</div>
+          </div>
+          <input id="s-maxpos" class="st-amber-inp" type="number" value="3" min="1" max="20" step="1">
+        </div>
+
+        <div class="st-save-row">
+          <button class="st-save-btn" id="strat-save-btn" onclick="_saveStrategy()">Save</button>
+          <span class="st-save-msg" id="strat-msg"></span>
+        </div>
+      </div>
+
+      <!-- ── CARD 2: Preferences ── -->
+      <div class="st-card">
+        <div class="st-card-hdr">🔔 Preferences</div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Auto Trading</div>
+            <div class="st-tog-sub">Bot executes trades automatically</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-autobot" onchange="_onBotToggle(this)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Trade Notifications</div>
+            <div class="st-tog-sub">Alert when a position closes</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-notifs" onchange="_savePref('notifications',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Phone Notifications</div>
+            <div class="st-tog-sub">Get notified even when the site is closed</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-push" onchange="_onPushToggle(this)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Scam Filter</div>
+            <div class="st-tog-sub">Skip flagged honeypot tokens</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-scam" checked onchange="_savePref('scam_filter',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Sound Alerts</div>
+            <div class="st-tog-sub">Audio cue on trade execution</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-sound" onchange="_savePref('sound_alerts',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
+      </div>
+
+      <!-- ── CARD 3: Account & Wallet ── -->
+      <div class="st-card">
+        <div class="st-card-hdr">🔑 Account &amp; Wallet</div>
+
+        <div class="st-wallet-row">
+          <span class="st-wallet-addr" id="st-wallet-addr"></span>
+          <button class="st-copy-btn" onclick="_copyWallet()" title="Copy address">⧉</button>
+        </div>
+
+        <div class="st-key-status" id="st-key-status">
+          <span class="st-key-dot"></span>
+          <span id="st-key-status-text">Checking…</span>
+        </div>
+
+        <div class="st-wallet-btns">
+          <button class="st-manage-btn" onclick="_openManage()">Manage</button>
+        </div>
+      </div>
+
+
+      <!-- ── CARD 4: X (Twitter) ── -->
+      <div class="st-card">
+        <div class="st-card-hdr">𝕏 X (Twitter)</div>
+
+        <div class="st-row-sub" style="margin-bottom:14px">Connect your X account to auto-share trades and badges.</div>
+        <a href="/api/x/connect" class="st-x-connect-btn">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+          Connect X
+        </a>
+      </div>
+
+      <!-- ── CARD: Accepted Terms ── -->
+      <div class="st-card">
+        <div class="st-card-hdr">📄 Your Accepted Terms</div>
+        <div id="st-tos-body">
+          <div class="st-row-sub">Loading…</div>
+        </div>
+      </div>
+
+    </div><!-- /st-content -->
+
+    <!-- ── MANAGE MODAL ── -->
+    <div class="modal-back" id="manage-modal" onclick="if(event.target===this)_closeManage()">
+      <div class="modal-box">
+        <button class="modal-close" onclick="_closeManage()">✕</button>
+        <div class="modal-title">Enter Private Key</div>
+        <textarea id="manage-inp" class="modal-textarea" placeholder="Paste your base58 private key here…" autocomplete="new-password" spellcheck="false"></textarea>
+        <div class="manage-warn">
+          <p>Door een private key op te slaan:</p>
+          <ul>
+            <li>wordt dit wallet je <strong>trading-wallet</strong> voor zowel de bot als copy-trade — geen wallet-pop-up meer per trade;</li>
+            <li>bewaart de server de sleutel <strong>versleuteld</strong> (encrypted at rest);</li>
+            <li>ben je zelf verantwoordelijk voor het saldo op dit wallet — gebruik geen wallet met je hoofdvermogen.</li>
+          </ul>
+        </div>
+        <label class="tos-checkbox-row">
+          <input type="checkbox" id="manage-confirm-chk" onchange="document.getElementById('manage-save-btn').disabled=!this.checked">
+          <span>Ik begrijp dit en wil doorgaan</span>
+        </label>
+        <div class="modal-btns">
+          <button class="modal-btn modal-cancel" onclick="_closeManage()">Cancel</button>
+          <button class="modal-btn modal-save" id="manage-save-btn" disabled onclick="_saveKey()">Save</button>
+        </div>
+        <div class="modal-msg" id="manage-msg"></div>
+      </div>
+    </div>
+  </div><!-- /dash-settings -->
 
   <!-- ── RIGHT DISCOVERY RAIL ── -->
   <aside id="right-rail">
