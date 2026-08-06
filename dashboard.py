@@ -5258,10 +5258,33 @@ def wallet_page():
             return redirect('/?connect=1')
         wallet_address = session['wallet']
         wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else ''
+
+        # Deposit address must be the trading wallet (derived from encrypted_private_key),
+        # never the connected session wallet -- those are different keypairs by design
+        # (see wallet_set_key's "paste a separate, dedicated trading wallet" guidance).
+        deposit_address = None
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet_address,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row and row[0]:
+            try:
+                with _use_key(row[0], wallet_address) as _pk:
+                    from solders.keypair import Keypair as _KP_wp
+                    deposit_address = str(_KP_wp.from_base58_string(_pk).pubkey())
+            except InvalidToken:
+                print(f'[wallet] cannot decrypt trading key for {wallet_short}', flush=True)
+            except Exception as e:
+                print(f'[wallet] key error for {wallet_short}: {type(e).__name__}: {e}', flush=True)
+
         return render_template(
             'wallet.html',
             wallet_address=wallet_address,
             wallet_short=wallet_short,
+            deposit_address=deposit_address,
             is_admin=_is_owner(wallet_address),
             csrf_token=_get_csrf_token(),
             client_secret=API_SHARED_SECRET,

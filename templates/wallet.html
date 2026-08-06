@@ -606,16 +606,20 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
         <span class="dep-title">Deposit Address</span>
         <span class="dep-network">SPL · SOL</span>
       </div>
+      {% if deposit_address %}
       <div class="dep-body">
         <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-sm"></div></div>
         <div class="dep-right">
-          <div class="dep-addr">{{ wallet_address }}</div>
+          <div class="dep-addr">{{ deposit_address }}</div>
           <div class="dep-btns">
             <button class="dep-btn dep-copy" onclick="_copyAddr()">Copy Address</button>
-            <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ wallet_address }}" target="_blank" rel="noopener">View on Solscan ↗</a>
+            <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ deposit_address }}" target="_blank" rel="noopener">View on Solscan ↗</a>
           </div>
         </div>
       </div>
+      {% else %}
+      <div class="state-msg">Stel eerst een trading wallet in via <a href="/settings" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px">Settings</a> voordat je stort</div>
+      {% endif %}
     </div>
 
     <!-- holdings -->
@@ -786,7 +790,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 </div>
 
 <script>
-var _walletAddr = '{{ wallet_address }}'
+var _walletAddr = {{ deposit_address|tojson }} || ''
 var _csrf = {{ csrf_token|tojson }};
 var _clientSecret = {{ client_secret|tojson }};
 
@@ -855,6 +859,13 @@ function _closeModal(){
 
 function _modalDeposit(){
   var addr=_walletAddr
+  if(!addr){
+    _showModal(
+      '<div class="w-modal-title">Receive SOL / Tokens</div>'
+      +'<div class="w-modal-note" style="margin-top:0">Stel eerst een trading wallet in via <a href="/settings" style="color:var(--accent)">Settings</a> voordat je stort.</div>'
+    )
+    return
+  }
   var bits=_qrPattern(_hash(addr),7)
   var cells=bits.map(function(on){
     return '<div class="w-modal-qr-cell" style="background:'+(on?'#f7b955':'#16191f')+'"></div>'
