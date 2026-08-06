@@ -4740,11 +4740,6 @@ function _renderLbTable(entries){
 
 // ── SETTINGS PAGE (#dash-settings) ──────────────────────────────────────────
 // Loads current values into the 5 cards ported from templates/settings.html.
-// Data loading only -- the save/manage-modal interactions those cards'
-// onclick handlers reference (_saveStrategy, _openManage, etc.) aren't wired
-// up yet. The X (Twitter) card stays on its static "not connected" default:
-// there's no JSON endpoint for x_handle (the original page only had it via
-// server-side Jinja at render time), so it's left alone rather than guessing.
 async function loadSettingsPage(){
   if(phantomKey){
     var addrEl=document.getElementById('st-wallet-addr');
@@ -4775,7 +4770,52 @@ async function loadSettingsPage(){
   if(pushCb && typeof _isPushSubscribed==='function'){
     try{ pushCb.checked=await _isPushSubscribed(); }catch(e){}
   }
+  _loadXCard();
   _loadSettingsTos();
+}
+
+/* ── X (Twitter) card (Card 4) ── */
+var _X_CONNECT_SVG='<svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622 5.912-5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>';
+async function _loadXCard(){
+  var el=document.getElementById('st-x-body');
+  if(!el) return;
+  try{
+    var d=await fetch('/api/x/status',{credentials:'include'}).then(function(r){return r.json();});
+    if(!d.ok || !d.connected){
+      el.innerHTML='<div class="st-row-sub" style="margin-bottom:14px">Connect your X account to auto-share trades and badges.</div>'
+        +'<a href="/api/x/connect" class="st-x-connect-btn">'+_X_CONNECT_SVG+'Connect X</a>';
+      return;
+    }
+    el.innerHTML=
+      '<div class="st-x-connected"><span class="st-x-dot"></span><span class="st-x-handle">@'+esc(d.x_handle)+' connected</span></div>'
+      +'<div class="st-tog-row"><div><div class="st-tog-label">Auto-share big trades</div>'
+      +'<div class="st-tog-sub">Post to X when a trade closes with significant P&amp;L</div></div>'
+      +'<label class="st-toggle"><input type="checkbox" id="x-share-trade"'+(d.share_on_big_trade?' checked':'')
+      +' onchange="_saveXPref(\'share_on_big_trade\',this.checked)"><span class="st-track"></span></label></div>'
+      +'<div class="st-tog-row"><div><div class="st-tog-label">Auto-share badges</div>'
+      +'<div class="st-tog-sub">Post to X when you earn a new badge</div></div>'
+      +'<label class="st-toggle"><input type="checkbox" id="x-share-badge"'+(d.share_on_badge?' checked':'')
+      +' onchange="_saveXPref(\'share_on_badge\',this.checked)"><span class="st-track"></span></label></div>'
+      +'<button class="st-x-disconnect" onclick="_disconnectX()">Disconnect @'+esc(d.x_handle)+'</button>';
+  }catch(e){}
+}
+function _saveXPref(key, val){
+  var body={}; body[key]=val?1:0;
+  fetch('/api/x/prefs',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify(body)
+  }).catch(function(){});
+}
+async function _disconnectX(){
+  if(!(await openConfirmModal({text:'Disconnect your X account?',danger:true}))) return;
+  var d=await fetch('/api/x/disconnect',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}
+  }).then(function(r){return r.json();}).catch(function(){return null;});
+  if(d && d.ok) _loadXCard();
 }
 
 function _setKeyStatus(hasKey){

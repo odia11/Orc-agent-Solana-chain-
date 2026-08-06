@@ -10660,6 +10660,33 @@ def x_callback():
     session.pop('x_oauth_wallet',  None)
     return redirect('/settings?x_connected=1')
 
+@app.route('/api/x/status', methods=['GET'])
+@rate_limit(60, 60)
+def x_status():
+    """JSON counterpart to the x_handle/x_share_* Jinja context settings_page()
+    builds server-side -- lets the SPA's #dash-settings X card show the real
+    connection state instead of always defaulting to 'not connected'."""
+    wallet = _current_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        xrow = conn.execute(
+            'SELECT x_handle, share_on_big_trade, share_on_badge FROM x_connections WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not xrow:
+        return jsonify({'ok': True, 'connected': False})
+    return jsonify({
+        'ok': True,
+        'connected': True,
+        'x_handle': xrow[0],
+        'share_on_big_trade': bool(xrow[1]),
+        'share_on_badge': bool(xrow[2]),
+    })
+
 @app.route('/api/x/prefs', methods=['POST'])
 @rate_limit(20, 60)
 def x_prefs():
