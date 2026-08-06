@@ -7411,6 +7411,12 @@ def set_wallet():
         session.permanent = True
         session.modified  = True
         session['wallet'] = address
+        # A prior connect-readonly in this same browser session may have left
+        # session['readonly']=True set -- this signature just proved real key
+        # ownership, so clear it. Without this, _authenticated_wallet() stays
+        # blocked forever for a user who went readonly-connect -> real-connect
+        # without an intervening logout.
+        session.pop('readonly', None)
         # Generate (or retrieve) CSRF token for this session now that the session exists
         csrf_tok = _get_csrf_token()
         try:

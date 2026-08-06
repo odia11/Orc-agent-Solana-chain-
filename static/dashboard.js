@@ -1930,6 +1930,11 @@ function checkOwnerPanel(){
   const healthBtn=document.getElementById('health-btn');
   const sbAdminLink=document.getElementById('sb-admin-link');
   const mnAdminLink=document.getElementById('mn-admin-link');
+  // Piggybacks on checkOwnerPanel()'s existing call sites (launchApp, wallet
+  // reconnect, periodic fetchState) -- not admin-specific, just needs the
+  // same "is a wallet actually connected" moments those already cover.
+  const mnDisconnect=document.getElementById('mn-disconnect');
+  if(mnDisconnect) mnDisconnect.style.display=phantomKey?'flex':'none';
   const isAdminWallet=!!(phantomKey&&(phantomKey===ADMIN_WALLET||phantomKey.startsWith('HC5ahspSox3XRm')));
   if(isAdminWallet){
     if(adminBtn) adminBtn.style.display='';
@@ -4807,6 +4812,116 @@ async function _loadSettingsTos(){
     el.innerHTML='<div class="st-row-sub">Could not load your acceptance record.</div>';
   }
 }
+
+/* ── Strategy save (Card 1) ── */
+async function _saveStrategy(){
+  var btn=document.getElementById('strat-save-btn');
+  var msgEl=document.getElementById('strat-msg');
+  if(!btn) return;
+  var origText=btn.textContent;
+  btn.textContent='Saving…'; btn.disabled=true;
+  try{
+    var submitted={
+      breakout_trigger: parseFloat((document.getElementById('s-breakout')||{}).value)||3,
+      min_trade_size:   parseFloat((document.getElementById('ds-minusdc')||{}).value)||1,
+      take_profit:      parseFloat((document.getElementById('s-tp')||{}).value)||15,
+      stop_loss:        parseFloat((document.getElementById('s-sl')||{}).value)||8,
+      max_positions:    parseInt((document.getElementById('s-maxpos')||{}).value,10)||3
+    };
+    var d=await fetch('/api/settings/save',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      body:JSON.stringify(submitted)
+    }).then(function(r){return r.json();}).catch(function(){return null;});
+    d=d||{};
+    var adjusted=d.ok && d.max_positions!==undefined && d.max_positions!==submitted.max_positions;
+    if(adjusted){
+      var mp=document.getElementById('s-maxpos');
+      if(mp) mp.value=d.max_positions;
+    }
+    if(msgEl){
+      msgEl.className='st-save-msg '+(d.ok?'ok':'err');
+      msgEl.textContent=d.ok?(adjusted?'✓ Saved (max positions capped at '+d.max_positions+')':'✓ Saved'):'✗ '+(d.msg||'failed');
+    }
+    setTimeout(function(){ if(msgEl) msgEl.textContent=''; },3000);
+  }catch(e){
+    if(msgEl){ msgEl.className='st-save-msg err'; msgEl.textContent='✗ Network error'; }
+  }finally{
+    btn.textContent=origText; btn.disabled=false;
+  }
+}
+
+/* ── Manage-key modal (Card 3) ── */
+function _manageMsg(txt, cls){
+  var el=document.getElementById('manage-msg');
+  if(!el) return;
+  el.className='modal-msg'+(cls?' '+cls:'');
+  el.textContent=txt;
+}
+function _openManage(){
+  var inp=document.getElementById('manage-inp');
+  var chk=document.getElementById('manage-confirm-chk');
+  var btn=document.getElementById('manage-save-btn');
+  var modal=document.getElementById('manage-modal');
+  if(inp) inp.value='';
+  if(chk) chk.checked=false;
+  if(btn) btn.disabled=true;
+  _manageMsg('','');
+  if(modal) modal.style.display='flex';
+  setTimeout(function(){ if(inp) inp.focus(); },60);
+}
+function _closeManage(){
+  var inp=document.getElementById('manage-inp');
+  var chk=document.getElementById('manage-confirm-chk');
+  var btn=document.getElementById('manage-save-btn');
+  var modal=document.getElementById('manage-modal');
+  if(modal) modal.style.display='none';
+  if(inp) inp.value='';
+  if(chk) chk.checked=false;
+  if(btn) btn.disabled=true;
+}
+async function _saveKey(){
+  var inp=document.getElementById('manage-inp');
+  var btn=document.getElementById('manage-save-btn');
+  var key=(inp?inp.value:'').trim();
+  if(!key){ _manageMsg('Paste your private key first.','err'); return; }
+  if(key.length<40){ _manageMsg('Key looks too short — paste the full base58 key.','err'); return; }
+  if(!btn) return;
+  var origText=btn.textContent;
+  btn.textContent='Saving…'; btn.disabled=true;
+  try{
+    var d=await fetch('/api/wallet/set-key',{
+      method:'POST',
+      credentials:'include',
+      headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+      body:JSON.stringify({private_key:key})
+    }).then(function(r){return r.json();}).catch(function(){return null;});
+    if(d && d.ok){
+      _manageMsg('✓ Key saved and encrypted.','ok');
+      if(inp) inp.value='';
+      _setKeyStatus(true);
+      // keep the app-wide key flag (Start Trading gating, setup wizard, etc.)
+      // in sync -- this modal is a second entry point to the same save, same
+      // as the older #settings-modal's onboarding flow (_obSaveKey()).
+      settingsHasKey=true;
+      if(typeof _updateKeyStatus==='function') _updateKeyStatus();
+      setTimeout(_closeManage, 1200);
+    } else {
+      _manageMsg('✗ '+((d&&(d.msg||d.error))||'Save failed.'),'err');
+    }
+  }catch(e){
+    _manageMsg('✗ Network error.','err');
+  }finally{
+    btn.textContent=origText; btn.disabled=false;
+  }
+}
+document.addEventListener('keydown',function(e){
+  if(e.key==='Escape'){
+    var modal=document.getElementById('manage-modal');
+    if(modal && modal.style.display==='flex') _closeManage();
+  }
+});
 
 // ── PNL PERFORMANCE CHART (LightweightCharts) ──────────────────────────────
 let _pnlcChart=null,_pnlcSeries=null,_pnlcRange='1d';
