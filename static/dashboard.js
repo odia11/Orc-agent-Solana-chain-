@@ -3405,7 +3405,20 @@ function _sbNav(section){
   } else if(section==='community'){
     openCommunityView();
   } else if(section==='leaderboard'){
-    window.location.href='/leaderboard';
+    if(_dmOpen) closeMessagesView();
+    if(_tradersView) closeTradersView();
+    if(_gcOpen) closeCommunityView();
+    // hide main content and all dash sections
+    const _mc=document.getElementById('main-content');
+    if(_mc) _mc.style.display='none';
+    document.querySelectorAll('.dash-section').forEach(function(s){ s.style.display='none'; });
+    const lb=document.getElementById('dash-leaderboard');
+    if(lb){
+      lb.style.display='block';
+      lb.scrollTop=0;
+    }
+    _sbSetActive('sbn-leaderboard');
+    loadLeaderboardPage();
   } else if(section==='notifications'){
     if(_dmOpen) closeMessagesView();
     if(_tradersView) closeTradersView();
@@ -4609,6 +4622,95 @@ async function fetchLeaderboard(){
   const _foc=document.getElementById('feed-online-count');
   if(_foc&&ps&&ps.ok) _foc.textContent=ps.active_traders??'—';
   _lbStartCountdown();
+}
+
+// ── FULL LEADERBOARD PAGE (#dash-leaderboard) ──────────────────────────────
+// Distinct from renderLeaderboard()/#lb-list above, which is the small
+// home-feed widget. This populates the podium/table/rank-banner scaffold
+// ported from templates/leaderboard.html. Reuses /api/leaderboard (today's
+// top 10) rather than the removed /leaderboard page's own all-time query,
+// so there's no server-side win_rate here -- rendered as "—".
+async function loadLeaderboardPage(){
+  const tbody=document.getElementById('lb-table-tbody');
+  if(tbody) tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr>';
+  const entries=await fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null);
+  _renderLbRankBanner(Array.isArray(entries)?entries:[]);
+  _renderLbPodium(Array.isArray(entries)?entries:[]);
+  _renderLbTable(Array.isArray(entries)?entries:[]);
+}
+
+function _lbShortWallet(addr){
+  addr=addr||'';
+  return addr.length>=10 ? addr.slice(0,6)+'…'+addr.slice(-4) : addr;
+}
+function _lbVerifiedBadgeHtml(e){
+  return (e.badges||[]).includes('verified')
+    ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+    : '';
+}
+
+function _renderLbRankBanner(entries){
+  const el=document.getElementById('lb-rank-banner');
+  if(!el) return;
+  const mine=entries.find(function(e){ return phantomKey && e.wallet_address===phantomKey; });
+  if(!mine){ el.innerHTML=''; return; }
+  const pnlStr=(mine.total_pnl>=0?'+':'')+mine.total_pnl.toFixed(4);
+  el.innerHTML='<div class="rank-banner"><span class="rank-banner-check">✓</span>'
+    +'<span>You are ranked <strong>#'+mine.rank+'</strong> with <strong>'+esc(pnlStr)+' SOL</strong> across <strong>'
+    +mine.trade_count+' trade'+(mine.trade_count!==1?'s':'')+'</strong>.</span></div>';
+}
+
+const _LB_MEDALS=[['🥇','gold','1ST PLACE'],['🥈','silver','2ND PLACE'],['🥉','bronze','3RD PLACE']];
+
+function _renderLbPodium(entries){
+  const el=document.getElementById('lb-podium');
+  if(!el) return;
+  const top=entries.slice(0,3);
+  if(!top.length){ el.innerHTML=''; return; }
+  el.innerHTML=top.map(function(e,i){
+    const medal=_LB_MEDALS[i][0], cls=_LB_MEDALS[i][1], label=_LB_MEDALS[i][2];
+    const isMe=!!(phantomKey && e.wallet_address===phantomKey);
+    const pnlPos=e.total_pnl>=0;
+    return '<div class="podium-card '+cls+'">'
+      +'<div class="podium-top-line"></div>'
+      +'<div class="podium-medal">'+medal+'</div>'
+      +'<div class="podium-place">'+label+'</div>'
+      +'<div class="podium-wallet'+(isMe?' is-me':'')+'" style="cursor:pointer" onclick="openProfileCard('+(e.user_id||0)+')">'+esc(_lbShortWallet(e.wallet_address))+'</div>'+_lbVerifiedBadgeHtml(e)
+      +'<div class="podium-pnl '+(pnlPos?'pos':'neg')+'">'+(pnlPos?'+':'')+e.total_pnl.toFixed(4)+' SOL</div>'
+      +'<div class="podium-meta">'+e.trade_count+' trade'+(e.trade_count!==1?'s':'')+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+function _renderLbTable(entries){
+  const wrap=document.querySelector('#dash-leaderboard .table-wrap');
+  const tbody=document.getElementById('lb-table-tbody');
+  const empty=document.getElementById('lb-empty');
+  if(!tbody) return;
+  if(!entries.length){
+    tbody.innerHTML='';
+    if(wrap) wrap.style.display='none';
+    if(empty) empty.style.display='';
+    return;
+  }
+  if(wrap) wrap.style.display='';
+  if(empty) empty.style.display='none';
+  tbody.innerHTML=entries.map(function(e){
+    const isMe=!!(phantomKey && e.wallet_address===phantomKey);
+    const rowCls=isMe?'row-me':(e.rank===1?'row-gold':e.rank===2?'row-silver':e.rank===3?'row-bronze':'');
+    const rankCls=e.rank===1?' top1':e.rank===2?' top2':e.rank===3?' top3':'';
+    const rankHtml=e.rank===1?'🥇':e.rank===2?'🥈':e.rank===3?'🥉':e.rank;
+    const pnlPos=e.total_pnl>=0;
+    const meChip=isMe?'<span class="me-chip">YOU</span>':'';
+    return '<tr class="'+rowCls+'">'
+      +'<td class="td-rank'+rankCls+'">'+rankHtml+'</td>'
+      +'<td><span class="td-wallet'+(isMe?' is-me':'')+'" style="cursor:pointer" onclick="openProfileCard('+(e.user_id||0)+')">'+esc(_lbShortWallet(e.wallet_address))+'</span>'+_lbVerifiedBadgeHtml(e)+meChip+'</td>'
+      +'<td class="td-pnl '+(pnlPos?'pos':'neg')+'">'+(pnlPos?'+':'')+e.total_pnl.toFixed(4)+'</td>'
+      +'<td class="td-wr">—</td>'
+      +'<td class="td-num">'+e.trade_count+'</td>'
+      +'<td class="td-best">+'+e.best_trade.toFixed(4)+'</td>'
+      +'</tr>';
+  }).join('');
 }
 
 // ── PNL PERFORMANCE CHART (LightweightCharts) ──────────────────────────────
