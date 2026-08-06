@@ -997,6 +997,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .s-key-saved-row{display:flex;align-items:center;justify-content:space-between;gap:8px;background:rgba(0,0,0,.09);border:1px solid rgba(0,0,0,.35);border-radius:8px;padding:11px 14px;margin-bottom:16px}
 .s-remove-key-btn{background:rgba(255,0,0,.1);border:1px solid rgba(255,0,0,.3);border-radius:5px;color:var(--red);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
 .s-remove-key-btn:hover{background:rgba(255,0,0,.2)}
+.s-manage-key-btn{background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.3);border-radius:5px;color:var(--accent);font-size:9px;padding:4px 10px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s}
+.s-manage-key-btn:hover{background:rgba(247,185,85,.2)}
 .avoid-btn{background:rgba(255,0,0,.08);border:1px solid rgba(255,0,0,.25);border-radius:5px;color:var(--red);font-size:9px;padding:3px 8px;cursor:pointer;font-family:'Share Tech Mono',monospace;white-space:nowrap;transition:background .15s;line-height:1.4}
 .avoid-btn:hover{background:rgba(255,0,0,.2)}
 .bl-list{margin-top:6px;display:flex;flex-direction:column;gap:6px}
@@ -3513,6 +3515,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="s-title">⚙ TRADING SETTINGS</div>
     <div class="s-sub" id="s-user-label">Connect a wallet to save per-wallet settings</div>
 
+    <div class="s-key-saved-row" id="s-key-saved" style="display:none">
+      <span style="font-size:11px;color:var(--green)">✓ Trading key saved</span>
+      <button class="s-remove-key-btn" onclick="removeKey()">Remove Key</button>
+    </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+      <button class="s-manage-key-btn" onclick="_openManage()">🔑 Manage Trading Key</button>
+      <span class="s-key-hint" id="s-key-hint"></span>
+    </div>
+
     <div class="s-grid" style="grid-template-columns:1fr 1fr 1fr">
       <div class="s-field" style="margin-bottom:0">
         <label class="s-label">Min Trade Size (USDC)</label>
@@ -3546,6 +3557,34 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div id="s-faceid-prompt-msg" style="font-size:11px;margin-top:8px;min-height:14px"></div>
     </div>
 
+  </div>
+</div>
+
+<!-- ── MANAGE TRADING KEY MODAL (opened from #settings-modal's Manage button
+     and from #dash-settings' Account & Wallet card -- lives outside #app so
+     it isn't hidden if #dash-settings itself is display:none at the time) ── -->
+<div class="modal-back" id="manage-modal" onclick="if(event.target===this)_closeManage()">
+  <div class="modal-box">
+    <button class="modal-close" onclick="_closeManage()">✕</button>
+    <div class="modal-title">Enter Private Key</div>
+    <textarea id="manage-inp" class="modal-textarea" placeholder="Paste your base58 private key here…" autocomplete="new-password" spellcheck="false"></textarea>
+    <div class="manage-warn">
+      <p>Door een private key op te slaan:</p>
+      <ul>
+        <li>wordt dit wallet je <strong>trading-wallet</strong> voor zowel de bot als copy-trade — geen wallet-pop-up meer per trade;</li>
+        <li>bewaart de server de sleutel <strong>versleuteld</strong> (encrypted at rest);</li>
+        <li>ben je zelf verantwoordelijk voor het saldo op dit wallet — gebruik geen wallet met je hoofdvermogen.</li>
+      </ul>
+    </div>
+    <label class="tos-checkbox-row">
+      <input type="checkbox" id="manage-confirm-chk" onchange="document.getElementById('manage-save-btn').disabled=!this.checked">
+      <span>Ik begrijp dit en wil doorgaan</span>
+    </label>
+    <div class="modal-btns">
+      <button class="modal-btn modal-cancel" onclick="_closeManage()">Cancel</button>
+      <button class="modal-btn modal-save" id="manage-save-btn" disabled onclick="_saveKey()">Save</button>
+    </div>
+    <div class="modal-msg" id="manage-msg"></div>
   </div>
 </div>
 
@@ -4654,32 +4693,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
 
     </div><!-- /st-content -->
-
-    <!-- ── MANAGE MODAL ── -->
-    <div class="modal-back" id="manage-modal" onclick="if(event.target===this)_closeManage()">
-      <div class="modal-box">
-        <button class="modal-close" onclick="_closeManage()">✕</button>
-        <div class="modal-title">Enter Private Key</div>
-        <textarea id="manage-inp" class="modal-textarea" placeholder="Paste your base58 private key here…" autocomplete="new-password" spellcheck="false"></textarea>
-        <div class="manage-warn">
-          <p>Door een private key op te slaan:</p>
-          <ul>
-            <li>wordt dit wallet je <strong>trading-wallet</strong> voor zowel de bot als copy-trade — geen wallet-pop-up meer per trade;</li>
-            <li>bewaart de server de sleutel <strong>versleuteld</strong> (encrypted at rest);</li>
-            <li>ben je zelf verantwoordelijk voor het saldo op dit wallet — gebruik geen wallet met je hoofdvermogen.</li>
-          </ul>
-        </div>
-        <label class="tos-checkbox-row">
-          <input type="checkbox" id="manage-confirm-chk" onchange="document.getElementById('manage-save-btn').disabled=!this.checked">
-          <span>Ik begrijp dit en wil doorgaan</span>
-        </label>
-        <div class="modal-btns">
-          <button class="modal-btn modal-cancel" onclick="_closeManage()">Cancel</button>
-          <button class="modal-btn modal-save" id="manage-save-btn" disabled onclick="_saveKey()">Save</button>
-        </div>
-        <div class="modal-msg" id="manage-msg"></div>
-      </div>
-    </div>
   </div><!-- /dash-settings -->
 
   <!-- ── RIGHT DISCOVERY RAIL ── -->
