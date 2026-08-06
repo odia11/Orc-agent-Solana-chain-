@@ -3421,6 +3421,21 @@ function _sbNav(section){
     }
     _sbSetActive('sbn-leaderboard');
     loadLeaderboardPage();
+  } else if(section==='settings'){
+    if(_dmOpen) closeMessagesView();
+    if(_tradersView) closeTradersView();
+    if(_gcOpen) closeCommunityView();
+    // hide main content and all dash sections
+    const _mc=document.getElementById('main-content');
+    if(_mc) _mc.style.display='none';
+    document.querySelectorAll('.dash-section').forEach(function(s){ s.style.display='none'; });
+    const st=document.getElementById('dash-settings');
+    if(st){
+      st.style.display='block';
+      st.scrollTop=0;
+    }
+    _sbSetActive('sbn-settings');
+    loadSettingsPage();
   } else if(section==='notifications'){
     if(_dmOpen) closeMessagesView();
     if(_tradersView) closeTradersView();
@@ -4714,6 +4729,83 @@ function _renderLbTable(entries){
       +'<td class="td-best">+'+e.best_trade.toFixed(4)+'</td>'
       +'</tr>';
   }).join('');
+}
+
+// ── SETTINGS PAGE (#dash-settings) ──────────────────────────────────────────
+// Loads current values into the 5 cards ported from templates/settings.html.
+// Data loading only -- the save/manage-modal interactions those cards'
+// onclick handlers reference (_saveStrategy, _openManage, etc.) aren't wired
+// up yet. The X (Twitter) card stays on its static "not connected" default:
+// there's no JSON endpoint for x_handle (the original page only had it via
+// server-side Jinja at render time), so it's left alone rather than guessing.
+async function loadSettingsPage(){
+  if(phantomKey){
+    var addrEl=document.getElementById('st-wallet-addr');
+    if(addrEl){ addrEl.textContent=phantomKey; addrEl.title=phantomKey; }
+  }
+  try{
+    var d=await fetch('/api/settings/get').then(function(r){return r.json();});
+    if(d.ok){
+      var b =document.getElementById('s-breakout'); if(b  && d.breakout_trigger!=null) b.value =d.breakout_trigger;
+      var mu=document.getElementById('ds-minusdc');  if(mu && d.min_trade_size!=null)   mu.value=d.min_trade_size;
+      var tp=document.getElementById('s-tp');        if(tp && d.take_profit!=null)      tp.value=d.take_profit;
+      var sl=document.getElementById('s-sl');        if(sl && d.stop_loss!=null)        sl.value=d.stop_loss;
+      var mp=document.getElementById('s-maxpos');    if(mp && d.max_positions!=null)    mp.value=d.max_positions;
+      _setKeyStatus(!!d.has_trading_key);
+      var notifs=document.getElementById('pref-notifs'); if(notifs) notifs.checked=!!d.pref_notifications;
+      var scam  =document.getElementById('pref-scam');   if(scam)   scam.checked  =!!d.pref_scam_filter;
+      var sound =document.getElementById('pref-sound');  if(sound)  sound.checked =!!d.pref_sound_alerts;
+      var autobot=document.getElementById('pref-autobot'); if(autobot) autobot.checked=!!d.bot_running;
+      if(d.is_verified){
+        var nameEl=document.getElementById('sb-user-name');
+        if(nameEl && !nameEl.querySelector('svg')){
+          nameEl.innerHTML='You <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+        }
+      }
+    }
+  }catch(e){}
+  var pushCb=document.getElementById('pref-push');
+  if(pushCb && typeof _isPushSubscribed==='function'){
+    try{ pushCb.checked=await _isPushSubscribed(); }catch(e){}
+  }
+  _loadSettingsTos();
+}
+
+function _setKeyStatus(hasKey){
+  var stat=document.getElementById('st-key-status');
+  var txt=document.getElementById('st-key-status-text');
+  if(hasKey){
+    if(stat) stat.className='st-key-status has-key';
+    if(txt)  txt.textContent='Private key saved — ready to trade';
+  } else {
+    if(stat) stat.className='st-key-status';
+    if(txt)  txt.textContent='No private key — add one to enable trading';
+  }
+}
+
+async function _loadSettingsTos(){
+  var el=document.getElementById('st-tos-body');
+  if(!el) return;
+  try{
+    var d=await fetch('/api/tos/my-acceptance').then(function(r){return r.json();});
+    if(!d.ok || !d.accepted){
+      el.innerHTML='<div class="st-row-sub">You haven\'t accepted the Terms of Service yet.</div>';
+      return;
+    }
+    var iso=d.accepted_at.replace(' ','T')+'Z';
+    var dateStr=new Date(iso).toLocaleString('en-US',{dateStyle:'medium',timeStyle:'short',timeZone:'UTC'})+' UTC';
+    var note=d.has_snapshot?'':(
+      '<div class="st-tos-note">⚠ This will show the <strong>current</strong> Terms of Service '
+      +'in the PDF — the exact text in effect on your acceptance date wasn\'t archived at that time.</div>'
+    );
+    el.innerHTML=
+      '<div class="st-row-sub" style="margin-bottom:14px">Accepted on <strong style="color:var(--text)">'
+      +esc(dateStr)+'</strong> &middot; version '+esc(d.version)+'</div>'
+      +note
+      +'<a class="st-tos-dl-btn" href="/tos/download">⬇ Download PDF</a>';
+  }catch(e){
+    el.innerHTML='<div class="st-row-sub">Could not load your acceptance record.</div>';
+  }
 }
 
 // ── PNL PERFORMANCE CHART (LightweightCharts) ──────────────────────────────
