@@ -3263,12 +3263,14 @@ function _botApplyUI(running){
   var dot=document.getElementById('bot-dot')
   var lbl=document.getElementById('bot-label')
   var btn=document.getElementById('bot-toggle-btn')
+  var prefAutobot=document.getElementById('pref-autobot')
   if(dot) dot.style.background=running?'#3ad29b':'#f7b955'
   if(lbl) lbl.textContent=running?'Bot running':'Bot is idle'
   if(btn){
     btn.textContent=running?'⏹ Stop Trading':'▶ Start Trading'
     btn.classList.toggle('running',running)
   }
+  if(prefAutobot) prefAutobot.checked=running
   traderOn = running
   updateBtns()
   return btn
@@ -4922,6 +4924,41 @@ document.addEventListener('keydown',function(e){
     if(modal && modal.style.display==='flex') _closeManage();
   }
 });
+
+/* ── Preference toggles (Card 2) ── */
+function _savePref(key, val){
+  var body={};
+  body['pref_'+key]=val;
+  fetch('/api/settings/save',{
+    method:'POST',
+    credentials:'include',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify(body)
+  }).catch(function(){});
+}
+async function _onBotToggle(el){
+  // Reuses the app-wide _botToggle()/_botApplyUI() (Home page's Start Trading
+  // button) instead of a separate start/stop call, so this checkbox and that
+  // button can never end up showing different running-states.
+  el.disabled=true;
+  try{ await _botToggle(); }finally{ el.disabled=false; }
+}
+async function _onPushToggle(cb){
+  cb.disabled=true;
+  if(cb.checked){
+    if(typeof _enablePushNotifications!=='function'){
+      cb.checked=false; cb.disabled=false; return;
+    }
+    var r=await _enablePushNotifications();
+    if(!r.ok){
+      cb.checked=false;
+      openAlertModal({text:'Could not enable phone notifications: '+(r.msg||'unknown error')});
+    }
+  } else if(typeof _disablePushNotifications==='function'){
+    await _disablePushNotifications();
+  }
+  cb.disabled=false;
+}
 
 // ── PNL PERFORMANCE CHART (LightweightCharts) ──────────────────────────────
 let _pnlcChart=null,_pnlcSeries=null,_pnlcRange='1d';
