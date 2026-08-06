@@ -4627,13 +4627,13 @@ async function fetchLeaderboard(){
 // ── FULL LEADERBOARD PAGE (#dash-leaderboard) ──────────────────────────────
 // Distinct from renderLeaderboard()/#lb-list above, which is the small
 // home-feed widget. This populates the podium/table/rank-banner scaffold
-// ported from templates/leaderboard.html. Reuses /api/leaderboard (today's
-// top 10) rather than the removed /leaderboard page's own all-time query,
-// so there's no server-side win_rate here -- rendered as "—".
+// ported from templates/leaderboard.html, fed by /api/leaderboard/full --
+// the all-time, win_rate-inclusive counterpart to /api/leaderboard (which
+// stays today-only/top-10 for the home-feed widget above).
 async function loadLeaderboardPage(){
   const tbody=document.getElementById('lb-table-tbody');
   if(tbody) tbody.innerHTML='<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:16px">Loading…</td></tr>';
-  const entries=await fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null);
+  const entries=await fetch('/api/leaderboard/full').then(r=>r.json()).catch(()=>null);
   _renderLbRankBanner(Array.isArray(entries)?entries:[]);
   _renderLbPodium(Array.isArray(entries)?entries:[]);
   _renderLbTable(Array.isArray(entries)?entries:[]);
@@ -4677,7 +4677,7 @@ function _renderLbPodium(entries){
       +'<div class="podium-place">'+label+'</div>'
       +'<div class="podium-wallet'+(isMe?' is-me':'')+'" style="cursor:pointer" onclick="openProfileCard('+(e.user_id||0)+')">'+esc(_lbShortWallet(e.wallet_address))+'</div>'+_lbVerifiedBadgeHtml(e)
       +'<div class="podium-pnl '+(pnlPos?'pos':'neg')+'">'+(pnlPos?'+':'')+e.total_pnl.toFixed(4)+' SOL</div>'
-      +'<div class="podium-meta">'+e.trade_count+' trade'+(e.trade_count!==1?'s':'')+'</div>'
+      +'<div class="podium-meta">'+e.win_rate.toFixed(1)+'% WR &middot; '+e.trade_count+' trade'+(e.trade_count!==1?'s':'')+'</div>'
       +'</div>';
   }).join('');
 }
@@ -4701,12 +4701,13 @@ function _renderLbTable(entries){
     const rankCls=e.rank===1?' top1':e.rank===2?' top2':e.rank===3?' top3':'';
     const rankHtml=e.rank===1?'🥇':e.rank===2?'🥈':e.rank===3?'🥉':e.rank;
     const pnlPos=e.total_pnl>=0;
+    const wrPos=e.win_rate>=50;
     const meChip=isMe?'<span class="me-chip">YOU</span>':'';
     return '<tr class="'+rowCls+'">'
       +'<td class="td-rank'+rankCls+'">'+rankHtml+'</td>'
       +'<td><span class="td-wallet'+(isMe?' is-me':'')+'" style="cursor:pointer" onclick="openProfileCard('+(e.user_id||0)+')">'+esc(_lbShortWallet(e.wallet_address))+'</span>'+_lbVerifiedBadgeHtml(e)+meChip+'</td>'
       +'<td class="td-pnl '+(pnlPos?'pos':'neg')+'">'+(pnlPos?'+':'')+e.total_pnl.toFixed(4)+'</td>'
-      +'<td class="td-wr">—</td>'
+      +'<td class="td-wr '+(wrPos?'pos':'neg')+'">'+e.win_rate.toFixed(1)+'%</td>'
       +'<td class="td-num">'+e.trade_count+'</td>'
       +'<td class="td-best">+'+e.best_trade.toFixed(4)+'</td>'
       +'</tr>';

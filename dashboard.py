@@ -7933,6 +7933,61 @@ def get_leaderboard():
         })
     return jsonify(result)
 
+@app.route('/api/leaderboard/full', methods=['GET'])
+@rate_limit(60, 60)
+def get_leaderboard_full():
+    """All-time leaderboard with win_rate -- the fuller dataset the /leaderboard
+    page's Jinja template renders server-side (see leaderboard()). This is the
+    JSON counterpart powering #dash-leaderboard (the SPA podium/table section);
+    /api/leaderboard above stays today-only/top-10 for the home-feed widget."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT t.user_id,
+                   u.username,
+                   u.wallet_address,
+                   u.avatar_url,
+                   ROUND(SUM(t.pnl), 4)                                                    AS total_pnl,
+                   ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
+                         * 100.0 / COUNT(*), 1)                                            AS win_rate,
+                   COUNT(*)                                                                 AS trade_count,
+                   ROUND(MAX(t.pnl), 4)                                                    AS best_trade,
+                   u.badges                                                                 AS badges,
+                   u.is_verified                                                            AS is_verified
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE u.wallet_address IS NOT NULL AND u.wallet_address != ''
+              AND (t.source = 'manual' OR (t.source IS NULL AND t.mint_address IS NOT NULL))
+            GROUP BY t.user_id
+            ORDER BY total_pnl DESC
+            LIMIT 50
+        ''')
+        rows = c.fetchall()
+    finally:
+        conn.close()
+    result = []
+    for rank, row in enumerate(rows, 1):
+        user_id, username, wallet, avatar_url, total_pnl, win_rate, trade_count, best_trade, badges_str, is_verified = row
+        if not username:
+            username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
+        badges_list = [b.strip() for b in (badges_str or '').split(',') if b.strip()]
+        if is_verified and 'verified' not in badges_list:
+            badges_list.append('verified')
+        result.append({
+            'rank':           rank,
+            'user_id':        user_id,
+            'username':       username,
+            'wallet_address': wallet or '',
+            'avatar_url':     avatar_url or '',
+            'total_pnl':      round(float(total_pnl or 0), 4),
+            'win_rate':       round(float(win_rate or 0), 1),
+            'trade_count':    int(trade_count or 0),
+            'best_trade':     round(float(best_trade or 0), 4),
+            'badges':         badges_list,
+        })
+    return jsonify(result)
+
 @app.route('/api/stats', methods=['GET'])
 @rate_limit(60, 60)
 def api_stats():
