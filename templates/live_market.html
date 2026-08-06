@@ -782,10 +782,38 @@ function _lmApplyChipFilter(){
   var filtered = _lmChipQuery ? sorted.filter(function(p){ return _lmChipMatchesQuery(p,_lmChipQuery); }) : sorted;
   var wrap = document.getElementById('lm-table-wrap');
   if(!filtered.length){
+    if(_lmChipQuery){ _lmChipFilterRemoteFallback(_lmChipQuery); return; }
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
   wrap.innerHTML = _buildTable(filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+}
+
+/* local list has no match for the typed query -- fall back to the same
+   broad DexScreener search _lmGlobalSearch() hits (/api/dexscreener/search,
+   same $-stripping and chainId filter), but rendered as table rows via
+   _buildTable/_rowHtml instead of the global-search dropdown, so results
+   land in the same table form (liquidity/volume/age columns included) as
+   a normal chip-filter match. _lmChipQuery is re-checked after the await
+   so a stale response from fast typing doesn't clobber newer input. */
+async function _lmChipFilterRemoteFallback(q){
+  var wrap = document.getElementById('lm-table-wrap');
+  wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8"><span class="lm-spinner-ring"></span>Searching…</td></tr>');
+  try{
+    var qRemote = q.replace(/^\$/, ''); // DexScreener's search doesn't understand a leading $
+    var r = await fetch('/api/dexscreener/search?q=' + encodeURIComponent(qRemote));
+    var d = await r.json();
+    if(q !== _lmChipQuery) return; // stale — query changed while in flight
+    var pairs = _dedupeByAddress((d.pairs || []).filter(function(p){ return p.chainId === 'solana'; }), {});
+    if(!pairs.length){
+      wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
+      return;
+    }
+    wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  }catch(e){
+    if(q !== _lmChipQuery) return;
+    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8" style="color:#ff4d6a">Search failed</td></tr>');
+  }
 }
 
 /* ── global token search — separate from the chip-search above: hits
