@@ -125,6 +125,16 @@
   .lmtd-terminal-chart{flex:1 1 auto;width:100%}
 }
 
+/* < 480px: logo + titel/badge/LIVE-indicator alleen passen niet meer naast
+   de Focus/Terminal/Holders-toggle op één regel — laat de header wrappen en
+   geef de toggle flex-basis:100% zodat hij op een eigen regel eronder komt
+   i.p.v. ertegenaan te persen (.lmtd-header's gap:12px geeft de verticale
+   ruimte tussen de twee regels, zonder extra margin nodig). */
+@media(max-width:480px){
+  .lmtd-header{flex-wrap:wrap}
+  .lmtd-layout-toggle{flex-basis:100%}
+}
+
 /* Token Detail card header — SOLANA-badge/LIVE-dot werden al vanaf 375px
    afgekapt of onzichtbaar (gemeten tot ~428px). Badges verkort i.p.v. naam
    volledig te tonen; naam krijgt expliciete min-width:0 zodat hij ellipsist
