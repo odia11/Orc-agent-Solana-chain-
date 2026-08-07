@@ -5082,7 +5082,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- MOBILE NAV DRAWER -->
 <div id="mn-drawer" role="dialog" aria-label="Navigation menu">
-  <div class="mn-drawer-handle"></div>
+  <div class="mn-drawer-handle" id="mn-drawer-handle"></div>
   <button class="mn-drawer-cta" id="mn-drawer-trade-btn" onclick="_mnDrawerClose();_botToggle()">&#9654; Start Trading</button>
   <nav class="mn-drawer-nav">
     <a class="mn-drawer-item" href="/" onclick="_mnDrawerClose();if(window._sbNav){event.preventDefault();_clearStalePostHash();_sbNav('dashboard');}">
@@ -5165,6 +5165,8 @@ function _mnDrawerOpen(){
   var drawer  = document.getElementById('mn-drawer');
   var overlay = document.getElementById('mn-overlay');
   if(!drawer) return;
+  drawer.style.transition = ''; // clear any leftover drag state from a swipe-to-close
+  drawer.style.transform  = '';
   drawer.classList.add('open');
   overlay.classList.add('open');
   document.body.style.overflow = 'hidden';
@@ -5193,6 +5195,52 @@ document.addEventListener('DOMContentLoaded', function(){
 document.addEventListener('keydown', function(e){
   if(e.key === 'Escape') _mnDrawerClose();
 });
+
+/* ── SWIPE-DOWN-TO-CLOSE (drag handle) — same vanilla touchstart/touchmove/
+   touchend pattern as _attachSwipeToDelete() (static/dashboard.js ~line 6272),
+   but vertical instead of horizontal: dragging the handle down past
+   DISMISS_THRESHOLD closes the drawer via _mnDrawerClose(); an insufficient
+   drag springs back to the open position. ── */
+(function(){
+  var handle = document.getElementById('mn-drawer-handle');
+  var drawer = document.getElementById('mn-drawer');
+  if(!handle || !drawer) return;
+  var DISMISS_THRESHOLD = 80;
+  var startY = 0, dragging = false, moved = false, lastDy = 0;
+
+  function setTranslate(y, animate){
+    drawer.style.transition = animate ? 'transform .2s ease' : 'none';
+    drawer.style.transform = 'translateY('+y+'px)';
+  }
+
+  handle.addEventListener('touchstart', function(e){
+    if(e.touches.length!==1) return;
+    startY = e.touches[0].clientY;
+    dragging = true; moved = false; lastDy = 0;
+  }, {passive:true});
+
+  handle.addEventListener('touchmove', function(e){
+    if(!dragging) return;
+    var dy = e.touches[0].clientY - startY;
+    if(dy <= 0) return; // only a downward drag moves the drawer
+    e.preventDefault();
+    moved = true;
+    lastDy = dy;
+    setTranslate(dy, false);
+  }, {passive:false});
+
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    if(moved){
+      if(lastDy > DISMISS_THRESHOLD) _mnDrawerClose();
+      else setTranslate(0, true);
+    }
+    moved = false; lastDy = 0;
+  }
+  handle.addEventListener('touchend', endDrag, {passive:true});
+  handle.addEventListener('touchcancel', endDrag, {passive:true});
+})();
 </script>
 
 <!-- ADMIN INVITE MODAL -->
