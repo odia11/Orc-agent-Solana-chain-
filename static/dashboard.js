@@ -4703,7 +4703,13 @@ function _renderLbRankBanner(entries){
   const pnlStr=(mine.total_pnl>=0?'+':'')+mine.total_pnl.toFixed(4);
   el.innerHTML='<div class="rank-banner"><span class="rank-banner-check">✓</span>'
     +'<span>You are ranked <strong>#'+mine.rank+'</strong> with <strong>'+esc(pnlStr)+' SOL</strong> across <strong>'
-    +mine.trade_count+' trade'+(mine.trade_count!==1?'s':'')+'</strong>.</span></div>';
+    +mine.trade_count+' trade'+(mine.trade_count!==1?'s':'')+'</strong>.</span>'
+    +'<button class="rank-banner-share" onclick="_shareLbRankToX('+mine.rank+',\''+pnlStr+'\','+mine.trade_count+')" title="Share on X">𝕏 Share</button>'
+    +'</div>';
+}
+function _shareLbRankToX(rank, pnlStr, tradeCount){
+  var text = 'Ranked #'+rank+' on OrcAgent with '+pnlStr+' SOL across '+tradeCount+' trade'+(tradeCount!==1?'s':'')+' 🚀';
+  window.open('https://x.com/intent/tweet?text='+encodeURIComponent(text)+'&url='+encodeURIComponent(window.location.origin+'/leaderboard'), '_blank');
 }
 
 const _LB_MEDALS=[['🥇','gold','1ST PLACE'],['🥈','silver','2ND PLACE'],['🥉','bronze','3RD PLACE']];

@@ -92,6 +92,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
   display:flex;align-items:center;gap:10px;
 }
 .rank-banner-check{font-size:16px;flex-shrink:0}
+.rank-banner-share{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;gap:5px;background:transparent;border:1px solid var(--accent-border);border-radius:8px;padding:6px 12px;font-family:var(--ui);font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;transition:all .15s;white-space:nowrap}
+.rank-banner-share:hover{background:var(--accent-dim)}
 
 /* ── TABLE ── */
 .table-wrap{overflow-x:auto;border-radius:14px;border:1px solid #16191f}
@@ -200,9 +202,11 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 
   <!-- YOUR RANK BANNER -->
   {% for e in entries %}{% if e.is_me %}
+  {% set pnl_str = ('+' if e.total_pnl >= 0 else '') ~ ('%.4f'|format(e.total_pnl)) %}
   <div class="rank-banner">
     <span class="rank-banner-check">✓</span>
-    <span>You are ranked <strong>#{{ e.rank }}</strong> with <strong>{{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }} SOL</strong> across <strong>{{ e.trade_count }} trade{{ 's' if e.trade_count != 1 else '' }}</strong>.</span>
+    <span>You are ranked <strong>#{{ e.rank }}</strong> with <strong>{{ pnl_str }} SOL</strong> across <strong>{{ e.trade_count }} trade{{ 's' if e.trade_count != 1 else '' }}</strong>.</span>
+    <button class="rank-banner-share" onclick="_shareLbRankToX({{ e.rank }},'{{ pnl_str }}',{{ e.trade_count }})" title="Share on X">𝕏 Share</button>
   </div>
   {% endif %}{% endfor %}
 
@@ -274,6 +278,12 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 {% endif %}
 
 </div><!-- /page -->
+<script>
+function _shareLbRankToX(rank, pnlStr, tradeCount){
+  var text = 'Ranked #'+rank+' on OrcAgent with '+pnlStr+' SOL across '+tradeCount+' trade'+(tradeCount!==1?'s':'')+' 🚀';
+  window.open('https://x.com/intent/tweet?text='+encodeURIComponent(text)+'&url='+encodeURIComponent(window.location.origin+'/leaderboard'), '_blank');
+}
+</script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 </body>
