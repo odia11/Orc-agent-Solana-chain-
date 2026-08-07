@@ -5200,12 +5200,19 @@ document.addEventListener('keydown', function(e){
    touchend pattern as _attachSwipeToDelete() (static/dashboard.js ~line 6272),
    but vertical instead of horizontal: dragging the handle down past
    DISMISS_THRESHOLD closes the drawer via _mnDrawerClose(); an insufficient
-   drag springs back to the open position. ── */
+   drag springs back to the open position.
+   Listeners live on #mn-drawer itself rather than the 4px-tall
+   .mn-drawer-handle bar, so the actual touch target is the whole top
+   TOUCH_ZONE_HEIGHT band (handle + surrounding padding) instead of just the
+   sliver of the visual streepje — touchstart gates on the touch's Y position
+   relative to the drawer's own top edge; touchmove/touchend stay guarded by
+   `dragging`, so a touch starting further down (e.g. scrolling the nav list)
+   never engages the drag. ── */
 (function(){
-  var handle = document.getElementById('mn-drawer-handle');
   var drawer = document.getElementById('mn-drawer');
-  if(!handle || !drawer) return;
-  var DISMISS_THRESHOLD = 80;
+  if(!drawer) return;
+  var DISMISS_THRESHOLD  = 80;
+  var TOUCH_ZONE_HEIGHT  = 56; // px from the drawer's top edge that can start the drag
   var startY = 0, dragging = false, moved = false, lastDy = 0;
 
   function setTranslate(y, animate){
@@ -5213,13 +5220,15 @@ document.addEventListener('keydown', function(e){
     drawer.style.transform = 'translateY('+y+'px)';
   }
 
-  handle.addEventListener('touchstart', function(e){
+  drawer.addEventListener('touchstart', function(e){
     if(e.touches.length!==1) return;
-    startY = e.touches[0].clientY;
+    var touchY = e.touches[0].clientY;
+    if(touchY - drawer.getBoundingClientRect().top > TOUCH_ZONE_HEIGHT) return; // only the top band starts the gesture
+    startY = touchY;
     dragging = true; moved = false; lastDy = 0;
   }, {passive:true});
 
-  handle.addEventListener('touchmove', function(e){
+  drawer.addEventListener('touchmove', function(e){
     if(!dragging) return;
     var dy = e.touches[0].clientY - startY;
     if(dy <= 0) return; // only a downward drag moves the drawer
@@ -5238,8 +5247,8 @@ document.addEventListener('keydown', function(e){
     }
     moved = false; lastDy = 0;
   }
-  handle.addEventListener('touchend', endDrag, {passive:true});
-  handle.addEventListener('touchcancel', endDrag, {passive:true});
+  drawer.addEventListener('touchend', endDrag, {passive:true});
+  drawer.addEventListener('touchcancel', endDrag, {passive:true});
 })();
 </script>
 
