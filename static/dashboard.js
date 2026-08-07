@@ -68,6 +68,43 @@ async function connectReadonlyAddress(){
   finally{ if(btn){ btn.disabled=false; btn.textContent='CONNECT (read-only) →'; } }
 }
 
+/* ── WebAuthn base64url <-> ArrayBuffer helpers ──
+   Server (py_webauthn) speaks base64url JSON for challenge/id/response fields
+   (see webauthn_register_options()/webauthn_login_options() in dashboard.py);
+   navigator.credentials.create()/.get() need real ArrayBuffers instead. These
+   two directions are the only thing standing between the two, so getting them
+   right is what makes verification actually work end-to-end. ── */
+function _waB64uEncode(buf){
+  var bytes=new Uint8Array(buf), bin='';
+  for(var i=0;i<bytes.length;i++) bin+=String.fromCharCode(bytes[i]);
+  return btoa(bin).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+}
+function _waB64uDecode(str){
+  str=str.replace(/-/g,'+').replace(/_/g,'/');
+  while(str.length%4) str+='=';
+  var bin=atob(str), bytes=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+  return bytes.buffer;
+}
+function _waOptionsFromJSON(opt){
+  var out=Object.assign({},opt);
+  out.challenge=_waB64uDecode(opt.challenge);
+  if(opt.user) out.user=Object.assign({},opt.user,{id:_waB64uDecode(opt.user.id)});
+  ['excludeCredentials','allowCredentials'].forEach(function(k){
+    if(Array.isArray(opt[k])) out[k]=opt[k].map(function(c){ return Object.assign({},c,{id:_waB64uDecode(c.id)}); });
+  });
+  return out;
+}
+function _waCredentialToJSON(cred){
+  var r=cred.response;
+  var out={id:cred.id, rawId:_waB64uEncode(cred.rawId), type:cred.type, response:{clientDataJSON:_waB64uEncode(r.clientDataJSON)}};
+  if(r.attestationObject) out.response.attestationObject=_waB64uEncode(r.attestationObject);
+  if(r.authenticatorData)  out.response.authenticatorData=_waB64uEncode(r.authenticatorData);
+  if(r.signature)          out.response.signature=_waB64uEncode(r.signature);
+  if(r.userHandle)         out.response.userHandle=_waB64uEncode(r.userHandle);
+  return out;
+}
+
 async function _webAuthnLogin(){
   var errEl=document.getElementById('ob-bio-err');
   var btn=document.getElementById('ob-bio-btn');
@@ -82,21 +119,17 @@ async function _webAuthnLogin(){
   var failed=false;
   try{
     var storedId=localStorage.getItem('orca_credential_id');
-    var allowCreds=[];
-    if(storedId){
-      try{ allowCreds=[{type:'public-key',id:Uint8Array.from(atob(storedId),function(c){return c.charCodeAt(0);})}]; }catch(e){}
-    }
-    var ch=new Uint8Array(32); crypto.getRandomValues(ch);
-    var cred=await navigator.credentials.get({
-      publicKey:{rpId:'orcagent.fun',challenge:ch,timeout:60000,userVerification:'required',allowCredentials:allowCreds}
-    });
+    var optUrl='/api/auth/webauthn/login/options'+(storedId?('?credential_id='+encodeURIComponent(storedId)):'');
+    var opt=await fetch(optUrl).then(function(r){return r.json();}).catch(function(){return null;});
+    if(!opt||!opt.challenge){ if(errEl) errEl.textContent='Face ID unavailable — try connecting wallet instead.'; failed=true; return; }
+    var cred=await navigator.credentials.get({publicKey:_waOptionsFromJSON(opt)});
     if(!cred){ if(errEl) errEl.textContent='Face ID failed.'; failed=true; return; }
-    var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
     var r=await fetch('/api/auth/webauthn/login',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({credential_id:rawIdB64})
+      body:JSON.stringify(_waCredentialToJSON(cred))
     }).then(res=>res.json()).catch(()=>null);
     if(r&&r.success){
+      localStorage.setItem('orca_credential_id',cred.id); // .id is already base64url, same encoding the server just verified
       location.reload();
     } else {
       if(errEl) errEl.textContent=(r&&r.msg)||'Face ID failed — try connecting wallet instead.';
@@ -174,33 +207,16 @@ async function _setupFaceID(){
   if(btn){ btn.disabled=true; btn.textContent='Setting up…'; }
   if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
   try{
-    var ch=new Uint8Array(32); crypto.getRandomValues(ch);
-    var uid=new Uint8Array(32);
-    new TextEncoder().encode(wallet).slice(0,32).forEach(function(b,i){ uid[i]=b; });
-    var cred=await navigator.credentials.create({
-      publicKey:{
-        rp:{id:'orcagent.fun',name:'OrcAgent'},
-        user:{id:uid,name:wallet,displayName:wallet},
-        challenge:ch,
-        pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
-        timeout:60000,
-        authenticatorSelection:{
-          authenticatorAttachment:'platform',
-          userVerification:'preferred',
-          residentKey:'preferred'
-        },
-        attestation:'none'
-      }
-    });
+    var opt=await fetch('/api/auth/webauthn/register/options').then(function(r){return r.json();}).catch(function(){return null;});
+    if(!opt||!opt.challenge){ _show((opt&&opt.msg)||'Could not start Face ID setup.',false); return; }
+    var cred=await navigator.credentials.create({publicKey:_waOptionsFromJSON(opt)});
     if(!cred){ _show('Registration failed — please try again.',false); return; }
-    var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
-    var attObjB64=btoa(String.fromCharCode(...new Uint8Array(cred.response.attestationObject)));
     var r=await fetch('/api/auth/webauthn/register',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({credential_id:rawIdB64,public_key:attObjB64})
+      body:JSON.stringify(_waCredentialToJSON(cred))
     }).then(res=>res.json()).catch(()=>null);
     if(r&&r.success){
-      localStorage.setItem('orca_credential_id',rawIdB64);
+      localStorage.setItem('orca_credential_id',cred.id);
       _show('✓ Face ID saved!',true);
       _updateFaceIdStatus();
       setTimeout(function(){ var p=document.getElementById('s-faceid-prompt'); if(p) p.style.display='none'; },2500);
@@ -213,56 +229,6 @@ async function _setupFaceID(){
           'Setup failed: '+(e.message||e.name), false);
   }finally{
     if(btn){ btn.disabled=false; btn.textContent='Setup Face ID'; }
-  }
-}
-
-async function _setupFaceId(){
-  var wallet=phantomKey;
-  if(!wallet){ openAlertModal({text:'Connect a wallet first.'}); return; }
-  if(!window.PublicKeyCredential){ openAlertModal({text:'WebAuthn not supported on this device.'}); return; }
-  var btn=document.getElementById('s-faceid-btn');
-  var msg=document.getElementById('s-faceid-msg');
-  if(btn){ btn.disabled=true; btn.textContent='Setting up…'; }
-  if(msg){ msg.style.color='var(--muted)'; msg.textContent=''; }
-  try{
-    var ch=new Uint8Array(32); crypto.getRandomValues(ch);
-    var uid=new Uint8Array(32);
-    var wb=new TextEncoder().encode(wallet); uid.set(wb.slice(0,32));
-    var cred=await navigator.credentials.create({
-      publicKey:{
-        rp:{id:'orcagent.fun',name:'OrcAgent'},
-        user:{id:uid,name:wallet,displayName:wallet},
-        challenge:ch,
-        pubKeyCredParams:[{type:'public-key',alg:-7},{type:'public-key',alg:-257}],
-        timeout:60000,
-        authenticatorSelection:{userVerification:'preferred',residentKey:'preferred'},
-        attestation:'none'
-      }
-    });
-    if(!cred){
-      if(msg){ msg.style.color='var(--red)'; msg.textContent='Registration failed — please try again.'; } return;
-    }
-    var rawIdB64=btoa(String.fromCharCode(...new Uint8Array(cred.rawId)));
-    var attObjB64=btoa(String.fromCharCode(...new Uint8Array(cred.response.attestationObject)));
-    var r=await fetch('/api/auth/webauthn/register',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({credential_id:rawIdB64,public_key:attObjB64,wallet_address:wallet})
-    }).then(res=>res.json()).catch(()=>null);
-    if(r && r.success){
-      localStorage.setItem('orca_credential_id',rawIdB64);
-      if(msg){ msg.style.color='var(--green)'; msg.textContent='Face ID saved! Use it to login next time.'; }
-      _updateFaceIdStatus();
-    } else {
-      if(msg){ msg.style.color='var(--red)'; msg.textContent='Registration failed: '+((r&&r.msg)||'unknown error'); }
-    }
-  }catch(e){
-    var em=e.name==='NotAllowedError'?'Setup cancelled.':
-           e.name==='InvalidStateError'?'A passkey already exists for this device — try logging in.':
-           'Setup failed: '+(e.message||e.name);
-    if(msg){ msg.style.color='var(--red)'; msg.textContent=em; }
-  }finally{
-    if(btn) btn.disabled=false;
-    _updateFaceIdStatus();
   }
 }
 
@@ -284,26 +250,6 @@ function _updateFaceIdStatus(){
   if(btn) btn.textContent=has?'Update Face ID':'Setup Face ID login';
   if(removeBtn) removeBtn.style.display=has?'':'none';
   if(bioBtn) bioBtn.style.display=has?'':'none';
-}
-
-/* Called by the post-key-save Face ID prompt in Settings */
-async function _settingsFaceIdSetup(){
-  var promptBtn=document.getElementById('s-faceid-prompt-btn');
-  var promptMsg=document.getElementById('s-faceid-prompt-msg');
-  if(promptBtn){ promptBtn.disabled=true; promptBtn.textContent='Setting up…'; }
-  if(promptMsg){ promptMsg.style.color='var(--muted)'; promptMsg.textContent=''; }
-  await _setupFaceId();
-  if(promptBtn){ promptBtn.disabled=false; promptBtn.textContent='Setup Face ID'; }
-  if(localStorage.getItem('orca_credential_id')){
-    if(promptMsg){ promptMsg.style.color='var(--green)'; promptMsg.textContent='✓ Face ID saved! Next time login with just your face.'; }
-    setTimeout(function(){ var p=document.getElementById('s-faceid-prompt'); if(p) p.style.display='none'; },2800);
-  } else {
-    /* _setupFaceId already wrote an error to s-faceid-msg — copy it to the prompt area */
-    var faceMsg=document.getElementById('s-faceid-msg');
-    if(promptMsg && faceMsg && faceMsg.textContent){
-      promptMsg.style.color='var(--red)'; promptMsg.textContent=faceMsg.textContent;
-    }
-  }
 }
 
 /* Mobile deep-link constants — used by wallet detection below */

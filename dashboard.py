@@ -11,6 +11,21 @@ except ImportError:
     _NACL_OK = False
     _nacl_signing = None
 try:
+    import webauthn as _webauthn
+    from webauthn.helpers.structs import (
+        AuthenticatorSelectionCriteria as _WaAuthenticatorSelectionCriteria,
+        UserVerificationRequirement as _WaUserVerificationRequirement,
+        ResidentKeyRequirement as _WaResidentKeyRequirement,
+        AttestationConveyancePreference as _WaAttestationConveyancePreference,
+        PublicKeyCredentialDescriptor as _WaPublicKeyCredentialDescriptor,
+    )
+    from webauthn.helpers.exceptions import InvalidRegistrationResponse as _WaInvalidRegistrationResponse, \
+        InvalidAuthenticationResponse as _WaInvalidAuthenticationResponse
+    _WEBAUTHN_OK = True
+except ImportError:
+    _WEBAUTHN_OK = False
+    _webauthn = None
+try:
     from apscheduler.schedulers.background import BackgroundScheduler as _BgScheduler
     from apscheduler.triggers.cron import CronTrigger as _CronTrigger
     _APSCHEDULER_OK = True
@@ -359,6 +374,8 @@ HELIUS_RPC       = os.environ.get('HELIUS_RPC', '')        # full Helius URL e.g
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ADMIN_WALLET     = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'
+WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID', 'orcagent.fun')
+WEBAUTHN_RP_NAME = 'OrcAgent'
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
 VAPID_PUBLIC_KEY  = os.getenv('VAPID_PUBLIC_KEY', '')
 VAPID_CLAIMS      = {'sub': 'mailto:admin@orcagent.fun'}
@@ -1419,6 +1436,24 @@ def init_db():
 
 def run_migrations():
     con = sqlite3.connect(DB_FILE)
+    # SECURITY FIX (see commit): WebAuthn/Face ID login previously never verified
+    # the cryptographic assertion at all -- the server trusted any submitted
+    # credential_id blindly, with no challenge, signature, or public-key check.
+    # Every credential registered before this fix was therefore never actually
+    # proven to belong to a real authenticator; there's no safe way to
+    # retroactively validate them, so they're wiped and affected users must
+    # re-register Face ID under the now-verified flow. Guarded on the
+    # sign_count column not existing yet (added by the ALTER below, run once
+    # per database) so this can never re-fire and wipe a legitimately
+    # re-registered credential on a later restart.
+    try:
+        _wa_cols = [r[1] for r in con.execute("PRAGMA table_info(webauthn_credentials)").fetchall()]
+        if 'sign_count' not in _wa_cols:
+            con.execute("DELETE FROM webauthn_credentials")
+            con.execute("UPDATE users SET webauthn_ready=0")
+            con.commit()
+    except Exception:
+        pass
     for sql in [
         "ALTER TABLE users ADD COLUMN badges TEXT DEFAULT ''",
         "ALTER TABLE users ADD COLUMN copy_source TEXT DEFAULT NULL",
@@ -1467,6 +1502,10 @@ def run_migrations():
         # profit back to the original trader (neither open_positions nor trades recorded
         # this before).
         "ALTER TABLE open_positions ADD COLUMN copy_of_wallet TEXT DEFAULT NULL",
+        # Signature counter for WebAuthn replay protection (see the security-fix
+        # comment above this function) -- must increase on every successful
+        # authentication; a non-increasing counter signals a cloned authenticator.
+        "ALTER TABLE webauthn_credentials ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0",
     ]:
         try:
             con.execute(sql)
@@ -7286,47 +7325,152 @@ def webauthn_has_credential():
         conn.close()
     return jsonify({'has_credential': has_cred})
 
+def _webauthn_expected_origins():
+    """Allowed WebAuthn origins -- production domains, or (only when the request
+    itself is to localhost/127.0.0.1, e.g. local dev/testing) that request's own
+    origin. Mirrors the identical dev carve-out already used in _csrf_check()'s
+    Origin validation -- never widens what a real deployed instance accepts."""
+    host_bare = (request.host or '').split(':')[0]
+    if host_bare in ('localhost', '127.0.0.1'):
+        return [f'{request.scheme}://{request.host}']
+    return list(_CORS_ALLOWLIST)
+
+_WEBAUTHN_CHALLENGE_TTL_S = 120  # generous slack for a biometric prompt to complete
+
+def _webauthn_store_challenge(session_key, challenge_bytes):
+    session[session_key] = {'c': _webauthn.helpers.bytes_to_base64url(challenge_bytes), 't': time.time()}
+
+def _webauthn_pop_challenge(session_key):
+    """Consume (and clear) a stored, single-use WebAuthn challenge. None if
+    missing or expired -- caller must treat that as a hard failure."""
+    data = session.pop(session_key, None)
+    if not data or time.time() - data.get('t', 0) > _WEBAUTHN_CHALLENGE_TTL_S:
+        return None
+    try:
+        return _webauthn.base64url_to_bytes(data['c'])
+    except Exception:
+        return None
+
+@app.route('/api/auth/webauthn/register/options', methods=['GET'])
+@rate_limit(10, 60)
+def webauthn_register_options():
+    if not _WEBAUTHN_OK:
+        return jsonify({'success': False, 'msg': 'Face ID unavailable on this server'}), 503
+    user_id = session.get('user_id')
+    wallet  = _authenticated_wallet()
+    if not user_id or not wallet:
+        return jsonify({'success': False, 'msg': 'Login required before setting up Face ID'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute('SELECT credential_id FROM webauthn_credentials WHERE user_id=?', (user_id,)).fetchall()
+    finally:
+        conn.close()
+    exclude = []
+    for (cred_id,) in rows:
+        try:
+            exclude.append(_WaPublicKeyCredentialDescriptor(id=_webauthn.base64url_to_bytes(cred_id)))
+        except Exception:
+            pass
+    options = _webauthn.generate_registration_options(
+        rp_id=WEBAUTHN_RP_ID,
+        rp_name=WEBAUTHN_RP_NAME,
+        user_id=str(user_id).encode(),
+        user_name=wallet,
+        user_display_name=wallet,
+        attestation=_WaAttestationConveyancePreference.NONE,
+        authenticator_selection=_WaAuthenticatorSelectionCriteria(
+            resident_key=_WaResidentKeyRequirement.PREFERRED,
+            user_verification=_WaUserVerificationRequirement.REQUIRED,
+        ),
+        exclude_credentials=exclude or None,
+    )
+    _webauthn_store_challenge('webauthn_reg_challenge', options.challenge)
+    return _webauthn.options_to_json(options), 200, {'Content-Type': 'application/json'}
+
 @app.route('/api/auth/webauthn/register', methods=['POST'])
 @rate_limit(10, 60)
 def webauthn_register():
+    if not _WEBAUTHN_OK:
+        return jsonify({'success': False, 'msg': 'Face ID unavailable on this server'}), 503
     # Registration requires an active session — user must already be logged in
     user_id = session.get('user_id')
     wallet  = _authenticated_wallet()
-    if not user_id:
+    if not user_id or not wallet:
         return jsonify({'success': False, 'msg': 'Login required before setting up Face ID'}), 401
 
-    body          = request.json or {}
-    credential_id = str(body.get('credential_id', '')).strip()
-    public_key    = str(body.get('public_key',    '')).strip()
-    if not credential_id or not public_key:
-        return jsonify({'success': False, 'msg': 'credential_id and public_key are required'}), 400
+    challenge = _webauthn_pop_challenge('webauthn_reg_challenge')
+    if not challenge:
+        return jsonify({'success': False, 'msg': 'Registration expired — please try again'}), 400
+
+    body = request.json or {}
+    try:
+        verification = _webauthn.verify_registration_response(
+            credential=body,
+            expected_challenge=challenge,
+            expected_rp_id=WEBAUTHN_RP_ID,
+            expected_origin=_webauthn_expected_origins(),
+            require_user_verification=True,
+        )
+    except Exception as e:
+        _log_security_event('webauthn_register_fail', wallet, f'{type(e).__name__}: {e}')
+        return jsonify({'success': False, 'msg': 'Face ID registration could not be verified'}), 400
+
+    credential_id  = _webauthn.helpers.bytes_to_base64url(verification.credential_id)
+    public_key_b64 = _webauthn.helpers.bytes_to_base64url(verification.credential_public_key)
 
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute(
-            '''INSERT INTO webauthn_credentials (user_id, credential_id, public_key)
-               VALUES (?, ?, ?)
-               ON CONFLICT(credential_id) DO UPDATE SET public_key=excluded.public_key''',
-            (user_id, credential_id, public_key)
+            '''INSERT INTO webauthn_credentials (user_id, credential_id, public_key, sign_count)
+               VALUES (?, ?, ?, ?)
+               ON CONFLICT(credential_id) DO UPDATE SET public_key=excluded.public_key, sign_count=excluded.sign_count''',
+            (user_id, credential_id, public_key_b64, verification.sign_count)
         )
         conn.execute('UPDATE users SET webauthn_ready=1 WHERE id=?', (user_id,))
         conn.commit()
     finally:
         conn.close()
     add_user_log(wallet, 'WebAuthn credential registered')
-    return jsonify({'success': True})
+    return jsonify({'success': True, 'credential_id': credential_id})
+
+@app.route('/api/auth/webauthn/login/options', methods=['GET'])
+@rate_limit(20, 60)
+def webauthn_login_options():
+    if not _WEBAUTHN_OK:
+        return jsonify({'success': False, 'msg': 'Face ID unavailable on this server'}), 503
+    credential_id = (request.args.get('credential_id') or '').strip()
+    allow = None
+    if credential_id:
+        try:
+            allow = [_WaPublicKeyCredentialDescriptor(id=_webauthn.base64url_to_bytes(credential_id))]
+        except Exception:
+            allow = None
+    options = _webauthn.generate_authentication_options(
+        rp_id=WEBAUTHN_RP_ID,
+        allow_credentials=allow,
+        user_verification=_WaUserVerificationRequirement.REQUIRED,
+    )
+    _webauthn_store_challenge('webauthn_login_challenge', options.challenge)
+    return _webauthn.options_to_json(options), 200, {'Content-Type': 'application/json'}
 
 @app.route('/api/auth/webauthn/login', methods=['POST'])
 @rate_limit(10, 60)
 def webauthn_login():
+    if not _WEBAUTHN_OK:
+        return jsonify({'success': False, 'msg': 'Face ID unavailable on this server'}), 503
+    challenge = _webauthn_pop_challenge('webauthn_login_challenge')
+    if not challenge:
+        return jsonify({'success': False, 'msg': 'Login expired — please try again'}), 400
+
     body          = request.json or {}
-    credential_id = str(body.get('credential_id', '')).strip()
+    credential_id = str(body.get('id', '')).strip()
     if not credential_id:
         return jsonify({'success': False, 'msg': 'credential_id required'}), 400
+
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            '''SELECT wc.user_id, u.wallet_address, COALESCE(u.username, ''),
+            '''SELECT wc.id, wc.user_id, wc.public_key, wc.sign_count, u.wallet_address, COALESCE(u.username, ''),
                       CASE WHEN u.encrypted_private_key != '' AND u.encrypted_private_key IS NOT NULL
                            THEN 1 ELSE 0 END
                FROM webauthn_credentials wc
@@ -7338,12 +7482,35 @@ def webauthn_login():
         conn.close()
     if not row:
         return jsonify({'success': False, 'msg': 'Credential not found — register first'}), 404
-    user_id, wallet_address, username, has_trading_key = row
+    cred_row_id, user_id, public_key_b64, sign_count, wallet_address, username, has_trading_key = row
+
+    try:
+        verification = _webauthn.verify_authentication_response(
+            credential=body,
+            expected_challenge=challenge,
+            expected_rp_id=WEBAUTHN_RP_ID,
+            expected_origin=_webauthn_expected_origins(),
+            credential_public_key=_webauthn.base64url_to_bytes(public_key_b64),
+            credential_current_sign_count=sign_count,
+            require_user_verification=True,
+        )
+    except Exception as e:
+        _log_security_event('webauthn_login_fail', wallet_address, f'{type(e).__name__}: {e}')
+        return jsonify({'success': False, 'msg': 'Face ID verification failed'}), 401
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE webauthn_credentials SET sign_count=? WHERE id=?', (verification.new_sign_count, cred_row_id))
+        conn.commit()
+    finally:
+        conn.close()
+
     # Restore full session — identical to what /api/wallet/set establishes
     session.permanent           = True
     session['user_id']          = user_id
     session['wallet']           = wallet_address
     session['authenticated']    = True
+    session.pop('readonly', None)  # a stale read-only flag must never survive a real login (see set_wallet())
     csrf_tok = _get_csrf_token()
     add_user_log(wallet_address, 'Login via WebAuthn Face ID')
     return jsonify({
@@ -7420,7 +7587,7 @@ def set_wallet():
         # Generate (or retrieve) CSRF token for this session now that the session exists
         csrf_tok = _get_csrf_token()
         try:
-            get_or_create_user(address, ref_code or None)
+            session['user_id'] = get_or_create_user(address, ref_code or None)
         except: pass
         threading.Thread(target=fetch_user_balances, args=(address,), daemon=True).start()
         add_user_log(address, 'Wallet connected: ' + address[:6] + '...' + address[-4:])
