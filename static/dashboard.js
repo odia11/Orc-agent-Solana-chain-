@@ -1193,6 +1193,12 @@ function renderLiveMarket(tokens){
     tbody.innerHTML=tokens.map((t,i)=>{
       const addr=safeMint(t.address||'');
       const sym=esc(t.symbol||'?');
+      // HTML-escaping alone (sym above) isn't safe once spliced into a single-quoted
+      // onclick(...) JS-string argument -- the browser HTML-decodes the attribute
+      // before compiling it as JS, so an escaped quote decodes right back to a real
+      // one and breaks out. esc(JSON.stringify(...)) escapes for both contexts at
+      // once (same pattern already used for avatar/image lightbox onclicks below).
+      const symJs=esc(JSON.stringify(t.symbol||'?'));
       const nm=esc(t.name||t.symbol||'');
       const logo=t.image_url
         ?`<img src="${esc(t.image_url)}" alt="" style="width:24px;height:24px;border-radius:50%;object-fit:cover;margin-right:7px;vertical-align:middle;background:var(--bg3)" onerror="this.style.display='none'">`
@@ -1209,7 +1215,7 @@ function renderLiveMarket(tokens){
         <td>${fmtNum(t.volume_24h)}</td>
         <td>${fmtNum(t.liquidity)}</td>
         <td>${fmtInt(t.txns_24h)}</td>
-        <td>${addr?`<button class="lm-buy-btn" onclick="event.stopPropagation();_lmBuy('${addr}','${sym}',this)">BUY</button>`:''}</td>
+        <td>${addr?`<button class="lm-buy-btn" onclick="event.stopPropagation();_lmBuy('${addr}',${symJs},this)">BUY</button>`:''}</td>
       </tr>`;
     }).join('');
   }
@@ -1220,6 +1226,7 @@ function renderLiveMarket(tokens){
     cards.innerHTML=tokens.map(t=>{
       const addr=safeMint(t.address||'');
       const sym=esc(t.symbol||'?');
+      const symJs=esc(JSON.stringify(t.symbol||'?')); // see the desktop-table branch above for why this is needed separately from sym
       const nm=esc(t.name||t.symbol||'');
       const chg24=parseFloat(t.price_change_24h??0);
       const logo=t.image_url
@@ -1231,7 +1238,7 @@ function renderLiveMarket(tokens){
         <div class="lm-card-right">
           <div class="lm-card-price">${fmtPrice(t.price)}</div>
           <div class="lm-pct ${chgCls(chg24)}" style="font-size:11px">${fmtChg(t.price_change_24h)}</div>
-          ${addr?`<button class="lm-card-buy-btn" onclick="event.stopPropagation();_lmBuy('${addr}','${sym}',this)">BUY</button>`:''}
+          ${addr?`<button class="lm-card-buy-btn" onclick="event.stopPropagation();_lmBuy('${addr}',${symJs},this)">BUY</button>`:''}
         </div>
       </div>`;
     }).join('');
@@ -1348,6 +1355,9 @@ function renderMarket(tokens){
     const pumping=h1>=50;
     // Sanitize all external data before injecting into innerHTML
     const sym=esc(t.symbol||'???');
+    // esc() alone isn't enough once spliced into a single-quoted onclick(...) JS-string
+    // argument below (BUY/SELL) -- see the identical comment in renderLiveMarket() above.
+    const symJs=esc(JSON.stringify(t.symbol||'???'));
     const name=esc(t.name||t.symbol||'Unknown');
     const mint=safeMint(t.mint);
     const clickAttr=mint?`onclick="location.href='/token/${mint}'"`:'';
@@ -1384,8 +1394,8 @@ function renderMarket(tokens){
     <span class="mkt-score-label" style="color:${scoreCol}">${t.score}/10</span>
   </div>
   ${mint?`<div style="display:flex;gap:6px;margin-top:auto;padding-top:10px;width:100%">
-    <button style="flex:1;padding:6px;background:#00e676;color:#000000;font-weight:700;border:none;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.03em" onclick="event.stopPropagation();manualBuy('${mint}','${sym}',this)">BUY</button>
-    <button style="flex:1;padding:6px;background:#ff1744;color:#fff;font-weight:700;border:none;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.03em" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
+    <button style="flex:1;padding:6px;background:#00e676;color:#000000;font-weight:700;border:none;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.03em" onclick="event.stopPropagation();manualBuy('${mint}',${symJs},this)">BUY</button>
+    <button style="flex:1;padding:6px;background:#ff1744;color:#fff;font-weight:700;border:none;border-radius:6px;cursor:pointer;font-size:12px;letter-spacing:.03em" onclick="event.stopPropagation();manualSell('${mint}',${symJs},this)">SELL</button>
   </div>`:''}
 </div>`;
   };
@@ -1594,6 +1604,9 @@ function renderPumpScanner(tokens){
   const chgCls=v=>(v??0)>=0?'up':'dn';
   const _psCards=tokens.map(t=>{
     const sym=esc(t.symbol||'???');
+    // esc() alone isn't enough once spliced into a single-quoted onclick(...) JS-string
+    // argument below (BUY/SELL) -- see the identical comment in renderLiveMarket() above.
+    const symJs=esc(JSON.stringify(t.symbol||'???'));
     const name=esc(t.name||t.symbol||'Unknown');
     const mint=safeMint(t.mint);
     if(!mint) return '';
@@ -1609,8 +1622,8 @@ function renderPumpScanner(tokens){
     <span class="ps-chg ${chgCls(h1)}">1H ${fmtChg(h1)}</span>
   </div>
   <div style="display:flex;gap:6px;margin-top:10px;width:100%">
-    <button class="ps-buy-btn" onclick="event.stopPropagation();manualBuy('${mint}','${sym}',this)">BUY</button>
-    <button class="ps-sell-btn" style="display:${hasSell?'block':'none'}" onclick="event.stopPropagation();manualSell('${mint}','${sym}',this)">SELL</button>
+    <button class="ps-buy-btn" onclick="event.stopPropagation();manualBuy('${mint}',${symJs},this)">BUY</button>
+    <button class="ps-sell-btn" style="display:${hasSell?'block':'none'}" onclick="event.stopPropagation();manualSell('${mint}',${symJs},this)">SELL</button>
   </div>
 </div>`;
   });
@@ -2158,7 +2171,7 @@ async function fetchAdminBans(){
   el.innerHTML=r.bans.map(b=>`<div style="display:flex;align-items:center;gap:12px;padding:4px 0;border-bottom:1px solid rgba(255,255,255,.04)">
     <span style="color:var(--red);min-width:130px">${esc(b.ip)}</span>
     <span style="color:var(--muted)">expires in ${b.mins_left} min</span>
-    <button onclick="unbanIP('${esc(b.ip)}')" style="margin-left:auto;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;padding:2px 10px;color:#ef4444;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">Unban</button>
+    <button onclick="unbanIP(${esc(JSON.stringify(b.ip))})" style="margin-left:auto;background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:5px;padding:2px 10px;color:#ef4444;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">Unban</button>
   </div>`).join('')+
   `<div style="margin-top:6px;color:var(--muted)">${r.bans.length} ban(s) active  •  ${r.rl_bucket_count||0} rate-limit bucket(s) in memory</div>`;
 }
@@ -3088,7 +3101,7 @@ async function _blMgrFetch(){
       <td style="font-size:9px;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${_esc(t.mint)}">${_esc(t.mint)}</td>
       <td>${_esc(t.blacklisted_at||'—')}</td>
       <td><span class="bl-status-label">🚫 Blocked</span></td>
-      <td><button class="bl-unban-btn" onclick="event.stopPropagation();_blMgrUnban(this,'${_esc(t.mint)}')">Unban</button></td>
+      <td><button class="bl-unban-btn" onclick="event.stopPropagation();_blMgrUnban(this,${_esc(JSON.stringify(t.mint))})">Unban</button></td>
     </tr>`).join('');
   }catch(e){
     if(loading){loading.textContent='Failed to load.';loading.style.color='var(--red)';loading.style.display='block';}
@@ -3120,7 +3133,7 @@ function _renderBlacklist(tokens){
     <div class="bl-item">
       <span class="bl-item-sym">🚫 ${esc(t.symbol||t.mint.slice(0,8))}</span>
       <span class="bl-item-mint">${esc(t.mint)}</span>
-      <button class="bl-remove-btn" onclick="removeBlacklistToken('${esc(t.mint)}')">✕ Remove</button>
+      <button class="bl-remove-btn" onclick="removeBlacklistToken(${esc(JSON.stringify(t.mint))})">✕ Remove</button>
     </div>`).join('')+'</div>';
 }
 
@@ -7609,12 +7622,15 @@ function _renderTradeTerminalCard(t){
   var exit_p = _fp(exitN);
   var dur    = t.duration ? '<span style="color:#565d68;font-size:11px"> · '+esc(t.duration)+'</span>' : '';
   var sym    = esc(t.symbol||'');
+  // esc() alone isn't safe once spliced into the single-quoted showTokenCard(...) JS-string
+  // argument below -- see the identical comment in renderLiveMarket() (static/dashboard.js).
+  var symJs  = esc(JSON.stringify(t.symbol||''));
   var amtStr = '';
   if(t.amount && parseFloat(t.amount) > 0){
     var _amt = parseFloat(t.amount);
     amtStr = '<div style="color:#565d68;font-size:11px;margin-top:3px">'+(_amt>=1000?_amt.toLocaleString('en-US',{maximumFractionDigits:0}):_amt.toFixed(4))+' tokens</div>';
   }
-  return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard(\''+sym+'\')">'
+  return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard('+symJs+')">'
     +'<div data-cc="banner" class="tc-banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
     +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(13,17,23,0.55),rgba(13,17,23,0.92))"></div>'
     +'<div style="position:relative;z-index:1">'

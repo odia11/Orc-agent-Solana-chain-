@@ -10945,10 +10945,19 @@ def _verify_image_magic(data: bytes) -> bool:
 def _sanitize(text: str) -> str:
     """Strip HTML tags to prevent XSS in user-generated content.
     Two-pass approach: first strip raw tags, then decode HTML entities and
-    strip again — catches payloads like &lt;script&gt; that survive a single pass."""
-    stripped = re.sub(r'<[^>]+>', '', text)
-    decoded  = _html_lib.unescape(stripped)
-    return re.sub(r'<[^>]+>', '', decoded).strip()
+    strip again — catches payloads like &lt;script&gt; that survive a single
+    pass. Final pass strips any bare '<' the regexes above couldn't match --
+    an unterminated tag (no matching '>' anywhere in the input, e.g.
+    "<svg onload=alert(1)//") survives 're.sub(r"<[^>]+>", ...)' entirely and
+    relies on whatever markup happens to follow it at render time to supply
+    the closing '>' and complete the tag. This was exploitable as a real
+    stored XSS in community.html's chat (fixed separately by escaping on
+    output there too — this is defense in depth for _sanitize()'s other ~20
+    callers, not a substitute for escaping at render time)."""
+    stripped  = re.sub(r'<[^>]+>', '', text)
+    decoded   = _html_lib.unescape(stripped)
+    stripped2 = re.sub(r'<[^>]+>', '', decoded)
+    return stripped2.replace('<', '').strip()
 
 def _get_uid(conn, wallet: str):
     row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
