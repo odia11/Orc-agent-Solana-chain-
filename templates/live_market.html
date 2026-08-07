@@ -879,17 +879,17 @@ function _lmRenderGlobalResults(state){
     box.classList.add('open');
     return;
   }
-  box.innerHTML = _lmGsResults.map(function(p){
-    var sym   = (p.baseToken && p.baseToken.symbol) || '?';
-    var name  = (p.baseToken && p.baseToken.name) || sym;
-    var addr  = (p.baseToken && p.baseToken.address) || '';
-    var price = _fmtPrice(p.priceUsd);
-    return '<div class="lm-gsr-item" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
-      +'<span class="lm-gsr-sym">$'+_esc(sym)+'</span>'
-      +'<span class="lm-gsr-name">'+_esc(name)+'</span>'
-      +'<span class="lm-gsr-price">'+price+'</span>'
-      +'</div>';
-  }).join('');
+  // Same rich row rendering as _lmChipFilterRemoteFallback() (avatar, name,
+  // ticker, price, 24h%, volume, market cap, age, Trade button) instead of
+  // the old compact ticker/name/price-only .lm-gsr-item -- reuses
+  // _buildTable/_rowHtml directly so both fallback paths stay visually and
+  // structurally identical.
+  box.innerHTML = _buildTable(_lmGsResults.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  // _rowHtml() ids its <tr> "lm-row-"+idx starting from 0, same as the main
+  // table -- strip them here so a concurrently-open main table's own
+  // getElementById('lm-row-'+idx) lookups (_flashRow, _openBuyDrop) can
+  // never resolve into this dropdown instead of the row they actually mean.
+  box.querySelectorAll('tr[id]').forEach(function(tr){ tr.removeAttribute('id'); });
   box.classList.add('open');
 }
 
@@ -1105,12 +1105,28 @@ _lmInitFeatured();
 (function(){
   var resultsBox = document.getElementById('lm-global-search-results');
   if(resultsBox){
+    // Rows are now real _rowHtml() <tr class="lm-row"> markup (see
+    // _lmRenderGlobalResults), which also carries a watch-star and a Trade
+    // button. The watch-star toggles the watchlist in place, same as the
+    // main table. The Trade button is deliberately NOT wired to the inline
+    // buy-dropdown (_openBuyDrop) here -- that keys off
+    // document.getElementById('lm-row-'+idx), and since this box's rows
+    // reuse the same idx numbering (0..N) as whatever's in the main table
+    // at the same time, that lookup would collide with the main table's own
+    // rows. Any other click on a row -- including the Trade button --
+    // closes the search box and opens the full Token Detail modal instead,
+    // which has its own working buy/sell UI.
     resultsBox.addEventListener('click', function(e){
-      var item = e.target.closest('.lm-gsr-item');
-      if(!item || !item.dataset.addr) return;
-      var sym = item.dataset.sym, addr = item.dataset.addr;
+      var watchBtn = e.target.closest('.lm-watch-star');
+      if(watchBtn){
+        e.stopPropagation();
+        _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
+        return;
+      }
+      var row = e.target.closest('.lm-row');
+      if(!row || !row.dataset.addr) return;
       _lmCloseGlobalSearch();
-      showTokenCard(sym, addr, item.dataset.pair);
+      showTokenCard(row.dataset.sym, row.dataset.addr, row.dataset.pair);
     });
   }
   document.addEventListener('click', function(e){
