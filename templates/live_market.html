@@ -46,11 +46,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-chip{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:20px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
 .lm-chip:hover{color:var(--text);border-color:var(--bg3)}
 .lm-chip.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
-.lm-chip-search-wrap{position:relative;flex:1;max-width:220px;min-width:140px}
-.lm-chip-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:7px 12px 7px 30px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
-.lm-chip-search:focus{border-color:var(--accent)}
-.lm-chip-search::placeholder{color:var(--muted)}
-.lm-chip-search-icon{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
 
 /* global token search — hits DexScreener directly (proxied), independent of
    the loaded/tracked list above; opens the Token Detail modal on a result
@@ -192,10 +187,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   }
   .lm-chip{
     flex-shrink:0;
-  }
-  .lm-chip-search-wrap{
-    width:100%;
-    max-width:none;
   }
   .lm-global-search-wrap{
     margin:10px 8px 0;
@@ -377,10 +368,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <button class="lm-chip"        id="chip-volume"   onclick="_lmSetChip('volume')">Volume</button>
     <button class="lm-chip"        id="chip-all"      onclick="_lmSetChip('all')">All</button>
   </div>
-  <div class="lm-chip-search-wrap">
-    <span class="lm-chip-search-icon">⌕</span>
-    <input class="lm-chip-search" id="lm-chip-search" type="text" placeholder="Filter loaded tokens…" autocomplete="off" oninput="_lmChipSearchDebounce(this.value)">
-  </div>
 </div>
 
 <div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
@@ -444,8 +431,6 @@ function _toggleWatch(btn, addr, sym){
 /* ── tab switching ── */
 function _setTab(tab){
   _activeTab = tab;
-  document.getElementById('lm-chip-search').value = '';
-  _lmChipQuery = '';
   if(_cache[tab]){ _renderTable(_cache[tab]); }
   else { _loadTab(tab); }
 }
@@ -728,23 +713,13 @@ function _renderTable(pairs){
   _lmApplyChipFilter();
 }
 
-/* ── filter chips + client-side search ──
-   Re-sorts/filters the already-fetched _pairs array in place, client-side,
-   no new fetch. Composes with whichever tab is active: switching tabs
-   resets the chip back to 'trending' (see _setTab). Rank (#) is recomputed
-   from the filtered/sorted array's own index, not the original _pairs
-   index — reuses _rowHtml/_sparkline unchanged. */
+/* ── filter chips ──
+   Re-sorts the already-fetched _pairs array in place, client-side, no new
+   fetch. Composes with whichever tab is active: switching tabs resets the
+   chip back to 'trending' (see _setTab). Rank (#) is recomputed from the
+   sorted array's own index, not the original _pairs index — reuses
+   _rowHtml/_sparkline unchanged. */
 var _lmChipFilter = 'trending';
-var _lmChipQuery  = '';
-var _lmChipTimer  = null;
-
-function _lmChipSearchDebounce(q){
-  clearTimeout(_lmChipTimer);
-  _lmChipTimer = setTimeout(function(){
-    _lmChipQuery = q.trim().toLowerCase();
-    _lmApplyChipFilter();
-  }, 300);
-}
 
 function _lmSortedPairs(){
   var arr = _pairs.slice();
@@ -771,49 +746,14 @@ function _lmSortedPairs(){
   return arr;
 }
 
-function _lmChipMatchesQuery(p, q){
-  var sym  = ((p.baseToken&&p.baseToken.symbol)||'').toLowerCase();
-  var name = ((p.baseToken&&p.baseToken.name)||'').toLowerCase();
-  return sym.indexOf(q)>=0 || name.indexOf(q)>=0;
-}
-
 function _lmApplyChipFilter(){
-  var sorted   = _lmSortedPairs();
-  var filtered = _lmChipQuery ? sorted.filter(function(p){ return _lmChipMatchesQuery(p,_lmChipQuery); }) : sorted;
+  var sorted = _lmSortedPairs();
   var wrap = document.getElementById('lm-table-wrap');
-  if(!filtered.length){
-    if(_lmChipQuery){ _lmChipFilterRemoteFallback(_lmChipQuery); return; }
+  if(!sorted.length){
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
-  wrap.innerHTML = _buildTable(filtered.map(function(p,i){ return _rowHtml(p,i); }).join(''));
-}
-
-/* local list has no match for the typed query -- fall back to the same
-   broad DexScreener search _lmGlobalSearch() hits (/api/dexscreener/search,
-   same $-stripping and chainId filter), but rendered as table rows via
-   _buildTable/_rowHtml instead of the global-search dropdown, so results
-   land in the same table form (liquidity/volume/age columns included) as
-   a normal chip-filter match. _lmChipQuery is re-checked after the await
-   so a stale response from fast typing doesn't clobber newer input. */
-async function _lmChipFilterRemoteFallback(q){
-  var wrap = document.getElementById('lm-table-wrap');
-  wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8"><span class="lm-spinner-ring"></span>Searching…</td></tr>');
-  try{
-    var qRemote = q.replace(/^\$/, ''); // DexScreener's search doesn't understand a leading $
-    var r = await fetch('/api/dexscreener/search?q=' + encodeURIComponent(qRemote));
-    var d = await r.json();
-    if(q !== _lmChipQuery) return; // stale — query changed while in flight
-    var pairs = _dedupeByAddress((d.pairs || []).filter(function(p){ return p.chainId === 'solana'; }), {});
-    if(!pairs.length){
-      wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
-      return;
-    }
-    wrap.innerHTML = _buildTable(pairs.map(function(p,i){ return _rowHtml(p,i); }).join(''));
-  }catch(e){
-    if(q !== _lmChipQuery) return;
-    wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8" style="color:#ff4d6a">Search failed</td></tr>');
-  }
+  wrap.innerHTML = _buildTable(sorted.map(function(p,i){ return _rowHtml(p,i); }).join(''));
 }
 
 /* ── global token search — separate from the chip-search above: hits
@@ -879,11 +819,9 @@ function _lmRenderGlobalResults(state){
     box.classList.add('open');
     return;
   }
-  // Same rich row rendering as _lmChipFilterRemoteFallback() (avatar, name,
-  // ticker, price, 24h%, volume, market cap, age, Trade button) instead of
-  // the old compact ticker/name/price-only .lm-gsr-item -- reuses
-  // _buildTable/_rowHtml directly so both fallback paths stay visually and
-  // structurally identical.
+  // Same rich row rendering _buildTable/_rowHtml produce for the main table
+  // (avatar, name, ticker, price, 24h%, volume, market cap, age, Trade
+  // button) instead of the old compact ticker/name/price-only .lm-gsr-item.
   box.innerHTML = _buildTable(_lmGsResults.map(function(p,i){ return _rowHtml(p,i); }).join(''));
   // _rowHtml() ids its <tr> "lm-row-"+idx starting from 0, same as the main
   // table -- strip them here so a concurrently-open main table's own
@@ -1136,7 +1074,7 @@ _lmInitFeatured();
 })();
 
 setInterval(function(){
-  if(!document.getElementById('lm-chip-search').value && _openDropIdx < 0){
+  if(_openDropIdx < 0){
     _silentRefreshTab(_activeTab);
   }
 }, 15000);
