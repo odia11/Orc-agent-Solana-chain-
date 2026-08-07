@@ -172,6 +172,8 @@ async function showTokenCard(symbol, knownAddr, knownPair){
   var modal = document.getElementById('lm-token-modal');
   var body  = document.getElementById('lm-modal-body');
   if(modal) modal.style.display = 'flex'; // no #lm-token-modal on the standalone /token page
+  var card = document.querySelector('.lm-modal-card');
+  if(card){ card.style.transition=''; card.style.transform=''; } // clear any leftover swipe-to-dismiss drag state
   _lmtdLayout = 'focus';
   _lmtdTf     = '5m';
   _lmtdSide   = 'buy';
@@ -245,6 +247,65 @@ function _lmtdCloseModal(){
   if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
   _lmtdActiveMint = ''; // any fetch still in flight for the closed token now reads as stale
 }
+
+/* ── SWIPE-TO-DISMISS (token detail modal) — same vanilla touchstart/
+   touchmove/touchend pattern as _attachSwipeToDelete() (static/dashboard.js
+   ~line 6272): dragging .lm-modal-card down moves it with the finger;
+   releasing past DISMISS_DISTANCE, or with a fast enough downward flick
+   (DISMISS_VELOCITY), closes it via _lmtdCloseModal() -- otherwise it
+   springs back into place. Only wired up when #lm-token-modal exists: on
+   the standalone /token page .lm-modal-card IS the page, there's no
+   overlay to dismiss it into. ── */
+(function(){
+  var overlay = document.getElementById('lm-token-modal');
+  var card    = document.querySelector('.lm-modal-card');
+  if(!overlay || !card) return;
+  var DISMISS_DISTANCE = 100;  // px
+  var DISMISS_VELOCITY = 0.5;  // px/ms
+  var startX=0, startY=0, lastY=0, lastT=0, lastDy=0, velocity=0;
+  var dragging=false, verticalDown=null, moved=false;
+
+  function setTranslate(y, animate){
+    card.style.transition = animate ? 'transform .2s ease' : 'none';
+    card.style.transform = 'translateY('+y+'px)';
+  }
+
+  card.addEventListener('touchstart', function(e){
+    if(e.touches.length!==1) return;
+    startX = e.touches[0].clientX;
+    startY = lastY = e.touches[0].clientY;
+    lastT = Date.now();
+    velocity = 0; lastDy = 0;
+    dragging = true; verticalDown = null; moved = false;
+  }, {passive:true});
+
+  card.addEventListener('touchmove', function(e){
+    if(!dragging) return;
+    var x = e.touches[0].clientX, y = e.touches[0].clientY;
+    var dx = x-startX, dy = y-startY;
+    if(verticalDown===null && (Math.abs(dx)>6||Math.abs(dy)>6)) verticalDown = Math.abs(dy)>Math.abs(dx) && dy>0;
+    if(verticalDown){
+      e.preventDefault(); // only suppress scroll/chart-pan once confirmed a downward drag
+      moved = true;
+      var now = Date.now(), dt = now-lastT;
+      if(dt>0) velocity = (y-lastY)/dt;
+      lastY = y; lastT = now; lastDy = dy;
+      setTranslate(dy, false);
+    }
+  }, {passive:false});
+
+  function endDrag(){
+    if(!dragging) return;
+    dragging = false;
+    if(verticalDown && moved){
+      if(lastDy>DISMISS_DISTANCE || velocity>DISMISS_VELOCITY) _lmtdCloseModal();
+      else setTranslate(0,true);
+    }
+    verticalDown = null; moved = false;
+  }
+  card.addEventListener('touchend', endDrag, {passive:true});
+  card.addEventListener('touchcancel', endDrag, {passive:true});
+})();
 
 function _lmtdRenderModal(){
   var p    = _lmtdPair;
