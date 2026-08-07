@@ -1,5 +1,8 @@
 import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib, traceback
 import io
+import socket
+import ipaddress
+import urllib.parse
 from datetime import timedelta
 from PIL import Image, ImageDraw, ImageFont
 import bcrypt as _bcrypt
@@ -48,12 +51,54 @@ try:
 except ImportError:
     _PYWEBPUSH_OK = False
 
+def _safe_external_image_url(url: str) -> bool:
+    """True if url is safe for the SERVER to fetch on a caller's behalf --
+    http(s) only, and every address the hostname resolves to is a public,
+    non-reserved IP (blocks loopback/private/link-local/cloud-metadata/
+    multicast/reserved ranges). Checks every resolved address, not just the
+    first, since a DNS name can resolve to several.
+
+    banner_url in _tc_build_canvas() below comes from DexScreener's
+    per-token "info.header" field, which is attacker-settable for any
+    token they mint -- not a value this server controls or can otherwise
+    trust, so this check runs before ever fetching it (found by this
+    session's security audit: without it, minting a token whose
+    DexScreener profile points 'header' at e.g. 169.254.169.254 or an
+    internal service, then referencing that mint from a feed post's
+    __TRADE__/__CHART__ embed, made /api/trade-card/<id>.png fetch
+    whatever internal URL the attacker chose)."""
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except Exception:
+        return False
+    if parsed.scheme not in ('http', 'https'):
+        return False
+    host = parsed.hostname
+    if not host:
+        return False
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except Exception:
+        return False
+    if not infos:
+        return False
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError:
+            return False
+        if (ip.is_private or ip.is_loopback or ip.is_link_local or
+                ip.is_multicast or ip.is_reserved or ip.is_unspecified):
+            return False
+    return True
+
 def _tc_build_canvas(banner_url=None):
     """Build the base 1200x630 canvas for a server-rendered trade card image.
-    Falls back to a flat background if banner_url is missing or fails to load."""
+    Falls back to a flat background if banner_url is missing, fails the
+    _safe_external_image_url() SSRF check, or fails to load."""
     W, H = 1200, 630
     canvas = Image.new('RGB', (W, H), '#0d1117')
-    if banner_url:
+    if banner_url and _safe_external_image_url(banner_url):
         try:
             resp = requests.get(banner_url, timeout=5)
             resp.raise_for_status()
@@ -9773,8 +9818,13 @@ def _tc_lookup(id):
         conn.close()
 
 @app.route('/api/trade-card/<id>.png')
+@rate_limit(60, 60)
 def trade_card_image(id):
-    """Render a shareable 1200x630 PNG for a trade — see _tc_lookup for the id scheme."""
+    """Render a shareable 1200x630 PNG for a trade — see _tc_lookup for the id scheme.
+    Deliberately no auth check -- this is meant to be publicly fetchable so X/Discord/etc.
+    link-unfurl bots can render it (see share_feed_to_x's og:image comment) -- but it does
+    trigger a server-side outbound fetch (_tc_build_canvas's banner_url), so it's rate-limited
+    per IP same as everything else that does that, which it wasn't before."""
     tc = _tc_lookup(id)
     if not tc:
         return jsonify({'ok': False, 'msg': 'Not found'}), 404
@@ -14566,7 +14616,7 @@ def api_market_tokens_search():
     if not q:
         return jsonify([])
     try:
-        r = requests.get(f'https://api.dexscreener.com/latest/dex/search?q={q}', timeout=5)
+        r = requests.get('https://api.dexscreener.com/latest/dex/search?q=' + requests.utils.quote(q, safe=''), timeout=5)
         pairs = r.json().get('pairs', [])[:10]
         tokens = [
             {
