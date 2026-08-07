@@ -341,19 +341,12 @@ def _validate_csrf(token: str) -> bool:
 def _csrf_check():
     if request.method not in ('POST', 'PUT', 'PATCH', 'DELETE') or not request.path.startswith('/api/'):
         return None
-    # Fully exempt paths skip ALL sub-checks (client-secret, origin, token).
-    # These routes either bootstrap auth (no session yet) or handle their own
-    # auth/CORS (instant-trade has its own CORS after_request + session wallet check).
-    if request.path in _CSRF_EXEMPT_PATHS:
-        return None
-    # ── 0. Shared client secret (only enforced if API_SHARED_SECRET is configured) ──
-    if API_SHARED_SECRET:
-        sent = request.headers.get('X-API-Shared-Secret', '')
-        if not sent or not hmac.compare_digest(sent.encode(), API_SHARED_SECRET.encode()):
-            _log_security_event('client_secret_fail', session.get('wallet', 'unknown'),
-                                f'bad/missing X-API-Shared-Secret on {request.path}')
-            return jsonify({'error': 'Forbidden'}), 403
-    # ── 1. Origin / Host validation ──────────────────────────────────────────
+    # ── 1. Origin / Host validation — runs even for the fully-exempt paths below.
+    # SECURITY FIX (see commit): this used to run AFTER the exempt-path shortcut,
+    # so /api/wallet/set and friends got no Origin check at all -- not actively
+    # exploitable today (they all require Content-Type: application/json,
+    # forcing a CORS preflight, and none send permissive CORS headers), but
+    # fragile defense-in-depth that shouldn't rely on that staying true. ──────
     origin = request.headers.get('Origin', '')
     if origin:
         host = request.headers.get('Host', '') or ''
@@ -363,6 +356,19 @@ def _csrf_check():
         origin_bare = origin.split('//')[-1].split(':')[0].removeprefix('www.')
         if origin_bare not in ('localhost', '127.0.0.1') and origin_bare != host_bare:
             return jsonify({'error': 'CSRF check failed'}), 403
+    # Fully exempt paths skip the client-secret + token checks below (they either
+    # bootstrap auth with no session yet, or handle their own auth/CORS --
+    # instant-trade has its own CORS after_request + session wallet check) --
+    # but never skip the Origin check above, which always applies.
+    if request.path in _CSRF_EXEMPT_PATHS:
+        return None
+    # ── 0. Shared client secret (only enforced if API_SHARED_SECRET is configured) ──
+    if API_SHARED_SECRET:
+        sent = request.headers.get('X-API-Shared-Secret', '')
+        if not sent or not hmac.compare_digest(sent.encode(), API_SHARED_SECRET.encode()):
+            _log_security_event('client_secret_fail', session.get('wallet', 'unknown'),
+                                f'bad/missing X-API-Shared-Secret on {request.path}')
+            return jsonify({'error': 'Forbidden'}), 403
     # Function-level exemption via @csrf_exempt decorator -- skips only the
     # CSRF-token check below; the origin/client-secret checks above still apply.
     _ep = app.view_functions.get(request.endpoint)
@@ -7060,12 +7066,19 @@ def push_subscribe():
 @csrf_exempt
 @rate_limit(10, 60)
 def push_unsubscribe():
+    # SECURITY FIX (see commit): previously deleted by endpoint alone, with no
+    # auth or ownership check at all -- any caller who knew (or brute-forced)
+    # another user's push endpoint URL could silently kill their notifications.
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     data = request.get_json(silent=True) or {}
     endpoint = data.get('endpoint', '')
     if endpoint:
         conn = sqlite3.connect(DB_FILE)
         try:
-            conn.execute('DELETE FROM push_subscriptions WHERE endpoint=?', (endpoint,))
+            uid = _get_uid(conn, wallet)
+            conn.execute('DELETE FROM push_subscriptions WHERE endpoint=? AND user_id=?', (endpoint, uid))
             conn.commit()
         finally:
             conn.close()
@@ -7271,6 +7284,12 @@ def connect_wallet_readonly():
     return jsonify({'ok': True, 'wallet': address, 'readonly': True,
                     'has_trading_key': False, 'csrf_token': csrf_tok})
 
+# Computed once at import time (bcrypt is deliberately slow -- ~the same cost as
+# a real check, which is the point) so login_password() can run a same-cost dummy
+# comparison for "no such user"/"no password set" instead of skipping bcrypt
+# entirely, which would otherwise leak which case it was via response timing.
+_LOGIN_DUMMY_BCRYPT_HASH = _bcrypt.hashpw(b'orcagent-dummy-password-for-timing', _bcrypt.gensalt(rounds=12))
+
 @app.route('/api/login_password', methods=['POST'])
 @rate_limit(10, 60)
 def login_password():
@@ -7295,14 +7314,17 @@ def login_password():
     finally:
         conn.close()
 
-    if not row:
+    # SECURITY FIX (see commit): "no such user" and "user exists but has no
+    # password set" used to return distinct messages (and skip bcrypt entirely,
+    # a timing tell too) -- letting a caller enumerate valid usernames/wallet
+    # addresses by which error they got back. Both now return the identical
+    # generic message and always run a same-cost dummy bcrypt check.
+    if not row or not row[3]:
+        _bcrypt.checkpw(password.encode('utf-8'), _LOGIN_DUMMY_BCRYPT_HASH)
         _record_ip_failure(ip)
         return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
 
     user_id, wallet_address, db_username, password_hash, has_trading_key = row
-
-    if not password_hash:
-        return jsonify({'success': False, 'error': 'No password set — use Phantom or Face ID to login'}), 401
 
     try:
         valid = _bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
@@ -7619,8 +7641,14 @@ def set_wallet():
                 'SELECT created_at FROM auth_nonces WHERE nonce=?', (nonce,)
             ).fetchone()
             if row:
-                _nonce_conn.execute('DELETE FROM auth_nonces WHERE nonce=?', (nonce,))
+                cur = _nonce_conn.execute('DELETE FROM auth_nonces WHERE nonce=?', (nonce,))
                 _nonce_conn.commit()
+                # Hardening (see commit): if two requests raced the SELECT above and
+                # both saw the row before either DELETEd it, only the DELETE that
+                # actually removed a row (rowcount==1) may treat the nonce as claimed
+                # -- otherwise a nonce could be verified/consumed by two callers.
+                if cur.rowcount != 1:
+                    row = None
         finally:
             _nonce_conn.close()
         if not row:
@@ -8819,6 +8847,8 @@ def api_instant_trade():
             return jsonify({'error': 'side must be buy or sell'}), 400
         if not token_address:
             return jsonify({'error': 'token_address is required'}), 400
+        if not is_valid_solana_address(token_address):
+            return jsonify({'error': 'Invalid token address'}), 400
         if side == 'buy' and amount_sol <= 0:
             return jsonify({'error': 'amount_sol must be > 0 for buy'}), 400
         if side == 'buy':
