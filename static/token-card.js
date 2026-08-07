@@ -608,7 +608,7 @@ function _lmtdInitChart(){
     layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
     grid:{vertLines:{color:'#21252c'},horzLines:{color:'#21252c'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
-    rightPriceScale:{borderColor:'#21252c'},
+    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.1,bottom:0.3}},
     timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
     handleScroll:true,handleScale:true
   });
