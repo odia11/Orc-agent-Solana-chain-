@@ -349,6 +349,7 @@ html,body{overflow-x:hidden}
 
 <script>
 var _groupId       = {{ group_id }};
+var _inviteToken    = new URLSearchParams(location.search).get('invite') || ''; // ?invite=<token> from a shared link -- see api_groups_join()
 var _csrfToken      = (document.querySelector('meta[name="csrf-token"]')    || {}).content || '';
 var _clientSecret   = (document.querySelector('meta[name="client-secret"]') || {}).content || '';
 var _myUsername     = '';
@@ -547,7 +548,8 @@ function _confirmDeleteGroup(){
 }
 
 function _shareGroupLink(){
-  var url = location.origin + '/groups/' + _groupId;
+  var token = _groupData && _groupData.invite_token;
+  var url = location.origin + '/groups/' + _groupId + (token ? '?invite='+encodeURIComponent(token) : '');
   if(navigator.clipboard && navigator.clipboard.writeText){
     navigator.clipboard.writeText(url).then(function(){
       _showToast('Link copied — anyone who opens it can join', 'ok');
@@ -1278,7 +1280,13 @@ function _toggleJoin(){
   btn.disabled = true;
   var isMember = _groupData.is_member;
   var url = '/api/groups/'+_groupId+'/'+(isMember ? 'leave' : 'join');
-  fetch(url, {method:'POST', credentials:'include', headers:_apiHeaders()})
+  var opts = {method:'POST', credentials:'include', headers:_apiHeaders()};
+  if(!isMember){
+    // invite_token is required server-side for private groups (see
+    // api_groups_join()) -- harmless to always send it, public groups ignore it.
+    opts.body = JSON.stringify({invite_token: _inviteToken});
+  }
+  fetch(url, opts)
     .then(function(r){return r.json();}).then(function(d){
       if(!d.ok){ _showToast(d.msg||'Something went wrong', 'err'); btn.disabled=false; return; }
       _loadGroup();

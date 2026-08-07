@@ -1551,6 +1551,13 @@ def run_migrations():
         # comment above this function) -- must increase on every successful
         # authentication; a non-increasing counter signals a cloned authenticator.
         "ALTER TABLE webauthn_credentials ADD COLUMN sign_count INTEGER NOT NULL DEFAULT 0",
+        # SECURITY FIX (see commit): the private-group "share invite link" feature
+        # (group_detail.html's _shareGroupLink()) used to just copy /groups/<id> --
+        # api_groups_join() never checked is_private, so group_id (a sequential,
+        # guessable integer) was the only thing standing between a private group
+        # and anyone who cared to enumerate ids. This unguessable per-group token
+        # is the real secret the invite link now carries instead.
+        "ALTER TABLE groups ADD COLUMN invite_token TEXT DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -1568,6 +1575,18 @@ def run_migrations():
             sep = content.find(': ')
             prefix = content[:sep + 2] if sep > -1 else ''
             con.execute('UPDATE notifications SET content=? WHERE id=?', (prefix + '📷 Photo', nid))
+        if rows:
+            con.commit()
+    except Exception:
+        pass
+    # one-time backfill: every group needs an invite_token (added above) to share
+    # a real, unguessable invite link -- existing groups predate the column and
+    # have none yet. Idempotent (only ever touches NULL rows), so this is safe to
+    # leave running on every startup rather than needing its own guard.
+    try:
+        rows = con.execute("SELECT id FROM groups WHERE invite_token IS NULL").fetchall()
+        for (gid,) in rows:
+            con.execute('UPDATE groups SET invite_token=? WHERE id=?', (secrets.token_urlsafe(16), gid))
         if rows:
             con.commit()
     except Exception:
@@ -5786,9 +5805,9 @@ def api_groups_create():
     try:
         uid = _get_uid(conn, wallet)
         cur = conn.execute(
-            'INSERT INTO groups (token_address, token_symbol, name, description, is_private, created_by) '
-            'VALUES (?,?,?,?,?,?)',
-            (token_address or None, token_symbol, name, description, is_private, uid))
+            'INSERT INTO groups (token_address, token_symbol, name, description, is_private, created_by, invite_token) '
+            'VALUES (?,?,?,?,?,?,?)',
+            (token_address or None, token_symbol, name, description, is_private, uid, secrets.token_urlsafe(16)))
         group_id = cur.lastrowid
         conn.execute('INSERT INTO group_members (group_id, user_id, role) VALUES (?,?,?)',
                      (group_id, uid, 'owner'))
@@ -5806,9 +5825,17 @@ def api_groups_join(group_id):
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
-        row = conn.execute('SELECT is_private FROM groups WHERE id=?', (group_id,)).fetchone()
+        row = conn.execute('SELECT is_private, invite_token FROM groups WHERE id=?', (group_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
+        is_private, invite_token = row
+        if is_private:
+            # SECURITY FIX (see commit): group_id alone used to be enough to join a
+            # private group -- it's a sequential, guessable integer, not a secret.
+            # The real invite link now carries invite_token; require it to match.
+            submitted = str((request.json or {}).get('invite_token', '')).strip()
+            if not submitted or not invite_token or not hmac.compare_digest(submitted, invite_token):
+                return jsonify({'ok': False, 'msg': 'This group is private — you need an invite link to join'}), 403
         uid = _get_uid(conn, wallet)
         conn.execute('INSERT OR IGNORE INTO group_members (group_id, user_id) VALUES (?,?)', (group_id, uid))
         conn.commit()
@@ -5937,7 +5964,7 @@ def api_group_detail(group_id):
         _process_expired_claims(conn, group_id)
         row = conn.execute(
             'SELECT id, token_address, token_symbol, name, description, is_private, created_by, '
-            'avatar_url, banner_url, rules, announcement_only, pinned_post_id, is_official '
+            'avatar_url, banner_url, rules, announcement_only, pinned_post_id, is_official, invite_token '
             'FROM groups WHERE id=?', (group_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'Group not found'}), 404
@@ -5969,6 +5996,11 @@ def api_group_detail(group_id):
             'is_platform_owner': bool(wallet and _is_owner(wallet)),
             'member_count': _group_member_count(conn, group_id),
         }
+        # invite_token is the actual secret behind the "share invite link" feature
+        # (see api_groups_join()) -- only ever hand it to someone who's already a
+        # member, never to an outside viewer who merely knows/guessed the group_id.
+        if role is not None:
+            group['invite_token'] = row[13] or ''
         return jsonify({'ok': True, 'group': group})
     finally:
         conn.close()
