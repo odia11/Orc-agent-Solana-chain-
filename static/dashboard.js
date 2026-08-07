@@ -310,6 +310,21 @@ async function _settingsFaceIdSetup(){
 const isMobile=/iPhone|iPad|Android/i.test(navigator.userAgent);
 const phantomDeepLink='https://phantom.app/ul/browse/'+encodeURIComponent('https://orcagent.fun');
 const solflareDeepLink='https://solflare.com/ul/v1/browse/'+encodeURIComponent('https://orcagent.fun');
+/* Installed PWA (standalone display-mode): Phantom's connect deep link
+   redirects back to the browser, not to the home-screen app icon, so the
+   round trip never reaches us — must not even attempt it in this mode. */
+const isStandalonePWA=!!(window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+
+function _copyOrcagentUrl(btn){
+  var url='https://orcagent.fun';
+  var origHtml=btn?btn.innerHTML:'';
+  var done=function(){ if(btn){btn.innerHTML='✓ Copied!'; setTimeout(function(){btn.innerHTML=origHtml;},2000);} };
+  if(navigator.clipboard&&navigator.clipboard.writeText){
+    navigator.clipboard.writeText(url).then(done).catch(function(){ _clipFallback(url); done(); });
+  } else {
+    _clipFallback(url); done();
+  }
+}
 
 // Minimal base58 encoder for Phantom v1/connect deep link keypair
 var _b58enc=(function(){
@@ -384,6 +399,13 @@ function _phantomMobileV1Connect(){
   function _setNote(txt,col){
     if(noteEl){noteEl.textContent=txt;if(col)noteEl.style.color=col;}
     if(msgEl&&msgEl!==noteEl){msgEl.textContent=txt;msgEl.style.display='block';}
+  }
+  if(isStandalonePWA){
+    var _pwaHtml='Open orcagent.fun in Safari/Chrome om je wallet te verbinden.'
+      +' <button type="button" onclick="_copyOrcagentUrl(this)" style="background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.3);border-radius:5px;color:var(--accent);font-size:9px;padding:3px 8px;cursor:pointer;font-family:\'Share Tech Mono\',monospace;margin-left:6px;white-space:nowrap">⧉ Copy link</button>';
+    if(noteEl){noteEl.innerHTML=_pwaHtml;noteEl.style.color='var(--red)';}
+    if(msgEl&&msgEl!==noteEl){msgEl.innerHTML=_pwaHtml;msgEl.style.display='block';}
+    return;
   }
   _setNote('Initialising connection…','var(--muted)');
   // Server generates the NaCl keypair — no browser storage needed
