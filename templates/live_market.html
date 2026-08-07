@@ -57,12 +57,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-global-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
 .lm-global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;max-height:320px;overflow-y:auto;z-index:25;display:none}
 .lm-global-search-results.open{display:block}
-.lm-gsr-item{display:flex;align-items:center;gap:10px;padding:9px 12px;cursor:pointer;border-bottom:1px solid var(--bg3);transition:background .15s}
-.lm-gsr-item:last-child{border-bottom:none}
-.lm-gsr-item:hover{background:var(--bg3)}
-.lm-gsr-sym{font-weight:700;color:var(--text);font-size:12px;flex-shrink:0}
-.lm-gsr-name{color:var(--muted);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
-.lm-gsr-price{color:var(--text);font-size:11px;flex-shrink:0}
 .lm-gsr-empty,.lm-gsr-loading{padding:12px;color:var(--muted);font-size:12px;text-align:center}
 
 /* table wrapper */
@@ -431,6 +425,7 @@ function _toggleWatch(btn, addr, sym){
 /* ── tab switching ── */
 function _setTab(tab){
   _activeTab = tab;
+  _lmCloseGlobalSearch(); // don't leave a stale results dropdown floating over a newly-switched table
   if(_cache[tab]){ _renderTable(_cache[tab]); }
   else { _loadTab(tab); }
 }
@@ -440,6 +435,7 @@ function _setTab(tab){
    client-side re-sort of whatever's already loaded (see _lmSortedPairs). ── */
 function _lmSetChip(chip){
   _lmChipFilter = chip;
+  _lmCloseGlobalSearch(); // 'volume' doesn't route through _setTab(), so it needs its own close call too
   document.getElementById('lm-watchlist-toggle').classList.remove('active');
   ['trending','gainers','new','volume','all'].forEach(function(c){
     document.getElementById('chip-'+c).classList.toggle('active', c===chip);
@@ -1069,7 +1065,13 @@ _lmInitFeatured();
   }
   document.addEventListener('click', function(e){
     var wrap = document.getElementById('lm-global-search-wrap');
-    if(wrap && resultsBox && !wrap.contains(e.target)) resultsBox.classList.remove('open');
+    // full _lmCloseGlobalSearch(), not just hiding the box -- otherwise the
+    // typed query stays in the input and the stale results stay cached in
+    // the box's innerHTML with nothing left to ever re-show or clear them
+    if(wrap && resultsBox && resultsBox.classList.contains('open') && !wrap.contains(e.target)) _lmCloseGlobalSearch();
+  });
+  document.addEventListener('keydown', function(e){
+    if(e.key === 'Escape') _lmCloseGlobalSearch();
   });
 })();
 
