@@ -1451,9 +1451,12 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_webauthn_cred ON webauthn_credentials(credential_id)')
-    c.execute('''CREATE TABLE IF NOT EXISTS community_messages
-        (id INTEGER PRIMARY KEY AUTOINCREMENT, wallet TEXT, content TEXT,
-         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)''')
+    # community_messages / /community / /api/community/* -- removed (dead feature:
+    # community_page() unconditionally redirected to '/' and never rendered
+    # community.html, which was the only consumer of the message API; found
+    # during this session's security audit). Not dropping the table itself --
+    # any historical messages already in a deployed DB are left alone, just
+    # no longer written to or read from.
     c.execute('''CREATE TABLE IF NOT EXISTS feed_posts (
         id         INTEGER PRIMARY KEY AUTOINCREMENT,
         wallet     TEXT NOT NULL,
@@ -5639,48 +5642,6 @@ def deposit_page():
 @app.route('/withdraw')
 def withdraw_page():
     return redirect('/?action=withdraw')
-
-
-@app.route('/community')
-def community_page():
-    wallet = _current_wallet()
-    if not wallet:
-        return redirect('/?next=community')
-    wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
-    return redirect('/')
-
-@app.route('/api/community/messages')
-def community_messages():
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        rows = conn.execute(
-            'SELECT id, wallet, content, created_at FROM community_messages ORDER BY created_at DESC LIMIT 50'
-        ).fetchall()
-        return jsonify([{'id': r[0], 'wallet': r[1], 'content': r[2], 'created_at': r[3]} for r in rows])
-    finally:
-        conn.close()
-
-@app.route('/api/community/message', methods=['POST'])
-@rate_limit(10, 60)
-def post_community():
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({}), 401
-    content = (request.json or {}).get('content', '').strip()
-    if not content:
-        return jsonify({'ok': False, 'msg': 'Empty content'}), 400
-    if len(content) > 500:
-        return jsonify({'ok': False, 'msg': 'Too long'}), 400
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        conn.execute(
-            'INSERT INTO community_messages (wallet, content) VALUES (?,?)',
-            [wallet, _sanitize(content)]
-        )
-        conn.commit()
-        return jsonify({'ok': True})
-    finally:
-        conn.close()
 
 
 @app.route('/groups')
@@ -11063,9 +11024,10 @@ def _sanitize(text: str) -> str:
     "<svg onload=alert(1)//") survives 're.sub(r"<[^>]+>", ...)' entirely and
     relies on whatever markup happens to follow it at render time to supply
     the closing '>' and complete the tag. This was exploitable as a real
-    stored XSS in community.html's chat (fixed separately by escaping on
-    output there too — this is defense in depth for _sanitize()'s other ~20
-    callers, not a substitute for escaping at render time)."""
+    stored XSS in the now-removed community.html chat page (its own
+    unescaped-innerHTML rendering was the actual bug; this is defense in
+    depth for _sanitize()'s other ~20 callers, not a substitute for
+    escaping at render time)."""
     stripped  = re.sub(r'<[^>]+>', '', text)
     decoded   = _html_lib.unescape(stripped)
     stripped2 = re.sub(r'<[^>]+>', '', decoded)
