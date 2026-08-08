@@ -18,7 +18,7 @@
 <script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js" defer></script>
 <link rel="stylesheet" href="/static/token-card.css?v={{ app_version }}">
 <style>
-:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f7b955;--text:#eef1f5;--muted:#565d68;--green:#3ad29b;--red:#ff4d6a}
+:root{--bg:#0a0b0e;--bg1:#0b0d11;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f5b544;--text:#eef1f5;--muted:#565d68;--green:#3ad29b;--red:#f76b62}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
 
@@ -38,14 +38,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 /* watchlist toggle (replaces the old ★ Watchlist tab) */
 .lm-watchlist-toggle{margin-left:auto;flex-shrink:0;background:var(--bg2);border:1px solid var(--bg4);color:var(--muted);width:34px;height:34px;border-radius:10px;font-size:15px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center}
 .lm-watchlist-toggle:hover{color:var(--text);border-color:var(--bg3)}
-.lm-watchlist-toggle.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+.lm-watchlist-toggle.active{background:rgba(245,181,68,.12);color:var(--accent);border-color:rgba(245,181,68,.25)}
 
 /* filter chips + client-side search (drives which tab-data is fetched, plus a pure client-side sort/filter) */
 .lm-chips-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 16px;position:sticky;top:56px;z-index:20;background:var(--bg);border-bottom:1px solid var(--bg3);flex-wrap:wrap}
 .lm-chips{display:flex;gap:6px;flex-wrap:wrap}
 .lm-chip{padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg2);border:1px solid var(--bg4);border-radius:20px;transition:all .15s;font-family:'JetBrains Mono',monospace;letter-spacing:.04em;text-transform:uppercase;white-space:nowrap}
 .lm-chip:hover{color:var(--text);border-color:var(--bg3)}
-.lm-chip.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+.lm-chip.active{background:rgba(245,181,68,.12);color:var(--accent);border-color:rgba(245,181,68,.25)}
 
 /* global token search — hits DexScreener directly (proxied), independent of
    the loaded/tracked list above; opens the Token Detail modal on a result
@@ -86,7 +86,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-cell{display:flex;align-items:center;gap:10px}
 .lm-watch-star{background:none;border:none;color:var(--bg4,#21252c);font-size:15px;cursor:pointer;padding:0;line-height:1;flex-shrink:0;transition:color .15s}
 .lm-watch-star:hover{color:#565d68}
-.lm-watch-star.active{color:#f7b955}
+.lm-watch-star.active{color:#f5b544}
 .lm-tok-logo{width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0}
 .lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
@@ -97,9 +97,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
    gradient/glow treatment instead of the old flat tint */
 .lm-featured-banner{
   margin:16px 16px 0;height:44px;border-radius:12px;overflow:hidden;flex-shrink:0;
-  background:linear-gradient(to right, rgba(247,185,85,.12), rgba(247,185,85,.03));
-  border:1.5px solid rgba(247,185,85,.35);
-  box-shadow:0 0 12px rgba(247,185,85,.25);
+  background:linear-gradient(to right, rgba(245,181,68,.12), rgba(245,181,68,.03));
+  border:1.5px solid rgba(245,181,68,.35);
+  box-shadow:0 0 12px rgba(245,181,68,.25);
 }
 .lm-featured-slide{height:100%;display:flex;align-items:center;gap:10px;padding:0 16px;cursor:pointer;white-space:nowrap;overflow:hidden}
 .lm-featured-label{font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:#0a0b0e;background:var(--accent);border-radius:4px;padding:2px 6px;flex-shrink:0}
@@ -109,6 +109,24 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-featured-mcap{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;flex-shrink:0}
 @keyframes lmFeaturedSlideIn{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
 .lm-featured-slide.lm-slide-anim{animation:lmFeaturedSlideIn .35s ease}
+
+/* leaders strip — today's 4 biggest movers (by |24h%|, up or down), one card
+   each. Same amber gradient/border/glow language as .lm-featured-banner
+   above, just per-card instead of one strip. */
+.lm-leaders-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 16px 0}
+.lm-leader-card{
+  background:linear-gradient(160deg, rgba(245,181,68,.14), rgba(245,181,68,.02) 60%), var(--bg1);
+  border:1.5px solid rgba(245,181,68,.35);
+  box-shadow:0 0 12px rgba(245,181,68,.15);
+  border-radius:14px;padding:14px;cursor:pointer;transition:border-color .15s;
+}
+.lm-leader-card:hover{border-color:rgba(245,181,68,.55)}
+.lm-leader-top{display:flex;align-items:center;gap:8px;margin-bottom:12px;min-width:0}
+.lm-leader-logo,.lm-leader-logo-ph{width:24px;height:24px;border-radius:7px;flex-shrink:0;object-fit:cover}
+.lm-leader-logo-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--muted)}
+.lm-leader-sym{font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.lm-leader-chg{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1}
+.lm-leader-price{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:6px}
 
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
@@ -130,14 +148,14 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-drop-confirm{background:var(--accent);color:#0a0b0e;border:none;border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:opacity .15s}
 .lm-drop-confirm:hover{opacity:.85}
 .lm-drop-confirm:disabled{opacity:.35;cursor:default}
-.lm-drop-sell-btn{background:var(--bg4);color:var(--red);border:1px solid rgba(255,77,106,.25);border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
-.lm-drop-sell-btn:hover{background:rgba(255,77,106,.1)}
+.lm-drop-sell-btn{background:var(--bg4);color:var(--red);border:1px solid rgba(247,107,98,.25);border-radius:8px;padding:6px 14px;font-size:11px;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;transition:all .15s}
+.lm-drop-sell-btn:hover{background:rgba(247,107,98,.1)}
 .lm-drop-cancel{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;font-family:'JetBrains Mono',monospace;padding:5px 8px;transition:color .15s}
 .lm-drop-cancel:hover{color:var(--text)}
 
 /* row flash */
 @keyframes flashGreen{0%{background:rgba(58,210,155,.15)}100%{background:transparent}}
-@keyframes flashRed  {0%{background:rgba(255,77,106,.15)}100%{background:transparent}}
+@keyframes flashRed  {0%{background:rgba(247,107,98,.15)}100%{background:transparent}}
 .flash-green{animation:flashGreen 1.2s ease-out forwards}
 .flash-red  {animation:flashRed   1.2s ease-out forwards}
 
@@ -159,7 +177,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .mobile-back-bar{display:none}
 @media(max-width:767px){
   .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
-  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+  .mobile-back-btn{color:#f5b544;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
   .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
 }
 /* mobile — CSS grid layout replaces table layout entirely */
@@ -187,6 +205,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   }
   .lm-table-wrap{margin:8px}
   .lm-featured-banner{margin:8px 8px 0}
+  .lm-leaders-strip{grid-template-columns:repeat(2,1fr);margin:8px 8px 0;gap:8px}
   .col-hide{display:none!important}
   .lm-scanning-pill .lm-scan-label{display:none}
 
@@ -367,6 +386,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 <div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
   <div class="lm-featured-slide" id="lm-featured-slide"></div>
 </div>
+
+<div class="lm-leaders-strip" id="lm-leaders-strip" style="display:none;"></div>
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
 
@@ -662,6 +683,74 @@ async function _lmInitFeatured(){
   _lmRenderFeaturedBanner(_featuredPairs);
 }
 
+/* ── leaders strip — today's 4 biggest movers, up or down (|24h%|), independent
+   of whichever chip/tab is active. Reuses the same trending+new fetch/dedupe
+   already used by _fetchGainers()/_fetchAll(), just sorted by magnitude
+   instead of signed value. ── */
+async function _lmFetchLeaders(){
+  var trending = await _fetchTrending();
+  var fresh    = await _fetchNew();
+  var merged   = _dedupeByAddress(trending.concat(fresh), {});
+  merged.sort(function(a,b){
+    var av = Math.abs(a.priceChange&&a.priceChange.h24!=null?a.priceChange.h24:0);
+    var bv = Math.abs(b.priceChange&&b.priceChange.h24!=null?b.priceChange.h24:0);
+    return bv-av;
+  });
+  return merged.slice(0,4);
+}
+
+function _lmRenderLeadersStrip(pairs){
+  var el = document.getElementById('lm-leaders-strip');
+  if(!el) return;
+  if(!pairs || !pairs.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='grid';
+  el.innerHTML = pairs.map(function(p){
+    var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
+    var addr = (p.baseToken&&p.baseToken.address)||'';
+    var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
+    var logo = imgUrl
+      ? '<img class="lm-leader-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+        +'<div class="lm-leader-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
+      : '<div class="lm-leader-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+    var chg24  = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
+    var chgCls = chg24==null ? 'chg-fl' : (chg24>=0?'chg-up':'chg-dn');
+    var chgStr = chg24==null ? '—' : (chg24>=0?'+':'')+chg24.toFixed(2)+'%';
+    return '<div class="lm-leader-card" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
+      +'<div class="lm-leader-top">'+logo+'<span class="lm-leader-sym">$'+_esc(sym)+'</span></div>'
+      +'<div class="lm-leader-chg '+chgCls+'">'+chgStr+'</div>'
+      +'<div class="lm-leader-price">'+_fmtPrice(p.priceUsd)+'</div>'
+      +'</div>';
+  }).join('');
+}
+
+var _lmLeadersDelegated = false;
+function _lmBindLeadersEvents(){
+  if(_lmLeadersDelegated) return;
+  _lmLeadersDelegated = true;
+  var el = document.getElementById('lm-leaders-strip');
+  if(!el) return;
+  el.addEventListener('click', function(e){
+    var card = e.target.closest('.lm-leader-card');
+    if(!card) return;
+    showTokenCard(card.dataset.sym, card.dataset.addr, card.dataset.pair);
+  });
+}
+
+async function _lmInitLeaders(){
+  _lmBindLeadersEvents();
+  var pairs = await _lmFetchLeaders().catch(function(){ return []; });
+  _lmRenderLeadersStrip(pairs);
+}
+
+async function _lmRefreshLeaders(){
+  try{
+    var pairs = await _lmFetchLeaders();
+    _lmRenderLeadersStrip(pairs);
+  }catch(e){
+    console.error('[live-market] leaders refresh failed', e);
+  }
+}
+
 /* thead — 8 columns */
 var _THEAD = '<thead><tr>'
   +'<th class="th-rank">#</th>'
@@ -855,7 +944,7 @@ function _sparkline(p){
     pc.h24!=null?pc.h24:0
   ];
   var h24   = pc.h24!=null?pc.h24:0;
-  var color = h24>=0 ? '#3ad29b' : '#ff4d6a';
+  var color = h24>=0 ? '#3ad29b' : '#f76b62';
   var maxAbs = Math.max.apply(null, vals.map(Math.abs)) || 1;
   var bars = vals.map(function(v){
     var pct = Math.max(10, Math.round(Math.abs(v)/maxAbs*100));
@@ -926,7 +1015,7 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
   tr.className = 'lm-drop-row';
   tr.innerHTML = '<td colspan="8">'
     +'<div class="lm-drop-inner">'
-      +'<span class="lm-drop-label">Trade <strong style="color:#f7b955">$'+_esc(sym)+'</strong></span>'
+      +'<span class="lm-drop-label">Trade <strong style="color:#f5b544">$'+_esc(sym)+'</strong></span>'
       +'<span class="lm-drop-label">SOL:</span>'
       +'<input class="lm-drop-input" id="'+inputId+'" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
       +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'">Buy</button>'
@@ -1006,12 +1095,13 @@ function _setLoading(){
 }
 function _setError(msg){
   document.getElementById('lm-table-wrap').innerHTML =
-    _buildTable('<tr class="lm-status-row"><td colspan="8" style="color:#ff4d6a">'+msg+'</td></tr>');
+    _buildTable('<tr class="lm-status-row"><td colspan="8" style="color:#f76b62">'+msg+'</td></tr>');
 }
 
 /* ── init ── */
 _loadTab('trending');
 _lmInitFeatured();
+_lmInitLeaders();
 
 (function(){
   var _params = new URLSearchParams(location.search);
@@ -1078,6 +1168,7 @@ _lmInitFeatured();
 setInterval(function(){
   if(_openDropIdx < 0){
     _silentRefreshTab(_activeTab);
+    _lmRefreshLeaders();
   }
 }, 15000);
 </script>
