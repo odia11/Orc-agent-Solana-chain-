@@ -55,9 +55,17 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-global-search:focus{border-color:var(--accent)}
 .lm-global-search::placeholder{color:var(--muted)}
 .lm-global-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
-.lm-global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;max-height:320px;overflow-y:auto;z-index:25;display:none}
+.lm-global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg2);border:1px solid var(--bg3);border-top:2px solid var(--accent);border-radius:10px;max-height:320px;overflow-y:auto;z-index:25;display:none;box-shadow:0 12px 32px rgba(0,0,0,.5)}
 .lm-global-search-results.open{display:block}
+.lm-gsr-header{padding:10px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--bg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lm-gsr-empty,.lm-gsr-loading{padding:12px;color:var(--muted);font-size:12px;text-align:center}
+/* dims the rest of the page while the results dropdown is open, so it reads
+   unmistakably as a floating overlay rather than part of the page underneath.
+   pointer-events:none -- the existing outside-click-closes handler (see
+   _lmCloseGlobalSearch() call sites) already does the job of dismissing it,
+   this is purely visual and must never swallow a click meant for the page. */
+.lm-global-search-dim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:24;pointer-events:none}
+.lm-global-search-dim.open{display:block}
 
 /* table wrapper */
 .lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:visible;margin:16px}
@@ -366,6 +374,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
   <button class="lm-watchlist-toggle" id="lm-watchlist-toggle" onclick="_lmToggleWatchlistView()" title="Watchlist">★</button>
 </header>
+
+<div class="lm-global-search-dim" id="lm-global-search-dim"></div>
 
 <div class="lm-global-search-wrap" id="lm-global-search-wrap">
   <span class="lm-global-search-icon">⌕</span>
@@ -881,33 +891,47 @@ async function _lmGlobalSearch(q){
   }
 }
 
+function _lmSetSearchDim(on){
+  var dim = document.getElementById('lm-global-search-dim');
+  if(dim) dim.classList.toggle('open', on);
+}
+
+/* Header pinned atop the dropdown so it always reads as "these are separate
+   search results", not the Live Market list itself -- suffix is the trailing
+   " · N found" bit, omitted while still loading. */
+function _lmGsrHeaderHtml(suffix){
+  return '<div class="lm-gsr-header">Search results for "'+_esc(_lmGsLastQuery)+'"'+(suffix?' · '+suffix:'')+'</div>';
+}
+
 function _lmRenderGlobalResults(state){
   var box = document.getElementById('lm-global-search-results');
   if(!box) return;
   if(!_lmGsLastQuery){
     box.classList.remove('open');
     box.innerHTML = '';
+    _lmSetSearchDim(false);
     return;
   }
+  _lmSetSearchDim(true);
   if(state === 'loading'){
-    box.innerHTML = '<div class="lm-gsr-loading">Searching…</div>';
+    box.innerHTML = _lmGsrHeaderHtml() + '<div class="lm-gsr-loading">Searching…</div>';
     box.classList.add('open');
     return;
   }
   if(state === 'error'){
-    box.innerHTML = '<div class="lm-gsr-empty">Search failed — try again</div>';
+    box.innerHTML = _lmGsrHeaderHtml() + '<div class="lm-gsr-empty">Search failed — try again</div>';
     box.classList.add('open');
     return;
   }
   if(!_lmGsResults.length){
-    box.innerHTML = '<div class="lm-gsr-empty">No tokens found for "'+_esc(_lmGsLastQuery)+'"</div>';
+    box.innerHTML = _lmGsrHeaderHtml('0 found') + '<div class="lm-gsr-empty">No tokens found</div>';
     box.classList.add('open');
     return;
   }
   // Same rich row rendering _buildTable/_rowHtml produce for the main table
   // (avatar, name, ticker, price, 24h%, volume, market cap, age, Trade
   // button) instead of the old compact ticker/name/price-only .lm-gsr-item.
-  box.innerHTML = _buildTable(_lmGsResults.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+  box.innerHTML = _lmGsrHeaderHtml(_lmGsResults.length+' found') + _buildTable(_lmGsResults.map(function(p,i){ return _rowHtml(p,i); }).join(''));
   // _rowHtml() ids its <tr> "lm-row-"+idx starting from 0, same as the main
   // table -- strip them here so a concurrently-open main table's own
   // getElementById('lm-row-'+idx) lookups (_flashRow, _openBuyDrop) can
@@ -921,6 +945,7 @@ function _lmCloseGlobalSearch(){
   var box   = document.getElementById('lm-global-search-results');
   if(input) input.value = '';
   if(box){ box.classList.remove('open'); box.innerHTML = ''; }
+  _lmSetSearchDim(false);
   _lmGsLastQuery = '';
   _lmGsResults = [];
 }
