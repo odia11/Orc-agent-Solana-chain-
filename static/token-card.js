@@ -283,7 +283,13 @@ function _lmtdCloseModal(){
     if(!dragging) return;
     var x = e.touches[0].clientX, y = e.touches[0].clientY;
     var dx = x-startX, dy = y-startY;
-    if(verticalDown===null && (Math.abs(dx)>6||Math.abs(dy)>6)) verticalDown = Math.abs(dy)>Math.abs(dx) && dy>0;
+    if(verticalDown===null && (Math.abs(dx)>6||Math.abs(dy)>6)){
+      // Only start the dismiss-drag if the modal's own scroll is already at
+      // the top -- otherwise this is someone scrolling the modal content
+      // down-then-up, not trying to dismiss it. scrollTop<=0 (not ===0)
+      // to tolerate iOS Safari's negative scrollTop during rubber-banding.
+      verticalDown = Math.abs(dy)>Math.abs(dx) && dy>0 && overlay.scrollTop<=0;
+    }
     if(verticalDown){
       e.preventDefault(); // only suppress scroll/chart-pan once confirmed a downward drag
       moved = true;
