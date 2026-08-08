@@ -423,6 +423,23 @@ SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
 SOLANA_RPC_URL   = os.environ.get('SOLANA_RPC_URL', '')   # set in Railway — overrides all fallbacks
 HELIUS_RPC       = os.environ.get('HELIUS_RPC', '')        # full Helius URL e.g. https://mainnet.helius-rpc.com/?api-key=xxx
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
+# OWNER_WALLET vs ADMIN_WALLET — deliberately two separate constants, not
+# duplication (checked/confirmed against production 2026-08-08: same address
+# in practice, but that's a deployment fact, not something the code enforces
+# or should assume):
+#   - OWNER_WALLET: env-configurable, used by _is_owner() for general owner
+#     checks, and as the destination for regular trading-fee recovery. Can be
+#     blank if the env var is never set (see the startup warning below).
+#   - ADMIN_WALLET: hardcoded, intentionally NOT tied to any env var, used
+#     specifically where a misconfigured-or-blank OWNER_WALLET must never be
+#     able to cause harm: it's the real on-chain destination
+#     _verify_promotion_payment() checks incoming promotion payments against,
+#     the sole wallet allowed to use /api/promote/<id>/simulate-confirm's
+#     payment-bypass, and a "constant super-admin" that can't be demoted or
+#     removed from the role system by another admin (see the role-removal
+#     guards further down). Don't consolidate this into OWNER_WALLET --
+#     that would make all of the above depend on a value that can be blank
+#     or changed via deploy config.
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ADMIN_WALLET     = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'
 WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID', 'orcagent.fun')
@@ -16785,6 +16802,17 @@ if not OWNER_WALLET:
     print('WARNING: OWNER_WALLET is not set in environment variables.')
     print('         is_admin will never be true for any user.')
     print('         Set OWNER_WALLET in Railway Variables and redeploy.')
+elif OWNER_WALLET != ADMIN_WALLET:
+    # Non-fatal by design -- OWNER_WALLET and ADMIN_WALLET are allowed to
+    # differ (see the comment where they're defined), but in this app's
+    # actual deployment they're meant to be the same address, so a mismatch
+    # here almost certainly means one of them drifted (e.g. OWNER_WALLET
+    # rotated without updating the hardcoded ADMIN_WALLET, or vice versa)
+    # rather than being intentional.
+    print('WARNING: OWNER_WALLET does not match the hardcoded ADMIN_WALLET.')
+    print('         These are expected to be the same address in this deployment --')
+    print('         promotion-payment verification, the super-admin role guard, and')
+    print('         is_admin/_is_owner() checks may now disagree about who the owner is.')
 init_db()
 run_migrations()
 _load_banned_ips()
