@@ -70,7 +70,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'G
 <body>
 
 <div class="mobile-back-bar">
-  <button onclick="location.href='/'" class="mobile-back-btn">← Back</button>
+  <button onclick="window.history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Promote your coin</span>
 </div>
 

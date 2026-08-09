@@ -129,7 +129,7 @@
 {% include '_delete_convo_modal.html' %}
 {% include '_alert_modal.html' %}
 <div class="mobile-back-bar">
-  <button onclick="location.href='/'" class="mobile-back-btn">← Back</button>
+  <button onclick="window.history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Notifications</span>
 </div>
 <div id="app">

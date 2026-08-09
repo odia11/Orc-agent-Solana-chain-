@@ -282,7 +282,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
     <!-- mobile top bar -->
     <div class="mobile-back-bar">
-      <button onclick="location.href='/'" class="mobile-back-btn">← Back</button>
+      <button onclick="window.history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
       <span class="mobile-page-title">Settings</span>
     </div>
 

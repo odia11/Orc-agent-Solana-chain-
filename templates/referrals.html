@@ -178,7 +178,7 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 </head>
 <body>
 <div class="mobile-back-bar">
-  <button onclick="location.href='/'" class="mobile-back-btn">← Back</button>
+  <button onclick="window.history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
   <span class="mobile-page-title">Referrals</span>
 </div>
 <div id="app">

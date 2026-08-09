@@ -362,7 +362,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
     <!-- mobile top bar (hidden on desktop via CSS) -->
     <div class="mobile-back-bar">
-      <button onclick="location.href='/'" class="mobile-back-btn">← Back</button>
+      <button onclick="window.history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
       <span class="mobile-page-title">Profile</span>
     </div>
 
@@ -821,9 +821,18 @@ var _flmColors = ['#6366f1','#8b5cf6','#ec4899','#f59e0b','#10b981','#3b82f6','#
 function _flmColor(s){ var h=0; for(var i=0;i<(s||'').length;i++) h=(h*31+s.charCodeAt(i))&0xfffffff; return _flmColors[h%_flmColors.length]; }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'); }
 
+// Pushes a history entry while the modal is open so the phone's hardware
+// back button closes the modal instead of leaving the page outright, and
+// so returning here via back (bfcache reload) can restore it — see the
+// popstate listener and history.state check below.
+var _flmSkipHistory = false;
+
 function closeFollowListModal(){
   var back = document.getElementById('flm-back');
   if(back) back.classList.remove('open');
+  if(!_flmSkipHistory && history.state && history.state.flm){
+    history.back();
+  }
 }
 
 async function openFollowListModal(type){
@@ -831,6 +840,7 @@ async function openFollowListModal(type){
   var title = document.getElementById('flm-title');
   var body  = document.getElementById('flm-body');
   if(!back) return;
+  if(!_flmSkipHistory) history.pushState({flm:type}, '', location.pathname + location.search);
   title.textContent = type === 'following' ? 'Following' : 'Followers';
   body.innerHTML = '<div class="flm-empty">Loading…</div>';
   back.classList.add('open');
@@ -845,7 +855,7 @@ async function openFollowListModal(type){
       var img   = u.avatar_url ? '<img src="'+u.avatar_url.replace(/"/g,'&quot;')+'" onerror="this.style.display=\'none\'">' : '';
       var handle = u.wallet ? '<div class="flm-handle">'+esc(u.wallet)+'</div>' : '';
       var verifiedBadge = u.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
-      return '<div class="flm-row" onclick="closeFollowListModal();window.location.href=\'/profile/'+encodeURIComponent(u.wallet_address||'')+'\'">'
+      return '<div class="flm-row" onclick="window.location.href=\'/profile/'+encodeURIComponent(u.wallet_address||'')+'\'">'
         +'<div class="flm-av" style="background:'+color+'">'+ini+img+'</div>'
         +'<div style="flex:1;min-width:0"><div class="flm-name">'+esc(u.username)+verifiedBadge+'</div>'+handle+'</div>'
         +'</div>';
@@ -853,6 +863,24 @@ async function openFollowListModal(type){
   }catch(e){
     body.innerHTML='<div class="flm-empty">Failed to load.</div>';
   }
+}
+
+window.addEventListener('popstate', function(e){
+  var state = e.state;
+  _flmSkipHistory = true;
+  try{
+    if(state && state.flm) openFollowListModal(state.flm);
+    else closeFollowListModal();
+  } finally {
+    _flmSkipHistory = false;
+  }
+});
+// Page loaded directly into a pushed "modal open" state (e.g. bfcache was
+// evicted and back navigation triggered a full reload) — restore it.
+if(history.state && history.state.flm){
+  _flmSkipHistory = true;
+  openFollowListModal(history.state.flm);
+  _flmSkipHistory = false;
 }
 
 var _epmOriginalUsername = '';
