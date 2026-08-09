@@ -9375,3 +9375,21 @@ document.addEventListener('DOMContentLoaded', function(){
     _ca.style.cssText += ';display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted)';
   }
 });
+
+// ── Live online-users badge (sidebar + mobile header) ──
+function _refreshOnlineCount(){
+  fetch('/api/online-count').then(function(r){ return r.json(); }).then(function(d){
+    if(!d || !d.ok) return;
+    var n = d.online;
+    var sb = document.getElementById('sb-online-badge');
+    var sbCount = document.getElementById('sb-online-count');
+    if(sb && sbCount){ sbCount.textContent = n; sb.style.display = 'flex'; }
+    var hdr = document.getElementById('hdr-online-badge');
+    var hdrCount = document.getElementById('hdr-online-count');
+    if(hdr && hdrCount){ hdrCount.textContent = n; hdr.style.display = 'flex'; }
+  }).catch(function(){});
+}
+document.addEventListener('DOMContentLoaded', function(){
+  _refreshOnlineCount();
+  setInterval(_refreshOnlineCount, 30000);
+});

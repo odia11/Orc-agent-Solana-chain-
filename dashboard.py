@@ -12537,6 +12537,20 @@ def admin_support_suggest_reply(thread_id):
         return jsonify({'ok': False, 'msg': 'AI request failed: ' + str(e)[:200]}), 502
 
 
+@app.route('/api/online-count', methods=['GET'])
+@rate_limit(30, 60)
+def api_online_count():
+    """Small public counter: users with a heartbeat in the last 3 minutes."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            "SELECT COUNT(*) FROM users WHERE last_active >= datetime('now','-3 minutes')"
+        ).fetchone()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'online': int(row[0] or 0)})
+
+
 @app.route('/api/heartbeat', methods=['POST'])
 @rate_limit(6, 60)
 def api_heartbeat():

@@ -154,6 +154,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #sidebar::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
 .sb-logo{padding:20px 20px 14px;flex-shrink:0}
 .sb-logo-row{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.sb-online-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#8b93a1;font-weight:600;letter-spacing:.01em}
+.online-count-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;box-shadow:0 0 0 rgba(58,210,155,.5);animation:onlineCountPulse 2s infinite}
+@keyframes onlineCountPulse{0%{box-shadow:0 0 0 0 rgba(58,210,155,.5)}70%{box-shadow:0 0 0 5px rgba(58,210,155,0)}100%{box-shadow:0 0 0 0 rgba(58,210,155,0)}}
 .sb-logo-shape{width:36px;height:36px;min-width:36px;background:#f7b955;border-radius:11px;display:flex;align-items:center;justify-content:center}
 .sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
 .sb-logo-text{font-family:'Geist',system-ui,sans-serif;font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
@@ -236,6 +239,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 @media(min-width:1025px){.header{display:none!important}}
 .logo-row{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .brand{font-family:'Inter',system-ui,sans-serif;font-size:16px;font-weight:700;color:#ffffff;letter-spacing:-0.02em}
+.hdr-online-badge{display:flex;align-items:center;gap:4px;font-size:10px;color:#8b93a1;font-weight:700;margin-left:6px}
 .brand-sub{display:none}
 .header-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .hdr-search-wrap{flex:1;max-width:300px;position:relative;display:flex;align-items:center}
@@ -3739,6 +3743,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <path d="M 60 88 Q 80 100 100 88" stroke="#000000" stroke-width="3" fill="none" stroke-linecap="round"/>
       </svg>
       <span class="brand">OrcAgent</span>
+      <span class="hdr-online-badge" id="hdr-online-badge" style="display:none">
+        <span class="online-count-dot"></span><span id="hdr-online-count">0</span>
+      </span>
     </div>
     <div class="header-right">
       <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
@@ -3786,6 +3793,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="sb-logo-row">
           <div class="sb-logo-shape"></div>
           <span class="sb-logo-text">OrcAgent</span>
+        </div>
+        <div class="sb-online-badge" id="sb-online-badge" style="display:none">
+          <span class="online-count-dot"></span><span id="sb-online-count">0</span> online
         </div>
       </div>
 
