@@ -4255,7 +4255,7 @@ async function openFollowView(userId, username, type){
     const nameBadge = type==='followers'
       ? (isFollowed ? '<span class="fstate-mutual">Mutual</span>' : '<span class="fstate-follows-you">Follows you</span>')
       : '';
-    return `<div class="${rowCls}" onclick="openProfileCard(${u.user_id||0})">
+    return `<div class="${rowCls}" onclick="_tvpNavFromFollowRow(${u.user_id||0},${_tvFollowViewUserId||0},'${esc(_tvFollowViewUsername).replace(/'/g,"\\'")}','${_tvFollowViewType}')">
       <div class="tvfl-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvfl-info">
         <div class="tvfl-name">${esc(u.username||u.wallet)}${nameBadge}</div>
@@ -4308,7 +4308,7 @@ async function _loadFollowPanel(wallet, tab){
     const nameBadge = tab==='followers'
       ? (isFollowed ? '<span class="fstate-mutual">Mutual</span>' : '<span class="fstate-follows-you">Follows you</span>')
       : '';
-    return `<div class="${rowCls}" onclick="openProfileCard(${u.user_id||0})">
+    return `<div class="${rowCls}" onclick="_tvpNavFromFollowRow(${u.user_id||0},${_tvpCurrentProfileId||0},'${esc(_tvpCurrentProfileUsername).replace(/'/g,"\\'")}','${tab}')">
       <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
       <div class="tvp-fp-info">
         <div class="tvp-fp-name">${esc(u.username||u.wallet)}${nameBadge}</div>
@@ -4336,6 +4336,16 @@ async function _tvpFollowAndRefresh(btn, key, userId, username){
 let _tvpCurrentProfileId = 0;
 let _tvpCurrentProfileUsername = '';
 let _tvpPrevProfile = null; // {userId, wallet, tab, username}
+
+// Records where we're navigating from (a follow-list row) so the profile's
+// back button can return here instead of always falling back to the top-level
+// Traders Feed — see openFollowView()/_loadFollowPanel() row templates below.
+function _tvpNavFromFollowRow(targetUserId, prevUserId, prevUsername, prevTab){
+  if(prevUserId){
+    _tvpPrevProfile = {userId: prevUserId, username: prevUsername, tab: prevTab};
+  }
+  openProfileCard(targetUserId);
+}
 
 async function _tvpGoBack(){
   const prev = _tvpPrevProfile;
