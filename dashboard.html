@@ -157,6 +157,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .sb-online-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#8b93a1;font-weight:600;letter-spacing:.01em}
 .online-count-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;box-shadow:0 0 0 rgba(58,210,155,.5);animation:onlineCountPulse 2s infinite}
 @keyframes onlineCountPulse{0%{box-shadow:0 0 0 0 rgba(58,210,155,.5)}70%{box-shadow:0 0 0 5px rgba(58,210,155,0)}100%{box-shadow:0 0 0 0 rgba(58,210,155,0)}}
+.mob-online-badge{position:fixed;top:calc(env(safe-area-inset-top,0px) + 10px);right:10px;align-items:center;gap:5px;background:rgba(16,18,22,.92);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);border:1px solid #21252c;border-radius:20px;padding:5px 10px;font-size:10px;color:#8b93a1;font-weight:700;z-index:8800}
+@media(min-width:768px){.mob-online-badge{display:none!important}}
 .sb-logo-shape{width:36px;height:36px;min-width:36px;background:#f7b955;border-radius:11px;display:flex;align-items:center;justify-content:center}
 .sb-logo-shape::after{content:'';width:0;height:0;border-left:7px solid transparent;border-right:7px solid transparent;border-bottom:13px solid #0a0b0e}
 .sb-logo-text{font-family:'Geist',system-ui,sans-serif;font-size:18px;font-weight:700;color:var(--text);letter-spacing:-.02em}
@@ -3712,6 +3714,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <div id="guest-banner">
   <span>👋 Browsing as guest · <button class="gb-link" onclick="_guestConnect()">Connect wallet</button></span>
   <button class="gb-min" onclick="_minimizeGuestBanner()" title="Minimize">✕</button>
+</div>
+
+<!-- MOBILE ONLINE-COUNT BADGE: floating, phone widths only (#sidebar and .header
+     both hide below 768px in favor of #mob-bottom-nav, which has no room for this) -->
+<div class="mob-online-badge" id="mob-online-badge" style="display:none">
+  <span class="online-count-dot"></span><span id="mob-online-count">0</span> online
 </div>
 
 <!-- MAIN APP -->
