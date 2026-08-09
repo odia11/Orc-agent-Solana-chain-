@@ -7274,7 +7274,22 @@ function selectUserTag(username){
 }
 function _toggleFeedEmojiPanel(e){
   if(e) e.stopPropagation()
-  document.getElementById('feed-emoji-panel').classList.toggle('open')
+  var panel = document.getElementById('feed-emoji-panel')
+  var willOpen = !panel.classList.contains('open')
+  if(willOpen){
+    var btn = e && (e.currentTarget||e.target)
+    if(btn){
+      // Panel's max-height is 220px (dashboard.html:406) + the 6px gap it
+      // opens with -- if there isn't that much room above the button,
+      // flip it to open downward instead so it can't run off-screen.
+      var PANEL_SPACE = 220 + 6
+      var rect = btn.getBoundingClientRect()
+      var fitsAbove = rect.top >= PANEL_SPACE
+      panel.style.bottom = fitsAbove ? 'calc(100% + 6px)' : 'auto'
+      panel.style.top = fitsAbove ? 'auto' : 'calc(100% + 6px)'
+    }
+  }
+  panel.classList.toggle('open')
 }
 document.addEventListener('click', function(e){
   var panel = document.getElementById('feed-emoji-panel')
