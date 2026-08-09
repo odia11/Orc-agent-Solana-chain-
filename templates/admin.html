@@ -440,6 +440,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
           <div class="kpi-lbl">Fees collected (SOL)</div>
           <div class="kpi-delta" id="ov-fees-today" style="color:var(--accent)">— today</div>
         </div>
+        <div class="kpi-card">
+          <div class="kpi-ico" style="background:rgba(58,210,155,.14)">●</div>
+          <div class="kpi-val" id="ov-online">—</div>
+          <div class="kpi-lbl">Online now</div>
+          <div class="kpi-delta" style="color:var(--muted)">active in last 3 min</div>
+        </div>
       </div>
 
       <div class="chart-wrap">
@@ -1148,7 +1154,8 @@ function _txRow(t, showTx) {
 
 // ══════════════════ OVERVIEW ══════════════════
 async function loadOverview() {
-  var [admin, fees, stats] = await Promise.all([_a('/api/admin'), _a('/api/admin/fees'), _a('/api/admin/stats')]);
+  var [admin, fees, stats, online] = await Promise.all([_a('/api/admin'), _a('/api/admin/fees'), _a('/api/admin/stats'), _a('/api/online-count')]);
+  if (online && online.ok) document.getElementById('ov-online').textContent = online.online;
   if (admin) {
     document.getElementById('ov-users').textContent = admin.total_users ?? '—';
     document.getElementById('ov-trades').textContent = admin.total_trades ?? '—';

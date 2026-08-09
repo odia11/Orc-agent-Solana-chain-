@@ -9376,7 +9376,7 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 });
 
-// ── Live online-users badge (sidebar + tablet header + phone floating pill) ──
+// ── Live online-users badge (sidebar + tablet header) ──
 function _refreshOnlineCount(){
   fetch('/api/online-count').then(function(r){ return r.json(); }).then(function(d){
     if(!d || !d.ok) return;
@@ -9387,9 +9387,6 @@ function _refreshOnlineCount(){
     var hdr = document.getElementById('hdr-online-badge');
     var hdrCount = document.getElementById('hdr-online-count');
     if(hdr && hdrCount){ hdrCount.textContent = n; hdr.style.display = 'flex'; }
-    var mob = document.getElementById('mob-online-badge');
-    var mobCount = document.getElementById('mob-online-count');
-    if(mob && mobCount){ mobCount.textContent = n; mob.style.display = 'flex'; }
   }).catch(function(){});
 }
 document.addEventListener('DOMContentLoaded', function(){
