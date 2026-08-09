@@ -6515,31 +6515,166 @@ async function _dmEditMsg(msgId, msgEl){
   inp.addEventListener('blur',save);
 }
 
-const _EMOJI_PALETTE_EMOJIS=['😀','😂','😍','🥰','😢','😮','😎','🤔','😤','🔥','❤️','💯','👍','👎','🚀','💰','📈','📉','⚡','🎯','💎','🏆','🌙','💀','🤝','👀','🙏','✅','❌','⚠️'];
+// ── Unified emoji picker: shared dataset + search/category/recent UI,
+// used by both the DM/reply picker (.ep-palette) and the feed composer
+// panel (#feed-emoji-panel). Replaces the two separate flat emoji lists.
+const _EMOJI_CATS=[
+  {id:'recent',icon:'🕐',label:'Recent'},
+  {id:'trading',icon:'🚀',label:'Trading'},
+  {id:'smileys',icon:'😀',label:'Smileys'},
+  {id:'gestures',icon:'👍',label:'Gestures'},
+  {id:'hearts',icon:'❤️',label:'Hearts'},
+  {id:'animals',icon:'🐶',label:'Animals'},
+  {id:'food',icon:'🍕',label:'Food'},
+  {id:'objects',icon:'🎉',label:'Objects'}
+];
+const _EMOJI_DATA=[
+  ['🚀','rocket','moon pump','trading'],['📈','chart up','gains bull','trading'],
+  ['📉','chart down','loss bear dump','trading'],['💰','money bag','cash rich','trading'],
+  ['💎','diamond hands','hodl gem','trading'],['🐳','whale','big wallet','trading'],
+  ['🦍','ape','apes together','trading'],['🤡','clown','rekt bagholder','trading'],
+  ['💩','poop','shit rug','trading'],['🔔','bell','alert notify','trading'],
+  ['🧠','brain','smart alpha','trading'],['👑','crown','king top','trading'],
+  ['🔒','lock','locked safe','trading'],['🔓','unlock','unlocked','trading'],
+  ['✅','check','yes confirm good','trading'],['❌','cross','no wrong bad','trading'],
+  ['⚠️','warning','alert caution','trading'],['💯','hundred','perfect','trading'],
+  ['🔥','fire','hot lit','trading'],['⚡','lightning','fast bolt','trading'],
+  ['😀','grinning','happy smile','smileys'],['😃','smiley','happy joy','smileys'],
+  ['😄','smile','happy grin','smileys'],['😁','beaming','grin happy','smileys'],
+  ['😆','laughing','haha lol','smileys'],['😅','sweat smile','phew relief','smileys'],
+  ['😂','joy tears','lol funny','smileys'],['🤣','rofl','rolling laugh','smileys'],
+  ['🙂','slight smile','okay fine','smileys'],['😉','wink','flirt','smileys'],
+  ['😊','blush','happy shy','smileys'],['😇','halo','angel innocent','smileys'],
+  ['😍','heart eyes','love adore','smileys'],['🥰','smiling hearts','love','smileys'],
+  ['😘','kiss','love kiss','smileys'],['😜','wink tongue','silly playful','smileys'],
+  ['🤔','thinking','hmm consider','smileys'],['🫡','salute','respect','smileys'],
+  ['😐','neutral','meh blank','smileys'],['🙄','eye roll','whatever','smileys'],
+  ['😴','sleeping','tired sleep','smileys'],['🥳','party face','celebrate','smileys'],
+  ['🤯','mind blown','shocked wow','smileys'],['😳','flushed','shocked','smileys'],
+  ['😭','sobbing','crying sad','smileys'],['😢','crying','sad tear','smileys'],
+  ['😤','huffing','angry frustrated','smileys'],['😡','angry','mad rage','smileys'],
+  ['😱','screaming','shocked scared','smileys'],['🥺','pleading','puppy eyes','smileys'],
+  ['😎','sunglasses','cool chill','smileys'],['🤗','hug','embrace','smileys'],
+  ['👍','thumbs up','yes good like','gestures'],['👎','thumbs down','no bad dislike','gestures'],
+  ['👏','clapping','applause bravo','gestures'],['🙌','raised hands','celebrate yay','gestures'],
+  ['👋','wave','hello hi bye','gestures'],['🤝','handshake','deal agree','gestures'],
+  ['🙏','pray','please thanks','gestures'],['💪','flex muscle','strong power','gestures'],
+  ['👀','eyes','looking watching','gestures'],['✌️','peace','victory','gestures'],
+  ['🤞','fingers crossed','hope luck','gestures'],['👆','point up','up here','gestures'],
+  ['❤️','red heart','love','hearts'],['🧡','orange heart','love','hearts'],
+  ['💛','yellow heart','love','hearts'],['💚','green heart','love money','hearts'],
+  ['💙','blue heart','love','hearts'],['💜','purple heart','love','hearts'],
+  ['🖤','black heart','love dark','hearts'],['💔','broken heart','sad breakup','hearts'],
+  ['💕','two hearts','love','hearts'],['💖','sparkling heart','love','hearts'],
+  ['🐶','dog','puppy','animals'],['🐱','cat','kitty','animals'],
+  ['🦊','fox','sly','animals'],['🐻','bear','animal','animals'],
+  ['🐼','panda','animal','animals'],['🐯','tiger','animal','animals'],
+  ['🦁','lion','king animal','animals'],['🐸','frog','pepe','animals'],
+  ['🐵','monkey','ape','animals'],['🦈','shark','fish','animals'],
+  ['🍕','pizza','food','food'],['🍔','burger','food','food'],
+  ['🍟','fries','food','food'],['🍿','popcorn','snack','food'],
+  ['🍩','donut','sweet','food'],['🍫','chocolate','sweet','food'],
+  ['☕','coffee','drink caffeine','food'],['🍎','apple','fruit','food'],
+  ['🍌','banana','fruit','food'],['🍑','peach','fruit','food'],
+  ['🎉','party popper','celebrate confetti','objects'],['🎊','confetti ball','celebrate','objects'],
+  ['🎁','gift','present','objects'],['🏆','trophy','win champion','objects'],
+  ['🎯','dart target','goal bullseye','objects'],['🎮','game controller','gaming','objects'],
+  ['🎸','guitar','music','objects'],['🌙','crescent moon','moon night','objects'],
+  ['🌟','glowing star','star shine','objects'],['☀️','sun','sunny day','objects'],
+  ['🌈','rainbow','colorful','objects'],['💡','light bulb','idea','objects'],
+  ['💀','skull','dead rip','objects']
+];
+function _emojiRecentGet(){
+  try{ return JSON.parse(localStorage.getItem('orc_recent_emojis')||'[]'); }catch(_){ return []; }
+}
+function _emojiRecentAdd(emoji){
+  try{
+    var list=_emojiRecentGet().filter(function(e){ return e!==emoji; });
+    list.unshift(emoji);
+    localStorage.setItem('orc_recent_emojis', JSON.stringify(list.slice(0,16)));
+  }catch(_){}
+}
+// Builds the search box + category tabs + grid inside `container` and wires
+// `onPick(emoji)`. Rebuilds the grid content on search/tab/pick without
+// tearing down the search input (so focus + typed query are preserved).
+function _buildEmojiPicker(container, onPick){
+  container.innerHTML='';
+  var search=document.createElement('input');
+  search.type='text'; search.className='emoji-picker-search'; search.placeholder='Search emoji…';
+  var tabs=document.createElement('div'); tabs.className='emoji-picker-tabs';
+  var grid=document.createElement('div'); grid.className='emoji-picker-grid';
+  var activeCat='recent';
+  function itemsFor(cat, query){
+    if(query) return _EMOJI_DATA.filter(function(it){
+      return it[1].indexOf(query)!==-1 || it[2].indexOf(query)!==-1;
+    });
+    if(cat==='recent'){
+      var recents=_emojiRecentGet();
+      return recents.map(function(e){ return _EMOJI_DATA.find(function(it){ return it[0]===e; }) || [e,'','','recent']; });
+    }
+    return _EMOJI_DATA.filter(function(it){ return it[3]===cat; });
+  }
+  function renderGrid(){
+    var q=search.value.trim().toLowerCase();
+    var items=itemsFor(activeCat, q);
+    grid.innerHTML='';
+    if(!items.length){
+      var empty=document.createElement('div');
+      empty.className='emoji-picker-empty';
+      empty.textContent = q ? 'No emoji found' : 'No recent emoji yet';
+      grid.appendChild(empty);
+      return;
+    }
+    items.forEach(function(it){
+      var b=document.createElement('button');
+      b.type='button'; b.textContent=it[0]; b.title=it[1];
+      b.onclick=function(ev){
+        ev.stopPropagation();
+        _emojiRecentAdd(it[0]);
+        onPick(it[0]);
+      };
+      grid.appendChild(b);
+    });
+  }
+  _EMOJI_CATS.forEach(function(cat){
+    var t=document.createElement('button');
+    t.type='button'; t.className='emoji-picker-tab'+(cat.id===activeCat?' active':'');
+    t.textContent=cat.icon; t.title=cat.label;
+    t.onclick=function(ev){
+      ev.stopPropagation();
+      activeCat=cat.id; search.value='';
+      tabs.querySelectorAll('.emoji-picker-tab').forEach(function(x){ x.classList.remove('active'); });
+      t.classList.add('active');
+      renderGrid();
+    };
+    tabs.appendChild(t);
+  });
+  search.oninput=function(){ renderGrid(); };
+  search.onclick=function(ev){ ev.stopPropagation(); };
+  container.appendChild(search);
+  container.appendChild(tabs);
+  container.appendChild(grid);
+  renderGrid();
+}
 function _emojiPickerToggle(e, palId, inputId){
   e.stopPropagation();
   var pal=typeof palId==='string'?document.getElementById(palId):palId;
   var inp=typeof inputId==='string'?document.getElementById(inputId):inputId;
   if(!pal) return;
-  var wasOpen=pal.style.display==='grid';
+  var wasOpen=pal.style.display==='flex';
   document.querySelectorAll('.ep-palette,.fc-react-palette').forEach(function(p){ p.style.display='none'; });
   if(wasOpen) return;
-  if(!pal.childElementCount){
-    _EMOJI_PALETTE_EMOJIS.forEach(function(emoji){
-      var b=document.createElement('button');
-      b.textContent=emoji;
-      b.onclick=function(ev){
-        ev.stopPropagation();
-        if(inp){
-          var s=inp.selectionStart,en=inp.selectionEnd,v=inp.value;
-          inp.value=v.slice(0,s)+emoji+v.slice(en);
-          var pos=s+[...emoji].length;
-          inp.setSelectionRange(pos,pos);
-          inp.focus();
-        }
-      };
-      pal.appendChild(b);
+  if(!pal.dataset.built){
+    _buildEmojiPicker(pal, function(emoji){
+      if(inp){
+        var s=inp.selectionStart,en=inp.selectionEnd,v=inp.value;
+        inp.value=v.slice(0,s)+emoji+v.slice(en);
+        var pos=s+[...emoji].length;
+        inp.setSelectionRange(pos,pos);
+        inp.focus();
+      }
     });
+    pal.dataset.built='1';
   }
   // Escape overflow:hidden clipping by reparenting to body and using position:fixed
   var btn=e.currentTarget||e.target;
@@ -6549,7 +6684,7 @@ function _emojiPickerToggle(e, palId, inputId){
   pal.style.right='auto';
   pal.style.bottom='auto';
   pal.style.visibility='hidden';
-  pal.style.display='grid';
+  pal.style.display='flex';
   var pw=pal.offsetWidth, ph=pal.offsetHeight;
   var left=Math.max(4,Math.min(rect.left+rect.width/2-pw/2, window.innerWidth-pw-4));
   var top=rect.top-ph-8;
@@ -7277,12 +7412,26 @@ function _toggleFeedEmojiPanel(e){
   var panel = document.getElementById('feed-emoji-panel')
   var willOpen = !panel.classList.contains('open')
   if(willOpen){
+    if(!panel.dataset.built){
+      _buildEmojiPicker(panel, function(emoji){
+        var ta = document.getElementById('postText')
+        if(!ta) return
+        var start = ta.selectionStart || ta.value.length
+        var end = ta.selectionEnd || ta.value.length
+        ta.value = ta.value.slice(0,start) + emoji + ta.value.slice(end)
+        var pos = start + emoji.length
+        ta.focus()
+        ta.setSelectionRange(pos,pos)
+        panel.classList.remove('open')
+      })
+      panel.dataset.built = '1'
+    }
     var btn = e && (e.currentTarget||e.target)
     if(btn){
-      // Panel's max-height is 220px (dashboard.html:406) + the 6px gap it
-      // opens with -- if there isn't that much room above the button,
-      // flip it to open downward instead so it can't run off-screen.
-      var PANEL_SPACE = 220 + 6
+      // Panel's max-height is ~300px (search + tabs + grid, dashboard.html)
+      // + the 6px gap it opens with -- if there isn't that much room above
+      // the button, flip it to open downward instead so it can't run off-screen.
+      var PANEL_SPACE = 300 + 6
       var rect = btn.getBoundingClientRect()
       var fitsAbove = rect.top >= PANEL_SPACE
       panel.style.bottom = fitsAbove ? 'calc(100% + 6px)' : 'auto'
@@ -7294,19 +7443,6 @@ function _toggleFeedEmojiPanel(e){
 document.addEventListener('click', function(e){
   var panel = document.getElementById('feed-emoji-panel')
   if(panel && panel.classList.contains('open') && !e.target.closest('.feed-emoji-wrap')) panel.classList.remove('open')
-})
-document.addEventListener('click', function(e){
-  var btn = e.target.closest('#feed-emoji-panel button')
-  if(!btn) return
-  var ta = document.getElementById('postText')
-  if(!ta) return
-  var start = ta.selectionStart || ta.value.length
-  var end = ta.selectionEnd || ta.value.length
-  ta.value = ta.value.slice(0,start) + btn.textContent + ta.value.slice(end)
-  var pos = start + btn.textContent.length
-  ta.focus()
-  ta.setSelectionRange(pos,pos)
-  document.getElementById('feed-emoji-panel').classList.remove('open')
 })
 function _updatePostCharCounter(ta){
   var el = document.getElementById('postText-counter')

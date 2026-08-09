@@ -403,10 +403,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-composer-actions{display:flex;align-items:center;gap:8px;padding-top:12px;border-top:1px solid var(--bg3)}
 .feed-emoji-wrap{position:relative;display:inline-block}
 .feed-emoji-btn{display:flex;align-items:center;justify-content:center;padding:6px 10px;background:transparent;border:1px solid #21252c;border-radius:9px;font-size:15px;cursor:pointer}
-.feed-emoji-panel{display:none;position:absolute;bottom:calc(100% + 6px);right:0;width:260px;max-width:calc(100vw - 24px);box-sizing:border-box;max-height:220px;overflow-y:auto;background:#101216;border:1px solid #21252c;border-radius:13px;padding:8px;grid-template-columns:repeat(7,1fr);gap:2px;z-index:20}
-.feed-emoji-panel.open{display:grid}
+.feed-emoji-panel{display:none;position:absolute;bottom:calc(100% + 6px);right:0;width:280px;max-width:calc(100vw - 24px);box-sizing:border-box;background:#101216;border:1px solid #21252c;border-radius:13px;padding:8px;flex-direction:column;gap:6px;z-index:20}
+.feed-emoji-panel.open{display:flex}
 .feed-emoji-panel button{background:none;border:none;font-size:19px;padding:6px 0;border-radius:8px;cursor:pointer}
 .feed-emoji-panel button:hover{background:#16191f}
+.feed-emoji-panel .emoji-picker-grid{max-height:200px}
 .feed-composer-pill{display:flex;align-items:center;gap:5px;padding:6px 11px;background:transparent;border:1px solid #21252c;border-radius:9px;font-size:12px;font-weight:500;color:#8a919c;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:background .15s,border-color .15s}
 .feed-composer-pill:hover{background:#16191f;border-color:#2d333c;color:#eef1f5}
 .feed-composer-post{padding:8px 18px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
@@ -2154,9 +2155,20 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .dm-emoji-btn{background:none;border:none;cursor:pointer;font-size:18px;padding:0 2px;height:42px;display:flex;align-items:center;flex-shrink:0;opacity:.6;transition:opacity .15s;align-self:flex-end}
 .dm-emoji-btn:hover{opacity:1}
 .dm-emoji-wrap{position:relative;flex-shrink:0;align-self:flex-end}
-.dm-emoji-picker{position:absolute;bottom:calc(100% + 8px);right:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:10px;display:none;grid-template-columns:repeat(6,1fr);gap:4px;z-index:300;width:220px;box-shadow:0 8px 24px rgba(0,0,0,.55)}
+.dm-emoji-picker{position:absolute;bottom:calc(100% + 8px);right:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:8px;display:none;flex-direction:column;gap:6px;z-index:300;width:264px;box-shadow:0 8px 24px rgba(0,0,0,.55)}
 .dm-emoji-picker button,.fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:6px;border-radius:6px;transition:background .1s;line-height:1.4}
 .dm-emoji-picker button:hover,.fc-reply-palette button:hover{background:rgba(255,255,255,.08)}
+.emoji-picker-search{width:100%;box-sizing:border-box;background:#101216;border:1px solid #21252c;border-radius:8px;padding:6px 8px;color:#eef1f5;font-size:13px;outline:none}
+.emoji-picker-search::placeholder{color:#565d68}
+.emoji-picker-search:focus{border-color:#f7b955}
+.emoji-picker-tabs{display:flex;gap:2px;overflow-x:auto;scrollbar-width:none;flex-shrink:0}
+.emoji-picker-tabs::-webkit-scrollbar{display:none}
+.emoji-picker-tabs .emoji-picker-tab{background:none;border:none;cursor:pointer;font-size:15px;padding:4px 6px;border-radius:6px;opacity:.5;flex-shrink:0;line-height:1.3}
+.emoji-picker-tabs .emoji-picker-tab:hover{opacity:.85;background:rgba(255,255,255,.06)}
+.emoji-picker-tabs .emoji-picker-tab.active{opacity:1;background:rgba(247,185,85,.14)}
+.emoji-picker-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:2px;max-height:180px;overflow-y:auto}
+.emoji-picker-grid button{font-size:18px;padding:5px 0;text-align:center}
+.emoji-picker-empty{color:#565d68;font-size:12px;text-align:center;padding:14px 4px;grid-column:1/-1}
 .dm-img-btn{background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:6px 10px;color:#aaaaaa;cursor:pointer;font-size:16px;flex-shrink:0;align-self:flex-end;height:42px;display:flex;align-items:center;justify-content:center;transition:color .15s,border-color .15s;line-height:1}
 .dm-img-btn:hover{color:#ffffff;border-color:#aaaaaa}
 .dm-img-btn.loading{pointer-events:none;opacity:.6}
@@ -3223,7 +3235,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .feed-composer-avatar{width:36px!important;height:36px!important}
   .feed-composer-input{font-size:15px!important}
   .feed-composer-actions{flex-wrap:wrap!important;gap:6px!important;padding-top:10px!important}
-  .feed-emoji-panel{grid-template-columns:repeat(6,1fr)!important}
+  .feed-emoji-panel .emoji-picker-grid{grid-template-columns:repeat(6,1fr)!important}
   .feed-composer-pill{font-size:11px!important;padding:6px 10px!important}
   .feed-composer-post{
     width:100%!important;text-align:center!important;
@@ -4090,7 +4102,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <!-- Emoji picker -->
       <div class="feed-emoji-wrap">
         <button class="feed-emoji-btn" type="button" onclick="_toggleFeedEmojiPanel(event)">😀</button>
-        <div class="feed-emoji-panel" id="feed-emoji-panel"><button type="button">😀</button><button type="button">😂</button><button type="button">🤣</button><button type="button">😍</button><button type="button">🥰</button><button type="button">😎</button><button type="button">🤔</button><button type="button">😅</button><button type="button">😉</button><button type="button">😢</button><button type="button">😭</button><button type="button">😡</button><button type="button">😱</button><button type="button">😴</button><button type="button">🥳</button><button type="button">🤯</button><button type="button">🙌</button><button type="button">👏</button><button type="button">👍</button><button type="button">👎</button><button type="button">🙏</button><button type="button">🤝</button><button type="button">💪</button><button type="button">👀</button><button type="button">🔥</button><button type="button">💯</button><button type="button">✅</button><button type="button">❌</button><button type="button">🚀</button><button type="button">📈</button><button type="button">📉</button><button type="button">💰</button><button type="button">💎</button><button type="button">❤️</button><button type="button">🎉</button></div>
+        <div class="feed-emoji-panel" id="feed-emoji-panel"></div>
       </div>
       <span id="postText-counter" class="feed-composer-counter" style="display:none"></span>
       <div style="flex:1"></div>
