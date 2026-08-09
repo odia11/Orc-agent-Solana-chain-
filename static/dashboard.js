@@ -3976,6 +3976,7 @@ function _fadeIn(el){
 function openTradersView(){
   if(_tradersView) return;
   _tradersView=true;
+  _tvPush({tv:'list'});
   _clearStalePostHash();
   document.getElementById('dash-main').style.display='none';
   const _rrT=document.getElementById('right-rail');if(_rrT) _rrT.style.display='none';
@@ -3995,6 +3996,7 @@ function openTradersView(){
 function closeTradersView(){
   if(!_tradersView) return;
   _tradersView=false;
+  if(!_tvSkipPush) _tvReplace(null);
   // If a profile is open, reset it so re-opening traders view shows the feed
   if(typeof _tvProfileOpen!=='undefined'&&_tvProfileOpen){
     _tvProfileOpen=false;
@@ -4189,6 +4191,7 @@ function closeTraderProfile(){
   document.getElementById('tv-profile-view').style.display = 'none';
   document.getElementById('tv-follow-view').style.display = 'none';
   document.getElementById('tv-layout').style.display = '';
+  if(!_tvSkipPush) _tvReplace({tv:'list'});
   _updateTvMeCard();
 }
 
@@ -4201,8 +4204,10 @@ function closeFollowView(){
   document.getElementById('tv-follow-view').style.display = 'none';
   if(_tvpCurrentProfileId){
     document.getElementById('tv-profile-view').style.display = '';
+    if(!_tvSkipPush) _tvReplace({tv:'profile', userId:_tvpCurrentProfileId, prevProfile:_tvpPrevProfile});
   } else {
     document.getElementById('tv-layout').style.display = '';
+    if(!_tvSkipPush) _tvReplace({tv:'list'});
     _updateTvMeCard();
   }
 }
@@ -4212,6 +4217,7 @@ async function openFollowView(userId, username, type){
   _tvFollowViewUserId = userId;
   _tvFollowViewUsername = username || '';
   _tvFollowViewType = type;
+  _tvPush({tv:'followview', userId, username, type});
   const view = document.getElementById('tv-follow-view');
   document.getElementById('tv-profile-view').style.display = 'none';
   document.getElementById('tv-layout').style.display = 'none';
@@ -4223,7 +4229,7 @@ async function openFollowView(userId, username, type){
     : `${esc(username)} is Following`;
   view.innerHTML = `
     <div class="tvp-back-bar">
-      <button class="tvp-back-btn" onclick="closeFollowView()">← Back</button>
+      <button class="tvp-back-btn" onclick="history.back()">← Back</button>
       <span style="color:var(--muted);font-size:11px">${esc(username)}</span>
     </div>
     <div class="tvfl-title">${title}</div>
@@ -4347,12 +4353,38 @@ function _tvpNavFromFollowRow(targetUserId, prevUserId, prevUsername, prevTab){
   openProfileCard(targetUserId);
 }
 
-async function _tvpGoBack(){
-  const prev = _tvpPrevProfile;
-  _tvpPrevProfile = null;
-  await openProfileCard(prev.userId);
-  if(prev.tab !== 'followers') _switchFollowTab(prev.tab);
+// ── Browser-history integration for the Traders/Profile/FollowList stack ──
+// Without this, the native back button/swipe has nothing to step through and
+// exits straight past everything to the last real page load. `_tvSkipPush`
+// guards against re-pushing while we're restoring a state (popstate) or
+// closing programmatically (menu clicks etc, not an actual back action).
+let _tvSkipPush = false;
+function _tvPush(state){
+  if(_tvSkipPush) return;
+  try{ history.pushState(state, '', location.pathname + location.search); }catch(e){}
 }
+function _tvReplace(state){
+  try{ history.replaceState(state, '', location.pathname + location.search); }catch(e){}
+}
+window.addEventListener('popstate', function(e){
+  const state = e.state;
+  _tvSkipPush = true;
+  try{
+    if(!state || !state.tv){
+      if(_tradersView) closeTradersView();
+    } else if(state.tv === 'list'){
+      closeTraderProfile();
+      if(!_tradersView) openTradersView();
+    } else if(state.tv === 'profile'){
+      _tvpPrevProfile = state.prevProfile || null;
+      openProfileCard(state.userId);
+    } else if(state.tv === 'followview'){
+      openFollowView(state.userId, state.username, state.type);
+    }
+  } finally {
+    _tvSkipPush = false;
+  }
+});
 
 function _tvpTradesHtml(trades){
   if(!trades?.length) return '<div class="tvp-empty">No trades today</div>';
@@ -4410,6 +4442,7 @@ async function openProfileCard(userId){
   if(!_tradersView) openTradersView();
   _tvProfileOpen = true;
   _tvpCurrentProfileId = userId;
+  _tvPush({tv:'profile', userId, prevProfile:_tvpPrevProfile});
   const view = document.getElementById('tv-profile-view');
   document.getElementById('tv-layout').style.display = 'none';
   document.getElementById('tv-follow-view').style.display = 'none';
@@ -4425,7 +4458,7 @@ async function openProfileCard(userId){
   ]);
 
   if(!p?.ok){
-    view.innerHTML = '<div class="tvp-back-bar"><button class="tvp-back-btn" onclick="closeTraderProfile()">← Traders Feed</button></div><div class="tvp-loading" style="color:var(--red)">Failed to load profile.</div>';
+    view.innerHTML = '<div class="tvp-back-bar"><button class="tvp-back-btn" onclick="history.back()">← Traders Feed</button></div><div class="tvp-loading" style="color:var(--red)">Failed to load profile.</div>';
     return;
   }
 
@@ -4463,14 +4496,13 @@ async function openProfileCard(userId){
   const allPnlPos = allPnl>=0;
   const allPnlStr = (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
   const winRateColor = winRate>=50?'var(--green)':'var(--muted)';
-  const prevBackBtn = _tvpPrevProfile
-    ? `<button class="tvp-back-btn" onclick="_tvpGoBack()">← ${esc(_tvpPrevProfile.username)}'s ${_tvpPrevProfile.tab}</button>`
-    : '';
+  const backLabel = _tvpPrevProfile
+    ? `← ${esc(_tvpPrevProfile.username)}'s ${_tvpPrevProfile.tab}`
+    : '← Traders Feed';
 
   view.innerHTML = `
     <div class="tvp-back-bar">
-      <button class="tvp-back-btn" onclick="closeTraderProfile()">← Traders Feed</button>
-      ${prevBackBtn}
+      <button class="tvp-back-btn" onclick="history.back()">${backLabel}</button>
     </div>
 
     <div class="tvp-card">
