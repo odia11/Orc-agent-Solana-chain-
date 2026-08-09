@@ -13158,7 +13158,7 @@ def delete_profile_comment(comment_id):
 @app.route('/api/settings/key', methods=['DELETE'])
 @rate_limit(5, 60)
 def delete_trading_key():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -13557,7 +13557,7 @@ def start_trader():
 @app.route('/api/trader/stop', methods=['POST'])
 @rate_limit(10, 60)
 def stop_trader():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     us = get_user_state(wallet)
