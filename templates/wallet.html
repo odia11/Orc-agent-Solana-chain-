@@ -1781,6 +1781,13 @@ document.addEventListener('keydown', function(e){
     if(a.getAttribute('href') === path) a.classList.add('active');
   });
 })();
+// Standalone pages have no SPA re-init to fall back on, so a bfcache
+// restore (e.g. via the back button) would otherwise show whatever was
+// on screen when the user navigated away — stale balance, stale trades,
+// stale unread counts. Force a real reload so the page is always fresh.
+window.addEventListener('pageshow', function(e){
+  if(e.persisted) location.reload();
+});
 </script>
 
 </body>
