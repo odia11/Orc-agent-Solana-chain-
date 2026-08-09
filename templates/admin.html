@@ -956,6 +956,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
         <select id="invite-role" style="background:#0a0b0e;border:1px solid #21252c;border-radius:9px;padding:10px 12px;font-size:13px;color:var(--text);font-family:'Geist',system-ui,sans-serif;width:100%;outline:none">
           <option value="Moderator">Moderator</option>
           <option value="Analyst">Analyst</option>
+          <option value="Executive">Executive</option>
         </select>
       </div>
     </div>
@@ -973,6 +974,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
   </button>
   <button class="role-opt" onclick="applyRoleChange('Analyst')">
     <span class="tag tag-muted" style="pointer-events:none">Analyst</span>
+  </button>
+  <button class="role-opt" onclick="applyRoleChange('Executive')">
+    <span class="tag tag-red" style="pointer-events:none">Executive</span>
   </button>
 </div>
 
@@ -1709,6 +1713,7 @@ async function loadAdminRoles() {
 
 function _roleTagCls(role) {
   if (role === 'Super-admin') return 'tag-amber';
+  if (role === 'Executive')   return 'tag-red';
   if (role === 'Moderator')   return 'tag-green';
   return 'tag-muted';
 }

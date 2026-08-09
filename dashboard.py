@@ -1666,7 +1666,7 @@ def run_migrations():
 # ── ROLE HELPERS ──
 
 def get_user_role(wallet: str) -> str:
-    """Return role for a wallet: 'admin', 'moderator', 'analyst', or 'user'."""
+    """Return role for a wallet: 'admin', 'executive', 'moderator', 'analyst', or 'user'."""
     if not wallet:
         return 'user'
     if wallet == ADMIN_WALLET:
@@ -15175,7 +15175,7 @@ def api_audit_run():
 
 @app.route('/api/admin')
 def api_admin():
-    err = _require_role('admin', 'analyst')
+    err = _require_role('admin', 'executive', 'analyst')
     if err: return err
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
@@ -15264,7 +15264,7 @@ def admin_users():
 @app.route('/api/admin/fees')
 @rate_limit(20, 60)
 def admin_fees():
-    err = _require_role('admin', 'analyst')
+    err = _require_role('admin', 'executive', 'analyst')
     if err: return err
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
@@ -15297,7 +15297,7 @@ def admin_fees():
 @app.route('/api/admin/stats')
 @rate_limit(20, 60)
 def admin_stats():
-    err = _require_role('admin', 'moderator', 'analyst')
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -15356,7 +15356,7 @@ def admin_collect_fees():
 @app.route('/api/admin/force-pause', methods=['POST'])
 @rate_limit(20, 60)
 def admin_force_pause():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     caller = _current_wallet()
     target = str((request.json or {}).get('wallet', '')).strip()
@@ -15374,7 +15374,7 @@ def admin_force_pause():
 @app.route('/api/admin/force-resume', methods=['POST'])
 @rate_limit(20, 60)
 def admin_force_resume():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     caller = _current_wallet()
     target = str((request.json or {}).get('wallet', '')).strip()
@@ -15411,7 +15411,7 @@ def admin_force_resume():
 @app.route('/api/admin/force-close-all', methods=['POST'])
 @rate_limit(10, 60)
 def admin_force_close_all():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     caller = _current_wallet()
     target = str((request.json or {}).get('wallet', '')).strip()
@@ -15788,7 +15788,7 @@ def admin_health():
 @rate_limit(20, 60)
 def admin_bans():
     """Return currently active IP bans and total rate-limit bucket count."""
-    err = _require_role('admin', 'analyst')
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     wallet = _current_wallet()
     now  = time.time()
@@ -15813,7 +15813,7 @@ def admin_bans():
 
 @app.route('/api/admin/user/ban', methods=['POST'])
 def admin_ban_user():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     data   = request.get_json(silent=True) or {}
     target = data.get('wallet', '').strip()
@@ -15834,7 +15834,7 @@ def admin_toggle_verify():
     body = request.get_json(silent=True) or {}
     target = body.get('wallet', '').strip()
     verified = bool(body.get('verified', True))
-    err = _require_role('admin', 'moderator') if verified else _require_role('admin')
+    err = _require_role('admin', 'executive', 'moderator') if verified else _require_role('admin', 'executive')
     if err: return err
     if not target:
         return jsonify({'ok': False, 'msg': 'Missing wallet'}), 400
@@ -15850,7 +15850,7 @@ def admin_toggle_verify():
 
 @app.route('/api/admin/ban', methods=['POST'])
 def admin_ban_v2():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     target = (request.get_json(silent=True) or {}).get('wallet', '').strip()
     if not target:
@@ -15888,7 +15888,7 @@ def admin_delete_post():
 @app.route('/api/admin/trades')
 @rate_limit(20, 60)
 def admin_trades():
-    err = _require_role('admin', 'moderator', 'analyst')
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -15925,7 +15925,7 @@ def admin_trades():
 @app.route('/api/admin/posts')
 @rate_limit(20, 60)
 def admin_posts():
-    err = _require_role('admin', 'moderator', 'analyst')
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -15957,7 +15957,7 @@ def admin_posts():
 @app.route('/api/admin/revenue')
 @rate_limit(20, 60)
 def admin_revenue():
-    err = _require_role('admin', 'moderator', 'analyst')
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
@@ -15998,7 +15998,7 @@ def admin_revenue():
 
 @app.route('/api/admin/settings/get')
 def admin_settings_get():
-    err = _require_role('admin', 'moderator', 'analyst')
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -16017,7 +16017,7 @@ def admin_settings_get():
 @app.route('/api/admin/settings/save', methods=['POST'])
 @csrf_exempt
 def admin_settings_save():
-    err = _require_role('admin')
+    err = _require_role('admin', 'executive')
     if err: return err
     wallet = session.get('wallet', '')
     data = request.get_json(silent=True) or {}
@@ -16108,7 +16108,7 @@ def admin_roles_list():
 @app.route('/api/admin/invite', methods=['POST'])
 @csrf_exempt
 def admin_invite():
-    err = _require_role('admin')
+    err = _require_role('admin', 'executive')
     if err: return err
     admin_wallet = session.get('wallet', '')
     data        = request.get_json(silent=True) or {}
@@ -16120,7 +16120,7 @@ def admin_invite():
         return jsonify({'ok': False, 'msg': 'Owner wallet cannot be re-invited'}), 400
     if invite_addr == admin_wallet:
         return jsonify({'ok': False, 'msg': "You can't invite the wallet you're currently logged in with"}), 400
-    if role not in ('Moderator', 'Analyst'):
+    if role not in ('Moderator', 'Analyst', 'Executive'):
         role = 'Moderator'
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -16162,7 +16162,7 @@ def admin_invite():
 @app.route('/api/admin/invites')
 @csrf_exempt
 def admin_invites_pending():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -16267,7 +16267,7 @@ def admin_role_change():
         return jsonify({'ok': False, 'msg': 'Invalid wallet'}), 400
     if target == ADMIN_WALLET:
         return jsonify({'ok': False, 'msg': 'Cannot change owner role'}), 400
-    if role not in ('Moderator', 'Analyst'):
+    if role not in ('Moderator', 'Analyst', 'Executive'):
         return jsonify({'ok': False, 'msg': 'Invalid role'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -16591,7 +16591,7 @@ def admin_security_audit():
        _require_role(), the exact pattern behind the read-only privilege-escalation
        fix (see _authenticated_wallet()).
     """
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -16665,7 +16665,7 @@ def admin_security_audit():
             SELECT wallet_address, role, 'admin_roles' AS source FROM admin_roles
             UNION
             SELECT wallet_address, role, 'users.role' AS source FROM users
-            WHERE role IS NOT NULL AND lower(role) IN ('admin','moderator','analyst')
+            WHERE role IS NOT NULL AND lower(role) IN ('admin','executive','moderator','analyst')
               AND wallet_address NOT IN (SELECT wallet_address FROM admin_roles)
         ''')
         privileged = c.fetchall()
