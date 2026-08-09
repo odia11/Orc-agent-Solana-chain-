@@ -12344,7 +12344,7 @@ def support_send_message():
 @app.route('/api/admin/support/threads', methods=['GET'])
 @rate_limit(30, 60)
 def admin_support_threads():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     status_filter = request.args.get('status', 'open')
     conn = sqlite3.connect(DB_FILE)
@@ -12374,7 +12374,7 @@ def admin_support_threads():
 @app.route('/api/admin/support/threads/<int:thread_id>', methods=['GET'])
 @rate_limit(60, 60)
 def admin_support_thread_messages(thread_id):
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -12400,7 +12400,7 @@ def admin_support_thread_messages(thread_id):
 @app.route('/api/admin/support/threads/<int:thread_id>/message', methods=['POST'])
 @rate_limit(30, 60)
 def admin_support_reply(thread_id):
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     wallet = _authenticated_wallet()
     text = _sanitize(str((request.json or {}).get('message', '')))
@@ -12443,7 +12443,7 @@ def admin_support_reply(thread_id):
 @app.route('/api/admin/support/threads/<int:thread_id>/status', methods=['POST'])
 @rate_limit(30, 60)
 def admin_support_set_status(thread_id):
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     new_status = str((request.json or {}).get('status', '')).strip().lower()
     if new_status not in ('open', 'resolved'):
@@ -12477,7 +12477,7 @@ _SUPPORT_AI_SYSTEM_PROMPT = (
 @rate_limit(10, 60)
 def admin_support_suggest_reply(thread_id):
     global _ai_disabled_until
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     if not ANTHROPIC_API_KEY:
         return jsonify({'ok': False, 'msg': 'AI suggestions are not configured (ANTHROPIC_API_KEY not set)'}), 400
@@ -15225,7 +15225,7 @@ def api_admin():
 @app.route('/api/admin/users')
 @rate_limit(20, 60)
 def admin_users():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     try:
         today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
@@ -15451,7 +15451,7 @@ def admin_force_close_all():
 @app.route('/api/admin/rate-stats')
 @rate_limit(20, 60)
 def admin_rate_stats():
-    err = _require_role('admin', 'analyst')
+    err = _require_role('admin', 'executive', 'analyst')
     if err: return err
 
     now        = time.time()
@@ -15868,7 +15868,7 @@ def admin_ban_v2():
 @app.route('/api/admin/post/delete', methods=['POST'])
 @csrf_exempt
 def admin_delete_post():
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     post_id = (request.get_json(silent=True) or {}).get('post_id')
     if not post_id:
@@ -16311,7 +16311,7 @@ def admin_role_remove():
 def admin_clear_ratelimit():
     """Clear IP ban and rate-limit hit counters.
     POST body: {"ip": "1.2.3.4"} to target one IP, or {} to clear everything."""
-    err = _require_role('admin', 'moderator')
+    err = _require_role('admin', 'executive', 'moderator')
     if err: return err
     wallet = _current_wallet()
     data   = request.json or {}
