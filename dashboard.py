@@ -457,7 +457,10 @@ print(f'[startup] JUPITER_PROXY_URL = {(JUPITER_PROXY[:40] + "...") if len(JUPIT
 # so local/dev deployments without the env var keep working unchanged.
 API_SHARED_SECRET  = os.environ.get('API_SHARED_SECRET', '')
 FEE_RATE_DEFAULT = 0.05  # 5% performance fee on profitable trades only
-FEE_RATE_TXN     = 0.01  # 1% transaction fee on every closed trade's SOL swap amount, win or lose
+FEE_RATE_TXN     = 0.0075  # 0.75% transaction fee, charged on BOTH the buy and the sell
+                            # leg of every trade (see _charge_txn_fee()) -- so a full
+                            # round-trip pays 1.5% total, split as two separate 0.75%
+                            # charges rather than one combined charge at close.
 
 def _get_fee_rate():
     try:
@@ -1070,6 +1073,12 @@ def init_db():
         pass
     try:
         c.execute('ALTER TABLE fees ADD COLUMN status TEXT DEFAULT "ok"')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        # 'sell' default backfills every pre-existing row correctly, since the buy-side
+        # fee didn't exist before this column was added -- see FEE_RATE_TXN comment.
+        c.execute('ALTER TABLE fees ADD COLUMN kind TEXT DEFAULT "sell"')
     except sqlite3.OperationalError:
         pass
     try:
@@ -2882,6 +2891,108 @@ def _close_open_position(user_id: int, wallet: str, mint: str):
             pass
         print(f'[bot] {wallet[:6]}... auto-stopped — all positions closed', flush=True)
 
+def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
+                     sol_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0):
+    """Charge FEE_RATE_TXN (0.75%) on a swap's SOL amount and transfer it to FEE_WALLET
+    in the background. `kind` is 'buy' or 'sell' -- a full round-trip trade calls this
+    twice (once per leg), so it pays 1.5% total split across two separate transfers,
+    each recorded as its own row in `fees`. For 'sell', pass trade_ts (the closed
+    trade's timestamp) so the matching `trades` row gets marked fee_paid=1 once the
+    transfer confirms; buys have no trades row yet at this point, so trade_ts is
+    omitted and that step is skipped. Referral payout (20% of the fee) applies to both.
+    """
+    fee_amount = round(sol_amount * FEE_RATE_TXN, 6)
+    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    print(f'[fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} SOL '
+          f'({FEE_RATE_TXN * 100:.2f}% of {sol_amount:.6f} SOL {kind})', flush=True)
+    if not (wallet and private_key) or fee_amount <= 0:
+        print(f'[fee] {short_w} {symbol} {kind} no fee — no private key or nothing to collect', flush=True)
+        return
+
+    def _do_fee(pk, sym, gross, fee, wlt, uid, kind_, t_ts):
+        sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
+        # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
+        time.sleep(12)
+        print(f'[fee] → attempting {fee:.6f} SOL {kind_} fee transfer from trading wallet to FEE_WALLET '
+              f'for {sw} {sym}', flush=True)
+        tx_sig  = None
+        err_msg = None
+        try:
+            from solders.keypair import Keypair as _KP_fee
+            signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
+            signer_sol = _get_user_sol(signer_pub)
+            NET_FEE    = 0.000005  # ~5000 lamports for a simple SOL transfer tx
+            if signer_sol < fee + NET_FEE:
+                err_msg = (f'insufficient balance: {signer_sol:.6f} SOL '
+                           f'(need {fee:.6f} + {NET_FEE} network fee)')
+                print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
+            else:
+                tx_sig = send_sol_fee(pk, FEE_WALLET, fee)
+                print(f'[fee] ✓ {sw} {sym} {kind_} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
+        except Exception as e:
+            err_msg = _redact_keys(str(e))
+            print(f'[fee] ✗ {sw} {sym} {kind_} transfer FAILED: {err_msg}', flush=True)
+
+        # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
+        try:
+            status = 'ok' if tx_sig else 'failed'
+            fee_tx = tx_sig if tx_sig else ('FAILED: ' + (err_msg or 'unknown')[:80])
+            conn2  = sqlite3.connect(DB_FILE)
+            conn2.execute(
+                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind) '
+                'VALUES (?,?,?,?,?,?,?)',
+                (wlt, sym, gross, fee, fee_tx, status, kind_))
+            if tx_sig:
+                if kind_ == 'sell' and t_ts:
+                    # FIX 2: mark fee_paid by row ID, not timestamp (timestamp is second-level
+                    # precision and could match two trades from the same user in the same second)
+                    row = conn2.execute(
+                        'SELECT id FROM trades WHERE user_id=? AND timestamp=? AND fee_paid=0 '
+                        'ORDER BY rowid LIMIT 1', (uid, t_ts)).fetchone()
+                    if row:
+                        conn2.execute('UPDATE trades SET fee_paid=1 WHERE id=?', (row[0],))
+                    else:
+                        conn2.execute(
+                            'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
+                            (uid, t_ts))
+
+                # Referral payout: 20% of the fee the platform just actually collected
+                # goes to whoever referred this trader, if anyone. Gated on tx_sig (not
+                # on fee_amount being computed) so a referrer is never credited for a fee
+                # transfer that failed.
+                try:
+                    ref_row = conn2.execute(
+                        'SELECT referred_by FROM users WHERE wallet_address=?', (wlt,)).fetchone()
+                    if ref_row and ref_row[0]:
+                        referrer = ref_row[0]
+                        earned   = round(fee * 0.20, 6)
+                        conn2.execute(
+                            'INSERT INTO referral_earnings '
+                            '(referrer_wallet, referred_wallet, trade_fee_sol, earned_sol) VALUES (?,?,?,?)',
+                            (referrer, wlt, fee, earned))
+                        conn2.execute(
+                            'UPDATE users SET referral_balance = referral_balance + ? WHERE wallet_address=?',
+                            (earned, referrer))
+                        print(f'[referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} SOL '
+                              f'(20% of {fee:.6f} SOL {kind_} fee)', flush=True)
+                except Exception as ref_e:
+                    print(f'[referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
+            conn2.commit()
+            conn2.close()
+            print(f'[fee] recorded in fees table: kind={kind_} status={status} fee_tx={fee_tx[:30]}', flush=True)
+        except Exception as db_e:
+            print(f'[fee] ✗ could not write to fees table: {db_e}', flush=True)
+        finally:
+            pk = None
+
+    threading.Thread(
+        target=_do_fee,
+        args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts),
+        daemon=True,
+    ).start()
+    print(f'[fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
+
+
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
                        exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True,
@@ -2896,9 +3007,10 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         cooldown_tokens[symbol] = time.time() + 1800
         print(f'[cooldown] {symbol} enters 30-min cooldown (pnl={pnl:.6f} SOL, exit_reason={exit_reason})', flush=True)
 
-    # 1% transaction fee on every closed trade, charged on the SOL amount of the sell
+    # 0.75% transaction fee on the sell leg, charged on the SOL amount of the sell
     # swap itself (amount * exit_price) -- not on profit -- so it applies whether the
-    # trade won or lost.
+    # trade won or lost. The matching 0.75% buy-leg fee was already charged when this
+    # position was opened -- see _charge_txn_fee() call at position-open time.
     fee_amount = 0.0
     short_w    = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     swap_sol_amount = round(amount * exit_price, 6)
@@ -2906,108 +3018,14 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
           f'has_key={bool(private_key and wallet)}  '
           f'fee_wallet={FEE_WALLET[:8]}…', flush=True)
 
-    # Collect the 1% transaction fee from every closed trade regardless of who the
-    # session wallet belongs to, and regardless of pnl (win, loss, or break-even all pay
-    # it, since it's charged on the swap amount, not the profit).
-    # The fee goes FROM the trading keypair TO FEE_WALLET — these are different addresses,
-    # so even the platform owner's trades generate a valid transfer.
+    # Collect the 0.75% transaction fee on this sell leg (the matching buy-leg fee was
+    # already charged at position-open time). Applies regardless of who the session
+    # wallet belongs to, and regardless of pnl (win, loss, or break-even all pay it,
+    # since it's charged on the swap amount, not the profit).
     if wallet and private_key:
+        _charge_txn_fee(private_key, wallet, user_id, symbol, swap_sol_amount, 'sell',
+                         trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl)
         fee_amount = round(swap_sol_amount * FEE_RATE_TXN, 6)
-        print(f'[fee] {short_w} {symbol} fee owed = {fee_amount:.6f} SOL '
-              f'({FEE_RATE_TXN * 100:.1f}% of {swap_sol_amount:.6f} SOL swap)', flush=True)
-
-        if fee_amount > 0:
-            _pk   = private_key     # Python string — immutable, ref lives in thread args tuple
-            _sym  = symbol
-            _gros = pnl
-            _fee  = fee_amount
-            _wlt  = wallet
-            _uid  = user_id
-            _ts   = now.strftime('%Y-%m-%dT%H:%M:%SZ')
-
-            def _do_fee(pk, sym, gross, fee, wlt, uid, trade_ts):
-                sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
-                # Wait for the sell TX to confirm on-chain before we try to spend from that balance
-                time.sleep(12)
-                print(f'[fee] → attempting {fee:.6f} SOL transfer from trading wallet to OWNER_WALLET '
-                      f'for {sw} {sym}  gross_profit={gross:.6f} SOL', flush=True)
-                tx_sig   = None
-                err_msg  = None
-                try:
-                    # check balance before attempting transfer (mirrors recovery-path guard)
-                    from solders.keypair import Keypair as _KP_fee
-                    signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
-                    signer_sol  = _get_user_sol(signer_pub)
-                    NET_FEE     = 0.000005  # ~5000 lamports for a simple SOL transfer tx
-                    if signer_sol < fee + NET_FEE:
-                        err_msg = (f'insufficient balance: {signer_sol:.6f} SOL '
-                                   f'(need {fee:.6f} + {NET_FEE} network fee)')
-                        print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
-                    else:
-                        tx_sig = send_sol_fee(pk, FEE_WALLET, fee)
-                        print(f'[fee] ✓ {sw} {sym} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
-                except Exception as e:
-                    err_msg = _redact_keys(str(e))
-                    print(f'[fee] ✗ {sw} {sym} transfer FAILED: {err_msg}', flush=True)
-
-                # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
-                try:
-                    status = 'ok' if tx_sig else 'failed'
-                    fee_tx = tx_sig if tx_sig else ('FAILED: ' + (err_msg or 'unknown')[:80])
-                    conn2  = sqlite3.connect(DB_FILE)
-                    conn2.execute(
-                        'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status) VALUES (?,?,?,?,?,?)',
-                        (wlt, sym, gross, fee, fee_tx, status))
-                    if tx_sig:
-                        # FIX 2: mark fee_paid by row ID, not timestamp (timestamp is second-level
-                        # precision and could match two trades from the same user in the same second)
-                        row = conn2.execute(
-                            'SELECT id FROM trades WHERE user_id=? AND timestamp=? AND fee_paid=0 '
-                            'ORDER BY rowid LIMIT 1', (uid, trade_ts)).fetchone()
-                        if row:
-                            conn2.execute('UPDATE trades SET fee_paid=1 WHERE id=?', (row[0],))
-                        else:
-                            conn2.execute(
-                                'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
-                                (uid, trade_ts))
-
-                        # Referral payout: 20% of the fee the platform just actually collected
-                        # goes to whoever referred this trader, if anyone. Gated on tx_sig (not
-                        # on fee_amount being computed) so a referrer is never credited for a fee
-                        # transfer that failed -- see insufficient-balance/exception paths above.
-                        try:
-                            ref_row = conn2.execute(
-                                'SELECT referred_by FROM users WHERE wallet_address=?', (wlt,)).fetchone()
-                            if ref_row and ref_row[0]:
-                                referrer = ref_row[0]
-                                earned   = round(fee * 0.20, 6)
-                                conn2.execute(
-                                    'INSERT INTO referral_earnings '
-                                    '(referrer_wallet, referred_wallet, trade_fee_sol, earned_sol) VALUES (?,?,?,?)',
-                                    (referrer, wlt, fee, earned))
-                                conn2.execute(
-                                    'UPDATE users SET referral_balance = referral_balance + ? WHERE wallet_address=?',
-                                    (earned, referrer))
-                                print(f'[referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} SOL '
-                                      f'(20% of {fee:.6f} SOL fee)', flush=True)
-                        except Exception as ref_e:
-                            print(f'[referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
-                    conn2.commit()
-                    conn2.close()
-                    print(f'[fee] recorded in fees table: status={status} fee_tx={fee_tx[:30]}', flush=True)
-                except Exception as db_e:
-                    print(f'[fee] ✗ could not write to fees table: {db_e}', flush=True)
-                finally:
-                    pk = None
-
-            threading.Thread(
-                target=_do_fee,
-                args=(_pk, _sym, _gros, _fee, _wlt, _uid, _ts),
-                daemon=True,
-            ).start()
-            print(f'[fee] {short_w} {symbol} fee thread started (will execute in ~12s after sell confirms)', flush=True)
-        else:
-            print(f'[fee] {short_w} {symbol} nothing to collect', flush=True)
     else:
         print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
 
@@ -3675,6 +3693,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
                                 _upsert_open_position(user_id, wallet, bmint, pos, source='bot')
+                                _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy')
                                 open_pos += 1
                                 _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
                             else:
@@ -3761,6 +3780,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                 pos['opened_at']       = time.time()
                 pos['entry_liquidity'] = liquidity
                 _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy', copy_of_wallet=buyer_wallet)
+                _charge_txn_fee(_pk, c_wallet, c_uid, symbol, spend, 'buy')
                 add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
             except Exception as e:
                 print(f'[copy-trade] error for {c_wallet[:6]}: {e}', flush=True)
@@ -11437,6 +11457,7 @@ def api_trade_buy():
     pos['symbol']    = symbol
     pos['opened_at'] = time.time()
     _upsert_open_position(user_id, wallet, mint, pos, source='manual')
+    _charge_txn_fee(pk, wallet, user_id, symbol, amount_sol, 'buy')
     return jsonify({'ok': True, 'amount_sol': amount_sol, 'entry_price': entry_price, 'symbol': symbol})
 
 
@@ -13071,6 +13092,7 @@ def copy_trade_from_message():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, token_address, pos, source='manual')
+    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] COPY TRADE: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -13344,6 +13366,7 @@ def api_pump_scanner_buy():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
+    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -13423,6 +13446,7 @@ def api_manual_buy():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
+    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] MANUAL BUY: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))

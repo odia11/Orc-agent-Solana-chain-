@@ -264,16 +264,19 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
         </div>
         <div class="fee-stat">
           <div class="fee-stat-label">Charged on</div>
-          <div class="fee-stat-value neutral">Every sell</div>
+          <div class="fee-stat-value neutral">Every buy and every sell</div>
         </div>
       </div>
       <p>OrcAgent charges a <strong>{{ fee_pct }}% transaction fee</strong> on
-      every sell, calculated on the SOL amount of that swap — not on the
-      trade's profit. It's sent as a small, separate SOL transaction from
-      your trading wallet right after the position closes; it is not
-      deducted from the sell proceeds themselves.</p>
-      <p>This fee applies whether the trade closes at a profit, a loss, or
-      break-even. Open (not-yet-closed) positions are not charged.</p>
+      every buy and every sell, each calculated on the SOL amount of that
+      individual swap — not on the trade's profit. So a full round-trip
+      (buy + sell) pays {{ fee_pct }}% twice, {{ (fee_pct * 2) | round(2) }}%
+      total. Each fee is sent as a small, separate SOL transaction from your
+      trading wallet right after that swap confirms; it is not deducted from
+      the swap proceeds themselves.</p>
+      <p>The sell-side fee applies whether that trade closes at a profit, a
+      loss, or break-even. Open (not-yet-closed) positions only pay the
+      buy-side fee until they're closed.</p>
 
       <h3>Network fees</h3>
       <p>Every on-chain trade also pays standard Solana network and
