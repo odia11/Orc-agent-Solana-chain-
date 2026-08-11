@@ -842,11 +842,14 @@ document.addEventListener('keydown', function(e){
 /* Mark the current page active in both the bottom bar and the drawer */
 (function(){
   var path = window.location.pathname;
+  // Exact match, or a dynamic sub-route of it (e.g. /profile/<wallet>,
+  // /messages/<wallet>) - a plain === left those tabs never highlighting.
+  function isActive(href){ return path === href || path.indexOf(href + '/') === 0; }
   document.querySelectorAll('#mobile-nav .mn-item[href]').forEach(function(a){
-    if(a.getAttribute('href') === path) a.classList.add('active');
+    if(isActive(a.getAttribute('href'))) a.classList.add('active');
   });
   document.querySelectorAll('.mn-drawer-item[href]').forEach(function(a){
-    if(a.getAttribute('href') === path) a.classList.add('active');
+    if(isActive(a.getAttribute('href'))) a.classList.add('active');
   });
 })();
 // Standalone pages have no SPA re-init to fall back on, so a bfcache

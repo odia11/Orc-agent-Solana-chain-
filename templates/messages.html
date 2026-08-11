@@ -243,7 +243,10 @@ html,body{height:100%;overflow:hidden;background:#0a0b0e;color:#eef1f5;font-fami
   /* thread pane hidden by default; opens as fullscreen overlay */
   .msgs-right{display:none}
   .msgs-main.thread-open .msgs-left{display:none}
-  .msgs-main.thread-open .msgs-right{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:100;background:#0a0b0e;overflow:hidden}
+  /* z-index above the shared #mobile-nav (500)/#mn-drawer (501) so the fullscreen
+     thread — including its composer/send button — isn't covered by and can't have
+     its taps swallowed by the fixed bottom nav bar underneath it. */
+  .msgs-main.thread-open .msgs-right{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:600;background:#0a0b0e;overflow:hidden}
   .msgs-thread{flex:1;min-height:0;display:flex;flex-direction:column}
   .msgs-area{flex:1;overflow-y:auto;min-height:0}
   .msgs-back{display:flex}
@@ -1494,11 +1497,14 @@ document.addEventListener('keydown', function(e){
 /* Mark the current page active in both the bottom bar and the drawer */
 (function(){
   var path = window.location.pathname;
+  // Exact match, or a dynamic sub-route of it (e.g. /profile/<wallet>,
+  // /messages/<wallet>) - a plain === left those tabs never highlighting.
+  function isActive(href){ return path === href || path.indexOf(href + '/') === 0; }
   document.querySelectorAll('#mobile-nav .mn-item[href]').forEach(function(a){
-    if(a.getAttribute('href') === path) a.classList.add('active');
+    if(isActive(a.getAttribute('href'))) a.classList.add('active');
   });
   document.querySelectorAll('.mn-drawer-item[href]').forEach(function(a){
-    if(a.getAttribute('href') === path) a.classList.add('active');
+    if(isActive(a.getAttribute('href'))) a.classList.add('active');
   });
 })();
 // Standalone pages have no SPA re-init to fall back on, so a bfcache
