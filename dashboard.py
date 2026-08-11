@@ -2135,6 +2135,96 @@ _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previou
 cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
 profit_cooldown:  dict = {}  # user_id -> expiry_timestamp — 1-hour pause after 60% profit in 2h
 
+# ── FAST-PUMP DETECTION (6%+ within 15s) ──────────────────────────────────
+# token_loop() only refreshes the full candidate list every 120s, which is far
+# too coarse to catch a sudden move inside a 15-second window. This is a
+# separate, lightweight loop that polls price ONLY (no full metadata) for the
+# current candidate list every FAST_POLL_INTERVAL seconds, batching requests
+# (DexScreener's multi-token endpoint accepts up to 30 comma-joined addresses
+# per call) to keep the extra request volume manageable.
+FAST_POLL_INTERVAL   = 4      # seconds between fast-poll cycles
+FAST_PUMP_WINDOW     = 15     # seconds — the window checked for the 6% move
+FAST_PUMP_THRESHOLD  = 0.06   # 6%
+_FAST_HIST_MAXAGE    = 20     # seconds — a bit more than the window, so there's
+                               # always at least one sample older than the window
+_fast_hist_lock = threading.Lock()
+_fast_price_history: dict = {}  # mint -> list of (ts, price), oldest first
+
+def _fast_pump_check(mint: str, now: float = None) -> bool:
+    """True if `mint` has risen >= FAST_PUMP_THRESHOLD at any point in the last
+    FAST_PUMP_WINDOW seconds, based on the fast-poll history. Uses the history's
+    OWN most recent sample as the current price (not whatever price the caller
+    has on hand, e.g. from the slow 120s scanner, which can be stale by the time
+    this fires) compared against the LOWEST price seen in that window, so it also
+    catches a dip-then-pump inside the same window."""
+    now = now or time.time()
+    with _fast_hist_lock:
+        hist = _fast_price_history.get(mint)
+        if not hist or len(hist) < 2:
+            return False
+        # require the freshest sample to actually be fresh -- a mint that dropped
+        # out of the candidate list stops getting new samples, and we don't want
+        # to judge it off stale history once that happens.
+        latest_ts, latest_price = hist[-1]
+        if now - latest_ts > FAST_POLL_INTERVAL * 2:
+            return False
+        window_prices = [p for ts, p in hist if now - ts <= FAST_PUMP_WINDOW and p > 0]
+    if not window_prices or latest_price <= 0:
+        return False
+    floor_price = min(window_prices)
+    if floor_price <= 0:
+        return False
+    return (latest_price - floor_price) / floor_price >= FAST_PUMP_THRESHOLD
+
+def _fast_poll_loop():
+    """Global background loop: keeps _fast_price_history warm for whatever mints
+    are currently in state['tokens'] (the shared candidate list token_loop()
+    maintains), so _fast_pump_check() above always has fresh-enough data."""
+    while True:
+        try:
+            mints = [t['mint'] for t in state.get('tokens', []) if t.get('mint')]
+            now = time.time()
+            for i in range(0, len(mints), 30):  # DexScreener multi-token endpoint: up to 30 addresses/call
+                chunk = mints[i:i + 30]
+                try:
+                    r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(chunk),
+                                 timeout=8, ttl_override=FAST_POLL_INTERVAL)
+                    if not r:
+                        continue
+                    pairs = r.json().get('pairs', []) or []
+                    # Same convention as get_token_data(): a token can have multiple
+                    # pairs across DEXs/quote assets — only trust the first (primary/
+                    # highest-relevance) pair per mint, so this history stays a clean
+                    # single series instead of mixing prices from different pairs.
+                    _first_pair_price = {}
+                    for p in pairs:
+                        m = (p.get('baseToken') or {}).get('address', '')
+                        if m and m not in _first_pair_price:
+                            price = float(p.get('priceUsd', 0) or 0)
+                            if price > 0:
+                                _first_pair_price[m] = price
+                    with _fast_hist_lock:
+                        for m, price in _first_pair_price.items():
+                            hist = _fast_price_history.setdefault(m, [])
+                            hist.append((now, price))
+                            # prune samples older than _FAST_HIST_MAXAGE in place
+                            cutoff = now - _FAST_HIST_MAXAGE
+                            while hist and hist[0][0] < cutoff:
+                                hist.pop(0)
+                except Exception as e:
+                    print(f'[fast-poll] chunk error: {e}', flush=True)
+                time.sleep(0.2)  # stagger chunks within the same cycle
+            # drop history for mints no longer in the candidate list at all,
+            # so this doesn't grow unbounded as the 120s scanner rotates tokens
+            with _fast_hist_lock:
+                _live_set = set(mints)
+                for _stale_m in [m for m in _fast_price_history if m not in _live_set]:
+                    _fast_price_history.pop(_stale_m, None)
+        except Exception as e:
+            print(f'[fast-poll] loop error: {e}', flush=True)
+        time.sleep(FAST_POLL_INTERVAL)
+
+
 # ── ADAPTIVE HOT-MINT POLLING ──
 # A position is "hot" when its unrealized change is within 5% of the user's own
 # stop-loss/crash-exit value (relative to the threshold itself, e.g. -2.85%..-3.00%
@@ -3616,6 +3706,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _v1h  = _t.get('volume1h', 0)
                         _vol_rising = bool(_v5m > 0 and _v1h > 0 and _v5m > _v1h / 12)
                         _m5_ok = (_m5 >= m5_min or _h1 >= m5_min) if m5_max is None else (m5_min <= _m5 <= m5_max or m5_min <= _h1 <= m5_max)
+                        # Fast-pump path: qualifies independently of the 5m/1h breakout_trigger
+                        # check above if a >=6% move happened within the last 15s (see
+                        # _fast_poll_loop()/_fast_pump_check() — much finer-grained than the
+                        # 5m/1h fields DexScreener's normal token list provides).
+                        _fast_pump = _fast_pump_check(_t['mint'], _now_cd)
+                        if _fast_pump and not _m5_ok:
+                            _skip_log.append(f'[fast-pump] {_tsym}: qualifies via 6%+ in 15s (5m/1h trigger not met otherwise)')
+                        _m5_ok = _m5_ok or _fast_pump
                         _snap = _price_snapshots.get(_t['mint'])
                         _reversing = bool(
                             _snap and
@@ -16866,6 +16964,7 @@ def _heartbeat_loop():
 
 threading.Thread(target=_heartbeat_loop,       daemon=True).start()
 threading.Thread(target=token_loop,            daemon=True).start()
+threading.Thread(target=_fast_poll_loop,       daemon=True).start()
 threading.Thread(target=totd_loop,             daemon=True).start()
 threading.Thread(target=_cleanup_loop,         daemon=True).start()
 threading.Thread(target=_audit_loop,           daemon=True).start()
