@@ -3524,6 +3524,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if stop_event.is_set(): break
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
+                    # Every open position stays fast-polled (2s tier, or 5s if beyond
+                    # HOT_MINT_CAP) for as long as it's held, not just once it's already
+                    # close to a trigger -- a real rugpull can crash a token from healthy
+                    # to way past stop-loss within a single normal (15s) scan gap, before
+                    # the reactive "near-threshold" hot-marking below ever gets a chance
+                    # to fire. Refreshed every cycle here so the TTL never lapses while held.
+                    _mark_hot_mint(mint)
                     # A mint already flagged hot (near SL/crash-exit) skips the live-scan
                     # cache entirely — that snapshot can be up to 120s stale (token_loop's
                     # own cycle), too slow for a position we're already fast-polling.
@@ -3582,9 +3589,14 @@ def user_trader_loop(stop_event, config, wallet: str):
 
                     # ── Rugpull detector — first check, before crash-exit and stop-loss ──
                     _rug_reason = None
-                    if chg <= -0.60:
-                        _rug_reason = 'price -' + str(abs(round(chg*100, 1))) + '% from entry'
-                    elif cur_liq > 0 and pos.get('entry_liquidity', 0) > 0 and cur_liq < pos['entry_liquidity'] * 0.50:
+                    # Price-based "rugpull" trigger removed: it used to be a fixed -60%
+                    # regardless of the user's own settings. The normal stop-loss check
+                    # below already exits on price drop using this user's configured
+                    # stop_loss (Settings), so it's the single source of truth for
+                    # price-based exits now. Rugpull here stays limited to the two
+                    # signals that are genuinely distinct from "price just fell": the
+                    # pool being drained, or volume collapsing to near-zero.
+                    if cur_liq > 0 and pos.get('entry_liquidity', 0) > 0 and cur_liq < pos['entry_liquidity'] * 0.50:
                         _liq_drop = round((1 - cur_liq / pos['entry_liquidity']) * 100, 1)
                         _rug_reason = ('liquidity dropped ' + str(_liq_drop) + '% ($' +
                                        str(int(pos['entry_liquidity'])) + ' → $' + str(int(cur_liq)) + ')')
@@ -3791,6 +3803,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
                                 _upsert_open_position(user_id, wallet, bmint, pos, source='bot')
+                                _mark_hot_mint(bmint)  # fast-poll (2s) from the moment the position opens, not just near SL
                                 _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy')
                                 open_pos += 1
                                 _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
@@ -3878,6 +3891,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                 pos['opened_at']       = time.time()
                 pos['entry_liquidity'] = liquidity
                 _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy', copy_of_wallet=buyer_wallet)
+                _mark_hot_mint(mint)  # fast-poll (2s) from the moment the position opens, not just near SL
                 _charge_txn_fee(_pk, c_wallet, c_uid, symbol, spend, 'buy')
                 add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
             except Exception as e:
@@ -11555,6 +11569,7 @@ def api_trade_buy():
     pos['symbol']    = symbol
     pos['opened_at'] = time.time()
     _upsert_open_position(user_id, wallet, mint, pos, source='manual')
+    _mark_hot_mint(mint)  # fast-poll (2s) from the moment the position opens, not just near SL
     _charge_txn_fee(pk, wallet, user_id, symbol, amount_sol, 'buy')
     return jsonify({'ok': True, 'amount_sol': amount_sol, 'entry_price': entry_price, 'symbol': symbol})
 
@@ -13190,6 +13205,7 @@ def copy_trade_from_message():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, token_address, pos, source='manual')
+    _mark_hot_mint(token_address)  # fast-poll (2s) from the moment the position opens, not just near SL
     _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] COPY TRADE: ' + pos['symbol'] +
@@ -13464,6 +13480,7 @@ def api_pump_scanner_buy():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
+    _mark_hot_mint(mint)  # fast-poll (2s) from the moment the position opens, not just near SL
     _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
@@ -13544,6 +13561,7 @@ def api_manual_buy():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
+    _mark_hot_mint(mint)  # fast-poll (2s) from the moment the position opens, not just near SL
     _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] MANUAL BUY: ' + pos['symbol'] +
