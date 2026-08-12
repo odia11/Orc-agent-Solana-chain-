@@ -1082,9 +1082,15 @@ setInterval(_fetchSolPrice,30000);
 
 function _updateSolUsdc(sol){
   const el=document.getElementById('s-sol-usdc');
-  if(!el) return;
-  if(_solUsdPrice>0) el.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
-  else el.textContent='';
+  if(el){
+    if(_solUsdPrice>0) el.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
+    else el.textContent='';
+  }
+  const sbEl=document.getElementById('sb-sol-usdc');
+  if(sbEl){
+    if(_solUsdPrice>0) sbEl.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2);
+    else sbEl.textContent='';
+  }
 }
 
 let _solCounterDone=false;
@@ -3270,7 +3276,8 @@ async function _botFetchStatus(){
       var sol=parseFloat(d.sol_ready||0).toFixed(2)
       var open=parseInt(d.open_positions||0)
       var wr=parseFloat(d.win_rate||0).toFixed(0)
-      statsEl.textContent=sol+' SOL ready · '+open+'/5 open · '+wr+'% win rate'
+      var usdcPart = (_solUsdPrice>0) ? (' (≈ $'+(parseFloat(d.sol_ready||0)*_solUsdPrice).toFixed(2)+')') : ''
+      statsEl.textContent=sol+' SOL'+usdcPart+' ready · '+open+'/5 open · '+wr+'% win rate'
     }
   }catch(e){}
 }
