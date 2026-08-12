@@ -1091,6 +1091,13 @@ function _updateSolUsdc(sol){
     if(_solUsdPrice>0) sbEl.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2);
     else sbEl.textContent='';
   }
+  const mnSolEl=document.getElementById('mn-bal-sol');
+  if(mnSolEl) mnSolEl.textContent=sol.toFixed(3)+' SOL';
+  const mnUsdcEl=document.getElementById('mn-bal-usdc');
+  if(mnUsdcEl){
+    if(_solUsdPrice>0) mnUsdcEl.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
+    else mnUsdcEl.textContent='';
+  }
 }
 
 let _solCounterDone=false;

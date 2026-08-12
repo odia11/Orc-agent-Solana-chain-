@@ -301,14 +301,22 @@ function _shareLbRankToX(rank, pnlStr, tradeCount){
 #mn-overlay.open{display:block}
 @media(max-width:767px){
   #mobile-nav{
-    display:flex;align-items:stretch;
+    display:flex;flex-direction:column;align-items:stretch;
     position:fixed;bottom:0;left:0;right:0;
-    height:calc(60px + env(safe-area-inset-bottom,0px));
+    height:calc(78px + env(safe-area-inset-bottom,0px));
     padding-bottom:env(safe-area-inset-bottom,0px);
     background:#101216;
     border-top:1px solid #16191f;z-index:500;
     -webkit-tap-highlight-color:transparent;
   }
+  .mn-balance-strip{
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    height:18px;font-family:'JetBrains Mono',monospace;font-size:11px;
+    color:#8a919c;border-bottom:1px solid #16191f;flex-shrink:0;
+  }
+  .mn-balance-strip .mn-bal-sol{color:#eef1f5;font-weight:700}
+  .mn-balance-strip .mn-bal-usdc{color:#565d68}
+  .mn-items-row{display:flex;align-items:stretch;flex:1;min-height:0}
   .mn-item{
     flex:1;display:flex;flex-direction:column;align-items:center;
     justify-content:center;gap:3px;text-decoration:none;
@@ -333,11 +341,16 @@ function _shareLbRankToX(rank, pnlStr, tradeCount){
   .mn-drawer-footer a{color:#565d68;font-size:11px;text-decoration:none;min-height:22px;display:inline-flex;align-items:center}
   .mn-drawer-footer a:active{color:#8a919c}
   /* Reserve space so page content doesn't sit under the fixed bar */
-  body{padding-bottom:calc(60px + env(safe-area-inset-bottom,0px))!important}
+  body{padding-bottom:calc(78px + env(safe-area-inset-bottom,0px))!important}
 }
 </style>
 
 <nav id="mobile-nav" aria-label="Mobile navigation">
+  <div class="mn-balance-strip" id="mn-balance-strip">
+    <span class="mn-bal-sol" id="mn-bal-sol">— SOL</span>
+    <span class="mn-bal-usdc" id="mn-bal-usdc"></span>
+  </div>
+  <div class="mn-items-row">
   <a class="mn-item" href="/">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     <span>Home</span>
@@ -358,7 +371,38 @@ function _shareLbRankToX(rank, pnlStr, tradeCount){
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     <span>More</span>
   </button>
+  </div>
 </nav>
+
+<script>
+/* Mobile nav balance strip — self-contained (this page doesn't load the shared
+   dashboard.js balance logic), so it independently polls the same /api/balance
+   endpoint and Binance SOL/USD price dashboard.js uses, at the same cadence. */
+(function(){
+  var solEl=document.getElementById('mn-bal-sol');
+  var usdEl=document.getElementById('mn-bal-usdc');
+  if(!solEl && !usdEl) return;
+  var _mnbPrice=0;
+  function _mnbFetchPrice(){
+    fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT').then(function(r){return r.json()}).then(function(r){
+      var p=parseFloat((r&&r.price)||0);
+      if(p>1) _mnbPrice=p;
+    }).catch(function(){});
+  }
+  function _mnbFetchBalance(){
+    fetch('/api/balance',{credentials:'include'}).then(function(r){return r.json()}).then(function(d){
+      if(!d||!d.ok) return;
+      var sol=+d.sol||0;
+      if(solEl) solEl.textContent=sol.toFixed(3)+' SOL';
+      if(usdEl) usdEl.textContent=_mnbPrice>0?('≈ $'+(sol*_mnbPrice).toFixed(2)+' USDC'):'';
+    }).catch(function(){});
+  }
+  _mnbFetchPrice();
+  _mnbFetchBalance();
+  setInterval(_mnbFetchPrice,30000);
+  setInterval(_mnbFetchBalance,30000);
+})();
+</script>
 
 <div id="mn-overlay" onclick="_mnDrawerClose()"></div>
 

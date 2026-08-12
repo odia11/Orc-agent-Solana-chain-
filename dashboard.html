@@ -2342,7 +2342,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   /* ── LAYOUT: all cards full width ── */
   .wrap{
-    padding:0.75rem 0.75rem calc(60px + env(safe-area-inset-bottom,0px));
+    padding:0.75rem 0.75rem calc(78px + env(safe-area-inset-bottom,0px));
     max-width:100vw;
     overflow-x:hidden;
   }
@@ -2588,7 +2588,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   .panels{grid-template-columns:1fr}
 
   /* ── TIGHTER PADDING ── */
-  .wrap{padding:0.5rem 0.5rem calc(60px + env(safe-area-inset-bottom,0px))}
+  .wrap{padding:0.5rem 0.5rem calc(78px + env(safe-area-inset-bottom,0px))}
 
   /* ── TRADER PROFILE STAT TILES ── */
   .tvp-stat5-val{font-size:13px}
@@ -2621,10 +2621,10 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 @media(max-width:767px){
   /* Clear the fixed bottom-nav bar (60px + safe-area inset) instead of sitting
      underneath it at a fixed 16-24px, which made the banner overlap it. */
-  #update-banner{bottom:calc(60px + env(safe-area-inset-bottom,0px) + 16px)}
+  #update-banner{bottom:calc(78px + env(safe-area-inset-bottom,0px) + 16px)}
 }
 @media(max-width:480px){
-  #update-banner{flex-direction:column;align-items:stretch;text-align:center;bottom:calc(60px + env(safe-area-inset-bottom,0px) + 16px);padding:14px 16px;gap:10px;width:calc(100vw - 32px)}
+  #update-banner{flex-direction:column;align-items:stretch;text-align:center;bottom:calc(78px + env(safe-area-inset-bottom,0px) + 16px);padding:14px 16px;gap:10px;width:calc(100vw - 32px)}
   #update-banner .ub-btn{width:100%;padding:9px 14px}
 }
 
@@ -3151,14 +3151,22 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   /* ── Bottom nav ── */
   #mobile-nav{
-    display:flex;align-items:stretch;
+    display:flex;flex-direction:column;align-items:stretch;
     position:fixed;bottom:0;left:0;right:0;
-    height:calc(60px + env(safe-area-inset-bottom,0px));
+    height:calc(78px + env(safe-area-inset-bottom,0px));
     padding-bottom:env(safe-area-inset-bottom,0px);
     background:#101216;
     border-top:1px solid #16191f;z-index:500;
     -webkit-tap-highlight-color:transparent;
   }
+  .mn-balance-strip{
+    display:flex;align-items:center;justify-content:center;gap:6px;
+    height:18px;font-family:'JetBrains Mono',monospace;font-size:11px;
+    color:#8a919c;border-bottom:1px solid #16191f;flex-shrink:0;
+  }
+  .mn-balance-strip .mn-bal-sol{color:#eef1f5;font-weight:700}
+  .mn-balance-strip .mn-bal-usdc{color:#565d68}
+  .mn-items-row{display:flex;align-items:stretch;flex:1;min-height:0}
   .rr-search,.hdr-search,.fc-reply-inp{font-size:16px}
   .fc-reply-inner{gap:6px}
   .fc-reply-inp{min-width:0}
@@ -5081,6 +5089,11 @@ document.addEventListener('DOMContentLoaded', function() {
 
 <!-- MOBILE BOTTOM NAV (visible <768px only) -->
 <nav id="mobile-nav" aria-label="Mobile navigation">
+  <div class="mn-balance-strip" id="mn-balance-strip">
+    <span class="mn-bal-sol" id="mn-bal-sol">— SOL</span>
+    <span class="mn-bal-usdc" id="mn-bal-usdc"></span>
+  </div>
+  <div class="mn-items-row">
   <a class="mn-item active" href="/" onclick="if(window._sbNav){_clearStalePostHash();_sbNav('dashboard');return false;}">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
     <span>Home</span>
@@ -5101,6 +5114,7 @@ document.addEventListener('DOMContentLoaded', function() {
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
     <span>More</span>
   </button>
+  </div>
 </nav>
 
 <!-- MOBILE NAV OVERLAY -->
