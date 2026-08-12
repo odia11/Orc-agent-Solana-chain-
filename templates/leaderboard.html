@@ -482,36 +482,7 @@ window.addEventListener('pageshow', function(e){
 </script>
 
 
-<script>
-/* Safe auto-refresh — every 60s, but skipped while the person is actively
-   typing (focused input/textarea/contenteditable), has a modal or drawer
-   open (this codebase consistently locks body scroll while one is open —
-   see mn-drawer, token-detail panel, etc.), or interacted in the last 20s. */
-(function(){
-  var REFRESH_INTERVAL_MS = 60000;
-  var IDLE_GRACE_MS       = 20000;
-  var _lastInteraction = Date.now();
-  ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evt){
-    document.addEventListener(evt, function(){ _lastInteraction = Date.now(); }, {passive: true});
-  });
-  function _isTypingOrFocused(){
-    var el = document.activeElement;
-    if(!el) return false;
-    var tag = el.tagName;
-    return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
-  }
-  function _modalOpen(){
-    return document.body.style.overflow === 'hidden';
-  }
-  setInterval(function(){
-    if(document.hidden) return;
-    if(_isTypingOrFocused()) return;
-    if(_modalOpen()) return;
-    if(Date.now() - _lastInteraction < IDLE_GRACE_MS) return;
-    window.location.reload();
-  }, REFRESH_INTERVAL_MS);
-})();
-</script>
+<script src="/static/auto-refresh.js?v={{ app_version }}"></script>
 
 </body>
 </html>
