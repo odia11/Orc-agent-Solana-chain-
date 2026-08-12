@@ -7945,7 +7945,7 @@ def logout():
 @app.route('/api/settings', methods=['GET'])
 @rate_limit(60, 60)
 def get_settings():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
     conn = sqlite3.connect(DB_FILE)
@@ -11163,7 +11163,7 @@ def x_status():
     """JSON counterpart to the x_handle/x_share_* Jinja context settings_page()
     builds server-side -- lets the SPA's #dash-settings X card show the real
     connection state instead of always defaulting to 'not connected'."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -11992,7 +11992,7 @@ def api_wallet_balance():
 @app.route('/api/portfolio-summary', methods=['GET'])
 @rate_limit(30, 60)
 def api_portfolio_summary():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     try:
@@ -12064,7 +12064,7 @@ _PH_TF_HOURS = {'1h': 1, '4h': 4, 'd': 24, 'all': 24 * 7}
 @app.route('/api/portfolio-history', methods=['GET'])
 @rate_limit(30, 60)
 def api_portfolio_history():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     tf = request.args.get('tf', 'd')
@@ -12174,7 +12174,7 @@ def api_friends_positions():
 @app.route('/api/wallet/transactions', methods=['GET'])
 @rate_limit(30, 60)
 def api_wallet_transactions():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -13035,7 +13035,7 @@ def upload_chat_image():
 @app.route('/api/trades/open', methods=['GET'])
 @rate_limit(60, 60)
 def api_open_trades():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     us = get_user_state(wallet)
@@ -13957,7 +13957,7 @@ def bot_status():
 @app.route('/api/bot/positions', methods=['GET'])
 @rate_limit(30, 60)
 def bot_positions():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'positions': [], 'total_pnl_sol': 0.0}), 401
     us = get_user_state(wallet)
@@ -15290,7 +15290,7 @@ def _trades_from_db(wallet: str, today: str) -> tuple:
 @app.route('/api/trades')
 @rate_limit(60, 60)
 def api_trades():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     _strip = lambda t: {k: v for k, v in t.items() if k not in ('fee', 'net_pnl')}
     _strip_daily = lambda d: {k: v for k, v in d.items() if k not in ('total_fees', 'net_pnl')}
     if wallet:
@@ -15777,7 +15777,15 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        # Group unpaid trades by user so we send one TX per user instead of one per trade
+        # Group unpaid trades by user so we send one TX per user instead of one per trade.
+        # Excludes trades closed in the last 2 minutes: _charge_txn_fee() spawns a
+        # background thread per sell that waits 12s then attempts its own send_sol_fee
+        # for that exact trade before marking it fee_paid -- without this window, a
+        # recovery sweep (hourly, or triggered manually) landing during those ~12+
+        # seconds would see the same still-fee_paid=0 trade and send a second, real
+        # on-chain fee transfer for it. 2 minutes is comfortably longer than the 12s
+        # delay plus realistic RPC/retry time for that thread to finish one way or
+        # the other.
         c.execute('''
             SELECT u.wallet_address,
                    u.encrypted_private_key,
@@ -15786,6 +15794,7 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE (t.fee_paid IS NULL OR t.fee_paid = 0)
+              AND datetime(t.timestamp) < datetime('now', '-2 minutes')
               AND u.encrypted_private_key IS NOT NULL
               AND u.encrypted_private_key != ""
             GROUP BY u.wallet_address, u.encrypted_private_key
@@ -15873,6 +15882,27 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
                 '''INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status)
                    VALUES (?,?,?,?,?,?)''',
                 (user_wallet, '[recovery]', total_fee / _get_fee_rate(), total_fee, tx_sig, 'ok'))
+            # Referral payout (20% of the fee just actually collected) -- the normal
+            # per-trade path (_charge_txn_fee/_do_fee) credits this on every successful
+            # send, but a trade recovered here (its original attempt failed or never ran)
+            # would otherwise never pay its referrer at all.
+            try:
+                ref_row = conn2.execute(
+                    'SELECT referred_by FROM users WHERE wallet_address=?', (user_wallet,)).fetchone()
+                if ref_row and ref_row[0]:
+                    referrer = ref_row[0]
+                    earned   = round(total_fee * 0.20, 6)
+                    conn2.execute(
+                        'INSERT INTO referral_earnings '
+                        '(referrer_wallet, referred_wallet, trade_fee_sol, earned_sol) VALUES (?,?,?,?)',
+                        (referrer, user_wallet, total_fee, earned))
+                    conn2.execute(
+                        'UPDATE users SET referral_balance = referral_balance + ? WHERE wallet_address=?',
+                        (earned, referrer))
+                    print(f'[referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} SOL '
+                          f'(20% of {total_fee:.6f} SOL recovered fee)', flush=True)
+            except Exception as ref_e:
+                print(f'[referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
             conn2.commit()
             conn2.close()
 
