@@ -5990,10 +5990,10 @@ def api_groups_create():
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     body = request.json or {}
-    name = (body.get('name') or '').strip()
+    name = _sanitize((body.get('name') or '').strip())
     token_symbol = (body.get('token_symbol') or '').strip().lstrip('$').upper()
     token_address = (body.get('token_address') or '').strip()
-    description = (body.get('description') or '').strip()
+    description = _sanitize((body.get('description') or '').strip())
     is_private = 1 if body.get('is_private') else 0
     if not name or len(name) > 60:
         return jsonify({'ok': False, 'msg': 'Group name is required (max 60 chars)'}), 400
@@ -6556,12 +6556,12 @@ def api_group_settings(group_id):
             conn.execute('UPDATE groups SET announcement_only=? WHERE id=?',
                          (1 if body.get('announcement_only') else 0, group_id))
         if 'name' in body:
-            name = (body.get('name') or '').strip()
+            name = _sanitize((body.get('name') or '').strip())
             if not name or len(name) > 60:
                 return jsonify({'ok': False, 'msg': 'Group name is required (max 60 chars)'}), 400
             conn.execute('UPDATE groups SET name=? WHERE id=?', (name, group_id))
         if 'description' in body:
-            description = (body.get('description') or '').strip()
+            description = _sanitize((body.get('description') or '').strip())
             if len(description) > 300:
                 return jsonify({'ok': False, 'msg': 'Description too long (max 300 chars)'}), 400
             conn.execute('UPDATE groups SET description=? WHERE id=?', (description or None, group_id))
@@ -11228,7 +11228,7 @@ def save_bio():
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'})
-    bio = str((request.json or {}).get('bio', '')).strip()
+    bio = _sanitize(str((request.json or {}).get('bio', '')).strip())
     if len(bio) > 100:
         return jsonify({'ok': False, 'msg': 'Bio must be 100 characters or fewer'})
     conn = sqlite3.connect(DB_FILE)
@@ -13208,7 +13208,7 @@ def send_wallet_message(wallet):
         return jsonify({'ok': False, 'msg': 'Invalid wallet address'}), 400
     if wallet == me:
         return jsonify({'ok': False, 'msg': 'Cannot message yourself'}), 400
-    content = str((request.json or {}).get('content', '')).strip()
+    content = _sanitize(str((request.json or {}).get('content', '')).strip())
     if not content:
         return jsonify({'ok': False, 'msg': 'content required'}), 400
     if len(content) > 2000:
