@@ -3844,7 +3844,8 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
             conn = sqlite3.connect(DB_FILE)
             try:
                 rows = conn.execute(
-                    'SELECT id, wallet_address, encrypted_private_key, min_trade_size, copy_amount FROM users '
+                    'SELECT id, wallet_address, encrypted_private_key, min_trade_size, copy_amount, '
+                    'max_positions, daily_loss_limit FROM users '
                     'WHERE copy_source=? AND encrypted_private_key != "" AND encrypted_private_key IS NOT NULL',
                     (buyer_wallet,)
                 ).fetchall()
@@ -3854,12 +3855,24 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
             print(f'[copy-trade] DB error: {e}', flush=True)
             return
 
-        for c_uid, c_wallet, c_enc, c_min_usdc, c_copy_amount in rows:
+        for c_uid, c_wallet, c_enc, c_min_usdc, c_copy_amount, c_max_positions, c_daily_loss_limit in rows:
             try:
                 c_short = c_wallet[:6] + '...' + c_wallet[-4:]
                 c_us    = get_user_state(c_wallet)
+                # Copiers get the same daily-loss and max-position guards the primary
+                # bot loop enforces on itself (dashboard.py ~3512, ~3862 previously
+                # hardcoded 5 here) -- otherwise a copier who's hit their own limit and
+                # had their own bot pause still gets bought into new positions any time
+                # the trader they copy makes a move, silently overriding their own risk
+                # controls.
+                c_daily_loss = c_us['daily_stats'].get('total_pnl', 0)
+                c_loss_limit = abs(float(c_daily_loss_limit)) if c_daily_loss_limit is not None else 50.0
+                if c_daily_loss < -c_loss_limit:
+                    add_user_log(c_wallet, f'[copy] Skip {symbol}: daily loss limit hit')
+                    continue
+                c_max_pos = int(c_max_positions) if c_max_positions is not None else 5
                 open_pos = sum(1 for p in c_us['positions'].values() if p.get('amount', 0) > 0)
-                if open_pos >= 5:
+                if open_pos >= c_max_pos:
                     add_user_log(c_wallet, f'[copy] Skip {symbol}: max positions reached')
                     continue
                 if c_us['positions'].get(mint, {}).get('amount', 0) > 0:
@@ -4877,6 +4890,25 @@ def api_badges(wallet_addr):
         return jsonify({'ok': False, 'error': str(e)}), 500
 
 
+def _sync_copy_relationship(conn, wallet: str, new_target: str | None) -> None:
+    """Keep copy_relationships (used for copiers_count on profile pages) in sync
+    with users.copy_source. A copier can only follow one target at a time, so
+    this also deactivates any other relationship still marked active for this
+    copier -- without it, switching copy targets left the old target's
+    copiers_count permanently inflated by one, since only the new target's row
+    ever got touched. Called with new_target=None to stop copying entirely."""
+    conn.execute(
+        'UPDATE copy_relationships SET active=0 WHERE copier_wallet=? AND copied_wallet != ? AND active=1',
+        (wallet, new_target or '')
+    )
+    if new_target:
+        conn.execute(
+            'INSERT INTO copy_relationships (copier_wallet, copied_wallet, active) VALUES (?,?,1) '
+            'ON CONFLICT(copier_wallet, copied_wallet) DO UPDATE SET active=1',
+            (wallet, new_target)
+        )
+
+
 @app.route('/api/copy-trade', methods=['POST'])
 @rate_limit(20, 60)
 def api_copy_trade_start():
@@ -4891,6 +4923,7 @@ def api_copy_trade_start():
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute('UPDATE users SET copy_source=? WHERE wallet_address=?', (target, wallet))
+        _sync_copy_relationship(conn, wallet, target)
         conn.commit()
     finally:
         conn.close()
@@ -4906,6 +4939,7 @@ def api_copy_trade_stop():
     conn = sqlite3.connect(DB_FILE)
     try:
         conn.execute('UPDATE users SET copy_source=NULL WHERE wallet_address=?', (wallet,))
+        _sync_copy_relationship(conn, wallet, None)
         conn.commit()
     finally:
         conn.close()
@@ -4955,18 +4989,7 @@ def api_copy_trade_toggle():
             conn.execute('UPDATE users SET copy_source=?, copy_amount=? WHERE wallet_address=?',
                          (target, amount_sol, wallet))
             new_active = 1
-        # sync copy_relationships table
-        existing = conn.execute(
-            'SELECT id FROM copy_relationships WHERE copier_wallet=? AND copied_wallet=?',
-            (wallet, target)
-        ).fetchone()
-        if existing:
-            conn.execute('UPDATE copy_relationships SET active=? WHERE id=?', (new_active, existing[0]))
-        else:
-            conn.execute(
-                'INSERT INTO copy_relationships (copier_wallet, copied_wallet, active) VALUES (?,?,?)',
-                (wallet, target, new_active)
-            )
+        _sync_copy_relationship(conn, wallet, target if new_active else None)
         conn.commit()
         copiers_count = conn.execute(
             'SELECT COUNT(*) FROM copy_relationships WHERE copied_wallet=? AND active=1',
@@ -7090,6 +7113,17 @@ def _send_push_notification(user_id, title, body, url='/'):
         args=(user_id, title, body, url),
         daemon=True
     ).start()
+
+def _send_push_notifications_bulk(user_ids, title, body, url='/'):
+    """Same as _send_push_notification but for many recipients at once, run
+    from a single background thread instead of spawning one OS thread per
+    recipient -- a popular account's follower fan-out could otherwise spawn
+    thousands of threads (each opening its own SQLite connection) in one
+    request."""
+    def _run():
+        for uid in user_ids:
+            _send_push_notification_sync(uid, title, body, url)
+    threading.Thread(target=_run, daemon=True).start()
 
 def _notify_staff(title: str, body: str, link: str = '/admin#support', actor_wallet: str = None):
     """Fan out a notification + push to every current admin/moderator so a new
@@ -9250,8 +9284,7 @@ def feed_post_create():
                 '/#post-p' + str(post_id), wallet
             )
             conn.commit()
-            for fid in follower_ids:
-                _send_push_notification(fid, 'New post', author_name + ' ' + post_desc, '/#post-p' + str(post_id))
+            _send_push_notifications_bulk(follower_ids, 'New post', author_name + ' ' + post_desc, '/#post-p' + str(post_id))
         return jsonify({'ok': True, 'id': post_id})
     finally:
         conn.close()
