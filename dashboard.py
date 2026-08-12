@@ -4375,7 +4375,7 @@ def api_connect_wallet():
 
 @app.route('/profile')
 def profile():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/')
     conn = sqlite3.connect(DB_FILE)
@@ -5060,7 +5060,7 @@ def api_copy_trade_toggle():
 @app.route('/api/copy-trade/status', methods=['GET'])
 @rate_limit(60, 60)
 def api_copy_trade_status():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -5235,7 +5235,7 @@ def page_terms():
 def api_tos_status():
     """Whether the current session's wallet needs to (re-)accept the Terms of
     Service. No wallet in session -> nothing to gate (guests aren't logged in)."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': True, 'needs_acceptance': False})
     conn = sqlite3.connect(DB_FILE)
@@ -5291,7 +5291,7 @@ def api_tos_my_acceptance():
     """Read-only summary for the Settings page -- when the current wallet last
     accepted the Terms, and whether the exact text from that moment is on file
     (content_html is NULL for acceptances recorded before that column existed)."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -5494,7 +5494,7 @@ def live_market():
 
 @app.route('/history')
 def history():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/')
     trades = []
@@ -5645,7 +5645,7 @@ def wallet_page():
 @app.route('/referrals')
 def referrals_page():
     try:
-        wallet = _current_wallet()
+        wallet = _authenticated_wallet()
         if not wallet:
             return redirect('/?connect=1')
         wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else ''
@@ -5699,7 +5699,7 @@ def referrals_page():
 
 @app.route('/settings')
 def settings_page():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
@@ -8050,7 +8050,7 @@ def save_settings():
 @csrf_exempt
 @rate_limit(60, 60)
 def settings_get():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -8219,7 +8219,7 @@ def wallet_reveal_key():
 @app.route('/api/blacklist', methods=['GET'])
 @rate_limit(60, 60)
 def api_blacklist_get():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'error': 'not logged in'}), 401
     user_id = get_or_create_user(wallet)
@@ -8503,7 +8503,7 @@ def api_stats():
 @app.route('/api/wallet/activity', methods=['GET'])
 @rate_limit(30, 60)
 def wallet_activity():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -8561,7 +8561,7 @@ def wallet_manual_trades():
     """Summary + list of trades made manually via Live Market instant-trade
     (source='manual') — the counterpart to /api/bot/overview, which only
     covers trades the bot itself executed (source='bot')."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -10448,7 +10448,7 @@ def api_promote_featured():
 @rate_limit(60, 60)
 def api_me():
     """Lightweight current-user endpoint used by sidebar profile loaders."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -10476,7 +10476,7 @@ def api_me():
 @app.route('/api/profile/me', methods=['GET'])
 @rate_limit(60, 60)
 def api_profile_me():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
@@ -11050,7 +11050,7 @@ def _post_to_x(wallet: str, text: str) -> bool:
 @app.route('/api/x/connect', methods=['GET'])
 @rate_limit(20, 60)
 def x_connect():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
     client_id = os.getenv('X_CLIENT_ID', '')
@@ -11716,7 +11716,7 @@ def api_trade_sell():
 @app.route('/api/trade/position/<token_address>', methods=['GET'])
 @rate_limit(60, 60)
 def api_trade_position(token_address):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     mint = _sanitize(token_address.strip())
@@ -11939,7 +11939,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
 @app.route('/api/wallet/tokens', methods=['GET'])
 @rate_limit(20, 60)
 def api_wallet_tokens():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     if request.args.get('bust'):
@@ -11956,7 +11956,7 @@ def api_wallet_tokens():
 @app.route('/api/wallet/total', methods=['GET'])
 @rate_limit(30, 60)
 def api_wallet_total():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     try:
@@ -11974,7 +11974,7 @@ def api_wallet_total():
 @app.route('/api/wallet/balance', methods=['GET'])
 @rate_limit(30, 60)
 def api_wallet_balance():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     try:
@@ -12799,7 +12799,7 @@ def api_heartbeat():
 @app.route('/api/messages/my-recent-trades')
 @rate_limit(30, 60)
 def messages_my_recent_trades():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     conn = sqlite3.connect(DB_FILE)
@@ -13420,7 +13420,7 @@ def _db_has_key(wallet: str) -> bool:
 @app.route('/api/state')
 @rate_limit(60, 60, ban=True)
 def api_state():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if wallet:
         us       = get_user_state(wallet)
         # In-memory may be stale after server restart — DB-confirm when False
@@ -13917,7 +13917,7 @@ def bot_stop():
 @app.route('/api/bot/status', methods=['GET'])
 @rate_limit(60, 60)
 def bot_status():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'running': False}), 401
     us = get_user_state(wallet)
@@ -14008,7 +14008,7 @@ def bot_overview():
     trading wallet's own SOL balance (not the Phantom session wallet — see
     _insufficient_trade_balance), current TP/SL/max-positions, and all-time
     trade stats. One call instead of stitching together several endpoints."""
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
 
@@ -14217,7 +14217,7 @@ def api_withdraw():
 @app.route('/api/balance')
 @rate_limit(30, 60)
 def api_balance():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'sol': 0.0, 'usdc': 0.0})
     us  = get_user_state(wallet)
@@ -14274,7 +14274,7 @@ def _get_spl_token_accounts(wallets: list) -> tuple:
 @app.route('/api/get-tokens')
 @rate_limit(30, 60)
 def api_get_tokens():
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
 
@@ -15317,7 +15317,7 @@ def api_trades():
 @rate_limit(30, 60)
 def api_pnl_chart():
     import calendar as _calendar
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': True, 'data': []})
 
