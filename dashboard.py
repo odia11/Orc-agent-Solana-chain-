@@ -2567,8 +2567,9 @@ def _get_user_sol(wallet: str) -> float:
 def get_token_data(mint, fast: bool = False):
     """fast=True bypasses the normal 30s DexScreener cache in favor of the
     HOT_MINT_TTL_FAST/MEDIUM tier for `mint` if it's currently registered in
-    _hot_mints (see _hot_mint_fetch_ttl) — used for near-stop-loss positions
-    that need fresher-than-30s price data. No-op (normal 30s TTL) otherwise."""
+    _hot_mints (see _hot_mint_fetch_ttl) — every open position stays registered
+    for as long as it's held, with near-stop-loss ones prioritized for the
+    fastest tier. No-op (normal 30s TTL) otherwise."""
     try:
         _ttl = _hot_mint_fetch_ttl(mint) if fast else None
         r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8, ttl_override=_ttl)
@@ -3545,8 +3546,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                     # lapses while held. get_token_data(fast=True) caches per-mint at the
                     # HOT_MINT_TTL_FAST/MEDIUM tier (_hot_mint_fetch_ttl), so this is one
                     # shared fetch per mint per tier window, not one extra request per
-                    # position/user holding it.
-                    _mark_hot_mint(mint)
+                    # position/user holding it. Priority reflects the last successfully
+                    # computed _near_trigger state (not just this cycle's) so a position
+                    # already near its trigger doesn't lose its fast-tier ranking to a
+                    # temporary price-fetch failure -- exactly the kind of DexScreener
+                    # hiccup a real liquidity drain can cause.
+                    _mark_hot_mint(mint, priority=bool(pos.get('_near_trigger')))
                     _td       = get_token_data(mint, fast=True)
                     price     = float(_td['price']) if _td else 0.0
                     label     = (_td['symbol'] if _td else '') or pos.get('symbol', mint[:8])
@@ -3819,7 +3824,7 @@ def user_trader_loop(stop_event, config, wallet: str):
             # "near trigger" from "just holding something." Persisted on the position dict
             # rather than a local variable, so this is still correct even if the try block
             # above raised before reaching the position loop this cycle.
-            _wait_s = 2 if any(p.get('_near_trigger') for p in positions.values()) else config.get('interval', 15)
+            _wait_s = 2 if any(p.get('_near_trigger') for p in list(positions.values())) else config.get('interval', 15)
             stop_event.wait(_wait_s)
     finally:
         print(f'[bot] {short} loop exited — running set to False', flush=True)
