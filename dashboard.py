@@ -2226,34 +2226,49 @@ def _fast_poll_loop():
 
 
 # ── ADAPTIVE HOT-MINT POLLING ──
-# A position is "hot" when its unrealized change is within 5% of the user's own
-# stop-loss/crash-exit value (relative to the threshold itself, e.g. -2.85%..-3.00%
-# for a 3% SL). Hot mints get a shortened get_token_data() cache TTL (2s instead of
-# 30s) and the owning user's scan loop drops to a 2s wait instead of 15s, so a fast
-# crash gets caught within ~2s instead of up to 15s. Capped at HOT_MINT_CAP
-# concurrent mints (systemwide, not per-user) so a correlated market-wide dip can't
-# turn this into an unbounded DexScreener request burst — mints beyond the cap fall
-# back to a 5s TTL tier instead of being dropped outright.
+# Every held position stays registered here for as long as it's open (see
+# _upsert_open_position and user_trader_loop's Pass 1), so get_token_data(fast=True)
+# always has fresher-than-30s price data available for open positions rather than
+# waiting for one to already be near its stop-loss/crash-exit trigger. Capped at
+# HOT_MINT_CAP concurrent mints (systemwide, not per-user) so a large number of
+# simultaneously-open positions can't turn this into an unbounded DexScreener
+# request burst — mints beyond the cap fall back to a 5s TTL tier instead of losing
+# fast polling outright. A mint actually within 5% of a stop-loss/crash-exit trigger
+# is marked with `priority=True`, which outranks every merely-held mint for the
+# scarce top-HOT_MINT_CAP fast (2s) slots — otherwise a healthy position opened a
+# moment ago could crowd out a genuinely at-risk one once >HOT_MINT_CAP positions
+# are open system-wide. The near-trigger determination itself (and the separate
+# adaptive scan-loop wait interval) lives in user_trader_loop via each position's
+# own pos['_near_trigger'] flag, not here — this registry only answers "should
+# get_token_data() use the fast cache tier for this mint," nothing else.
 _hot_mints_lock: threading.Lock = threading.Lock()
 _hot_mints: dict = {}          # mint -> expiry_timestamp (refreshed each time a loop sees it as hot)
-HOT_MINT_CAP        = 10       # max concurrently fast-polled (2s) mints
-HOT_MINT_TTL_FAST   = 2        # seconds — cache TTL for mints within the cap
-HOT_MINT_TTL_MEDIUM = 5        # seconds — cache TTL for mints over the cap (still faster than the 30s default)
-HOT_MINT_ENTRY_TTL  = 30       # seconds — how long a mint stays registered as "hot" after last being seen near trigger
+HOT_MINT_CAP            = 10     # max concurrently fast-polled (2s) mints
+HOT_MINT_TTL_FAST       = 2      # seconds — cache TTL for mints within the cap
+HOT_MINT_TTL_MEDIUM     = 5      # seconds — cache TTL for mints over the cap (still faster than the 30s default)
+HOT_MINT_ENTRY_TTL      = 30     # seconds — how long a mint stays registered as "hot" after last being marked
+HOT_MINT_PRIORITY_BOOST = 60     # seconds — added on top of the entry TTL for a priority (near-trigger) mark,
+                                  # so it always outranks a plain "currently held" mark for the capped fast tier.
+                                  # Comfortably larger than any real refresh gap (positions re-mark every 2-15s
+                                  # while held) without leaving a closed position's last-known-hot mint crowding
+                                  # the fast tier for too long after it stops being re-marked.
 
 
-def _mark_hot_mint(mint: str) -> None:
-    """Register `mint` as currently near a stop-loss/crash-exit trigger. Idempotent —
-    safe to call every scan cycle from every user loop that holds the position."""
+def _mark_hot_mint(mint: str, priority: bool = False) -> None:
+    """Register `mint` for fast polling. Idempotent — safe to call every scan cycle
+    from every user loop that holds the position. `priority=True` (within 5% of a
+    stop-loss/crash-exit trigger) outranks a plain hold for the scarce HOT_MINT_CAP
+    fast-tier slots in _hot_mint_fetch_ttl below."""
     with _hot_mints_lock:
-        _hot_mints[mint] = time.time() + HOT_MINT_ENTRY_TTL
+        _hot_mints[mint] = time.time() + HOT_MINT_ENTRY_TTL + (HOT_MINT_PRIORITY_BOOST if priority else 0)
 
 
 def _hot_mint_fetch_ttl(mint: str) -> float | None:
     """Returns the fast-poll TTL for `mint` if it's currently registered hot, else None
     (meaning: use get_token_data()'s normal 30s cache). Mints beyond HOT_MINT_CAP —
-    ranked by how recently they were marked hot, i.e. most-recently-confirmed-near-trigger
-    first — get the slower HOT_MINT_TTL_MEDIUM tier instead of losing fast polling outright."""
+    ranked by expiry, which priority marks push far higher than plain-hold marks, so a
+    genuinely near-trigger mint is never crowded out by merely-held ones — get the
+    slower HOT_MINT_TTL_MEDIUM tier instead of losing fast polling outright."""
     now = time.time()
     with _hot_mints_lock:
         expired = [m for m, exp in _hot_mints.items() if exp <= now]
@@ -2265,11 +2280,6 @@ def _hot_mint_fetch_ttl(mint: str) -> float | None:
         top_mints = {m for m, _ in ranked[:HOT_MINT_CAP]}
         return HOT_MINT_TTL_FAST if mint in top_mints else HOT_MINT_TTL_MEDIUM
 
-
-def _any_hot_mint(mints) -> bool:
-    now = time.time()
-    with _hot_mints_lock:
-        return any(_hot_mints.get(m, 0) > now for m in mints)
 
 def _migrate_trade_size_units(sol_price: float) -> None:
     """One-time migration: min_trade_size/max_trade_size/daily_loss_limit used to be
@@ -3556,6 +3566,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     _now_hot             = (chg <= -0.95 * stop_loss) or (chg <= -0.95 * crash_exit)
                     pos['_near_trigger'] = _now_hot
                     if _now_hot:
+                        _mark_hot_mint(mint, priority=True)
                         if not _was_near_trigger:
                             add_user_log(wallet, '[' + short + '] ⚡ ' + label + ' ' + str(round(chg*100,1)) +
                                          '% — within 5% of trigger, check interval 15s→2s')
@@ -3801,10 +3812,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
             # Adaptive interval: any currently-held position within 5% of its SL/crash-exit
             # trigger drops the wait to 2s instead of the normal scan interval, so a fast
-            # crash gets caught within ~2s instead of up to `interval` seconds. Read from the
-            # global registry (not a local flag) so it's correct even if the try block above
-            # raised before reaching the position loop this cycle.
-            _wait_s = 2 if _any_hot_mint(positions.keys()) else config.get('interval', 15)
+            # crash gets caught within ~2s instead of up to `interval` seconds. Read from
+            # each position's own _near_trigger flag (set in Pass 1 above), not the
+            # _hot_mints registry -- that registry is unconditionally true for every held
+            # position now (see _upsert_open_position), so it can no longer distinguish
+            # "near trigger" from "just holding something." Persisted on the position dict
+            # rather than a local variable, so this is still correct even if the try block
+            # above raised before reaching the position loop this cycle.
+            _wait_s = 2 if any(p.get('_near_trigger') for p in positions.values()) else config.get('interval', 15)
             stop_event.wait(_wait_s)
     finally:
         print(f'[bot] {short} loop exited — running set to False', flush=True)
