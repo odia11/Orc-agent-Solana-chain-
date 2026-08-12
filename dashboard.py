@@ -3177,9 +3177,13 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         _recalculate_badges(wallet)
     _check_auto_verify(user_id)
     if wallet and abs(pnl_pct) >= 20:
-        _xrow = sqlite3.connect(DB_FILE).execute(
-            'SELECT share_on_big_trade FROM x_connections WHERE wallet_address=?',
-            (wallet,)).fetchone()
+        _xconn = sqlite3.connect(DB_FILE)
+        try:
+            _xrow = _xconn.execute(
+                'SELECT share_on_big_trade FROM x_connections WHERE wallet_address=?',
+                (wallet,)).fetchone()
+        finally:
+            _xconn.close()
         if _xrow and _xrow[0]:
             _sign  = '+' if pnl_pct >= 0 else ''
             _link  = f'https://orcagent.fun/share/t{_trade_id}' if _trade_id else ''
@@ -6636,6 +6640,10 @@ def api_group_set_official(group_id):
         return jsonify({'ok': True})
     finally:
         conn.close()
+
+
+@app.route('/api/groups/<int:group_id>/mute/<int:user_id>', methods=['POST'])
+@rate_limit(20, 60)
 def api_group_mute(group_id, user_id):
     wallet = _authenticated_wallet()
     if not wallet:
@@ -11190,19 +11198,6 @@ def _sanitize(text: str) -> str:
 def _get_uid(conn, wallet: str):
     row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
     return row[0] if row else None
-
-def _mutual_follow(conn, a: int, b: int) -> bool:
-    return (
-        bool(conn.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (a, b)).fetchone()) and
-        bool(conn.execute('SELECT 1 FROM follows WHERE follower_id=? AND following_id=?', (b, a)).fetchone())
-    )
-
-def _any_follow(conn, a: int, b: int) -> bool:
-    """True if a follows b OR b follows a."""
-    return bool(conn.execute(
-        'SELECT 1 FROM follows WHERE (follower_id=? AND following_id=?) OR (follower_id=? AND following_id=?)',
-        (a, b, b, a)
-    ).fetchone())
 
 def _is_following_ids(conn, follower: int, following: int) -> bool:
     return bool(conn.execute(
@@ -15837,38 +15832,66 @@ def _snapshot_portfolios(triggered_by: str = 'manual') -> dict:
 
     sol_price = _sol_price_usd
     live_map  = {t['mint']: t for t in state.get('tokens', [])}
-    saved     = 0
 
-    for user_id, wallet in rows:
-        try:
-            r = requests.post(SOLANA_RPC, json={
-                'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
-            }, timeout=8)
-            sol_balance = r.json()['result']['value'] / 1e9
+    # Fetch every user's SOL balance concurrently (bounded) instead of one RPC
+    # round-trip at a time -- at any real user count, doing this sequentially
+    # (each getBalance call can take up to the 8s timeout) made this hourly
+    # job's runtime grow linearly with the user base. Only the RPC call itself
+    # runs in parallel; get_user_state()/DB writes below stay single-threaded
+    # per wallet, so there's no shared-state concurrency to worry about here.
+    _balances = {}
+    _bal_lock = threading.Lock()
+    _sem      = threading.Semaphore(10)
 
-            us = get_user_state(wallet)
-            total_value_usd = sol_balance * sol_price if sol_price else 0.0
-            for mint, pos in us.get('positions', {}).items():
-                if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
-                    continue
-                amount    = float(pos.get('amount', 0))
-                live      = live_map.get(mint)
-                cur_price = float(live.get('price', 0) or 0) if live else 0.0
-                if not live:
-                    td        = get_token_data(mint)
-                    cur_price = float(td['price']) if td else 0.0
-                if cur_price > 0:
-                    total_value_usd += amount * cur_price
+    def _fetch_balance(user_id, wallet):
+        with _sem:
+            try:
+                r = requests.post(SOLANA_RPC, json={
+                    'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+                }, timeout=8)
+                sol_balance = r.json()['result']['value'] / 1e9
+                with _bal_lock:
+                    _balances[user_id] = (wallet, sol_balance, None)
+            except Exception as e:
+                with _bal_lock:
+                    _balances[user_id] = (wallet, None, e)
 
-            conn2 = sqlite3.connect(DB_FILE)
-            conn2.execute(
-                'INSERT INTO portfolio_snapshots (user_id, total_value_usd) VALUES (?, ?)',
-                (user_id, round(total_value_usd, 4)))
-            conn2.commit()
-            conn2.close()
-            saved += 1
-        except Exception as e:
-            print(f'[portfolio-snapshot] user_id={user_id} FAILED: {e}', flush=True)
+    _threads = [threading.Thread(target=_fetch_balance, args=(uid, w)) for uid, w in rows]
+    for _t in _threads: _t.start()
+    for _t in _threads: _t.join()
+
+    saved = 0
+    conn2 = sqlite3.connect(DB_FILE)
+    try:
+        for user_id, wallet in rows:
+            _wallet, sol_balance, err = _balances.get(user_id, (wallet, None, 'no result'))
+            if err is not None:
+                print(f'[portfolio-snapshot] user_id={user_id} FAILED: {err}', flush=True)
+                continue
+            try:
+                us = get_user_state(wallet)
+                total_value_usd = sol_balance * sol_price if sol_price else 0.0
+                for mint, pos in us.get('positions', {}).items():
+                    if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
+                        continue
+                    amount    = float(pos.get('amount', 0))
+                    live      = live_map.get(mint)
+                    cur_price = float(live.get('price', 0) or 0) if live else 0.0
+                    if not live:
+                        td        = get_token_data(mint)
+                        cur_price = float(td['price']) if td else 0.0
+                    if cur_price > 0:
+                        total_value_usd += amount * cur_price
+
+                conn2.execute(
+                    'INSERT INTO portfolio_snapshots (user_id, total_value_usd) VALUES (?, ?)',
+                    (user_id, round(total_value_usd, 4)))
+                saved += 1
+            except Exception as e:
+                print(f'[portfolio-snapshot] user_id={user_id} FAILED: {e}', flush=True)
+        conn2.commit()
+    finally:
+        conn2.close()
 
     print(f'[portfolio-snapshot] ── DONE  saved={saved}/{len(rows)} ──', flush=True)
     return {'ok': True, 'saved': saved, 'total': len(rows)}
