@@ -590,6 +590,27 @@ def decrypt_private_key(enc: str, wallet: str) -> str:
         print(f'[decrypt] ✗ Unexpected {type(e).__name__}  wallet={short_w} v2={is_v2} blob_len={blob_len}: {e}', flush=True)
         raise
 
+def encrypt_x_token(raw: str, wallet: str) -> str:
+    """Encrypt an X (Twitter) OAuth access/refresh token the same way trading
+    private keys are (ENCRYPTION_KEY Fernet + wallet-derived Fernet), so a DB
+    compromise alone can't be used to post as a user or mint fresh tokens via
+    refresh indefinitely. Prefixed 'v2:' to distinguish from the plaintext
+    tokens stored before this was added -- see decrypt_x_token()."""
+    l1 = _fernet.encrypt(raw.encode())
+    l2 = _wallet_fernet(wallet).encrypt(l1)
+    return 'v2:' + l2.decode()
+
+def decrypt_x_token(enc: str, wallet: str) -> str:
+    """Decrypt a 'v2:'-prefixed X token. Every token stored before encryption
+    was added is bare plaintext with no prefix -- returned unchanged, which is
+    the whole migration path (no separate backfill needed for tokens this
+    function happens to touch; _encrypt_legacy_x_tokens() proactively
+    encrypts the rest at startup)."""
+    if not isinstance(enc, str) or not enc.startswith('v2:'):
+        return enc
+    l1 = _wallet_fernet(wallet).decrypt(enc[3:].encode())
+    return _fernet.decrypt(l1).decode()
+
 # ── PERFORMANCE FEE COLLECTION ──
 def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> str:
     """Native SOL transfer via System Program — no ATA, no SPL, just lamports."""
@@ -1671,6 +1692,41 @@ def run_migrations():
     con.execute('CREATE INDEX IF NOT EXISTS idx_referral_earnings_referrer ON referral_earnings(referrer_wallet)')
     con.commit()
     con.close()
+
+def _encrypt_legacy_x_tokens() -> None:
+    """SECURITY FIX: x_connections.access_token/refresh_token were stored as
+    plain, unencrypted text -- unlike trading private keys, which have been
+    encrypted since the start. Run once at every startup (idempotent: rows
+    already 'v2:'-prefixed are skipped) so every existing connection gets
+    migrated immediately instead of waiting on that user's token to next be
+    refreshed by _post_to_x(), which could be a long time for a wallet with
+    'share big trades' enabled but few 20%+ trades."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            rows = conn.execute(
+                'SELECT wallet_address, access_token, refresh_token FROM x_connections'
+            ).fetchall()
+            migrated = 0
+            for wallet, access_token, refresh_token in rows:
+                needs_access  = isinstance(access_token, str) and not access_token.startswith('v2:')
+                needs_refresh = isinstance(refresh_token, str) and not refresh_token.startswith('v2:')
+                if not (needs_access or needs_refresh):
+                    continue
+                new_access  = encrypt_x_token(access_token, wallet) if needs_access else access_token
+                new_refresh = encrypt_x_token(refresh_token, wallet) if needs_refresh else refresh_token
+                conn.execute(
+                    'UPDATE x_connections SET access_token=?, refresh_token=? WHERE wallet_address=?',
+                    (new_access, new_refresh, wallet)
+                )
+                migrated += 1
+            conn.commit()
+            if migrated:
+                print(f'[x-token-migration] encrypted {migrated} legacy plaintext token row(s)', flush=True)
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[x-token-migration] failed: {e}', flush=True)
 
 # ── ROLE HELPERS ──
 
@@ -10936,6 +10992,8 @@ def _post_to_x(wallet: str, text: str) -> bool:
         if not row:
             return False
         access_token, refresh_token, token_expires_at_str = row
+        access_token  = decrypt_x_token(access_token, wallet) if access_token else access_token
+        refresh_token = decrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token
         # refresh if expired or expiring within 60 seconds
         if token_expires_at_str:
             try:
@@ -10966,7 +11024,9 @@ def _post_to_x(wallet: str, text: str) -> bool:
             try:
                 conn2.execute(
                     'UPDATE x_connections SET access_token=?, refresh_token=?, token_expires_at=? WHERE wallet_address=?',
-                    (access_token, refresh_token, new_exp, wallet)
+                    (encrypt_x_token(access_token, wallet),
+                     encrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token,
+                     new_exp, wallet)
                 )
                 conn2.commit()
             finally:
@@ -11085,7 +11145,9 @@ def x_callback():
                 access_token     = excluded.access_token,
                 refresh_token    = excluded.refresh_token,
                 token_expires_at = excluded.token_expires_at
-        ''', (wallet, x_user_id, x_handle, access_token, refresh_token, token_expires_at))
+        ''', (wallet, x_user_id, x_handle, encrypt_x_token(access_token, wallet),
+              encrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token,
+              token_expires_at))
         conn.commit()
     finally:
         conn.close()
@@ -17055,6 +17117,7 @@ elif OWNER_WALLET != ADMIN_WALLET:
     print('         is_admin/_is_owner() checks may now disagree about who the owner is.')
 init_db()
 run_migrations()
+_encrypt_legacy_x_tokens()
 _load_banned_ips()
 def _heartbeat_loop():
     while True:
