@@ -15743,6 +15743,24 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
                         results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
                                         'status': 'skipped_low_balance', 'sol_balance': signer_sol})
                         continue
+
+                    # Mark these trades fee_paid BEFORE sending -- send_sol_fee() below is an
+                    # irreversible on-chain transfer, so this order guarantees the same trades
+                    # can never be re-selected and sent a second time, even if the process
+                    # crashes, the DB is briefly locked, or anything else fails between the
+                    # transfer and recording it. The downside -- a send that then fails leaves
+                    # these trades marked paid without the fee actually collected -- is a
+                    # recoverable, admin-visible under-collection, not a user-harming double
+                    # charge (which is what the old post-send ordering risked).
+                    conn2 = sqlite3.connect(DB_FILE)
+                    conn2.execute('PRAGMA busy_timeout=3000')
+                    placeholders = ','.join('?' * len(trade_ids))
+                    conn2.execute(
+                        f'UPDATE trades SET fee_paid=1 WHERE id IN ({placeholders})',
+                        trade_ids)
+                    conn2.commit()
+                    conn2.close()
+
                     tx_sig = send_sol_fee(pk, FEE_WALLET, total_fee)
             except InvalidToken:
                 # Wrong ENCRYPTION_KEY for this wallet, or the stored blob is corrupted.
@@ -15756,12 +15774,11 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
                                 'status': 'skipped_decrypt_error'})
                 continue
 
-            # Mark every trade in this batch as paid and record in fees table
+            # Record the successful send in the fees table for reporting/audit. Trades are
+            # already marked paid above, so a failure here can't cause a double-send on the
+            # next recovery run -- worst case is just a missing audit row for a real transfer.
             conn2 = sqlite3.connect(DB_FILE)
-            placeholders = ','.join('?' * len(trade_ids))
-            conn2.execute(
-                f'UPDATE trades SET fee_paid=1 WHERE id IN ({placeholders})',
-                trade_ids)
+            conn2.execute('PRAGMA busy_timeout=3000')
             conn2.execute(
                 '''INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status)
                    VALUES (?,?,?,?,?,?)''',
@@ -15779,6 +15796,11 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
         except Exception as e:
             # Covers send_sol_fee failure, DB errors, keypair derivation errors, etc.
             # Decrypt errors are handled by the inner except above and never reach here.
+            # These trades may already be marked fee_paid=1 (set before send_sol_fee is
+            # called, above) even though this branch was reached -- that's intentional,
+            # see the comment at the UPDATE -- so this won't be retried next run even on
+            # failure. Check the fees table for a matching row before assuming nothing
+            # happened.
             err = _redact_keys(str(e)[:200])
             print(f'[fee-recovery] ✗ {sw} FAILED: {err}', flush=True)
             results.append({'wallet': sw, 'fee': total_fee, 'trades': len(trade_ids),
@@ -16277,6 +16299,13 @@ def admin_invite():
         return jsonify({'ok': False, 'msg': "You can't invite the wallet you're currently logged in with"}), 400
     if role not in ('Moderator', 'Analyst', 'Executive'):
         role = 'Moderator'
+    # Granting Executive is owner-only, even though Executives themselves can invite
+    # Moderator/Analyst -- otherwise a single Executive account (compromised, or just
+    # a bad actor) could mint unlimited peer Executives, and only the owner can ever
+    # remove a role (see admin_role_remove below), so this is the one place that gap
+    # needs to be closed at grant time, not just at removal time.
+    if role == 'Executive' and not hmac.compare_digest(admin_wallet.encode(), ADMIN_WALLET.encode()):
+        return jsonify({'ok': False, 'msg': 'Only the owner can invite an Executive'}), 403
     conn = sqlite3.connect(DB_FILE)
     try:
         # Supersede any existing pending invite for this wallet
