@@ -9442,6 +9442,27 @@ def trade_delete(trade_id):
         conn.close()
 
 # ── FEED INTERACTIONS ──
+def _group_post_access_ok(conn, post_id: str, uid) -> bool:
+    """True if `uid` (may be None) may read/react to `post_id`. Only group_posts
+    ('g'-prefixed) carry a privacy flag -- feed/trade posts ('p'/'t') are always
+    public, so this is a no-op for those. Gated the same way api_group_posts
+    already gates the group's own post listing (is_private + _group_role), so
+    the like/reaction/reply endpoints below can't be used to read or write into
+    a private group's posts without membership, even though they're keyed off
+    a bare post_id with no group_id of their own to check against."""
+    if not post_id.startswith('g'):
+        return True
+    row = conn.execute(
+        'SELECT g.is_private, gp.group_id FROM group_posts gp '
+        'JOIN groups g ON g.id = gp.group_id WHERE gp.id=?', (post_id[1:],)
+    ).fetchone()
+    if not row:
+        return False
+    is_private, group_id = row
+    if not is_private:
+        return True
+    return _group_role(conn, group_id, uid) is not None
+
 @app.route('/api/feed/like/<path:post_id>', methods=['POST'])
 @rate_limit(60, 60)
 def toggle_feed_like(post_id):
@@ -9453,6 +9474,8 @@ def toggle_feed_like(post_id):
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if not _group_post_access_ok(conn, post_id, me):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
         existing = conn.execute(
             'SELECT id FROM post_likes WHERE user_id=? AND post_id=?', (me, post_id)
         ).fetchone()
@@ -9652,6 +9675,8 @@ def toggle_feed_reaction(post_id):
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if not _group_post_access_ok(conn, post_id, me):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
         existing = conn.execute(
             'SELECT id FROM post_reactions WHERE user_id=? AND post_id=? AND emoji=?',
             (me, post_id, emoji)
@@ -9773,6 +9798,8 @@ def post_feed_reply():
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        if not _group_post_access_ok(conn, post_id, me):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
         if parent_reply_id is not None:
             parent_row = conn.execute(
                 'SELECT post_id FROM feed_replies WHERE id=?', (parent_reply_id,)
@@ -9813,10 +9840,12 @@ def post_feed_reply():
 @app.route('/api/feed/replies/<path:post_id>', methods=['GET'])
 @rate_limit(60, 60)
 def get_feed_replies(post_id):
-    wallet = _current_wallet()
+    wallet = _authenticated_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         me = _get_uid(conn, wallet) if wallet else None
+        if not _group_post_access_ok(conn, post_id, me):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
         rows = conn.execute(
             '''SELECT r.id,
                       COALESCE(u.username, ''),
@@ -9874,6 +9903,9 @@ def toggle_feed_reply_like(reply_id):
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'error': 'not logged in'}), 401
+        reply_post = conn.execute('SELECT post_id FROM feed_replies WHERE id=?', (reply_id,)).fetchone()
+        if not reply_post or not _group_post_access_ok(conn, reply_post[0], me):
+            return jsonify({'ok': False, 'msg': 'Members only'}), 403
         existing = conn.execute(
             'SELECT id FROM feed_reply_likes WHERE user_id=? AND reply_id=?',
             (me, reply_id)
