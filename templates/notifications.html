@@ -1020,43 +1020,4 @@ window.addEventListener('pageshow', function(e){
 
 <script src="/static/auto-refresh.js?v={{ app_version }}"></script>
 
-<!-- TEMP DEBUG — More-drawer tap investigation, remove once diagnosed.
-     Purely observational: never calls preventDefault/stopPropagation, so it
-     cannot change page behavior. Logs every touch/mouse/click event (capture
-     phase, document-level) to an on-screen panel so this can be read on a
-     phone without a remote-debugging connection. -->
-<div id="__touchdebug" style="position:fixed;top:0;left:0;right:0;max-height:38vh;overflow-y:auto;background:rgba(0,0,0,.92);color:#3ad29b;font:11px/1.45 monospace;padding:6px 8px;z-index:999999;white-space:pre-wrap;pointer-events:none;border-bottom:2px solid #3ad29b"></div>
-<script>
-(function(){
-  var box = document.getElementById('__touchdebug');
-  var lastT = 0;
-  function log(line){
-    var now = performance.now();
-    var dt = lastT ? Math.round(now - lastT) : 0;
-    lastT = now;
-    var row = document.createElement('div');
-    row.textContent = '+' + dt + 'ms  ' + line;
-    box.appendChild(row);
-    box.scrollTop = box.scrollHeight;
-    while (box.children.length > 80) box.removeChild(box.firstChild);
-  }
-  function describe(e){
-    var t = e.target;
-    if(!t || !t.tagName) return String(t);
-    var tag = t.tagName.toLowerCase();
-    var id  = t.id ? '#' + t.id : '';
-    var cls = (typeof t.className === 'string' && t.className) ? '.' + t.className.trim().split(/\s+/).join('.') : '';
-    var a   = t.closest ? t.closest('a[href]') : null;
-    return tag + id + cls + (a ? '  href=' + a.getAttribute('href') : '');
-  }
-  ['touchstart','touchmove','touchend','touchcancel','mousedown','mouseup','click'].forEach(function(type){
-    document.addEventListener(type, function(e){
-      var extra = e.touches ? '  touches=' + e.touches.length : '';
-      log(type + '  target=' + describe(e) + '  defaultPrevented=' + e.defaultPrevented + extra);
-    }, {capture: true, passive: true});
-  });
-  log('debug overlay active — open More, tap a link, screenshot this panel');
-})();
-</script>
-
 </body></html>
