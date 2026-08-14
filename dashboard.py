@@ -414,7 +414,20 @@ TAKE_PROFIT     = 0.05   # 5%  — universal take profit
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
-MIN_MARKETCAP_USD = 30_000  # tokens below this (market cap) are skipped before any paid/rate-limited check
+MIN_MARKETCAP_USD = 15_000  # fallback only — see _min_marketcap_for_stake() below, which is
+                             # what actually gates entries per-user based on their stake size
+
+def _min_marketcap_for_stake(stake_usd: float) -> int:
+    """Tiered entry-marketcap floor: the smaller the stake, the smaller (riskier) a
+    market cap is acceptable to enter, since the absolute dollar risk is small. Larger
+    stakes are restricted to more established tokens. Boundaries are non-overlapping:
+    a stake of exactly $5 or $50 belongs to the higher tier ("threshold reached")."""
+    if stake_usd < 5:
+        return 15_000
+    elif stake_usd < 50:
+        return 50_000
+    else:
+        return 100_000
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -3765,8 +3778,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                             _skip_log.append(f'[skip] {_tsym}: blacklisted by user')
                             continue
                         _mcap = _t.get('market_cap', 0) or 0
-                        if _mcap < MIN_MARKETCAP_USD:
-                            _skip_log.append(f'[skip] {_tsym}: Skipped: marketcap ${int(_mcap):,} below ${int(MIN_MARKETCAP_USD):,} minimum')
+                        _min_mcap = _min_marketcap_for_stake(min_trade_usdc)
+                        if _mcap < _min_mcap:
+                            _skip_log.append(f'[skip] {_tsym}: Skipped: marketcap ${int(_mcap):,} below ${int(_min_mcap):,} minimum (for ${min_trade_usdc:.2f} stake)')
                             continue
                         if pref_scam_filter:
                             _rf = _t.get('breakdown', {}).get('risk_flags', [])
@@ -3845,11 +3859,16 @@ def user_trader_loop(stop_event, config, wallet: str):
                             add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
                                          ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (rug risk)')
                             continue
-                        # Fixed stake: the user's min_trade_size (USDC, converted to SOL
-                        # at the current price) times a score factor -- no more
-                        # percentage-of-balance sizing or max_trade_size clamp here.
-                        # The spend<=us_sol check below is the only remaining cap.
-                        factor = 2 if sc >= 7 else 1
+                        # Stake scales continuously with the score, from 1x the user's
+                        # min_trade_size at the qualifying floor (score 5.0) up to 5x at
+                        # a perfect score (10.0) -- so with the $1 default min_trade_size,
+                        # stakes range $1 (score 5) to $5 (score 10) rather than the old
+                        # flat 1x/2x split. Scales proportionally if min_trade_size is
+                        # changed in settings. The spend<=us_sol check below is still the
+                        # only hard cap (no percentage-of-balance sizing, no max_trade_size
+                        # clamp).
+                        _sc_clamped = max(5.0, min(10.0, sc))
+                        factor = 1 + (_sc_clamped - 5.0) / 5.0 * 4
                         min_spend_sol = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
                         spend = round(min_spend_sol * factor, 4)
                         if spend >= 0.001 and spend <= us_sol:
