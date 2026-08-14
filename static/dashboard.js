@@ -6965,7 +6965,7 @@ function _tvcRender(comments, profileUserId, canComment, isSelf){
   if(!sec) return;
   const myId=_myProfileId;
   const countStr=comments.length?'('+comments.length+')':'';
-  let h=`<div class="tvp-comments-hdr">💬 Comments <span style="font-size:9px;color:var(--muted);font-family:'Share Tech Mono',monospace;font-weight:400">${countStr}</span></div>`;
+  let h=`<div class="tvp-comments-hdr">💬 Comments <span style="font-size:9px;color:var(--muted);font-family:'JetBrains Mono','Share Tech Mono',monospace;font-weight:400">${countStr}</span></div>`;
   if(canComment){
     h+=`<div class="tvp-comment-input-row">
       <textarea class="tvp-comment-input" id="tvp-comment-input" placeholder="Write a comment… (max 280 chars)" rows="2" maxlength="280"
