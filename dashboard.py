@@ -3860,15 +3860,15 @@ def user_trader_loop(stop_event, config, wallet: str):
                                          ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (rug risk)')
                             continue
                         # Stake scales continuously with the score, from 1x the user's
-                        # min_trade_size at the qualifying floor (score 5.0) up to 5x at
+                        # min_trade_size at the qualifying floor (score 5.0) up to 3x at
                         # a perfect score (10.0) -- so with the $1 default min_trade_size,
-                        # stakes range $1 (score 5) to $5 (score 10) rather than the old
+                        # stakes range $1 (score 5) to $3 (score 10) rather than the old
                         # flat 1x/2x split. Scales proportionally if min_trade_size is
                         # changed in settings. The spend<=us_sol check below is still the
                         # only hard cap (no percentage-of-balance sizing, no max_trade_size
                         # clamp).
                         _sc_clamped = max(5.0, min(10.0, sc))
-                        factor = 1 + (_sc_clamped - 5.0) / 5.0 * 4
+                        factor = 1 + (_sc_clamped - 5.0) / 5.0 * 2
                         min_spend_sol = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
                         spend = round(min_spend_sol * factor, 4)
                         if spend >= 0.001 and spend <= us_sol:
