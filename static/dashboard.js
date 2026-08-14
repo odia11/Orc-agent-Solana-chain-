@@ -959,6 +959,8 @@ function _rrFeaturedMarketRow(p){
 
 async function _loadRrMarket(){
   var el=document.getElementById('rr-market-list'); if(!el) return;
+  var badge=document.getElementById('rr-pumping-badge');
+  var label=document.getElementById('rr-pumping-label');
   try{
     var results=await Promise.all([
       fetch('/api/promote/featured?placement=market').then(function(r){return r.json();}).catch(function(){return null;}),
@@ -967,7 +969,24 @@ async function _loadRrMarket(){
     var featured=results[0], d=results[1];
     var promos=(featured&&featured.ok&&featured.promotions)||[];
     var toks=(d&&d.tokens)||[];
-    if(!toks.length && !promos.length){ el.innerHTML='<div class="rr-empty">No market data</div>'; return; }
+    if(!toks.length && !promos.length){
+      el.innerHTML='<div class="rr-empty">No market data</div>';
+      if(badge) badge.style.display='none';
+      return;
+    }
+    // Reflect the badge off the tokens actually shown, instead of a static
+    // label that claimed "PUMPING" even when the list below said "No market
+    // data" — count 24h-positive vs -negative among the visible top 5.
+    if(badge && label && toks.length){
+      var sample=toks.slice(0,5);
+      var up=sample.filter(function(t){ return parseFloat(t.price_change_24h||0) >= 0; }).length;
+      var isPumping = up > sample.length / 2;
+      badge.style.display='flex';
+      badge.classList.toggle('rr-cooling', !isPumping);
+      label.textContent = isPumping ? 'PUMPING' : 'COOLING';
+    } else if(badge){
+      badge.style.display='none';
+    }
     var featuredHtml=promos.map(_rrFeaturedMarketRow).join('');
     var normalHtml=toks.slice(0,5).map(function(t){
       var chg=parseFloat(t.price_change_24h||0);
@@ -984,7 +1003,7 @@ async function _loadRrMarket(){
         +'</div>';
     }).join('');
     el.innerHTML=featuredHtml+normalHtml;
-  }catch(e){ el.innerHTML='<div class="rr-empty">—</div>'; }
+  }catch(e){ el.innerHTML='<div class="rr-empty">—</div>'; if(badge) badge.style.display='none'; }
 }
 
 async function _loadRrTraders(){

@@ -99,6 +99,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .rr-card-title{font-size:16px;font-weight:600;color:#eef1f5}
 .rr-pumping{display:flex;align-items:center;gap:6px;font-size:10px;font-weight:600;letter-spacing:0.1em;color:#3ad29b}
 .rr-pumping-dot{width:6px;height:6px;border-radius:50%;background:#3ad29b;animation:orcaBlink 1.6s infinite}
+.rr-pumping.rr-cooling{color:#f76b62}
+.rr-pumping.rr-cooling .rr-pumping-dot{background:#f76b62}
 .rr-market-row{display:flex;align-items:center;gap:12px;padding:9px 17px;cursor:pointer;transition:background .12s}
 .rr-market-row:hover{background:#14171c}
 .rr-tok-chip{width:36px;height:36px;border-radius:10px;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;color:#0a0b0e}
@@ -4750,7 +4752,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="rr-card">
       <div class="rr-card-top">
         <div class="rr-card-title">Live Market</div>
-        <div class="rr-pumping"><span class="rr-pumping-dot"></span>PUMPING</div>
+        <div class="rr-pumping" id="rr-pumping-badge" style="display:none"><span class="rr-pumping-dot"></span><span id="rr-pumping-label">PUMPING</span></div>
       </div>
       <div id="rr-market-list"><div class="rr-empty">Loading…</div></div>
       <a href="/live-market" class="rr-card-link">Show all markets →</a>
