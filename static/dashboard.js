@@ -7959,6 +7959,100 @@ function _clearComposerTrade(){
 }
 
 
+// ── $ticker autocomplete in the post composer — disambiguates same-name
+// Solana tokens (anyone can create a token called e.g. "HAROLD") by showing
+// matching results while typing, same DexScreener search the "+ Chart"
+// button already uses. Picking one attaches the rich chart-preview card too.
+var _ptcdTimer = null;
+var _ptcdRange = null; // {start, end} of the $partial substring, for replacement
+var _ptcdPairs = null;
+
+function _postTextCashtagCheck(ta){
+  var val = ta.value;
+  var caret = ta.selectionStart;
+  var i = caret - 1;
+  while(i >= 0 && /[A-Za-z0-9]/.test(val[i])) i--;
+  if(i < 0 || val[i] !== '$'){ _ptcdClose(); return; }
+  if(i > 0 && /[A-Za-z0-9]/.test(val[i-1])){ _ptcdClose(); return; } // mid-word $, e.g. "abc$def" — ignore
+  var query = val.slice(i+1, caret);
+  if(query.length < 2){ _ptcdClose(); return; }
+  _ptcdRange = {start: i, end: caret};
+  _ptcdSearch(query);
+}
+
+function _ptcdClose(){
+  var dd = document.getElementById('postText-cashtag-dropdown');
+  if(dd){ dd.style.display = 'none'; dd.innerHTML = ''; }
+  _ptcdRange = null;
+  _ptcdPairs = null;
+}
+
+function _ptcdSearch(q){
+  clearTimeout(_ptcdTimer);
+  var dd = document.getElementById('postText-cashtag-dropdown');
+  if(!dd) return;
+  dd.style.display = 'block';
+  dd.innerHTML = '<div class="ptcd-empty">Searching…</div>';
+  _ptcdTimer = setTimeout(function(){
+    fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      if(!_ptcdRange) return; // dropdown was closed while the request was in flight
+      var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,5);
+      if(!pairs.length){ dd.innerHTML='<div class="ptcd-empty">No Solana tokens found</div>'; return; }
+      dd.innerHTML = pairs.map(function(p,i){
+        var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
+        var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
+        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+        var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+        var name = (p.baseToken&&p.baseToken.name)||'';
+        return '<div class="ptcd-row" onmousedown="event.preventDefault();_selectCashtagResult('+i+')">'
+          +'<div><div class="ptcd-sym">'+esc(sym)+'</div><div class="ptcd-name">'+esc(name)+'</div></div>'
+          +'<div><div class="ptcd-price">'+price+'</div><div class="ptcd-chg">'+chgStr+'</div></div></div>';
+      }).join('');
+      _ptcdPairs = pairs;
+    })
+    .catch(function(){ dd.innerHTML='<div class="ptcd-empty" style="color:#f76b62">Search failed</div>'; });
+  }, 300);
+}
+
+function _selectCashtagResult(idx){
+  if(!_ptcdPairs || !_ptcdPairs[idx] || !_ptcdRange) return;
+  var p = _ptcdPairs[idx];
+  var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+  var ta = document.getElementById('postText');
+  var val = ta.value;
+  var newText = '$' + sym;
+  var range = _ptcdRange;
+  ta.value = val.slice(0, range.start) + newText + val.slice(range.end);
+  var newCaret = range.start + newText.length;
+  ta.setSelectionRange(newCaret, newCaret);
+  ta.focus();
+  _updatePostCharCounter(ta);
+
+  // Also attach the rich chart-preview card — same shape _attachChartEmbed() builds
+  _composerChart = {
+    symbol:  sym,
+    name:    (p.baseToken&&p.baseToken.name)||'',
+    price:   p.priceUsd||null,
+    chg5m:   p.priceChange&&p.priceChange.m5!=null  ? p.priceChange.m5  : null,
+    chg1h:   p.priceChange&&p.priceChange.h1!=null  ? p.priceChange.h1  : null,
+    chg6h:   p.priceChange&&p.priceChange.h6!=null  ? p.priceChange.h6  : null,
+    chg24h:  p.priceChange&&p.priceChange.h24!=null ? p.priceChange.h24 : null,
+    vol24h:  p.volume&&p.volume.h24!=null ? p.volume.h24 : null,
+    liq:     p.liquidity&&p.liquidity.usd!=null ? p.liquidity.usd : null,
+    buys:        p.txns&&p.txns.h24 ? p.txns.h24.buys  : null,
+    sells:       p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
+    mint:        (p.baseToken&&p.baseToken.address)||'',
+    pairAddress: p.pairAddress||''
+  };
+  var chartBtn = document.getElementById('chart-pill-btn');
+  if(chartBtn) chartBtn.style.background = '#f7b95522';
+  _renderComposerChartPreview();
+
+  _ptcdClose();
+}
+
 function _feedComposerChart(){
   var bar = document.getElementById('composer-chart-search');
   if(!bar) return;
