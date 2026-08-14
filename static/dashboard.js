@@ -7987,6 +7987,17 @@ function _ptcdClose(){
   _ptcdPairs = null;
 }
 
+// Close only on a genuine tap/click elsewhere on the page — NOT on blur, since
+// the iOS/Safari keyboard's own accessory bar (the checkmark/done button) also
+// fires blur, which used to close the dropdown before the person could look at it.
+document.addEventListener('click', function(e){
+  if(!_ptcdRange) return;
+  var ta = document.getElementById('postText');
+  var dd = document.getElementById('postText-cashtag-dropdown');
+  if((ta && ta.contains(e.target)) || (dd && dd.contains(e.target))) return;
+  _ptcdClose();
+});
+
 function _ptcdSearch(q){
   clearTimeout(_ptcdTimer);
   var dd = document.getElementById('postText-cashtag-dropdown');

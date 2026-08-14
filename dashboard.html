@@ -4073,7 +4073,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade or post an update…" maxlength="500"
         onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}else if(event.key==='Escape'){_ptcdClose();}"
         oninput="_updatePostCharCounter(this);_postTextCashtagCheck(this)"
-        onblur="setTimeout(_ptcdClose,150)"
         style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
     </div>
     <!-- $ticker autocomplete — disambiguates same-name Solana tokens while typing -->
@@ -4603,7 +4602,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="st-row">
           <div class="st-row-left">
             <div class="st-row-label">Min Trade Size (USDC)</div>
-            <div class="st-row-sub">Inzet per trade (bij een sterk signaal tot 2x hoger)</div>
+            <div class="st-row-sub">Inzet per trade (schaalt met signaalsterkte tot 3x hoger)</div>
           </div>
           <input id="ds-minusdc" class="st-amber-inp" type="number" value="1" min="1" max="10000" step="1">
         </div>
