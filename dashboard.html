@@ -404,12 +404,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .feed-composer-avatar{width:44px;height:44px;border-radius:50%;background:var(--bg3);border:1px solid var(--bg4);flex-shrink:0;overflow:hidden;position:relative}
 .feed-composer-avatar img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%}
 .feed-composer-input{flex:1;background:transparent;border:none;outline:none;font-family:'Geist',system-ui,sans-serif;font-size:17px;color:var(--text);padding:8px 0;cursor:pointer;caret-color:var(--accent)}
-.ptcd-dropdown{position:relative;margin-top:4px;background:#101216;border:1px solid #21252c;border-radius:11px;overflow:hidden;max-height:260px;overflow-y:auto;z-index:20}
+.ptcd-dropdown{position:fixed;width:280px;background:#101216;border:1px solid #21252c;border-radius:11px;overflow:hidden;max-height:260px;overflow-y:auto;z-index:200;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .ptcd-row{padding:11px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;transition:background .1s}
 .ptcd-row:last-child{border-bottom:none}
-.ptcd-row:hover,.ptcd-row:active{background:#16191f}
+.ptcd-row:hover,.ptcd-row:active,.ptcd-row.active{background:#16191f}
 .ptcd-sym{font-weight:700;color:#eef1f5;font-size:13px}
 .ptcd-name{color:#565d68;font-size:11px}
+.ptcd-hl{color:#f7b955;font-weight:800}
 .ptcd-price{font-family:'JetBrains Mono',monospace;font-size:12px;color:#eef1f5;text-align:right}
 .ptcd-chg{font-size:11px;text-align:right}
 .ptcd-empty{padding:10px 14px;color:#565d68;font-size:13px}
@@ -4071,7 +4072,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="feed-composer-top">
       <div class="feed-composer-avatar" id="feed-composer-avatar"></div>
       <textarea class="feed-composer-input" id="postText" placeholder="Share your last trade or post an update…" maxlength="500"
-        onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();submitPost();}else if(event.key==='Escape'){_ptcdClose();}"
+        onkeydown="_postTextKeydown(event)"
         oninput="_updatePostCharCounter(this);_postTextCashtagCheck(this)"
         style="background:transparent;border:none;color:#eef1f5;font-size:17px;width:100%;outline:none;resize:none;min-height:44px;font-family:inherit;position:relative;z-index:10;pointer-events:auto;cursor:text"></textarea>
     </div>

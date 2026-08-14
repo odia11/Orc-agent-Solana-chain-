@@ -7966,6 +7966,8 @@ function _clearComposerTrade(){
 var _ptcdTimer = null;
 var _ptcdRange = null; // {start, end} of the $partial substring, for replacement
 var _ptcdPairs = null;
+var _ptcdActiveIdx = -1;
+var _ptcdQuery = '';
 
 function _postTextCashtagCheck(ta){
   var val = ta.value;
@@ -7985,6 +7987,7 @@ function _ptcdClose(){
   if(dd){ dd.style.display = 'none'; dd.innerHTML = ''; }
   _ptcdRange = null;
   _ptcdPairs = null;
+  _ptcdActiveIdx = -1;
 }
 
 // Close only on a genuine tap/click elsewhere on the page — NOT on blur, since
@@ -7997,11 +8000,100 @@ document.addEventListener('click', function(e){
   if((ta && ta.contains(e.target)) || (dd && dd.contains(e.target))) return;
   _ptcdClose();
 });
+// The dropdown is caret-positioned (fixed), so a scroll invalidates its
+// position same as X does — closing beats tracking scroll for a rare case.
+window.addEventListener('scroll', function(){ if(_ptcdRange) _ptcdClose(); }, true);
+
+// Mirror-div technique: clone the textarea's text-affecting styles onto an
+// offscreen div, split its content at the caret, and measure where the
+// split lands — gives pixel-accurate caret coordinates for a plain <textarea>.
+function _ptcdCaretCoords(ta){
+  var div = document.createElement('div');
+  var cs = getComputedStyle(ta);
+  ['boxSizing','width','paddingTop','paddingRight','paddingBottom','paddingLeft',
+   'borderTopWidth','borderRightWidth','borderBottomWidth','borderLeftWidth',
+   'fontStyle','fontVariant','fontWeight','fontSize','lineHeight','fontFamily',
+   'textAlign','textTransform','letterSpacing','wordSpacing'].forEach(function(p){
+    div.style[p] = cs[p];
+  });
+  div.style.position = 'absolute';
+  div.style.visibility = 'hidden';
+  div.style.whiteSpace = 'pre-wrap';
+  div.style.wordWrap = 'break-word';
+  div.style.top = '0';
+  div.style.left = '-9999px';
+  document.body.appendChild(div);
+  div.textContent = ta.value.slice(0, ta.selectionStart);
+  var span = document.createElement('span');
+  span.textContent = ta.value.slice(ta.selectionStart) || '.';
+  div.appendChild(span);
+  var rect = ta.getBoundingClientRect();
+  var coords = {
+    top:  rect.top  + span.offsetTop  - ta.scrollTop,
+    left: rect.left + span.offsetLeft - ta.scrollLeft,
+    lineHeight: parseInt(cs.lineHeight, 10) || 20
+  };
+  document.body.removeChild(div);
+  return coords;
+}
+
+function _ptcdPosition(ta){
+  var dd = document.getElementById('postText-cashtag-dropdown');
+  if(!dd) return;
+  var c = _ptcdCaretCoords(ta);
+  dd.style.top  = (c.top + c.lineHeight + 4) + 'px';
+  var maxLeft = window.innerWidth - 280 - 12;
+  dd.style.left = Math.max(12, Math.min(c.left, maxLeft)) + 'px';
+}
+
+// Bold the part of sym/name that matches what was typed, X-style — built on
+// top of esc() so highlighting never reopens the XSS hole esc() closes.
+function _ptcdHighlight(text, q){
+  var s = String(text||'');
+  var idx = s.toLowerCase().indexOf(q.toLowerCase());
+  if(idx < 0) return esc(s);
+  return esc(s.slice(0,idx)) + '<b class="ptcd-hl">' + esc(s.slice(idx,idx+q.length)) + '</b>' + esc(s.slice(idx+q.length));
+}
+
+function _ptcdRenderActive(){
+  var dd = document.getElementById('postText-cashtag-dropdown');
+  if(!dd) return;
+  var rows = dd.querySelectorAll('.ptcd-row');
+  rows.forEach(function(row, i){
+    row.classList.toggle('active', i === _ptcdActiveIdx);
+    if(i === _ptcdActiveIdx) row.scrollIntoView({block:'nearest'});
+  });
+}
+
+function _ptcdMove(delta){
+  if(!_ptcdPairs || !_ptcdPairs.length) return;
+  _ptcdActiveIdx = (_ptcdActiveIdx + delta + _ptcdPairs.length) % _ptcdPairs.length;
+  _ptcdRenderActive();
+}
+
+// Handles ArrowUp/Down + Enter/Tab for the dropdown; falls back to the
+// composer's normal Enter-to-submit / Escape behavior when it's closed.
+function _postTextKeydown(e){
+  if(_ptcdPairs && _ptcdPairs.length){
+    if(e.key === 'ArrowDown'){ e.preventDefault(); _ptcdMove(1); return; }
+    if(e.key === 'ArrowUp'){ e.preventDefault(); _ptcdMove(-1); return; }
+    if((e.key === 'Enter' || e.key === 'Tab') && _ptcdActiveIdx >= 0){
+      e.preventDefault(); _selectCashtagResult(_ptcdActiveIdx); return;
+    }
+  }
+  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); submitPost(); }
+  else if(e.key === 'Escape'){ _ptcdClose(); }
+}
 
 function _ptcdSearch(q){
   clearTimeout(_ptcdTimer);
   var dd = document.getElementById('postText-cashtag-dropdown');
-  if(!dd) return;
+  var ta = document.getElementById('postText');
+  if(!dd || !ta) return;
+  _ptcdQuery = q;
+  _ptcdPairs = null; // stale results from the previous keystroke shouldn't be Enter-selectable while this search is in flight
+  _ptcdActiveIdx = -1;
+  _ptcdPosition(ta);
   dd.style.display = 'block';
   dd.innerHTML = '<div class="ptcd-empty">Searching…</div>';
   _ptcdTimer = setTimeout(function(){
@@ -8010,20 +8102,22 @@ function _ptcdSearch(q){
     .then(function(d){
       if(!_ptcdRange) return; // dropdown was closed while the request was in flight
       var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,5);
-      if(!pairs.length){ dd.innerHTML='<div class="ptcd-empty">No Solana tokens found</div>'; return; }
+      if(!pairs.length){ dd.innerHTML='<div class="ptcd-empty">No Solana tokens found</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; return; }
       dd.innerHTML = pairs.map(function(p,i){
         var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
         var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
         var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
         var sym = (p.baseToken&&p.baseToken.symbol)||'?';
         var name = (p.baseToken&&p.baseToken.name)||'';
-        return '<div class="ptcd-row" onmousedown="event.preventDefault();_selectCashtagResult('+i+')">'
-          +'<div><div class="ptcd-sym">'+esc(sym)+'</div><div class="ptcd-name">'+esc(name)+'</div></div>'
+        return '<div class="ptcd-row" data-idx="'+i+'" onmousedown="event.preventDefault();_selectCashtagResult('+i+')">'
+          +'<div><div class="ptcd-sym">'+_ptcdHighlight(sym,q)+'</div><div class="ptcd-name">'+_ptcdHighlight(name,q)+'</div></div>'
           +'<div><div class="ptcd-price">'+price+'</div><div class="ptcd-chg">'+chgStr+'</div></div></div>';
       }).join('');
       _ptcdPairs = pairs;
+      _ptcdActiveIdx = 0;
+      _ptcdRenderActive();
     })
-    .catch(function(){ dd.innerHTML='<div class="ptcd-empty" style="color:#f76b62">Search failed</div>'; });
+    .catch(function(){ dd.innerHTML='<div class="ptcd-empty" style="color:#f76b62">Search failed</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; });
   }, 300);
 }
 
