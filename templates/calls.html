@@ -42,8 +42,34 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 
 /* ── PAGE ── */
 .page{max-width:800px;margin:0 auto;padding:28px 24px 90px}
+.page-header-row{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
 .page-title{font-size:22px;font-weight:800;letter-spacing:-.01em;margin-bottom:4px}
 .page-sub{color:var(--sub);font-size:13px;margin-bottom:22px}
+.live-badge{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--green);flex-shrink:0;padding-top:3px}
+.live-dot{width:7px;height:7px;border-radius:50%;background:var(--green);animation:live-pulse 1.6s infinite}
+@keyframes live-pulse{
+  0%{box-shadow:0 0 0 0 rgba(58,210,155,.55)}
+  70%{box-shadow:0 0 0 8px rgba(58,210,155,0)}
+  100%{box-shadow:0 0 0 0 rgba(58,210,155,0)}
+}
+
+/* ── PODIUM ── */
+.podium-wrap{display:flex;align-items:flex-end;gap:10px;margin-bottom:20px}
+.podium-card{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:16px 10px;text-align:center}
+.podium-card.p1{order:2;padding:26px 12px 22px;border-color:var(--accent-border);background:linear-gradient(180deg,var(--accent-dim),var(--bg2) 65%);box-shadow:0 8px 24px rgba(247,185,85,.08)}
+.podium-card.p2{order:1}
+.podium-card.p3{order:3}
+.podium-rank{font-family:var(--mono);font-weight:700;font-size:12px;color:var(--muted);margin-bottom:8px}
+.podium-card.p1 .podium-rank{color:var(--accent);font-size:13px}
+.podium-tile{width:42px;height:42px;border-radius:11px;background:var(--bg4);margin:0 auto 10px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:var(--sub);overflow:hidden}
+.podium-card.p1 .podium-tile{width:54px;height:54px;font-size:14px}
+.podium-sym{font-weight:700;font-size:12.5px;margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.podium-multi{font-family:var(--mono);font-weight:800;font-size:19px;color:var(--green)}
+.podium-card.p1 .podium-multi{font-size:25px}
+.podium-multi.neg{color:var(--red)}
+.podium-caller{font-size:10.5px;color:var(--muted);margin-top:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.podium-info{min-width:0}
+.section-label{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;margin:4px 2px 10px}
 
 /* ── MAKE A CALL ── */
 .call-box{background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:16px;margin-bottom:20px;position:relative}
@@ -98,6 +124,15 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
   .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
   .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
   .page{padding:16px 14px 90px}
+  .podium-wrap{flex-direction:column;gap:8px}
+  .podium-card{order:0!important;display:flex;align-items:center;gap:12px;text-align:left;padding:12px 14px!important}
+  .podium-card .podium-rank{margin-bottom:0}
+  .podium-card .podium-tile{margin:0}
+  .podium-card.p1 .podium-tile{width:42px;height:42px;font-size:12px}
+  .podium-card .podium-sym{margin-bottom:2px}
+  .podium-card .podium-caller{margin-top:0}
+  .podium-card .podium-multi{margin-left:auto;flex-shrink:0}
+  .podium-card.p1 .podium-multi{font-size:19px}
 }
 </style>
 </head>
@@ -129,8 +164,15 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 
 <!-- BODY -->
 <div class="page">
-  <div class="page-title">Token Calls</div>
-  <div class="page-sub">Call a token publicly, then watch how it performs. Ranked by the biggest gain since the call was made. Max {{ calls_per_day_limit }} calls per day.</div>
+  <div class="page-header-row">
+    <div>
+      <div class="page-title">Token Calls</div>
+      <div class="page-sub">Call a token publicly · ranked by gain since call · max {{ calls_per_day_limit }}/day</div>
+    </div>
+    <div class="live-badge"><span class="live-dot"></span>LIVE</div>
+  </div>
+
+  <div class="podium-wrap" id="calls-podium" style="display:none"></div>
 
   <div class="call-box">
     <div class="call-box-label">Make a call</div>
@@ -149,6 +191,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
     <button class="calls-tab" data-window="all" onclick="_setCallsWindow('all')">ALL</button>
   </div>
 
+  <div class="section-label">Recent Calls</div>
   <div id="calls-list">
     <div class="calls-empty">Loading calls…</div>
   </div>
@@ -193,24 +236,49 @@ function _setCallsWindow(w){
   _loadCallsList();
 }
 
+function _renderPodium(top3){
+  var el = document.getElementById('calls-podium');
+  if(!top3.length){ el.style.display='none'; el.innerHTML=''; return; }
+  el.style.display='flex';
+  el.innerHTML = top3.map(function(c, i){
+    var rank = i+1;
+    var neg = c.multiplier < 1 ? ' neg' : '';
+    return '<div class="podium-card p'+rank+'">'
+      +'<div class="podium-rank">#'+rank+'</div>'
+      +'<div class="podium-tile">'+esc((c.symbol||'?').slice(0,3).toUpperCase())+'</div>'
+      +'<div class="podium-info">'
+        +'<div class="podium-sym">$'+esc(c.symbol||'?')+'</div>'
+        +'<div class="podium-caller">'+esc(c.caller_username||'')+(c.caller_verified?' ✓':'')+'</div>'
+      +'</div>'
+      +'<div class="podium-multi'+neg+'">'+_fmtMultiplier(c.multiplier)+'</div>'
+    +'</div>';
+  }).join('');
+}
+
 async function _loadCallsList(){
   var el = document.getElementById('calls-list');
   try{
     var r = await fetch('/api/calls/top?window='+_callsWindow);
     var d = await r.json();
     if(!d.ok || !d.calls.length){
+      _renderPodium([]);
       el.innerHTML = '<div class="calls-empty">No calls yet in this window. Be the first!</div>';
       return;
     }
-    el.innerHTML = d.calls.map(function(c, i){
-      var rank = i+1;
-      var rankCls = rank===1?'top1':rank===2?'top2':rank===3?'top3':'';
+    _renderPodium(d.calls.slice(0, 3));
+    var rest = d.calls.slice(3);
+    if(!rest.length){
+      el.innerHTML = '<div class="calls-empty">Top 3 shown above — that\'s everyone in this window.</div>';
+      return;
+    }
+    el.innerHTML = rest.map(function(c, i){
+      var rank = i+4;
       var neg = c.multiplier < 1 ? ' neg' : '';
       var avatarHtml = c.caller_avatar
         ? '<img src="'+esc(c.caller_avatar)+'" alt="">'
         : esc((c.caller_username||'?').slice(0,2).toUpperCase());
       return '<div class="call-row">'
-        +'<div class="call-rank '+rankCls+'">#'+rank+'</div>'
+        +'<div class="call-rank">#'+rank+'</div>'
         +'<div class="call-avatar">'+avatarHtml+'</div>'
         +'<div class="call-info">'
           +'<div class="call-caller">'+esc(c.caller_username||'')+(c.caller_verified?' ✓':'')+' · '+_timeAgo(c.timestamp)+'</div>'
