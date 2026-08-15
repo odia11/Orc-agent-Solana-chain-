@@ -45,6 +45,9 @@ var _lmtdSolBalance = 0;
 var _lmtdChart      = null;
 var _lmtdSeries     = null;
 var _lmtdVolSeries  = null;
+var _lmtdChartStyle = 'candles'; // 'candles' or 'fomo' (live step-area chart)
+var _lmtdFomoTimer  = null;      // live-refresh interval while the 'fomo' style is active
+var _lmtdPriceLine  = null;      // the dashed current-price line + floating label on the fomo chart
 var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fetch (pending or resolved) for
                              // the currently-open token, so the skeleton render, the post-metadata re-render,
                              // and layout switches all reuse the same request instead of re-fetching
@@ -245,6 +248,8 @@ async function showTokenCard(symbol, knownAddr, knownPair){
 function _lmtdCloseModal(){
   document.getElementById('lm-token-modal').style.display = 'none';
   if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  if(_lmtdFomoTimer){ clearInterval(_lmtdFomoTimer); _lmtdFomoTimer=null; }
+  _lmtdPriceLine = null;
   _lmtdActiveMint = ''; // any fetch still in flight for the closed token now reads as stale
 }
 
@@ -332,6 +337,10 @@ function _lmtdRenderModal(){
   var tfHtml = ['1m','5m','15m','1H','4H','1D'].map(function(tf){
     return '<button class="lmtd-tf-btn'+(tf===_lmtdTf?' active':'')+'" onclick="_lmtdSetTf(\''+tf+'\')">'+tf+'</button>';
   }).join('');
+  var styleToggleHtml = '<div class="lmtd-chart-style-toggle">'
+    +'<button class="lmtd-style-btn'+(_lmtdChartStyle==='candles'?' active':'')+'" onclick="_lmtdSetChartStyle(\'candles\')" title="Candlestick chart">Candles</button>'
+    +'<button class="lmtd-style-btn'+(_lmtdChartStyle==='fomo'?' active':'')+'" onclick="_lmtdSetChartStyle(\'fomo\')" title="Live step chart">Live</button>'
+    +'</div>';
 
   var headerHtml =
     '<div class="lmtd-header">'
@@ -354,7 +363,7 @@ function _lmtdRenderModal(){
       +'<div class="lmtd-hero-price">'+price+'</div>'
       +'<div class="lmtd-hero-chg" style="color:'+chgColor+'">'+chgStr+' (24h)</div>'
     +'</div>'
-    +'<div class="lmtd-tf-tabs">'+tfHtml+'</div>'
+    +'<div class="lmtd-tf-tabs">'+tfHtml+styleToggleHtml+'</div>'
     +(addr ? (
       '<div class="lmtd-mint-row">'
         +'<span class="lmtd-mint-label">Mint</span>'
@@ -393,6 +402,7 @@ function _lmtdRenderModal(){
   if(_lmtdLayout !== 'holders'){
     _lmtdInitChart();
     _lmtdLoadChartData(); // reuses an in-flight/cached fetch for this mint+tf if one already exists
+    if(_lmtdChartStyle === 'fomo') _lmtdFomoLiveLoop(addr || _lmtdActiveMint);
   }
   if(_lmtdLayout === 'terminal') _lmtdWireSidePanel(sym, addr);
   if(_lmtdLayout === 'holders') _lmtdRenderHoldersTab(addr);
@@ -558,6 +568,21 @@ function _lmtdSetTf(tf){
   _lmtdLoadChartData(); // reuse the existing chart instance — just reload candles
 }
 
+function _lmtdSetChartStyle(style){
+  if(style === _lmtdChartStyle) return;
+  _lmtdChartStyle = style;
+  document.querySelectorAll('.lmtd-style-btn').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('onclick').indexOf("'"+style+"'") !== -1);
+  });
+  _lmtdInitChart();     // different series type — needs a fresh chart instance
+  _lmtdLoadChartData();
+  if(style === 'fomo'){
+    _lmtdFomoLiveLoop((_lmtdPair && _lmtdPair.baseToken && _lmtdPair.baseToken.address) || _lmtdActiveMint);
+  } else if(_lmtdFomoTimer){
+    clearInterval(_lmtdFomoTimer); _lmtdFomoTimer = null;
+  }
+}
+
 function _lmtdSetSide(side){
   var prevInput = document.getElementById('lmtd-sol-input');
   var prevVal   = prevInput ? prevInput.value : '0.1';
@@ -666,6 +691,11 @@ async function _lmtdRenderHoldersTab(addr){
 /* candlestick + volume chart — same LightweightCharts pattern as
    dashboard.html's _posChart, fed by the existing /api/chart/<mint> endpoint */
 function _lmtdInitChart(){
+  if(_lmtdChartStyle === 'fomo') return _lmtdInitFomoChart();
+  return _lmtdInitCandleChart();
+}
+
+function _lmtdInitCandleChart(){
   var container = document.getElementById('lmtd-chart-container');
   if(!container) return;
   if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
@@ -690,6 +720,55 @@ function _lmtdInitChart(){
   }).observe(container);
 }
 
+/* "Live" step-area chart — same visual pattern popularized by apps like
+   FOMO Family: an angular (stepped, not smoothed) area series with a
+   gradient fill, plus a dashed price-line with a floating label pinned to
+   the latest value. Built entirely with LightweightCharts features already
+   in use elsewhere in this file (candlesticks, the PNL area chart) — no new
+   library, just a different series type + createPriceLine(). Sourced from
+   the same /api/chart/<mint> candle data, using each candle's close price
+   as one point on the line (no separate backend endpoint needed). */
+function _lmtdInitFomoChart(){
+  var container = document.getElementById('lmtd-chart-container');
+  if(!container) return;
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; _lmtdPriceLine=null; }
+  _lmtdChart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 340,
+    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
+    grid:{vertLines:{color:'transparent'},horzLines:{color:'#21252c'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
+    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.15,bottom:0.1}},
+    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
+    handleScroll:true,handleScale:true
+  });
+  _lmtdSeries = _lmtdChart.addAreaSeries({
+    lineColor:'#ff7a3d', lineWidth:2,
+    topColor:'rgba(255,122,61,.32)', bottomColor:'rgba(255,122,61,0)',
+    lineType: LightweightCharts.LineType.WithSteps,
+    priceLineVisible:false,
+  });
+  new ResizeObserver(function(){
+    if(container.clientWidth>0) _lmtdChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  }).observe(container);
+}
+
+/* Restarts (or stops) the ~5s live-refresh loop that keeps the fomo chart's
+   last point moving while that style + the modal are both still active —
+   the closest a REST-polling setup gets to the true tick-by-tick feed a
+   dedicated WebSocket would give, without standing up new infrastructure. */
+function _lmtdFomoLiveLoop(mint){
+  if(_lmtdFomoTimer){ clearInterval(_lmtdFomoTimer); _lmtdFomoTimer=null; }
+  if(_lmtdChartStyle !== 'fomo') return;
+  _lmtdFomoTimer = setInterval(function(){
+    if(_lmtdChartStyle !== 'fomo' || mint !== _lmtdActiveMint || !_lmtdChart){
+      clearInterval(_lmtdFomoTimer); _lmtdFomoTimer=null; return;
+    }
+    var pairAddr = (_lmtdPair && _lmtdPair.pairAddress) || '';
+    _lmtdRenderChartData(_lmtdGetChartPromise(mint, _lmtdTf, pairAddr), mint);
+  }, 5000);
+}
+
 /* Awaits a chart-data promise (already in flight — started in parallel with
    the pair-search — or freshly created) and renders it into the existing
    chart instance. Fully independent of the pair-search path: a failure here
@@ -706,9 +785,25 @@ async function _lmtdRenderChartData(dataPromise, forMint){
   if(forMint !== _lmtdActiveMint) return; // stale — modal has moved on since this fetch started
   if(r && r.candles && r.candles.length){
     try{
-      _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
-      _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
-      _lmtdLastClose = r.candles[r.candles.length-1].c;
+      if(_lmtdChartStyle === 'fomo'){
+        var linePoints = r.candles.map(function(c){ return {time:c.t, value:c.c}; });
+        _lmtdSeries.setData(linePoints);
+        var lastPoint = linePoints[linePoints.length-1];
+        _lmtdLastClose = lastPoint.value;
+        if(_lmtdPriceLine){ try{ _lmtdSeries.removePriceLine(_lmtdPriceLine); }catch(e){} }
+        _lmtdPriceLine = _lmtdSeries.createPriceLine({
+          price: lastPoint.value,
+          color: '#ff7a3d',
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: _fmtPrice(lastPoint.value),
+        });
+      } else {
+        _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
+        _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
+        _lmtdLastClose = r.candles[r.candles.length-1].c;
+      }
       _lmtdChart.timeScale().fitContent();
       if(loadEl) loadEl.style.display='none';
     }catch(e){

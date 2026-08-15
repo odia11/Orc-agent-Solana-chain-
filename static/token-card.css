@@ -29,10 +29,14 @@
 .lmtd-hero{padding:16px 20px 0}
 .lmtd-hero-price{font-size:30px;font-weight:700;color:var(--text);font-family:'JetBrains Mono',monospace}
 .lmtd-hero-chg{font-size:14px;font-weight:600;font-family:'JetBrains Mono',monospace;margin-top:2px}
-.lmtd-tf-tabs{display:flex;gap:6px;padding:14px 20px}
+.lmtd-tf-tabs{display:flex;gap:6px;padding:14px 20px;align-items:center;flex-wrap:wrap}
 .lmtd-tf-btn{padding:6px 13px;font-size:11px;font-weight:700;cursor:pointer;color:var(--muted);background:var(--bg3);border:1px solid var(--bg4);border-radius:8px;transition:all .15s;font-family:'JetBrains Mono',monospace}
 .lmtd-tf-btn:hover{color:var(--text)}
 .lmtd-tf-btn.active{background:rgba(247,185,85,.12);color:var(--accent);border-color:rgba(247,185,85,.25)}
+.lmtd-chart-style-toggle{display:flex;gap:2px;margin-left:auto;padding:2px;background:var(--bg3);border-radius:9px;border:1px solid var(--bg4)}
+.lmtd-style-btn{padding:5px 11px;font-size:10.5px;font-weight:700;cursor:pointer;color:var(--muted);background:transparent;border:none;border-radius:7px;transition:all .15s;font-family:'Geist',system-ui,sans-serif}
+.lmtd-style-btn:hover{color:var(--text)}
+.lmtd-style-btn.active{background:rgba(255,122,61,.14);color:#ff7a3d}
 
 /* mint-adres regel — volle breedte, tussen tf-tabs en chart; onderdeel van
    de gedeelde headerHtml (zie _lmtdRenderModal) dus automatisch in zowel
