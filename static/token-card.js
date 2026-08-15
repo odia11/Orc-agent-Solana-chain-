@@ -52,6 +52,13 @@ var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fet
                              // the currently-open token, so the skeleton render, the post-metadata re-render,
                              // and layout switches all reuse the same request instead of re-fetching
 var _lmtdActiveMint = ''; // mint the modal is CURRENTLY open on — lets a late-arriving stale fetch recognize itself as stale
+var _lmtdChartGen   = 0;  // bumped every _lmtdInitChart() call -- showTokenCard() renders the modal twice (skeleton,
+                           // then again once real metadata lands), and each render tears down and recreates
+                           // _lmtdChart/_lmtdSeries. Without this, a chart-data fetch started against the skeleton's
+                           // chart instance can still be in flight when the metadata render replaces it, and then
+                           // resolve into a since-destroyed series -- intermittently (whichever render's fetch
+                           // happens to land last "wins", so it's a coin flip, and lands more often as fetches get
+                           // faster) showing "Chart unavailable" even though the data loaded fine.
 var _LMTD_TF_MAP    = {'1m':'1m','5m':'5m','15m':'15m','1H':'1h','4H':'4h','1D':'D'};
 var _LMTD_CHART_FETCH_TIMEOUT = 12000;
 var _lmtdLastClose   = null; // most recent candle close -- "current price" for the Holders tab, independent of the priceUsd shown in the hero
@@ -691,6 +698,7 @@ async function _lmtdRenderHoldersTab(addr){
 /* candlestick + volume chart — same LightweightCharts pattern as
    dashboard.html's _posChart, fed by the existing /api/chart/<mint> endpoint */
 function _lmtdInitChart(){
+  _lmtdChartGen++; // any chart-data fetch already in flight for the previous instance is now stale
   if(_lmtdChartStyle === 'fomo') return _lmtdInitFomoChart();
   return _lmtdInitCandleChart();
 }
@@ -778,11 +786,13 @@ function _lmtdFomoLiveLoop(mint){
    the user has since navigated away from (switched tokens, or closed the
    modal) is silently dropped instead of rendering into the wrong chart. */
 async function _lmtdRenderChartData(dataPromise, forMint){
+  var myGen = _lmtdChartGen; // snapshot -- if _lmtdInitChart() runs again before this resolves, our chart/series is gone
   var loadEl = document.getElementById('lmtd-chart-loading');
   if(loadEl){ loadEl.textContent='Loading chart…'; loadEl.style.display='flex'; }
   if(!_lmtdChart) return;
   var r = await dataPromise;
   if(forMint !== _lmtdActiveMint) return; // stale — modal has moved on since this fetch started
+  if(myGen !== _lmtdChartGen) return; // stale — chart/series was torn down and recreated while we were awaiting
   if(r && r.candles && r.candles.length){
     try{
       if(_lmtdChartStyle === 'fomo'){
