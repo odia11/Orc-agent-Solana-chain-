@@ -4,11 +4,23 @@
 // modal/drawer/dropdown/panel open, has a request in flight, interacted in
 // the last 20s, or the tab isn't visible.
 (function(){
-  var REFRESH_INTERVAL_MS = 60000;
-  var IDLE_GRACE_MS       = 20000;
+  var REFRESH_INTERVAL_MS  = 60000;
+  var IDLE_GRACE_MS        = 20000;
+  // A reload() firing in the same tick a backgrounded tab becomes visible
+  // again races iOS Safari's own resume of a suspended page -- WebKit
+  // sometimes can't complete that reload cleanly and the tab comes back
+  // permanently blank (worse the longer it sat backgrounded, e.g. phone
+  // screen locked for a few minutes). Requiring this grace period after
+  // becoming visible again gives WebKit time to fully resume the page
+  // first, so the reload behaves like any other foreground reload.
+  var VISIBLE_GRACE_MS     = 5000;
   var _lastInteraction = Date.now();
+  var _lastVisible     = Date.now();
   ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evt){
     document.addEventListener(evt, function(){ _lastInteraction = Date.now(); }, {passive: true});
+  });
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) _lastVisible = Date.now();
   });
 
   function _isTypingOrFocused(){
@@ -46,6 +58,7 @@
     if(_modalOpen()) return;
     if(_pendingFetches > 0) return;
     if(Date.now() - _lastInteraction < IDLE_GRACE_MS) return;
+    if(Date.now() - _lastVisible < VISIBLE_GRACE_MS) return;
     window.location.reload();
   }, REFRESH_INTERVAL_MS);
 })();
