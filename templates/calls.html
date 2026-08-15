@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>Calls — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="OrcAgent">
+<link rel="apple-touch-icon" href="/static/icon-180.png?v=5">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"></noscript>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;--bg2:#101216;--bg3:#14171c;--bg4:#16191f;
+  --accent:#f7b955;--accent-dim:rgba(247,185,85,.12);--accent-border:rgba(247,185,85,.25);
+  --text:#eef1f5;--muted:#565d68;--sub:#8a919c;
+  --green:#3ad29b;--red:#f76b62;
+  --mono:'JetBrains Mono','Share Tech Mono',monospace;
+  --ui:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
+}
+html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.5;-webkit-font-smoothing:antialiased}
+
+/* ── NAVBAR ── */
+.navbar{position:sticky;top:0;z-index:50;background:rgba(10,11,14,.82);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;padding:0 28px;height:56px;gap:16px}
+.nav-left{display:flex;align-items:center;gap:14px;text-decoration:none;flex-shrink:0}
+.nav-logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
+.nav-brand{font-weight:700;font-size:15px;color:var(--text);letter-spacing:-.01em}
+.nav-tag{font-size:10px;color:var(--muted);letter-spacing:.06em}
+.nav-right{display:flex;align-items:center;gap:10px}
+.wallet-pill{display:flex;align-items:center;gap:7px;background:var(--bg3);border:1px solid var(--bg4);border-radius:999px;padding:6px 13px;font-family:var(--mono);font-size:12px;color:var(--sub)}
+.wallet-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
+.nav-btn{color:var(--sub);text-decoration:none;font-size:13px;font-weight:600;padding:8px 14px;border-radius:9px;transition:background .15s,color .15s}
+.nav-btn:hover{background:var(--bg3);color:var(--text)}
+.nav-btn.active{background:var(--accent-dim);color:var(--accent)}
+
+/* ── PAGE ── */
+.page{max-width:800px;margin:0 auto;padding:28px 24px 90px}
+.page-title{font-size:22px;font-weight:800;letter-spacing:-.01em;margin-bottom:4px}
+.page-sub{color:var(--sub);font-size:13px;margin-bottom:22px}
+
+/* ── MAKE A CALL ── */
+.call-box{background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:16px;margin-bottom:20px;position:relative}
+.call-box-label{font-size:11px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:10px}
+.call-input-row{display:flex;gap:8px}
+.call-input{flex:1;background:var(--bg3);border:1px solid var(--bg4);border-radius:10px;padding:11px 14px;color:var(--text);font-size:14px;outline:none;font-family:var(--ui)}
+.call-input:focus{border-color:var(--accent-border)}
+.call-btn{background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;padding:0 20px;font-weight:700;font-size:13px;cursor:pointer;white-space:nowrap;transition:opacity .15s}
+.call-btn:hover{opacity:.9}
+.call-btn:disabled{opacity:.5;cursor:default}
+.call-limit-note{font-size:11px;color:var(--muted);margin-top:8px}
+.call-dropdown{position:absolute;left:16px;right:16px;top:100%;margin-top:4px;background:var(--bg3);border:1px solid var(--bg4);border-radius:11px;overflow:hidden;max-height:260px;overflow-y:auto;z-index:20;display:none}
+.call-dd-row{padding:11px 14px;cursor:pointer;border-bottom:1px solid var(--bg4);display:flex;align-items:center;justify-content:space-between}
+.call-dd-row:last-child{border-bottom:none}
+.call-dd-row:hover{background:var(--bg4)}
+.call-dd-sym{font-weight:700;font-size:13px}
+.call-dd-name{color:var(--muted);font-size:11px}
+.call-dd-price{font-family:var(--mono);font-size:12px;color:var(--sub)}
+.call-msg{font-size:12px;margin-top:8px}
+.call-msg.ok{color:var(--green)}
+.call-msg.err{color:var(--red)}
+
+/* ── TABS ── */
+.calls-tabs{display:flex;gap:6px;margin-bottom:16px}
+.calls-tab{background:var(--bg3);border:1px solid var(--bg4);color:var(--muted);font-size:12px;font-weight:700;padding:7px 15px;border-radius:9px;cursor:pointer;font-family:var(--ui)}
+.calls-tab.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent-border)}
+
+/* ── CALLS LIST ── */
+.call-row{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg2);border:1px solid var(--bg4);border-radius:13px;margin-bottom:8px}
+.call-rank{width:24px;text-align:center;font-family:var(--mono);font-weight:700;color:var(--muted);flex-shrink:0}
+.call-rank.top1{color:#f7b955}
+.call-rank.top2{color:#c8c8d4}
+.call-rank.top3{color:#cd8c52}
+.call-avatar{width:34px;height:34px;border-radius:50%;background:var(--bg4);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--sub);overflow:hidden}
+.call-avatar img{width:100%;height:100%;object-fit:cover}
+.call-info{flex:1;min-width:0}
+.call-caller{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:4px}
+.call-token{font-weight:700;font-size:14px;margin-top:2px}
+.call-mcap{font-size:11px;color:var(--muted);margin-top:2px}
+.call-multi{text-align:right;flex-shrink:0}
+.call-multi-val{font-family:var(--mono);font-size:17px;font-weight:700;color:var(--green)}
+.call-multi-val.neg{color:var(--red)}
+.call-multi-sub{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
+.calls-empty{text-align:center;padding:50px 20px;color:var(--muted);font-size:13px}
+
+/* ── MOBILE BACK BAR ── */
+.mobile-back-bar{display:none}
+@media(max-width:767px){
+  html,body{overflow-x:hidden}
+  .navbar{display:none!important}
+  .mobile-back-bar{display:flex;align-items:center;gap:12px;padding:12px 16px;position:sticky;top:0;z-index:30;background:#101216;border-bottom:1px solid #16191f}
+  .mobile-back-btn{color:#f7b955;font-size:15px;font-weight:600;background:none;border:none;cursor:pointer;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent;min-height:44px;min-width:44px;display:inline-flex;align-items:center}
+  .mobile-page-title{font-size:16px;font-weight:600;color:#eef1f5;font-family:inherit}
+  .page{padding:16px 14px 90px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAVBAR -->
+<nav class="navbar">
+  <a class="nav-left" href="/">
+    <div class="nav-logo-tile"></div>
+    <div>
+      <div class="nav-brand">ORCAGENT</div>
+      <div class="nav-tag">SOLANA SMART SCALPER V4</div>
+    </div>
+  </a>
+  <div class="nav-right">
+    {% if wallet_short %}
+    <div class="wallet-pill"><div class="wallet-dot"></div><span>{{ wallet_short }}</span></div>
+    {% endif %}
+    <a href="/" class="nav-btn">Dashboard</a>
+    <a href="/leaderboard" class="nav-btn">Leaderboard</a>
+    <a href="/calls" class="nav-btn active">Calls</a>
+  </div>
+</nav>
+
+<div class="mobile-back-bar">
+  <button onclick="window.history.length>1?history.back():location.href='/'" class="mobile-back-btn">← Back</button>
+  <span class="mobile-page-title">Calls</span>
+</div>
+
+<!-- BODY -->
+<div class="page">
+  <div class="page-title">Token Calls</div>
+  <div class="page-sub">Call a token publicly, then watch how it performs. Ranked by the biggest gain since the call was made. Max {{ calls_per_day_limit }} calls per day.</div>
+
+  <div class="call-box">
+    <div class="call-box-label">Make a call</div>
+    <div class="call-input-row">
+      <input class="call-input" id="call-search-input" type="text" placeholder="Search token by name or paste an address…" autocomplete="off">
+      <button class="call-btn" id="call-submit-btn" disabled onclick="_submitCall()">Call it</button>
+    </div>
+    <div class="call-dropdown" id="call-dropdown"></div>
+    <div class="call-msg" id="call-msg"></div>
+    <div class="call-limit-note" id="call-limit-note"></div>
+  </div>
+
+  <div class="calls-tabs">
+    <button class="calls-tab active" data-window="24h" onclick="_setCallsWindow('24h')">24H</button>
+    <button class="calls-tab" data-window="7d" onclick="_setCallsWindow('7d')">7D</button>
+    <button class="calls-tab" data-window="all" onclick="_setCallsWindow('all')">ALL</button>
+  </div>
+
+  <div id="calls-list">
+    <div class="calls-empty">Loading calls…</div>
+  </div>
+</div>
+
+<script>
+var _callsCsrfToken = {{ csrf_token|tojson }};
+var _callsWindow = '24h';
+var _callSelected = null; // {mint, symbol, name, price}
+var _callSearchTimer = null;
+
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#x27;'); }
+
+function _fmtMultiplier(m){
+  return (m>=1 ? m.toFixed(2) : m.toFixed(3)) + 'x';
+}
+function _fmtCallPrice(p){
+  if(p >= 1) return '$'+p.toFixed(4);
+  if(p >= 0.01) return '$'+p.toFixed(6);
+  return '$'+p.toPrecision(3);
+}
+function _fmtMcap(m){
+  if(m >= 1e6) return '$'+(m/1e6).toFixed(2)+'M';
+  if(m >= 1e3) return '$'+(m/1e3).toFixed(1)+'K';
+  return '$'+m.toFixed(0);
+}
+function _timeAgo(ts){
+  var then = new Date(ts.replace(' ','T')+'Z').getTime();
+  var diffMin = Math.floor((Date.now()-then)/60000);
+  if(diffMin < 1) return 'just now';
+  if(diffMin < 60) return diffMin+'m ago';
+  var diffH = Math.floor(diffMin/60);
+  if(diffH < 24) return diffH+'h ago';
+  return Math.floor(diffH/24)+'d ago';
+}
+
+function _setCallsWindow(w){
+  _callsWindow = w;
+  document.querySelectorAll('.calls-tab').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-window')===w);
+  });
+  _loadCallsList();
+}
+
+async function _loadCallsList(){
+  var el = document.getElementById('calls-list');
+  try{
+    var r = await fetch('/api/calls/top?window='+_callsWindow);
+    var d = await r.json();
+    if(!d.ok || !d.calls.length){
+      el.innerHTML = '<div class="calls-empty">No calls yet in this window. Be the first!</div>';
+      return;
+    }
+    el.innerHTML = d.calls.map(function(c, i){
+      var rank = i+1;
+      var rankCls = rank===1?'top1':rank===2?'top2':rank===3?'top3':'';
+      var neg = c.multiplier < 1 ? ' neg' : '';
+      var avatarHtml = c.caller_avatar
+        ? '<img src="'+esc(c.caller_avatar)+'" alt="">'
+        : esc((c.caller_username||'?').slice(0,2).toUpperCase());
+      return '<div class="call-row">'
+        +'<div class="call-rank '+rankCls+'">#'+rank+'</div>'
+        +'<div class="call-avatar">'+avatarHtml+'</div>'
+        +'<div class="call-info">'
+          +'<div class="call-caller">'+esc(c.caller_username||'')+(c.caller_verified?' ✓':'')+' · '+_timeAgo(c.timestamp)+'</div>'
+          +'<div class="call-token">$'+esc(c.symbol||'?')+'</div>'
+          +'<div class="call-mcap">Called at '+_fmtMcap(c.mcap_at_call||0)+' mcap</div>'
+        +'</div>'
+        +'<div class="call-multi">'
+          +'<div class="call-multi-val'+neg+'">'+_fmtMultiplier(c.multiplier)+'</div>'
+          +'<div class="call-multi-sub">'+_fmtCallPrice(c.price_at_call)+' → '+_fmtCallPrice(c.peak_price)+'</div>'
+        +'</div>'
+      +'</div>';
+    }).join('');
+  }catch(e){
+    el.innerHTML = '<div class="calls-empty">Could not load calls.</div>';
+  }
+}
+
+function _callSearchInput(){
+  var q = document.getElementById('call-search-input').value.trim();
+  var dd = document.getElementById('call-dropdown');
+  _callSelected = null;
+  document.getElementById('call-submit-btn').disabled = true;
+  clearTimeout(_callSearchTimer);
+  if(q.length < 2){ dd.style.display='none'; return; }
+  _callSearchTimer = setTimeout(function(){
+    dd.style.display = 'block';
+    dd.innerHTML = '<div class="call-dd-row" style="cursor:default;color:var(--muted)">Searching…</div>';
+    fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,6);
+      if(!pairs.length){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--muted)">No Solana tokens found</div>'; return; }
+      dd.innerHTML = pairs.map(function(p,i){
+        var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+        var name = (p.baseToken&&p.baseToken.name)||'';
+        var price = p.priceUsd ? _fmtCallPrice(parseFloat(p.priceUsd)) : '—';
+        return '<div class="call-dd-row" onclick="_pickCallToken('+i+')">'
+          +'<div><div class="call-dd-sym">'+esc(sym)+'</div><div class="call-dd-name">'+esc(name)+'</div></div>'
+          +'<div class="call-dd-price">'+price+'</div></div>';
+      }).join('');
+      window._callDdPairs = pairs;
+    })
+    .catch(function(){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--red)">Search failed</div>'; });
+  }, 300);
+}
+
+function _pickCallToken(idx){
+  var p = window._callDdPairs[idx];
+  if(!p) return;
+  var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+  _callSelected = {mint: (p.baseToken&&p.baseToken.address)||'', symbol: sym};
+  document.getElementById('call-search-input').value = sym;
+  document.getElementById('call-dropdown').style.display = 'none';
+  document.getElementById('call-submit-btn').disabled = false;
+}
+
+async function _submitCall(){
+  if(!_callSelected) return;
+  var btn = document.getElementById('call-submit-btn');
+  var msg = document.getElementById('call-msg');
+  btn.disabled = true;
+  msg.textContent = '';
+  msg.className = 'call-msg';
+  try{
+    var r = await fetch('/api/calls', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json','X-CSRF-Token':_callsCsrfToken},
+      body: JSON.stringify({mint: _callSelected.mint})
+    });
+    var d = await r.json();
+    if(d.ok){
+      msg.textContent = 'Call placed on $'+d.symbol+' at '+_fmtCallPrice(d.price)+'. '+d.calls_left_today+' call(s) left today.';
+      msg.className = 'call-msg ok';
+      document.getElementById('call-search-input').value = '';
+      _callSelected = null;
+      _loadCallsList();
+    } else {
+      msg.textContent = d.msg || 'Could not place call.';
+      msg.className = 'call-msg err';
+    }
+  }catch(e){
+    msg.textContent = 'Network error — try again.';
+    msg.className = 'call-msg err';
+  }
+  btn.disabled = false;
+}
+
+document.getElementById('call-search-input').addEventListener('input', _callSearchInput);
+document.addEventListener('click', function(e){
+  var dd = document.getElementById('call-dropdown');
+  var inp = document.getElementById('call-search-input');
+  if(dd && !dd.contains(e.target) && e.target !== inp) dd.style.display = 'none';
+});
+
+_loadCallsList();
+</script>
+
+
+
+<nav id="mobile-nav" aria-label="Mobile navigation">
+  <a class="mn-item" href="/">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>Home</span>
+  </a>
+  <a class="mn-item" href="/live-market">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+    <span>Market</span>
+  </a>
+  <a class="mn-item" href="/messages">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    <span>Messages</span>
+  </a>
+  <a class="mn-item" href="/profile">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    <span>Profile</span>
+  </a>
+  <button class="mn-item" onclick="_mnDrawerOpen()" aria-label="More navigation">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+    <span>More</span>
+  </button>
+</nav>
+
+<div id="mn-overlay" onclick="_mnDrawerClose()"></div>
+
+<div id="mn-drawer" role="dialog" aria-label="Navigation menu">
+  <div class="mn-drawer-handle" id="mn-drawer-handle"></div>
+  <button class="mn-drawer-cta" id="mn-drawer-trade-btn" onclick="_mnDrawerClose();window.location.href='/'">&#9654; Start Trading</button>
+  <nav class="mn-drawer-nav">
+    <a class="mn-drawer-item" href="/" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+      Home
+    </a>
+    <a class="mn-drawer-item" href="/live-market" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      Live Market
+    </a>
+    <a class="mn-drawer-item" href="/leaderboard" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/></svg>
+      Leaderboard
+    </a>
+    <a class="mn-drawer-item" href="/calls" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Calls
+    </a>
+    <a class="mn-drawer-item" href="/traders" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      Traders
+    </a>
+    <a class="mn-drawer-item" href="/groups" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><circle cx="8.5" cy="11.5" r="1"/><circle cx="12" cy="11.5" r="1"/><circle cx="15.5" cy="11.5" r="1"/></svg>
+      Groups
+    </a>
+    <a class="mn-drawer-item" href="/promote" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      Promote
+    </a>
+    <a class="mn-drawer-item" href="/messages" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      Messages
+      <span class="mn-drawer-badge" id="mn-msg-badge" style="display:none"></span>
+    </a>
+    <a class="mn-drawer-item" href="/notifications" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      Notifications
+      <span class="mn-drawer-badge" id="mn-notif-badge" style="display:none"></span>
+    </a>
+    <a class="mn-drawer-item" href="/wallet" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M16 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" fill="currentColor" stroke="none"/><path d="M2 10h20"/></svg>
+      Wallet
+    </a>
+    <a class="mn-drawer-item" href="/referrals" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 17H7A5 5 0 0 1 7 7h2"/><path d="M15 7h2a5 5 0 1 1 0 10h-2"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+      Referrals
+    </a>
+    <a class="mn-drawer-item" href="/profile" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+      Profile
+    </a>
+    <div class="mn-drawer-sep"></div>
+    <a class="mn-drawer-item" href="/settings" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </a>
+    <a class="mn-drawer-item" href="/history" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/></svg>
+      History
+    </a>
+    <a class="mn-drawer-item" href="/bot" onclick="_mnDrawerClose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>
+      Bot Overview
+    </a>
+    <div class="mn-drawer-sep"></div>
+    <div class="mn-drawer-footer">
+      <a href="/info#about" onclick="_mnDrawerClose()">About</a>
+      <a href="/info#docs" onclick="_mnDrawerClose()">Docs</a>
+      <a href="/info#fees" onclick="_mnDrawerClose()">Fees</a>
+      <a href="/info#security" onclick="_mnDrawerClose()">Security</a>
+      <a href="/info#terms" onclick="_mnDrawerClose()">Terms</a>
+    </div>
+  </nav>
+</div>
+
+<script>
+/* Mobile nav drawer — self-contained, no dashboard.js dependency */
+function _mnDrawerOpen(){
+  var drawer  = document.getElementById('mn-drawer');
+  var overlay = document.getElementById('mn-overlay');
+  if(!drawer) return;
+  drawer.style.transition = '';
+  drawer.style.transform  = '';
+  drawer.classList.add('open');
+  overlay.classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function _mnDrawerClose(){
+  var drawer  = document.getElementById('mn-drawer');
+  var overlay = document.getElementById('mn-overlay');
+  if(!drawer) return;
+  drawer.classList.remove('open');
+  overlay.classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.addEventListener('keydown', function(e){
+  if(e.key === 'Escape') _mnDrawerClose();
+});
+/* Mark the current page active in both the bottom bar and the drawer */
+(function(){
+  var path = window.location.pathname;
+  document.querySelectorAll('#mobile-nav .mn-item[href]').forEach(function(a){
+    if(a.getAttribute('href') === path) a.classList.add('active');
+  });
+  document.querySelectorAll('.mn-drawer-item[href]').forEach(function(a){
+    if(a.getAttribute('href') === path) a.classList.add('active');
+  });
+})();
+</script>
+
+
+<script>
+/* Safe auto-refresh — every 60s, but skipped while the person is actively
+   typing (focused input/textarea/contenteditable), has a modal or drawer
+   open (this codebase consistently locks body scroll while one is open —
+   see mn-drawer, token-detail panel, etc.), or interacted in the last 20s. */
+(function(){
+  var REFRESH_INTERVAL_MS = 60000;
+  var IDLE_GRACE_MS       = 20000;
+  var _lastInteraction = Date.now();
+  ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evt){
+    document.addEventListener(evt, function(){ _lastInteraction = Date.now(); }, {passive: true});
+  });
+  function _isTypingOrFocused(){
+    var el = document.activeElement;
+    if(!el) return false;
+    var tag = el.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable === true;
+  }
+  function _modalOpen(){
+    return document.body.style.overflow === 'hidden';
+  }
+  function _safeCall(fn){
+    try{ if(typeof fn === 'function') fn(); }catch(e){}
+  }
+  setInterval(function(){
+    if(document.hidden) return;
+    if(_isTypingOrFocused()) return;
+    if(_modalOpen()) return;
+    if(Date.now() - _lastInteraction < IDLE_GRACE_MS) return;
+    _safeCall(window.fetchState);
+    _safeCall(window._loadRightRail);
+    _safeCall(window._botFetchStatus);
+    _safeCall(window._refreshOnlineCount);
+  }, REFRESH_INTERVAL_MS);
+})();
+</script>
+
+</body>
+</html>

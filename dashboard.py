@@ -1060,6 +1060,22 @@ def init_db():
         timestamp    TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
+    c.execute('''CREATE TABLE IF NOT EXISTS token_calls (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id       INTEGER NOT NULL,
+        wallet        TEXT NOT NULL,
+        mint          TEXT NOT NULL,
+        symbol        TEXT DEFAULT '',
+        token_name    TEXT DEFAULT '',
+        price_at_call REAL NOT NULL,
+        mcap_at_call  REAL DEFAULT 0,
+        peak_price    REAL NOT NULL,
+        peak_at       TEXT DEFAULT CURRENT_TIMESTAMP,
+        timestamp     TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_token_calls_mint ON token_calls(mint)')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_token_calls_user_ts ON token_calls(user_id, timestamp)')
     c.execute('''CREATE TABLE IF NOT EXISTS fees (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_wallet  TEXT NOT NULL,
@@ -5443,6 +5459,19 @@ def tos_download_page():
         return redirect('/?connect=1')
     return render_template('tos_download.html')
 
+@app.route('/calls')
+def calls_page():
+    session_wallet = _current_wallet()  # may be '' — page is public, like leaderboard
+    wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
+                    if len(session_wallet) >= 8 else '')
+    return render_template(
+        'calls.html',
+        wallet=session_wallet,
+        wallet_short=wallet_short,
+        csrf_token=_get_csrf_token(),
+        calls_per_day_limit=CALLS_PER_DAY_LIMIT,
+    )
+
 @app.route('/leaderboard')
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
@@ -8394,7 +8423,170 @@ def save_banner():
         conn.close()
     return jsonify({'ok': True, 'banner_url': banner_data})
 
-# ── LEADERBOARD ──
+# ── TOKEN CALLS ── ("call" a token publicly, tracked against its peak price
+# since the call, ranked by multiplier — same pattern popularized by Solbix
+# and similar Solana "community calls" bots. Peak price is kept fresh by
+# _calls_peak_loop() (see thread startup section near the bottom of the file).
+CALLS_PER_DAY_LIMIT = 3
+
+@app.route('/api/calls', methods=['POST'])
+@rate_limit(10, 60)
+def api_make_call():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    data = request.get_json(silent=True) or {}
+    mint = str(data.get('mint', '')).strip()
+    if not is_valid_solana_address(mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+
+        today_count = conn.execute(
+            "SELECT COUNT(*) FROM token_calls WHERE user_id=? AND date(timestamp)=date('now')",
+            (uid,)
+        ).fetchone()[0]
+        if today_count >= CALLS_PER_DAY_LIMIT:
+            return jsonify({'ok': False, 'msg': f'Daily call limit reached ({CALLS_PER_DAY_LIMIT}/day). Try again tomorrow.'}), 429
+
+        # Always fetch the price fresh server-side -- never trust a client-submitted
+        # price, which anyone could forge to fake a huge multiplier from the start.
+        td = get_token_data(mint)
+        if not td or not td.get('price'):
+            return jsonify({'ok': False, 'msg': 'Could not fetch this token — check the address'}), 400
+        price = float(td['price'])
+        symbol = td.get('symbol', '') or mint[:8]
+        name = td.get('name', '') or symbol
+        mcap = float(td.get('market_cap', 0) or 0)
+
+        conn.execute(
+            'INSERT INTO token_calls (user_id, wallet, mint, symbol, token_name, price_at_call, mcap_at_call, peak_price) '
+            'VALUES (?,?,?,?,?,?,?,?)',
+            (uid, wallet, mint, symbol, name, price, mcap, price)
+        )
+        conn.commit()
+        return jsonify({'ok': True, 'symbol': symbol, 'price': price, 'calls_left_today': CALLS_PER_DAY_LIMIT - today_count - 1})
+    finally:
+        conn.close()
+
+@app.route('/api/calls/top', methods=['GET'])
+@rate_limit(30, 60)
+def api_calls_top():
+    window = request.args.get('window', '7d')  # '24h', '7d', 'all'
+    cutoff_sql = {
+        '24h': "timestamp >= datetime('now','-1 day')",
+        '7d':  "timestamp >= datetime('now','-7 days')",
+        'all': '1=1',
+    }.get(window, "timestamp >= datetime('now','-7 days')")
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(f'''
+            SELECT tc.id, tc.mint, tc.symbol, tc.token_name, tc.price_at_call, tc.mcap_at_call,
+                   tc.peak_price, tc.timestamp, u.wallet_address, u.username, u.avatar_url,
+                   u.is_verified
+            FROM token_calls tc
+            JOIN users u ON u.id = tc.user_id
+            WHERE {cutoff_sql} AND tc.price_at_call > 0
+            ORDER BY (tc.peak_price * 1.0 / tc.price_at_call) DESC
+            LIMIT 50
+        ''').fetchall()
+        result = []
+        for r in rows:
+            (cid, mint, symbol, name, price_at_call, mcap_at_call, peak_price,
+             ts, caller_wallet, caller_username, caller_avatar, caller_verified) = r
+            multiplier = round(peak_price / price_at_call, 4) if price_at_call > 0 else 0
+            result.append({
+                'id': cid, 'mint': mint, 'symbol': symbol, 'name': name,
+                'price_at_call': price_at_call, 'mcap_at_call': mcap_at_call,
+                'peak_price': peak_price, 'multiplier': multiplier,
+                'timestamp': ts,
+                'caller_wallet': caller_wallet,
+                'caller_username': caller_username or (caller_wallet[:4]+'...'+caller_wallet[-4:]),
+                'caller_avatar': caller_avatar or '',
+                'caller_verified': bool(caller_verified),
+            })
+        return jsonify({'ok': True, 'calls': result})
+    finally:
+        conn.close()
+
+@app.route('/api/calls/mine', methods=['GET'])
+@rate_limit(30, 60)
+def api_calls_mine():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': True, 'calls': [], 'calls_left_today': CALLS_PER_DAY_LIMIT})
+        rows = conn.execute(
+            'SELECT id, mint, symbol, token_name, price_at_call, peak_price, timestamp '
+            'FROM token_calls WHERE user_id=? ORDER BY timestamp DESC LIMIT 100',
+            (uid,)
+        ).fetchall()
+        today_count = conn.execute(
+            "SELECT COUNT(*) FROM token_calls WHERE user_id=? AND date(timestamp)=date('now')",
+            (uid,)
+        ).fetchone()[0]
+        calls = [{
+            'id': r[0], 'mint': r[1], 'symbol': r[2], 'name': r[3],
+            'price_at_call': r[4], 'peak_price': r[5],
+            'multiplier': round(r[5]/r[4], 4) if r[4] > 0 else 0,
+            'timestamp': r[6],
+        } for r in rows]
+        return jsonify({'ok': True, 'calls': calls, 'calls_left_today': max(0, CALLS_PER_DAY_LIMIT - today_count)})
+    finally:
+        conn.close()
+
+def _calls_peak_loop():
+    """Global background loop: refreshes peak_price for every token_call made
+    in the last 30 days, batched via the same DexScreener multi-token endpoint
+    _fast_poll_loop() uses. Runs every 2 minutes -- calls track price over
+    days, not seconds, so this doesn't need fast-poll-grade frequency."""
+    while True:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            try:
+                rows = conn.execute(
+                    "SELECT DISTINCT mint FROM token_calls WHERE timestamp >= datetime('now','-30 days')"
+                ).fetchall()
+                mints = [r[0] for r in rows]
+                price_by_mint = {}
+                for i in range(0, len(mints), 30):
+                    chunk = mints[i:i+30]
+                    try:
+                        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(chunk),
+                                     timeout=10, ttl_override=90)
+                        if not r:
+                            continue
+                        pairs = r.json().get('pairs', []) or []
+                        for p in pairs:
+                            m = (p.get('baseToken') or {}).get('address', '')
+                            price = float(p.get('priceUsd', 0) or 0)
+                            if m and price > 0 and m not in price_by_mint:
+                                price_by_mint[m] = price
+                    except Exception as e:
+                        print(f'[calls-peak] chunk error: {e}', flush=True)
+                    time.sleep(0.3)
+                for mint, price in price_by_mint.items():
+                    conn.execute(
+                        'UPDATE token_calls SET peak_price=?, peak_at=CURRENT_TIMESTAMP '
+                        'WHERE mint=? AND ?>peak_price',
+                        (price, mint, price)
+                    )
+                conn.commit()
+            finally:
+                conn.close()
+        except Exception as e:
+            print(f'[calls-peak] loop error: {e}', flush=True)
+        time.sleep(120)
+
 @app.route('/api/leaderboard', methods=['GET'])
 @rate_limit(60, 60)
 def get_leaderboard():
@@ -17213,6 +17405,7 @@ def _heartbeat_loop():
 threading.Thread(target=_heartbeat_loop,       daemon=True).start()
 threading.Thread(target=token_loop,            daemon=True).start()
 threading.Thread(target=_fast_poll_loop,       daemon=True).start()
+threading.Thread(target=_calls_peak_loop,      daemon=True).start()
 threading.Thread(target=totd_loop,             daemon=True).start()
 threading.Thread(target=_cleanup_loop,         daemon=True).start()
 threading.Thread(target=_audit_loop,           daemon=True).start()
