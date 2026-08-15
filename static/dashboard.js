@@ -924,12 +924,6 @@ async function launchApp(){
   _safeInit('loadHomeFeed', loadHomeFeed());
   _safeInit('_loadRightRail', _loadRightRail());
   _safeInit('_checkAdminInvite', _checkAdminInvite());
-  const _pendingProfile = sessionStorage.getItem('openProfile');
-  if(_pendingProfile){
-    sessionStorage.removeItem('openProfile');
-    const _pid = parseInt(_pendingProfile, 10);
-    if(_pid) setTimeout(() => openProfileCard(_pid), 400);
-  }
 }
 
 // ── RIGHT DISCOVERY RAIL ────────────────────────────────────────────────────
@@ -1016,7 +1010,7 @@ async function _loadRrTraders(){
       var bg=_rrColor(t.username||t.wallet_address||'?');
       var pnl=(t.total_pnl>=0?'+':'')+t.total_pnl.toFixed(3)+' SOL';
       var badge=t.badges&&t.badges.includes('verified')?'<span class="rr-verified">✓</span>':'';
-      return '<div class="rr-trader-row" onclick="openProfileCard('+t.user_id+')">'
+      return '<div class="rr-trader-row" onclick="location.href=\'/profile/'+encodeURIComponent(t.wallet_address||'')+'\'">'
         +'<span class="rr-trader-rank">'+t.rank+'</span>'
         +'<div class="rr-trader-av" style="background:'+bg+'">'+ini+'</div>'
         +'<div class="rr-trader-info">'
@@ -1776,43 +1770,12 @@ async function fetchMyProfile(){
     _dmMyId=r.user_id;
     _myProfileData=r;
     _updateMyProfileBtn();
-    _updateTvMeCard();
     _updateDashProfileBar();
     _sbUpdateUser(r);
   }catch(e){}
 }
 
 function _updateMyProfileBtn(){ /* wallet-pill is always visible when logged in; profile opens on click */ }
-
-function _updateTvMeCard(){
-  const card=document.getElementById('tv-me-card');
-  if(!card||!_myProfileData||!phantomKey){ if(card) card.style.display='none'; return; }
-  const p=_myProfileData;
-  const bg=_tvAvatarColor(p.username||'?');
-  const ini=esc((p.username||'?')[0].toUpperCase());
-  const avHtml=p.avatar_url
-    ?`<div class="tv-me-avatar" style="background:${bg}"><img src="${esc(p.avatar_url)}" alt="" onerror="this.style.display='none'"><span style="position:relative;z-index:1">${ini}</span></div>`
-    :`<div class="tv-me-avatar" style="background:${bg}">${ini}</div>`;
-  const todayPnl=p.today_pnl??0;
-  const todayPos=todayPnl>=0;
-  const pnlColor=todayPos?'var(--green)':'var(--red)';
-  const pnlStr=(todayPos?'+':'')+todayPnl.toFixed(4)+' SOL';
-  card.innerHTML=`
-    <div class="tv-me-badge">Your Profile</div>
-    <div class="tv-me-row">
-      ${avHtml}
-      <div class="tv-me-info">
-        <div class="tv-me-name">${esc(p.username||p.wallet)}</div>
-        <div class="tv-me-chips">
-          <span class="tv-me-chip"><strong>${p.follower_count??0}</strong> Followers</span>
-          <span class="tv-me-chip"><strong>${p.following_count??0}</strong> Following</span>
-          <span class="tv-me-chip" style="color:${pnlColor}"><strong style="color:inherit">${esc(pnlStr)}</strong> today</span>
-        </div>
-      </div>
-      <button class="tv-me-profile-btn" onclick="if(_myProfileId)openProfileCard(_myProfileId)">View Full Profile</button>
-    </div>`;
-  card.style.display='flex';
-}
 
 function _updateDashProfileBar(){
   const bar=document.getElementById('dash-profile-bar');
@@ -3383,7 +3346,6 @@ function _sbNav(section){
   if(section!=='wallet') _stopWalletRefresh();
   if(section==='dashboard'){
     if(_dmOpen) closeMessagesView();
-    else if(_tradersView) closeTradersView();
     else if(_gcOpen) closeCommunityView();
     // hide any other dash-section left visible by a previous nav (e.g. leaderboard/wallet)
     document.querySelectorAll('.dash-section').forEach(function(s){ if(s.id!=='dash-main') s.style.display='none'; });
@@ -3397,7 +3359,6 @@ function _sbNav(section){
     const _rrD=document.getElementById('right-rail');if(_rrD){_rrD.style.display='flex';loadRightRail();}loadInlineSidebar();
   } else if(section==='market'){
     if(_dmOpen) closeMessagesView();
-    if(_tradersView) closeTradersView();
     const _mc=document.getElementById('main-content');
     if(_mc) _mc.style.display='';
     const _dm=document.getElementById('dash-main');
@@ -3407,7 +3368,6 @@ function _sbNav(section){
     if(mp) setTimeout(()=>mp.scrollIntoView({behavior:'smooth',block:'start'}),50);
   } else if(section==='wallet'){
     if(_dmOpen) closeMessagesView();
-    if(_tradersView) closeTradersView();
     if(_gcOpen) closeCommunityView();
     // hide main content and all dash sections
     const _mc=document.getElementById('main-content');
@@ -3421,15 +3381,12 @@ function _sbNav(section){
     _sbSetActive('sbn-wallet');
     loadWalletTokens();
     _startWalletRefresh();
-  } else if(section==='traders'){
-    openTradersView();
   } else if(section==='messages'){
     openMessagesView();
   } else if(section==='community'){
     openCommunityView();
   } else if(section==='leaderboard'){
     if(_dmOpen) closeMessagesView();
-    if(_tradersView) closeTradersView();
     if(_gcOpen) closeCommunityView();
     // hide main content and all dash sections
     const _mc=document.getElementById('main-content');
@@ -3444,7 +3401,6 @@ function _sbNav(section){
     loadLeaderboardPage();
   } else if(section==='settings'){
     if(_dmOpen) closeMessagesView();
-    if(_tradersView) closeTradersView();
     if(_gcOpen) closeCommunityView();
     // hide main content and all dash sections
     const _mc=document.getElementById('main-content');
@@ -3459,7 +3415,6 @@ function _sbNav(section){
     loadSettingsPage();
   } else if(section==='notifications'){
     if(_dmOpen) closeMessagesView();
-    if(_tradersView) closeTradersView();
     if(_gcOpen) closeCommunityView();
     const _mc=document.getElementById('main-content');
     if(_mc) _mc.style.display='';
@@ -3862,140 +3817,15 @@ async function saveSettings(){
   }
 }
 
-// ── TRADERS VIEW ──
-let _tradersView=false, _tvCountdownTimer=null, _tvCountdownVal=15, _tvFollowed=new Set(), _tvFeedCache=[], _tvFeedFilter='all';
-
-function _tvStartCountdown(){
-  if(_tvCountdownTimer) clearInterval(_tvCountdownTimer);
-  _tvCountdownVal=15;
-  const el=document.getElementById('tv-countdown');
-  if(el) el.textContent='↻ '+_tvCountdownVal+'s';
-  _tvCountdownTimer=setInterval(()=>{
-    _tvCountdownVal=Math.max(0,_tvCountdownVal-1);
-    if(el) el.textContent=_tvCountdownVal>0?'↻ '+_tvCountdownVal+'s':'refreshing…';
-    if(_tvCountdownVal===0) _tvCountdownVal=15;
-  },1000);
-}
-
-function _tvTimeAgo(ts){
-  if(!ts) return '';
-  const sec=Math.floor(Date.now()/1000)-ts;
-  if(sec<60)   return sec+'s ago';
-  if(sec<3600) return Math.floor(sec/60)+'m ago';
-  if(sec<86400)return Math.floor(sec/3600)+'h ago';
-  return Math.floor(sec/86400)+'d ago';
-}
-
-function _tvTimeAgoStr(isoStr){
-  if(!isoStr) return '';
-  try{ var _fixed = isoStr.endsWith('Z') ? isoStr : isoStr + 'Z'; return _tvTimeAgo(Math.floor(new Date(_fixed).getTime()/1000)); }catch(e){ return ''; }
-}
-
 const _TV_AVATAR_COLORS=['#1a5276','#0e4d3a','#2d3561','#4a235a','#5b2333','#1b4332','#154360','#3d1a00'];
 function _tvAvatarColor(name){
   let h=0; for(let i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))>>>0;
   return _TV_AVATAR_COLORS[h%_TV_AVATAR_COLORS.length];
 }
 
-function _tvAvatarHtml(e){
-  const name=e.username||'?';
-  const ini=esc(name[0].toUpperCase());
-  const bg=_tvAvatarColor(name);
-  if(e.avatar_url){
-    return `<div class="tv-avatar" style="background:${bg}"><img src="${esc(e.avatar_url)}" alt="" onerror="this.style.display='none'">${ini}</div>`;
-  }
-  return `<div class="tv-avatar" style="background:${bg}">${ini}</div>`;
-}
-
-async function _tvFollowToggle(btn, key, userId, username){
-  if(checkGuest()) return;
-  const wasFollowing=_tvFollowed.has(key);
-  if(wasFollowing){
-    _tvFollowed.delete(key);
-    btn.classList.remove('followed','is-following');
-    btn.textContent='Follow';
-  } else {
-    _tvFollowed.add(key);
-    btn.classList.add('followed','is-following');
-    btn.textContent='✓ Following';
-  }
-  if(username) showLfToast(wasFollowing?'👋':'👥', wasFollowing?`Unfollowed ${username}`:`Now following ${username}`, wasFollowing?'neg':'pos');
-  if(userId){
-    const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(r=>r.json()).catch(()=>null);
-    if(r?.ok){
-      if(r.following){_tvFollowed.add(key);btn.classList.add('followed','is-following');btn.textContent='✓ Following';}
-      else{_tvFollowed.delete(key);btn.classList.remove('followed','is-following');btn.textContent='Follow';}
-    }
-  }
-}
-
-
-function _tvTopAvatar(e){
-  const bg=_lbAvatarColor(e.username||e.wallet||'?');
-  const ini=(e.username||e.wallet||'?')[0].toUpperCase();
-  const img=e.avatar_url?`<img src="${esc(e.avatar_url)}" alt="" loading="lazy" onerror="this.style.display='none'">`:'';
-  return `<div class="tv-top-avtr" style="background:${bg}">${img}<span style="${e.avatar_url?'opacity:0;position:absolute':''}">  ${ini}</span></div>`;
-}
-
-function renderTopTraders(entries){
-  const el=document.getElementById('tv-top-traders'); if(!el) return;
-  if(!entries||!entries.length){el.innerHTML='<div class="tv-empty" style="padding:16px 0">No trades yet today.</div>';return;}
-  const top=entries.slice(0,5);
-  const rankColors=['#FFD700','#C0C0C0','#CD7F32','var(--dim)','var(--dim)'];
-  el.innerHTML=top.map((e,i)=>{
-    const pnl=e.total_pnl||0;
-    const pos=pnl>=0;
-    const pnlStr=(pos?'+':'')+pnl.toFixed(4)+' SOL';
-    const pnlCls=pos?'tv-top-pnl-pos':'tv-top-pnl-neg';
-    const uid=e.user_id||0;
-    return `<div class="tv-top-row" onclick="openProfileCard(${uid})">
-      <span class="tv-top-rank" style="color:${rankColors[i]}">${i+1}</span>
-      ${_tvTopAvatar(e)}
-      <span class="tv-top-name">${esc(e.username||e.wallet||'Trader')}</span>
-      <span class="${pnlCls}">${esc(pnlStr)}</span>
-    </div>`;
-  }).join('');
-}
-
-function renderPlatformStats(s){
-  const tv=document.getElementById('tv-pstat-trades');
-  const pv=document.getElementById('tv-pstat-pnl');
-  const av=document.getElementById('tv-pstat-active');
-  if(tv) tv.textContent=s.trades_today??'—';
-  if(pv){
-    const n=s.net_pnl_today??null;
-    if(n!=null){
-      const pos=n>=0;
-      pv.textContent=(pos?'+':'')+Number(n).toFixed(4);
-      pv.style.color=pos?'var(--green)':'var(--red)';
-    } else {pv.textContent='—';}
-  }
-  if(av) av.textContent=s.active_traders??'—';
-  const badge=document.getElementById('tv-active-badge');
-  if(badge&&s.active_traders!=null){
-    badge.innerHTML=`<b>${s.active_traders}</b> active`;
-    badge.style.display='';
-  }
-}
-
-async function fetchTradersFeed(){
-  if(!_tradersView) return;
-  const [lb, stats]=await Promise.all([
-    fetch('/api/leaderboard').then(r=>r.json()).catch(()=>null),
-    fetch('/api/platform/stats').then(r=>r.json()).catch(()=>null),
-  ]);
-  if(Array.isArray(lb)) renderTopTraders(lb);
-  if(stats&&stats.ok) renderPlatformStats(stats);
-  _tvStartCountdown();
-}
-
 function _navLogoClick(){
   if(_dmOpen){ closeMessagesView(); return; }
   if(_gcOpen){ closeCommunityView(); return; }
-  if(_tradersView){
-    if(_tvProfileOpen){ closeTraderProfile(); return; }
-    closeTradersView(); return;
-  }
   window.scrollTo({top:0,behavior:'smooth'});
 }
 
@@ -4006,618 +3836,8 @@ function _fadeIn(el){
   el.classList.add('fade-in');
 }
 
-function openTradersView(){
-  if(_tradersView) return;
-  _tradersView=true;
-  _tvPush({tv:'list'});
-  _clearStalePostHash();
-  document.getElementById('dash-main').style.display='none';
-  const _rrT=document.getElementById('right-rail');if(_rrT) _rrT.style.display='none';
-  if(!document.getElementById('dash-admin').style.display||document.getElementById('dash-admin').style.display!=='none'){
-    document.getElementById('dash-admin').style.display='none';
-  }
-  const _dtEl=document.getElementById('dash-traders');
-  _dtEl.style.display='';
-  _fadeIn(_dtEl);
-  _sbSetActive('sbn-traders');
-  const btn=document.getElementById('traders-btn');
-  if(btn){btn.style.borderColor='var(--green)';btn.style.color='var(--green)';btn.style.background='rgba(0,0,0,.08)';}
-  if(_myProfileData) _updateTvMeCard();
-  fetchTradersFeed();
-}
-
-function closeTradersView(){
-  if(!_tradersView) return;
-  _tradersView=false;
-  if(!_tvSkipPush) _tvReplace(null);
-  // If a profile is open, reset it so re-opening traders view shows the feed
-  if(typeof _tvProfileOpen!=='undefined'&&_tvProfileOpen){
-    _tvProfileOpen=false;
-    _tpcCurrentFullWallet='';
-    const pv=document.getElementById('tv-profile-view');
-    if(pv) pv.style.display='none';
-    const tl=document.getElementById('tv-layout');
-    if(tl) tl.style.display='';
-  }
-  document.getElementById('dash-traders').style.display='none';
-  const _dmEl=document.getElementById('dash-main');
-  _dmEl.style.display='';
-  _fadeIn(_dmEl);
-  const _rrC=document.getElementById('right-rail');if(_rrC){_rrC.style.display='flex';loadRightRail();}loadInlineSidebar();
-  _sbSetActive('sbn-dashboard');
-  if(_tvCountdownTimer){clearInterval(_tvCountdownTimer);_tvCountdownTimer=null;}
-  const el=document.getElementById('tv-countdown'); if(el) el.textContent='';
-  const btn=document.getElementById('traders-btn');
-  if(btn){btn.style.borderColor='';btn.style.color='';btn.style.background='';}
-  const meCard=document.getElementById('tv-me-card');
-  if(meCard) meCard.style.display='none';
-}
-
-// ── TRADER PROFILE CARD ──
-function _tvFormatHold(secs){
-  if(!secs||secs<=0) return '—';
-  const h=Math.floor(secs/3600), m=Math.floor((secs%3600)/60);
-  if(h>0) return h+'h'+(m>0?' '+m+'m':'');
-  if(m>0) return m+'m';
-  return Math.round(secs)+'s';
-}
-
-function _tvFormatJoined(iso){
-  if(!iso) return '—';
-  try{ return new Date(iso.slice(0,10)).toLocaleDateString('en-US',{month:'short',year:'numeric',timeZone:'UTC'}); }
-  catch(e){ return '—'; }
-}
-
-function closeProfileCard(){
-  document.getElementById('tv-profile-overlay').classList.add('hidden');
-  _tpcCurrentFullWallet='';
-}
-
-function _tpcAvatarHtml(p, botActive=false){
-  const name=p.username||'?';
-  const ini=esc(name[0].toUpperCase());
-  const bg=_tvAvatarColor(name);
-  const cls='tvp-avatar'+(botActive?' tvp-avatar-active':'');
-  if(p.avatar_url){
-    return `<div class="${cls}" style="background:${bg}"><img src="${esc(p.avatar_url)}" alt="" onerror="this.style.display='none'">${ini}</div>`;
-  }
-  return `<div class="${cls}" style="background:${bg}">${ini}</div>`;
-}
-
-function _tpcRecentHtml(userId){
-  const open  =_tvFeedCache.filter(e=>e.user_id===userId&&e.type==='open');
-  const trades=_tvFeedCache.filter(e=>e.user_id===userId&&e.type==='trade');
-  const items =[...open,...trades].slice(0,5);
-  if(!items.length) return '<div style="font-size:11px;color:var(--muted);padding:10px 0;text-align:center">No recent activity</div>';
-  return items.map(e=>{
-    if(e.type==='open'){
-      const pct=e.current_pnl_pct;
-      const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'in trade';
-      return `<div class="tpc-trade-row">
-        <span class="tpc-trade-badge" style="background:rgba(0,0,0,.15);color:var(--green);border:1px solid rgba(0,0,0,.4)">LIVE</span>
-        <span class="tpc-trade-token">${esc(e.token)}</span>
-        <span class="tpc-trade-pnl" style="color:var(--green)">📈 ${esc(pctStr)}</span>
-        <span class="tpc-trade-time">${_tvTimeAgo(e.opened_at)}</span>
-      </div>`;
-    }
-    const pos=e.pnl>=0;
-    return `<div class="tpc-trade-row">
-      <span class="tpc-trade-badge" style="${pos?'background:rgba(0,0,0,.1);color:var(--green);border:1px solid rgba(0,0,0,.25)':'background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.3)'}">${pos?'WIN':'LOSS'}</span>
-      <span class="tpc-trade-token">${esc(e.token)}</span>
-      <span class="tpc-trade-pnl" style="color:${pos?'var(--green)':'var(--red)'}">${esc((pos?'+':'')+e.pnl.toFixed(4)+' SOL')}</span>
-      <span class="tpc-trade-time">${_tvTimeAgoStr(e.timestamp)}</span>
-    </div>`;
-  }).join('');
-}
-
-// ── SEND SOL ──
-let _tpcCurrentFullWallet = '';
-
-async function _waitForSolanaWeb3(timeout=10000){
-  const start=Date.now();
-  while(!window.solanaWeb3){
-    if(Date.now()-start>timeout) throw new Error('solana/web3.js load timeout');
-    await new Promise(r=>setTimeout(r,100));
-  }
-  return window.solanaWeb3;
-}
-
-function _tpcOpenSolForm(){
-  const form=document.getElementById('tpc-sol-form');
-  const recip=document.getElementById('tpc-sol-recip');
-  const msg=document.getElementById('tpc-sol-msg');
-  const inp=document.getElementById('tpc-sol-amount');
-  const btn=document.getElementById('tpc-sol-send-btn');
-  if(!form) return;
-  const w=_tpcCurrentFullWallet;
-  if(recip) recip.textContent=w?(w.slice(0,6)+'...'+w.slice(-4)):'—';
-  if(msg){msg.className='tpc-sol-msg';msg.textContent='';}
-  if(inp) inp.value='';
-  if(btn){btn.disabled=false;btn.textContent='Send';}
-  form.classList.toggle('open');
-}
-
-function _tpcCloseSolForm(){
-  const form=document.getElementById('tpc-sol-form');
-  if(form) form.classList.remove('open');
-}
-
-async function _tpcSendSol(amountSol, recipientFullWallet) {
-  const provider = window.solana || window.solflare;
-  if (!provider || !provider.publicKey) throw new Error('No wallet connected');
-  const lamports = Math.floor(parseFloat(amountSol) * 1e9);
-  const resp = await fetch('/api/solana/build_transfer', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({from_wallet: provider.publicKey.toString(), to_wallet: recipientFullWallet, lamports})
-  });
-  const data = await resp.json();
-  if (!data.ok) throw new Error(data.msg);
-  const result = await provider.signAndSendTransaction({
-    serialize: () => Uint8Array.from(atob(data.tx_b64), c => c.charCodeAt(0))
-  });
-  return result.signature || result;
-}
-
-async function _tpcToggleFollow(userId, followKey){
-  if(checkGuest()) return;
-  const btn=document.getElementById('tpc-follow-btn');
-  if(!btn||btn.disabled) return;
-
-  const wasFollowing=_tvFollowed.has(followKey);
-  const username=followKey.split('|')[0];
-
-  // Optimistic update — apply immediately before the API round-trip
-  if(wasFollowing){
-    _tvFollowed.delete(followKey);
-    btn.className='tpc-follow-btn btn-follow';
-    btn.textContent='Follow';
-  } else {
-    _tvFollowed.add(followKey);
-    btn.className='tpc-follow-btn btn-follow following is-following';
-    btn.textContent='✓ Following';
-  }
-
-  btn.disabled=true;
-  const r=await fetch('/api/follow/'+userId,{method:'POST',headers:{'Content-Type':'application/json'}}).then(res=>res.json()).catch(()=>null);
-  btn.disabled=false;
-
-  if(!r?.ok){
-    // Revert optimistic update on failure
-    if(wasFollowing){
-      _tvFollowed.add(followKey);
-      btn.className='tpc-follow-btn btn-follow following is-following';
-      btn.textContent='✓ Following';
-    } else {
-      _tvFollowed.delete(followKey);
-      btn.className='tpc-follow-btn btn-follow';
-      btn.textContent='Follow';
-    }
-    showLfToast('🔴','Could not update follow status — try again','neg');
-    return;
-  }
-
-  // Sync to authoritative server state (handles any edge cases)
-  if(r.following){
-    _tvFollowed.add(followKey);
-    btn.className='tpc-follow-btn btn-follow following is-following';
-    btn.textContent='✓ Following';
-    showLfToast('👥',`Now following ${username}`,'pos');
-  } else {
-    _tvFollowed.delete(followKey);
-    btn.className='tpc-follow-btn btn-follow';
-    btn.textContent='Follow';
-    showLfToast('👋',`Unfollowed ${username}`,'neg');
-  }
-  const fc=document.getElementById('tpc-follower-count');
-  if(fc) fc.textContent=r.follower_count;
-}
-
-let _tvProfileOpen = false;
-
-function closeTraderProfile(){
-  _tvProfileOpen = false;
-  _tpcCurrentFullWallet = '';
-  _tvpCurrentProfileId = 0;
-  _tvpCurrentProfileUsername = '';
-  _tvpPrevProfile = null;
-  document.getElementById('tv-profile-view').style.display = 'none';
-  document.getElementById('tv-follow-view').style.display = 'none';
-  document.getElementById('tv-layout').style.display = '';
-  if(!_tvSkipPush) _tvReplace({tv:'list'});
-  _updateTvMeCard();
-}
-
-// ── FOLLOW FULL-PAGE VIEW ──
-let _tvFollowViewUserId = 0;
-let _tvFollowViewUsername = '';
-let _tvFollowViewType = 'followers';
-
-function closeFollowView(){
-  document.getElementById('tv-follow-view').style.display = 'none';
-  if(_tvpCurrentProfileId){
-    document.getElementById('tv-profile-view').style.display = '';
-    if(!_tvSkipPush) _tvReplace({tv:'profile', userId:_tvpCurrentProfileId, prevProfile:_tvpPrevProfile});
-  } else {
-    document.getElementById('tv-layout').style.display = '';
-    if(!_tvSkipPush) _tvReplace({tv:'list'});
-    _updateTvMeCard();
-  }
-}
-
-async function openFollowView(userId, username, type){
-  if(!userId) return;
-  _tvFollowViewUserId = userId;
-  _tvFollowViewUsername = username || '';
-  _tvFollowViewType = type;
-  _tvPush({tv:'followview', userId, username, type});
-  const view = document.getElementById('tv-follow-view');
-  document.getElementById('tv-profile-view').style.display = 'none';
-  document.getElementById('tv-layout').style.display = 'none';
-  const meCard = document.getElementById('tv-me-card');
-  if(meCard) meCard.style.display = 'none';
-  view.style.display = '';
-  const title = type === 'followers'
-    ? `${esc(username)}'s Followers`
-    : `${esc(username)} is Following`;
-  view.innerHTML = `
-    <div class="tvp-back-bar">
-      <button class="tvp-back-btn" onclick="history.back()">← Back</button>
-      <span style="color:var(--muted);font-size:11px">${esc(username)}</span>
-    </div>
-    <div class="tvfl-title">${title}</div>
-    <div class="tvfl-list" id="tvfl-list"><div class="tvfl-loading">Loading…</div></div>`;
-  const r = await fetch(`/api/profile/${userId}/${type}`).then(r=>r.json()).catch(()=>null);
-  const listEl = document.getElementById('tvfl-list');
-  if(!listEl) return;
-  if(!r?.ok || !r.users?.length){
-    listEl.innerHTML = `<div class="tvfl-empty">No ${type} yet.</div>`;
-    return;
-  }
-  listEl.innerHTML = r.users.map(u=>{
-    const bg = _tvAvatarColor(u.username||'?');
-    const ini = esc((u.username||'?')[0].toUpperCase());
-    const avImg = u.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="" onerror="this.style.display='none'">` : '';
-    const pnl = u.pnl_today ?? 0;
-    const pnlPos = pnl >= 0;
-    const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
-    const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
-    const rawKey = u.username+'|'+(u.wallet_address||'');
-    const followKey = esc(rawKey);
-    // Seed _tvFollowed from server's authoritative is_following field
-    if(u.is_following) _tvFollowed.add(rawKey); else _tvFollowed.delete(rawKey);
-    const isFollowed = _tvFollowed.has(rawKey);
-    const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" data-key="${followKey}" data-uid="${u.user_id}" data-uname="${esc(u.username)}" onclick="event.stopPropagation();_tvFollowToggle(this,this.dataset.key,+this.dataset.uid,this.dataset.uname)">Follow</button>`
-      : '';
-    const rowCls = (type==='following' && isFollowed) ? 'tvfl-row is-following' : 'tvfl-row';
-    const nameBadge = type==='followers'
-      ? (isFollowed ? '<span class="fstate-mutual">Mutual</span>' : '<span class="fstate-follows-you">Follows you</span>')
-      : '';
-    return `<div class="${rowCls}" onclick="_tvpNavFromFollowRow(${u.user_id||0},${_tvFollowViewUserId||0},'${esc(_tvFollowViewUsername).replace(/'/g,"\\'")}','${_tvFollowViewType}')">
-      <div class="tvfl-avatar" style="background:${bg}">${avImg}${ini}</div>
-      <div class="tvfl-info">
-        <div class="tvfl-name">${esc(u.username||u.wallet)}${nameBadge}</div>
-        <div class="tvfl-wallet">${esc(u.wallet)}</div>
-      </div>
-      <div class="tvfl-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
-      ${fBtnHtml}
-    </div>`;
-  }).join('');
-}
-
-// ── FOLLOWERS / FOLLOWING PANEL (inline in profile view) ──
-let _tvpFollowPanelWallet = '';
-let _tvpFollowPanelTab = 'followers';
-
-async function _loadFollowPanel(wallet, tab){
-  if(!wallet) return;
-  _tvpFollowPanelWallet = wallet;
-  _tvpFollowPanelTab = tab;
-  const listEl = document.getElementById('tvp-fp-list');
-  if(!listEl) return;
-  listEl.innerHTML = '<div class="tvp-fp-loading">Loading…</div>';
-  const r = await fetch(`/api/profile/${encodeURIComponent(wallet)}/${tab}`).then(r=>r.json()).catch(()=>null);
-  console.log('[followPanel] tab:', tab, 'response:', r);
-  if(!listEl.isConnected) return;
-  if(!r?.ok || !r.users?.length){
-    const empty = tab==='followers' ? 'No followers yet' : 'Not following anyone';
-    listEl.innerHTML = `<div class="tvp-fp-empty">${empty}</div>`;
-    return;
-  }
-  listEl.innerHTML = r.users.map(u=>{
-    const bg = _tvAvatarColor(u.username||'?');
-    const ini = esc((u.username||'?')[0].toUpperCase());
-    const avImg = u.avatar_url ? `<img src="${esc(u.avatar_url)}" alt="" onerror="this.style.display='none'">` : '';
-    const pnl = u.pnl_today ?? 0;
-    const pnlPos = pnl >= 0;
-    const pnlStr = (pnlPos?'+':'') + pnl.toFixed(4);
-    const pnlColor = pnlPos ? 'var(--green)' : 'var(--red)';
-    const rawKey = u.username+'|'+(u.wallet_address||'');
-    const followKey = esc(rawKey);
-    // Seed _tvFollowed from server's authoritative is_following field
-    if(u.is_following) _tvFollowed.add(rawKey); else _tvFollowed.delete(rawKey);
-    const isFollowed = _tvFollowed.has(rawKey);
-    // stopPropagation is on the button directly — not a wrapper div — so clicking
-    // elsewhere on the row still fires the row onclick
-    const fBtnHtml = (u.user_id && phantomKey && u.wallet_address !== phantomKey)
-      ? `<button class="tv-follow-btn${isFollowed?' followed is-following':''}" data-key="${followKey}" data-uid="${u.user_id}" data-uname="${esc(u.username)}" onclick="event.stopPropagation();_tvpFollowAndRefresh(this,this.dataset.key,+this.dataset.uid,this.dataset.uname)">Follow</button>`
-      : '';
-    const rowCls = (tab==='following' && isFollowed) ? 'tvp-fp-row is-following' : 'tvp-fp-row';
-    const nameBadge = tab==='followers'
-      ? (isFollowed ? '<span class="fstate-mutual">Mutual</span>' : '<span class="fstate-follows-you">Follows you</span>')
-      : '';
-    return `<div class="${rowCls}" onclick="_tvpNavFromFollowRow(${u.user_id||0},${_tvpCurrentProfileId||0},'${esc(_tvpCurrentProfileUsername).replace(/'/g,"\\'")}','${tab}')">
-      <div class="tvp-fp-avatar" style="background:${bg}">${avImg}${ini}</div>
-      <div class="tvp-fp-info">
-        <div class="tvp-fp-name">${esc(u.username||u.wallet)}${nameBadge}</div>
-        <div class="tvp-fp-wallet">${esc(u.wallet)}</div>
-      </div>
-      <div class="tvp-fp-pnl" style="color:${pnlColor}">${esc(pnlStr)}</div>
-      ${fBtnHtml}
-    </div>`;
-  }).join('');
-}
-
-function _switchFollowTab(tab){
-  _tvpFollowPanelTab = tab;
-  document.getElementById('tvp-tab-followers')?.classList.toggle('active', tab==='followers');
-  document.getElementById('tvp-tab-following')?.classList.toggle('active', tab==='following');
-  _loadFollowPanel(_tvpFollowPanelWallet, tab);
-}
-
-async function _tvpFollowAndRefresh(btn, key, userId, username){
-  await _tvFollowToggle(btn, key, userId, username);
-  _loadFollowPanel(_tvpFollowPanelWallet, _tvpFollowPanelTab);
-}
-
-// ── PROFILE NAVIGATION HISTORY ──
-let _tvpCurrentProfileId = 0;
-let _tvpCurrentProfileUsername = '';
-let _tvpPrevProfile = null; // {userId, wallet, tab, username}
-
-// Records where we're navigating from (a follow-list row) so the profile's
-// back button can return here instead of always falling back to the top-level
-// Traders Feed — see openFollowView()/_loadFollowPanel() row templates below.
-function _tvpNavFromFollowRow(targetUserId, prevUserId, prevUsername, prevTab){
-  if(prevUserId){
-    _tvpPrevProfile = {userId: prevUserId, username: prevUsername, tab: prevTab};
-  }
-  openProfileCard(targetUserId);
-}
-
-// ── Browser-history integration for the Traders/Profile/FollowList stack ──
-// Without this, the native back button/swipe has nothing to step through and
-// exits straight past everything to the last real page load. `_tvSkipPush`
-// guards against re-pushing while we're restoring a state (popstate) or
-// closing programmatically (menu clicks etc, not an actual back action).
-let _tvSkipPush = false;
-function _tvPush(state){
-  if(_tvSkipPush) return;
-  try{ history.pushState(state, '', location.pathname + location.search); }catch(e){}
-}
-function _tvReplace(state){
-  try{ history.replaceState(state, '', location.pathname + location.search); }catch(e){}
-}
-window.addEventListener('popstate', function(e){
-  const state = e.state;
-  _tvSkipPush = true;
-  try{
-    if(!state || !state.tv){
-      if(_tradersView) closeTradersView();
-    } else if(state.tv === 'list'){
-      closeTraderProfile();
-      if(!_tradersView) openTradersView();
-    } else if(state.tv === 'profile'){
-      _tvpPrevProfile = state.prevProfile || null;
-      openProfileCard(state.userId);
-    } else if(state.tv === 'followview'){
-      openFollowView(state.userId, state.username, state.type);
-    }
-  } finally {
-    _tvSkipPush = false;
-  }
-});
-
-function _tvpTradesHtml(trades){
-  if(!trades?.length) return '<div class="tvp-empty">No trades today</div>';
-  return `<table class="tvp-table">
-    <thead><tr>
-      <th>Token</th><th>Entry</th><th>Exit</th><th>PnL</th><th>Time</th>
-    </tr></thead>
-    <tbody>${trades.map(t=>{
-      const pos=t.pnl>=0;
-      const pnlStr=(pos?'+':'')+t.pnl.toFixed(4)+' SOL';
-      const pnlColor=pos?'var(--green)':'var(--red)';
-      return `<tr>
-        <td style="font-weight:700;color:var(--text)">${esc(t.token)}</td>
-        <td style="color:var(--muted)">${fmtPrice(t.entry)}</td>
-        <td style="color:var(--muted)">${fmtPrice(t.exit)}</td>
-        <td style="color:${pnlColor};font-weight:700">${esc(pnlStr)}</td>
-        <td style="color:var(--dim)">${esc(_tvTimeAgoStr(t.timestamp))}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-}
-
-function _tvpPositionsHtml(positions){
-  if(!positions?.length) return '';
-  return `<table class="tvp-table">
-    <thead><tr>
-      <th>Token</th><th>Entry</th><th>Current</th><th>PnL%</th><th>PnL SOL</th><th>Open</th>
-    </tr></thead>
-    <tbody>${positions.map(p=>{
-      const pct=p.pnl_pct;
-      const sol=p.pnl_sol;
-      const pctStr=pct!=null?(pct>=0?'+':'')+pct.toFixed(1)+'%':'—';
-      const solStr=sol!=null?(sol>=0?'+':'')+sol.toFixed(4):'—';
-      const pnlColor=(pct!=null&&pct<0)?'var(--red)':'var(--green)';
-      const openStr=p.opened_at?_tvTimeAgo(p.opened_at):'—';
-      return `<tr>
-        <td style="font-weight:700;color:var(--text)">${esc(p.token)}</td>
-        <td style="color:var(--muted)">${fmtPrice(p.entry)}</td>
-        <td style="color:var(--muted)">${p.current!=null?fmtPrice(p.current):'—'}</td>
-        <td style="color:${pnlColor};font-weight:700">${esc(pctStr)}</td>
-        <td style="color:${pnlColor};font-weight:700">${esc(solStr)}</td>
-        <td style="color:var(--dim)">${esc(openStr)}</td>
-      </tr>`;
-    }).join('')}</tbody>
-  </table>`;
-}
-
 function _clearStalePostHash(){
   if(/^#post-/.test(location.hash)) history.replaceState(null, '', location.pathname + location.search);
-}
-
-async function openProfileCard(userId){
-  if(!userId) return;
-  _clearStalePostHash();
-  if(!_tradersView) openTradersView();
-  _tvProfileOpen = true;
-  _tvpCurrentProfileId = userId;
-  _tvPush({tv:'profile', userId, prevProfile:_tvpPrevProfile});
-  const view = document.getElementById('tv-profile-view');
-  document.getElementById('tv-layout').style.display = 'none';
-  document.getElementById('tv-follow-view').style.display = 'none';
-  const meCard = document.getElementById('tv-me-card');
-  if(meCard) meCard.style.display = 'none';
-  view.style.display = '';
-  view.innerHTML = '<div class="tvp-loading">Loading profile…</div>';
-
-  const [p, td, copyStatus] = await Promise.all([
-    fetch('/api/profile/'+userId).then(r=>r.json()).catch(()=>null),
-    fetch('/api/profile/'+userId+'/trades').then(r=>r.json()).catch(()=>null),
-    phantomKey ? fetch('/api/copy-trade/status').then(r=>r.json()).catch(()=>null) : Promise.resolve(null),
-  ]);
-
-  if(!p?.ok){
-    view.innerHTML = '<div class="tvp-back-bar"><button class="tvp-back-btn" onclick="history.back()">← Traders Feed</button></div><div class="tvp-loading" style="color:var(--red)">Failed to load profile.</div>';
-    return;
-  }
-
-  _tpcCurrentFullWallet = p.wallet_address || '';
-  _tvpCurrentProfileUsername = p.username || '';
-  console.log('wallet set:', _tpcCurrentFullWallet);
-  const followKey = p.username+'|'+p.wallet;
-  // Seed _tvFollowed from server's authoritative response so the button is
-  // correct on first load even if this trader was followed in a previous session.
-  if(p.is_following){ _tvFollowed.add(followKey); }
-  else               { _tvFollowed.delete(followKey); }
-  const isFollowing = _tvFollowed.has(followKey);
-  const followCls = 'tpc-follow-btn btn-follow'+(isFollowing?' following is-following':'');
-  const _isSelf = !!(_myProfileId && userId && _myProfileId === userId);
-  const isCopyingThis = !_isSelf && copyStatus?.ok && copyStatus.copying && copyStatus.target_wallet === _tpcCurrentFullWallet;
-  const followBtnHtml = _isSelf
-    ? `<button class="tpc-follow-btn" style="border-color:rgba(0,0,0,.4);color:var(--green);background:rgba(0,0,0,.06)" onclick="closeTraderProfile();openSettings()">✏ Edit Profile</button>`
-    : `<button class="${followCls}" id="tpc-follow-btn" onclick="_tpcToggleFollow(${userId},'${followKey.replace(/'/g,"\\'")}')">Follow</button>`;
-  const copyBtnHtml = (!_isSelf && phantomKey)
-    ? (isCopyingThis
-        ? `<button class="tpc-stop-copy-btn" id="tpc-copy-btn" onclick="_tpcStopCopy()">Stop Copying</button>`
-        : `<button class="tpc-copy-btn" id="tpc-copy-btn" data-wallet="${esc(_tpcCurrentFullWallet)}" data-uname="${esc(p.username||'')}" onclick="_tpcStartCopy(this.dataset.wallet,this.dataset.uname)">Copy Trader</button>`)
-    : '';
-  const msgBtnHtml = (!_isSelf && phantomKey)
-    ? `<button class="tpc-msg-btn" data-uid="${userId}" data-wallet="${esc(_tpcCurrentFullWallet)}" data-uname="${esc(p.username||'')}" onclick="openDMWith(Number(this.dataset.uid),this.dataset.wallet,this.dataset.uname)">💬 Message</button>`
-    : '';
-  const tradesHtml = _tvpTradesHtml(td?.trades);
-  const posHtml = _tvpPositionsHtml(td?.positions);
-
-  const solBal    = p.sol_balance??td?.sol_balance??0;
-  const openCnt   = p.open_trades??td?.open_count??0;
-  const closedCnt = p.closed_trades??td?.total_closed??p.trade_count??0;
-  const allPnl    = p.total_pnl??td?.total_pnl??0;
-  const winRate   = p.win_rate??0;
-  const allPnlPos = allPnl>=0;
-  const allPnlStr = (allPnlPos?'+':'')+allPnl.toFixed(4)+' SOL';
-  const winRateColor = winRate>=50?'var(--green)':'var(--muted)';
-  const backLabel = _tvpPrevProfile
-    ? `← ${esc(_tvpPrevProfile.username)}'s ${_tvpPrevProfile.tab}`
-    : '← Traders Feed';
-
-  view.innerHTML = `
-    <div class="tvp-back-bar">
-      <button class="tvp-back-btn" onclick="history.back()">${backLabel}</button>
-    </div>
-
-    <div class="tvp-card">
-      <div class="tvp-top">
-        ${_tpcAvatarHtml(p, p.bot_active)}
-        <div class="tvp-meta">
-          <div class="tvp-username">${esc(p.username)}</div>
-          <div class="tvp-wallet">${esc(p.wallet)}</div>
-          ${p.bio?`<div class="tpc-bio" style="margin-bottom:8px">${esc(p.bio)}</div>`:''}
-          ${(p.badges&&p.badges.length)?`<div class="badges-row" style="margin-bottom:8px">${p.badges.map(b=>_badgePillHtml(b,true)).join('')}</div>`:''}
-          <div class="tvp-social-row">
-            <span class="tvp-social-item clickable" onclick="openFollowView(${userId},_tvpCurrentProfileUsername,'followers')" title="View followers"><span class="tvp-social-icon">👥</span><strong id="tpc-follower-count">${p.follower_count}</strong>&nbsp;Followers</span>
-            <span class="tvp-social-item clickable" onclick="openFollowView(${userId},_tvpCurrentProfileUsername,'following')" title="View following"><span class="tvp-social-icon">➜</span><strong>${p.following_count}</strong>&nbsp;Following</span>
-            ${p.avg_hold_seconds?`<span class="tvp-social-item"><span class="tvp-social-icon">⏱</span>&nbsp;${esc(_tvFormatHold(p.avg_hold_seconds))}</span>`:''}
-            <span class="tvp-social-item"><span class="tvp-social-icon">📅</span>&nbsp;${esc(_tvFormatJoined(p.joined_at))}</span>
-          </div>
-        </div>
-        <div class="tvp-actions">
-          ${followBtnHtml}
-          ${copyBtnHtml}
-          ${msgBtnHtml}
-          <button class="tpc-sol-btn" onclick="_tpcOpenSolForm()">◎ Send SOL</button>
-        </div>
-      </div>
-      <div class="tpc-sol-form" id="tpc-sol-form" style="margin-top:14px">
-        <div class="tpc-sol-row">
-          <span class="tpc-sol-lbl">Amount (SOL)</span>
-          <input type="number" class="tpc-sol-amount" id="tpc-sol-amount" placeholder="0.01" min="0.001" max="10" step="0.001">
-        </div>
-        <div class="tpc-sol-row">
-          <span class="tpc-sol-lbl">To</span>
-          <span class="tpc-sol-recip" id="tpc-sol-recip">—</span>
-        </div>
-        <div class="tpc-sol-btns">
-          <button class="tpc-sol-send" id="tpc-sol-send-btn" onclick="(async()=>{const sendBtn=this,amountInput=document.getElementById('tpc-sol-amount'),msgEl=document.getElementById('tpc-sol-msg');sendBtn.disabled=true;sendBtn.textContent='Sending...';msgEl.textContent='';console.log('Send clicked', amountInput.value, _tpcCurrentFullWallet);try{const sig=await _tpcSendSol(parseFloat(amountInput.value),_tpcCurrentFullWallet);msgEl.className='tpc-sol-msg ok';msgEl.textContent='✓ Sent! '+sig.slice(0,8)+'...';sendBtn.textContent='✓ Sent';setTimeout(()=>{sendBtn.disabled=false;sendBtn.textContent='Send';},3000);}catch(e){msgEl.className='tpc-sol-msg err';msgEl.textContent='✗ '+(e.message||'Transaction failed');sendBtn.disabled=false;sendBtn.textContent='Send';}})()">Send</button>
-          <button class="tpc-sol-cancel" onclick="_tpcCloseSolForm()">Cancel</button>
-        </div>
-        <div class="tpc-sol-msg" id="tpc-sol-msg"></div>
-      </div>
-    </div>
-
-    <div class="tvp-stats5">
-      <div class="tvp-stat5">
-        <div class="tvp-stat5-val">◎ ${solBal.toFixed(4)}</div>
-        <div class="tvp-stat5-lbl">SOL Balance</div>
-      </div>
-      <div class="tvp-stat5">
-        <div class="tvp-stat5-val">${openCnt}</div>
-        <div class="tvp-stat5-lbl">Open Trades</div>
-      </div>
-      <div class="tvp-stat5">
-        <div class="tvp-stat5-val">${closedCnt}</div>
-        <div class="tvp-stat5-lbl">Closed Trades</div>
-      </div>
-      <div class="tvp-stat5">
-        <div class="tvp-stat5-val" style="color:${winRateColor}">${winRate.toFixed(1)}%</div>
-        <div class="tvp-stat5-lbl">Win Rate</div>
-      </div>
-      <div class="tvp-stat5">
-        <div class="tvp-stat5-val" style="color:${allPnlPos?'var(--green)':'var(--red)'}">${esc(allPnlStr)}</div>
-        <div class="tvp-stat5-lbl">All-Time PnL</div>
-      </div>
-    </div>
-
-    <div class="tvp-follow-panel">
-      <div class="tvp-fp-tabs">
-        <button class="tvp-fp-tab active" id="tvp-tab-followers" onclick="_switchFollowTab('followers')">👥 Followers</button>
-        <button class="tvp-fp-tab" id="tvp-tab-following" onclick="_switchFollowTab('following')">➜ Following</button>
-      </div>
-      <div class="tvp-fp-list" id="tvp-fp-list"><div class="tvp-fp-loading">Loading…</div></div>
-    </div>
-
-    ${posHtml?`<div class="tvp-section"><div class="tvp-section-hdr">Open Positions</div>${posHtml}</div>`:''}
-
-    <div class="tvp-section">
-      <div class="tvp-section-hdr">Today's Trades</div>
-      ${tradesHtml}
-    </div>
-    <div id="tvp-comments-section" class="tvp-comments"></div>
-  `;
-  _loadFollowPanel(_tpcCurrentFullWallet, 'followers');
-  _tvcLoadComments(userId, isFollowing, _isSelf);
 }
 
 // ── DAILY LEADERBOARD ──
@@ -5131,7 +4351,6 @@ setInterval(fetchMarketOnly,15000);
 setInterval(fetchTrades,30000);
 setInterval(fetchPnlChart,30000);
 setInterval(fetchLeaderboard,30000);
-setInterval(fetchTradersFeed,15000);
 setInterval(_refreshVisibleReactions,12000);
 setInterval(fetchPumpScanner,30000);
 
@@ -5831,7 +5050,6 @@ function _dmSearch(q){
 
 function openDMWith(peerId, peerWallet, peerUsername){
   if(!phantomKey){showLfToast('🔴','Connect wallet to use messages','neg');return;}
-  closeTraderProfile();
   openMessagesView();
   dmOpenConvo(peerId, peerWallet, peerUsername||_dmShort(peerWallet));
 }
@@ -5840,8 +5058,6 @@ function openMessagesView(){
   if(_dmOpen) return;
   _dmOpen=true;
   _clearStalePostHash();
-  // Close any sub-view that may be active inside .wrap
-  if(_tradersView) closeTradersView();
   // Hide .wrap entirely; messages lives outside it as a sibling
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='none';
@@ -5902,7 +5118,6 @@ function openCommunityView(){
   _gcOpen=true;
   _clearStalePostHash();
   if(_dmOpen) closeMessagesView();
-  if(_tradersView) closeTradersView();
   const wrap=document.getElementById('main-content');
   if(wrap) wrap.style.display='none';
   const bn=document.getElementById('mob-bottom-nav');
@@ -8432,7 +7647,7 @@ async function loadRightRail(){
         const pnlStr=(isPos?'+':'')+pnl.toFixed(2)+' SOL';
         const handle='@'+(e.username||((e.wallet_address||'').slice(0,6)+'…'));
         const rankColors=['#f7b955','#8a919c','#cd7f32','#565d68'];
-        return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #16191f;cursor:pointer" onclick="typeof openProfileCard===\'function\'&&openProfileCard('+(e.user_id||0)+')">'
+        return '<div style="display:flex;align-items:center;gap:9px;padding:8px 0;border-bottom:1px solid #16191f;cursor:pointer" onclick="location.href=\'/profile/'+encodeURIComponent(e.wallet_address||'')+'\'">'
           +'<span style="font-size:12px;font-weight:700;color:'+rankColors[i]+';width:16px;flex-shrink:0">#'+(e.rank||i+1)+'</span>'
           +'<div style="width:32px;height:32px;border-radius:50%;background:'+bg+';flex-shrink:0;position:relative;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:12px;color:#fff">'+imgHtml+ini+'</div>'
           +'<div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(e.username||'Trader')+'</div>'
@@ -9350,7 +8565,7 @@ window.addEventListener('hashchange', function(){
   // If we're not currently on the Home view, switching there also runs
   // loadHomeFeed() -> renderHomeFeed() -> _handleNotifDeepLink(), which
   // does the actual jump once the feed is loaded.
-  if(_dmOpen || _tradersView || _gcOpen || document.getElementById('dash-wallet')?.style.display==='block'){
+  if(_dmOpen || _gcOpen || document.getElementById('dash-wallet')?.style.display==='block'){
     _sbNav('dashboard');
   } else {
     _handleNotifDeepLink();

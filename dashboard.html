@@ -3786,7 +3786,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           </div>
           <div class="hdr-avatar-menu-sep"></div>
           <button class="hdr-avatar-menu-item" id="settings-btn" onclick="openSettings();_closeAvatarMenu()">⚙ Settings</button>
-          <button class="hdr-avatar-menu-item" onclick="if(_myProfileId)openProfileCard(_myProfileId);_closeAvatarMenu()">👤 My Profile</button>
+          <a class="hdr-avatar-menu-item" href="/profile">👤 My Profile</a>
           <div class="hdr-avatar-menu-sep"></div>
           <button class="hdr-avatar-menu-item logout" id="logout-btn" onclick="doLogout();_closeAvatarMenu()">⏻ Disconnect</button>
         </div>
@@ -3796,7 +3796,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="nav-menu-dropdown" id="nav-menu-dropdown">
           <a href="/history" class="nav-menu-item">📋 History</a>
           <a href="/leaderboard" class="nav-menu-item">🏆 Leaderboard</a>
-          <button class="nav-menu-item" id="traders-btn" onclick="openTradersView();_closeNavMenu()">👥 Traders</button>
+          <a href="/traders" class="nav-menu-item" id="traders-btn">👥 Traders</a>
           <button class="nav-menu-item" id="messages-btn" onclick="openMessagesView();_closeNavMenu()">💬 Messages <span class="nav-msg-badge" id="nav-msg-badge"></span></button>
           <button class="nav-menu-item" onclick="openBlacklistModal();_closeNavMenu()">🚫 Blacklist</button>
           <div class="nav-menu-sep"></div>
@@ -3830,7 +3830,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
           Live Market
         </a>
-        <a class="sb-nav-item" id="sbn-leaderboard" href="/leaderboard" onclick="if(window._sbNav){event.preventDefault();_sbNav('leaderboard');}">
+        <a class="sb-nav-item" id="sbn-leaderboard" href="/leaderboard">
           <span class="sb-nav-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 2H6v7a6 6 0 0 0 12 0V2z"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/></svg></span>
           Leaderboard
         </a>
@@ -3912,7 +3912,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <!-- PROFILE CHIP — pinned to bottom via margin-top:auto on .sb-bottom -->
       <div class="sb-bottom" id="sb-bottom" style="display:none">
         <div class="sb-user-card" id="sb-user-card"
-             onclick="if(window._myProfileId)openProfileCard(_myProfileId)"
+             onclick="location.href='/profile'"
              onmouseenter="this.style.background='#101216'"
              onmouseleave="this.style.background='transparent'">
           <div class="sb-avatar" id="sb-avatar">
@@ -3962,71 +3962,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div id="sidebar-overlay" onclick="_closeSidebar()"></div>
     <!-- MAIN CONTENT -->
     <div class="wrap" id="main-content">
-
-  <!-- ── TRADERS VIEW ── -->
-  <div id="dash-traders" class="dash-section" style="display:none">
-
-    <!-- Your Profile strip — above everything -->
-    <div id="tv-me-card" class="tv-me-card" style="display:none"></div>
-
-    <!-- Header bar: 56px, full-width -->
-    <div class="tv-hdr">
-      <div class="tv-hdr-left">
-        <span class="tv-hdr-title">👥 TRADERS FEED</span>
-        <div class="tv-live-pill">
-          <span class="tv-live-dot"></span>
-          <span class="tv-live-label">LIVE</span>
-          <span class="tv-countdown" id="tv-countdown"></span>
-        </div>
-      </div>
-      <div class="tv-hdr-right">
-        <span class="tv-active-badge" id="tv-active-badge" style="display:none"></span>
-        <button class="tv-back-btn" onclick="closeTradersView()">← Dashboard</button>
-      </div>
-    </div>
-
-    <!-- Profile full-page view (shown instead of tv-layout) -->
-    <div id="tv-profile-view" style="display:none"></div>
-
-    <!-- Follow list full-page view (shown instead of tv-layout / tv-profile-view) -->
-    <div id="tv-follow-view" style="display:none"></div>
-
-    <!-- Two-column body -->
-    <div class="tv-layout" id="tv-layout">
-
-      <!-- Right sidebar -->
-      <div class="tv-sidebar">
-
-        <!-- TODAY'S TOP leaderboard -->
-        <div class="tv-sb-section">
-          <div class="tv-sb-title">🏆 TODAY'S TOP</div>
-          <div id="tv-top-traders"><div class="tv-empty" style="padding:12px 0;font-size:10px">—</div></div>
-        </div>
-
-        <!-- Platform Stats -->
-        <div class="tv-sb-section">
-          <div class="tv-sb-title">PLATFORM STATS</div>
-          <div class="tv-sb-stats">
-            <div class="tv-sb-stat">
-              <div class="tv-sb-stat-val" id="tv-pstat-trades">—</div>
-              <div class="tv-sb-stat-lbl">Trades Today</div>
-            </div>
-            <div class="tv-sb-stat">
-              <div class="tv-sb-stat-val" id="tv-pstat-pnl">—</div>
-              <div class="tv-sb-stat-lbl">Net PnL (SOL)</div>
-            </div>
-            <div class="tv-sb-stat">
-              <div class="tv-sb-stat-val" id="tv-pstat-active">—</div>
-              <div class="tv-sb-stat-lbl">Active Traders</div>
-            </div>
-          </div>
-        </div>
-
-      </div><!-- /tv-sidebar -->
-
-    </div><!-- /tv-layout -->
-
-  </div><!-- /dash-traders -->
 
   <!-- ── MESSAGES VIEW ── -->
   <!-- ── MAIN DASHBOARD ── -->
@@ -4224,14 +4159,6 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   </div>
 
   </div><!-- /dash-main -->
-
-  <!-- TRADER PROFILE CARD OVERLAY -->
-  <div id="tv-profile-overlay" class="hidden" onclick="if(event.target===this)closeProfileCard()">
-    <div class="tpc-card" id="tpc-card">
-      <button class="tpc-close" onclick="closeProfileCard()">✕</button>
-      <div class="tpc-loading">Loading profile…</div>
-    </div>
-  </div>
 
   <!-- ── ADMIN DASHBOARD VIEW (toggled by 👑 Admin button) ── -->
   <div id="dash-admin" class="dash-section" style="display:none">
