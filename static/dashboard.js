@@ -4933,7 +4933,7 @@ function _supportRenderMessages(msgs){
   const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
   el.innerHTML = msgs.map(function(m){
     const cls = m.sender_role==='staff' ? 'staff' : 'user';
-    const t = new Date(m.created_at+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const t = new Date(m.created_at.replace(' ','T')+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
     return '<div class="support-msg '+cls+'">'+_esc(m.message)+
            '<div class="support-msg-time">'+(cls==='staff'?'Support · ':'')+t+'</div></div>';
   }).join('');
@@ -5008,7 +5008,7 @@ function _dmShort(w){ return w?w.slice(0,4)+'…'+w.slice(-4):''; }
 function _dmInitials(name){ return name?name.slice(0,2).toUpperCase():'??'; }
 function _dmRelTime(ts){
   if(!ts) return '';
-  const d=new Date(ts+'Z'), now=Date.now(), diff=Math.round((now-d.getTime())/1000);
+  const d=new Date(ts.replace(' ','T')+'Z'), now=Date.now(), diff=Math.round((now-d.getTime())/1000);
   if(diff<60) return diff+'s';
   if(diff<3600) return Math.floor(diff/60)+'m';
   if(diff<86400) return Math.floor(diff/3600)+'h';
@@ -5157,7 +5157,7 @@ function closeCommunityView(){
 
 function _gcRelTime(ts){
   if(!ts) return '';
-  const d=new Date(ts.includes('T')?ts:ts+'Z');
+  const d=new Date(ts.includes('T')?ts:ts.replace(' ','T')+'Z');
   const diff=Math.round((Date.now()-d.getTime())/1000);
   if(diff<30) return 'just now';
   if(diff<3600) return Math.floor(diff/60)+'m ago';
