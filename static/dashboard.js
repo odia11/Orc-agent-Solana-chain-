@@ -3355,6 +3355,11 @@ function _sbNav(section){
     const _dm=document.getElementById('dash-main');
     if(_dm) _dm.style.display='';
     _sbSetActive('sbn-dashboard');
+    // Tapping Home should always feel like "take me back to the top of a fresh
+    // feed" -- even if you're already on the dashboard, scrolled deep down.
+    const _wrapEl = document.querySelector('.wrap');
+    if(_wrapEl) _wrapEl.scrollTo({top:0, behavior:'smooth'});
+    window.scrollTo({top:0, behavior:'smooth'}); // covers mobile, where .wrap may not be the actual scroller
     loadHomeFeed();
     const _rrD=document.getElementById('right-rail');if(_rrD){_rrD.style.display='flex';loadRightRail();}loadInlineSidebar();
   } else if(section==='market'){
