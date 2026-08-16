@@ -165,6 +165,16 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .pf-trade-pnl.pos{color:#3ad29b}
 .pf-trade-pnl.neg{color:#ff4d6a}
 .pf-trade-time{font-size:11px;color:#565d68;flex-shrink:0}
+.pf-calls{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
+.pf-call-row{display:flex;align-items:center;gap:12px;padding:10px 14px;background:#101216;border-radius:12px;border:1px solid #16191f;transition:background .12s}
+.pf-call-row:hover{background:#12151a}
+.pf-call-chip{display:flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;background:#16191f;font-size:11px;font-weight:700;color:#eef1f5;flex-shrink:0;font-family:'JetBrains Mono',monospace;overflow:hidden}
+.pf-call-chip img{width:32px;height:32px;border-radius:8px;object-fit:cover}
+.pf-call-name{font-size:13px;font-weight:600;color:#eef1f5;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pf-call-multi{font-size:13px;font-weight:700;font-family:'JetBrains Mono',monospace;flex-shrink:0;min-width:52px;text-align:right}
+.pf-call-multi.pos{color:#3ad29b}
+.pf-call-multi.neg{color:#ff4d6a}
+.pf-call-prices{font-size:11px;color:#565d68;font-family:'JetBrains Mono',monospace;flex-shrink:0}
 
 /* ── POSTS ── */
 .pf-posts{display:flex;flex-direction:column;gap:8px;margin-bottom:20px}
@@ -627,6 +637,26 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
           {% endfor %}
         {% else %}
           <div class="pf-empty">No recent trades</div>
+        {% endif %}
+      </div>
+
+      <!-- CALLS -->
+      {% set calls = recent_calls|default([]) %}
+      <div class="pf-section-hdr">🔥 Calls</div>
+      <div class="pf-calls">
+        {% if calls %}
+          {% for c in calls %}
+          <div class="pf-call-row">
+            <div class="pf-call-chip">{{ (c.symbol or '?')[:3]|upper }}</div>
+            <span class="pf-call-name">${{ c.symbol or '?' }}</span>
+            <span class="pf-call-multi {{ 'pos' if c.multiplier >= 1 else 'neg' }}">
+              {{ '%.2f'|format(c.multiplier) if c.multiplier >= 1 else '%.3f'|format(c.multiplier) }}x
+            </span>
+            <span class="pf-call-prices">{{ c.price_at_call|fmtprice }} → {{ c.peak_price|fmtprice }}</span>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="pf-empty">No calls yet</div>
         {% endif %}
       </div>
 

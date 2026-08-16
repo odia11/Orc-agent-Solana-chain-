@@ -275,6 +275,24 @@ def _jinja_fmtk(v):
         return f'{v / 1_000:.1f}K'
     return f'{v:.0f}'
 
+@app.template_filter('fmtprice')
+def _jinja_fmtprice(v):
+    """Format a token price like the client-side priceFmt() helper: more
+    decimals for sub-cent prices so tiny memecoin prices stay readable.
+    Uses fixed-point (not '%g') below 1 cent -- '%g' switches to scientific
+    notation there (e.g. "1.23e-05"), which JS's toPrecision(3) never does
+    for prices in this range."""
+    v = float(v or 0)
+    if v >= 1:
+        return f'${v:.4f}'
+    if v >= 0.01:
+        return f'${v:.6f}'
+    if v <= 0:
+        return '$0'
+    exponent = math.floor(math.log10(v))
+    decimals = max(0, 2 - exponent)
+    return f'${v:.{decimals}f}'
+
 @app.before_request
 def _security_gate():
     """Runs before every other before_request hook (registration order).
@@ -4408,6 +4426,21 @@ def api_my_trades():
 def api_connect_wallet():
     return set_wallet()
 
+def _recent_token_calls(conn, user_id: int, limit: int = 10):
+    rows = conn.execute('''
+        SELECT mint, symbol, token_name, price_at_call, mcap_at_call, peak_price, timestamp
+        FROM token_calls
+        WHERE user_id=? AND price_at_call > 0
+        ORDER BY timestamp DESC
+        LIMIT ?
+    ''', (user_id, limit)).fetchall()
+    return [{
+        'mint': r[0], 'symbol': r[1], 'name': r[2],
+        'price_at_call': r[3], 'mcap_at_call': r[4], 'peak_price': r[5],
+        'multiplier': round(r[5] / r[3], 4) if r[3] > 0 else 0,
+        'timestamp': r[6],
+    } for r in rows]
+
 @app.route('/profile')
 def profile():
     wallet = _authenticated_wallet()
@@ -4436,6 +4469,7 @@ def profile():
             'WHERE wallet=? ORDER BY created_at DESC LIMIT 5',
             (wallet,)
         ).fetchall()
+        recent_calls = _recent_token_calls(conn, user_id)
         followers = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
         ).fetchone()[0]
@@ -4482,6 +4516,7 @@ def profile():
             followers=followers,
             following=following,
             posts=[dict(p) for p in posts],
+            recent_calls=recent_calls,
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=True,
@@ -4522,6 +4557,7 @@ def profile_view(wallet_address: str):
             'WHERE wallet=? ORDER BY created_at DESC LIMIT 5',
             (wallet_address,)
         ).fetchall()
+        recent_calls = _recent_token_calls(conn, user_id)
         followers = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
         ).fetchone()[0]
@@ -4594,6 +4630,7 @@ def profile_view(wallet_address: str):
             followers=followers,
             following=following,
             posts=[dict(p) for p in posts],
+            recent_calls=recent_calls,
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=is_own,
@@ -10862,27 +10899,15 @@ def get_profile(user_id: int):
 @app.route('/api/profile/<int:user_id>/calls', methods=['GET'])
 @rate_limit(60, 60)
 def profile_user_calls(user_id: int):
-    """This user's top calls of the last 7 days, for display on their profile
-    card — separate from /api/calls/top (the site-wide leaderboard) since this
+    """This user's most recent calls, for display on their profile card —
+    separate from /api/calls/top (the site-wide leaderboard) since this
     is scoped to one specific user, not ranked against everyone."""
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
-        rows = conn.execute('''
-            SELECT mint, symbol, token_name, price_at_call, mcap_at_call, peak_price, timestamp
-            FROM token_calls
-            WHERE user_id=? AND timestamp >= datetime('now','-7 days') AND price_at_call > 0
-            ORDER BY (peak_price * 1.0 / price_at_call) DESC
-            LIMIT 3
-        ''', (user_id,)).fetchall()
-        calls = [{
-            'mint': r[0], 'symbol': r[1], 'name': r[2],
-            'price_at_call': r[3], 'mcap_at_call': r[4], 'peak_price': r[5],
-            'multiplier': round(r[5]/r[3], 4) if r[3] > 0 else 0,
-            'timestamp': r[6],
-        } for r in rows]
+        calls = _recent_token_calls(conn, user_id)
         return jsonify({'ok': True, 'calls': calls})
     finally:
         conn.close()
