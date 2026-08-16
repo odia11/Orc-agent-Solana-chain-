@@ -10859,6 +10859,34 @@ def get_profile(user_id: int):
     })
 
 # ── PROFILE TRADES ──
+@app.route('/api/profile/<int:user_id>/calls', methods=['GET'])
+@rate_limit(60, 60)
+def profile_user_calls(user_id: int):
+    """This user's top calls of the last 7 days, for display on their profile
+    card — separate from /api/calls/top (the site-wide leaderboard) since this
+    is scoped to one specific user, not ranked against everyone."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        rows = conn.execute('''
+            SELECT mint, symbol, token_name, price_at_call, mcap_at_call, peak_price, timestamp
+            FROM token_calls
+            WHERE user_id=? AND timestamp >= datetime('now','-7 days') AND price_at_call > 0
+            ORDER BY (peak_price * 1.0 / price_at_call) DESC
+            LIMIT 3
+        ''', (user_id,)).fetchall()
+        calls = [{
+            'mint': r[0], 'symbol': r[1], 'name': r[2],
+            'price_at_call': r[3], 'mcap_at_call': r[4], 'peak_price': r[5],
+            'multiplier': round(r[5]/r[3], 4) if r[3] > 0 else 0,
+            'timestamp': r[6],
+        } for r in rows]
+        return jsonify({'ok': True, 'calls': calls})
+    finally:
+        conn.close()
+
 @app.route('/api/profile/<int:user_id>/trades', methods=['GET'])
 @rate_limit(60, 60)
 def profile_user_trades(user_id: int):
