@@ -3822,6 +3822,29 @@ async function saveSettings(){
   }
 }
 
+var _TV_MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+function _tvTimeAgo(unixSec){
+  if(!unixSec) return '';
+  var diff = Math.floor(Date.now()/1000) - unixSec;
+  if(diff < 0) diff = 0;
+  if(diff < 60) return 'now';
+  if(diff < 3600) return Math.floor(diff/60)+'m';
+  if(diff < 86400) return Math.floor(diff/3600)+'h';
+  if(diff < 604800) return Math.floor(diff/86400)+'d';
+  var d = new Date(unixSec*1000);
+  var now = new Date();
+  return _TV_MONTHS[d.getMonth()]+' '+d.getDate()+(d.getFullYear()!==now.getFullYear() ? ', '+d.getFullYear() : '');
+}
+function _tvTimeAgoStr(isoStr){
+  if(!isoStr) return '';
+  try{
+    var _fixed = isoStr.trim().replace(' ','T');
+    if(!/Z$|[+-]\d{2}:?\d{2}$/.test(_fixed)) _fixed += 'Z';
+    var _ms = new Date(_fixed).getTime();
+    if(isNaN(_ms)) return '';
+    return _tvTimeAgo(Math.floor(_ms/1000));
+  }catch(e){ return ''; }
+}
 const _TV_AVATAR_COLORS=['#1a5276','#0e4d3a','#2d3561','#4a235a','#5b2333','#1b4332','#154360','#3d1a00'];
 function _tvAvatarColor(name){
   let h=0; for(let i=0;i<(name||'').length;i++) h=(h*31+name.charCodeAt(i))>>>0;
