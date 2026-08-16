@@ -2,7 +2,7 @@
 
 A social meme coin trading platform on Solana. Follow traders, copy their trades, share wins to X, and let an AI-scored automated bot trade on your behalf — all in one wallet-native app.
 
-Live at: https://www.orcagent.fun
+
 
 ---
 
