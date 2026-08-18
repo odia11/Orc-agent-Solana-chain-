@@ -1859,8 +1859,15 @@ _SKIP_IMAGE_FIELDS = frozenset({
     'tx', 'signature', 'sig',
     'wallet', 'wallet_address', 'truncated_wallet', 'short_wallet',
 })
-# Endpoints where any 87-88 char base58 string in the response triggers a hard block.
-# Admin endpoints that return TX hashes are excluded — TX sigs are the same length.
+# The ONE endpoint that legitimately returns private key material (the user
+# explicitly asking to reveal their own key). Everything else that trips the
+# key-leak scanner gets blocked outright -- see the after_request hook.
+_KEY_REVEAL_PATHS = frozenset({'/api/wallet/reveal-key'})
+
+# Kept for the startup self-test, which asserts /api/settings is covered.
+# Blocking is no longer limited to this set: the scanner now blocks on every
+# path except _KEY_REVEAL_PATHS, so a leak on a route nobody thought to list
+# here fails closed instead of merely logging a warning.
 _SENSITIVE_PATHS = {'/api/settings', '/api/claim_sol', '/api/admin/test_fee'}
 
 # Paths that should never be legitimately accessed — any hit is a scan/probe.
@@ -1943,7 +1950,7 @@ def _security_selftest() -> bool:
         passed = False
     if passed:
         print(f'[security selftest] PASS — '
-              f'{len(_SENSITIVE_PATHS)} blocked path(s), '
+              f'key-leak scanner blocks all paths except {sorted(_KEY_REVEAL_PATHS)}, '
               f'{len(_FORBIDDEN_RESPONSE_KEYS)} forbidden field(s), '
               f'log_lines scrubbed, regex active on all endpoints', flush=True)
     return passed
@@ -4085,8 +4092,8 @@ def _security_headers(resp):
     if os.getenv('RAILWAY_ENVIRONMENT'):
         resp.headers.setdefault('Strict-Transport-Security', 'max-age=31536000; includeSubDomains')
     # Scan JSON responses for possible private key leak (87-88 char base58 = private key length).
-    # Actively block only on endpoints that must never return key material.
-    # Other endpoints (e.g. /api/admin with fee TX hashes) only log a warning.
+    # Blocks on every path except _KEY_REVEAL_PATHS (fail closed) -- fields whose
+    # name marks them as a tx/sig/hash are let through so trade responses aren't broken.
     if (resp.content_type or '').startswith('application/json'):
         path = getattr(request, 'path', '')
         try:
@@ -4113,7 +4120,18 @@ def _security_headers(resp):
                 pass
             if _key_hit:
                 _hit_field, _hit_snippet = _key_hit
-                if path in _SENSITIVE_PATHS:
+                # A Solana tx signature and a private key are BOTH 64 bytes, so
+                # they base58-encode to the same 87-88 chars -- length alone can
+                # never tell them apart. So: block when the field name says this
+                # is key material (or is unnamed/unknown), and when it's on a
+                # path that must never return a key. Fields explicitly named as
+                # signatures/hashes are allowed through, since blocking those
+                # would break every trade response.
+                _looks_like_tx_field = any(
+                    tok in (_hit_field or '').lower()
+                    for tok in ('tx', 'sig', 'hash', 'signature')
+                )
+                if path not in _KEY_REVEAL_PATHS and not _looks_like_tx_field:
                     print(f'SECURITY ALERT: possible key leak in {path} '
                           f'(field={_hit_field!r}, value={_hit_snippet!r}) — response blocked',
                           flush=True)
@@ -4126,19 +4144,40 @@ def _security_headers(resp):
                     return r
                 else:
                     print(f'SEC WARN: possible key in {path} '
-                          f'(field={_hit_field!r}) — expected if TX hash', flush=True)
+                          f'(field={_hit_field!r}) — allowed (tx/sig field or reveal endpoint)', flush=True)
             # ── 2. Strip forbidden field names from JSON responses ──
+            # Walks nested dicts/lists too: a top-level-only check would miss a
+            # forbidden field tucked inside a sub-object (e.g. {"user": {...}}),
+            # which is exactly where a runaway SELECT * tends to surface.
+            def _strip_forbidden(node):
+                """Returns (cleaned_node, list_of_stripped_field_names)."""
+                stripped = []
+                if isinstance(node, dict):
+                    out = {}
+                    for k, v in node.items():
+                        if k in _FORBIDDEN_RESPONSE_KEYS:
+                            stripped.append(k)
+                            continue
+                        cleaned, sub = _strip_forbidden(v)
+                        stripped.extend(sub)
+                        out[k] = cleaned
+                    return out, stripped
+                if isinstance(node, list):
+                    out = []
+                    for item in node:
+                        cleaned, sub = _strip_forbidden(item)
+                        stripped.extend(sub)
+                        out.append(cleaned)
+                    return out, stripped
+                return node, stripped
             try:
                 payload = json.loads(body)
-                if isinstance(payload, dict):
-                    dirty = _FORBIDDEN_RESPONSE_KEYS & payload.keys()
-                    if dirty:
-                        for k in dirty:
-                            del payload[k]
-                        print(f'SEC: stripped forbidden field(s) {dirty} from {path}', flush=True)
-                        r = jsonify(payload)
-                        r.status_code = resp.status_code
-                        return r
+                cleaned_payload, dirty = _strip_forbidden(payload)
+                if dirty:
+                    print(f'SEC: stripped forbidden field(s) {sorted(set(dirty))} from {path}', flush=True)
+                    r = jsonify(cleaned_payload)
+                    r.status_code = resp.status_code
+                    return r
             except (json.JSONDecodeError, Exception):
                 pass
         except Exception:
@@ -5727,10 +5766,13 @@ def bot_overview_page():
 @app.route('/wallet')
 def wallet_page():
     try:
-        if 'wallet' not in session:
-            print('[wallet] no wallet in session, redirecting', flush=True)
+        # _authenticated_wallet(), not a bare session lookup: this page decrypts
+        # the stored key to show the deposit (trading-wallet) address, which is
+        # first-person data -- a pasted-address read-only session must not see it.
+        wallet_address = _authenticated_wallet()
+        if not wallet_address:
+            print('[wallet] no authenticated wallet in session, redirecting', flush=True)
             return redirect('/?connect=1')
-        wallet_address = session['wallet']
         wallet_short = (wallet_address[:4] + '...' + wallet_address[-4:]) if len(wallet_address) >= 8 else ''
 
         # Deposit address must be the trading wallet (derived from encrypted_private_key),
