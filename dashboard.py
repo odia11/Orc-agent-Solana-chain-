@@ -342,6 +342,26 @@ def csrf_exempt(f):
     f._csrf_exempt = True
     return f
 
+def _time_ago_str(ts_str: str) -> str:
+    """'Xm'/'Xh'/'Xd' relative-time label, matching the x.com-style format
+    used client-side (see _tvTimeAgo() in dashboard.js) — this is the
+    server-rendered equivalent for pages like profile.html that aren't
+    fetched via JS/fetch."""
+    if not ts_str:
+        return ''
+    try:
+        ts = datetime.datetime.strptime(ts_str[:19], '%Y-%m-%d %H:%M:%S')
+        diff = (datetime.datetime.utcnow() - ts).total_seconds()
+        if diff < 60:
+            return 'now'
+        if diff < 3600:
+            return f'{int(diff // 60)}m'
+        if diff < 86400:
+            return f'{int(diff // 3600)}h'
+        return f'{int(diff // 86400)}d'
+    except (ValueError, TypeError):
+        return ''
+
 def _get_csrf_token() -> str:
     """Return (creating if absent) a per-session CSRF token stored in the Flask session."""
     if 'csrf_token' not in session:
@@ -4426,6 +4446,22 @@ def api_my_trades():
 def api_connect_wallet():
     return set_wallet()
 
+def _recent_trades_for_profile(conn, user_id: int, limit: int = 5):
+    rows = conn.execute(
+        'SELECT token, entry_price, exit_price, timestamp FROM trades '
+        'WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0 '
+        'ORDER BY timestamp DESC LIMIT ?',
+        (user_id, limit)
+    ).fetchall()
+    return [{
+        'symbol': r['token'] or '?',
+        'name': r['token'] or 'Unknown',
+        'side': 'sell',
+        'pnl_pct': round((r['exit_price'] - r['entry_price']) / r['entry_price'] * 100, 2) if r['entry_price'] else 0,
+        'time_ago': _time_ago_str(r['timestamp']),
+        'logo_url': None,
+    } for r in rows]
+
 def _recent_token_calls(conn, user_id: int, limit: int = 10):
     rows = conn.execute('''
         SELECT mint, symbol, token_name, price_at_call, mcap_at_call, peak_price, timestamp
@@ -4470,6 +4506,7 @@ def profile():
             (wallet,)
         ).fetchall()
         recent_calls = _recent_token_calls(conn, user_id)
+        recent_trades = _recent_trades_for_profile(conn, user_id)
         followers = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
         ).fetchone()[0]
@@ -4517,6 +4554,7 @@ def profile():
             following=following,
             posts=[dict(p) for p in posts],
             recent_calls=recent_calls,
+            recent_trades=recent_trades,
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=True,
@@ -4558,6 +4596,7 @@ def profile_view(wallet_address: str):
             (wallet_address,)
         ).fetchall()
         recent_calls = _recent_token_calls(conn, user_id)
+        recent_trades = _recent_trades_for_profile(conn, user_id)
         followers = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
         ).fetchone()[0]
@@ -4631,6 +4670,7 @@ def profile_view(wallet_address: str):
             following=following,
             posts=[dict(p) for p in posts],
             recent_calls=recent_calls,
+            recent_trades=recent_trades,
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=is_own,
@@ -10899,15 +10939,30 @@ def get_profile(user_id: int):
 @app.route('/api/profile/<int:user_id>/calls', methods=['GET'])
 @rate_limit(60, 60)
 def profile_user_calls(user_id: int):
-    """This user's most recent calls, for display on their profile card —
-    separate from /api/calls/top (the site-wide leaderboard) since this
-    is scoped to one specific user, not ranked against everyone."""
+    """This user's top calls of the last 24h, for display on their profile
+    card — separate from /api/calls/top (the site-wide leaderboard) since this
+    is scoped to one specific user, not ranked against everyone. Ranked by
+    multiplier rather than recency, unlike the profile.html page itself
+    (server-rendered via _recent_token_calls(), most-recent-first, no time
+    limit) — this endpoint intentionally uses a different query."""
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT id FROM users WHERE id=?', (user_id,)).fetchone()
         if not row:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
-        calls = _recent_token_calls(conn, user_id)
+        rows = conn.execute('''
+            SELECT mint, symbol, token_name, price_at_call, mcap_at_call, peak_price, timestamp
+            FROM token_calls
+            WHERE user_id=? AND timestamp >= datetime('now','-1 day') AND price_at_call > 0
+            ORDER BY (peak_price * 1.0 / price_at_call) DESC
+            LIMIT 3
+        ''', (user_id,)).fetchall()
+        calls = [{
+            'mint': r[0], 'symbol': r[1], 'name': r[2],
+            'price_at_call': r[3], 'mcap_at_call': r[4], 'peak_price': r[5],
+            'multiplier': round(r[5] / r[3], 4) if r[3] > 0 else 0,
+            'timestamp': r[6],
+        } for r in rows]
         return jsonify({'ok': True, 'calls': calls})
     finally:
         conn.close()
