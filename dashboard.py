@@ -1066,6 +1066,14 @@ _user_states_lock = threading.Lock()
 def init_db():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
+    # WAL mode is stored in the database file itself, so setting it once here
+    # at startup is enough -- every one of the ~280 other sqlite3.connect(DB_FILE)
+    # call sites across the app then opens the DB already in WAL mode. This lets
+    # readers and writers run concurrently instead of blocking each other, which
+    # matters a lot with only 1 gunicorn worker / 4 threads serving requests
+    # while the bot loop and monitor also hit the same file.
+    c.execute('PRAGMA journal_mode=WAL')
+    c.execute('PRAGMA busy_timeout=5000')
     # Migrate old X-based schema if it exists
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
     if c.fetchone():
@@ -4195,26 +4203,60 @@ def health():
         pass
     return jsonify({'status': 'ok', 'uptime': uptime, 'last_heartbeat': last_hb})
 
+_INDEX_BASE_CACHE = {'key': None, 'html': None}
+_INDEX_BASE_LOCK  = threading.Lock()
+
+def _index_base_files():
+    return [
+        os.path.join(BASE, 'dashboard.html'),
+        os.path.join(BASE, 'templates', '_low_balance_modal.html'),
+        os.path.join(BASE, 'templates', '_delete_convo_modal.html'),
+        os.path.join(BASE, 'templates', '_confirm_modal.html'),
+        os.path.join(BASE, 'templates', '_alert_modal.html'),
+    ]
+
+def _get_index_base_html():
+    """Assemble dashboard.html + its modal includes, with everything that's
+    identical for every request (modal HTML, API_SHARED_SECRET, ASSET_VER)
+    already substituted in. Cached in memory and keyed on the source files'
+    mtimes, so a redeploy/edit is picked up without a server restart but a
+    hot request never re-reads 5 files off disk or re-runs 5 full-string
+    .replace() passes over ~350KB of HTML — this route is hit on every page
+    load AND on every auto-refresh.js reload (every 60s per active tab)."""
+    files = _index_base_files()
+    try:
+        key = tuple(os.stat(p).st_mtime_ns for p in files)
+    except OSError:
+        key = None
+    cached = _INDEX_BASE_CACHE
+    if cached['key'] == key and cached['html'] is not None:
+        return cached['html']
+    with _INDEX_BASE_LOCK:
+        cached = _INDEX_BASE_CACHE
+        if cached['key'] == key and cached['html'] is not None:
+            return cached['html']
+        dashboard_path, low_balance_path, delete_convo_path, confirm_path, alert_path = files
+        with open(dashboard_path, 'r', encoding='utf-8') as f:
+            html = f.read()
+        with open(low_balance_path, 'r', encoding='utf-8') as f:
+            html = html.replace('__LOW_BALANCE_MODAL__', f.read())
+        with open(delete_convo_path, 'r', encoding='utf-8') as f:
+            html = html.replace('__DELETE_CONVO_MODAL__', f.read())
+        with open(confirm_path, 'r', encoding='utf-8') as f:
+            html = html.replace('__CONFIRM_MODAL__', f.read())
+        with open(alert_path, 'r', encoding='utf-8') as f:
+            html = html.replace('__ALERT_MODAL__', f.read())
+        html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
+        html = html.replace('__ASSET_VER__', _APP_VERSION)
+        _INDEX_BASE_CACHE['key']  = key
+        _INDEX_BASE_CACHE['html'] = html
+        return html
+
 @app.route('/')
 def index():
     # Inject the client secret (if configured) so the frontend can echo it back
     # on mutating requests — see API_SHARED_SECRET / _csrf_check above.
-    with open(os.path.join(BASE, 'dashboard.html'), 'r', encoding='utf-8') as f:
-        html = f.read()
-    with open(os.path.join(BASE, 'templates', '_low_balance_modal.html'), 'r', encoding='utf-8') as f:
-        low_balance_modal_html = f.read()
-    html = html.replace('__LOW_BALANCE_MODAL__', low_balance_modal_html)
-    with open(os.path.join(BASE, 'templates', '_delete_convo_modal.html'), 'r', encoding='utf-8') as f:
-        delete_convo_modal_html = f.read()
-    html = html.replace('__DELETE_CONVO_MODAL__', delete_convo_modal_html)
-    with open(os.path.join(BASE, 'templates', '_confirm_modal.html'), 'r', encoding='utf-8') as f:
-        confirm_modal_html = f.read()
-    html = html.replace('__CONFIRM_MODAL__', confirm_modal_html)
-    with open(os.path.join(BASE, 'templates', '_alert_modal.html'), 'r', encoding='utf-8') as f:
-        alert_modal_html = f.read()
-    html = html.replace('__ALERT_MODAL__', alert_modal_html)
-    html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
-    html = html.replace('__ASSET_VER__', _APP_VERSION)
+    html = _get_index_base_html()
     _sw = session.get('wallet', '')
     _ss = (_sw[:4] + '...' + _sw[-4:]) if len(_sw) > 8 else _sw
     html = html.replace('__SESSION_WALLET__', _sw)

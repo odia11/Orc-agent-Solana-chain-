@@ -1,19 +1,28 @@
 // ── SAFE AUTO-REFRESH ───────────────────────────────────────────────────────
-// Reloads the page every 60s so balances, positions, and feeds don't go stale
-// during a long session. Skipped while the person is actively typing, has any
-// modal/drawer/dropdown/panel open, has a request in flight, interacted in
-// the last 20s, or the tab isn't visible.
+// Keeps the home feed from going stale during a long session by silently
+// refetching it in place every REFRESH_INTERVAL_MS -- balances, positions,
+// market data, and notifications already have their own periodic refetch
+// (fetchState()/fetchMarketOnly()/_pollNotifCount() in dashboard.js and
+// notif-poll.js) so this only needs to cover the one thing nothing else
+// polls: new posts appearing in the social feed.
+//
+// This used to be a full window.location.reload(), which re-downloaded and
+// re-parsed the whole ~350KB HTML + JS bundle every minute for every active
+// tab -- the visible stutter this file now avoids. Swapping to loadHomeFeed()
+// mirrors the pattern already used elsewhere in this codebase (see the
+// "refetch + re-render in place instead of a full page reload" comment in
+// dashboard.js) rather than introducing a new refresh strategy.
+//
+// Same skip conditions as before (typing, modal/drawer/dropdown open, request
+// in flight, recent interaction, tab not visible), plus one new one: skip
+// while the person is scrolled into the feed reading, so an in-place refresh
+// never yanks their scroll position out from under them. Only refetch while
+// they're at the top, same as a "new posts" indicator on other feeds would.
 (function(){
   var REFRESH_INTERVAL_MS  = 60000;
   var IDLE_GRACE_MS        = 20000;
-  // A reload() firing in the same tick a backgrounded tab becomes visible
-  // again races iOS Safari's own resume of a suspended page -- WebKit
-  // sometimes can't complete that reload cleanly and the tab comes back
-  // permanently blank (worse the longer it sat backgrounded, e.g. phone
-  // screen locked for a few minutes). Requiring this grace period after
-  // becoming visible again gives WebKit time to fully resume the page
-  // first, so the reload behaves like any other foreground reload.
   var VISIBLE_GRACE_MS     = 5000;
+  var SCROLL_TOP_THRESHOLD = 80; // px -- "near the top" tolerance
   var _lastInteraction = Date.now();
   var _lastVisible     = Date.now();
   ['mousedown', 'keydown', 'touchstart', 'scroll'].forEach(function(evt){
@@ -40,7 +49,7 @@
     return document.body.style.overflow === 'hidden' || document.querySelector('.open') !== null;
   }
 
-  // Track in-flight fetch() calls so a reload never lands mid-request (e.g.
+  // Track in-flight fetch() calls so a refresh never lands mid-request (e.g.
   // a trade submit) with no chance for the success/error toast to show.
   // Wraps whatever window.fetch currently is, so it composes with any
   // page-specific wrapper (e.g. dashboard.js's CSRF-header injector) that
@@ -52,6 +61,10 @@
     return _prevFetch.apply(this, arguments).finally(function(){ _pendingFetches--; });
   };
 
+  function _scrolledIntoFeed(){
+    return (window.scrollY || document.documentElement.scrollTop || 0) > SCROLL_TOP_THRESHOLD;
+  }
+
   setInterval(function(){
     if(document.hidden) return;
     if(_isTypingOrFocused()) return;
@@ -59,6 +72,7 @@
     if(_pendingFetches > 0) return;
     if(Date.now() - _lastInteraction < IDLE_GRACE_MS) return;
     if(Date.now() - _lastVisible < VISIBLE_GRACE_MS) return;
-    window.location.reload();
+    if(_scrolledIntoFeed()) return;
+    if(typeof loadHomeFeed === 'function') loadHomeFeed();
   }, REFRESH_INTERVAL_MS);
 })();
