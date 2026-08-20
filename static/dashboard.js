@@ -934,9 +934,7 @@ function _rrPrice(p){ if(!p) return '—'; var n=parseFloat(p); if(isNaN(n)) ret
 async function _loadRightRail(){
   _loadRrMarket();
   _loadRrTraders();
-  _loadRrStats();
   setInterval(_loadRrMarket, 30000);
-  setInterval(_loadRrStats,  60000);
 }
 
 function _rrFeaturedMarketRow(p){
@@ -1021,17 +1019,6 @@ async function _loadRrTraders(){
         +'</div>';
     }).join('');
   }catch(e){ el.innerHTML='<div class="rr-empty">—</div>'; }
-}
-
-async function _loadRrStats(){
-  try{
-    var d=await fetch('/api/platform/stats').then(function(r){return r.json();}).catch(function(){return null;});
-    if(!d||!d.ok) return;
-    var t=document.getElementById('rr-stat-trades'); if(t) t.textContent=(d.trades_today||0).toLocaleString();
-    var p=document.getElementById('rr-stat-pnl');
-    if(p){ var pv=d.net_pnl_today||0; p.textContent=(pv>=0?'+':'')+pv.toFixed(1); p.className='rr-stat-val'+(pv>=0?' pos':' neg'); }
-    var o=document.getElementById('rr-stat-online'); if(o) o.textContent=(d.active_traders||0).toLocaleString();
-  }catch(e){}
 }
 
 function _rrSearch(q){
