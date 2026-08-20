@@ -4527,7 +4527,7 @@ def api_my_trades():
 def api_connect_wallet():
     return set_wallet()
 
-def _recent_trades_for_profile(conn, user_id: int, limit: int = 5):
+def _recent_trades_for_profile(conn, user_id: int, limit: int = 3):
     rows = conn.execute(
         'SELECT token, entry_price, exit_price, timestamp FROM trades '
         'WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0 '
