@@ -474,10 +474,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-view-count{font-size:11.5px;color:#565d68;font-family:'JetBrains Mono',monospace;margin-left:auto;user-select:none}
 .fc-action{display:flex;align-items:center;gap:5px;color:#565d68;font-size:13px;background:transparent;border:none;cursor:pointer;padding:0;font-family:'Geist',system-ui,sans-serif;transition:color .15s}
 .fc-action:hover{color:#eef1f5}
-.fc-action.liked{color:var(--red)!important}
-.fc-action.liked:hover{color:var(--red)!important}
+.fc-repost-btn{padding:4px 6px;margin:-4px -6px;border-radius:6px;transition:color .15s,background-color .15s}
+.fc-repost-btn:hover{color:#3ad29b;background:rgba(58,210,155,.12)}
 .fc-repost-btn.reposted{color:#3ad29b!important}
-.fc-repost-btn:hover{color:#3ad29b}
+.fc-like-btn{padding:4px 6px;margin:-4px -6px;border-radius:6px;transition:color .15s,background-color .15s}
+.fc-like-btn:hover{color:var(--red);background:rgba(247,107,98,.12)}
+.fc-like-btn.liked{color:var(--red)!important}
+.fc-like-btn.liked:hover{color:var(--red)!important;background:rgba(247,107,98,.12)}
 .fc-repost-wrap{margin-bottom:0}
 .fc-repost-banner{display:flex;align-items:center;gap:6px;padding:10px 16px 0;color:#565d68;font-size:12px;font-weight:600}
 .fc-repost-banner svg{flex-shrink:0}
@@ -501,7 +504,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reactions{display:flex;flex-wrap:wrap;gap:5px;margin-top:5px;padding:0 0 2px}
 .fc-reaction-pill{display:inline-flex;align-items:center;gap:4px;background:var(--bg3);border:1px solid var(--bg4);border-radius:99px;padding:3px 9px 3px 7px;font-size:13px;cursor:pointer;transition:border-color .15s,background .15s;line-height:1;font-family:inherit}
 .fc-reaction-pill:hover{background:#1c1f26;border-color:#3a3f4a}
-.fc-reaction-pill.mine{border-color:var(--accent);background:rgba(247,185,85,.08)}
+.fc-reaction-pill.mine{border-color:var(--accent);background:rgba(247,185,85,.16);font-weight:700}
 .fc-reaction-pill .rp-count{font-size:11px;color:#8a919c;font-family:'JetBrains Mono',monospace}
 .fc-reply-box{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .2s ease,padding .2s ease}
 .fc-reply-box.open{max-height:400px;overflow-y:auto;padding:0 22px 14px}
