@@ -4141,71 +4141,85 @@ def _agent_journal_log(user_id: int, mint: str, chain: str, symbol: str, phase: 
     except Exception as e:
         print(f'[agent_journal] log failed for {mint[:8] if mint else "?"}: {e}', flush=True)
 
+def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, chain: str, amount: float):
+    """One candidate through the full narrative-agent pipeline: safety gate
+    -> get_narrative_signal() -> (if decision=='buy') _can_narrative_buy()
+    gate -> chain-specific swap. Shared by _narrative_agent_cycle()'s full
+    scan and /admin/narrative-test's single-mint override, so both paths
+    run identically instead of drifting.
+
+    Always fetches its own get_token_data(mint) as the one source of truth
+    for get_narrative_signal()'s prompt data. Previously the full-scan path
+    fed get_narrative_signal() a _get_narrative_candidates() dict instead,
+    whose price_change_5m/price_change_1h field names don't match what
+    get_narrative_signal() actually reads (change5m/change1h) -- those two
+    fields silently resolved to 0 in every prompt. get_token_data()'s field
+    names match, so routing both paths through it here fixes that too."""
+    token_data = get_token_data(mint) or {}
+    symbol     = token_data.get('symbol') or mint[:8]
+
+    safe, reason = _narrative_safety_gate(mint, chain)
+    if not safe:
+        _agent_journal_log(user_id, mint, chain, symbol, phase='filtered',
+                            filter_result=reason, decision='pass')
+        return
+
+    signal   = get_narrative_signal(token_data, mint, symbol)
+    decision = signal.get('decision', 'pass')
+    _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
+                        thesis_json=json.dumps(signal), decision=decision)
+
+    if decision != 'buy':
+        return
+
+    allowed, gate_reason = _can_narrative_buy(user_id, amount)
+    if not allowed:
+        _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                            size_usd=amount, filter_result=gate_reason)
+        return
+
+    key_column = 'encrypted_private_key' if chain == 'solana' else 'encrypted_private_key_bsc'
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(f'SELECT {key_column} FROM users WHERE id=?', (user_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                            size_usd=amount, filter_result=f'no {chain} trading key configured')
+        return
+
+    with _use_key(row[0], wallet) as pk:
+        if chain == 'solana':
+            ok, tx_hash = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount))
+            err = '' if ok else 'swap failed'
+        else:
+            ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
+
+    _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                        size_usd=amount, tx_hash=tx_hash,
+                        filter_result='' if ok else (err or 'swap failed'))
+
 def _narrative_agent_cycle(user_id: int, wallet: str):
     """One pass of the narrative agent over _get_narrative_candidates().
-    Not invoked from anywhere yet -- no thread, no route.
+    Not invoked from anywhere yet -- no thread, no automatic route.
 
-    Per candidate: safety gate first (fail -> agent_journal phase='filtered',
-    next candidate). Pass -> get_narrative_signal(), logged phase='thesis'.
-    decision=='buy' -> _can_narrative_buy() gate, then the chain-specific
-    swap (_execute_user_swap_ex for Solana, _execute_bsc_swap for BSC),
-    logged phase='buy' with the real tx_hash on success or the failure
-    reason. (Previously both swap paths discarded their tx hash and every
-    buy logged tx_hash='', which would have falsely tripped
-    _can_narrative_buy()'s circuit breaker on real successes -- fixed by
-    adding _execute_user_swap_ex() and extending _execute_bsc_swap()'s
-    return to a 3-tuple; _execute_user_swap() itself is now a thin wrapper
-    over _execute_user_swap_ex() so its ~15 existing callers are unaffected.)"""
+    Per candidate, delegates to _narrative_agent_process_candidate() --
+    see that function for the actual pipeline (safety gate -> thesis ->
+    caps -> swap) and journal logging. (Previously both swap paths
+    discarded their tx hash and every buy logged tx_hash='', which would
+    have falsely tripped _can_narrative_buy()'s circuit breaker on real
+    successes -- fixed by adding _execute_user_swap_ex() and extending
+    _execute_bsc_swap()'s return to a 3-tuple; _execute_user_swap() itself
+    is now a thin wrapper over _execute_user_swap_ex() so its ~15 existing
+    callers are unaffected.)"""
     amount = NARRATIVE_MAX_PER_TX  # no per-candidate sizing signal exists yet -- flat per-tx cap
-
     for cand in _get_narrative_candidates():
-        mint   = cand.get('address', '')
-        chain  = cand.get('chain', 'solana')
-        symbol = cand.get('symbol', '')
+        mint  = cand.get('address', '')
+        chain = cand.get('chain', 'solana')
         if not mint:
             continue
-
-        safe, reason = _narrative_safety_gate(mint, chain)
-        if not safe:
-            _agent_journal_log(user_id, mint, chain, symbol, phase='filtered',
-                                filter_result=reason, decision='pass')
-            continue
-
-        signal   = get_narrative_signal(cand, mint, symbol)
-        decision = signal.get('decision', 'pass')
-        _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
-                            thesis_json=json.dumps(signal), decision=decision)
-
-        if decision != 'buy':
-            continue
-
-        allowed, gate_reason = _can_narrative_buy(user_id, amount)
-        if not allowed:
-            _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
-                                size_usd=amount, filter_result=gate_reason)
-            continue
-
-        key_column = 'encrypted_private_key' if chain == 'solana' else 'encrypted_private_key_bsc'
-        conn = sqlite3.connect(DB_FILE)
-        try:
-            row = conn.execute(f'SELECT {key_column} FROM users WHERE id=?', (user_id,)).fetchone()
-        finally:
-            conn.close()
-        if not row or not row[0]:
-            _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
-                                size_usd=amount, filter_result=f'no {chain} trading key configured')
-            continue
-
-        with _use_key(row[0], wallet) as pk:
-            if chain == 'solana':
-                ok, tx_hash = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount))
-                err = '' if ok else 'swap failed'
-            else:
-                ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
-
-        _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
-                            size_usd=amount, tx_hash=tx_hash,
-                            filter_result='' if ok else (err or 'swap failed'))
+        _narrative_agent_process_candidate(user_id, wallet, mint, chain, amount)
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
     """Records a bridge_transactions failure -- separated out since
@@ -7418,7 +7432,13 @@ def admin_narrative_test():
     then shows the last 20 agent_journal rows. Purely manual, same
     philosophy as the bridge test panel. POST-only (no GET/page/button) --
     trigger via curl/fetch with the session's CSRF token, same as
-    /api/bridge/execute."""
+    /api/bridge/execute.
+
+    Optional JSON body {"mint": "..."}: skips _get_narrative_candidates()
+    entirely and runs just that one token through
+    _narrative_agent_process_candidate() (same safety-gate/thesis/caps/buy
+    pipeline the full scan uses). Chain is auto-detected from the address
+    format. Without a mint, behavior is unchanged -- the full scan."""
     if session.get('readonly') and session.get('wallet'):
         _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
                              f'POST {request.path}')
@@ -7435,7 +7455,17 @@ def admin_narrative_test():
         return jsonify({'ok': False, 'msg': 'User not found'}), 404
     user_id = row[0]
 
-    _narrative_agent_cycle(user_id, wallet)
+    mint = str((request.get_json(silent=True) or {}).get('mint', '')).strip()
+    if mint:
+        if is_valid_solana_address(mint):
+            chain = 'solana'
+        elif is_valid_evm_address(mint):
+            chain = 'bsc'
+        else:
+            return jsonify({'ok': False, 'msg': 'mint is not a valid Solana or BSC address'}), 400
+        _narrative_agent_process_candidate(user_id, wallet, mint, chain, NARRATIVE_MAX_PER_TX)
+    else:
+        _narrative_agent_cycle(user_id, wallet)
 
     conn2 = sqlite3.connect(DB_FILE)
     try:
