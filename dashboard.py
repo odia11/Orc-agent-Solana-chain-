@@ -3932,6 +3932,77 @@ def _check_lp_locked(mint_address: str) -> dict:
         print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
         return {'lp_locked_pct': 0, 'ok': False}
 
+def _check_bsc_honeypot(token_address: str) -> dict:
+    """BSC's equivalent of _check_lp_locked() -- BSC tokens are arbitrary
+    smart contracts (not simple SPL tokens), so 'mint authority' doesn't
+    exist here. The real equivalent risk is a honeypot: a contract that lets
+    you buy but blocks or heavily taxes selling. Honeypot.is actually
+    SIMULATES a buy+sell against the live contract rather than just reading
+    source code, which is why it catches "hidden owner" tricks that a
+    static ownership-renounced check would miss (see the 2026 CryptoKoki
+    honeypot-kit research: renounced ownership is trivially fakeable).
+    Fails closed -- like _check_lp_locked(), a failed/inconclusive check
+    returns 'ok': False so callers treat it as NOT cleared, never silently
+    treat an unknown result as safe."""
+    try:
+        r = requests.get(
+            'https://api.honeypot.is/v2/IsHoneypot',
+            params={'address': token_address, 'chainID': BSC_CHAIN_ID},
+            timeout=8
+        )
+        data = r.json()
+        is_honeypot = bool((data.get('honeypotResult') or {}).get('isHoneypot', True))
+        risk_level  = (data.get('summary') or {}).get('riskLevel')
+        sim = data.get('simulationResult') or {}
+        buy_tax  = float(sim.get('buyTax')  or 0)
+        sell_tax = float(sim.get('sellTax') or 0)
+        sim_ok   = bool(data.get('simulationSuccess'))
+        print(f'[honeypot] {token_address[:10]} isHoneypot={is_honeypot} riskLevel={risk_level} '
+              f'buyTax={buy_tax} sellTax={sell_tax} simOk={sim_ok}', flush=True)
+        return {
+            'is_honeypot': is_honeypot,
+            'risk_level':  risk_level,
+            'buy_tax':     buy_tax,
+            'sell_tax':    sell_tax,
+            'ok':          sim_ok,  # whether the check itself completed, not whether the token is safe
+        }
+    except Exception as e:
+        print(f'[honeypot] error for {token_address[:10]}: {e}', flush=True)
+        return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+
+def bsc_discover_tokens() -> list:
+    """BSC equivalent of discover_tokens() -- deliberately a fully separate
+    function/loop from the Solana one (see bsc_token_loop() below), not a
+    branch inside the shared token_loop(). Keeping BSC discovery isolated
+    means a bug here can never affect Solana scanning, and vice versa."""
+    seen  = {USDC_BSC_ADDR}
+    addrs = []
+
+    r = _dex_get('https://api.dexscreener.com/token-boosts/top/v1')
+    if r and r.status_code == 200:
+        try:
+            for item in r.json():
+                if item.get('chainId') == 'bsc':
+                    a = item.get('tokenAddress', '')
+                    if a and a not in seen:
+                        seen.add(a); addrs.append(a)
+        except Exception: pass
+    time.sleep(0.5)
+
+    r = _dex_get('https://api.dexscreener.com/latest/dex/search?q=bnb&rankBy=trendingScoreH6')
+    if r and r.status_code == 200:
+        try:
+            data  = r.json()
+            pairs = data.get('pairs', []) if isinstance(data, dict) else (data if isinstance(data, list) else [])
+            for p in pairs:
+                if p.get('chainId') == 'bsc':
+                    a = (p.get('baseToken') or {}).get('address', '')
+                    if a and a not in seen:
+                        seen.add(a); addrs.append(a)
+        except Exception: pass
+
+    return addrs[:100]
+
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
     us    = get_user_state(wallet)
