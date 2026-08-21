@@ -3765,6 +3765,43 @@ def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: 
     r.raise_for_status()
     return r.json()
 
+# ── CROSS-CHAIN BRIDGE QUOTE (Mayan Finance) ──
+# Quote-only for now, deliberately: this is the safe half (no signing, no
+# funds move) of what would eventually become a Solana<->BSC bridge. The
+# execution half needs Mayan's official swap-sdk (JS/npm, not a plain REST
+# call) to build the cross-chain transaction correctly -- hand-rolling that
+# ourselves in Python without the SDK is exactly the kind of subtle,
+# expensive-to-get-wrong problem this project has avoided all day. See the
+# _MAYAN_NATIVE_SENTINEL note below for why native-asset addressing looks
+# unusual here.
+_MAYAN_NATIVE_SENTINEL = '0x0000000000000000000000000000000000000000'  # Mayan's placeholder for "the chain's native asset", not a real token contract
+
+def get_mayan_bridge_quote(amount: float, from_chain: str, to_chain: str,
+                            from_token: str, to_token: str) -> dict:
+    """Public, unauthenticated endpoint -- no API key, no wallet signature,
+    nothing that touches funds. Returns Mayan's own fee/route breakdown
+    so the UI can show 'bridging ~$X will cost ~$Y and take ~Z seconds'
+    before anyone commits to anything."""
+    r = requests.get(
+        'https://price-api.mayan.finance/v3/quote',
+        params={
+            'amountIn':   amount,
+            'fromToken':  from_token,
+            'fromChain':  from_chain,
+            'toToken':    to_token,
+            'toChain':    to_chain,
+            'slippageBps': 'auto',
+        },
+        timeout=12,
+    )
+    r.raise_for_status()
+    quotes = r.json()
+    if not quotes:
+        return {'ok': False, 'msg': 'No bridge route found for this pair/amount'}
+    # Mayan returns up to two quotes: [fastest, best-return]. Surface both so
+    # the UI can offer a real choice instead of silently picking one.
+    return {'ok': True, 'quotes': quotes}
+
 def _ensure_bsc_allowance(w3, owner_address: str, private_key: str, token_address: str,
                            spender: str, needed_amount_raw: int) -> bool:
     """Approves exactly `needed_amount_raw` (not an unlimited/infinite approval)
@@ -6487,6 +6524,36 @@ def api_bsc_balance():
         'usdc': balances['usdc'],
         'error': balances['error'],
     })
+
+@app.route('/api/bridge/quote', methods=['GET'])
+@rate_limit(30, 60)
+def api_bridge_quote():
+    """Quote-only, read-only -- no auth required since nothing here touches
+    a specific user's funds or identity, same as any other public price
+    lookup elsewhere in this app."""
+    try:
+        amount = float(request.args.get('amount', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    if amount <= 0:
+        return jsonify({'ok': False, 'msg': 'Amount must be greater than 0'}), 400
+
+    direction = request.args.get('direction', 'sol_to_bsc')
+    if direction == 'sol_to_bsc':
+        from_chain, to_chain = 'solana', 'bsc'
+        from_token, to_token = USDC_MINT, USDC_BSC_ADDR
+    elif direction == 'bsc_to_sol':
+        from_chain, to_chain = 'bsc', 'solana'
+        from_token, to_token = USDC_BSC_ADDR, USDC_MINT
+    else:
+        return jsonify({'ok': False, 'msg': 'direction must be sol_to_bsc or bsc_to_sol'}), 400
+
+    try:
+        result = get_mayan_bridge_quote(amount, from_chain, to_chain, from_token, to_token)
+        return jsonify(result)
+    except requests.exceptions.RequestException as e:
+        print(f'[bridge-quote] error: {e}', flush=True)
+        return jsonify({'ok': False, 'msg': 'Could not fetch bridge quote — try again'}), 502
 
 @app.route('/api/bsc/trade/buy', methods=['POST'])
 @rate_limit(10, 60)
