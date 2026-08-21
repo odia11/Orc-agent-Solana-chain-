@@ -800,9 +800,13 @@ def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> st
 _SOLANA_ADDR_RE = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{32,44}$')
 _SOLANA_KEY_RE  = re.compile(r'^[1-9A-HJ-NP-Za-km-z]{44,88}$')
 _FEED_VIEW_ID_RE = re.compile(r'^([pt])(\d+)$')   # feed_posts 'p<id>' / trades 't<id>'
+_EVM_ADDR_RE = re.compile(r'^0x[0-9a-fA-F]{40}$')
 
 def is_valid_solana_address(addr: str) -> bool:
     return bool(_SOLANA_ADDR_RE.match(addr or ''))
+
+def is_valid_evm_address(addr: str) -> bool:
+    return bool(_EVM_ADDR_RE.match(addr or ''))
 
 def is_valid_solana_private_key(key: str) -> bool:
     key = (key or '').strip()
@@ -6109,6 +6113,78 @@ def api_bsc_balance():
         'usdc': balances['usdc'],
         'error': balances['error'],
     })
+
+@app.route('/api/bsc/trade/buy', methods=['POST'])
+@rate_limit(10, 60)
+def api_bsc_trade_buy():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data          = request.get_json(silent=True) or {}
+    token_address = _sanitize(str(data.get('token_address', '')).strip())
+    if not is_valid_evm_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    amount_usdc = data.get('amount_usdc')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT id, encrypted_private_key_bsc, min_trade_size, max_trade_size FROM users WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No BSC trading wallet configured'}), 400
+    enc_blob = row[1]
+    min_size = float(row[2]) if row[2] is not None else 1.0
+    max_size = float(row[3]) if row[3] is not None else 10.0
+    if amount_usdc is None:
+        amount_usdc = max_size
+    try:
+        amount_usdc = float(amount_usdc)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    # min_trade_size/max_trade_size are already USDC-denominated (see
+    # _migrate_trade_size_units) -- reused as-is rather than adding a
+    # separate BSC-specific limit setting.
+    amount_usdc = max(min_size, min(max_size, amount_usdc))
+    with _use_key(enc_blob, wallet) as pk:
+        buy_ok = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
+    if not buy_ok:
+        return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
+    return jsonify({'ok': True, 'amount_usdc': amount_usdc, 'token_address': token_address})
+
+@app.route('/api/bsc/trade/sell', methods=['POST'])
+@rate_limit(10, 60)
+def api_bsc_trade_sell():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data          = request.get_json(silent=True) or {}
+    token_address = _sanitize(str(data.get('token_address', '')).strip())
+    if not is_valid_evm_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    try:
+        amount = float(data.get('amount'))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    if amount <= 0:
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No BSC trading wallet configured'}), 400
+    enc_blob = row[0]
+    with _use_key(enc_blob, wallet) as pk:
+        sell_ok = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
+    if not sell_ok:
+        return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
+    return jsonify({'ok': True, 'token_address': token_address, 'amount': amount})
 
 @app.route('/referrals')
 def referrals_page():
