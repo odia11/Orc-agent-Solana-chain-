@@ -1255,6 +1255,29 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_open_positions_user ON open_positions(user_id)')
+    # Bridge transactions: one row per Solana<->BSC bridge attempt (Mayan Finance),
+    # from quote-acceptance through on-chain confirmation. Kept even after
+    # completion (unlike open_positions) since this is an audit trail, not
+    # live state -- status/error_msg/updated_at track it through its lifecycle.
+    c.execute('''CREATE TABLE IF NOT EXISTS bridge_transactions (
+        id               INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id          INTEGER NOT NULL,
+        wallet           TEXT NOT NULL,
+        source_chain     TEXT NOT NULL,
+        dest_chain       TEXT NOT NULL,
+        token_in         TEXT NOT NULL,
+        token_out        TEXT NOT NULL,
+        amount_in        REAL NOT NULL,
+        source_tx_hash   TEXT DEFAULT '',
+        mayan_order_hash TEXT DEFAULT '',
+        status           TEXT DEFAULT 'initiated',
+        initiated_by     TEXT DEFAULT 'user',
+        error_msg        TEXT DEFAULT '',
+        created_at       TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at       TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_bridge_transactions_user ON bridge_transactions(user_id)')
     c.execute('''CREATE TABLE IF NOT EXISTS portfolio_snapshots (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id         INTEGER NOT NULL,
