@@ -18267,6 +18267,8 @@ def admin_health():
         c    = conn.cursor()
         c.execute('SELECT COUNT(*) FROM users')
         total_users = int(c.fetchone()[0] or 0)
+        c.execute('SELECT COUNT(*) FROM users WHERE narrative_agent_enabled=1')
+        narrative_agent_users = int(c.fetchone()[0] or 0)
         c.execute('SELECT COUNT(*) FROM security_log WHERE timestamp >= datetime("now", "-1 hour")')
         sec_events_1h = int(c.fetchone()[0] or 0)
         conn.close()
@@ -18306,6 +18308,7 @@ def admin_health():
             'active_traders':   active_traders,
             'total_sessions':   len(user_states),
             'total_users':      total_users,
+            'narrative_agent_users': narrative_agent_users,
             'db_size_kb':       db_size_kb,
             'ai_cache_size':    len(_ai_cache),
             'ai_disabled':      time.time() < _ai_disabled_until,

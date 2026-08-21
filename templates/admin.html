@@ -588,6 +588,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
             <div class="health-row"><span class="health-row-lbl">Active traders</span><span class="health-row-val" id="hc-traders">—</span></div>
             <div class="health-row"><span class="health-row-lbl">Total sessions</span><span class="health-row-val" id="hc-sessions">—</span></div>
             <div class="health-row"><span class="health-row-lbl">Users w/ key</span><span class="health-row-val" id="hc-users">—</span></div>
+            <div class="health-row"><span class="health-row-lbl">Narrative agent on</span><span class="health-row-val" id="hc-narrative">—</span></div>
             <div class="health-row"><span class="health-row-lbl">Owner wallet</span><span class="health-row-val" id="hc-owner">—</span></div>
           </div>
         </div>
@@ -1320,6 +1321,7 @@ async function loadSystem() {
     document.getElementById('hc-traders').textContent = health.active_traders ?? '—';
     document.getElementById('hc-sessions').textContent= health.total_sessions ?? '—';
     document.getElementById('hc-users').textContent   = health.total_users ?? '—';
+    document.getElementById('hc-narrative').textContent = health.narrative_agent_users ?? '—';
     document.getElementById('hc-owner').textContent   = health.owner_configured ? 'set' : 'missing';
     document.getElementById('hc-db').textContent      = (health.db_size_kb ?? '—') + ' KB';
     document.getElementById('hc-sec').textContent     = health.sec_events_1h ?? '—';
