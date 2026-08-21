@@ -45,6 +45,9 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet, InvalidToken
 from dotenv import load_dotenv
+from eth_account import Account as _EvmAccount  # BSC (EVM) keypair generation --
+                                                  # aliased to avoid clashing with any
+                                                  # local variable named "Account"
 try:
     from pywebpush import webpush, WebPushException
     _PYWEBPUSH_OK = True
@@ -661,6 +664,37 @@ def decrypt_x_token(enc: str, wallet: str) -> str:
         return enc
     l1 = _wallet_fernet(wallet).decrypt(enc[3:].encode())
     return _fernet.decrypt(l1).decode()
+
+# ── BSC (EVM) TRADING WALLET ──
+# A user's BSC trading wallet is a separate, server-generated secp256k1
+# keypair -- it is NOT derived from their Solana wallet in any way (the two
+# key types are cryptographically unrelated). It's encrypted with the exact
+# same double-Fernet scheme as the Solana key (see encrypt_private_key()
+# above), keyed off the user's Solana wallet_address as their stable
+# identity across both chains.
+def generate_bsc_wallet() -> tuple[str, str]:
+    """Returns (address, private_key_hex). Never logs the private key."""
+    acct = _EvmAccount.create()
+    return acct.address, acct.key.hex()
+
+def ensure_bsc_wallet(conn, user_id: int, wallet_address: str) -> str:
+    """Idempotent: creates and stores a BSC trading wallet for this user if
+    they don't already have one, and returns their BSC address either way."""
+    row = conn.execute(
+        'SELECT bsc_wallet_address, encrypted_private_key_bsc FROM users WHERE id=?',
+        (user_id,)
+    ).fetchone()
+    if row and row[0]:
+        return row[0]
+    bsc_address, bsc_pk_hex = generate_bsc_wallet()
+    encrypted = encrypt_private_key(bsc_pk_hex, wallet_address)
+    conn.execute(
+        'UPDATE users SET bsc_wallet_address=?, encrypted_private_key_bsc=? WHERE id=?',
+        (bsc_address, encrypted, user_id)
+    )
+    conn.commit()
+    print(f'[bsc] created trading wallet {bsc_address[:8]}... for user_id={user_id}', flush=True)
+    return bsc_address
 
 # ── PERFORMANCE FEE COLLECTION ──
 def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> str:
@@ -1654,6 +1688,18 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN is_verified INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN banner_url TEXT DEFAULT NULL",
+        # ── BSC (multi-chain) support ──
+        # Mirrors the existing Solana encrypted_private_key column, but for a
+        # separate, server-managed EVM (secp256k1) trading wallet -- Solana's
+        # ed25519 keys and BSC's secp256k1 keys are not interchangeable, so
+        # this genuinely needs its own key material, not a shared one.
+        "ALTER TABLE users ADD COLUMN encrypted_private_key_bsc TEXT DEFAULT ''",
+        "ALTER TABLE users ADD COLUMN bsc_wallet_address TEXT DEFAULT ''",
+        # Tracks whether the automatic gas-reserve top-up (a small USDC->BNB
+        # slice, invisible to the user) has been performed for this wallet,
+        # so the background job doesn't redundantly re-convert on every pass.
+        "ALTER TABLE users ADD COLUMN bsc_gas_reserved_at TIMESTAMP DEFAULT NULL",
+        "ALTER TABLE users ADD COLUMN bot_enabled_bsc INTEGER DEFAULT 0",
         # NULL for rows predating this column -- those acceptances only ever
         # recorded a version string, not the actual text. The PDF download
         # falls back to the CURRENT _TOS_CONTENT_HTML for those, clearly
