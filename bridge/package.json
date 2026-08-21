@@ -1,0 +1,13 @@
+{
+  "name": "orcagent-bridge",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Solana<->BSC bridge execution (mayan_execute.js), invoked as a subprocess from dashboard.py -- same pattern as orcagent_solana.py.",
+  "main": "mayan_execute.js",
+  "dependencies": {
+    "@mayanfinance/swap-sdk": "latest",
+    "@solana/web3.js": "^1.95.0",
+    "ethers": "^6.13.0",
+    "bs58": "^5.0.0"
+  }
+}
