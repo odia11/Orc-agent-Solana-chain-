@@ -3758,6 +3758,103 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
         return False
 
+def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chain: str,
+                          token_in: str, token_out: str, amount: float) -> tuple:
+    """Bridge equivalent of _execute_user_swap()/_execute_bsc_swap() -- signs
+    and broadcasts a Solana<->BSC bridge swap via bridge/mayan_execute.js
+    (Node -- Mayan's swap-sdk is JS-only, see that file's own header for why
+    this isn't hand-rolled in Python). Returns (success, tx_hash_or_message).
+
+    Unlike the single-chain swap functions, this one decrypts its own key --
+    source_chain determines which column/format (Solana vs BSC), so that
+    branch has to live here rather than at each call site."""
+    key_column = 'encrypted_private_key' if source_chain == 'solana' else 'encrypted_private_key_bsc'
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(f'SELECT {key_column} FROM users WHERE id=?', (user_id,)).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return False, f'No {source_chain} trading key configured'
+
+    with _use_key(row[0], wallet) as private_key:
+        # Audit-trail row written before anything touches the network -- if
+        # the subprocess call itself throws, there's still a record this was
+        # attempted.
+        conn2 = sqlite3.connect(DB_FILE)
+        try:
+            cur = conn2.execute(
+                '''INSERT INTO bridge_transactions
+                   (user_id, wallet, source_chain, dest_chain, token_in, token_out, amount_in, status)
+                   VALUES (?,?,?,?,?,?,?,?)''',
+                (user_id, wallet, source_chain, dest_chain, token_in, token_out, amount, 'initiated'))
+            conn2.commit()
+            row_id = cur.lastrowid
+        finally:
+            conn2.close()
+
+        env = os.environ.copy()
+        env['WALLET_PRIVATE_KEY'] = private_key
+        try:
+            result = subprocess.run(
+                ['node', os.path.join(BASE, 'bridge', 'mayan_execute.js'),
+                 'bridge', source_chain, dest_chain, token_in, token_out, str(amount)],
+                env=env, capture_output=True, text=True, timeout=180
+            )
+        finally:
+            env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
+
+    stdout = _redact_keys(result.stdout.strip())
+    stderr = _redact_keys(result.stderr.strip())
+
+    if result.returncode != 0:
+        err_msg = (stderr[-300:] or stdout[-300:] or 'Bridge script failed (no output)')
+        _bridge_tx_mark_failed(row_id, err_msg)
+        return False, err_msg
+
+    try:
+        parsed = json.loads(result.stdout.strip().splitlines()[-1])
+    except Exception:
+        _bridge_tx_mark_failed(row_id, 'Bridge script returned unparseable output')
+        return False, 'Bridge script returned unparseable output'
+
+    tx_hash = parsed.get('tx_hash')
+    if not tx_hash:
+        _bridge_tx_mark_failed(row_id, 'Bridge script returned no tx_hash')
+        return False, 'Bridge script returned no tx_hash'
+
+    # ── The instant tx_hash exists, record it -- nothing else runs between
+    # having it and persisting it. ──
+    conn3 = sqlite3.connect(DB_FILE)
+    try:
+        conn3.execute(
+            "UPDATE bridge_transactions SET status='source_broadcast', source_tx_hash=?, "
+            "mayan_order_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (tx_hash, parsed.get('order_hash'), row_id))
+        conn3.commit()
+    finally:
+        conn3.close()
+
+    add_user_log(wallet, f'Bridge {source_chain}->{dest_chain} broadcast: {tx_hash}')
+    return True, tx_hash
+
+def _bridge_tx_mark_failed(row_id: int, error_msg: str):
+    """Records a bridge_transactions failure -- separated out since
+    _execute_bridge_swap() has three distinct failure points that all need
+    the same status='failed' + error_msg write."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute(
+                "UPDATE bridge_transactions SET status='failed', error_msg=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (error_msg[:500], row_id))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[bridge_tx] failed to record failure for row {row_id}: {e}', flush=True)
+
 # ── BSC SWAP EXECUTION (0x API) ──
 _ERC20_FULL_ABI = _ERC20_MIN_ABI + [
     {'constant': True, 'inputs': [{'name': '_owner', 'type': 'address'}, {'name': '_spender', 'type': 'address'}],
