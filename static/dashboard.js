@@ -6841,6 +6841,10 @@ document.addEventListener('click',function(ev){
 
 /* ── Feed post reply icon ── */
 var _REPLY_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>';
+/* ── Reply composer toolbar icons (same paths as the main post composer's
+   chart/image chips, dashboard.html ~4071-4080) ── */
+var _RC_CHART_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
+var _RC_IMAGE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
 
 /* ── Feed post share menu ── */
 var _SHARE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>';
@@ -8340,14 +8344,24 @@ function _renderFeedCard(e){
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'" onclick="event.stopPropagation()">'
     +'<div class="fc-reply-inner">'
-    +'<div class="fc-reply-pill" id="rpill-'+esc(safePostId)+'">'
-    +'<div class="fc-reply-emoji-wrap">'
-    +'<button class="fc-reply-emoji-btn" onclick="_emojiPickerToggle(event,\'repal-'+esc(safePostId)+'\',\'rinp-'+esc(safePostId)+'\')" title="Emoji">😊</button>'
+    +'<div class="fc-reply-card" id="rcard-'+esc(safePostId)+'">'
+    +'<div class="fc-reply-heading">Reageren op <strong>'+esc(e.username||'Trader')+'</strong>\'s post</div>'
+    +'<div class="fc-reply-row1">'
+    +'<div class="fc-reply-avatar">'+_fcReplyAvatarHtml()+'</div>'
+    +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" '
+      +'oninput="_fcReplyCardSync(\'rcard-'+esc(safePostId)+'\')" onfocus="_fcReplyCardSync(\'rcard-'+esc(safePostId)+'\')" onblur="_fcReplyCardSync(\'rcard-'+esc(safePostId)+'\')" '
+      +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
+    +'</div>'
+    +'<div class="fc-reply-row2">'
+    +'<div class="fc-reply-tools">'
+    +'<button class="fc-reply-tool" onclick="_emojiPickerToggle(event,\'repal-'+esc(safePostId)+'\',\'rinp-'+esc(safePostId)+'\')" title="Emoji">😊</button>'
+    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Image\')" title="Image">'+_RC_IMAGE_ICON_SVG+'</button>'
+    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Chart\')" title="Chart">'+_RC_CHART_ICON_SVG+'</button>'
     +'<div class="fc-reply-palette ep-palette" id="repal-'+esc(safePostId)+'"></div>'
     +'</div>'
-    +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" onfocus="_fcReplyPillFocus(\'rpill-'+esc(safePostId)+'\',true)" onblur="_fcReplyPillFocus(\'rpill-'+esc(safePostId)+'\',false)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
-    +'</div>'
     +'<button class="fc-reply-send" onclick="_feedSubmitReply(document.getElementById(\'rinp-'+esc(safePostId)+'\'),\''+esc(safePostId)+'\')">Reply</button>'
+    +'</div>'
+    +'</div>'
     +'</div>'
     +'<div class="fc-replies-list" id="rlist-'+esc(safePostId)+'"></div>'
     +'</div>'
@@ -8560,16 +8574,35 @@ async function _refreshVisibleReactions(){
   }catch(_){}
 }
 
-// Reply composer pill: quiet at rest, grows an amber glow + reveals its
-// emoji tool once you're actually focused in the input (blur only collapses
-// it back down if you didn't type anything, so a half-written reply stays
-// visibly "open" rather than snapping shut under you).
-function _fcReplyPillFocus(pillId, isFocused){
-  var pill = document.getElementById(pillId);
-  if(!pill) return;
-  if(isFocused){ pill.classList.add('focused'); return; }
-  var inp = pill.querySelector('.fc-reply-inp');
-  if(!inp || !inp.value) pill.classList.remove('focused');
+// Reply composer card: border goes amber the moment the input has text or
+// is focused, drops back to neutral only once both are false -- so a
+// half-written reply stays visibly "active" rather than snapping shut
+// the instant you tab away, but an empty/blurred one settles back down.
+function _fcReplyCardSync(cardId){
+  var card = document.getElementById(cardId);
+  if(!card) return;
+  var inp = card.querySelector('.fc-reply-inp');
+  var focused = document.activeElement === inp;
+  card.classList.toggle('active', focused || !!(inp && inp.value));
+}
+
+// Image/chart reply attachments aren't wired to a backend yet (only the
+// top-level post composer supports them) -- surfaces that plainly instead
+// of a dead button that looks broken.
+function _fcReplyToolSoon(kind){
+  if(typeof showLfToast==='function') showLfToast('🛠️', kind+' replies — coming soon', 'warn');
+}
+
+// Reads the already-rendered sidebar avatar (same source #feed-composer-avatar
+// mirrors on DOMContentLoaded) at the moment each reply card's HTML is built,
+// since reply cards are created dynamically per-post -- a single page-load
+// mirror wouldn't reach the ones created later during scroll/pagination.
+function _fcReplyAvatarHtml(){
+  var img = document.getElementById('sb-avatar-img');
+  if(img && img.src) return '<img src="'+esc(img.src)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%">';
+  var ini = document.getElementById('sb-avatar-ini');
+  if(ini && ini.textContent) return esc(ini.textContent);
+  return '';
 }
 
 function _feedToggleReply(btn, postId){
@@ -8720,19 +8753,29 @@ function _feedToggleNestedReply(parentId, postId, btn){
   // Close any other open nested composer on this post first, so only one is active.
   document.querySelectorAll('#rlist-'+postId+' .fc-ri-nested-box').forEach(function(b){ b.style.display='none'; b.innerHTML=''; });
   if(isOpen) return; // was open -> we just closed it above
-  var inpId = 'rninp-'+parentId;
-  var pillId = 'rnpill-'+parentId;
+  var inpId  = 'rninp-'+parentId;
+  var cardId = 'rncard-'+parentId;
+  var row    = btn ? btn.closest('.fc-reply-item') : null;
+  var authorName = (row && row.querySelector('.fc-ri-name') && row.querySelector('.fc-ri-name').textContent) || 'Trader';
   box.innerHTML = '<div class="fc-reply-inner" style="margin-top:8px" onclick="event.stopPropagation()">'
-    +'<div class="fc-reply-pill" id="'+pillId+'">'
-    +'<div class="fc-reply-emoji-wrap">'
-    +'<button class="fc-reply-emoji-btn" onclick="_emojiPickerToggle(event,\'nrepal-'+parentId+'\',\''+inpId+'\')" title="Emoji">😊</button>'
-    +'<div class="fc-reply-palette ep-palette" id="nrepal-'+parentId+'"></div>'
-    +'</div>'
+    +'<div class="fc-reply-card" id="'+cardId+'">'
+    +'<div class="fc-reply-heading">Reageren op <strong>'+esc(authorName)+'</strong>\'s reply</div>'
+    +'<div class="fc-reply-row1">'
+    +'<div class="fc-reply-avatar">'+_fcReplyAvatarHtml()+'</div>'
     +'<input class="fc-reply-inp" id="'+inpId+'" type="text" placeholder="Write a reply…" maxlength="500" '
-      +'onfocus="_fcReplyPillFocus(\''+pillId+'\',true)" onblur="_fcReplyPillFocus(\''+pillId+'\',false)" '
+      +'oninput="_fcReplyCardSync(\''+cardId+'\')" onfocus="_fcReplyCardSync(\''+cardId+'\')" onblur="_fcReplyCardSync(\''+cardId+'\')" '
       +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitNestedReply(this,\''+postId.replace(/'/g,"\\'")+'\','+parentId+')}">'
     +'</div>'
+    +'<div class="fc-reply-row2">'
+    +'<div class="fc-reply-tools">'
+    +'<button class="fc-reply-tool" onclick="_emojiPickerToggle(event,\'nrepal-'+parentId+'\',\''+inpId+'\')" title="Emoji">😊</button>'
+    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Image\')" title="Image">'+_RC_IMAGE_ICON_SVG+'</button>'
+    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Chart\')" title="Chart">'+_RC_CHART_ICON_SVG+'</button>'
+    +'<div class="fc-reply-palette ep-palette" id="nrepal-'+parentId+'"></div>'
+    +'</div>'
     +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')">Reply</button>'
+    +'</div>'
+    +'</div>'
     +'</div>';
   box.style.display = '';
   var inp = document.getElementById(inpId);
