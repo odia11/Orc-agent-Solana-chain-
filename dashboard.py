@@ -15887,6 +15887,12 @@ def api_market_tokens_search():
 
 
 _market_live_cache: dict = {'ts': 0.0, 'data': []}
+# Live Market's own discovery pipeline (api_market_live) is intentionally
+# separate from token_loop()/state['tokens'], which also feeds the automated
+# bot's scanning -- so widening this to include BSC only affects what's
+# *displayed*, and can never cause the bot to start scanning/trading BSC on
+# its own. Bot-side BSC scanning is a distinct, not-yet-built feature.
+_MARKET_LIVE_CHAINS = {'solana', 'bsc'}
 _market_live_lock         = threading.Lock()
 
 @app.route('/api/market/live', methods=['GET'])
@@ -15918,6 +15924,7 @@ def api_market_live():
             'symbol':            base.get('symbol', ''),
             'name':              base.get('name', ''),
             'address':           addr,
+            'chain':             p.get('chainId', 'solana'),  # 'solana' or 'bsc' -- lets the frontend badge each row and route the Trade button to the right chain
             'price':             _f(p.get('priceUsd')),
             'mcap':              _f(p.get('marketCap')),
             'volume_24h':        _f(vol.get('h24')),
@@ -15941,7 +15948,7 @@ def api_market_live():
     if r and r.status_code == 200:
         try:
             for item in (r.json() if isinstance(r.json(), list) else []):
-                if item.get('chainId') == 'solana':
+                if item.get('chainId') in _MARKET_LIVE_CHAINS:
                     a = item.get('tokenAddress', '')
                     if a and a not in seen:
                         seen.add(a)
@@ -15960,7 +15967,7 @@ def api_market_live():
         if rb and rb.status_code == 200:
             try:
                 for p in (rb.json().get('pairs') or []):
-                    if p.get('chainId') != 'solana':
+                    if p.get('chainId') not in _MARKET_LIVE_CHAINS:
                         continue
                     a = (p.get('baseToken') or {}).get('address', '')
                     if not a:
@@ -15985,11 +15992,21 @@ def api_market_live():
                     trending_pairs.append(p)
         except Exception:
             pass
+    time.sleep(0.3)  # stagger -- same pattern as discover_tokens()
+    rt_bsc = _dex_get('https://api.dexscreener.com/latest/dex/search?q=bnb&rankBy=trendingScoreH6')
+    if rt_bsc and rt_bsc.status_code == 200:
+        try:
+            d = rt_bsc.json()
+            for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
+                if p.get('chainId') == 'bsc':
+                    trending_pairs.append(p)
+        except Exception:
+            pass
 
     # ── Step 4: assemble result — boosted first, then trending ───────────────
     added = set()
     for addr in boost_addrs:
-        if len(result) >= 20:
+        if len(result) >= 30:
             break
         p = best_pair.get(addr)
         if p:
@@ -15999,7 +16016,7 @@ def api_market_live():
                 added.add(tok['address'])
 
     for p in trending_pairs:
-        if len(result) >= 20:
+        if len(result) >= 30:
             break
         tok = _extract(p)
         if tok and tok['address'] not in added:

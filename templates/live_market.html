@@ -99,6 +99,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-tok-logo{width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0}
 .lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
+.lm-chain-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;padding:1px 6px;border-radius:5px;margin-left:6px;vertical-align:middle}
+.lm-chain-bsc{background:rgba(240,185,11,.15);color:#F0B90B}
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* featured banner — carousel of promoted tokens above the table, restored
@@ -144,6 +146,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 /* trade button */
 .lm-btn-trade{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;transition:opacity .15s;background:var(--accent);color:#0a0b0e;white-space:nowrap}
+.lm-btn-trade:disabled{background:var(--bg3);color:var(--muted);cursor:not-allowed}
 .lm-btn-trade:hover{opacity:.85}
 .lm-btn-trade:disabled{opacity:.35;cursor:default}
 
@@ -524,7 +527,7 @@ async function _silentRefreshTab(tab){
 async function _fetchTrending(){
   var r     = await fetch('/api/dexscreener/token-boosts');
   var items = await r.json();
-  var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
+  var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'||i.chainId==='bsc'; }).slice(0,50);
   if(!solana.length) return [];
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
@@ -537,7 +540,7 @@ async function _fetchTrending(){
 async function _fetchNew(){
   var r     = await fetch('/api/dexscreener/token-profiles');
   var items = await r.json();
-  var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'; }).slice(0,50);
+  var solana = (Array.isArray(items)?items:[]).filter(function(i){ return i.chainId==='solana'||i.chainId==='bsc'; }).slice(0,50);
   if(!solana.length) return [];
   var iconMap = {};
   solana.forEach(function(i){ iconMap[i.tokenAddress]=i.icon; });
@@ -797,7 +800,7 @@ function _lmBindTableEvents(wrap){
       return;
     }
     var row = event.target.closest('.lm-row');
-    if(row) _rowClick(event, row.dataset.sym, row.dataset.addr, row.dataset.pair);
+    if(row) _rowClick(event, row.dataset.sym, row.dataset.addr, row.dataset.pair, row.dataset.chain);
   });
 }
 function _renderTable(pairs){
@@ -883,7 +886,7 @@ async function _lmGlobalSearch(q){
     var r = await fetch('/api/dexscreener/search?q=' + encodeURIComponent(qRemote));
     var d = await r.json();
     if(q !== _lmGsLastQuery) return; // stale response from fast typing
-    _lmGsResults = (d.pairs || []).filter(function(p){ return p.chainId === 'solana'; }).slice(0, 20);
+    _lmGsResults = (d.pairs || []).filter(function(p){ return p.chainId === 'solana' || p.chainId === 'bsc'; }).slice(0, 20);
     _lmRenderGlobalResults();
   }catch(e){
     if(q !== _lmGsLastQuery) return;
@@ -984,6 +987,8 @@ function _rowHtml(p, idx){
   var name = (p.baseToken&&p.baseToken.name)||sym;
   var addr = (p.baseToken&&p.baseToken.address)||'';
   var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
+  var chain = p.chainId||'solana';
+  var isBsc = chain === 'bsc';
 
   var logo = imgUrl
     ? '<img class="lm-tok-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
@@ -995,14 +1000,22 @@ function _rowHtml(p, idx){
   var mcap  = _fmtNum(p.marketCap || p.fdv || null);
   var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
 
-  return '<tr id="lm-row-'+idx+'" class="lm-row" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
+  // BSC buying isn't wired into this token-detail/trade modal yet (it's
+  // Solana-only end to end right now) -- show the token for browsing, but
+  // don't let Trade open a flow that would misfire against a BSC address.
+  var tradeBtn = isBsc
+    ? '<button class="lm-btn-trade" disabled title="BSC trading via this screen is coming soon">Trade</button>'
+    : '<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>';
+  var chainBadge = isBsc ? '<span class="lm-chain-badge lm-chain-bsc">BSC</span>' : '';
+
+  return '<tr id="lm-row-'+idx+'" class="lm-row" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-chain="'+_esc(chain)+'">'
     +'<td class="lm-rank-cell">'+(idx+1)+'</td>'
     +'<td class="lm-tok-td">'
       +'<div class="lm-tok-cell">'
         +'<button class="lm-watch-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
         +logo
         +'<div>'
-          +'<div class="lm-tok-name">'+_esc(name)+'</div>'
+          +'<div class="lm-tok-name">'+_esc(name)+chainBadge+'</div>'
           +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
         +'</div>'
       +'</div>'
@@ -1012,14 +1025,21 @@ function _rowHtml(p, idx){
     +'<td class="col-hide">'+vol+'</td>'
     +'<td class="col-hide">'+mcap+'</td>'
     +'<td class="col-hide">'+_fmtAge(p.pairCreatedAt)+'</td>'
-    +'<td class="td-act">'
-      +'<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>'
-    +'</td>'
+    +'<td class="td-act">'+tradeBtn+'</td>'
     +'</tr>';
 }
 
-function _rowClick(e, sym, addr, pairAddr){
+function _rowClick(e, sym, addr, pairAddr, chain){
   if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
+  if(chain === 'bsc'){
+    // showTokenCard() is Solana-only end to end (chart, safety checks, buy
+    // flow) -- opening it for a BSC address would silently misbehave rather
+    // than cleanly fail, so this is blocked at the row level too, not just
+    // the Trade button. No toast utility exists in this file, so this uses
+    // a plain, guaranteed-visible fallback rather than a silent no-op.
+    alert('BSC token details are coming soon.');
+    return;
+  }
   showTokenCard(sym, addr, pairAddr);
 }
 
