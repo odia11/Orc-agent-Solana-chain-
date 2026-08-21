@@ -3763,7 +3763,9 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
     """Bridge equivalent of _execute_user_swap()/_execute_bsc_swap() -- signs
     and broadcasts a Solana<->BSC bridge swap via bridge/mayan_execute.js
     (Node -- Mayan's swap-sdk is JS-only, see that file's own header for why
-    this isn't hand-rolled in Python). Returns (success, tx_hash_or_message).
+    this isn't hand-rolled in Python). Returns (success, tx_hash_or_message,
+    bridge_row_id) -- row_id is None only when no bridge_transactions row was
+    ever created (the pre-INSERT "no key configured" check below).
 
     Unlike the single-chain swap functions, this one decrypts its own key --
     source_chain determines which column/format (Solana vs BSC), so that
@@ -3775,7 +3777,7 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
     finally:
         conn.close()
     if not row or not row[0]:
-        return False, f'No {source_chain} trading key configured'
+        return False, f'No {source_chain} trading key configured', None
 
     with _use_key(row[0], wallet) as private_key:
         # Audit-trail row written before anything touches the network -- if
@@ -3810,18 +3812,18 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
     if result.returncode != 0:
         err_msg = (stderr[-300:] or stdout[-300:] or 'Bridge script failed (no output)')
         _bridge_tx_mark_failed(row_id, err_msg)
-        return False, err_msg
+        return False, err_msg, row_id
 
     try:
         parsed = json.loads(result.stdout.strip().splitlines()[-1])
     except Exception:
         _bridge_tx_mark_failed(row_id, 'Bridge script returned unparseable output')
-        return False, 'Bridge script returned unparseable output'
+        return False, 'Bridge script returned unparseable output', row_id
 
     tx_hash = parsed.get('tx_hash')
     if not tx_hash:
         _bridge_tx_mark_failed(row_id, 'Bridge script returned no tx_hash')
-        return False, 'Bridge script returned no tx_hash'
+        return False, 'Bridge script returned no tx_hash', row_id
 
     # ── The instant tx_hash exists, record it -- nothing else runs between
     # having it and persisting it. ──
@@ -3836,7 +3838,7 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
         conn3.close()
 
     add_user_log(wallet, f'Bridge {source_chain}->{dest_chain} broadcast: {tx_hash}')
-    return True, tx_hash
+    return True, tx_hash, row_id
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
     """Records a bridge_transactions failure -- separated out since
@@ -6674,6 +6676,56 @@ def api_bridge_quote():
     except requests.exceptions.RequestException as e:
         print(f'[bridge-quote] error: {e}', flush=True)
         return jsonify({'ok': False, 'msg': 'Could not fetch bridge quote — try again'}), 502
+
+@app.route('/api/bridge/execute', methods=['POST'])
+@rate_limit(10, 60)
+def api_bridge_execute():
+    """Signs and broadcasts a real cross-chain bridge swap via
+    _execute_bridge_swap() -> bridge/mayan_execute.js. Not called from any
+    bot loop -- manual-only via this route while the underlying script is
+    still unverified against the live Mayan SDK (see mayan_execute.js's
+    own header)."""
+    # _authenticated_wallet(), not _current_wallet() -- this signs with the
+    # user's real key, so a pasted-address read-only session must not reach
+    # it (see the security-audit note on _authenticated_wallet() itself).
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+
+    data = request.get_json(silent=True) or {}
+    try:
+        amount = float(data.get('amount', 0))
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    if amount <= 0:
+        return jsonify({'ok': False, 'msg': 'Amount must be greater than 0'}), 400
+
+    direction = str(data.get('direction', '')).strip()
+    if direction == 'sol_to_bsc':
+        source_chain, dest_chain = 'solana', 'bsc'
+        token_in, token_out = USDC_MINT, USDC_BSC_ADDR
+    elif direction == 'bsc_to_sol':
+        source_chain, dest_chain = 'bsc', 'solana'
+        token_in, token_out = USDC_BSC_ADDR, USDC_MINT
+    else:
+        return jsonify({'ok': False, 'msg': 'direction must be sol_to_bsc or bsc_to_sol'}), 400
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': False, 'msg': 'User not found'}), 404
+    user_id = row[0]
+
+    success, result, bridge_id = _execute_bridge_swap(
+        user_id, wallet, source_chain, dest_chain, token_in, token_out, amount)
+
+    if not success:
+        return jsonify({'ok': False, 'msg': result, 'bridge_id': bridge_id, 'status': 'failed'}), 502
+
+    return jsonify({'ok': True, 'bridge_id': bridge_id, 'status': 'source_broadcast', 'tx_hash': result})
 
 @app.route('/api/bsc/trade/buy', methods=['POST'])
 @rate_limit(10, 60)
