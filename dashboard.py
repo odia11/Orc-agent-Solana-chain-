@@ -10163,6 +10163,77 @@ def _instant_trade_cors(resp):
             resp.headers['Access-Control-Max-Age'] = '86400'
     return resp
 
+def _get_token_decimals_rpc(mint: str) -> int:
+    """On-chain decimals for `mint` via getTokenSupply. Defaults to 6 (the
+    common SPL default) on any RPC failure -- mirrors orcagent_solana.py's
+    own get_token_decimals(), which runs in a separate process and so can't
+    be imported/shared directly."""
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1,
+            'method': 'getTokenSupply',
+            'params': [mint],
+        }, timeout=8)
+        return int(r.json()['result']['value']['decimals'])
+    except Exception:
+        return 6
+
+@app.route('/api/swap/quote', methods=['GET'])
+@rate_limit(30, 60)
+def api_swap_quote():
+    """Live Jupiter quote for the wallet Swap modal's preview. Replaces the
+    old client-side estimate (amount * fromPrice/toPrice using DexScreener/
+    Binance spot prices), which had no relation to what Jupiter would
+    actually route and could mislead on exactly the number a user is
+    deciding whether to confirm -- this calls the same quote endpoint
+    orcagent_solana.py uses to execute the real swap."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    from_mint = str(request.args.get('from_mint', '')).strip()
+    to_mint   = str(request.args.get('to_mint', '')).strip()
+    if from_mint == '__SOL__': from_mint = SOL_MINT
+    if to_mint   == '__SOL__': to_mint   = SOL_MINT
+    if not is_valid_solana_address(from_mint) or not is_valid_solana_address(to_mint):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    try:
+        amount = float(request.args.get('amount', 0))
+    except (TypeError, ValueError):
+        amount = 0.0
+    if amount <= 0:
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+
+    from_decimals = 9 if from_mint == SOL_MINT else _get_token_decimals_rpc(from_mint)
+    amount_raw    = int(amount * (10 ** from_decimals))
+    if amount_raw <= 0:
+        return jsonify({'ok': False, 'msg': 'Amount too small'}), 400
+
+    jup_url = (JUPITER_PROXY + '/quote') if JUPITER_PROXY else 'https://api.jup.ag/swap/v1/quote'
+    headers = {'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 OrcAgent/1.0'}
+    if PROXY_SECRET:
+        headers['X-Proxy-Secret'] = PROXY_SECRET
+    try:
+        r = requests.get(jup_url, params={
+            'inputMint':   from_mint,
+            'outputMint':  to_mint,
+            'amount':      amount_raw,
+            'slippageBps': 300,
+        }, headers=headers, timeout=10)
+        if r.status_code != 200:
+            return jsonify({'ok': False, 'msg': f'Quote unavailable (HTTP {r.status_code})'}), 502
+        q = r.json()
+        out_amount_raw = int(q.get('outAmount', 0) or 0)
+        if out_amount_raw <= 0:
+            return jsonify({'ok': False, 'msg': 'No route found'}), 502
+        to_decimals = 9 if to_mint == SOL_MINT else _get_token_decimals_rpc(to_mint)
+        return jsonify({
+            'ok':               True,
+            'out_amount':       out_amount_raw / (10 ** to_decimals),
+            'price_impact_pct': float(q.get('priceImpactPct', 0) or 0),
+        })
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': str(e)[:150]}), 502
+
 @app.route('/api/instant-trade', methods=['POST', 'OPTIONS'])
 @rate_limit(10, 60)
 def api_instant_trade():
@@ -10188,6 +10259,14 @@ def api_instant_trade():
             amount_sol = float(data.get('amount_sol', 0))
         except (TypeError, ValueError):
             amount_sol = 0.0
+        # Sell amount in the FROM token's own units (not a SOL-equivalent) --
+        # 0/absent means "sell everything held", matching orcagent_solana.py's
+        # default. A positive value sells exactly that much (clamped there to
+        # the actual on-chain balance).
+        try:
+            amount_token = float(data.get('amount_token', 0))
+        except (TypeError, ValueError):
+            amount_token = 0.0
 
 
         if side not in ('buy', 'sell'):
@@ -10229,7 +10308,7 @@ def api_instant_trade():
             env['WALLET_ADDRESS']     = wallet
             env['WALLET_PRIVATE_KEY'] = private_key
             _ext_hit('jupiter')
-            amount_str = str(amount_sol) if side == 'buy' else '0'
+            amount_str = str(amount_sol) if side == 'buy' else (str(amount_token) if amount_token > 0 else '0')
             result = subprocess.run(
                 [sys.executable, os.path.join(BASE, 'orcagent_solana.py'),
                  side, token_address, amount_str],

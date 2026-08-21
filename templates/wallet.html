@@ -1232,6 +1232,11 @@ function _swFlip(){
   _swUpdateEst()
 }
 
+function _swFmtOut(v){
+  return v<0.000001?v.toExponential(2):v<1?v.toFixed(6):v.toFixed(4)
+}
+var _swQuoteDebounce=null
+var _swQuoteSeq=0
 async function _swUpdateEst(){
   var spl=window._wTokens||_allSpl||[]
   var amtEl=document.getElementById('sw-amt-inp')
@@ -1261,15 +1266,38 @@ async function _swUpdateEst(){
   } else if(_swDexCache[_swToMint]){
     toPx=_swDexCache[_swToMint]
   }
-  var outAmt=(amt>0&&fromPx>0&&toPx>0)?amt*fromPx/toPx:0
-  if(outEl) outEl.textContent=outAmt>0?(outAmt<0.000001?outAmt.toExponential(2):outAmt<1?outAmt.toFixed(6):outAmt.toFixed(4)):'0'
-  var fromUsdEl=document.getElementById('sw-from-usd')
-  var toUsdEl=document.getElementById('sw-to-usd')
-  if(fromUsdEl) fromUsdEl.textContent='≈ $'+(amt>0&&fromPx>0?(amt*fromPx).toFixed(2):'—')
-  if(toUsdEl) toUsdEl.textContent='≈ $'+(outAmt>0&&toPx>0?(outAmt*toPx).toFixed(2):'—')
   var fromSym=fromIsSOL?'SOL':((fromTok||{}).symbol||'?')
   var toSym=toIsSOL?'SOL':((toTok||{}).symbol||'?')
-  if(rateEl) rateEl.textContent=(fromPx>0&&toPx>0)?'1 '+fromSym+' ≈ '+(fromPx/toPx).toFixed(4)+' '+toSym:'—'
+  var fromUsdEl=document.getElementById('sw-from-usd')
+  var toUsdEl=document.getElementById('sw-to-usd')
+  // Instant rough estimate (spot price, no route/slippage) so the field never
+  // sits empty while the real quote is in flight below -- overwritten by the
+  // actual Jupiter-routed amount once that lands, same pair either way.
+  var roughOut=(amt>0&&fromPx>0&&toPx>0)?amt*fromPx/toPx:0
+  if(outEl) outEl.textContent=roughOut>0?_swFmtOut(roughOut):'0'
+  if(fromUsdEl) fromUsdEl.textContent='≈ $'+(amt>0&&fromPx>0?(amt*fromPx).toFixed(2):'—')
+  if(toUsdEl) toUsdEl.textContent='≈ $'+(roughOut>0&&toPx>0?(roughOut*toPx).toFixed(2):'—')
+  if(rateEl) rateEl.textContent=(fromPx>0&&toPx>0)?'1 '+fromSym+' ≈ '+(fromPx/toPx).toFixed(4)+' '+toSym+' (est.)':'—'
+
+  clearTimeout(_swQuoteDebounce)
+  if(amt<=0||!_swFromMint||!_swToMint) return
+  var seq=++_swQuoteSeq
+  _swQuoteDebounce=setTimeout(async function(){
+    try{
+      var qr=await fetch('/api/swap/quote?from_mint='+encodeURIComponent(_swFromMint)+
+        '&to_mint='+encodeURIComponent(_swToMint)+'&amount='+encodeURIComponent(amt),{credentials:'include'})
+      var qd=await qr.json()
+      if(seq!==_swQuoteSeq) return // stale -- user kept typing or changed tokens since this fired
+      if(qd.ok&&qd.out_amount>0){
+        if(outEl) outEl.textContent=_swFmtOut(qd.out_amount)
+        if(toUsdEl&&toPx>0) toUsdEl.textContent='≈ $'+(qd.out_amount*toPx).toFixed(2)
+        var impact=qd.price_impact_pct?' · impact '+(qd.price_impact_pct*100).toFixed(2)+'%':''
+        if(rateEl) rateEl.textContent='1 '+fromSym+' ≈ '+(qd.out_amount/amt).toFixed(4)+' '+toSym+impact
+      }
+      // On failure, silently keep the rough estimate already shown above --
+      // never block "Review swap" over a quote-preview hiccup.
+    }catch(e){}
+  },400)
 }
 
 async function _execSwap(){
@@ -1288,10 +1316,13 @@ async function _execSwap(){
     payload={side:'buy',token_address:_swToMint,symbol:(toTok||{}).symbol||'',amount_sol:amt}
   } else {
     var fromBal=parseFloat((fromTok||{}).amount||0)
-    var solPx=window._wSolPrice||0
-    var tokPx=parseFloat((fromTok||{}).price_usd||0)
-    var amtSol=(fromBal>0&&amt>=fromBal*0.99)?0:solPx>0?amt*tokPx/solPx:0
-    payload={side:'sell',token_address:_swFromMint,symbol:(fromTok||{}).symbol||'',amount_sol:amtSol}
+    // amount_token is the literal quantity of the FROM token to sell (its own
+    // units, not a SOL-equivalent conversion) -- the backend now sells exactly
+    // this much instead of always liquidating the entire on-chain balance.
+    // Selling ~99%+ of the held balance is still treated as "sell all" (0),
+    // so price-movement dust between typing and confirming doesn't block it.
+    var amountToken=(fromBal>0&&amt>=fromBal*0.99)?0:amt
+    payload={side:'sell',token_address:_swFromMint,symbol:(fromTok||{}).symbol||'',amount_token:amountToken}
   }
   try{
     var r=await fetch('/api/instant-trade',{

@@ -262,9 +262,21 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
             if actual_balance <= 0:
                 print(f'SELL {mint[:16]} — on-chain balance is 0, nothing to sell', flush=True)
                 sys.exit(0)
-            lamports = int(actual_balance * (10 ** decimals))
+            # amount<=0 means "sell everything held" (e.g. Live Market's "Sell
+            # All" button, which always sends 0) -- a positive amount means
+            # sell exactly that much, clamped to the actual on-chain balance
+            # so a stale/optimistic caller can never oversell. Previously this
+            # branch ignored `amount` entirely and always sold 100%, so a
+            # partial sell request (e.g. the wallet Swap modal) silently
+            # liquidated the whole balance instead.
+            sell_amount = actual_balance if amount <= 0 else min(amount, actual_balance)
+            lamports = int(sell_amount * (10 ** decimals))
+            if lamports <= 0:
+                print(f'SELL {mint[:16]} — computed sell amount is 0, nothing to sell', flush=True)
+                sys.exit(0)
             sig = execute_swap(mint, SOL_MINT, lamports)
-            print(f'SELL {mint[:16]} amt:{round(actual_balance,6)} (on-chain) TX:{sig}', flush=True)
+            requested = 'ALL' if amount <= 0 else round(amount, 6)
+            print(f'SELL {mint[:16]} amt:{round(sell_amount,6)} (requested:{requested}, on-chain:{round(actual_balance,6)}) TX:{sig}', flush=True)
         else:
             print(f'Unknown action: {action}', flush=True)
             sys.exit(1)
