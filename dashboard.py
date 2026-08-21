@@ -2522,6 +2522,80 @@ def _fast_poll_loop():
         time.sleep(FAST_POLL_INTERVAL)
 
 
+_BRIDGE_STATUS_INTERVAL = 15
+
+def _bridge_status_loop():
+    """Global background loop: polls Mayan's public Explorer API for every
+    bridge_transactions row that hasn't reached a terminal state yet, updates
+    its status once Mayan reports one, and notifies the user. Global (not
+    per-user) since this only tracks already-broadcast transactions rather
+    than deciding whether to act -- same shape as _fast_poll_loop().
+
+    NOTE: unverified against Mayan's live Explorer API -- the endpoint and
+    the clientStatus values checked below are written from best available
+    knowledge of Mayan's documented shape, not confirmed against a real
+    response. An unrecognized clientStatus is deliberately left alone
+    (checked again next cycle) rather than guessed at, so a status this
+    doesn't yet understand can't get misclassified as complete/refunded."""
+    while True:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            try:
+                rows = conn.execute(
+                    "SELECT id, user_id, wallet, source_tx_hash FROM bridge_transactions "
+                    "WHERE status NOT IN ('completed','failed','refunded') AND source_tx_hash != ''"
+                ).fetchall()
+            finally:
+                conn.close()
+
+            for row_id, user_id, wallet, source_tx_hash in rows:
+                try:
+                    r = requests.get(
+                        f'https://explorer-api.mayan.finance/v3/swap/trx/{source_tx_hash}',
+                        timeout=10,
+                    )
+                    if r.status_code != 200:
+                        continue
+                    client_status = (r.json().get('clientStatus') or '').upper()
+
+                    if client_status == 'COMPLETED':
+                        new_status = 'completed'
+                    elif client_status == 'REFUNDED':
+                        new_status = 'refunded'
+                    else:
+                        continue  # still in progress, or a status this doesn't recognize yet
+
+                    conn2 = sqlite3.connect(DB_FILE)
+                    try:
+                        conn2.execute(
+                            "UPDATE bridge_transactions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (new_status, row_id))
+                        conn2.commit()
+                    finally:
+                        conn2.close()
+
+                    notif_content = ('Bridge complete — funds have arrived on the destination chain.'
+                                      if new_status == 'completed' else
+                                      'Bridge refunded — funds were returned to your source wallet.')
+                    try:
+                        _nc = sqlite3.connect(DB_FILE)
+                        _nc.execute(
+                            'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                            (user_id, 'bridge', notif_content, '/wallet', None))
+                        _nc.commit()
+                        _nc.close()
+                        _send_push_notification(user_id, 'Bridge update', notif_content, '/wallet')
+                    except Exception as _ne:
+                        print(f'[bridge-status] notify failed for row {row_id}: {_ne}', flush=True)
+
+                    add_user_log(wallet, f'Bridge row {row_id} -> {new_status}')
+                except Exception as e:
+                    print(f'[bridge-status] check failed for row {row_id} (tx={source_tx_hash[:12]}...): {e}', flush=True)
+        except Exception as e:
+            print(f'[bridge-status] loop error: {e}', flush=True)
+        time.sleep(_BRIDGE_STATUS_INTERVAL)
+
+
 # ── ADAPTIVE HOT-MINT POLLING ──
 # Every held position stays registered here for as long as it's open (see
 # _upsert_open_position and user_trader_loop's Pass 1), so get_token_data(fast=True)
@@ -18700,6 +18774,7 @@ def _heartbeat_loop():
 threading.Thread(target=_heartbeat_loop,       daemon=True).start()
 threading.Thread(target=token_loop,            daemon=True).start()
 threading.Thread(target=_fast_poll_loop,       daemon=True).start()
+threading.Thread(target=_bridge_status_loop,   daemon=True).start()
 threading.Thread(target=_calls_peak_loop,      daemon=True).start()
 threading.Thread(target=bsc_token_loop,        daemon=True).start()
 threading.Thread(target=totd_loop,             daemon=True).start()
