@@ -122,6 +122,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 .wlt-bsc-bal-lbl{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#565d68;margin-bottom:4px}
 .wlt-bsc-bal-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#eef1f5}
 .dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.dep-chain-tabs{display:flex;gap:2px;padding:2px;background:#0a0b0e;border:1px solid #16191f;border-radius:9px}
+.dep-chain-tab{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.04em;padding:5px 12px;border-radius:7px;cursor:pointer;transition:all .15s}
+.dep-chain-tab:hover{color:var(--text)}
+.dep-chain-tab.active{background:rgba(247,185,85,.14);color:var(--accent)}
 .dep-title{font-size:13px;font-weight:600;color:var(--text)}
 .dep-network{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.06em}
 .dep-body{display:flex;gap:14px;align-items:flex-start}
@@ -605,57 +609,63 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
       </div>
     </div>
 
-    <!-- deposit address card -->
+    <!-- unified deposit card — tabs per chain, so adding more chains later
+         means one more tab, never another stacked card -->
     <div class="dep-card">
       <div class="dep-header">
         <span class="dep-title">Deposit Address</span>
-        <span class="dep-network">SPL · SOL</span>
+        <div class="dep-chain-tabs" id="dep-chain-tabs">
+          <button class="dep-chain-tab active" data-chain="sol" onclick="_depSwitchChain('sol')">SOL</button>
+          {% if bsc_deposit_address %}
+          <button class="dep-chain-tab" data-chain="bsc" onclick="_depSwitchChain('bsc')">BSC</button>
+          {% endif %}
+        </div>
       </div>
-      {% if deposit_address %}
-      <div class="dep-body">
-        <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-sm"></div></div>
-        <div class="dep-right">
-          <div class="dep-addr">{{ deposit_address }}</div>
-          <div class="dep-btns">
-            <button class="dep-btn dep-copy" onclick="_copyAddr()">Copy Address</button>
-            <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ deposit_address }}" target="_blank" rel="noopener">View on Solscan ↗</a>
+
+      <!-- Solana tab -->
+      <div class="dep-chain-panel" id="dep-panel-sol">
+        {% if deposit_address %}
+        <div class="dep-body">
+          <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-sm"></div></div>
+          <div class="dep-right">
+            <div class="dep-addr">{{ deposit_address }}</div>
+            <div class="dep-btns">
+              <button class="dep-btn dep-copy" onclick="_copyAddr()">Copy Address</button>
+              <a class="dep-btn dep-scan" href="https://solscan.io/account/{{ deposit_address }}" target="_blank" rel="noopener">View on Solscan ↗</a>
+            </div>
+          </div>
+        </div>
+        {% else %}
+        <div class="state-msg">Stel eerst een trading wallet in via <a href="/settings" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px">Settings</a> voordat je stort</div>
+        {% endif %}
+      </div>
+
+      <!-- BSC tab -->
+      {% if bsc_deposit_address %}
+      <div class="dep-chain-panel" id="dep-panel-bsc" style="display:none">
+        <div class="dep-body">
+          <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-bsc"></div></div>
+          <div class="dep-right">
+            <div class="dep-addr">{{ bsc_deposit_address }}</div>
+            <div class="dep-btns">
+              <button class="dep-btn dep-copy" onclick="_copyAddrBsc()">Copy Address</button>
+              <a class="dep-btn dep-scan" href="https://bscscan.com/address/{{ bsc_deposit_address }}" target="_blank" rel="noopener">View on BscScan ↗</a>
+            </div>
+          </div>
+        </div>
+        <div class="wlt-bsc-balances">
+          <div class="wlt-bsc-bal-item">
+            <span class="wlt-bsc-bal-lbl">USDC</span>
+            <span class="wlt-bsc-bal-val" id="bsc-usdc-val">—</span>
+          </div>
+          <div class="wlt-bsc-bal-item">
+            <span class="wlt-bsc-bal-lbl">BNB <span title="Klein reservebedrag voor transactiekosten — wordt automatisch aangevuld vanuit je USDC-storting">(gas)</span></span>
+            <span class="wlt-bsc-bal-val" id="bsc-bnb-val">—</span>
           </div>
         </div>
       </div>
-      {% else %}
-      <div class="state-msg">Stel eerst een trading wallet in via <a href="/settings" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px">Settings</a> voordat je stort</div>
       {% endif %}
     </div>
-
-    <!-- BSC deposit address card -->
-    {% if bsc_deposit_address %}
-    <div class="dep-card">
-      <div class="dep-header">
-        <span class="dep-title">Deposit Address</span>
-        <span class="dep-network">BEP-20 · BSC</span>
-      </div>
-      <div class="dep-body">
-        <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-bsc"></div></div>
-        <div class="dep-right">
-          <div class="dep-addr">{{ bsc_deposit_address }}</div>
-          <div class="dep-btns">
-            <button class="dep-btn dep-copy" onclick="_copyAddrBsc()">Copy Address</button>
-            <a class="dep-btn dep-scan" href="https://bscscan.com/address/{{ bsc_deposit_address }}" target="_blank" rel="noopener">View on BscScan ↗</a>
-          </div>
-        </div>
-      </div>
-      <div class="wlt-bsc-balances">
-        <div class="wlt-bsc-bal-item">
-          <span class="wlt-bsc-bal-lbl">USDC</span>
-          <span class="wlt-bsc-bal-val" id="bsc-usdc-val">—</span>
-        </div>
-        <div class="wlt-bsc-bal-item">
-          <span class="wlt-bsc-bal-lbl">BNB <span title="Klein reservebedrag voor transactiekosten — wordt automatisch aangevuld vanuit je USDC-storting">(gas)</span></span>
-          <span class="wlt-bsc-bal-val" id="bsc-bnb-val">—</span>
-        </div>
-      </div>
-    </div>
-    {% endif %}
 
     <!-- holdings -->
     <div class="holdings">
@@ -869,6 +879,16 @@ function _qrPattern(seed, size){
 })()
 
 // ── copy address ──────────────────────────────────────────
+function _depSwitchChain(chain){
+  document.querySelectorAll('.dep-chain-tab').forEach(function(t){
+    t.classList.toggle('active', t.dataset.chain === chain)
+  })
+  var solPanel = document.getElementById('dep-panel-sol')
+  var bscPanel = document.getElementById('dep-panel-bsc')
+  if(solPanel) solPanel.style.display = (chain === 'sol') ? '' : 'none'
+  if(bscPanel) bscPanel.style.display = (chain === 'bsc') ? '' : 'none'
+}
+
 function _copyAddr(){
   if(!_walletAddr) return
   navigator.clipboard.writeText(_walletAddr).then(function(){
