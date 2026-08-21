@@ -97,10 +97,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-watch-star:hover{color:#565d68}
 .lm-watch-star.active{color:#f5b544}
 .lm-tok-logo{width:36px;height:36px;border-radius:10px;object-fit:cover;flex-shrink:0}
+.lm-tok-logo-wrap{position:relative;flex-shrink:0;display:inline-flex}
+.lm-chain-corner{position:absolute;bottom:-3px;right:-3px;width:15px;height:15px;border-radius:50%;background:#F0B90B;color:#1a1400;font-size:9px;font-weight:800;display:flex;align-items:center;justify-content:center;border:2px solid var(--bg,#0a0b0e);line-height:1}
 .lm-tok-logo-ph{width:36px;height:36px;border-radius:10px;background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);flex-shrink:0}
 .lm-tok-name{font-size:13px;font-weight:700;color:var(--text)}
-.lm-chain-badge{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.05em;padding:1px 6px;border-radius:5px;margin-left:6px;vertical-align:middle}
-.lm-chain-bsc{background:rgba(240,185,11,.15);color:#F0B90B}
 .lm-tok-sym{font-size:11px;color:var(--muted);margin-top:2px}
 
 /* featured banner — carousel of promoted tokens above the table, restored
@@ -994,6 +994,12 @@ function _rowHtml(p, idx){
     ? '<img class="lm-tok-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
       +'<div class="lm-tok-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
     : '<div class="lm-tok-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+  // Wrapped so the BSC corner-badge can sit on the logo itself, not the
+  // truncatable name line -- on mobile .lm-tok-name is a fixed-width,
+  // nowrap+ellipsis block, so a badge placed after the name text there
+  // gets silently clipped off the moment the name is long enough. A badge
+  // on the logo is never subject to that truncation, on any screen size.
+  var logoWrap = '<div class="lm-tok-logo-wrap">'+logo+(isBsc?'<span class="lm-chain-corner" title="BSC">B</span>':'')+'</div>';
 
   var price = _fmtPrice(p.priceUsd);
   var vol   = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
@@ -1001,16 +1007,15 @@ function _rowHtml(p, idx){
   var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
 
   var tradeBtn = '<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'" data-chain="'+_esc(chain)+'">Trade</button>';
-  var chainBadge = isBsc ? '<span class="lm-chain-badge lm-chain-bsc">BSC</span>' : '';
 
   return '<tr id="lm-row-'+idx+'" class="lm-row" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-chain="'+_esc(chain)+'">'
     +'<td class="lm-rank-cell">'+(idx+1)+'</td>'
     +'<td class="lm-tok-td">'
       +'<div class="lm-tok-cell">'
         +'<button class="lm-watch-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
-        +logo
+        +logoWrap
         +'<div>'
-          +'<div class="lm-tok-name">'+_esc(name)+chainBadge+'</div>'
+          +'<div class="lm-tok-name">'+_esc(name)+'</div>'
           +'<div class="lm-tok-sym">$'+_esc(sym)+'</div>'
         +'</div>'
       +'</div>'
