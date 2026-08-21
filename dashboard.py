@@ -3655,14 +3655,16 @@ def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: 
     r.raise_for_status()
     return r.json()
 
-def _ensure_bsc_allowance(w3, wallet: str, private_key: str, token_address: str,
+def _ensure_bsc_allowance(w3, owner_address: str, private_key: str, token_address: str,
                            spender: str, needed_amount_raw: int) -> bool:
     """Approves exactly `needed_amount_raw` (not an unlimited/infinite approval)
     -- caps worst-case exposure to this one trade if the spender contract were
     ever compromised, at the cost of one extra approve() tx per trade that
-    needs a bigger allowance than it already has."""
+    needs a bigger allowance than it already has. owner_address must be the
+    BSC (checksummed EVM) address derived from private_key -- NOT the caller's
+    Solana wallet_address (see _execute_bsc_swap's call site)."""
     contract = w3.eth.contract(address=w3.to_checksum_address(token_address), abi=_ERC20_FULL_ABI)
-    owner = w3.to_checksum_address(wallet)
+    owner = w3.to_checksum_address(owner_address)
     spender_cs = w3.to_checksum_address(spender)
     current = contract.functions.allowance(owner, spender_cs).call()
     if current >= needed_amount_raw:
@@ -3680,47 +3682,74 @@ def _ensure_bsc_allowance(w3, wallet: str, private_key: str, token_address: str,
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
     return receipt.status == 1
 
-def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address: str, amount_str: str) -> bool:
+def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address: str, amount_str: str) -> tuple:
     """BSC equivalent of _execute_user_swap(). action is 'buy' (USDC -> token)
     or 'sell' (token -> USDC). amount_str is a human-readable amount of
-    whichever asset is being sold (USDC for buy, the token for sell)."""
+    whichever asset is being sold (USDC for buy, the token for sell).
+    Returns (success, message) -- message is a specific, user-facing reason
+    on failure (empty string on success) so callers don't have to send
+    everyone back to the server logs for a generic 'swap failed'."""
     try:
         w3 = _get_web3()
-        wallet_cs = w3.to_checksum_address(wallet)
+        # `wallet` is the user's *Solana* wallet_address (their session identity,
+        # and the key used to decrypt private_key) -- NOT a BSC address. The BSC
+        # address must be derived from the BSC private key itself; using `wallet`
+        # here directly crashed to_checksum_address() on every single BSC swap
+        # (ValueError: not a hex string) until this fix.
+        acct = _EvmAccount.from_key(private_key)
+        wallet_cs = w3.to_checksum_address(acct.address)
         token_cs = w3.to_checksum_address(token_address)
 
         if action == 'buy':
-            sell_token, buy_token = USDC_BSC_ADDR, token_cs
+            sell_token, buy_token, sell_symbol = USDC_BSC_ADDR, token_cs, 'USDC'
         elif action == 'sell':
-            sell_token, buy_token = token_cs, USDC_BSC_ADDR
+            sell_token, buy_token, sell_symbol = token_cs, USDC_BSC_ADDR, 'token'
         else:
-            add_user_log(wallet, f'BSC swap error: unknown action {action!r}')
-            return False
+            msg = f'Unknown action {action!r}'
+            add_user_log(wallet, f'BSC swap error: {msg}')
+            return False, msg
 
         sell_contract = w3.eth.contract(address=w3.to_checksum_address(sell_token), abi=_ERC20_MIN_ABI)
         sell_decimals = sell_contract.functions.decimals().call()
         sell_amount_raw = int(float(amount_str) * (10 ** sell_decimals))
 
-        quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
+        try:
+            quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
+        except RuntimeError as e:
+            # _get_0x_quote's own "ZEROX_API_KEY not configured" is already specific
+            add_user_log(wallet, f'BSC swap error: {e}')
+            return False, str(e)
 
         issues = quote.get('issues') or {}
+        balance_issue = issues.get('balance')
+        if balance_issue:
+            msg = f'Insufficient {sell_symbol} balance'
+            add_user_log(wallet, f'BSC swap error: {msg} ({balance_issue})')
+            return False, msg
+
         allowance_issue = issues.get('allowance')
         if allowance_issue:
             spender = allowance_issue.get('spender')
-            ok = _ensure_bsc_allowance(w3, wallet, private_key, sell_token, spender, sell_amount_raw)
+            try:
+                ok = _ensure_bsc_allowance(w3, wallet_cs, private_key, sell_token, spender, sell_amount_raw)
+            except Exception as e:
+                msg = 'Insufficient BNB for gas fees' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
+                add_user_log(wallet, f'BSC swap error: {msg}: {_redact_keys(str(e))[:100]}')
+                return False, msg
             if not ok:
-                add_user_log(wallet, 'BSC swap error: allowance approval failed')
-                return False
+                msg = 'Token approval transaction reverted on-chain'
+                add_user_log(wallet, f'BSC swap error: {msg}')
+                return False, msg
             # Re-quote after approving -- the first quote's tx.data assumed the
             # allowance issue was still open; a stale quote can revert on-chain.
             quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
 
         txn = quote.get('transaction')
         if not txn:
-            add_user_log(wallet, f'BSC swap error: no transaction in quote (liquidity/insufficientFunds issue: {issues})')
-            return False
+            msg = 'No liquidity route found for this trade' if not issues else f'Trade not possible: {issues}'
+            add_user_log(wallet, f'BSC swap error: {msg}')
+            return False, msg
 
-        acct = _EvmAccount.from_key(private_key)
         tx = {
             'from': wallet_cs,
             'to': w3.to_checksum_address(txn['to']),
@@ -3731,17 +3760,23 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
             'nonce': w3.eth.get_transaction_count(wallet_cs),
             'chainId': BSC_CHAIN_ID,
         }
-        signed = acct.sign_transaction(tx)
-        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        try:
+            signed = acct.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        except Exception as e:
+            msg = 'Insufficient BNB for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+            add_user_log(wallet, f'BSC swap error: {msg}')
+            return False, msg
         add_user_log(wallet, f'BSC swap sent: {tx_hash.hex()}')
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
         success = receipt.status == 1
         add_user_log(wallet, f'BSC swap {"confirmed" if success else "reverted on-chain"}: {tx_hash.hex()}')
-        return success
+        return success, ('' if success else 'Swap transaction reverted on-chain')
     except Exception as e:
-        add_user_log(wallet, 'BSC swap error: ' + str(e)[:120])
+        msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+        add_user_log(wallet, 'BSC swap error: ' + msg)
         print(f'[bsc-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
-        return False
+        return False, msg
 
 def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) -> str:
     """BSC equivalent of send_sol_fee() -- sends amount_usdc of USDC (BEP-20
@@ -6296,9 +6331,9 @@ def api_bsc_trade_buy():
     amount_usdc = max(min_size, min(max_size, amount_usdc))
     user_id = row[0]
     with _use_key(enc_blob, wallet) as pk:
-        buy_ok = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
+        buy_ok, buy_err = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
     if not buy_ok:
-        return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
+        return jsonify({'ok': False, 'msg': buy_err or 'Swap failed'}), 502
     td          = get_token_data(token_address)
     entry_price = float(td['price']) if td and td.get('price') else 0.0
     symbol      = (td.get('symbol') or token_address[:8]) if td else token_address[:8]
@@ -6346,7 +6381,7 @@ def api_bsc_trade_sell():
     symbol     = pos.get('symbol') or (td.get('symbol', token_address[:8]) if td else token_address[:8])
     amount     = pos['amount']
     with _use_key(enc_blob, wallet) as pk:
-        sell_ok = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
+        sell_ok, sell_err = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
     entry     = pos.get('buy_price', 0.0)
     pnl       = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
     pnl_pct   = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
@@ -6382,7 +6417,8 @@ def api_bsc_trade_sell():
             print(f'[bsc-trade_record] DB write failed: {e}', flush=True)
         _recalculate_badges(wallet)
         _close_open_position(user_id, wallet, token_address, chain='bsc')
-    return jsonify({'ok': True, 'pnl': pnl, 'pnl_pct': pnl_pct, 'exit_price': exit_price, 'sell_executed': sell_ok})
+    return jsonify({'ok': True, 'pnl': pnl, 'pnl_pct': pnl_pct, 'exit_price': exit_price,
+                     'sell_executed': sell_ok, 'msg': ('' if sell_ok else sell_err)})
 
 @app.route('/referrals')
 def referrals_page():
