@@ -8340,11 +8340,13 @@ function _renderFeedCard(e){
     +'<div class="fc-reactions" id="rpills-'+esc(safePostId)+'"></div>'
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'" onclick="event.stopPropagation()">'
     +'<div class="fc-reply-inner">'
+    +'<div class="fc-reply-pill" id="rpill-'+esc(safePostId)+'">'
     +'<div class="fc-reply-emoji-wrap">'
     +'<button class="fc-reply-emoji-btn" onclick="_emojiPickerToggle(event,\'repal-'+esc(safePostId)+'\',\'rinp-'+esc(safePostId)+'\')" title="Emoji">😊</button>'
     +'<div class="fc-reply-palette ep-palette" id="repal-'+esc(safePostId)+'"></div>'
     +'</div>'
-    +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
+    +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" onfocus="_fcReplyPillFocus(\'rpill-'+esc(safePostId)+'\',true)" onblur="_fcReplyPillFocus(\'rpill-'+esc(safePostId)+'\',false)" onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
+    +'</div>'
     +'<button class="fc-reply-send" onclick="_feedSubmitReply(document.getElementById(\'rinp-'+esc(safePostId)+'\'),\''+esc(safePostId)+'\')">Reply</button>'
     +'</div>'
     +'<div class="fc-replies-list" id="rlist-'+esc(safePostId)+'"></div>'
@@ -8558,6 +8560,18 @@ async function _refreshVisibleReactions(){
   }catch(_){}
 }
 
+// Reply composer pill: quiet at rest, grows an amber glow + reveals its
+// emoji tool once you're actually focused in the input (blur only collapses
+// it back down if you didn't type anything, so a half-written reply stays
+// visibly "open" rather than snapping shut under you).
+function _fcReplyPillFocus(pillId, isFocused){
+  var pill = document.getElementById(pillId);
+  if(!pill) return;
+  if(isFocused){ pill.classList.add('focused'); return; }
+  var inp = pill.querySelector('.fc-reply-inp');
+  if(!inp || !inp.value) pill.classList.remove('focused');
+}
+
 function _feedToggleReply(btn, postId){
   var rbox = document.getElementById('rbox-'+postId);
   if(!rbox) return;
@@ -8707,13 +8721,17 @@ function _feedToggleNestedReply(parentId, postId, btn){
   document.querySelectorAll('#rlist-'+postId+' .fc-ri-nested-box').forEach(function(b){ b.style.display='none'; b.innerHTML=''; });
   if(isOpen) return; // was open -> we just closed it above
   var inpId = 'rninp-'+parentId;
+  var pillId = 'rnpill-'+parentId;
   box.innerHTML = '<div class="fc-reply-inner" style="margin-top:8px" onclick="event.stopPropagation()">'
+    +'<div class="fc-reply-pill" id="'+pillId+'">'
     +'<div class="fc-reply-emoji-wrap">'
     +'<button class="fc-reply-emoji-btn" onclick="_emojiPickerToggle(event,\'nrepal-'+parentId+'\',\''+inpId+'\')" title="Emoji">😊</button>'
     +'<div class="fc-reply-palette ep-palette" id="nrepal-'+parentId+'"></div>'
     +'</div>'
     +'<input class="fc-reply-inp" id="'+inpId+'" type="text" placeholder="Write a reply…" maxlength="500" '
+      +'onfocus="_fcReplyPillFocus(\''+pillId+'\',true)" onblur="_fcReplyPillFocus(\''+pillId+'\',false)" '
       +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitNestedReply(this,\''+postId.replace(/'/g,"\\'")+'\','+parentId+')}">'
+    +'</div>'
     +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')">Reply</button>'
     +'</div>';
   box.style.display = '';

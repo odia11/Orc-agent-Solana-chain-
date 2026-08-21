@@ -509,13 +509,19 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reply-box{padding:0 22px;max-height:0;overflow:hidden;transition:max-height .2s ease,padding .2s ease}
 .fc-reply-box.open{max-height:400px;overflow-y:auto;padding:0 22px 14px}
 .fc-reply-inner{display:flex;gap:8px;align-items:center;padding-top:10px;border-top:1px solid var(--bg3);position:relative}
-.fc-reply-emoji-wrap{position:relative;flex-shrink:0}
+/* Reply composer pill — refined resting state (option 1: gradient avatar,
+   quiet border) that grows to reveal its emoji tool on focus (option 3:
+   compact at rest, amber glow + tool reveal once you're actually typing). */
+.fc-reply-pill{flex:1;display:flex;align-items:center;gap:6px;background:var(--bg2);border:1px solid var(--bg3);border-radius:20px;padding:8px 8px 8px 16px;transition:border-color .15s,box-shadow .15s}
+.fc-reply-pill.focused{border-color:var(--accent);box-shadow:0 0 0 3px rgba(247,185,85,.1)}
+.fc-reply-emoji-wrap{position:relative;flex-shrink:0;width:0;opacity:0;overflow:hidden;transition:width .15s ease,opacity .15s ease}
+.fc-reply-pill.focused .fc-reply-emoji-wrap{width:22px;opacity:1}
 .fc-reply-emoji-btn{background:none;border:none;cursor:pointer;font-size:16px;padding:2px 4px;line-height:1;color:#565d68;transition:color .15s}
 .fc-reply-emoji-btn:hover{color:#eef1f5}
 .fc-reply-palette{position:absolute;bottom:calc(100% + 8px);left:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:8px;display:none;flex-direction:column;gap:6px;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,.55);width:220px;box-sizing:border-box;max-width:calc(100vw - 24px)}
 .fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:6px;border-radius:6px;transition:background .1s;line-height:1.4;text-align:center}
 .fc-reply-palette button:hover{background:rgba(255,255,255,.09)}
-.fc-reply-inp{flex:1;background:var(--bg2);border:1px solid var(--bg3);border-radius:20px;padding:8px 14px;font-size:13px;color:var(--text);outline:none;font-family:'Geist',system-ui,sans-serif;transition:border-color .15s}
+.fc-reply-inp{flex:1;background:none;border:none;padding:2px 0;font-size:13px;color:var(--text);outline:none;font-family:'Geist',system-ui,sans-serif}
 .fc-reply-inp:focus{border-color:var(--accent)}
 .fc-reply-send{padding:8px 16px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;transition:opacity .15s}
 .fc-reply-send:hover{opacity:.88}
