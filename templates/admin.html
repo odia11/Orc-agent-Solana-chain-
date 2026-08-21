@@ -1324,12 +1324,20 @@ async function loadSystem() {
     document.getElementById('hc-db').textContent      = (health.db_size_kb ?? '—') + ' KB';
     document.getElementById('hc-sec').textContent     = health.sec_events_1h ?? '—';
     document.getElementById('hc-jup').textContent     = health.jupiter_proxy ? 'yes' : 'no';
-    document.getElementById('hc-anth').textContent    = health.anthropic_key ? 'set' : 'missing';
+    var anthLabels = {ok: 'reachable', no_credit: 'no credit', invalid_key: 'invalid key',
+                       rate_limited: 'rate-limited', unreachable: 'unreachable', missing: 'missing'};
+    var anthStatus = health.anthropic_status || (health.anthropic_key ? 'ok' : 'missing');
+    document.getElementById('hc-anth').textContent    = anthLabels[anthStatus] || anthStatus;
+    var anthEl = document.getElementById('hc-anth');
+    anthEl.style.color = (anthStatus === 'ok') ? '' : (anthStatus === 'missing' || anthStatus === 'rate_limited' ? 'var(--amber)' : 'var(--red)');
     var secDot = document.getElementById('hc-sec');
     if ((health.sec_events_1h||0) > 10) secDot.style.color = 'var(--red)';
     if (health.dex_rate_limited) document.getElementById('hc-scanner-dot').className = 'health-dot warn';
     if (!health.owner_configured) document.getElementById('hc-engine-dot').className = 'health-dot warn';
-    if (!health.anthropic_key || !health.jupiter_proxy) document.getElementById('hc-infra-dot').className = 'health-dot warn';
+    var infraDotCls = 'health-dot ok';
+    if (anthStatus === 'missing' || !health.jupiter_proxy) infraDotCls = 'health-dot warn';
+    if (anthStatus === 'no_credit' || anthStatus === 'invalid_key' || anthStatus === 'unreachable') infraDotCls = 'health-dot err';
+    document.getElementById('hc-infra-dot').className = infraDotCls;
   }
   if (rateSt) {
     var eps = rateSt.endpoints || [];

@@ -456,6 +456,7 @@ BOT_BRIDGE_MAX_PER_TX  = 10.0  # USD — hardcoded, not user-configurable
 BOT_BRIDGE_MAX_PER_DAY = 25.0  # USD — hardcoded, not user-configurable
 NARRATIVE_MAX_PER_TX   = 10.0  # USD — hardcoded, not user-configurable
 NARRATIVE_MAX_PER_DAY  = 25.0  # USD — hardcoded, not user-configurable
+NARRATIVE_AGENT_GLOBAL_LIVE = False  # kill switch: while False, only ADMIN_WALLET can actually buy
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
@@ -1108,6 +1109,38 @@ def _run_audit() -> dict:
     except Exception as e:
         checks.append({'name': 'Jupiter API', 'status': 'fail',
                         'msg': f'Unreachable {_route_label} — {str(e)[:80]}'})
+
+    # 5b. Anthropic API (AI signals + narrative agent -- credit balance / auth).
+    # A rejected request (400/401) costs nothing -- Anthropic validates
+    # (including balance) before any generation happens, so this is safe to
+    # run on the same 5-minute cycle as the other checks with no real cost.
+    if not ANTHROPIC_API_KEY:
+        checks.append({'name': 'Anthropic API', 'status': 'warn',
+                        'msg': 'ANTHROPIC_API_KEY not configured — AI signals/narrative agent disabled'})
+    else:
+        try:
+            ar = requests.post(
+                _ANTHROPIC_URL,
+                headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+                json={'model': 'claude-haiku-4-5', 'max_tokens': 1,
+                      'messages': [{'role': 'user', 'content': 'hi'}]},
+                timeout=8,
+            )
+            if ar.status_code == 200:
+                checks.append({'name': 'Anthropic API', 'status': 'pass', 'msg': 'Reachable — HTTP 200'})
+            elif ar.status_code == 400 and 'credit balance' in ar.text.lower():
+                checks.append({'name': 'Anthropic API', 'status': 'fail',
+                                'msg': 'Credit balance too low — AI signals/narrative agent failing closed'})
+            elif ar.status_code == 401:
+                checks.append({'name': 'Anthropic API', 'status': 'fail', 'msg': 'Invalid API key (401)'})
+            elif ar.status_code == 429:
+                checks.append({'name': 'Anthropic API', 'status': 'warn', 'msg': 'Rate-limited (429)'})
+            else:
+                checks.append({'name': 'Anthropic API', 'status': 'warn',
+                                'msg': f'HTTP {ar.status_code} — {ar.text[:80]}'})
+        except Exception as e:
+            checks.append({'name': 'Anthropic API', 'status': 'fail',
+                            'msg': f'Unreachable — {str(e)[:60]}'})
 
     # 6. Encryption key (private key storage)
     if _fernet is not None:
@@ -4168,7 +4201,21 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
     whose price_change_5m/price_change_1h field names don't match what
     get_narrative_signal() actually reads (change5m/change1h) -- those two
     fields silently resolved to 0 in every prompt. get_token_data()'s field
-    names match, so routing both paths through it here fixes that too."""
+    names match, so routing both paths through it here fixes that too.
+
+    Global kill switch: while NARRATIVE_AGENT_GLOBAL_LIVE is False, only
+    ADMIN_WALLET can actually reach the AI call or a buy -- every other
+    user's candidates are logged phase='blocked' and returned immediately,
+    no get_token_data()/get_narrative_signal() call, no swap. Gating here
+    (the one place both _narrative_agent_cycle()'s full scan and
+    /admin/narrative-test's single-mint override funnel through) covers
+    every current and future entry point without needing the same check
+    duplicated at each call site."""
+    if not NARRATIVE_AGENT_GLOBAL_LIVE and wallet != ADMIN_WALLET:
+        _agent_journal_log(user_id, mint, chain, mint[:8], phase='blocked', decision='pass',
+                            filter_result='agent nog in besloten test, nog niet live voor gebruikers')
+        return
+
     token_data = get_token_data(mint) or {}
     symbol     = token_data.get('symbol') or mint[:8]
 
@@ -4827,10 +4874,23 @@ def user_trader_loop(stop_event, config, wallet: str):
             else:
                 add_user_log(wallet, f'[{short}] ✗ STARTUP FORCE SELL {_label} failed — position kept open, will retry next scan')
 
+    _narrative_iter = 0
+    _last_narrative_check = 0.0
     try:
         while not stop_event.is_set():
             try:
                 check_daily_reset_user(us)
+                # Narrative agent: every 15th iteration, or if it's been >900s
+                # since the last check, run one _narrative_agent_cycle() pass.
+                # Wrapped in its own try/except so a failure in there can never
+                # break the rest of this trading loop.
+                _narrative_iter += 1
+                if _narrative_iter % 15 == 0 or (time.time() - _last_narrative_check) > 900:
+                    _last_narrative_check = time.time()
+                    try:
+                        _narrative_agent_cycle(user_id, wallet)
+                    except Exception as _nae:
+                        print(f'[bot] {short} narrative-agent cycle error: {_nae}', flush=True)
                 # Re-read stop-loss/take-profit from the DB every cycle so a change
                 # made in Settings while the bot is already running takes effect on
                 # the next scan -- previously these were only ever read once at
@@ -7002,12 +7062,19 @@ def bot_overview_page():
     wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT narrative_agent_enabled FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    finally:
+        conn.close()
+    narrative_agent_enabled = bool(row[0]) if row else False
     return render_template(
         'bot.html',
         wallet=wallet,
         wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
         is_admin=_is_owner(wallet),
         csrf_token=_get_csrf_token(),
+        narrative_agent_enabled=narrative_agent_enabled,
     )
 
 
@@ -9794,6 +9861,29 @@ def save_settings():
         'prompt_faceid': bool(private_key_raw and final_has_key),
     })
 
+@app.route('/api/settings/narrative-agent', methods=['POST'])
+@rate_limit(10, 60)
+def save_narrative_agent_setting():
+    """Pure flag flip for users.narrative_agent_enabled -- no side effects
+    (unlike /api/bot/start //stop, which actually start/stop a background
+    trader thread). While NARRATIVE_AGENT_GLOBAL_LIVE is False, flipping
+    this on for a non-ADMIN_WALLET user doesn't do anything live yet --
+    _narrative_agent_process_candidate()'s kill switch still blocks every
+    non-admin candidate regardless of this flag, it just lets a user
+    register intent ahead of general availability."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data = request.get_json(silent=True) or {}
+    enabled = 1 if data.get('enabled') else 0
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('UPDATE users SET narrative_agent_enabled=? WHERE wallet_address=?', (enabled, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'narrative_agent_enabled': bool(enabled)})
+
 # ── SETTINGS/GET + SETTINGS/SAVE (per-user strategy + prefs) ──
 @app.route('/api/settings/get', methods=['GET'])
 @csrf_exempt
@@ -9883,6 +9973,9 @@ def settings_save():
             v = float(data['min_trade_size'])
             updates.append('min_trade_size=?'); params.append(max(1.0, min(v, 10000.0)))
         except (ValueError, TypeError): pass
+    if 'narrative_agent_enabled' in data:
+        updates.append('narrative_agent_enabled=?')
+        params.append(1 if data['narrative_agent_enabled'] else 0)
     if not updates:
         return jsonify({'ok': True, 'msg': 'Nothing to update'})
     params.append(wallet)
@@ -18179,6 +18272,35 @@ def admin_health():
         conn.close()
         with _dex_lock:
             dex_limited = time.time() < _dex_429_until
+
+        # Real reachability/billing check, not just presence -- a rejected
+        # request costs nothing (Anthropic validates, including balance,
+        # before any generation happens), and this endpoint is only called
+        # on-demand (System tab load), not polled, so this is safe to run
+        # every time. Same check as _run_audit()'s "Anthropic API" entry.
+        anthropic_status = 'missing'
+        if ANTHROPIC_API_KEY:
+            try:
+                ar = requests.post(
+                    _ANTHROPIC_URL,
+                    headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+                    json={'model': 'claude-haiku-4-5', 'max_tokens': 1,
+                          'messages': [{'role': 'user', 'content': 'hi'}]},
+                    timeout=8,
+                )
+                if ar.status_code == 200:
+                    anthropic_status = 'ok'
+                elif ar.status_code == 400 and 'credit balance' in ar.text.lower():
+                    anthropic_status = 'no_credit'
+                elif ar.status_code == 401:
+                    anthropic_status = 'invalid_key'
+                elif ar.status_code == 429:
+                    anthropic_status = 'rate_limited'
+                else:
+                    anthropic_status = f'http_{ar.status_code}'
+            except Exception:
+                anthropic_status = 'unreachable'
+
         return jsonify({
             'tokens_tracked':   len(state.get('tokens', [])),
             'active_traders':   active_traders,
@@ -18192,6 +18314,7 @@ def admin_health():
             'owner_configured': bool(OWNER_WALLET),
             'jupiter_proxy':    bool(JUPITER_PROXY),
             'anthropic_key':    bool(ANTHROPIC_API_KEY),
+            'anthropic_status': anthropic_status,
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500

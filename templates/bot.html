@@ -89,6 +89,20 @@ a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accen
 .progress-track{height:5px;border-radius:3px;background:var(--bg4);overflow:hidden;margin-top:2px}
 .progress-fill{height:100%;background:var(--accent);border-radius:3px;transition:width .3s}
 
+/* ── NARRATIVE AGENT (BETA) ── */
+.narrative-card{background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:18px 22px;margin-bottom:20px}
+.narrative-hdr{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px}
+.narrative-title-wrap{display:flex;align-items:center;gap:8px}
+.narrative-title{font-size:15px;font-weight:700;color:var(--text)}
+.narrative-beta-tag{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);background:rgba(247,185,85,.12);border:1px solid rgba(247,185,85,.3);border-radius:6px;padding:2px 7px}
+.narrative-desc{font-size:12px;color:var(--muted);line-height:1.5}
+.na-toggle{position:relative;display:inline-block;width:42px;height:24px;flex-shrink:0}
+.na-toggle input{opacity:0;width:0;height:0}
+.na-track{position:absolute;cursor:pointer;inset:0;background:var(--bg4);border-radius:24px;transition:.15s}
+.na-track::before{content:'';position:absolute;height:18px;width:18px;left:3px;bottom:3px;background:var(--sub);border-radius:50%;transition:.15s}
+.na-toggle input:checked+.na-track{background:rgba(58,210,155,.3)}
+.na-toggle input:checked+.na-track::before{background:var(--green);transform:translateX(18px)}
+
 ::-webkit-scrollbar{width:4px;height:4px}
 ::-webkit-scrollbar-track{background:transparent}
 ::-webkit-scrollbar-thumb{background:#21252c;border-radius:4px}
@@ -207,6 +221,21 @@ a.hdr-btn.active{background:var(--accent);color:#0a0b0e;border-color:var(--accen
     </div>
   </div>
 
+  <!-- NARRATIVE AGENT (BETA) -->
+  <div class="narrative-card">
+    <div class="narrative-hdr">
+      <div class="narrative-title-wrap">
+        <span class="narrative-title">Narrative Agent</span>
+        <span class="narrative-beta-tag">Beta</span>
+      </div>
+      <label class="na-toggle">
+        <input type="checkbox" id="na-toggle-input" {% if narrative_agent_enabled %}checked{% endif %} onchange="_saveNarrativeAgentToggle(this.checked)">
+        <span class="na-track"></span>
+      </label>
+    </div>
+    <div class="narrative-desc">Experimentele functie -- de agent zoekt zelf naar tokens op basis van online signalen en koopt automatisch, tot $10 per trade, max $25 per dag. Nog in vroege testfase.</div>
+  </div>
+
 </div><!-- /page-wrap -->
 
 <script>
@@ -222,6 +251,21 @@ function _fmtSol(n, showSign) {
 function _fmtDate(ts) {
   if (!ts) return '—';
   return String(ts).slice(0, 16).replace('T', ' ');
+}
+
+async function _saveNarrativeAgentToggle(enabled) {
+  var el = document.getElementById('na-toggle-input');
+  try {
+    var r = await fetch('/api/settings/save', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
+      body: JSON.stringify({narrative_agent_enabled: enabled}),
+    }).then(function(r){return r.json()}).catch(function(){return null});
+    if (!r || !r.ok) el.checked = !enabled;
+  } catch (e) {
+    el.checked = !enabled;
+  }
 }
 
 async function loadOverview() {
