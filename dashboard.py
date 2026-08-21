@@ -3104,7 +3104,9 @@ def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
             },
             timeout=30,
         )
-        resp.raise_for_status()
+        if resp.status_code != 200:
+            print(f'[narrative-signal] HTTP {resp.status_code} for {mint[:8]}: {resp.text[:500]}', flush=True)
+            return {'decision': 'pass', 'thesis': ['parse error']}
         content = resp.json().get('content') or []
         # Web search runs server-side and adds web_search_tool_result blocks
         # alongside the model's own text -- only the last text block is the
@@ -3123,7 +3125,19 @@ def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
             return {'decision': 'pass', 'thesis': ['parse error']}
         return parsed
     except Exception as e:
-        print(f'[narrative-signal] error for {mint[:8]}: {e}', flush=True)
+        # If this was an HTTP error, include the response body -- Anthropic's
+        # error responses carry the actual reason (e.g. "credit balance too
+        # low") in the body, which a bare exception string discards. This is
+        # exactly what made the first real 400 here take a manual repro to
+        # diagnose instead of being readable straight from this log line.
+        body = ''
+        resp_obj = getattr(e, 'response', None)
+        if resp_obj is not None:
+            try:
+                body = f' | body: {resp_obj.text[:500]}'
+            except Exception:
+                pass
+        print(f'[narrative-signal] error for {mint[:8]}: {e}{body}', flush=True)
         return {'decision': 'pass', 'thesis': ['parse error']}
 
 def score_token(data: dict) -> tuple:
