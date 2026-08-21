@@ -482,6 +482,8 @@ BSC_CHAIN_ID     = 56
 BSC_RPC          = 'https://bsc-dataseed.binance.org/'      # public fallback, Binance-operated
 BSC_RPC_URL      = os.environ.get('BSC_RPC_URL', '')        # set in Railway — overrides fallback (Alchemy/Ankr/etc)
 USDC_BSC_ADDR    = '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d'  # USDC (BEP-20), 18 decimals -- NOT 6 like Solana/Ethereum
+ZEROX_API_KEY    = os.environ.get('ZEROX_API_KEY', '')      # required for BSC swaps -- get one at dashboard.0x.org
+BNB_NATIVE_ADDR  = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'  # 0x's sentinel address for the native gas token
 # OWNER_WALLET vs ADMIN_WALLET — deliberately two separate constants, not
 # duplication (checked/confirmed against production 2026-08-08: same address
 # in practice, but that's a deployment fact, not something the code enforces
@@ -3596,6 +3598,122 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
         return result.returncode == 0 and bool(result.stdout.strip())
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
+        return False
+
+# ── BSC SWAP EXECUTION (0x API) ──
+_ERC20_FULL_ABI = _ERC20_MIN_ABI + [
+    {'constant': True, 'inputs': [{'name': '_owner', 'type': 'address'}, {'name': '_spender', 'type': 'address'}],
+     'name': 'allowance', 'outputs': [{'name': '', 'type': 'uint256'}], 'type': 'function'},
+    {'constant': False, 'inputs': [{'name': '_spender', 'type': 'address'}, {'name': '_value', 'type': 'uint256'}],
+     'name': 'approve', 'outputs': [{'name': '', 'type': 'bool'}], 'type': 'function'},
+]
+
+def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: str) -> dict:
+    """sell_amount_raw is already in the sell token's smallest unit (respect
+    its own decimals -- see the 18-vs-6-decimal USDC note earlier)."""
+    if not ZEROX_API_KEY:
+        raise RuntimeError('ZEROX_API_KEY not configured')
+    r = requests.get(
+        'https://api.0x.org/swap/allowance-holder/quote',
+        params={
+            'chainId': BSC_CHAIN_ID,
+            'sellToken': sell_token,
+            'buyToken': buy_token,
+            'sellAmount': str(sell_amount_raw),
+            'taker': taker,
+        },
+        headers={'0x-api-key': ZEROX_API_KEY, '0x-version': 'v2'},
+        timeout=15,
+    )
+    r.raise_for_status()
+    return r.json()
+
+def _ensure_bsc_allowance(w3, wallet: str, private_key: str, token_address: str,
+                           spender: str, needed_amount_raw: int) -> bool:
+    """Approves exactly `needed_amount_raw` (not an unlimited/infinite approval)
+    -- caps worst-case exposure to this one trade if the spender contract were
+    ever compromised, at the cost of one extra approve() tx per trade that
+    needs a bigger allowance than it already has."""
+    contract = w3.eth.contract(address=w3.to_checksum_address(token_address), abi=_ERC20_FULL_ABI)
+    owner = w3.to_checksum_address(wallet)
+    spender_cs = w3.to_checksum_address(spender)
+    current = contract.functions.allowance(owner, spender_cs).call()
+    if current >= needed_amount_raw:
+        return True
+    acct = _EvmAccount.from_key(private_key)
+    tx = contract.functions.approve(spender_cs, needed_amount_raw).build_transaction({
+        'from': owner,
+        'nonce': w3.eth.get_transaction_count(owner),
+        'chainId': BSC_CHAIN_ID,
+        'gasPrice': w3.eth.gas_price,
+    })
+    tx['gas'] = w3.eth.estimate_gas(tx)
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+    return receipt.status == 1
+
+def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address: str, amount_str: str) -> bool:
+    """BSC equivalent of _execute_user_swap(). action is 'buy' (USDC -> token)
+    or 'sell' (token -> USDC). amount_str is a human-readable amount of
+    whichever asset is being sold (USDC for buy, the token for sell)."""
+    try:
+        w3 = _get_web3()
+        wallet_cs = w3.to_checksum_address(wallet)
+        token_cs = w3.to_checksum_address(token_address)
+
+        if action == 'buy':
+            sell_token, buy_token = USDC_BSC_ADDR, token_cs
+        elif action == 'sell':
+            sell_token, buy_token = token_cs, USDC_BSC_ADDR
+        else:
+            add_user_log(wallet, f'BSC swap error: unknown action {action!r}')
+            return False
+
+        sell_contract = w3.eth.contract(address=w3.to_checksum_address(sell_token), abi=_ERC20_MIN_ABI)
+        sell_decimals = sell_contract.functions.decimals().call()
+        sell_amount_raw = int(float(amount_str) * (10 ** sell_decimals))
+
+        quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
+
+        issues = quote.get('issues') or {}
+        allowance_issue = issues.get('allowance')
+        if allowance_issue:
+            spender = allowance_issue.get('spender')
+            ok = _ensure_bsc_allowance(w3, wallet, private_key, sell_token, spender, sell_amount_raw)
+            if not ok:
+                add_user_log(wallet, 'BSC swap error: allowance approval failed')
+                return False
+            # Re-quote after approving -- the first quote's tx.data assumed the
+            # allowance issue was still open; a stale quote can revert on-chain.
+            quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
+
+        txn = quote.get('transaction')
+        if not txn:
+            add_user_log(wallet, f'BSC swap error: no transaction in quote (liquidity/insufficientFunds issue: {issues})')
+            return False
+
+        acct = _EvmAccount.from_key(private_key)
+        tx = {
+            'from': wallet_cs,
+            'to': w3.to_checksum_address(txn['to']),
+            'data': txn['data'],
+            'value': int(txn.get('value', '0')),
+            'gas': int(txn['gas']) if txn.get('gas') else 350000,
+            'gasPrice': int(txn['gasPrice']) if txn.get('gasPrice') else w3.eth.gas_price,
+            'nonce': w3.eth.get_transaction_count(wallet_cs),
+            'chainId': BSC_CHAIN_ID,
+        }
+        signed = acct.sign_transaction(tx)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        add_user_log(wallet, f'BSC swap sent: {tx_hash.hex()}')
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+        success = receipt.status == 1
+        add_user_log(wallet, f'BSC swap {"confirmed" if success else "reverted on-chain"}: {tx_hash.hex()}')
+        return success
+    except Exception as e:
+        add_user_log(wallet, 'BSC swap error: ' + str(e)[:120])
+        print(f'[bsc-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False
 
 def _check_mint_safety(mint_address: str) -> dict:
