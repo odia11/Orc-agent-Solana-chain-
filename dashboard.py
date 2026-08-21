@@ -1771,6 +1771,15 @@ def run_migrations():
         # so the background job doesn't redundantly re-convert on every pass.
         "ALTER TABLE users ADD COLUMN bsc_gas_reserved_at TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN bot_enabled_bsc INTEGER DEFAULT 0",
+        # USDC-denominated -- deliberately separate from min_trade_size/max_trade_size
+        # (SOL-denominated, Solana-only) rather than reinterpreting those columns,
+        # since a single column meaning "SOL amount" for one chain and "USDC amount"
+        # for another would be a silent, easy-to-misread ambiguity in every place
+        # that already reads those settings.
+        "ALTER TABLE users ADD COLUMN bsc_min_trade_size REAL DEFAULT 5.0",
+        "ALTER TABLE users ADD COLUMN bsc_max_trade_size REAL DEFAULT 20.0",
+        "ALTER TABLE users ADD COLUMN bsc_max_positions INTEGER DEFAULT 3",
+        "ALTER TABLE users ADD COLUMN bsc_daily_loss_limit REAL DEFAULT 50.0",
         # NULL for rows predating this column -- those acceptances only ever
         # recorded a version string, not the actual text. The PDF download
         # falls back to the CURRENT _TOS_CONTENT_HTML for those, clearly
@@ -3068,6 +3077,99 @@ def totd_loop():
                         ' m5:' + ('+' if m5 >= 0 else '') + str(round(m5, 1)) + '%)')
         except: pass
         time.sleep(TOTD_INTERVAL)
+
+# ── BSC BOT SCANNING (deliberately isolated from token_loop()/state['tokens'],
+# which the Solana bot also reads -- a bug here can never cross-contaminate
+# the Solana bot's scanning, and vice versa) ──
+state['bsc_tokens'] = []
+_BSC_MIN_MARKETCAP_USD = 60_000  # mirrors Solana's MIN_MARKETCAP_USD; not
+                                  # reusing that name/value directly in case
+                                  # the two chains' thresholds diverge later
+
+def bsc_token_loop():
+    """BSC equivalent of token_loop(). Populates state['bsc_tokens'] with
+    scored candidates -- this loop ONLY scans and scores; it never places a
+    trade itself. Buying/selling on that data is a separate, per-user step
+    (see the bot's BSC entry logic), same separation of concerns as Solana's
+    token_loop() (scans) vs user_trader_loop() (trades)."""
+    while True:
+        try:
+            addrs = bsc_discover_tokens()
+            if not addrs:
+                time.sleep(120)
+                continue
+            add_log(f'Scanning {len(addrs)} BSC tokens...')
+
+            scored = []
+            for i in range(0, len(addrs), 30):
+                batch = addrs[i:i + 30]
+                r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch), timeout=10)
+                if not r or r.status_code != 200:
+                    continue
+                try:
+                    pairs = r.json().get('pairs') or []
+                except Exception:
+                    continue
+                # keep the highest-liquidity pair per token address
+                best_by_addr = {}
+                for p in pairs:
+                    if p.get('chainId') != 'bsc':
+                        continue
+                    a = (p.get('baseToken') or {}).get('address', '')
+                    if not a:
+                        continue
+                    liq = float((p.get('liquidity') or {}).get('usd') or 0)
+                    if a not in best_by_addr or liq > best_by_addr[a][1]:
+                        best_by_addr[a] = (p, liq)
+                for addr, (p, liq) in best_by_addr.items():
+                    mcap = float(p.get('marketCap') or p.get('fdv') or 0)
+                    if mcap < _BSC_MIN_MARKETCAP_USD:
+                        continue
+                    pc  = p.get('priceChange') or {}
+                    vol = p.get('volume') or {}
+                    txns24 = p.get('txns', {}).get('h24', {}) or {}
+                    data = {
+                        'price':       float(p.get('priceUsd') or 0),
+                        'change5m':    float(pc.get('m5')  or 0),
+                        'change1h':    float(pc.get('h1')  or 0),
+                        'change6h':    float(pc.get('h6')  or 0),
+                        'volume5m':    float(vol.get('m5') or 0) if vol.get('m5') is not None else 0,
+                        'volume1h':    float(vol.get('h1') or 0) if vol.get('h1') is not None else 0,
+                        'liquidity':   liq,
+                        'fdv':         mcap,
+                        'txns_buys':   int(txns24.get('buys')  or 0),
+                        'txns_sells':  int(txns24.get('sells') or 0),
+                        'txns24h':     int(txns24.get('buys') or 0) + int(txns24.get('sells') or 0),
+                        'makers24h':   0,  # DexScreener doesn't expose this for BSC pairs
+                        'pairCreatedAt': p.get('pairCreatedAt') or 0,
+                    }
+                    if data['price'] <= 0:
+                        continue
+                    sc, bd = score_token(data)
+                    scored.append({
+                        'mint':    addr,  # keeping the field name 'mint' for consistency with
+                                          # the Solana token dict shape elsewhere, even though
+                                          # this is an EVM contract address, not an SPL mint
+                        'chain':   'bsc',
+                        'symbol':  (p.get('baseToken') or {}).get('symbol', '') or addr[:8],
+                        'name':    (p.get('baseToken') or {}).get('name', ''),
+                        'price':   data['price'],
+                        'market_cap': mcap,
+                        'liquidity':  liq,
+                        'change5m':   data['change5m'],
+                        'change1h':   data['change1h'],
+                        'score':      sc,
+                        'breakdown':  bd,
+                        'pairAddress': p.get('pairAddress', ''),
+                    })
+                time.sleep(0.3)
+
+            scored.sort(key=lambda t: t['score'], reverse=True)
+            state['bsc_tokens'] = scored[:50]
+            add_log(f'BSC scan complete: {len(scored)} tokens scored')
+        except Exception as e:
+            print(f'[bsc-scan] loop error: {e}', flush=True)
+        time.sleep(30)  # matches token_loop()'s general cadence order of magnitude
 
 def token_loop():
     global _last_good_mints
@@ -18255,6 +18357,7 @@ threading.Thread(target=_heartbeat_loop,       daemon=True).start()
 threading.Thread(target=token_loop,            daemon=True).start()
 threading.Thread(target=_fast_poll_loop,       daemon=True).start()
 threading.Thread(target=_calls_peak_loop,      daemon=True).start()
+threading.Thread(target=bsc_token_loop,        daemon=True).start()
 threading.Thread(target=totd_loop,             daemon=True).start()
 threading.Thread(target=_cleanup_loop,         daemon=True).start()
 threading.Thread(target=_audit_loop,           daemon=True).start()
