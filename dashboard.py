@@ -532,6 +532,13 @@ def _get_fee_rate():
     except Exception:
         return FEE_RATE_DEFAULT
 FEE_WALLET       = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'  # fixed fee recipient (independent of admin role)
+# BSC fee recipient -- a *separate* constant from FEE_WALLET on purpose: that's a
+# base58 Solana address and is not a valid EVM recipient in any sense (wrong
+# alphabet, wrong length, no relation to a BSC keypair). Left blank pending the
+# real BSC-format address -- _charge_bsc_txn_fee() no-ops (logs and skips) rather
+# than sending anywhere while this is unset, so no fee silently goes missing to
+# the wrong address.
+BSC_FEE_WALLET   = '0x4f187411023338E717D68c089855372997ef4640'  # fixed BSC fee recipient -- public address only, no key held anywhere
 
 PROMOTION_PRICE_USD_DEFAULT = 70.0
 PROMOTION_PRICE_SOL_FALLBACK = 0.42  # used only if the SOL/USD rate isn't available yet
@@ -1788,6 +1795,16 @@ def run_migrations():
         # profit back to the original trader (neither open_positions nor trades recorded
         # this before).
         "ALTER TABLE open_positions ADD COLUMN copy_of_wallet TEXT DEFAULT NULL",
+        # 'solana' default backfills every pre-existing row correctly, since every
+        # position predating BSC support was necessarily a Solana one. Address
+        # formats never collide across chains (base58 vs 0x-hex), so this doesn't
+        # need to join the UNIQUE(user_id, mint_address) constraint.
+        "ALTER TABLE open_positions ADD COLUMN chain TEXT DEFAULT 'solana'",
+        "ALTER TABLE fees ADD COLUMN chain TEXT DEFAULT 'solana'",
+        # Every trade/referral-earning predating BSC support was necessarily Solana --
+        # DEFAULT 'solana' backfills existing rows correctly with no separate migration.
+        "ALTER TABLE trades ADD COLUMN chain TEXT DEFAULT 'solana'",
+        "ALTER TABLE referral_earnings ADD COLUMN chain TEXT DEFAULT 'solana'",
         # Signature counter for WebAuthn replay protection (see the security-fix
         # comment above this function) -- must increase on every successful
         # authentication; a non-increasing counter signals a cloned authenticator.
@@ -3186,11 +3203,13 @@ def check_daily_reset_user(us: dict):
 # Write-through helpers: every call site that used to mutate
 # user_states[wallet]['positions'] directly now goes through one of these two,
 # so the in-memory dict and the open_positions table never drift apart.
-def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot', copy_of_wallet: str = None):
+def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot', copy_of_wallet: str = None, chain: str = 'solana'):
     get_user_state(wallet)['positions'][mint] = pos
     # Every open position is fast-polled from the moment it exists (see the
     # Pass-1 loop in user_trader_loop) -- registering here means every call
     # site gets it automatically instead of relying on each one to remember.
+    # (BSC positions aren't polled by that Solana-specific loop, but sharing
+    # the mint-keyed dict is harmless -- address formats never collide.)
     _mark_hot_mint(mint)
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -3198,22 +3217,22 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
             conn.execute('PRAGMA busy_timeout=3000')
             conn.execute(
                 '''INSERT INTO open_positions
-                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, source, copy_of_wallet, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, source, copy_of_wallet, chain, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                    ON CONFLICT(user_id, mint_address) DO UPDATE SET
                        symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
                        spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
                        opened_at=excluded.opened_at, source=excluded.source,
-                       copy_of_wallet=excluded.copy_of_wallet, updated_at=CURRENT_TIMESTAMP''',
+                       copy_of_wallet=excluded.copy_of_wallet, chain=excluded.chain, updated_at=CURRENT_TIMESTAMP''',
                 (user_id, mint, pos.get('symbol', ''), pos.get('amount', 0.0), pos.get('buy_price', 0.0),
-                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0), pos.get('opened_at', 0.0), source, copy_of_wallet))
+                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0), pos.get('opened_at', 0.0), source, copy_of_wallet, chain))
             conn.commit()
         finally:
             conn.close()
     except Exception as e:
         print(f'[open_positions] upsert failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
 
-def _close_open_position(user_id: int, wallet: str, mint: str):
+def _close_open_position(user_id: int, wallet: str, mint: str, chain: str = 'solana'):
     get_user_state(wallet)['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -3221,8 +3240,10 @@ def _close_open_position(user_id: int, wallet: str, mint: str):
             conn.execute('PRAGMA busy_timeout=3000')
             conn.execute('DELETE FROM open_positions WHERE user_id=? AND mint_address=?', (user_id, mint))
             conn.commit()
+            # Scoped to this chain only -- closing a user's last BSC position must not
+            # touch bot_enabled/trader_running for a still-open Solana bot, and vice versa.
             remaining = conn.execute(
-                'SELECT COUNT(*) FROM open_positions WHERE user_id=?', (user_id,)
+                'SELECT COUNT(*) FROM open_positions WHERE user_id=? AND chain=?', (user_id, chain)
             ).fetchone()[0]
         finally:
             conn.close()
@@ -3230,7 +3251,7 @@ def _close_open_position(user_id: int, wallet: str, mint: str):
         print(f'[open_positions] close failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
         return
 
-    if remaining == 0:
+    if remaining == 0 and chain == 'solana':
         us = get_user_state(wallet)
         if us.get('trader_stop'):
             us['trader_stop'].set()
@@ -3610,6 +3631,8 @@ _ERC20_FULL_ABI = _ERC20_MIN_ABI + [
      'name': 'allowance', 'outputs': [{'name': '', 'type': 'uint256'}], 'type': 'function'},
     {'constant': False, 'inputs': [{'name': '_spender', 'type': 'address'}, {'name': '_value', 'type': 'uint256'}],
      'name': 'approve', 'outputs': [{'name': '', 'type': 'bool'}], 'type': 'function'},
+    {'constant': False, 'inputs': [{'name': '_to', 'type': 'address'}, {'name': '_value', 'type': 'uint256'}],
+     'name': 'transfer', 'outputs': [{'name': '', 'type': 'bool'}], 'type': 'function'},
 ]
 
 def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: str) -> dict:
@@ -3719,6 +3742,129 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
         add_user_log(wallet, 'BSC swap error: ' + str(e)[:120])
         print(f'[bsc-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False
+
+def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) -> str:
+    """BSC equivalent of send_sol_fee() -- sends amount_usdc of USDC (BEP-20
+    ERC20 transfer, not a native-value transfer), using the same
+    build_transaction / sign_transaction / send_raw_transaction flow as
+    _execute_bsc_swap()."""
+    w3 = _get_web3()
+    acct = _EvmAccount.from_key(private_key)
+    owner = w3.to_checksum_address(acct.address)
+    contract = w3.eth.contract(address=w3.to_checksum_address(USDC_BSC_ADDR), abi=_ERC20_FULL_ABI)
+    decimals = contract.functions.decimals().call()
+    amount_raw = int(round(amount_usdc * (10 ** decimals)))
+    tx = contract.functions.transfer(w3.to_checksum_address(to_address), amount_raw).build_transaction({
+        'from': owner,
+        'nonce': w3.eth.get_transaction_count(owner),
+        'chainId': BSC_CHAIN_ID,
+        'gasPrice': w3.eth.gas_price,
+    })
+    tx['gas'] = w3.eth.estimate_gas(tx)
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+    if receipt.status != 1:
+        raise RuntimeError(f'fee transfer reverted on-chain: {tx_hash.hex()}')
+    return tx_hash.hex()
+
+def _charge_bsc_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
+                         usdc_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0):
+    """BSC equivalent of _charge_txn_fee(): same FEE_RATE_TXN (0.75%), charged on
+    BOTH the buy and the sell leg regardless of profit -- but the fee itself is
+    USDC (BEP-20), sent to BSC_FEE_WALLET via _send_bsc_usdc_fee()'s web3
+    build/sign/send_raw_transaction flow instead of a SOL transfer. Shares the
+    fees/referral_earnings tables with the Solana path, tagged chain='bsc' so a
+    USDC amount is never mistaken for a SOL one."""
+    fee_amount = round(usdc_amount * FEE_RATE_TXN, 6)
+    short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    print(f'[bsc-fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} USDC '
+          f'({FEE_RATE_TXN * 100:.2f}% of {usdc_amount:.6f} USDC {kind})', flush=True)
+    if not (wallet and private_key) or fee_amount <= 0:
+        print(f'[bsc-fee] {short_w} {symbol} {kind} no fee — no private key or nothing to collect', flush=True)
+        return
+    if not BSC_FEE_WALLET:
+        print(f'[bsc-fee] {short_w} {symbol} {kind} no fee — BSC_FEE_WALLET not configured', flush=True)
+        return
+
+    def _do_fee(pk, sym, gross, fee, wlt, uid, kind_, t_ts):
+        sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
+        # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
+        time.sleep(12)
+        print(f'[bsc-fee] → attempting {fee:.6f} USDC {kind_} fee transfer from trading wallet to BSC_FEE_WALLET '
+              f'for {sw} {sym}', flush=True)
+        tx_sig  = None
+        err_msg = None
+        try:
+            acct = _EvmAccount.from_key(pk)
+            signer_usdc = get_bsc_usdc_balance(acct.address)
+            if signer_usdc < fee:
+                err_msg = f'insufficient balance: {signer_usdc:.6f} USDC (need {fee:.6f})'
+                print(f'[bsc-fee] ✗ {sw} {sym} {err_msg}', flush=True)
+            else:
+                tx_sig = _send_bsc_usdc_fee(pk, BSC_FEE_WALLET, fee)
+                print(f'[bsc-fee] ✓ {sw} {sym} {kind_} {fee:.6f} USDC sent  TX:{tx_sig[:20]}...', flush=True)
+        except Exception as e:
+            err_msg = _redact_keys(str(e))
+            print(f'[bsc-fee] ✗ {sw} {sym} {kind_} transfer FAILED: {err_msg}', flush=True)
+
+        # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
+        try:
+            status = 'ok' if tx_sig else 'failed'
+            fee_tx = tx_sig if tx_sig else ('FAILED: ' + (err_msg or 'unknown')[:80])
+            conn2  = sqlite3.connect(DB_FILE)
+            conn2.execute(
+                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind, chain) '
+                'VALUES (?,?,?,?,?,?,?,?)',
+                (wlt, sym, gross, fee, fee_tx, status, kind_, 'bsc'))
+            if tx_sig:
+                if kind_ == 'sell' and t_ts:
+                    row = conn2.execute(
+                        'SELECT id FROM trades WHERE user_id=? AND timestamp=? AND fee_paid=0 '
+                        'ORDER BY rowid LIMIT 1', (uid, t_ts)).fetchone()
+                    if row:
+                        conn2.execute('UPDATE trades SET fee_paid=1 WHERE id=?', (row[0],))
+                    else:
+                        conn2.execute(
+                            'UPDATE trades SET fee_paid=1 WHERE user_id=? AND timestamp=?',
+                            (uid, t_ts))
+
+                # Referral payout: 20% of the fee just actually collected, same model as
+                # _charge_txn_fee() -- gated on tx_sig so a failed transfer never credits
+                # a referrer. Reuses trade_fee_sol/earned_sol (misnamed for BSC, but the
+                # new chain='bsc' tag disambiguates the currency per row) rather than
+                # adding parallel USDC-named columns.
+                try:
+                    ref_row = conn2.execute(
+                        'SELECT referred_by FROM users WHERE wallet_address=?', (wlt,)).fetchone()
+                    if ref_row and ref_row[0]:
+                        referrer = ref_row[0]
+                        earned   = round(fee * 0.20, 6)
+                        conn2.execute(
+                            'INSERT INTO referral_earnings '
+                            '(referrer_wallet, referred_wallet, trade_fee_sol, earned_sol, chain) VALUES (?,?,?,?,?)',
+                            (referrer, wlt, fee, earned, 'bsc'))
+                        conn2.execute(
+                            'UPDATE users SET referral_balance = referral_balance + ? WHERE wallet_address=?',
+                            (earned, referrer))
+                        print(f'[bsc-referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} USDC '
+                              f'(20% of {fee:.6f} USDC {kind_} fee)', flush=True)
+                except Exception as ref_e:
+                    print(f'[bsc-referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
+            conn2.commit()
+            conn2.close()
+            print(f'[bsc-fee] recorded in fees table: kind={kind_} status={status} fee_tx={fee_tx[:30]}', flush=True)
+        except Exception as db_e:
+            print(f'[bsc-fee] ✗ could not write to fees table: {db_e}', flush=True)
+        finally:
+            pk = None
+
+    threading.Thread(
+        target=_do_fee,
+        args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts),
+        daemon=True,
+    ).start()
+    print(f'[bsc-fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
 
 def _check_mint_safety(mint_address: str) -> dict:
     try:
@@ -6148,11 +6294,25 @@ def api_bsc_trade_buy():
     # _migrate_trade_size_units) -- reused as-is rather than adding a
     # separate BSC-specific limit setting.
     amount_usdc = max(min_size, min(max_size, amount_usdc))
+    user_id = row[0]
     with _use_key(enc_blob, wallet) as pk:
         buy_ok = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
     if not buy_ok:
         return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
-    return jsonify({'ok': True, 'amount_usdc': amount_usdc, 'token_address': token_address})
+    td          = get_token_data(token_address)
+    entry_price = float(td['price']) if td and td.get('price') else 0.0
+    symbol      = (td.get('symbol') or token_address[:8]) if td else token_address[:8]
+    pos = {
+        'amount':    (amount_usdc / entry_price) if entry_price > 0 else 0.0,
+        'buy_price': entry_price,
+        'spend':     amount_usdc,
+        'symbol':    symbol,
+        'opened_at': time.time(),
+    }
+    _upsert_open_position(user_id, wallet, token_address, pos, source='manual', chain='bsc')
+    _charge_bsc_txn_fee(pk, wallet, user_id, symbol, amount_usdc, 'buy')
+    return jsonify({'ok': True, 'amount_usdc': amount_usdc, 'token_address': token_address,
+                     'entry_price': entry_price, 'symbol': symbol})
 
 @app.route('/api/bsc/trade/sell', methods=['POST'])
 @rate_limit(10, 60)
@@ -6164,27 +6324,65 @@ def api_bsc_trade_sell():
     token_address = _sanitize(str(data.get('token_address', '')).strip())
     if not is_valid_evm_address(token_address):
         return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
-    try:
-        amount = float(data.get('amount'))
-    except (TypeError, ValueError):
-        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
-    if amount <= 0:
-        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    # Sell amount comes from the tracked position, not the client, same as
+    # /api/trade/sell -- prevents mismatched bookkeeping between what was
+    # actually bought and what a caller claims to want to sell.
+    us  = get_user_state(wallet)
+    pos = us['positions'].get(token_address, {})
+    if not pos.get('amount', 0.0) > 0:
+        return jsonify({'ok': False, 'msg': 'No open position for this token'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            'SELECT encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,)
+            'SELECT id, encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,)
         ).fetchone()
     finally:
         conn.close()
-    if not row or not row[0]:
+    if not row or not row[1]:
         return jsonify({'ok': False, 'msg': 'No BSC trading wallet configured'}), 400
-    enc_blob = row[0]
+    user_id, enc_blob = row[0], row[1]
+    td         = get_token_data(token_address)
+    exit_price = float(td['price']) if td and td.get('price') else 0.0
+    symbol     = pos.get('symbol') or (td.get('symbol', token_address[:8]) if td else token_address[:8])
+    amount     = pos['amount']
     with _use_key(enc_blob, wallet) as pk:
         sell_ok = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
-    if not sell_ok:
-        return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
-    return jsonify({'ok': True, 'token_address': token_address, 'amount': amount})
+    entry     = pos.get('buy_price', 0.0)
+    pnl       = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
+    pnl_pct   = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
+    opened_at = pos.get('opened_at', 0.0)
+    if sell_ok:
+        now = datetime.datetime.utcnow()
+        # 0.75% fee on the sell leg's USDC amount, not on profit -- same model as
+        # _record_user_trade()'s Solana sell-leg fee call.
+        swap_usdc_amount = round(amount * exit_price, 6)
+        _charge_bsc_txn_fee(pk, wallet, user_id, symbol, swap_usdc_amount, 'sell',
+                             trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl)
+        fee_amount = round(swap_usdc_amount * FEE_RATE_TXN, 6)
+        # Same trades-table insert + badge recalc as _record_user_trade(), so BSC
+        # sells count toward PnL history, badges, and profile stats. Doesn't port
+        # _record_user_trade()'s in-memory daily_stats/trades_history (that's
+        # live-dashboard state for the Solana bot view, not durable history) or
+        # its cooldown/auto-verify/X-post side effects -- those are Solana-bot-
+        # specific and weren't asked for here.
+        try:
+            conn2 = sqlite3.connect(DB_FILE)
+            try:
+                conn2.execute(
+                    '''INSERT INTO trades
+                       (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source, chain)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
+                     now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
+                     token_address, 'manual', 'bsc'))
+                conn2.commit()
+            finally:
+                conn2.close()
+        except Exception as e:
+            print(f'[bsc-trade_record] DB write failed: {e}', flush=True)
+        _recalculate_badges(wallet)
+        _close_open_position(user_id, wallet, token_address, chain='bsc')
+    return jsonify({'ok': True, 'pnl': pnl, 'pnl_pct': pnl_pct, 'exit_price': exit_price, 'sell_executed': sell_ok})
 
 @app.route('/referrals')
 def referrals_page():
