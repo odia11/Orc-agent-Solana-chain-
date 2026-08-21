@@ -477,6 +477,11 @@ SOLANA_RPC       = 'https://api.mainnet-beta.solana.com'
 SOLANA_RPC_URL   = os.environ.get('SOLANA_RPC_URL', '')   # set in Railway — overrides all fallbacks
 HELIUS_RPC       = os.environ.get('HELIUS_RPC', '')        # full Helius URL e.g. https://mainnet.helius-rpc.com/?api-key=xxx
 HELIUS_API_KEY   = os.environ.get('HELIUS_API_KEY', '')
+# ── BSC (multi-chain) config — mirrors the Solana RPC pattern above ──
+BSC_CHAIN_ID     = 56
+BSC_RPC          = 'https://bsc-dataseed.binance.org/'      # public fallback, Binance-operated
+BSC_RPC_URL      = os.environ.get('BSC_RPC_URL', '')        # set in Railway — overrides fallback (Alchemy/Ankr/etc)
+USDC_BSC_ADDR    = '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d'  # USDC (BEP-20), 18 decimals -- NOT 6 like Solana/Ethereum
 # OWNER_WALLET vs ADMIN_WALLET — deliberately two separate constants, not
 # duplication (checked/confirmed against production 2026-08-08: same address
 # in practice, but that's a deployment fact, not something the code enforces
@@ -695,6 +700,59 @@ def ensure_bsc_wallet(conn, user_id: int, wallet_address: str) -> str:
     conn.commit()
     print(f'[bsc] created trading wallet {bsc_address[:8]}... for user_id={user_id}', flush=True)
     return bsc_address
+
+_w3 = None
+def _get_web3():
+    """Lazily-constructed, module-level Web3 instance -- avoids reconnecting
+    on every call. Falls back to the public BSC_RPC if BSC_RPC_URL isn't set."""
+    global _w3
+    if _w3 is None:
+        from web3 import Web3
+        _w3 = Web3(Web3.HTTPProvider(BSC_RPC_URL or BSC_RPC, request_kwargs={'timeout': 8}))
+    return _w3
+
+# Minimal ERC20/BEP20 ABI -- just the two read-only calls we actually need,
+# not the full standard. Keeps this dependency-free of any ABI-fetching step.
+_ERC20_MIN_ABI = [
+    {'constant': True, 'inputs': [{'name': '_owner', 'type': 'address'}],
+     'name': 'balanceOf', 'outputs': [{'name': 'balance', 'type': 'uint256'}],
+     'type': 'function'},
+    {'constant': True, 'inputs': [], 'name': 'decimals',
+     'outputs': [{'name': '', 'type': 'uint8'}], 'type': 'function'},
+]
+
+def get_bnb_balance(address: str) -> float:
+    """Native BNB balance (for gas), in BNB not wei."""
+    w3 = _get_web3()
+    wei = w3.eth.get_balance(w3.to_checksum_address(address))
+    return float(w3.from_wei(wei, 'ether'))
+
+def get_bsc_usdc_balance(address: str) -> float:
+    """USDC-on-BSC balance. IMPORTANT: this token uses 18 decimals on BSC,
+    not the 6 decimals USDC uses on Solana/Ethereum -- reading decimals()
+    from the contract itself rather than hardcoding avoids that exact,
+    well-documented BSC integration mistake."""
+    w3 = _get_web3()
+    contract = w3.eth.contract(address=w3.to_checksum_address(USDC_BSC_ADDR), abi=_ERC20_MIN_ABI)
+    raw = contract.functions.balanceOf(w3.to_checksum_address(address)).call()
+    decimals = contract.functions.decimals().call()
+    return raw / (10 ** decimals)
+
+def get_bsc_balances(address: str) -> dict:
+    """Both balances in one call, with independent failure handling -- a
+    slow/down RPC for one shouldn't blank out the other."""
+    result = {'bnb': 0.0, 'usdc': 0.0, 'error': None}
+    try:
+        result['bnb'] = get_bnb_balance(address)
+    except Exception as e:
+        print(f'[bsc] get_bnb_balance failed for {address[:8]}...: {e}', flush=True)
+        result['error'] = 'bnb_fetch_failed'
+    try:
+        result['usdc'] = get_bsc_usdc_balance(address)
+    except Exception as e:
+        print(f'[bsc] get_bsc_usdc_balance failed for {address[:8]}...: {e}', flush=True)
+        result['error'] = result['error'] or 'usdc_fetch_failed'
+    return result
 
 # ── PERFORMANCE FEE COLLECTION ──
 def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> str:
@@ -5867,16 +5925,27 @@ def wallet_page():
         # never the connected session wallet -- those are different keypairs by design
         # (see wallet_set_key's "paste a separate, dedicated trading wallet" guidance).
         deposit_address = None
+        bsc_deposit_address = None
         conn = sqlite3.connect(DB_FILE)
         try:
             row = conn.execute(
-                'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet_address,)
+                'SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet_address,)
             ).fetchone()
+            if row:
+                uid = row[0]
+                try:
+                    # Address only here -- fast, local DB operation. Balances are
+                    # fetched client-side via /api/bsc/balance after page load,
+                    # same pattern as the SOL balance elsewhere in this app, so a
+                    # slow/down BSC RPC never blocks the page itself from rendering.
+                    bsc_deposit_address = ensure_bsc_wallet(conn, uid, wallet_address)
+                except Exception as e:
+                    print(f'[wallet] BSC wallet creation error for {wallet_short}: {type(e).__name__}: {e}', flush=True)
         finally:
             conn.close()
-        if row and row[0]:
+        if row and row[1]:
             try:
-                with _use_key(row[0], wallet_address) as _pk:
+                with _use_key(row[1], wallet_address) as _pk:
                     from solders.keypair import Keypair as _KP_wp
                     deposit_address = str(_KP_wp.from_base58_string(_pk).pubkey())
             except InvalidToken:
@@ -5889,6 +5958,7 @@ def wallet_page():
             wallet_address=wallet_address,
             wallet_short=wallet_short,
             deposit_address=deposit_address,
+            bsc_deposit_address=bsc_deposit_address,
             is_admin=_is_owner(wallet_address),
             csrf_token=_get_csrf_token(),
             client_secret=API_SHARED_SECRET,
@@ -5896,6 +5966,31 @@ def wallet_page():
     except Exception as e:
         return f'<h1>Wallet Error: {str(e)}</h1>', 500
 
+
+@app.route('/api/bsc/balance', methods=['GET'])
+@rate_limit(20, 60)
+def api_bsc_balance():
+    # _authenticated_wallet(): this is first-person balance data, same
+    # standard as every other key-touching/balance route audited earlier.
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        bsc_address = ensure_bsc_wallet(conn, uid, wallet)
+    finally:
+        conn.close()
+    balances = get_bsc_balances(bsc_address)
+    return jsonify({
+        'ok': True,
+        'address': bsc_address,
+        'bnb': balances['bnb'],
+        'usdc': balances['usdc'],
+        'error': balances['error'],
+    })
 
 @app.route('/referrals')
 def referrals_page():

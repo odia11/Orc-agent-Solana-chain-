@@ -117,6 +117,10 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
 
 /* ── deposit card ── */
 .dep-card{background:#101216;border:1px solid #16191f;border-radius:14px;padding:18px}
+.wlt-bsc-balances{display:flex;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #16191f}
+.wlt-bsc-bal-item{flex:1;background:#0a0b0e;border:1px solid #16191f;border-radius:10px;padding:10px 12px}
+.wlt-bsc-bal-lbl{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#565d68;margin-bottom:4px}
+.wlt-bsc-bal-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#eef1f5}
 .dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .dep-title{font-size:13px;font-weight:600;color:var(--text)}
 .dep-network{font-family:var(--mono);font-size:10px;color:var(--accent);letter-spacing:.06em}
@@ -623,6 +627,36 @@ html,body{height:100%;overflow:hidden;background:var(--bg);font-family:var(--ui)
       {% endif %}
     </div>
 
+    <!-- BSC deposit address card -->
+    {% if bsc_deposit_address %}
+    <div class="dep-card">
+      <div class="dep-header">
+        <span class="dep-title">Deposit Address</span>
+        <span class="dep-network">BEP-20 · BSC</span>
+      </div>
+      <div class="dep-body">
+        <div class="dep-qr"><div class="dep-qr-grid" id="dep-qr-bsc"></div></div>
+        <div class="dep-right">
+          <div class="dep-addr">{{ bsc_deposit_address }}</div>
+          <div class="dep-btns">
+            <button class="dep-btn dep-copy" onclick="_copyAddrBsc()">Copy Address</button>
+            <a class="dep-btn dep-scan" href="https://bscscan.com/address/{{ bsc_deposit_address }}" target="_blank" rel="noopener">View on BscScan ↗</a>
+          </div>
+        </div>
+      </div>
+      <div class="wlt-bsc-balances">
+        <div class="wlt-bsc-bal-item">
+          <span class="wlt-bsc-bal-lbl">USDC</span>
+          <span class="wlt-bsc-bal-val" id="bsc-usdc-val">—</span>
+        </div>
+        <div class="wlt-bsc-bal-item">
+          <span class="wlt-bsc-bal-lbl">BNB <span title="Klein reservebedrag voor transactiekosten — wordt automatisch aangevuld vanuit je USDC-storting">(gas)</span></span>
+          <span class="wlt-bsc-bal-val" id="bsc-bnb-val">—</span>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
     <!-- holdings -->
     <div class="holdings">
       <div class="holdings-hdr">
@@ -848,6 +882,42 @@ function _copyAddr(){
     document.body.removeChild(el)
   })
 }
+
+var _bscAddr = {{ bsc_deposit_address|tojson }} || ''
+function _copyAddrBsc(){
+  if(!_bscAddr) return
+  navigator.clipboard.writeText(_bscAddr).then(function(){
+    _wToast('Address copied',true)
+  }).catch(function(){
+    var el=document.createElement('textarea')
+    el.value=_bscAddr;el.style.cssText='position:fixed;opacity:0'
+    document.body.appendChild(el);el.select()
+    try{document.execCommand('copy');_wToast('Address copied',true)}
+    catch(e){_wToast('Copy failed',false)}
+    document.body.removeChild(el)
+  })
+}
+
+async function _loadBscBalance(){
+  if(!_bscAddr) return
+  var usdcEl = document.getElementById('bsc-usdc-val')
+  var bnbEl = document.getElementById('bsc-bnb-val')
+  try{
+    var r = await fetch('/api/bsc/balance')
+    var d = await r.json()
+    if(d.ok){
+      if(usdcEl) usdcEl.textContent = d.usdc.toFixed(2)
+      if(bnbEl) bnbEl.textContent = d.bnb.toFixed(4)
+    } else {
+      if(usdcEl) usdcEl.textContent = '—'
+      if(bnbEl) bnbEl.textContent = '—'
+    }
+  }catch(e){
+    if(usdcEl) usdcEl.textContent = '—'
+    if(bnbEl) bnbEl.textContent = '—'
+  }
+}
+if(_bscAddr) _loadBscBalance()
 
 // ── modals ────────────────────────────────────────────────
 function _showModal(html){
