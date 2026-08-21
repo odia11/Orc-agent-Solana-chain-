@@ -127,7 +127,7 @@ async function main() {
         quote,
         keypair.publicKey.toString(),
         destAddress,
-        [],
+        undefined,
         signSolanaTransaction,
         connection
       );
@@ -153,7 +153,7 @@ async function main() {
         quote,
         signer.address,
         destAddress,
-        [],
+        undefined,
         signer,
         null,
         {}

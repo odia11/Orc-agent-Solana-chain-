@@ -3896,6 +3896,7 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
 
     stdout = _redact_keys(result.stdout.strip())
     stderr = _redact_keys(result.stderr.strip())
+    print(f'[bridge] subprocess stdout: {stdout}\n[bridge] subprocess stderr: {stderr}', flush=True)
 
     if result.returncode != 0:
         err_msg = (stderr[-300:] or stdout[-300:] or 'Bridge script failed (no output)')
