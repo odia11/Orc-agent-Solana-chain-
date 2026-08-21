@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bridge Test — OrcAgent Admin</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Geist:wght@400;500;600;700&display=swap">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;
+  --bg2:#101216;
+  --bg3:#16191f;
+  --bg4:#21252c;
+  --border:#21252c;
+  --divider:#16191f;
+  --accent:#f7b955;
+  --amber:#f7b955;
+  --green:#3ad29b;
+  --red:#f76b62;
+  --text:#eef1f5;
+  --muted:#565d68;
+  --sub:#8a919c;
+  --mono:'JetBrains Mono',monospace;
+  --ui:'Geist',sans-serif;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--ui);font-size:14px;-webkit-font-smoothing:antialiased}
+body{padding:32px 20px;display:flex;justify-content:center}
+.wrap{width:100%;max-width:560px}
+h1{font-size:18px;font-weight:700;margin-bottom:4px}
+.sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.warn{background:rgba(247,107,98,.1);border:1px solid rgba(247,107,98,.35);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--red);margin-bottom:20px;line-height:1.5}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:18px;margin-bottom:20px}
+.field{margin-bottom:14px}
+.field label{display:block;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--sub);margin-bottom:6px}
+.field input,.field select{width:100%;background:var(--bg3);border:1px solid var(--bg4);border-radius:9px;padding:10px 12px;font-size:14px;color:var(--text);font-family:var(--mono);outline:none}
+.field input:focus,.field select:focus{border-color:var(--accent)}
+.btn{width:100%;padding:12px;background:var(--accent);color:#0a0b0e;border:none;border-radius:10px;font-size:13px;font-weight:700;cursor:pointer;font-family:var(--ui);transition:opacity .15s}
+.btn:hover{opacity:.88}
+.btn:disabled{opacity:.5;cursor:default}
+#bt-result{margin-top:14px;font-size:12px;font-family:var(--mono);white-space:pre-wrap;word-break:break-all;padding:12px;border-radius:9px;display:none}
+#bt-result.ok{display:block;background:rgba(58,210,155,.1);border:1px solid rgba(58,210,155,.35);color:var(--green)}
+#bt-result.err{display:block;background:rgba(247,107,98,.1);border:1px solid rgba(247,107,98,.35);color:var(--red)}
+h2{font-size:13px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border)}
+td{padding:6px 8px;border-bottom:1px solid var(--divider);font-family:var(--mono);color:var(--text)}
+td.status-completed{color:var(--green)}
+td.status-failed{color:var(--red)}
+td.status-refunded{color:var(--amber)}
+.tx{max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:inline-block;vertical-align:bottom}
+.empty{color:var(--muted);font-size:12px;padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Bridge Test</h1>
+  <div class="sub">{{ wallet }}</div>
+  <div class="warn">This triggers a real, signed cross-chain swap via /api/bridge/execute -- mayan_execute.js and _bridge_status_loop() are both still unverified against Mayan's live API. Use a trivial amount.</div>
+
+  <div class="card">
+    <div class="field">
+      <label for="bt-amount">Amount</label>
+      <input type="number" id="bt-amount" min="0" step="any" placeholder="0.0" autocomplete="off">
+    </div>
+    <div class="field">
+      <label for="bt-direction">Direction</label>
+      <select id="bt-direction">
+        <option value="sol_to_bsc">Solana → BSC</option>
+        <option value="bsc_to_sol">BSC → Solana</option>
+      </select>
+    </div>
+    <button class="btn" id="bt-submit" onclick="_btSubmit()">Execute bridge</button>
+    <div id="bt-result"></div>
+  </div>
+
+  <div class="card">
+    <h2>Last 10 bridge transactions</h2>
+    {% if bridge_rows %}
+    <table>
+      <thead><tr><th>Status</th><th>TX hash</th><th>Created</th></tr></thead>
+      <tbody>
+        {% for r in bridge_rows %}
+        <tr>
+          <td class="status-{{ r.status }}">{{ r.status }}</td>
+          <td>{% if r.tx_hash %}<span class="tx" title="{{ r.tx_hash }}">{{ r.tx_hash }}</span>{% else %}—{% endif %}</td>
+          <td>{{ r.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No bridge transactions yet.</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+var CSRF_TOKEN = {{ csrf_token|tojson }};
+
+async function _btSubmit(){
+  var amtEl = document.getElementById('bt-amount');
+  var dirEl = document.getElementById('bt-direction');
+  var btn = document.getElementById('bt-submit');
+  var resultEl = document.getElementById('bt-result');
+  var amount = parseFloat(amtEl.value);
+  if(!(amount > 0)){
+    resultEl.className = 'err';
+    resultEl.textContent = 'Enter a valid amount';
+    return;
+  }
+  btn.disabled = true;
+  btn.textContent = 'Bridging…';
+  resultEl.className = '';
+  resultEl.textContent = '';
+  try{
+    var r = await fetch('/api/bridge/execute', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': CSRF_TOKEN,
+        'X-Requested-With': 'XMLHttpRequest'
+      },
+      body: JSON.stringify({ direction: dirEl.value, amount: amount })
+    });
+    var d = await r.json();
+    resultEl.className = d.ok ? 'ok' : 'err';
+    resultEl.textContent = JSON.stringify(d, null, 2);
+    if(d.ok) setTimeout(function(){ location.reload(); }, 1500);
+  }catch(e){
+    resultEl.className = 'err';
+    resultEl.textContent = 'Network error: ' + e;
+  }finally{
+    btn.disabled = false;
+    btn.textContent = 'Execute bridge';
+  }
+}
+</script>
+</body>
+</html>

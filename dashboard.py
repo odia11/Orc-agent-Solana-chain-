@@ -3869,12 +3869,26 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
         finally:
             conn2.close()
 
+        # destAddress: where bridged funds land on dest_chain -- must be a
+        # dest_chain-format address, never the source signer's own address
+        # reused across chains (BSC 0x-addresses and Solana base58 addresses
+        # are different address spaces; mayan_execute.js used to make exactly
+        # this mistake by passing the origin address as the destination too).
+        if dest_chain == 'bsc':
+            conn_dest = sqlite3.connect(DB_FILE)
+            try:
+                dest_address = ensure_bsc_wallet(conn_dest, user_id, wallet)
+            finally:
+                conn_dest.close()
+        else:
+            dest_address = wallet
+
         env = os.environ.copy()
         env['WALLET_PRIVATE_KEY'] = private_key
         try:
             result = subprocess.run(
                 ['node', os.path.join(BASE, 'bridge', 'mayan_execute.js'),
-                 'bridge', source_chain, dest_chain, token_in, token_out, str(amount)],
+                 'bridge', source_chain, dest_chain, token_in, token_out, str(amount), dest_address],
                 env=env, capture_output=True, text=True, timeout=180
             )
         finally:
@@ -7030,6 +7044,38 @@ def promote_page():
         price_usd=round(_get_promotion_price_sol() * _sol_price_usd, 2) if _sol_price_usd else None,
         duration_hours=_get_promotion_duration_hours(),
         treasury_wallet=ADMIN_WALLET,
+    )
+
+
+@app.route('/admin/bridge-test')
+def admin_bridge_test():
+    """Manual test harness for _execute_bridge_swap() -- deliberately not
+    linked from any nav. Guard is stricter than /admin's (which lets any
+    non-'user' role in): exact role=='admin' only, no executive/moderator/
+    analyst, since this page triggers real signed cross-chain swaps rather
+    than just admin visibility."""
+    if session.get('readonly') and session.get('wallet'):
+        _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
+                             f'GET {request.path}')
+    wallet = _authenticated_wallet()
+    if not wallet or get_user_role(wallet) != 'admin':
+        return redirect('/')
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            'SELECT status, source_tx_hash, created_at FROM bridge_transactions '
+            'WHERE wallet=? ORDER BY id DESC LIMIT 10', (wallet,)
+        ).fetchall()
+    finally:
+        conn.close()
+    bridge_rows = [{'status': r[0], 'tx_hash': r[1], 'created_at': r[2]} for r in rows]
+
+    return render_template(
+        'bridge_test.html',
+        wallet=wallet,
+        csrf_token=_get_csrf_token(),
+        bridge_rows=bridge_rows,
     )
 
 

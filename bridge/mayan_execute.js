@@ -7,7 +7,17 @@
  * Executes a Solana<->BSC bridge swap via Mayan Finance's official SDK.
  *
  * Usage:
- *   node mayan_execute.js <action> <sourceChain> <destChain> <tokenIn> <tokenOut> <amount>
+ *   node mayan_execute.js <action> <sourceChain> <destChain> <tokenIn> <tokenOut> <amount> <destAddress>
+ *
+ * destAddress is where the bridged funds land on destChain -- it must be a
+ * destChain-format address (a BSC 0x-address if destChain is bsc, a Solana
+ * base58 address if destChain is solana), NOT the source signer's own
+ * address reused across chains. Solana and BSC addresses are different
+ * address spaces entirely, so silently reusing the origin address here
+ * would send funds to an address that means nothing on the destination
+ * chain -- the caller (dashboard.py's _execute_bridge_swap()) is
+ * responsible for resolving the user's actual destChain address before
+ * invoking this script.
  *
  * WALLET_PRIVATE_KEY (env) must be in the format native to sourceChain --
  * these are two different key systems, not interchangeable:
@@ -48,10 +58,10 @@ function succeed(txHash, orderHash) {
 }
 
 async function main() {
-  const [, , action, sourceChain, destChain, tokenIn, tokenOut, amountStr] = process.argv;
+  const [, , action, sourceChain, destChain, tokenIn, tokenOut, amountStr, destAddress] = process.argv;
 
-  if (!action || !sourceChain || !destChain || !tokenIn || !tokenOut || !amountStr) {
-    fail('Usage: mayan_execute.js <action> <sourceChain> <destChain> <tokenIn> <tokenOut> <amount>');
+  if (!action || !sourceChain || !destChain || !tokenIn || !tokenOut || !amountStr || !destAddress) {
+    fail('Usage: mayan_execute.js <action> <sourceChain> <destChain> <tokenIn> <tokenOut> <amount> <destAddress>');
     return;
   }
   if (sourceChain !== 'solana' && sourceChain !== 'bsc') {
@@ -116,7 +126,7 @@ async function main() {
       const result = await swapFromSolana(
         quote,
         keypair.publicKey.toString(),
-        keypair.publicKey.toString(),
+        destAddress,
         [],
         signSolanaTransaction,
         connection
@@ -142,7 +152,7 @@ async function main() {
       const result = await swapFromEvm(
         quote,
         signer.address,
-        signer.address,
+        destAddress,
         [],
         signer,
         null,
