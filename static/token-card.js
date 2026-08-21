@@ -9,24 +9,42 @@
 // Extracted from live_market.html so bug fixes and improvements land in one
 // place instead of drifting between two copies.
 
-async function _doTrade(sym, pairAddr, side, amount, tokenAddr){
+async function _doTrade(sym, pairAddr, side, amount, tokenAddr, chain){
+  chain = chain || 'solana';
   try{
     var _cs   = _lmClientSecret||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
     var _csrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||_lmCsrf||'';
-    var r = await fetch('/api/instant-trade',{
-      method:'POST',
-      credentials:'include',
-      headers:Object.assign({
+    var headers = Object.assign({
         'Content-Type':'application/json',
         'X-CSRF-Token':_csrf,
         'X-CSRFToken':_csrf,
         'X-Requested-With':'XMLHttpRequest'
-      }, _cs ? {'X-API-Shared-Secret':_cs} : {}),
-      body:JSON.stringify({symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr})
+      }, _cs ? {'X-API-Shared-Secret':_cs} : {});
+
+    var url, body;
+    if(chain === 'bsc'){
+      // BSC uses two separate buy/sell routes (not one side-flagged endpoint
+      // like Solana's /api/instant-trade), and trades are USDC-denominated,
+      // not SOL-denominated -- see _execute_bsc_swap() on the backend.
+      // /api/bsc/trade/buy reads amount_usdc specifically (not amount) --
+      // /api/bsc/trade/sell ignores amount entirely and sells the full
+      // tracked position server-side, so it's harmless to still send here.
+      url = side === 'buy' ? '/api/bsc/trade/buy' : '/api/bsc/trade/sell';
+      body = {token_address: tokenAddr, amount_usdc: amount, amount: amount};
+    } else {
+      url = '/api/instant-trade';
+      body = {symbol:sym, pair_address:pairAddr, side:side, amount_sol:amount, token_address:tokenAddr};
+    }
+
+    var r = await fetch(url, {
+      method:'POST',
+      credentials:'include',
+      headers: headers,
+      body: JSON.stringify(body)
     });
     var d = await r.json();
     if(r.ok) return true;
-    _toast((d.error||d.message||'Trade failed'), false);
+    _toast((d.error||d.message||d.msg||'Trade failed'), false);
     return false;
   }catch(e){
     _toast('Network error — trade not sent', false);

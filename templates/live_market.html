@@ -796,7 +796,7 @@ function _lmBindTableEvents(wrap){
     var tradeBtn = event.target.closest('.lm-btn-trade');
     if(tradeBtn){
       event.stopPropagation();
-      _openBuyDrop(parseInt(tradeBtn.dataset.idx,10), tradeBtn.dataset.sym, tradeBtn.dataset.pair, tradeBtn.dataset.addr, tradeBtn);
+      _openBuyDrop(parseInt(tradeBtn.dataset.idx,10), tradeBtn.dataset.sym, tradeBtn.dataset.pair, tradeBtn.dataset.addr, tradeBtn, tradeBtn.dataset.chain);
       return;
     }
     var row = event.target.closest('.lm-row');
@@ -1000,12 +1000,7 @@ function _rowHtml(p, idx){
   var mcap  = _fmtNum(p.marketCap || p.fdv || null);
   var chg24 = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
 
-  // BSC buying isn't wired into this token-detail/trade modal yet (it's
-  // Solana-only end to end right now) -- show the token for browsing, but
-  // don't let Trade open a flow that would misfire against a BSC address.
-  var tradeBtn = isBsc
-    ? '<button class="lm-btn-trade" disabled title="BSC trading via this screen is coming soon">Trade</button>'
-    : '<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'">Trade</button>';
+  var tradeBtn = '<button class="lm-btn-trade" data-action="trade" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-addr="'+_esc(addr)+'" data-chain="'+_esc(chain)+'">Trade</button>';
   var chainBadge = isBsc ? '<span class="lm-chain-badge lm-chain-bsc">BSC</span>' : '';
 
   return '<tr id="lm-row-'+idx+'" class="lm-row" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-chain="'+_esc(chain)+'">'
@@ -1046,7 +1041,8 @@ function _rowClick(e, sym, addr, pairAddr, chain){
 /* ── inline trade dropdown ── */
 var _openDropIdx = -1;
 
-function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
+function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn, chain){
+  chain = chain || 'solana';
   if(_openDropIdx === idx){ _closeBuyDrop(); return; }
   _closeBuyDrop();
   _openDropIdx = idx;
@@ -1055,6 +1051,11 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
   if(!dataRow) return;
 
   var inputId = 'lm-drop-amt-'+idx;
+  var isBsc = chain === 'bsc';
+  var currencyLabel = isBsc ? 'USDC:' : 'SOL:';
+  var defaultAmt = isBsc ? '10' : '0.1';
+  var step = isBsc ? '1' : '0.1';
+  var minAmt = isBsc ? '1' : '0.001';
 
   var tr = document.createElement('tr');
   tr.id = 'lm-drop-'+idx;
@@ -1062,22 +1063,22 @@ function _openBuyDrop(idx, sym, pairAddr, tokenAddr, btn){
   tr.innerHTML = '<td colspan="8">'
     +'<div class="lm-drop-inner">'
       +'<span class="lm-drop-label">Trade <strong style="color:#f5b544">$'+_esc(sym)+'</strong></span>'
-      +'<span class="lm-drop-label">SOL:</span>'
-      +'<input class="lm-drop-input" id="'+inputId+'" type="number" min="0.001" step="0.1" value="0.1" onclick="event.stopPropagation()">'
-      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'">Buy</button>'
-      +'<button class="lm-drop-sell-btn" id="lm-drop-sell-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'">Sell All</button>'
+      +'<span class="lm-drop-label">'+currencyLabel+'</span>'
+      +'<input class="lm-drop-input" id="'+inputId+'" type="number" min="'+minAmt+'" step="'+step+'" value="'+defaultAmt+'" onclick="event.stopPropagation()">'
+      +'<button class="lm-drop-confirm" id="lm-drop-confirm-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'" data-chain="'+_esc(chain)+'">Buy</button>'
+      +'<button class="lm-drop-sell-btn" id="lm-drop-sell-'+idx+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(pairAddr)+'" data-addr="'+_esc(tokenAddr)+'" data-chain="'+_esc(chain)+'">Sell All</button>'
       +'<button class="lm-drop-cancel" onclick="event.stopPropagation();_closeBuyDrop()">✕</button>'
     +'</div>'
     +'</td>';
   var confirmBtn = tr.querySelector('#lm-drop-confirm-'+idx);
   confirmBtn.addEventListener('click', function(ev){
     ev.stopPropagation();
-    _confirmBuy(idx, confirmBtn.dataset.sym, confirmBtn.dataset.pair, confirmBtn.dataset.addr);
+    _confirmBuy(idx, confirmBtn.dataset.sym, confirmBtn.dataset.pair, confirmBtn.dataset.addr, confirmBtn.dataset.chain);
   });
   var sellBtn = tr.querySelector('#lm-drop-sell-'+idx);
   sellBtn.addEventListener('click', function(ev){
     ev.stopPropagation();
-    _quickSell(idx, sellBtn.dataset.sym, sellBtn.dataset.pair, sellBtn.dataset.addr, sellBtn);
+    _quickSell(idx, sellBtn.dataset.sym, sellBtn.dataset.pair, sellBtn.dataset.addr, sellBtn, sellBtn.dataset.chain);
   });
 
   dataRow.insertAdjacentElement('afterend', tr);
@@ -1091,22 +1092,22 @@ function _closeBuyDrop(){
   _openDropIdx = -1;
 }
 
-async function _confirmBuy(idx, sym, pairAddr, tokenAddr){
+async function _confirmBuy(idx, sym, pairAddr, tokenAddr, chain){
   var inputEl    = document.getElementById('lm-drop-amt-'+idx);
   var confirmBtn = document.getElementById('lm-drop-confirm-'+idx);
   var amount     = parseFloat(inputEl ? inputEl.value : '0.1');
-  if(!amount || amount <= 0){ _toast('Enter a valid SOL amount', false); return; }
+  if(!amount || amount <= 0){ _toast('Enter a valid amount', false); return; }
   if(confirmBtn){ confirmBtn.textContent='…'; confirmBtn.disabled=true; }
-  var ok = await _doTrade(sym, pairAddr, 'buy', amount, tokenAddr);
+  var ok = await _doTrade(sym, pairAddr, 'buy', amount, tokenAddr, chain);
   _closeBuyDrop();
   if(ok){ _flashRow(idx, true);  _toast('Bought $'+sym, true); }
   else  { _flashRow(idx, false); }
 }
 
-async function _quickSell(idx, sym, pairAddr, tokenAddr, btn){
+async function _quickSell(idx, sym, pairAddr, tokenAddr, btn, chain){
   var origHtml = btn ? btn.innerHTML : '';
   if(btn){ btn.innerHTML='…'; btn.disabled=true; }
-  var ok = await _doTrade(sym, pairAddr, 'sell', 0, tokenAddr);
+  var ok = await _doTrade(sym, pairAddr, 'sell', 0, tokenAddr, chain);
   if(btn){ btn.innerHTML=origHtml; btn.disabled=false; }
   _closeBuyDrop();
   if(ok){ _flashRow(idx, false); _toast('Sold $'+sym, true); }
