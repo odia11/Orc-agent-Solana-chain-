@@ -452,6 +452,8 @@ _APP_START     = time.time()
 print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", flush=True)
 
 TAKE_PROFIT     = 0.05   # 5%  — universal take profit
+BOT_BRIDGE_MAX_PER_TX  = 10.0  # USD — hardcoded, not user-configurable
+BOT_BRIDGE_MAX_PER_DAY = 25.0  # USD — hardcoded, not user-configurable
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
@@ -1770,6 +1772,7 @@ def run_migrations():
         "ALTER TABLE user_tokens ADD COLUMN avg_price REAL NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN copy_amount REAL DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN bot_enabled INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN bridging_enabled INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN breakout_trigger REAL DEFAULT 3.0",
         "ALTER TABLE users ADD COLUMN take_profit REAL DEFAULT 15.0",
         "ALTER TABLE users ADD COLUMN stop_loss REAL DEFAULT 8.0",
@@ -3928,6 +3931,50 @@ def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chai
 
     add_user_log(wallet, f'Bridge {source_chain}->{dest_chain} broadcast: {tx_hash}')
     return True, tx_hash, row_id
+
+def _can_bot_bridge(user_id: int, amount: float) -> tuple:
+    """Gate for a future bot-driven bridge call -- not invoked from anywhere
+    yet, user_trader_loop is untouched. Returns (allowed, reason); reason is
+    '' when allowed. Checks in order:
+      1) users.bridging_enabled for this user
+      2) amount <= BOT_BRIDGE_MAX_PER_TX
+      3) today's SUM(amount_in) of bot-initiated, non-failed bridges + amount
+         <= BOT_BRIDGE_MAX_PER_DAY
+      4) circuit breaker: the last 3 bot-initiated bridge_transactions all
+         status='failed' -- also flips bridging_enabled off for this user in
+         the same call, since a breaker that only reports the problem
+         without stopping it isn't one."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT bridging_enabled FROM users WHERE id=?', (user_id,)).fetchone()
+        if not row or not row[0]:
+            return False, 'bridging not enabled for this user'
+
+        if amount > BOT_BRIDGE_MAX_PER_TX:
+            return False, f'amount ${amount:.2f} exceeds per-transaction cap (${BOT_BRIDGE_MAX_PER_TX:.2f})'
+
+        today_total = conn.execute(
+            "SELECT COALESCE(SUM(amount_in), 0) FROM bridge_transactions "
+            "WHERE user_id=? AND initiated_by='bot' AND status!='failed' AND date(created_at)=date('now')",
+            (user_id,)
+        ).fetchone()[0] or 0.0
+        if today_total + amount > BOT_BRIDGE_MAX_PER_DAY:
+            return False, (f"today's bot-bridged total ${today_total:.2f} + ${amount:.2f} would exceed "
+                            f'daily cap (${BOT_BRIDGE_MAX_PER_DAY:.2f})')
+
+        last3 = conn.execute(
+            "SELECT status FROM bridge_transactions WHERE user_id=? AND initiated_by='bot' "
+            "ORDER BY created_at DESC LIMIT 3",
+            (user_id,)
+        ).fetchall()
+        if len(last3) == 3 and all(s == 'failed' for (s,) in last3):
+            conn.execute('UPDATE users SET bridging_enabled=0 WHERE id=?', (user_id,))
+            conn.commit()
+            return False, 'circuit breaker: 3 consecutive bot bridge failures'
+
+        return True, ''
+    finally:
+        conn.close()
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
     """Records a bridge_transactions failure -- separated out since
