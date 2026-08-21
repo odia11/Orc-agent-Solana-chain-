@@ -1032,7 +1032,12 @@ var _SW_CHIPS=[
 function _swSym(mint){
   if(mint==='__SOL__') return 'SOL'
   var t=(_swAllTokens||[]).find(function(x){return x.mint===mint})
-  return t?(t.symbol||mint.slice(0,6)):mint.slice(0,6)
+  if(t) return t.symbol||mint.slice(0,6)
+  // Fall back to the quick-pick chip list so a known token (USDC, etc.)
+  // still shows its real symbol even when the wallet doesn't currently
+  // hold any of it yet -- not just held tokens should look correct here.
+  var c=_SW_CHIPS.find(function(x){return x.mint===mint})
+  return c?c.sym:mint.slice(0,6)
 }
 function _swUpdatePills(){
   var fromEl=document.getElementById('sw-from-sym')
@@ -1045,7 +1050,12 @@ function openSwapModal(){
   var spl=window._wTokens||_allSpl||[]
   _swAllTokens=spl
   _swFromMint='__SOL__'
-  _swToMint=spl.length?spl[0].mint:''
+  // Default "to" USDC when the wallet holds nothing yet, rather than leaving
+  // it blank -- spl[0] doesn't exist for an empty wallet, so this used to
+  // open the modal with no token selected at all, silently blocking "Review
+  // swap" until the person manually opened the picker and knew to look for
+  // the USDC chip themselves.
+  _swToMint=spl.length?spl[0].mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
   _swUpdatePills()
   _swUpdateFromBal()
   _swUpdateToBal()
@@ -1182,7 +1192,7 @@ function _swUpdateToBal(){
     if(span) span.textContent=(solEl?parseFloat(solEl.textContent||0).toFixed(4):'—')+' SOL'
   } else {
     var tok=spl.find(function(t){return t.mint===_swToMint})
-    if(span) span.textContent=(tok?parseFloat(tok.amount||0).toFixed(4):'0')+(tok?' '+(tok.symbol||''):'')
+    if(span) span.textContent=(tok?parseFloat(tok.amount||0).toFixed(4):'0')+' '+(tok?(tok.symbol||''):_swSym(_swToMint))
   }
 }
 
