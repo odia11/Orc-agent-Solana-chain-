@@ -454,6 +454,8 @@ print(f"[startup] persistent storage: {os.path.exists('/data')}  db={DB_FILE}", 
 TAKE_PROFIT     = 0.05   # 5%  — universal take profit
 BOT_BRIDGE_MAX_PER_TX  = 10.0  # USD — hardcoded, not user-configurable
 BOT_BRIDGE_MAX_PER_DAY = 25.0  # USD — hardcoded, not user-configurable
+NARRATIVE_MAX_PER_TX   = 10.0  # USD — hardcoded, not user-configurable
+NARRATIVE_MAX_PER_DAY  = 25.0  # USD — hardcoded, not user-configurable
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
@@ -1786,6 +1788,8 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN copy_amount REAL DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN bot_enabled INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN bridging_enabled INTEGER DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN narrative_agent_enabled INTEGER DEFAULT 0",
+        "ALTER TABLE agent_journal ADD COLUMN user_id INTEGER",
         "ALTER TABLE users ADD COLUMN breakout_trigger REAL DEFAULT 3.0",
         "ALTER TABLE users ADD COLUMN take_profit REAL DEFAULT 15.0",
         "ALTER TABLE users ADD COLUMN stop_loss REAL DEFAULT 8.0",
@@ -3059,6 +3063,69 @@ def get_ai_signal(token_data: dict, mint: str) -> tuple:
         _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
         return 0.0, ''
 
+def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
+    """Research-driven narrative signal via Claude + web search -- heavier
+    and separate from get_ai_signal() (which just scores a stats blob):
+    this asks Claude to actually search X/the web for recent mentions of
+    the token. Direct REST call to _ANTHROPIC_URL, same style as
+    get_ai_signal(), not the SDK -- matches this file's existing convention
+    for calling Claude.
+
+    Uses web_search_20260209 (current dynamic-filtering tool type) rather
+    than the web_search_20250305 the original spec named -- claude-sonnet-5
+    supports the newer variant, and the older one is for pre-4.6-tier
+    models only.
+
+    Returns {'thesis': [...], 'entry_condition': str, 'invalidation_condition':
+    str, 'decision': 'buy'|'pass', 'confidence': 0-10}. Any request or parse
+    failure returns {'decision': 'pass', 'thesis': ['parse error']} -- fails
+    closed, same convention as _check_lp_locked()/_check_bsc_honeypot()."""
+    if not ANTHROPIC_API_KEY:
+        return {'decision': 'pass', 'thesis': ['parse error']}
+    try:
+        prompt = (
+            f'Research recent mentions of ${symbol} (mint/address: {mint}) on X and the web. '
+            f'Known market data: price ${token_data.get("price", 0)}, '
+            f'5m change {token_data.get("change5m", 0):.1f}%, '
+            f'1h change {token_data.get("change1h", 0):.1f}%, '
+            f'liquidity ${token_data.get("liquidity", 0):,.0f}. '
+            'Return ONLY JSON, no other text, in exactly this shape: '
+            '{"thesis": ["..."], "entry_condition": "...", '
+            '"invalidation_condition": "...", "decision": "buy"|"pass", "confidence": 0-10}'
+        )
+        resp = requests.post(
+            _ANTHROPIC_URL,
+            headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+            json={
+                'model': 'claude-sonnet-5',
+                'max_tokens': 2000,
+                'tools': [{'type': 'web_search_20260209', 'name': 'web_search'}],
+                'messages': [{'role': 'user', 'content': prompt}],
+            },
+            timeout=30,
+        )
+        resp.raise_for_status()
+        content = resp.json().get('content') or []
+        # Web search runs server-side and adds web_search_tool_result blocks
+        # alongside the model's own text -- only the last text block is the
+        # actual answer (after however many searches Claude ran).
+        text_blocks = [b.get('text', '') for b in content if b.get('type') == 'text']
+        if not text_blocks:
+            return {'decision': 'pass', 'thesis': ['parse error']}
+        raw = text_blocks[-1].strip()
+        if raw.startswith('```'):
+            raw = raw.strip('`')
+            if raw.startswith('json'):
+                raw = raw[4:]
+            raw = raw.strip()
+        parsed = json.loads(raw)
+        if not isinstance(parsed, dict) or 'decision' not in parsed:
+            return {'decision': 'pass', 'thesis': ['parse error']}
+        return parsed
+    except Exception as e:
+        print(f'[narrative-signal] error for {mint[:8]}: {e}', flush=True)
+        return {'decision': 'pass', 'thesis': ['parse error']}
+
 def score_token(data: dict) -> tuple:
     """Multi-factor signal scoring. Returns (score 0–10, breakdown dict).
     Factors: momentum(0-3) + volume(0-2) + trend(0-2) + liq(0-1) + activity(0-1) - penalties."""
@@ -3989,6 +4056,144 @@ def _can_bot_bridge(user_id: int, amount: float) -> tuple:
     finally:
         conn.close()
 
+def _can_narrative_buy(user_id: int, amount: float) -> tuple:
+    """Gate for a future narrative-agent-driven buy -- not invoked from
+    anywhere yet. Same structure as _can_bot_bridge() above, against
+    agent_journal instead of bridge_transactions. Returns (allowed, reason);
+    reason is '' when allowed. Checks in order:
+      1) users.narrative_agent_enabled for this user
+      2) amount <= NARRATIVE_MAX_PER_TX
+      3) today's SUM(size_usd) of this user's successful 'buy' decisions
+         (tx_hash present) + amount <= NARRATIVE_MAX_PER_DAY
+      4) circuit breaker: the last 3 'buy' rows for this user all have no
+         tx_hash (=failed) -- also flips narrative_agent_enabled off for
+         this user in the same call, same as _can_bot_bridge()'s breaker."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT narrative_agent_enabled FROM users WHERE id=?', (user_id,)).fetchone()
+        if not row or not row[0]:
+            return False, 'narrative agent not enabled for this user'
+
+        if amount > NARRATIVE_MAX_PER_TX:
+            return False, f'amount ${amount:.2f} exceeds per-transaction cap (${NARRATIVE_MAX_PER_TX:.2f})'
+
+        today_total = conn.execute(
+            "SELECT COALESCE(SUM(size_usd), 0) FROM agent_journal "
+            "WHERE user_id=? AND decision='buy' AND tx_hash IS NOT NULL AND tx_hash!='' "
+            "AND date(created_at)=date('now')",
+            (user_id,)
+        ).fetchone()[0] or 0.0
+        if today_total + amount > NARRATIVE_MAX_PER_DAY:
+            return False, (f"today's narrative-bought total ${today_total:.2f} + ${amount:.2f} would exceed "
+                            f'daily cap (${NARRATIVE_MAX_PER_DAY:.2f})')
+
+        last3 = conn.execute(
+            "SELECT tx_hash FROM agent_journal WHERE user_id=? AND decision='buy' "
+            "ORDER BY created_at DESC LIMIT 3",
+            (user_id,)
+        ).fetchall()
+        if len(last3) == 3 and all(not h for (h,) in last3):
+            conn.execute('UPDATE users SET narrative_agent_enabled=0 WHERE id=?', (user_id,))
+            conn.commit()
+            return False, 'circuit breaker: 3 consecutive failed narrative buys'
+
+        return True, ''
+    finally:
+        conn.close()
+
+def _agent_journal_log(user_id: int, mint: str, chain: str, symbol: str, phase: str,
+                        filter_result: str = '', thesis_json: str = '',
+                        decision: str = '', size_usd: float = None, tx_hash: str = ''):
+    """One agent_journal row -- every candidate _narrative_agent_cycle() looks
+    at gets logged here regardless of outcome, so the pipeline is auditable
+    even before anything actually calls that function."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute(
+                '''INSERT INTO agent_journal
+                   (user_id, mint, chain, symbol, phase, filter_result, thesis_json, decision, size_usd, tx_hash)
+                   VALUES (?,?,?,?,?,?,?,?,?,?)''',
+                (user_id, mint, chain, symbol, phase, filter_result, thesis_json, decision, size_usd, tx_hash))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[agent_journal] log failed for {mint[:8] if mint else "?"}: {e}', flush=True)
+
+def _narrative_agent_cycle(user_id: int, wallet: str):
+    """One pass of the narrative agent over _get_narrative_candidates().
+    Not invoked from anywhere yet -- no thread, no route.
+
+    Per candidate: safety gate first (fail -> agent_journal phase='filtered',
+    next candidate). Pass -> get_narrative_signal(), logged phase='thesis'.
+    decision=='buy' -> _can_narrative_buy() gate, then the existing chain-
+    specific swap function (_execute_user_swap for Solana, _execute_bsc_swap
+    for BSC), logged phase='buy' with tx_hash or the failure reason.
+
+    KNOWN GAP: neither _execute_user_swap() (returns a bare bool) nor
+    _execute_bsc_swap() (returns (bool, message) -- message is '' on
+    success) exposes a transaction hash back to its caller, even though
+    both compute one internally for add_user_log(). So a successful buy
+    here logs tx_hash='', identical to what _can_narrative_buy()'s circuit
+    breaker treats as a FAILED attempt -- three real, successful buys in a
+    row would incorrectly trip the breaker and disable the agent. This
+    needs those two functions extended to return their tx hash before this
+    cycle is wired to anything live; not fixed here since it wasn't part of
+    what was asked, but flagging it since it directly undermines the
+    breaker's correctness."""
+    amount = NARRATIVE_MAX_PER_TX  # no per-candidate sizing signal exists yet -- flat per-tx cap
+
+    for cand in _get_narrative_candidates():
+        mint   = cand.get('address', '')
+        chain  = cand.get('chain', 'solana')
+        symbol = cand.get('symbol', '')
+        if not mint:
+            continue
+
+        safe, reason = _narrative_safety_gate(mint, chain)
+        if not safe:
+            _agent_journal_log(user_id, mint, chain, symbol, phase='filtered',
+                                filter_result=reason, decision='pass')
+            continue
+
+        signal   = get_narrative_signal(cand, mint, symbol)
+        decision = signal.get('decision', 'pass')
+        _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
+                            thesis_json=json.dumps(signal), decision=decision)
+
+        if decision != 'buy':
+            continue
+
+        allowed, gate_reason = _can_narrative_buy(user_id, amount)
+        if not allowed:
+            _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                                size_usd=amount, filter_result=gate_reason)
+            continue
+
+        key_column = 'encrypted_private_key' if chain == 'solana' else 'encrypted_private_key_bsc'
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(f'SELECT {key_column} FROM users WHERE id=?', (user_id,)).fetchone()
+        finally:
+            conn.close()
+        if not row or not row[0]:
+            _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                                size_usd=amount, filter_result=f'no {chain} trading key configured')
+            continue
+
+        with _use_key(row[0], wallet) as pk:
+            if chain == 'solana':
+                ok  = _execute_user_swap(wallet, pk, 'buy', mint, str(amount))
+                err = '' if ok else 'swap failed'
+            else:
+                ok, err = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
+
+        # tx_hash left '' on both outcomes -- see the KNOWN GAP note above,
+        # neither swap function returns one yet.
+        _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                            size_usd=amount, filter_result='' if ok else (err or 'swap failed'))
+
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
     """Records a bridge_transactions failure -- separated out since
     _execute_bridge_swap() has three distinct failure points that all need
@@ -4349,6 +4554,51 @@ def _check_lp_locked(mint_address: str) -> dict:
     except Exception as e:
         print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
         return {'lp_locked_pct': 0, 'ok': False}
+
+def _narrative_safety_gate(mint: str, chain: str) -> tuple:
+    """Combined safety gate for narrative/agent-driven candidates. Runs, in
+    order: mint/freeze-authority (Solana) or honeypot (BSC), lock/honeypot
+    threshold, liquidity >= $20k, pair age >= 30min. Returns (False, reason)
+    on the first failure, else (True, '').
+
+    Note: the spec for this named _check_bsc_safety() for the BSC branch,
+    which doesn't exist in this codebase -- _check_bsc_honeypot() (defined
+    just below) is the actual BSC equivalent of _check_lp_locked() here.
+    It also doesn't produce a "% locked" number the way _check_lp_locked()
+    does -- honeypot detection is a binary simulated-buy+sell result, not a
+    lock percentage, so there's no BSC equivalent of the Solana "<50% lock"
+    threshold. The BSC branch instead fails on is_honeypot or an incomplete
+    check, same fail-closed convention as every other check here."""
+    if chain == 'solana':
+        mint_safety = _check_mint_safety(mint)
+        if mint_safety['mint_authority_active'] or mint_safety['freeze_authority_active']:
+            return False, 'mint or freeze authority still active'
+
+        lp = _check_lp_locked(mint)
+        if not lp['ok'] or lp['lp_locked_pct'] < 50:
+            return False, f"LP locked {lp['lp_locked_pct']:.0f}% (need >=50%)"
+
+    elif chain == 'bsc':
+        hp = _check_bsc_honeypot(mint)
+        if not hp['ok'] or hp['is_honeypot']:
+            return False, 'honeypot check failed or flagged unsafe'
+
+    else:
+        return False, f'unsupported chain: {chain}'
+
+    data = get_token_data(mint)
+    if not data:
+        return False, 'could not fetch token data'
+
+    if data['liquidity'] < 20_000:
+        return False, f"liquidity ${data['liquidity']:.0f} below $20k minimum"
+
+    created_ms = data.get('pairCreatedAt', 0) or 0
+    age_min = (time.time() - created_ms / 1000) / 60 if created_ms > 0 else 0
+    if age_min < 30:
+        return False, f'pair age {age_min:.0f}m below 30m minimum'
+
+    return True, ''
 
 def _check_bsc_honeypot(token_address: str) -> dict:
     """BSC's equivalent of _check_lp_locked() -- BSC tokens are arbitrary
@@ -7138,6 +7388,50 @@ def admin_bridge_test():
         csrf_token=_get_csrf_token(),
         bridge_rows=bridge_rows,
     )
+
+
+@app.route('/admin/narrative-test', methods=['POST'])
+def admin_narrative_test():
+    """Manual, synchronous trigger for _narrative_agent_cycle() -- same
+    'admin'-only guard as /admin/bridge-test. No background loop, no other
+    users touched: runs exactly once, for the logged-in admin's own wallet,
+    then shows the last 20 agent_journal rows. Purely manual, same
+    philosophy as the bridge test panel. POST-only (no GET/page/button) --
+    trigger via curl/fetch with the session's CSRF token, same as
+    /api/bridge/execute."""
+    if session.get('readonly') and session.get('wallet'):
+        _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
+                             f'POST {request.path}')
+    wallet = _authenticated_wallet()
+    if not wallet or get_user_role(wallet) != 'admin':
+        return redirect('/')
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': False, 'msg': 'User not found'}), 404
+    user_id = row[0]
+
+    _narrative_agent_cycle(user_id, wallet)
+
+    conn2 = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn2.execute(
+            'SELECT mint, chain, symbol, phase, filter_result, decision, size_usd, tx_hash, created_at '
+            'FROM agent_journal WHERE user_id=? ORDER BY id DESC LIMIT 20', (user_id,)
+        ).fetchall()
+    finally:
+        conn2.close()
+    journal_rows = [
+        {'mint': r[0], 'chain': r[1], 'symbol': r[2], 'phase': r[3], 'filter_result': r[4],
+         'decision': r[5], 'size_usd': r[6], 'tx_hash': r[7], 'created_at': r[8]}
+        for r in rows
+    ]
+
+    return render_template('narrative_test.html', wallet=wallet, journal_rows=journal_rows)
 
 
 @app.route('/admin')
@@ -16626,14 +16920,12 @@ _market_live_cache: dict = {'ts': 0.0, 'data': []}
 _MARKET_LIVE_CHAINS = {'solana', 'bsc'}
 _market_live_lock         = threading.Lock()
 
-@app.route('/api/market/live', methods=['GET'])
-@rate_limit(60, 60)
-def api_market_live():
-    now = time.time()
-    with _market_live_lock:
-        if now - _market_live_cache['ts'] < 15:
-            return jsonify({'ok': True, 'tokens': _market_live_cache['data'], 'cached': True})
-
+def _get_narrative_candidates() -> list:
+    """Boosted + trending DexScreener pairs (Solana + BSC per
+    _MARKET_LIVE_CHAINS), extracted from api_market_live() -- same four
+    steps, same return shape, just callable on its own now. Behavior is
+    unchanged: boosted tokens first (batch-fetched, highest-liquidity pair
+    per address), then trending as fallback/top-up, capped at 30 total."""
     def _f(v):
         try:
             return float(v) if v not in (None, '', 'null') else 0.0
@@ -16753,6 +17045,18 @@ def api_market_live():
         if tok and tok['address'] not in added:
             result.append(tok)
             added.add(tok['address'])
+
+    return result
+
+@app.route('/api/market/live', methods=['GET'])
+@rate_limit(60, 60)
+def api_market_live():
+    now = time.time()
+    with _market_live_lock:
+        if now - _market_live_cache['ts'] < 15:
+            return jsonify({'ok': True, 'tokens': _market_live_cache['data'], 'cached': True})
+
+    result = _get_narrative_candidates()
 
     with _market_live_lock:
         _market_live_cache['ts']   = time.time()

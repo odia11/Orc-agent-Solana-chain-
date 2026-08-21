@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Narrative Agent Test — OrcAgent Admin</title>
+<meta name="robots" content="noindex,nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Geist:wght@400;500;600;700&display=swap">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#0a0b0e;
+  --bg2:#101216;
+  --bg3:#16191f;
+  --bg4:#21252c;
+  --border:#21252c;
+  --divider:#16191f;
+  --accent:#f7b955;
+  --amber:#f7b955;
+  --green:#3ad29b;
+  --red:#f76b62;
+  --text:#eef1f5;
+  --muted:#565d68;
+  --sub:#8a919c;
+  --mono:'JetBrains Mono',monospace;
+  --ui:'Geist',sans-serif;
+}
+html,body{background:var(--bg);color:var(--text);font-family:var(--ui);font-size:14px;-webkit-font-smoothing:antialiased}
+body{padding:32px 20px;display:flex;justify-content:center}
+.wrap{width:100%;max-width:760px}
+h1{font-size:18px;font-weight:700;margin-bottom:4px}
+.sub{font-size:12px;color:var(--muted);margin-bottom:20px}
+.note{background:rgba(247,185,85,.1);border:1px solid rgba(247,185,85,.35);border-radius:10px;padding:12px 14px;font-size:12px;color:var(--amber);margin-bottom:20px;line-height:1.5}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:18px}
+h2{font-size:13px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.05em;margin-bottom:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;color:var(--muted);font-weight:600;padding:6px 8px;border-bottom:1px solid var(--border);white-space:nowrap}
+td{padding:6px 8px;border-bottom:1px solid var(--divider);font-family:var(--mono);color:var(--text);vertical-align:top}
+td.phase-filtered{color:var(--muted)}
+td.phase-thesis{color:var(--accent)}
+td.phase-buy{color:var(--green)}
+td.decision-buy{color:var(--green)}
+td.decision-pass{color:var(--muted)}
+.mono-cell{max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.empty{color:var(--muted);font-size:12px;padding:8px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Narrative Agent Test</h1>
+  <div class="sub">{{ wallet }}</div>
+  <div class="note">This ran one full _narrative_agent_cycle() pass synchronously for this admin's own wallet just now. POST-only endpoint -- reload this page won't re-run it (GET isn't handled); POST to /admin/narrative-test again to run another pass.</div>
+
+  <div class="card">
+    <h2>Last 20 agent_journal rows</h2>
+    {% if journal_rows %}
+    <table>
+      <thead><tr><th>Symbol</th><th>Chain</th><th>Phase</th><th>Decision</th><th>Size $</th><th>Detail / TX</th><th>Created</th></tr></thead>
+      <tbody>
+        {% for r in journal_rows %}
+        <tr>
+          <td>{{ r.symbol or '—' }}</td>
+          <td>{{ r.chain or '—' }}</td>
+          <td class="phase-{{ r.phase }}">{{ r.phase }}</td>
+          <td class="decision-{{ r.decision }}">{{ r.decision or '—' }}</td>
+          <td>{{ r.size_usd if r.size_usd is not none else '—' }}</td>
+          <td class="mono-cell" title="{{ r.tx_hash or r.filter_result }}">{{ r.tx_hash or r.filter_result or '—' }}</td>
+          <td>{{ r.created_at }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <div class="empty">No agent_journal rows for this wallet yet.</div>
+    {% endif %}
+  </div>
+</div>
+</body>
+</html>
