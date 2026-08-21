@@ -1280,6 +1280,19 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_bridge_transactions_user ON bridge_transactions(user_id)')
+    c.execute('''CREATE TABLE IF NOT EXISTS agent_journal (
+        id            INTEGER PRIMARY KEY AUTOINCREMENT,
+        mint          TEXT,
+        chain         TEXT,
+        symbol        TEXT,
+        phase         TEXT,
+        filter_result TEXT,
+        thesis_json   TEXT,
+        decision      TEXT,
+        size_usd      REAL,
+        tx_hash       TEXT,
+        created_at    TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS portfolio_snapshots (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id         INTEGER NOT NULL,
