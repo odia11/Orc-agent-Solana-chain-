@@ -3893,9 +3893,15 @@ def _recalculate_badges(wallet: str) -> None:
         print(f'[badges] save error for {wallet}: {e}', flush=True)
 
 # ── SWAP EXECUTION ──
-def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
-    """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output.
-    Key is passed via env var to the subprocess and the env dict is discarded after launch."""
+def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> tuple:
+    """Same subprocess call as _execute_user_swap(), but also returns the
+    transaction signature -- parsed from orcagent_solana.py's own stdout
+    (a 'TX:<sig>' token), same parsing /api/instant-trade already does.
+    _execute_user_swap() is a thin backward-compatible wrapper around this
+    for its ~15 existing call sites that only need success/fail; new
+    callers that need the actual signature (e.g. _narrative_agent_cycle())
+    should call this instead. Returns (success, tx_hash) -- tx_hash is ''
+    on failure or if no 'TX:' token was found in stdout."""
     try:
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
@@ -3910,10 +3916,24 @@ def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, am
             add_user_log(wallet, 'Swap: ' + _redact_keys(result.stdout.strip()[-400:]))
         if result.stderr:
             add_user_log(wallet, 'Swap err: ' + _redact_keys(result.stderr.strip()[-400:]))
-        return result.returncode == 0 and bool(result.stdout.strip())
+        ok = result.returncode == 0 and bool(result.stdout.strip())
+        tx_hash = ''
+        if ok:
+            for line in result.stdout.split('\n'):
+                if 'TX:' in line:
+                    tx_hash = line.split('TX:')[-1].strip().split()[0]
+                    break
+        return ok, tx_hash
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
-        return False
+        return False, ''
+
+def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
+    """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output.
+    Key is passed via env var to the subprocess and the env dict is discarded after launch.
+    Thin wrapper over _execute_user_swap_ex() -- see that function if you also need the tx hash."""
+    ok, _tx_hash = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str)
+    return ok
 
 def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chain: str,
                           token_in: str, token_out: str, amount: float) -> tuple:
@@ -4127,21 +4147,15 @@ def _narrative_agent_cycle(user_id: int, wallet: str):
 
     Per candidate: safety gate first (fail -> agent_journal phase='filtered',
     next candidate). Pass -> get_narrative_signal(), logged phase='thesis'.
-    decision=='buy' -> _can_narrative_buy() gate, then the existing chain-
-    specific swap function (_execute_user_swap for Solana, _execute_bsc_swap
-    for BSC), logged phase='buy' with tx_hash or the failure reason.
-
-    KNOWN GAP: neither _execute_user_swap() (returns a bare bool) nor
-    _execute_bsc_swap() (returns (bool, message) -- message is '' on
-    success) exposes a transaction hash back to its caller, even though
-    both compute one internally for add_user_log(). So a successful buy
-    here logs tx_hash='', identical to what _can_narrative_buy()'s circuit
-    breaker treats as a FAILED attempt -- three real, successful buys in a
-    row would incorrectly trip the breaker and disable the agent. This
-    needs those two functions extended to return their tx hash before this
-    cycle is wired to anything live; not fixed here since it wasn't part of
-    what was asked, but flagging it since it directly undermines the
-    breaker's correctness."""
+    decision=='buy' -> _can_narrative_buy() gate, then the chain-specific
+    swap (_execute_user_swap_ex for Solana, _execute_bsc_swap for BSC),
+    logged phase='buy' with the real tx_hash on success or the failure
+    reason. (Previously both swap paths discarded their tx hash and every
+    buy logged tx_hash='', which would have falsely tripped
+    _can_narrative_buy()'s circuit breaker on real successes -- fixed by
+    adding _execute_user_swap_ex() and extending _execute_bsc_swap()'s
+    return to a 3-tuple; _execute_user_swap() itself is now a thin wrapper
+    over _execute_user_swap_ex() so its ~15 existing callers are unaffected.)"""
     amount = NARRATIVE_MAX_PER_TX  # no per-candidate sizing signal exists yet -- flat per-tx cap
 
     for cand in _get_narrative_candidates():
@@ -4184,15 +4198,14 @@ def _narrative_agent_cycle(user_id: int, wallet: str):
 
         with _use_key(row[0], wallet) as pk:
             if chain == 'solana':
-                ok  = _execute_user_swap(wallet, pk, 'buy', mint, str(amount))
+                ok, tx_hash = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount))
                 err = '' if ok else 'swap failed'
             else:
-                ok, err = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
+                ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
 
-        # tx_hash left '' on both outcomes -- see the KNOWN GAP note above,
-        # neither swap function returns one yet.
         _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
-                            size_usd=amount, filter_result='' if ok else (err or 'swap failed'))
+                            size_usd=amount, tx_hash=tx_hash,
+                            filter_result='' if ok else (err or 'swap failed'))
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
     """Records a bridge_transactions failure -- separated out since
@@ -4309,9 +4322,12 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
     """BSC equivalent of _execute_user_swap(). action is 'buy' (USDC -> token)
     or 'sell' (token -> USDC). amount_str is a human-readable amount of
     whichever asset is being sold (USDC for buy, the token for sell).
-    Returns (success, message) -- message is a specific, user-facing reason
-    on failure (empty string on success) so callers don't have to send
-    everyone back to the server logs for a generic 'swap failed'."""
+    Returns (success, message, tx_hash) -- message is a specific, user-facing
+    reason on failure (empty string on success) so callers don't have to
+    send everyone back to the server logs for a generic 'swap failed';
+    tx_hash is '' on every failure path and the real hex hash only once the
+    swap transaction is actually sent (previously discarded even on success --
+    see the KNOWN GAP note on _narrative_agent_cycle())."""
     try:
         w3 = _get_web3()
         # `wallet` is the user's *Solana* wallet_address (their session identity,
@@ -4330,7 +4346,7 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
         else:
             msg = f'Unknown action {action!r}'
             add_user_log(wallet, f'BSC swap error: {msg}')
-            return False, msg
+            return False, msg, ''
 
         sell_contract = w3.eth.contract(address=w3.to_checksum_address(sell_token), abi=_ERC20_MIN_ABI)
         sell_decimals = sell_contract.functions.decimals().call()
@@ -4341,14 +4357,14 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
         except RuntimeError as e:
             # _get_0x_quote's own "ZEROX_API_KEY not configured" is already specific
             add_user_log(wallet, f'BSC swap error: {e}')
-            return False, str(e)
+            return False, str(e), ''
 
         issues = quote.get('issues') or {}
         balance_issue = issues.get('balance')
         if balance_issue:
             msg = f'Insufficient {sell_symbol} balance'
             add_user_log(wallet, f'BSC swap error: {msg} ({balance_issue})')
-            return False, msg
+            return False, msg, ''
 
         allowance_issue = issues.get('allowance')
         if allowance_issue:
@@ -4358,11 +4374,11 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
             except Exception as e:
                 msg = 'Insufficient BNB for gas fees' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
                 add_user_log(wallet, f'BSC swap error: {msg}: {_redact_keys(str(e))[:100]}')
-                return False, msg
+                return False, msg, ''
             if not ok:
                 msg = 'Token approval transaction reverted on-chain'
                 add_user_log(wallet, f'BSC swap error: {msg}')
-                return False, msg
+                return False, msg, ''
             # Re-quote after approving -- the first quote's tx.data assumed the
             # allowance issue was still open; a stale quote can revert on-chain.
             quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
@@ -4371,7 +4387,7 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
         if not txn:
             msg = 'No liquidity route found for this trade' if not issues else f'Trade not possible: {issues}'
             add_user_log(wallet, f'BSC swap error: {msg}')
-            return False, msg
+            return False, msg, ''
 
         tx = {
             'from': wallet_cs,
@@ -4389,17 +4405,21 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
         except Exception as e:
             msg = 'Insufficient BNB for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
             add_user_log(wallet, f'BSC swap error: {msg}')
-            return False, msg
-        add_user_log(wallet, f'BSC swap sent: {tx_hash.hex()}')
+            return False, msg, ''
+        tx_hash_hex = tx_hash.hex()
+        add_user_log(wallet, f'BSC swap sent: {tx_hash_hex}')
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
         success = receipt.status == 1
-        add_user_log(wallet, f'BSC swap {"confirmed" if success else "reverted on-chain"}: {tx_hash.hex()}')
-        return success, ('' if success else 'Swap transaction reverted on-chain')
+        add_user_log(wallet, f'BSC swap {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        # tx_hash_hex is returned even on-chain-revert -- the transaction did
+        # broadcast and has a real hash, it just didn't succeed; only the
+        # never-broadcast failure paths above return ''.
+        return success, ('' if success else 'Swap transaction reverted on-chain'), tx_hash_hex
     except Exception as e:
         msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
         add_user_log(wallet, 'BSC swap error: ' + msg)
         print(f'[bsc-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
-        return False, msg
+        return False, msg, ''
 
 def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) -> str:
     """BSC equivalent of send_sol_fee() -- sends amount_usdc of USDC (BEP-20
@@ -7162,7 +7182,7 @@ def api_bsc_trade_buy():
     amount_usdc = max(min_size, min(max_size, amount_usdc))
     user_id = row[0]
     with _use_key(enc_blob, wallet) as pk:
-        buy_ok, buy_err = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
+        buy_ok, buy_err, buy_tx_hash = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
     if not buy_ok:
         return jsonify({'ok': False, 'msg': buy_err or 'Swap failed'}), 502
     td          = get_token_data(token_address)
@@ -7178,7 +7198,7 @@ def api_bsc_trade_buy():
     _upsert_open_position(user_id, wallet, token_address, pos, source='manual', chain='bsc')
     _charge_bsc_txn_fee(pk, wallet, user_id, symbol, amount_usdc, 'buy')
     return jsonify({'ok': True, 'amount_usdc': amount_usdc, 'token_address': token_address,
-                     'entry_price': entry_price, 'symbol': symbol})
+                     'entry_price': entry_price, 'symbol': symbol, 'tx_hash': buy_tx_hash})
 
 @app.route('/api/bsc/trade/sell', methods=['POST'])
 @rate_limit(10, 60)
@@ -7212,7 +7232,7 @@ def api_bsc_trade_sell():
     symbol     = pos.get('symbol') or (td.get('symbol', token_address[:8]) if td else token_address[:8])
     amount     = pos['amount']
     with _use_key(enc_blob, wallet) as pk:
-        sell_ok, sell_err = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
+        sell_ok, sell_err, sell_tx_hash = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
     entry     = pos.get('buy_price', 0.0)
     pnl       = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
     pnl_pct   = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
@@ -7249,7 +7269,7 @@ def api_bsc_trade_sell():
         _recalculate_badges(wallet)
         _close_open_position(user_id, wallet, token_address, chain='bsc')
     return jsonify({'ok': True, 'pnl': pnl, 'pnl_pct': pnl_pct, 'exit_price': exit_price,
-                     'sell_executed': sell_ok, 'msg': ('' if sell_ok else sell_err)})
+                     'sell_executed': sell_ok, 'msg': ('' if sell_ok else sell_err), 'tx_hash': sell_tx_hash})
 
 @app.route('/referrals')
 def referrals_page():
