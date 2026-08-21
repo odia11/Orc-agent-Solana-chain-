@@ -2710,15 +2710,19 @@ def _hydrate_positions_from_db(wallet: str, us: dict):
             if not row:
                 return
             rows = conn.execute(
-                '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at
+                '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain
                    FROM open_positions WHERE user_id=?''', (row[0],)
             ).fetchall()
         finally:
             conn.close()
-        for mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at in rows:
+        for mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain in rows:
+            # chain must be carried into the restored dict, not just the DB row --
+            # every place that iterates us['positions'] and calls the Solana-only
+            # _execute_user_swap() relies on pos['chain'] to skip BSC entries.
             us['positions'][mint] = {
                 'amount': amount, 'buy_price': buy_price, 'spend': spend,
                 'symbol': symbol, 'opened_at': opened_at, 'entry_liquidity': entry_liquidity,
+                'chain': chain or 'solana',
             }
         if rows:
             print(f'[open_positions] restored {len(rows)} open position(s) for {wallet[:8]}…', flush=True)
@@ -3306,12 +3310,16 @@ def check_daily_reset_user(us: dict):
 # user_states[wallet]['positions'] directly now goes through one of these two,
 # so the in-memory dict and the open_positions table never drift apart.
 def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot', copy_of_wallet: str = None, chain: str = 'solana'):
+    pos = dict(pos)
+    pos['chain'] = chain
     get_user_state(wallet)['positions'][mint] = pos
     # Every open position is fast-polled from the moment it exists (see the
     # Pass-1 loop in user_trader_loop) -- registering here means every call
     # site gets it automatically instead of relying on each one to remember.
-    # (BSC positions aren't polled by that Solana-specific loop, but sharing
-    # the mint-keyed dict is harmless -- address formats never collide.)
+    # Tagging pos['chain'] above is what lets that Solana-only loop (and every
+    # other place that iterates us['positions'] and calls _execute_user_swap)
+    # skip BSC entries instead of misfiring a Solana swap on an EVM address --
+    # see the pos.get('chain', 'solana') guards at each of those sites.
     _mark_hot_mint(mint)
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -4169,6 +4177,12 @@ def user_trader_loop(stop_event, config, wallet: str):
     # Catches any positions that breached the stop-loss while the bot was offline.
     for _mint, _pos in list(positions.items()):
         if stop_event.is_set(): break
+        # This is the Solana bot loop -- _execute_user_swap() below assumes a
+        # Solana mint + the Solana private key. A BSC position sitting in the
+        # same shared us['positions'] dict must never reach it (wrong swap
+        # pipeline entirely, not just a wrong-chain address).
+        if _pos.get('chain', 'solana') != 'solana':
+            continue
         if _pos.get('amount', 0) <= 0 or _pos.get('buy_price', 0) <= 0:
             continue
         _td = get_token_data(_mint)
@@ -4233,7 +4247,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                     stop_event.wait(300)
                     continue
                 live     = state['tokens']  # already sorted by score desc
-                open_pos = sum(1 for p in positions.values() if p.get('amount', 0) > 0)
+                # max_positions is this user's Solana-bot setting -- a BSC position
+                # must not count against it (or vice versa, once a BSC bot exists).
+                open_pos = sum(1 for p in positions.values()
+                                if p.get('amount', 0) > 0 and p.get('chain', 'solana') == 'solana')
                 us_sol  = _get_user_sol(_trading_wallet)
                 total_live = len(live)
                 print(f'[bot] {short} running=True tokens={total_live} pos={open_pos}/5 sol={round(us_sol,4)} scanning...', flush=True)
@@ -4258,6 +4275,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                 # DexScreener trending list still get stop-loss/take-profit every cycle.
                 for mint, pos in list(positions.items()):
                     if stop_event.is_set(): break
+                    if pos.get('chain', 'solana') != 'solana':
+                        continue
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
                     # Every open position stays fast-polled for as long as it's held, not
@@ -4595,7 +4614,8 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                     add_user_log(c_wallet, f'[copy] Skip {symbol}: daily loss limit hit')
                     continue
                 c_max_pos = int(c_max_positions) if c_max_positions is not None else 5
-                open_pos = sum(1 for p in c_us['positions'].values() if p.get('amount', 0) > 0)
+                open_pos = sum(1 for p in c_us['positions'].values()
+                                if p.get('amount', 0) > 0 and p.get('chain', 'solana') == 'solana')
                 if open_pos >= c_max_pos:
                     add_user_log(c_wallet, f'[copy] Skip {symbol}: max positions reached')
                     continue
@@ -15028,7 +15048,10 @@ def _liquidate_all_positions(wallet: str):
     def _run():
         short = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
         us = get_user_state(wallet)
-        mints = [m for m, p in us['positions'].items() if p.get('amount', 0) > 0]
+        # Solana-only -- this calls _execute_user_swap() below, which assumes a
+        # Solana mint + the Solana private key. A BSC position must not reach it.
+        mints = [m for m, p in us['positions'].items()
+                 if p.get('amount', 0) > 0 and p.get('chain', 'solana') == 'solana']
         if not mints:
             return
         conn = sqlite3.connect(DB_FILE)
@@ -16868,7 +16891,10 @@ def admin_force_close_all():
         return jsonify({'error': 'User not found or has no trading key'}), 400
     user_id, enc_blob = row
     us = user_states.get(target, {})
-    positions = {k: v for k, v in us.get('positions', {}).items() if v.get('amount', 0) > 0}
+    # Solana-only -- this calls _execute_user_swap() below, which assumes a
+    # Solana mint + the Solana private key. A BSC position must not reach it.
+    positions = {k: v for k, v in us.get('positions', {}).items()
+                 if v.get('amount', 0) > 0 and v.get('chain', 'solana') == 'solana'}
     if not positions:
         return jsonify({'ok': True, 'msg': 'No open positions to close'})
     closed, failed = 0, 0
