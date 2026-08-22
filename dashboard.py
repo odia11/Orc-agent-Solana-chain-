@@ -462,6 +462,11 @@ NARRATIVE_AGENT_GLOBAL_LIVE = False  # kill switch: while False, only ADMIN_WALL
 # NARRATIVE_MAX_PER_DAY (see _can_narrative_buy()) -- the circuit breaker
 # still applies to them, same as everyone else.
 NARRATIVE_UNCAPPED_WALLETS = {'Cdn8WftaYycdudV9yeeQPY1A1Tgo1bMa9eV4Tv9SeAM9'}
+# PUMPFUN-DEGEN pre-bond auto-buy threshold (USD, 24h volume) -- see
+# _narrative_agent_process_candidate(). At/above this, a NARRATIVE_UNCAPPED_
+# WALLETS pre-bond candidate that clears _narrative_safety_gate_pumpfun()
+# skips get_narrative_signal() (no AI review) entirely.
+NARRATIVE_PUMPFUN_VOLUME_THRESHOLD = 10000
 # In-memory dedup for NARRATIVE_UNCAPPED_WALLETS' dedicated 10s fast loop
 # only (see _narrative_agent_collect_new_candidates()) -- every other
 # wallet's normal 15-iteration/900s _narrative_agent_cycle() check never
@@ -4372,11 +4377,22 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
                             filter_result=_log_prefix + reason, decision='pass')
         return
 
-    signal   = get_narrative_signal(token_data, mint, symbol)
-    decision = signal.get('decision', 'pass')
-    _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
-                        thesis_json=json.dumps(signal), decision=decision,
-                        filter_result=_log_prefix + reason)
+    # PUMPFUN-DEGEN auto-buy: a pre-bond candidate that already cleared the
+    # mint/freeze-authority-only gate above, with 24h volume at/above
+    # NARRATIVE_PUMPFUN_VOLUME_THRESHOLD, skips get_narrative_signal()
+    # entirely -- no AI review -- and goes straight into the same buy
+    # pipeline (sizing, _can_narrative_buy() gate, swap) every other
+    # decision=='buy' candidate already goes through below.
+    if _use_pumpfun_gate and float(token_data.get('volume24h', 0) or 0) >= NARRATIVE_PUMPFUN_VOLUME_THRESHOLD:
+        decision = 'buy'
+        _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                            filter_result='PUMPFUN-DEGEN AUTO-BUY (volume>=$10k, geen AI-review)')
+    else:
+        signal   = get_narrative_signal(token_data, mint, symbol)
+        decision = signal.get('decision', 'pass')
+        _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
+                            thesis_json=json.dumps(signal), decision=decision,
+                            filter_result=_log_prefix + reason)
 
     if decision != 'buy':
         return
