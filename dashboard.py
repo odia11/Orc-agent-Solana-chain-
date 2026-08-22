@@ -4651,6 +4651,38 @@ def _check_lp_locked(mint_address: str) -> dict:
         print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
         return {'lp_locked_pct': 0, 'ok': False}
 
+def _get_deepest_pair_liquidity(mint: str) -> dict:
+    """Fetches the full DexScreener pairs list for `mint` directly and
+    returns the liquidity/age of whichever pair actually has the most
+    liquidity. Used ONLY by _narrative_safety_gate()'s blue-chip LP-lock
+    exemption below -- get_token_data() itself (and everything that depends
+    on it: token_loop()'s scanner at line ~3450, the live SL/TP monitor in
+    user_trader_loop() at line ~4985, every buy/sell entry-price site) stays
+    completely untouched. DexScreener's pair order isn't liquidity-sorted --
+    a token can have many pools across DEXes, and get_token_data()'s
+    pairs[0] is often a small/newer one while a much deeper pool sits
+    further down the list (confirmed for BONK: pairs[0] was a $123k Orca
+    pool while a $1.5M Meteora pool was pairs[2]). Reuses _dex_get()'s
+    shared response cache, so this is the same upstream request as any
+    other get_token_data(mint) call for this mint within the TTL window --
+    no extra DexScreener load, and no change to what get_token_data()
+    returns to its other callers."""
+    try:
+        r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
+        if not r:
+            return {'ok': False, 'liquidity': 0.0, 'pair_created_at': 0}
+        pairs = r.json().get('pairs', [])
+        if not pairs:
+            return {'ok': False, 'liquidity': 0.0, 'pair_created_at': 0}
+        deepest = max(pairs, key=lambda x: float(x.get('liquidity', {}).get('usd', 0) or 0))
+        return {
+            'ok': True,
+            'liquidity': float(deepest.get('liquidity', {}).get('usd', 0) or 0),
+            'pair_created_at': int(deepest.get('pairCreatedAt', 0) or 0),
+        }
+    except Exception:
+        return {'ok': False, 'liquidity': 0.0, 'pair_created_at': 0}
+
 def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     """Combined safety gate for narrative/agent-driven candidates. Runs, in
     order: mint/freeze-authority (Solana) or honeypot (BSC), lock/honeypot
@@ -4660,11 +4692,14 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     visible in agent_journal instead of passing silently.
 
     Blue-chip exemption: the LP-lock threshold (>=50%) is skipped when the
-    token has both liquidity >= $500k and pair age >= 90 days. The mint/
-    freeze-authority check, the $20k liquidity floor, and the 30min age
-    floor are NOT part of this exemption -- they stay in force for every
-    token regardless of size, since those catch different risks than an
-    unlocked-but-deep pool does.
+    token's DEEPEST pair (via _get_deepest_pair_liquidity(), not
+    get_token_data()) has both liquidity >= $500k and pair age >= 90 days.
+    The mint/freeze-authority check, the $20k liquidity floor, and the
+    30min age floor all keep using get_token_data()'s normal (pairs[0])
+    value, completely unchanged -- they stay in force for every token
+    regardless of size, since those catch different risks than an
+    unlocked-but-deep pool does, and this function must not change what
+    feeds any other trading decision in the app.
 
     Note: the spec for this named _check_bsc_safety() for the BSC branch,
     which doesn't exist in this codebase -- _check_bsc_honeypot() (defined
@@ -4679,16 +4714,16 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     if not data:
         return False, 'could not fetch token data'
 
-    created_ms = data.get('pairCreatedAt', 0) or 0
-    age_days = (time.time() - created_ms / 1000) / 86400 if created_ms > 0 else 0
-
     exemption_note = ''
     if chain == 'solana':
         mint_safety = _check_mint_safety(mint)
         if mint_safety['mint_authority_active'] or mint_safety['freeze_authority_active']:
             return False, 'mint or freeze authority still active'
 
-        if data['liquidity'] >= 500_000 and age_days >= 90:
+        deepest = _get_deepest_pair_liquidity(mint)
+        deepest_age_days = ((time.time() - deepest['pair_created_at'] / 1000) / 86400
+                             if deepest['pair_created_at'] > 0 else 0)
+        if deepest['ok'] and deepest['liquidity'] >= 500_000 and deepest_age_days >= 90:
             exemption_note = 'LP-lock overgeslagen: blue-chip uitzondering (leeftijd+liquiditeit)'
         else:
             lp = _check_lp_locked(mint)
@@ -4706,7 +4741,8 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     if data['liquidity'] < 20_000:
         return False, f"liquidity ${data['liquidity']:.0f} below $20k minimum"
 
-    age_min = age_days * 1440
+    created_ms = data.get('pairCreatedAt', 0) or 0
+    age_min = (time.time() - created_ms / 1000) / 60 if created_ms > 0 else 0
     if age_min < 30:
         return False, f'pair age {age_min:.0f}m below 30m minimum'
 
