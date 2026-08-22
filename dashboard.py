@@ -4349,17 +4349,34 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
     token_data = get_token_data(mint) or {}
     symbol     = token_data.get('symbol') or mint[:8]
 
-    safe, reason = _narrative_safety_gate(mint, chain)
+    # PUMPFUN-DEGEN route: NARRATIVE_UNCAPPED_WALLETS + Solana only, and
+    # only for a token that hasn't graduated off the pump.fun bonding curve
+    # yet -- no Raydium/PumpSwap pair, determined from dexId and/or the
+    # absence of a pairAddress in the DexScreener response (get_token_data()
+    # returns {} when DexScreener has no pairs at all for this mint, which
+    # also naturally satisfies "no pairAddress"). Every journal row logged
+    # for a candidate that takes this path is prefixed so it's unmistakable
+    # which safety level actually applied.
+    _dex_id      = (token_data.get('dexId') or '').lower()
+    _has_pair    = bool(token_data.get('pairAddress'))
+    _is_graduated = _has_pair and _dex_id in ('raydium', 'pumpswap')
+    _use_pumpfun_gate = (wallet in NARRATIVE_UNCAPPED_WALLETS and chain == 'solana' and not _is_graduated)
+    _log_prefix = 'PUMPFUN-DEGEN (mint-check only): ' if _use_pumpfun_gate else ''
+
+    if _use_pumpfun_gate:
+        safe, reason = _narrative_safety_gate_pumpfun(mint)
+    else:
+        safe, reason = _narrative_safety_gate(mint, chain)
     if not safe:
         _agent_journal_log(user_id, mint, chain, symbol, phase='filtered',
-                            filter_result=reason, decision='pass')
+                            filter_result=_log_prefix + reason, decision='pass')
         return
 
     signal   = get_narrative_signal(token_data, mint, symbol)
     decision = signal.get('decision', 'pass')
     _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
                         thesis_json=json.dumps(signal), decision=decision,
-                        filter_result=reason)
+                        filter_result=_log_prefix + reason)
 
     if decision != 'buy':
         return
@@ -4378,7 +4395,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
     allowed, gate_reason = _can_narrative_buy(user_id, amount, wallet)
     if not allowed:
         _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
-                            size_usd=amount, filter_result=gate_reason)
+                            size_usd=amount, filter_result=_log_prefix + gate_reason)
         return
 
     key_column = 'encrypted_private_key' if chain == 'solana' else 'encrypted_private_key_bsc'
@@ -4389,7 +4406,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
         conn.close()
     if not row or not row[0]:
         _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
-                            size_usd=amount, filter_result=f'no {chain} trading key configured')
+                            size_usd=amount, filter_result=_log_prefix + f'no {chain} trading key configured')
         return
 
     entry_price = float(token_data.get('price', 0) or 0)
@@ -4436,7 +4453,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
 
     _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
                         size_usd=amount, tx_hash=tx_hash,
-                        filter_result='' if ok else (err or 'swap failed'))
+                        filter_result=_log_prefix + ('' if ok else (err or 'swap failed')))
 
 def _narrative_agent_gather_candidates() -> list:
     """Merges _get_narrative_candidates() (boosted/trending) with
@@ -4961,6 +4978,26 @@ def _get_deepest_pair_liquidity(mint: str) -> dict:
         }
     except Exception:
         return {'ok': False, 'liquidity': 0.0, 'pair_created_at': 0}
+
+def _narrative_safety_gate_pumpfun(mint: str) -> tuple:
+    """Stripped-down gate for the PUMPFUN-DEGEN route only (see
+    _narrative_agent_process_candidate()) -- a pre-graduation pump.fun
+    token trades on its bonding curve, not a real AMM pool, so
+    _narrative_safety_gate()'s liquidity/age/LP-lock checks don't even
+    apply (there's no pool yet to measure any of that against). The ONLY
+    check kept is mint/freeze-authority via _check_mint_safety() --
+    everything else about the token is unconstrained by this gate.
+
+    Only ever reached for a wallet in NARRATIVE_UNCAPPED_WALLETS, on
+    Solana, for a token that hasn't graduated to Raydium/PumpSwap yet --
+    see the caller for the exact gating conditions and the
+    'PUMPFUN-DEGEN (mint-check only): ' prefix every agent_journal row for
+    this route gets, so it's unmistakable in the journal which safety
+    level actually applied to a given buy."""
+    mint_safety = _check_mint_safety(mint)
+    if mint_safety['mint_authority_active'] or mint_safety['freeze_authority_active']:
+        return False, 'mint or freeze authority still active'
+    return True, ''
 
 def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     """Combined safety gate for narrative/agent-driven candidates. Runs, in
