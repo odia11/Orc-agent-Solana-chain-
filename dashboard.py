@@ -3173,6 +3173,118 @@ def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
         print(f'[narrative-signal] error for {mint[:8]}: {e}{body}', flush=True)
         return {'decision': 'pass', 'thesis': ['parse error']}
 
+def _discover_x_buzz() -> list[str]:
+    """Lightweight X/Twitter buzz discovery via Claude + web search -- finds
+    candidate cashtags for the narrative agent's normal pipeline elsewhere
+    to evaluate; this function makes no buy/pass call itself. Logged to
+    Railway via print() only, not agent_journal -- this is discovery, not
+    a decision, so there's nothing here worth an audit-trail entry for.
+
+    Uses web_search_20260209 (current dynamic-filtering tool type) rather
+    than the web_search_20250305 the original spec named -- same
+    correction as get_narrative_signal(), which claude-sonnet-5 also
+    requires the newer variant for.
+
+    Returns a list of up to 10 cashtag strings (e.g. ["$FOO", "$BAR"]).
+    Any request or parse failure returns [] -- fails closed, same
+    convention as get_narrative_signal()."""
+    if not ANTHROPIC_API_KEY:
+        return []
+    try:
+        prompt = (
+            'Zoek naar Solana-memecoins die op dit moment opvallend veel besproken '
+            'worden op X/Twitter, ook als ze nog klein zijn qua volume. Geef ALLEEN '
+            'een JSON-array van cashtags terug, max 10, bv ["$FOO", "$BAR"].'
+        )
+        resp = requests.post(
+            _ANTHROPIC_URL,
+            headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+            json={
+                'model': 'claude-sonnet-5',
+                'max_tokens': 2000,
+                'tools': [{'type': 'web_search_20260209', 'name': 'web_search'}],
+                'messages': [{'role': 'user', 'content': prompt}],
+            },
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            print(f'[x-buzz] HTTP {resp.status_code}: {resp.text[:500]}', flush=True)
+            return []
+        content = resp.json().get('content') or []
+        # Same convention as get_narrative_signal(): web search adds
+        # web_search_tool_result blocks alongside the model's own text --
+        # only the last text block is the actual answer.
+        text_blocks = [b.get('text', '') for b in content if b.get('type') == 'text']
+        if not text_blocks:
+            print('[x-buzz] no text blocks in response', flush=True)
+            return []
+        raw = text_blocks[-1].strip()
+        print(f'[x-buzz] raw output: {raw[:500]}', flush=True)
+        if raw.startswith('```'):
+            raw = raw.strip('`')
+            if raw.startswith('json'):
+                raw = raw[4:]
+            raw = raw.strip()
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list):
+            return []
+        return [str(x) for x in parsed if isinstance(x, str)][:10]
+    except Exception as e:
+        body = ''
+        resp_obj = getattr(e, 'response', None)
+        if resp_obj is not None:
+            try:
+                body = f' | body: {resp_obj.text[:500]}'
+            except Exception:
+                pass
+        print(f'[x-buzz] error: {e}{body}', flush=True)
+        return []
+
+def _match_buzz_to_mints(tickers: list[str]) -> list[dict]:
+    """Resolves _discover_x_buzz()'s cashtags to actual Solana mints, using
+    the same DexScreener search endpoint search_tokens() (line ~13617)
+    calls. Multiple pairs can share the same ticker text -- ticker-
+    squatting with clone tokens is common for memecoins, as seen tonight
+    testing CATE/ANSEM. search_tokens() just takes DexScreener's result
+    order as-is; this instead filters to pairs whose symbol actually
+    matches the ticker (falling back to the raw search results if nothing
+    matches exactly), then picks whichever of those has the highest
+    liquidity -- that's the one actually being traded, not whichever the
+    search API happened to list first.
+
+    Returns a list of {'mint': str, 'symbol': str, 'source': 'x_buzz'},
+    one entry per ticker that resolved to at least one Solana pair.
+    Tickers with no match are silently skipped."""
+    results = []
+    for ticker in tickers:
+        query = str(ticker).lstrip('$').strip()
+        if not query:
+            continue
+        try:
+            url = 'https://api.dexscreener.com/latest/dex/search?q=' + requests.utils.quote(query, safe='')
+            r = _dex_get(url, timeout=6)
+            if not r or r.status_code != 200:
+                continue
+            pairs = r.json().get('pairs') or []
+            solana_pairs = [p for p in pairs if (p.get('chainId') or '').lower() == 'solana']
+            if not solana_pairs:
+                continue
+            symbol_matches = [
+                p for p in solana_pairs
+                if ((p.get('baseToken') or {}).get('symbol', '') or '').lower() == query.lower()
+            ]
+            candidates = symbol_matches or solana_pairs
+            best = max(candidates, key=lambda p: float((p.get('liquidity') or {}).get('usd', 0) or 0))
+            base = best.get('baseToken') or {}
+            addr = base.get('address', '')
+            if not addr:
+                continue
+            results.append({'mint': addr, 'symbol': base.get('symbol', '') or query, 'source': 'x_buzz'})
+        except Exception as e:
+            print(f'[x-buzz-match] error for {ticker}: {e}', flush=True)
+            continue
+    return results
+
 def score_token(data: dict) -> tuple:
     """Multi-factor signal scoring. Returns (score 0–10, breakdown dict).
     Factors: momentum(0-3) + volume(0-2) + trend(0-2) + liq(0-1) + activity(0-1) - penalties."""
@@ -4263,8 +4375,18 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
                         filter_result='' if ok else (err or 'swap failed'))
 
 def _narrative_agent_cycle(user_id: int, wallet: str):
-    """One pass of the narrative agent over _get_narrative_candidates().
-    Not invoked from anywhere yet -- no thread, no automatic route.
+    """One pass of the narrative agent over _get_narrative_candidates()
+    (boosted/trending) PLUS _discover_x_buzz() -> _match_buzz_to_mints()
+    (X/Twitter buzz) candidates, merged into a single list before the loop
+    starts. Not invoked from anywhere yet -- no thread, no automatic route.
+
+    X-buzz candidates get exactly one extra thing: a phase='discovered'
+    agent_journal row logged here, before _narrative_agent_process_
+    candidate() runs, noting source='x_buzz' so it's visible which route a
+    candidate came in through. That's the ONLY thing that differs --
+    _narrative_safety_gate() itself is untouched, so an x-buzz candidate
+    runs through the exact same LP-lock/liquidity/age/mint-authority checks
+    as a trending one, no exception.
 
     Per candidate, delegates to _narrative_agent_process_candidate() --
     see that function for the actual pipeline (safety gate -> thesis ->
@@ -4276,11 +4398,27 @@ def _narrative_agent_cycle(user_id: int, wallet: str):
     is now a thin wrapper over _execute_user_swap_ex() so its ~15 existing
     callers are unaffected.)"""
     amount = NARRATIVE_MAX_PER_TX  # no per-candidate sizing signal exists yet -- flat per-tx cap
-    for cand in _get_narrative_candidates():
+
+    candidates = list(_get_narrative_candidates())
+    for buzz_cand in _match_buzz_to_mints(_discover_x_buzz()):
+        mint = buzz_cand.get('mint', '')
+        if not mint:
+            continue
+        candidates.append({
+            'address': mint,
+            'chain':   'solana',  # _match_buzz_to_mints() only searches DexScreener's Solana pairs
+            'symbol':  buzz_cand.get('symbol', '') or mint[:8],
+            'source':  'x_buzz',
+        })
+
+    for cand in candidates:
         mint  = cand.get('address', '')
         chain = cand.get('chain', 'solana')
         if not mint:
             continue
+        if cand.get('source') == 'x_buzz':
+            _agent_journal_log(user_id, mint, chain, cand.get('symbol', mint[:8]),
+                                phase='discovered', filter_result="source='x_buzz'")
         _narrative_agent_process_candidate(user_id, wallet, mint, chain, amount)
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
