@@ -4228,7 +4228,8 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
     signal   = get_narrative_signal(token_data, mint, symbol)
     decision = signal.get('decision', 'pass')
     _agent_journal_log(user_id, mint, chain, symbol, phase='thesis',
-                        thesis_json=json.dumps(signal), decision=decision)
+                        thesis_json=json.dumps(signal), decision=decision,
+                        filter_result=reason)
 
     if decision != 'buy':
         return
@@ -4654,7 +4655,16 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     """Combined safety gate for narrative/agent-driven candidates. Runs, in
     order: mint/freeze-authority (Solana) or honeypot (BSC), lock/honeypot
     threshold, liquidity >= $20k, pair age >= 30min. Returns (False, reason)
-    on the first failure, else (True, '').
+    on the first failure, else (True, '') -- except for the blue-chip LP-lock
+    exemption below, which returns (True, note) so the exemption stays
+    visible in agent_journal instead of passing silently.
+
+    Blue-chip exemption: the LP-lock threshold (>=50%) is skipped when the
+    token has both liquidity >= $500k and pair age >= 90 days. The mint/
+    freeze-authority check, the $20k liquidity floor, and the 30min age
+    floor are NOT part of this exemption -- they stay in force for every
+    token regardless of size, since those catch different risks than an
+    unlocked-but-deep pool does.
 
     Note: the spec for this named _check_bsc_safety() for the BSC branch,
     which doesn't exist in this codebase -- _check_bsc_honeypot() (defined
@@ -4662,16 +4672,28 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     It also doesn't produce a "% locked" number the way _check_lp_locked()
     does -- honeypot detection is a binary simulated-buy+sell result, not a
     lock percentage, so there's no BSC equivalent of the Solana "<50% lock"
-    threshold. The BSC branch instead fails on is_honeypot or an incomplete
-    check, same fail-closed convention as every other check here."""
+    threshold (or its blue-chip exemption). The BSC branch instead fails on
+    is_honeypot or an incomplete check, same fail-closed convention as
+    every other check here."""
+    data = get_token_data(mint)
+    if not data:
+        return False, 'could not fetch token data'
+
+    created_ms = data.get('pairCreatedAt', 0) or 0
+    age_days = (time.time() - created_ms / 1000) / 86400 if created_ms > 0 else 0
+
+    exemption_note = ''
     if chain == 'solana':
         mint_safety = _check_mint_safety(mint)
         if mint_safety['mint_authority_active'] or mint_safety['freeze_authority_active']:
             return False, 'mint or freeze authority still active'
 
-        lp = _check_lp_locked(mint)
-        if not lp['ok'] or lp['lp_locked_pct'] < 50:
-            return False, f"LP locked {lp['lp_locked_pct']:.0f}% (need >=50%)"
+        if data['liquidity'] >= 500_000 and age_days >= 90:
+            exemption_note = 'LP-lock overgeslagen: blue-chip uitzondering (leeftijd+liquiditeit)'
+        else:
+            lp = _check_lp_locked(mint)
+            if not lp['ok'] or lp['lp_locked_pct'] < 50:
+                return False, f"LP locked {lp['lp_locked_pct']:.0f}% (need >=50%)"
 
     elif chain == 'bsc':
         hp = _check_bsc_honeypot(mint)
@@ -4681,19 +4703,14 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
     else:
         return False, f'unsupported chain: {chain}'
 
-    data = get_token_data(mint)
-    if not data:
-        return False, 'could not fetch token data'
-
     if data['liquidity'] < 20_000:
         return False, f"liquidity ${data['liquidity']:.0f} below $20k minimum"
 
-    created_ms = data.get('pairCreatedAt', 0) or 0
-    age_min = (time.time() - created_ms / 1000) / 60 if created_ms > 0 else 0
+    age_min = age_days * 1440
     if age_min < 30:
         return False, f'pair age {age_min:.0f}m below 30m minimum'
 
-    return True, ''
+    return True, exemption_note
 
 def _check_bsc_honeypot(token_address: str) -> dict:
     """BSC's equivalent of _check_lp_locked() -- BSC tokens are arbitrary
