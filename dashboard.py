@@ -4363,12 +4363,47 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
                             size_usd=amount, filter_result=f'no {chain} trading key configured')
         return
 
+    entry_price = float(token_data.get('price', 0) or 0)
+
     with _use_key(row[0], wallet) as pk:
         if chain == 'solana':
-            ok, tx_hash = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount))
+            # amount is USD (NARRATIVE_MAX_PER_TX). orcagent_solana.py's buy
+            # path interprets its amount argument as SOL directly
+            # (lamports = int(amount * 1_000_000_000)) -- passing the raw USD
+            # figure through bought ~150-200x more than intended ($10 became
+            # ~10 SOL, not $10 of SOL). Convert here first, same pattern as
+            # every other USD->SOL site in this file (e.g. min_trade_usdc /
+            # _sol_price_usd in the BSC-cap-mirroring bot-buy paths).
+            amount_sol = amount / _sol_price_usd if _sol_price_usd else 0
+            ok, tx_hash = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
             err = '' if ok else 'swap failed'
         else:
             ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
+
+    if ok:
+        # Register the new position so user_trader_loop()'s SL/TP monitor
+        # (line ~4985) actually sees it exists -- without this the buy
+        # executes but nothing ever tracks or sells it. Same pattern as
+        # api_trade_buy() (Solana, lines 13996-14004) / api_bsc_trade_buy()
+        # (BSC, lines 7477-7484).
+        if chain == 'solana':
+            us  = get_user_state(wallet)
+            pos = us['positions'].get(mint, {})
+            pos['amount']    = pos.get('amount', 0.0) + (amount_sol / entry_price if entry_price > 0 else 0.0)
+            pos['buy_price'] = entry_price
+            pos['spend']     = pos.get('spend', 0.0) + amount_sol
+            pos['symbol']    = symbol
+            pos['opened_at'] = time.time()
+            _upsert_open_position(user_id, wallet, mint, pos, source='narrative')
+        else:
+            pos = {
+                'amount':    (amount / entry_price) if entry_price > 0 else 0.0,
+                'buy_price': entry_price,
+                'spend':     amount,
+                'symbol':    symbol,
+                'opened_at': time.time(),
+            }
+            _upsert_open_position(user_id, wallet, mint, pos, source='narrative', chain='bsc')
 
     _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
                         size_usd=amount, tx_hash=tx_hash,
