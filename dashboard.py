@@ -462,6 +462,12 @@ NARRATIVE_AGENT_GLOBAL_LIVE = False  # kill switch: while False, only ADMIN_WALL
 # NARRATIVE_MAX_PER_DAY (see _can_narrative_buy()) -- the circuit breaker
 # still applies to them, same as everyone else.
 NARRATIVE_UNCAPPED_WALLETS = {'Cdn8WftaYycdudV9yeeQPY1A1Tgo1bMa9eV4Tv9SeAM9'}
+# In-memory dedup for NARRATIVE_UNCAPPED_WALLETS' dedicated 10s fast loop
+# only (see _narrative_agent_collect_new_candidates()) -- every other
+# wallet's normal 15-iteration/900s _narrative_agent_cycle() check never
+# touches this set and re-scans the same trending candidates every pass,
+# unchanged.
+_narrative_seen_mints: set = set()
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
@@ -4432,31 +4438,15 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
                         size_usd=amount, tx_hash=tx_hash,
                         filter_result='' if ok else (err or 'swap failed'))
 
-def _narrative_agent_cycle(user_id: int, wallet: str):
-    """One pass of the narrative agent over _get_narrative_candidates()
-    (boosted/trending) PLUS _discover_x_buzz() -> _match_buzz_to_mints()
-    (X/Twitter buzz) candidates, merged into a single list before the loop
-    starts. Not invoked from anywhere yet -- no thread, no automatic route.
-
-    X-buzz candidates get exactly one extra thing: a phase='discovered'
-    agent_journal row logged here, before _narrative_agent_process_
-    candidate() runs, noting source='x_buzz' so it's visible which route a
-    candidate came in through. That's the ONLY thing that differs --
-    _narrative_safety_gate() itself is untouched, so an x-buzz candidate
-    runs through the exact same LP-lock/liquidity/age/mint-authority checks
-    as a trending one, no exception.
-
-    Per candidate, delegates to _narrative_agent_process_candidate() --
-    see that function for the actual pipeline (safety gate -> thesis ->
-    caps -> swap) and journal logging. (Previously both swap paths
-    discarded their tx hash and every buy logged tx_hash='', which would
-    have falsely tripped _can_narrative_buy()'s circuit breaker on real
-    successes -- fixed by adding _execute_user_swap_ex() and extending
-    _execute_bsc_swap()'s return to a 3-tuple; _execute_user_swap() itself
-    is now a thin wrapper over _execute_user_swap_ex() so its ~15 existing
-    callers are unaffected.)"""
-    amount = NARRATIVE_MAX_PER_TX  # no per-candidate sizing signal exists yet -- flat per-tx cap
-
+def _narrative_agent_gather_candidates() -> list:
+    """Merges _get_narrative_candidates() (boosted/trending) with
+    _discover_x_buzz() -> _match_buzz_to_mints() (X/Twitter buzz) into one
+    candidate list, each shaped {'address', 'chain', 'symbol', 'source'?}.
+    Shared by _narrative_agent_cycle() (the normal 15-iteration/900s path,
+    every wallet except NARRATIVE_UNCAPPED_WALLETS) and
+    _narrative_agent_collect_new_candidates() (the NARRATIVE_UNCAPPED_
+    WALLETS 10s fast-loop path, Part A below) so the two candidate sources
+    can't drift out of sync with each other."""
     candidates = list(_get_narrative_candidates())
     for buzz_cand in _match_buzz_to_mints(_discover_x_buzz()):
         mint = buzz_cand.get('mint', '')
@@ -4468,7 +4458,23 @@ def _narrative_agent_cycle(user_id: int, wallet: str):
             'symbol':  buzz_cand.get('symbol', '') or mint[:8],
             'source':  'x_buzz',
         })
+    return candidates
 
+def _narrative_agent_evaluate_candidates(user_id: int, wallet: str, candidates: list, amount: float):
+    """Runs the safety-gate -> thesis -> buy pipeline (via
+    _narrative_agent_process_candidate() -- see that function for the
+    actual pipeline and journal logging) for every candidate in the list.
+    X-buzz-sourced candidates get exactly one extra thing first: a
+    phase='discovered' agent_journal row noting source='x_buzz' so it's
+    visible which route a candidate came in through. That's the ONLY thing
+    that differs -- _narrative_safety_gate() itself is untouched, so an
+    x-buzz candidate runs through the exact same LP-lock/liquidity/age/
+    mint-authority checks as a trending one, no exception.
+
+    Shared by _narrative_agent_cycle() and
+    _narrative_agent_evaluate_new_candidates() (Part B of the
+    NARRATIVE_UNCAPPED_WALLETS fast loop below), so both run the identical
+    per-candidate pipeline instead of drifting."""
     for cand in candidates:
         mint  = cand.get('address', '')
         chain = cand.get('chain', 'solana')
@@ -4478,6 +4484,83 @@ def _narrative_agent_cycle(user_id: int, wallet: str):
             _agent_journal_log(user_id, mint, chain, cand.get('symbol', mint[:8]),
                                 phase='discovered', filter_result="source='x_buzz'")
         _narrative_agent_process_candidate(user_id, wallet, mint, chain, amount)
+
+def _narrative_agent_cycle(user_id: int, wallet: str):
+    """One pass of the narrative agent over _narrative_agent_gather_
+    candidates() (boosted/trending + X-buzz combined). This is the normal
+    path, run every 15th user_trader_loop() iteration or 900s -- see that
+    function. NARRATIVE_UNCAPPED_WALLETS use a separate, dedicated 10s
+    fast loop instead (_narrative_uncapped_fast_loop() / Part A+B below);
+    every other wallet, including admin, keeps calling this function
+    completely unchanged.
+
+    (Previously both swap paths discarded their tx hash and every buy
+    logged tx_hash='', which would have falsely tripped
+    _can_narrative_buy()'s circuit breaker on real successes -- fixed by
+    adding _execute_user_swap_ex() and extending _execute_bsc_swap()'s
+    return to a 3-tuple; _execute_user_swap() itself is now a thin wrapper
+    over _execute_user_swap_ex() so its ~15 existing callers are
+    unaffected.)"""
+    amount = NARRATIVE_MAX_PER_TX  # no per-candidate sizing signal exists yet -- flat per-tx cap
+    candidates = _narrative_agent_gather_candidates()
+    _narrative_agent_evaluate_candidates(user_id, wallet, candidates, amount)
+
+def _narrative_agent_collect_new_candidates() -> list:
+    """Part A of the NARRATIVE_UNCAPPED_WALLETS fast loop
+    (_narrative_uncapped_fast_loop(), 10s cadence, started from
+    user_trader_loop() only for wallets in that set -- see there).
+
+    Gathers the same combined candidate list _narrative_agent_cycle() does
+    (via the shared _narrative_agent_gather_candidates()), then filters out
+    any mint already in the module-level _narrative_seen_mints set. Without
+    this, the same trending/buzz candidate -- which tends to keep showing
+    up scan after scan -- would re-enter the AI step (get_narrative_signal(),
+    a real Claude call) every single 10s tick forever. Newly-seen mints are
+    added to _narrative_seen_mints here and returned, so Part B
+    (_narrative_agent_evaluate_new_candidates()) only ever evaluates each
+    mint once for the lifetime of this process."""
+    candidates = _narrative_agent_gather_candidates()
+    new_candidates = []
+    for cand in candidates:
+        mint = cand.get('address', '')
+        if not mint or mint in _narrative_seen_mints:
+            continue
+        _narrative_seen_mints.add(mint)
+        new_candidates.append(cand)
+    return new_candidates
+
+def _narrative_agent_evaluate_new_candidates(user_id: int, wallet: str, candidates: list):
+    """Part B of the NARRATIVE_UNCAPPED_WALLETS fast loop -- runs the exact
+    same evaluation step _narrative_agent_cycle() does (via the shared
+    _narrative_agent_evaluate_candidates()), just for whichever mints Part A
+    (_narrative_agent_collect_new_candidates()) already filtered down to
+    unseen ones. amount is passed as NARRATIVE_MAX_PER_TX for consistency,
+    but _narrative_agent_process_candidate() overrides it internally for
+    NARRATIVE_UNCAPPED_WALLETS using the user's own max_trade_size, so the
+    value here doesn't actually matter for any wallet that ever reaches
+    this function."""
+    amount = NARRATIVE_MAX_PER_TX
+    _narrative_agent_evaluate_candidates(user_id, wallet, candidates, amount)
+
+def _narrative_uncapped_fast_loop(stop_event, user_id: int, wallet: str):
+    """Dedicated 10s-cadence background thread for NARRATIVE_UNCAPPED_
+    WALLETS only, started from user_trader_loop() in place of that loop's
+    normal 15-iteration/900s narrative-agent check -- every other wallet,
+    including admin, keeps that check completely unchanged. Runs Part A
+    (_narrative_agent_collect_new_candidates()) then, if it found anything
+    new, Part B (_narrative_agent_evaluate_new_candidates()) every tick.
+    Wrapped in its own try/except per tick so a failure here can never take
+    down the caller's trading loop -- same convention as the normal
+    _narrative_agent_cycle() call inside user_trader_loop()."""
+    short = wallet[:6] + '...' + wallet[-4:]
+    while not stop_event.is_set():
+        try:
+            new_candidates = _narrative_agent_collect_new_candidates()
+            if new_candidates:
+                _narrative_agent_evaluate_new_candidates(user_id, wallet, new_candidates)
+        except Exception as _nfe:
+            print(f'[bot] {short} narrative-agent fast-loop error: {_nfe}', flush=True)
+        stop_event.wait(10)
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
     """Records a bridge_transactions failure -- separated out since
@@ -5125,6 +5208,14 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     _narrative_iter = 0
     _last_narrative_check = 0.0
+    # NARRATIVE_UNCAPPED_WALLETS get a dedicated 10s-cadence background
+    # thread (_narrative_uncapped_fast_loop()) instead of the 15-iteration/
+    # 900s check below -- every other wallet, including admin, keeps that
+    # check completely unchanged. Started here (not inside the while loop)
+    # so it runs exactly once per trader-loop lifetime, sharing this same
+    # stop_event so it stops the moment the bot does.
+    if wallet in NARRATIVE_UNCAPPED_WALLETS:
+        threading.Thread(target=_narrative_uncapped_fast_loop, args=(stop_event, user_id, wallet), daemon=True).start()
     try:
         while not stop_event.is_set():
             try:
@@ -5132,14 +5223,17 @@ def user_trader_loop(stop_event, config, wallet: str):
                 # Narrative agent: every 15th iteration, or if it's been >900s
                 # since the last check, run one _narrative_agent_cycle() pass.
                 # Wrapped in its own try/except so a failure in there can never
-                # break the rest of this trading loop.
-                _narrative_iter += 1
-                if _narrative_iter % 15 == 0 or (time.time() - _last_narrative_check) > 900:
-                    _last_narrative_check = time.time()
-                    try:
-                        _narrative_agent_cycle(user_id, wallet)
-                    except Exception as _nae:
-                        print(f'[bot] {short} narrative-agent cycle error: {_nae}', flush=True)
+                # break the rest of this trading loop. NARRATIVE_UNCAPPED_
+                # WALLETS skip this entirely -- they get the dedicated 10s
+                # fast loop started above instead.
+                if wallet not in NARRATIVE_UNCAPPED_WALLETS:
+                    _narrative_iter += 1
+                    if _narrative_iter % 15 == 0 or (time.time() - _last_narrative_check) > 900:
+                        _last_narrative_check = time.time()
+                        try:
+                            _narrative_agent_cycle(user_id, wallet)
+                        except Exception as _nae:
+                            print(f'[bot] {short} narrative-agent cycle error: {_nae}', flush=True)
                 # Re-read stop-loss/take-profit from the DB every cycle so a change
                 # made in Settings while the bot is already running takes effect on
                 # the next scan -- previously these were only ever read once at
