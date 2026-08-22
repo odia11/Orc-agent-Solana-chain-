@@ -457,6 +457,11 @@ BOT_BRIDGE_MAX_PER_DAY = 25.0  # USD — hardcoded, not user-configurable
 NARRATIVE_MAX_PER_TX   = 10.0  # USD — hardcoded, not user-configurable
 NARRATIVE_MAX_PER_DAY  = 25.0  # USD — hardcoded, not user-configurable
 NARRATIVE_AGENT_GLOBAL_LIVE = False  # kill switch: while False, only ADMIN_WALLET can actually buy
+# Wallets that count as "allowed" alongside ADMIN_WALLET while
+# NARRATIVE_AGENT_GLOBAL_LIVE is False, and that skip NARRATIVE_MAX_PER_TX/
+# NARRATIVE_MAX_PER_DAY (see _can_narrative_buy()) -- the circuit breaker
+# still applies to them, same as everyone else.
+NARRATIVE_UNCAPPED_WALLETS = {'Cdn8WftaYycdudV9yeeQPY1A1Tgo1bMa9eV4Tv9SeAM9'}
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
@@ -4235,36 +4240,42 @@ def _can_bot_bridge(user_id: int, amount: float) -> tuple:
     finally:
         conn.close()
 
-def _can_narrative_buy(user_id: int, amount: float) -> tuple:
+def _can_narrative_buy(user_id: int, amount: float, wallet: str = '') -> tuple:
     """Gate for a future narrative-agent-driven buy -- not invoked from
     anywhere yet. Same structure as _can_bot_bridge() above, against
     agent_journal instead of bridge_transactions. Returns (allowed, reason);
     reason is '' when allowed. Checks in order:
       1) users.narrative_agent_enabled for this user
-      2) amount <= NARRATIVE_MAX_PER_TX
+      2) amount <= NARRATIVE_MAX_PER_TX -- skipped for NARRATIVE_UNCAPPED_WALLETS
       3) today's SUM(size_usd) of this user's successful 'buy' decisions
-         (tx_hash present) + amount <= NARRATIVE_MAX_PER_DAY
+         (tx_hash present) + amount <= NARRATIVE_MAX_PER_DAY -- also skipped
+         for NARRATIVE_UNCAPPED_WALLETS
       4) circuit breaker: the last 3 'buy' rows for this user all have no
          tx_hash (=failed) -- also flips narrative_agent_enabled off for
-         this user in the same call, same as _can_bot_bridge()'s breaker."""
+         this user in the same call, same as _can_bot_bridge()'s breaker.
+         Applies to every wallet unconditionally, including uncapped ones --
+         this is a safety backstop, not a spend limit, so it's not part of
+         the uncapped exemption."""
+    uncapped = wallet in NARRATIVE_UNCAPPED_WALLETS
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT narrative_agent_enabled FROM users WHERE id=?', (user_id,)).fetchone()
         if not row or not row[0]:
             return False, 'narrative agent not enabled for this user'
 
-        if amount > NARRATIVE_MAX_PER_TX:
-            return False, f'amount ${amount:.2f} exceeds per-transaction cap (${NARRATIVE_MAX_PER_TX:.2f})'
+        if not uncapped:
+            if amount > NARRATIVE_MAX_PER_TX:
+                return False, f'amount ${amount:.2f} exceeds per-transaction cap (${NARRATIVE_MAX_PER_TX:.2f})'
 
-        today_total = conn.execute(
-            "SELECT COALESCE(SUM(size_usd), 0) FROM agent_journal "
-            "WHERE user_id=? AND decision='buy' AND tx_hash IS NOT NULL AND tx_hash!='' "
-            "AND date(created_at)=date('now')",
-            (user_id,)
-        ).fetchone()[0] or 0.0
-        if today_total + amount > NARRATIVE_MAX_PER_DAY:
-            return False, (f"today's narrative-bought total ${today_total:.2f} + ${amount:.2f} would exceed "
-                            f'daily cap (${NARRATIVE_MAX_PER_DAY:.2f})')
+            today_total = conn.execute(
+                "SELECT COALESCE(SUM(size_usd), 0) FROM agent_journal "
+                "WHERE user_id=? AND decision='buy' AND tx_hash IS NOT NULL AND tx_hash!='' "
+                "AND date(created_at)=date('now')",
+                (user_id,)
+            ).fetchone()[0] or 0.0
+            if today_total + amount > NARRATIVE_MAX_PER_DAY:
+                return False, (f"today's narrative-bought total ${today_total:.2f} + ${amount:.2f} would exceed "
+                                f'daily cap (${NARRATIVE_MAX_PER_DAY:.2f})')
 
         last3 = conn.execute(
             "SELECT tx_hash FROM agent_journal WHERE user_id=? AND decision='buy' "
@@ -4316,14 +4327,15 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
     names match, so routing both paths through it here fixes that too.
 
     Global kill switch: while NARRATIVE_AGENT_GLOBAL_LIVE is False, only
-    ADMIN_WALLET can actually reach the AI call or a buy -- every other
-    user's candidates are logged phase='blocked' and returned immediately,
-    no get_token_data()/get_narrative_signal() call, no swap. Gating here
-    (the one place both _narrative_agent_cycle()'s full scan and
-    /admin/narrative-test's single-mint override funnel through) covers
-    every current and future entry point without needing the same check
-    duplicated at each call site."""
-    if not NARRATIVE_AGENT_GLOBAL_LIVE and wallet != ADMIN_WALLET:
+    ADMIN_WALLET (or a wallet in NARRATIVE_UNCAPPED_WALLETS) can actually
+    reach the AI call or a buy -- every other user's candidates are logged
+    phase='blocked' and returned immediately, no get_token_data()/
+    get_narrative_signal() call, no swap. Gating here (the one place both
+    _narrative_agent_cycle()'s full scan and /admin/narrative-test's
+    single-mint override funnel through) covers every current and future
+    entry point without needing the same check duplicated at each call
+    site."""
+    if not NARRATIVE_AGENT_GLOBAL_LIVE and wallet != ADMIN_WALLET and wallet not in NARRATIVE_UNCAPPED_WALLETS:
         _agent_journal_log(user_id, mint, chain, mint[:8], phase='blocked', decision='pass',
                             filter_result='agent nog in besloten test, nog niet live voor gebruikers')
         return
@@ -4346,7 +4358,18 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
     if decision != 'buy':
         return
 
-    allowed, gate_reason = _can_narrative_buy(user_id, amount)
+    if wallet in NARRATIVE_UNCAPPED_WALLETS:
+        # Uncapped wallets size off their own max_trade_size setting --
+        # same source the regular bot already uses for position sizing --
+        # instead of the flat NARRATIVE_MAX_PER_TX every other user gets.
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            _mts_row = conn.execute('SELECT max_trade_size FROM users WHERE id=?', (user_id,)).fetchone()
+        finally:
+            conn.close()
+        amount = float(_mts_row[0]) if _mts_row and _mts_row[0] is not None else 10.0
+
+    allowed, gate_reason = _can_narrative_buy(user_id, amount, wallet)
     if not allowed:
         _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
                             size_usd=amount, filter_result=gate_reason)
