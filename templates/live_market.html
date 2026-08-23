@@ -161,7 +161,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-view-toggle:hover{color:var(--text);border-color:var(--bg3)}
 .lm-view-toggle.active{background:rgba(245,181,68,.12);color:var(--accent);border-color:rgba(245,181,68,.25)}
 
-.lm-poster-wrap{padding:0 16px 16px}
+.lm-poster-wrap{max-width:520px;margin:0 auto;padding:0 16px 16px}
 .lm-poster-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
 
 .lm-poster-card{position:relative;height:430px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif}
@@ -208,7 +208,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-trade-btn:hover{opacity:.88}
 
 @media(max-width:767px){
-  .lm-poster-wrap{padding:0 8px 8px}
+  .lm-poster-wrap{max-width:none;padding:0 8px 8px}
   .lm-poster-card{height:400px}
 }
 
@@ -934,18 +934,34 @@ function _lmRenderTableView(sorted){
    data. Only rendered while active (view toggled via _lmToggleViewMode()),
    so the periodic 15s silent refresh doesn't churn poster-card DOM (images,
    per-card safety fetches) while the table is what's actually showing, and
-   vice versa. ── */
-var _lmViewMode = 'table'; // 'table' | 'poster'
+   vice versa. Defaults to 'poster' on a fresh visit, but remembers a
+   user's own choice across visits via localStorage (same try/catch'd
+   orca_*-prefixed pattern as static/dashboard.js's other persisted UI
+   prefs, e.g. orca_welcome_dismissed). ── */
+var _lmViewMode = (function(){
+  try{
+    var saved = localStorage.getItem('orca_lm_view_mode');
+    if(saved === 'table' || saved === 'poster') return saved;
+  }catch(e){}
+  return 'poster'; // 'table' | 'poster' — no saved preference yet: open straight into poster view
+})();
 
-function _lmToggleViewMode(){
-  _lmViewMode = (_lmViewMode === 'table') ? 'poster' : 'table';
+function _lmApplyViewModeUI(){
   var toggle = document.getElementById('lm-view-toggle');
   if(toggle){
     toggle.classList.toggle('active', _lmViewMode === 'poster');
     toggle.title = _lmViewMode === 'poster' ? 'Table view' : 'Poster view';
   }
-  document.getElementById('lm-table-wrap').style.display  = _lmViewMode === 'table'  ? '' : 'none';
-  document.getElementById('lm-poster-wrap').style.display = _lmViewMode === 'poster' ? '' : 'none';
+  var tableWrap  = document.getElementById('lm-table-wrap');
+  var posterWrap = document.getElementById('lm-poster-wrap');
+  if(tableWrap)  tableWrap.style.display  = _lmViewMode === 'table'  ? '' : 'none';
+  if(posterWrap) posterWrap.style.display = _lmViewMode === 'poster' ? '' : 'none';
+}
+
+function _lmToggleViewMode(){
+  _lmViewMode = (_lmViewMode === 'table') ? 'poster' : 'table';
+  try{ localStorage.setItem('orca_lm_view_mode', _lmViewMode); }catch(e){}
+  _lmApplyViewModeUI();
   _lmApplyChipFilter();
 }
 
@@ -1403,6 +1419,7 @@ function _setError(msg){
 }
 
 /* ── init ── */
+_lmApplyViewModeUI();
 _loadTab('trending');
 _lmInitFeatured();
 _lmInitLeaders();
