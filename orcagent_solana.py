@@ -23,10 +23,23 @@ SOL_MINT      = 'So11111111111111111111111111111111111111112'
 
 def _clean_rpc_error(err):
     if isinstance(err, dict):
-        if err.get('message'):
-            return str(err['message'])[:200]
+        # Solana's real failure reason (e.g. 'AccountNotFound' -- a 0-SOL
+        # wallet, since an empty account doesn't exist on-chain to simulate
+        # against) lives in data.err, separate from the generic top-level
+        # message ('Transaction simulation failed'). Previously a present
+        # message short-circuited before data.err was ever checked, so
+        # every simulation failure surfaced as that one generic phrase
+        # with no actual reason attached.
+        detail = None
         if isinstance(err.get('data'), dict) and err['data'].get('err'):
-            return f"Transaction simulation failed: {err['data']['err']}"[:200]
+            detail = str(err['data']['err'])
+        if err.get('message'):
+            msg = str(err['message'])
+            if detail and detail not in msg:
+                msg = f'{msg}: {detail}'
+            return msg[:200]
+        if detail:
+            return f'Transaction simulation failed: {detail}'[:200]
         return 'RPC error (see server logs for details)'
     return str(err)[:200]
 
