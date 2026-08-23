@@ -206,6 +206,31 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-trade-btn{flex:1;background:var(--accent);color:#06210f;border:none;border-radius:11px;padding:10px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:opacity .15s}
 .lm-poster-trade-btn:hover{opacity:.88}
 
+/* inline buy panel — folds open at the bottom of the card itself (see
+   _lmOpenBuyPanel()), no modal, no navigation */
+.lm-poster-buy-panel{
+  position:absolute;left:0;right:0;bottom:0;z-index:5;
+  background:rgba(10,11,14,.96);backdrop-filter:blur(10px);
+  border-top:1px solid var(--bg3);border-radius:0 0 20px 20px;
+  padding:16px 14px 14px;display:flex;flex-direction:column;gap:10px;
+  pointer-events:auto;
+}
+.lm-poster-buy-close{position:absolute;top:8px;right:10px;background:none;border:none;color:var(--muted);font-size:13px;cursor:pointer;padding:6px;line-height:1}
+.lm-poster-buy-close:hover{color:var(--text)}
+.lm-poster-buy-balance{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.lm-poster-buy-row{display:flex;gap:8px;align-items:center}
+.lm-poster-buy-input{flex:1;min-width:0;background:var(--bg2);border:1px solid var(--bg3);border-radius:9px;padding:9px 12px;color:var(--text);font-size:14px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
+.lm-poster-buy-input:focus{border-color:var(--accent)}
+.lm-poster-buy-currency-toggle{display:flex;background:var(--bg2);border:1px solid var(--bg3);border-radius:9px;overflow:hidden;flex-shrink:0}
+.lm-poster-buy-currency-btn{padding:9px 12px;font-size:11px;font-weight:700;font-family:'JetBrains Mono',monospace;color:var(--muted);background:none;border:none;cursor:pointer;transition:all .15s}
+.lm-poster-buy-currency-btn.active{background:var(--accent);color:#06210f}
+.lm-poster-buy-confirm{background:var(--accent);color:#06210f;border:none;border-radius:9px;padding:11px;font-size:13px;font-weight:800;cursor:pointer;font-family:'Geist',system-ui,sans-serif;transition:opacity .15s}
+.lm-poster-buy-confirm:hover{opacity:.88}
+.lm-poster-buy-confirm:disabled{opacity:.5;cursor:default}
+.lm-poster-buy-msg{font-size:12px;text-align:center;padding:7px;border-radius:8px}
+.lm-poster-buy-msg.ok{background:rgba(58,210,155,.12);color:var(--green)}
+.lm-poster-buy-msg.err{background:rgba(247,107,98,.12);color:var(--red)}
+
 @media(max-width:767px){
   .lm-poster-wrap{max-width:none;padding:0 8px 8px}
   .lm-poster-card{height:456px}
@@ -1143,6 +1168,7 @@ function _posterCardHtml(p, idx){
       +'</div>'
       +'<div class="lm-poster-actions"><button class="lm-poster-trade-btn" data-action="trade" data-sym="'+_esc(sym)+'">Trade $'+_esc(sym)+'</button></div>'
     +'</div>'
+    +'<div class="lm-poster-buy-panel" id="lm-buy-panel-'+idx+'" style="display:none;"></div>'
   +'</div>';
 }
 
@@ -1157,25 +1183,183 @@ function _lmBindPosterEvents(wrap){
       _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
       return;
     }
-    // Trade button still opens the Token Detail modal, same as before --
-    // only the "click anywhere on the card" trigger below it is removed.
+    // Trade button opens the inline buy panel on this same card -- no modal,
+    // no navigation. See _lmOpenBuyPanel().
     var tradeBtn = event.target.closest('.lm-poster-trade-btn');
     if(tradeBtn){
       event.stopPropagation();
       var card = tradeBtn.closest('.lm-poster-card');
       if(!card) return;
-      if(card.dataset.chain === 'bsc'){
-        alert('BSC token details are coming soon.');
-        return;
-      }
-      showTokenCard(card.dataset.sym, card.dataset.mint, card.dataset.pair);
+      _lmOpenBuyPanel(parseInt(card.dataset.idx,10), card.dataset.sym, card.dataset.mint, card.dataset.chain);
+      return;
     }
+
+    var closeBtn = event.target.closest('.lm-poster-buy-close');
+    if(closeBtn){
+      event.stopPropagation();
+      _lmCloseBuyPanel();
+      return;
+    }
+
+    var curBtn = event.target.closest('.lm-poster-buy-currency-btn');
+    if(curBtn){
+      event.stopPropagation();
+      _lmSetBuyCurrency(curBtn.closest('.lm-poster-buy-panel'), curBtn.dataset.cur);
+      return;
+    }
+
+    var confirmBuyBtn = event.target.closest('[data-action="confirm-buy"]');
+    if(confirmBuyBtn){
+      event.stopPropagation();
+      _lmConfirmBuy(parseInt(confirmBuyBtn.dataset.idx,10), confirmBuyBtn.dataset.sym, confirmBuyBtn.dataset.addr, confirmBuyBtn.dataset.chain);
+      return;
+    }
+
+    // Any other click inside an open panel (the amount input, its own
+    // whitespace) must not fall through to anything else on the card.
+    if(event.target.closest('.lm-poster-buy-panel')) event.stopPropagation();
   });
+}
+
+/* ── inline buy panel — poster-card equivalent of the table's
+   _openBuyDrop()/_confirmBuy(), but folded into the bottom of the card
+   itself instead of a new <tr>. Deliberately posts to /api/trade/buy (not
+   /api/instant-trade, which _doTrade() above uses) -- api_trade_buy()
+   accepts {token_address, token_symbol, amount_sol} and is what registers
+   the position into open_positions, same as the Wallet/Trade page. Only
+   one panel open at a time, same as the table's _openDropIdx. ── */
+var _lmOpenBuyPanelIdx = -1;
+var _lmBuySolPrice     = 0; // sol_price_usd from the last /api/wallet/balance fetch, for USDC->SOL conversion
+
+function _lmCloseBuyPanel(){
+  if(_lmOpenBuyPanelIdx < 0) return;
+  var panel = document.getElementById('lm-buy-panel-'+_lmOpenBuyPanelIdx);
+  if(panel){ panel.style.display = 'none'; panel.innerHTML = ''; }
+  _lmOpenBuyPanelIdx = -1;
+}
+
+async function _lmOpenBuyPanel(idx, sym, addr, chain){
+  if(_lmOpenBuyPanelIdx === idx){ _lmCloseBuyPanel(); return; }
+  _lmCloseBuyPanel();
+  if(chain === 'bsc'){
+    // /api/trade/buy is Solana-only (amount_sol, is_valid_solana_address) --
+    // same BSC guard used everywhere else in this file.
+    alert('BSC token details are coming soon.');
+    return;
+  }
+  _lmOpenBuyPanelIdx = idx;
+
+  var panel = document.getElementById('lm-buy-panel-'+idx);
+  if(!panel) return;
+  panel.dataset.currency = 'SOL';
+  panel.style.display = 'flex';
+  panel.innerHTML = '<button class="lm-poster-buy-close" title="Close">✕</button>'
+    +'<div class="lm-poster-buy-balance" id="lm-buy-bal-'+idx+'">Loading balance…</div>'
+    +'<div class="lm-poster-buy-row">'
+      +'<input class="lm-poster-buy-input" id="lm-buy-amt-'+idx+'" type="number" min="0" step="any" placeholder="0.0">'
+      +'<div class="lm-poster-buy-currency-toggle">'
+        +'<button class="lm-poster-buy-currency-btn active" data-cur="SOL">SOL</button>'
+        +'<button class="lm-poster-buy-currency-btn" data-cur="USDC">USDC</button>'
+      +'</div>'
+    +'</div>'
+    +'<button class="lm-poster-buy-confirm" data-action="confirm-buy" data-idx="'+idx+'" data-sym="'+_esc(sym)+'" data-addr="'+_esc(addr)+'" data-chain="'+_esc(chain)+'">Confirm Buy</button>'
+    +'<div class="lm-poster-buy-msg" id="lm-buy-msg-'+idx+'" style="display:none"></div>';
+
+  var input = document.getElementById('lm-buy-amt-'+idx);
+  if(input) setTimeout(function(){ input.focus(); }, 30);
+
+  var balEl = document.getElementById('lm-buy-bal-'+idx);
+  try{
+    var r = await fetch('/api/wallet/balance', {credentials:'include'});
+    var d = await r.json();
+    if(_lmOpenBuyPanelIdx !== idx) return; // panel closed/switched while this was in flight
+    _lmBuySolPrice = d.sol_price_usd || 0;
+    if(balEl){
+      balEl.textContent = d.ok
+        ? 'Balance: '+d.sol.toFixed(4)+' SOL'+(d.usd!=null?' ($'+d.usd.toFixed(2)+')':'')
+        : (d.msg || 'Could not load balance');
+    }
+  }catch(e){
+    if(_lmOpenBuyPanelIdx === idx && balEl) balEl.textContent = 'Could not load balance';
+  }
+}
+
+function _lmSetBuyCurrency(panel, cur){
+  if(!panel) return;
+  panel.dataset.currency = cur;
+  panel.querySelectorAll('.lm-poster-buy-currency-btn').forEach(function(btn){
+    btn.classList.toggle('active', btn.dataset.cur === cur);
+  });
+}
+
+function _lmBuyMsg(idx, text, ok){
+  var msgEl = document.getElementById('lm-buy-msg-'+idx);
+  if(!msgEl) return;
+  msgEl.textContent = text;
+  msgEl.className   = 'lm-poster-buy-msg ' + (ok ? 'ok' : 'err');
+  msgEl.style.display = 'block';
+}
+
+async function _lmConfirmBuy(idx, sym, addr, chain){
+  var panel = document.getElementById('lm-buy-panel-'+idx);
+  if(!panel) return;
+  var inputEl    = document.getElementById('lm-buy-amt-'+idx);
+  var confirmBtn = panel.querySelector('[data-action="confirm-buy"]');
+  var currency   = panel.dataset.currency || 'SOL';
+  var raw        = parseFloat(inputEl ? inputEl.value : '');
+  if(!raw || raw <= 0){
+    _lmBuyMsg(idx, 'Enter a valid amount', false);
+    return;
+  }
+
+  var amountSol = raw;
+  if(currency === 'USDC'){
+    if(!_lmBuySolPrice){
+      _lmBuyMsg(idx, 'SOL price unavailable — try again', false);
+      return;
+    }
+    amountSol = raw / _lmBuySolPrice;
+  }
+
+  if(confirmBtn){ confirmBtn.disabled = true; confirmBtn.textContent = '…'; }
+  try{
+    var _cs   = (typeof _lmClientSecret!=='undefined'?_lmClientSecret:'')||(document.querySelector('meta[name="client-secret"]')||{}).content||'';
+    var _csrf = (document.querySelector('meta[name="csrf-token"]')||{}).content||'';
+    var headers = Object.assign({
+        'Content-Type':'application/json',
+        'X-CSRF-Token':_csrf,
+        'X-CSRFToken':_csrf,
+        'X-Requested-With':'XMLHttpRequest'
+      }, _cs ? {'X-API-Shared-Secret':_cs} : {});
+    var r = await fetch('/api/trade/buy', {
+      method: 'POST',
+      credentials: 'include',
+      headers: headers,
+      body: JSON.stringify({token_address: addr, token_symbol: sym, amount_sol: amountSol})
+    });
+    var d = await r.json();
+    if(_lmOpenBuyPanelIdx !== idx) return; // panel closed while the request was in flight
+    if(d.ok){
+      _lmBuyMsg(idx, 'Bought $'+sym+' for '+amountSol.toFixed(4)+' SOL', true);
+      if(inputEl) inputEl.value = '';
+      setTimeout(function(){ if(_lmOpenBuyPanelIdx === idx) _lmCloseBuyPanel(); }, 2500);
+    } else {
+      _lmBuyMsg(idx, d.msg || 'Buy failed', false);
+    }
+  }catch(e){
+    if(_lmOpenBuyPanelIdx === idx) _lmBuyMsg(idx, 'Network error — buy not sent', false);
+  }finally{
+    if(confirmBtn){ confirmBtn.disabled = false; confirmBtn.textContent = 'Confirm Buy'; }
+  }
 }
 
 function _lmRenderPosterView(sorted){
   var wrap = document.getElementById('lm-poster-wrap');
   if(!wrap) return;
+  // Any open buy panel's DOM is about to be replaced wholesale below --
+  // just reset the tracking var (not _lmCloseBuyPanel(), which would try
+  // to touch elements that are seconds away from being wiped anyway).
+  _lmOpenBuyPanelIdx = -1;
   if(!sorted.length){
     wrap.innerHTML = '<div class="lm-poster-empty">No tokens found</div>';
   } else {
