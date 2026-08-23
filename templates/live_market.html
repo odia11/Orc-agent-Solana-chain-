@@ -121,23 +121,22 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 @keyframes lmFeaturedSlideIn{from{transform:translateX(24px);opacity:0}to{transform:translateX(0);opacity:1}}
 .lm-featured-slide.lm-slide-anim{animation:lmFeaturedSlideIn .35s ease}
 
-/* leaders strip — today's 4 biggest movers (by |24h%|, up or down), one card
-   each. Same amber gradient/border/glow language as .lm-featured-banner
-   above, just per-card instead of one strip. */
-.lm-leaders-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:16px 16px 0}
-.lm-leader-card{
-  background:linear-gradient(160deg, rgba(245,181,68,.14), rgba(245,181,68,.02) 60%), var(--bg1);
-  border:1.5px solid rgba(245,181,68,.35);
-  box-shadow:0 0 12px rgba(245,181,68,.15);
-  border-radius:14px;padding:14px;cursor:pointer;transition:border-color .15s;
-}
-.lm-leader-card:hover{border-color:rgba(245,181,68,.55)}
-.lm-leader-top{display:flex;align-items:center;gap:8px;margin-bottom:12px;min-width:0}
-.lm-leader-logo,.lm-leader-logo-ph{width:24px;height:24px;border-radius:7px;flex-shrink:0;object-fit:cover}
-.lm-leader-logo-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;color:var(--muted)}
-.lm-leader-sym{font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
-.lm-leader-chg{font-size:22px;font-weight:700;font-family:'JetBrains Mono',monospace;line-height:1}
-.lm-leader-price{font-size:11px;color:var(--muted);font-family:'JetBrains Mono',monospace;margin-top:6px}
+/* leaders strip — today's 6 biggest movers (by |24h%|, up or down), a
+   horizontal row of ring-avatar circles (colored by direction) instead of
+   rectangular cards. overflow-x:auto rather than a grid, so the exact same
+   markup/CSS works on narrow screens too -- no separate mobile layout. */
+.lm-leaders-strip{display:flex;gap:14px;margin:16px 16px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 4px}
+.lm-leader-circle{flex-shrink:0;width:62px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;text-align:center}
+.lm-leader-ring{width:56px;height:56px;border-radius:50%;padding:2.5px;flex-shrink:0;transition:opacity .15s}
+.lm-leader-circle:hover .lm-leader-ring{opacity:.8}
+.lm-leader-ring.chg-up{background:var(--green)}
+.lm-leader-ring.chg-dn{background:var(--red)}
+.lm-leader-ring.chg-fl{background:var(--bg4)}
+.lm-leader-ring-inner{width:100%;height:100%;border-radius:50%;background:var(--bg);padding:2.5px}
+.lm-leader-logo,.lm-leader-logo-ph{width:100%;height:100%;border-radius:50%;object-fit:cover;display:block}
+.lm-leader-logo-ph{background:var(--bg2);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.lm-leader-sym{font-size:11px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;width:100%}
+.lm-leader-chg{font-size:11px;font-family:'JetBrains Mono',monospace;font-weight:700}
 
 /* price change */
 .chg-up{color:var(--green);font-weight:700}
@@ -166,6 +165,13 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 .lm-poster-card{position:relative;height:486px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif}
 .lm-poster-bg{position:absolute;inset:-10%;width:120%;height:120%;object-fit:cover;filter:blur(22px) brightness(.55) saturate(1.2);transform:scale(1.1)}
+/* A real banner (DexScreener's info.header) is purpose-made card art, not
+   a tiny logo blown up -- show it crisp and full instead of blurred/
+   scaled like the logo fallback above. Compound selector so this always
+   wins over .lm-poster-bg's own filter/transform regardless of CSS source
+   order. Same rule applies on every screen size -- no mobile override to
+   duplicate this in. */
+.lm-poster-bg.lm-poster-bg-full{inset:0;width:100%;height:100%;filter:none;transform:none}
 .lm-poster-bg-fallback{position:absolute;inset:0;background:linear-gradient(160deg,var(--poster-color,var(--accent)) 0%,var(--bg1) 78%)}
 .lm-poster-scrim{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(6,7,10,.86) 0%,rgba(6,7,10,.35) 32%,rgba(6,7,10,.55) 62%,rgba(6,7,10,.95) 100%)}
 
@@ -309,7 +315,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   }
   .lm-table-wrap{margin:8px}
   .lm-featured-banner{margin:8px 8px 0}
-  .lm-leaders-strip{grid-template-columns:repeat(2,1fr);margin:8px 8px 0;gap:8px}
+  .lm-leaders-strip{margin:8px 8px 0;gap:10px}
   .col-hide{display:none!important}
   .lm-scanning-pill .lm-scan-label{display:none}
 
@@ -804,14 +810,14 @@ async function _lmFetchLeaders(){
     var bv = Math.abs(b.priceChange&&b.priceChange.h24!=null?b.priceChange.h24:0);
     return bv-av;
   });
-  return merged.slice(0,4);
+  return merged.slice(0,6);
 }
 
 function _lmRenderLeadersStrip(pairs){
   var el = document.getElementById('lm-leaders-strip');
   if(!el) return;
   if(!pairs || !pairs.length){ el.style.display='none'; el.innerHTML=''; return; }
-  el.style.display='grid';
+  el.style.display='flex';
   el.innerHTML = pairs.map(function(p){
     var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
     var addr = (p.baseToken&&p.baseToken.address)||'';
@@ -823,10 +829,10 @@ function _lmRenderLeadersStrip(pairs){
     var chg24  = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
     var chgCls = chg24==null ? 'chg-fl' : (chg24>=0?'chg-up':'chg-dn');
     var chgStr = chg24==null ? '—' : (chg24>=0?'+':'')+chg24.toFixed(2)+'%';
-    return '<div class="lm-leader-card" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
-      +'<div class="lm-leader-top">'+logo+'<span class="lm-leader-sym">$'+_esc(sym)+'</span></div>'
-      +'<div class="lm-leader-chg '+chgCls+'">'+chgStr+'</div>'
-      +'<div class="lm-leader-price">'+_fmtPrice(p.priceUsd)+'</div>'
+    return '<div class="lm-leader-circle" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'">'
+      +'<div class="lm-leader-ring '+chgCls+'"><div class="lm-leader-ring-inner">'+logo+'</div></div>'
+      +'<span class="lm-leader-sym">$'+_esc(sym)+'</span>'
+      +'<span class="lm-leader-chg '+chgCls+'">'+chgStr+'</span>'
       +'</div>';
   }).join('');
 }
@@ -838,7 +844,7 @@ function _lmBindLeadersEvents(){
   var el = document.getElementById('lm-leaders-strip');
   if(!el) return;
   el.addEventListener('click', function(e){
-    var card = e.target.closest('.lm-leader-card');
+    var card = e.target.closest('.lm-leader-circle');
     if(!card) return;
     showTokenCard(card.dataset.sym, card.dataset.addr, card.dataset.pair);
   });
@@ -1080,24 +1086,41 @@ function _lmObservePosterCharts(){
   var cards = document.querySelectorAll('.lm-poster-card');
   if(!('IntersectionObserver' in window)) return; // no fallback here — an always-mounted chart per card defeats the entire point
 
+  function mountIfNeeded(card){
+    var idx = card.dataset.idx;
+    if(_lmChartInstances[idx]) return; // already mounted
+    var handle = (typeof _lmtdInitEmbeddedChart === 'function')
+      ? _lmtdInitEmbeddedChart('lm-chart-'+idx, card.dataset.mint, card.dataset.chain)
+      : null;
+    if(handle) _lmChartInstances[idx] = handle;
+  }
+
   if(_lmChartObserver) _lmChartObserver.disconnect();
   _lmChartObserver = new IntersectionObserver(function(entries){
     entries.forEach(function(entry){
       var card = entry.target;
       var idx  = card.dataset.idx;
-      if(entry.isIntersecting){
-        if(_lmChartInstances[idx]) return; // already mounted
-        var handle = (typeof _lmtdInitEmbeddedChart === 'function')
-          ? _lmtdInitEmbeddedChart('lm-chart-'+idx, card.dataset.mint, card.dataset.chain)
-          : null;
-        if(handle) _lmChartInstances[idx] = handle;
-      } else if(_lmChartInstances[idx]){
+      if(entry.isIntersecting) mountIfNeeded(card);
+      else if(_lmChartInstances[idx]){
         try{ _lmChartInstances[idx].destroy(); }catch(e){}
         delete _lmChartInstances[idx];
       }
     });
   }, {rootMargin:'100px 0px', threshold:0.15});
-  cards.forEach(function(card){ _lmChartObserver.observe(card); });
+
+  cards.forEach(function(card){
+    _lmChartObserver.observe(card);
+    // IntersectionObserver's first callback is only guaranteed "as soon as
+    // possible", not synchronous or bounded -- right after a big innerHTML
+    // replacement (layout not yet settled) it can be delayed well beyond
+    // what a live chart should wait for, leaving an already-visible card's
+    // chart area empty. Checking each card's own geometry immediately and
+    // mounting on the spot for anything already on screen removes that
+    // dependency entirely; the observer above still handles everything
+    // that scrolls in/out afterwards.
+    var r = card.getBoundingClientRect();
+    if(r.bottom > -100 && r.top < window.innerHeight + 100) mountIfNeeded(card);
+  });
 }
 
 function _posterCardHtml(p, idx){
@@ -1118,7 +1141,7 @@ function _posterCardHtml(p, idx){
   // no banner was ever visible, regardless of whether one existed.
   var bg = '<div class="lm-poster-bg-fallback" style="--poster-color:'+color+'"></div>'
     + (bannerUrl
-        ? '<img class="lm-poster-bg" src="'+_esc(bannerUrl)+'" onerror="this.remove()">'
+        ? '<img class="lm-poster-bg lm-poster-bg-full" src="'+_esc(bannerUrl)+'" onerror="this.remove()">'
         : (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : ''));
 
   var logo = imgUrl
