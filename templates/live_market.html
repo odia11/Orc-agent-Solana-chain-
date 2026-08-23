@@ -163,7 +163,10 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-wrap{max-width:520px;margin:0 auto;padding:0 16px 16px}
 .lm-poster-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
 
-.lm-poster-card{position:relative;height:486px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif}
+.lm-poster-card{position:relative;height:486px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif;transition:border-color .3s,box-shadow .3s}
+/* Brief highlight after jumping here from the leaders strip (see
+   _lmBindLeadersEvents()) -- removed via setTimeout, not meant to persist. */
+.lm-poster-card-highlight{border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,181,68,.4),0 0 24px rgba(245,181,68,.35)}
 .lm-poster-bg{position:absolute;inset:-10%;width:120%;height:120%;object-fit:cover;filter:blur(22px) brightness(.55) saturate(1.2);transform:scale(1.1)}
 /* A real banner (DexScreener's info.header) is purpose-made card art, not
    a tiny logo blown up -- show it crisp and full instead of blurred/
@@ -846,7 +849,19 @@ function _lmBindLeadersEvents(){
   el.addEventListener('click', function(e){
     var card = e.target.closest('.lm-leader-circle');
     if(!card) return;
-    showTokenCard(card.dataset.sym, card.dataset.addr, card.dataset.pair);
+    // Jump to the matching poster card in the feed below instead of
+    // opening the modal -- only makes sense in poster view (the table has
+    // its own row-click already); the poster card might not exist in the
+    // currently-loaded/filtered feed at all (different tab active), so
+    // that's handled explicitly rather than silently doing nothing.
+    var target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(card.dataset.addr)+'"]');
+    if(!target){
+      _toast("Wissel naar 'Alle tokens' om deze te zien", false);
+      return;
+    }
+    target.scrollIntoView({behavior:'smooth', block:'center'});
+    target.classList.add('lm-poster-card-highlight');
+    setTimeout(function(){ target.classList.remove('lm-poster-card-highlight'); }, 1800);
   });
 }
 
