@@ -197,7 +197,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-chg{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
 .lm-poster-chg-sub{font-size:11px;color:var(--muted)}
 
-.lm-poster-chart{height:100px;border-radius:8px;overflow:hidden;pointer-events:auto;background:#16191f}
+.lm-poster-chart{height:100px;border-radius:8px;overflow:hidden;pointer-events:auto}
 
 .lm-poster-stats-row{display:flex;gap:7px}
 .lm-poster-stats-row>div{flex:1;min-width:0}
@@ -1087,10 +1087,14 @@ function _posterCardHtml(p, idx){
   var bannerUrl = (p.info&&p.info.header)||'';
   var color  = _lmColorFromAddr(addr||sym);
 
-  var bg = (bannerUrl
-      ? '<img class="lm-poster-bg" src="'+_esc(bannerUrl)+'" onerror="this.remove()">'
-      : (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : ''))
-    + '<div class="lm-poster-bg-fallback" style="--poster-color:'+color+'"></div>';
+  // Fallback painted FIRST (behind), the real image SECOND (in front) --
+  // previously this was the other way round, so the solid gradient
+  // fallback always covered the actual banner/logo image completely and
+  // no banner was ever visible, regardless of whether one existed.
+  var bg = '<div class="lm-poster-bg-fallback" style="--poster-color:'+color+'"></div>'
+    + (bannerUrl
+        ? '<img class="lm-poster-bg" src="'+_esc(bannerUrl)+'" onerror="this.remove()">'
+        : (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : ''));
 
   var logo = imgUrl
     ? '<img class="lm-poster-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'

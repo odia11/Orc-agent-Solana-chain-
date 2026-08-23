@@ -837,6 +837,11 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain){
   if(chain && chain !== 'solana') return null;
   var created = _lmtdCreateFomoChart(containerId);
   if(!created) return null;
+  // Transparent background so the poster card's own banner art shows
+  // through behind the chart -- applied here, after creation, rather than
+  // changed in _lmtdCreateFomoChart() itself, so the modal's chart (which
+  // wants its solid #16191f panel) is completely unaffected.
+  try{ created.chart.applyOptions({layout:{background:{type:'solid', color:'transparent'}}}); }catch(e){}
   var destroyed = false;
   var priceLine = null;
   var timer     = null;
