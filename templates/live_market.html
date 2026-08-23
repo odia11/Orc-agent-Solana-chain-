@@ -197,8 +197,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-chg{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
 .lm-poster-chg-sub{font-size:11px;color:var(--muted)}
 
-.lm-poster-bottom .lm-sparkline{height:44px;gap:3px}
-.lm-poster-bottom .lm-spark-bar{flex:1;width:auto;min-height:3px;opacity:.85}
+.lm-poster-chart{height:44px;border-radius:8px;overflow:hidden;pointer-events:auto}
 
 .lm-poster-stats-row{display:flex;gap:7px}
 .lm-poster-stats-row>div{flex:1;min-width:0}
@@ -1029,15 +1028,68 @@ function _lmObservePosterSafety(){
   cards.forEach(function(card){ _lmSafetyObserver.observe(card); });
 }
 
+/* Mini price charts (_lmtdInitEmbeddedChart(), shared with token-card.js's
+   modal chart constructor) — mounted only while a card is actually
+   visible, destroyed the moment it scrolls out, so at most a handful are
+   ever alive at once instead of one LightweightCharts instance per card on
+   the page. Unlike _lmObservePosterSafety() above, this observer is never
+   unobserved after the first trigger -- it keeps watching every card for
+   as long as the poster view exists, toggling mount/destroy both ways.
+   Switching back to table view needs no extra handling here: hiding
+   #lm-poster-wrap via display:none removes its children's layout boxes,
+   which IntersectionObserver reports as isIntersecting:false for all of
+   them, so every mounted chart gets destroyed through the normal
+   "scrolled out of view" path. */
+var _lmChartInstances = {}; // idx -> {destroy()} handle, only present while mounted
+var _lmChartObserver  = null;
+
+function _lmObservePosterCharts(){
+  // Old cards' containers are gone the moment wrap.innerHTML is replaced --
+  // destroy whatever was still mounted from the previous render first, or
+  // those chart instances (and their ResizeObservers) would leak.
+  Object.keys(_lmChartInstances).forEach(function(idx){
+    try{ _lmChartInstances[idx].destroy(); }catch(e){}
+  });
+  _lmChartInstances = {};
+
+  var cards = document.querySelectorAll('.lm-poster-card');
+  if(!('IntersectionObserver' in window)) return; // no fallback here — an always-mounted chart per card defeats the entire point
+
+  if(_lmChartObserver) _lmChartObserver.disconnect();
+  _lmChartObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      var card = entry.target;
+      var idx  = card.dataset.idx;
+      if(entry.isIntersecting){
+        if(_lmChartInstances[idx]) return; // already mounted
+        var handle = (typeof _lmtdInitEmbeddedChart === 'function')
+          ? _lmtdInitEmbeddedChart('lm-chart-'+idx, card.dataset.mint, card.dataset.chain)
+          : null;
+        if(handle) _lmChartInstances[idx] = handle;
+      } else if(_lmChartInstances[idx]){
+        try{ _lmChartInstances[idx].destroy(); }catch(e){}
+        delete _lmChartInstances[idx];
+      }
+    });
+  }, {rootMargin:'100px 0px', threshold:0.15});
+  cards.forEach(function(card){ _lmChartObserver.observe(card); });
+}
+
 function _posterCardHtml(p, idx){
   var sym    = (p.baseToken&&p.baseToken.symbol)||'?';
   var name   = (p.baseToken&&p.baseToken.name)||sym;
   var addr   = (p.baseToken&&p.baseToken.address)||'';
   var chain  = p.chainId||'solana';
   var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
+  // Banner (DexScreener's info.header) is the real per-token background art
+  // when it exists -- falls back to the small logo (blurred, same as
+  // before) and then the gradient fallback below when neither is present.
+  var bannerUrl = (p.info&&p.info.header)||'';
   var color  = _lmColorFromAddr(addr||sym);
 
-  var bg = (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : '')
+  var bg = (bannerUrl
+      ? '<img class="lm-poster-bg" src="'+_esc(bannerUrl)+'" onerror="this.remove()">'
+      : (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : ''))
     + '<div class="lm-poster-bg-fallback" style="--poster-color:'+color+'"></div>';
 
   var logo = imgUrl
@@ -1079,7 +1131,7 @@ function _posterCardHtml(p, idx){
     +'<div class="lm-poster-bottom">'
       +'<div><div class="lm-poster-price">'+_fmtPrice(p.priceUsd)+'</div>'
         +'<div class="lm-poster-chg-row"><span class="lm-poster-chg '+chgCls+'">'+chgStr+'</span><span class="lm-poster-chg-sub">24h</span></div></div>'
-      +_sparkline(p)
+      +'<div id="lm-chart-'+idx+'" class="lm-poster-chart"></div>'
       +'<div class="lm-poster-stats-row">'
         +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">LIQUIDITY</div><div class="lm-poster-stat-val">'+liq+'</div></div>'
         +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">MARKET CAP</div><div class="lm-poster-stat-val">'+mcap+'</div></div>'
@@ -1101,13 +1153,19 @@ function _lmBindPosterEvents(wrap){
       _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
       return;
     }
-    var card = event.target.closest('.lm-poster-card');
-    if(!card) return;
-    if(card.dataset.chain === 'bsc'){
-      alert('BSC token details are coming soon.');
-      return;
+    // Trade button still opens the Token Detail modal, same as before --
+    // only the "click anywhere on the card" trigger below it is removed.
+    var tradeBtn = event.target.closest('.lm-poster-trade-btn');
+    if(tradeBtn){
+      event.stopPropagation();
+      var card = tradeBtn.closest('.lm-poster-card');
+      if(!card) return;
+      if(card.dataset.chain === 'bsc'){
+        alert('BSC token details are coming soon.');
+        return;
+      }
+      showTokenCard(card.dataset.sym, card.dataset.mint, card.dataset.pair);
     }
-    showTokenCard(card.dataset.sym, card.dataset.mint, card.dataset.pair);
   });
 }
 
@@ -1116,11 +1174,14 @@ function _lmRenderPosterView(sorted){
   if(!wrap) return;
   if(!sorted.length){
     wrap.innerHTML = '<div class="lm-poster-empty">No tokens found</div>';
-    return;
+  } else {
+    wrap.innerHTML = sorted.map(function(p,i){ return _posterCardHtml(p,i); }).join('');
+    _lmBindPosterEvents(wrap);
+    _lmObservePosterSafety();
   }
-  wrap.innerHTML = sorted.map(function(p,i){ return _posterCardHtml(p,i); }).join('');
-  _lmBindPosterEvents(wrap);
-  _lmObservePosterSafety();
+  // Always run, even on the empty-results branch above -- otherwise chart
+  // instances from a previous non-empty render never get destroyed.
+  _lmObservePosterCharts();
 }
 
 /* ── global token search — separate from the chip-search above: hits

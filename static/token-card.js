@@ -721,11 +721,19 @@ function _lmtdInitChart(){
   return _lmtdInitCandleChart();
 }
 
-function _lmtdInitCandleChart(){
-  var container = document.getElementById('lmtd-chart-container');
-  if(!container) return;
-  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
-  _lmtdChart = LightweightCharts.createChart(container, {
+/* Shared LightweightCharts candlestick+volume chart constructor -- pulled
+   out of _lmtdInitCandleChart() so both the modal below (unchanged
+   behavior) and live_market.html's poster-card mini charts (see
+   _lmtdInitEmbeddedChart() below, many simultaneous instances) build a
+   chart the exact same way instead of two option-object copies drifting
+   apart. Does no data fetching/rendering and keeps no global state of its
+   own, so it's safe to call for any number of different containers at
+   once. Returns null (instead of throwing) if the container doesn't exist
+   or LightweightCharts hasn't loaded yet. */
+function _lmtdCreateChart(containerId){
+  var container = document.getElementById(containerId);
+  if(!container || typeof LightweightCharts === 'undefined') return null;
+  var chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight || 340,
     layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
@@ -735,15 +743,67 @@ function _lmtdInitCandleChart(){
     timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
     handleScroll:true,handleScale:true
   });
-  _lmtdSeries = _lmtdChart.addCandlestickSeries({
+  var series = chart.addCandlestickSeries({
     upColor:'#3ad29b',downColor:'#ff4d6a',borderVisible:false,
     wickUpColor:'#3ad29b',wickDownColor:'#ff4d6a'
   });
-  _lmtdVolSeries = _lmtdChart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'lmtd-vol'});
-  _lmtdChart.priceScale('lmtd-vol').applyOptions({scaleMargins:{top:0.75,bottom:0}});
-  new ResizeObserver(function(){
-    if(container.clientWidth>0) _lmtdChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
-  }).observe(container);
+  var volSeries = chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'lmtd-vol'});
+  chart.priceScale('lmtd-vol').applyOptions({scaleMargins:{top:0.75,bottom:0}});
+  var resizeObserver = new ResizeObserver(function(){
+    if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  });
+  resizeObserver.observe(container);
+  return {chart:chart, series:series, volSeries:volSeries, resizeObserver:resizeObserver};
+}
+
+function _lmtdInitCandleChart(){
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  var created = _lmtdCreateChart('lmtd-chart-container');
+  if(!created) return;
+  _lmtdChart    = created.chart;
+  _lmtdSeries   = created.series;
+  _lmtdVolSeries = created.volSeries;
+  // created.resizeObserver is intentionally not kept -- _lmtdInitCandleChart()
+  // never disconnected its ResizeObserver before this refactor either
+  // (chart.remove() above tears down its DOM; a fresh observer was simply
+  // created every call). Same behavior, unchanged.
+}
+
+/* Embedded, read-only mini chart for live_market.html's poster cards --
+   reuses _lmtdCreateChart() but owns its own series/state locally instead
+   of the modal's global _lmtdChart/_lmtdSeries/_lmtdVolSeries, so many can
+   run at once (one per visible poster card). Fetches+renders its own data
+   via the same raw _lmtdFetchChartData() the modal uses, on the 5m
+   timeframe, once, with no timeframe switching or FOMO-style toggle --
+   this is deliberately simpler than the modal's chart, which still owns
+   all of that. chain is accepted for parity with how every other
+   mint-scoped call in this app threads chain through, even though
+   /api/chart/<mint> is Solana-only today: a BSC poster card gets no chart
+   at all (returns null) rather than a broken one. Returns {destroy()} for
+   the caller to tear down (see live_market.html's IntersectionObserver),
+   or null if the container/library/chain isn't available. */
+function _lmtdInitEmbeddedChart(containerId, mint, chain){
+  if(chain && chain !== 'solana') return null;
+  var created = _lmtdCreateChart(containerId);
+  if(!created) return null;
+  var destroyed = false;
+  _lmtdFetchChartData(mint, '5m', '').then(function(r){
+    if(destroyed) return;
+    if(r && r.candles && r.candles.length){
+      try{
+        created.series.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
+        created.volSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
+        created.chart.timeScale().fitContent();
+      }catch(e){}
+    }
+  });
+  return {
+    destroy: function(){
+      destroyed = true;
+      try{ created.resizeObserver.disconnect(); }catch(e){}
+      try{ created.chart.remove(); }catch(e){}
+    }
+  };
 }
 
 /* "Live" step-area chart — same visual pattern popularized by apps like
