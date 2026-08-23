@@ -1774,7 +1774,13 @@ _lmInitLeaders();
 })();
 
 setInterval(function(){
-  if(_openDropIdx < 0){
+  // _lmOpenBuyPanelIdx guards the poster view's inline buy panel the same
+  // way _openDropIdx already guards the table's inline dropdown -- without
+  // it, this refresh silently wiped out (and reset to -1) an open poster
+  // buy panel every 15s, discarding whatever amount the user had typed
+  // with no error shown, which looked exactly like "buy/sell doesn't work"
+  // for anyone who took more than a few seconds to fill the panel in.
+  if(_openDropIdx < 0 && _lmOpenBuyPanelIdx < 0){
     _silentRefreshTab(_activeTab);
     _lmRefreshLeaders();
   }
