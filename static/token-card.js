@@ -769,41 +769,35 @@ function _lmtdInitCandleChart(){
   // created every call). Same behavior, unchanged.
 }
 
-/* Embedded, read-only mini chart for live_market.html's poster cards --
-   reuses _lmtdCreateChart() but owns its own series/state locally instead
-   of the modal's global _lmtdChart/_lmtdSeries/_lmtdVolSeries, so many can
-   run at once (one per visible poster card). Fetches+renders its own data
-   via the same raw _lmtdFetchChartData() the modal uses, on the 5m
-   timeframe, once, with no timeframe switching or FOMO-style toggle --
-   this is deliberately simpler than the modal's chart, which still owns
-   all of that. chain is accepted for parity with how every other
-   mint-scoped call in this app threads chain through, even though
-   /api/chart/<mint> is Solana-only today: a BSC poster card gets no chart
-   at all (returns null) rather than a broken one. Returns {destroy()} for
-   the caller to tear down (see live_market.html's IntersectionObserver),
-   or null if the container/library/chain isn't available. */
-function _lmtdInitEmbeddedChart(containerId, mint, chain){
-  if(chain && chain !== 'solana') return null;
-  var created = _lmtdCreateChart(containerId);
-  if(!created) return null;
-  var destroyed = false;
-  _lmtdFetchChartData(mint, '5m', '').then(function(r){
-    if(destroyed) return;
-    if(r && r.candles && r.candles.length){
-      try{
-        created.series.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
-        created.volSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
-        created.chart.timeScale().fitContent();
-      }catch(e){}
-    }
+/* Shared FOMO-style step-area chart constructor — same extraction pattern
+   as _lmtdCreateChart() above, pulled out of _lmtdInitFomoChart() so both
+   the modal (unchanged behavior) and _lmtdInitEmbeddedChart() below build
+   this chart style identically. No volume series (the FOMO style never
+   had one) and no global state. */
+function _lmtdCreateFomoChart(containerId){
+  var container = document.getElementById(containerId);
+  if(!container || typeof LightweightCharts === 'undefined') return null;
+  var chart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 340,
+    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
+    grid:{vertLines:{color:'transparent'},horzLines:{color:'#21252c'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
+    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.15,bottom:0.1}},
+    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
+    handleScroll:true,handleScale:true
   });
-  return {
-    destroy: function(){
-      destroyed = true;
-      try{ created.resizeObserver.disconnect(); }catch(e){}
-      try{ created.chart.remove(); }catch(e){}
-    }
-  };
+  var series = chart.addAreaSeries({
+    lineColor:'#ff7a3d', lineWidth:2,
+    topColor:'rgba(255,122,61,.32)', bottomColor:'rgba(255,122,61,0)',
+    lineType: LightweightCharts.LineType.WithSteps,
+    priceLineVisible:false,
+  });
+  var resizeObserver = new ResizeObserver(function(){
+    if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  });
+  resizeObserver.observe(container);
+  return {chart:chart, series:series, resizeObserver:resizeObserver};
 }
 
 /* "Live" step-area chart — same visual pattern popularized by apps like
@@ -815,28 +809,74 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain){
    the same /api/chart/<mint> candle data, using each candle's close price
    as one point on the line (no separate backend endpoint needed). */
 function _lmtdInitFomoChart(){
-  var container = document.getElementById('lmtd-chart-container');
-  if(!container) return;
   if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; _lmtdPriceLine=null; }
-  _lmtdChart = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: container.clientHeight || 340,
-    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
-    grid:{vertLines:{color:'transparent'},horzLines:{color:'#21252c'}},
-    crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
-    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.15,bottom:0.1}},
-    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
-    handleScroll:true,handleScale:true
-  });
-  _lmtdSeries = _lmtdChart.addAreaSeries({
-    lineColor:'#ff7a3d', lineWidth:2,
-    topColor:'rgba(255,122,61,.32)', bottomColor:'rgba(255,122,61,0)',
-    lineType: LightweightCharts.LineType.WithSteps,
-    priceLineVisible:false,
-  });
-  new ResizeObserver(function(){
-    if(container.clientWidth>0) _lmtdChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
-  }).observe(container);
+  var created = _lmtdCreateFomoChart('lmtd-chart-container');
+  if(!created) return;
+  _lmtdChart  = created.chart;
+  _lmtdSeries = created.series;
+  // created.resizeObserver intentionally not kept -- same reasoning as
+  // _lmtdInitCandleChart() above, unchanged from before this refactor.
+}
+
+/* Embedded, "live" mini chart for live_market.html's poster cards -- same
+   FOMO-style step-area look + gradient fill + dashed price-line as the
+   modal's Live chart style (_lmtdInitFomoChart() above), via the shared
+   _lmtdCreateFomoChart() constructor, but owning its own series/timer
+   state locally instead of the modal's globals, so many can run at once
+   (one per visible poster card). Re-fetches and re-renders every 5s while
+   mounted -- same cadence/approach as the modal's _lmtdFomoLiveLoop(), the
+   closest a REST-polling setup gets to a true live tick feed -- and stops
+   the moment destroy() is called. chain is accepted for parity with how
+   every other mint-scoped call in this app threads chain through, even
+   though /api/chart/<mint> is Solana-only today: a BSC poster card gets no
+   chart at all (returns null) rather than a broken one. Returns
+   {destroy()} for the caller to tear down (see live_market.html's
+   IntersectionObserver), or null if the container/library/chain isn't
+   available. */
+function _lmtdInitEmbeddedChart(containerId, mint, chain){
+  if(chain && chain !== 'solana') return null;
+  var created = _lmtdCreateFomoChart(containerId);
+  if(!created) return null;
+  var destroyed = false;
+  var priceLine = null;
+  var timer     = null;
+
+  function renderOnce(){
+    _lmtdFetchChartData(mint, '5m', '').then(function(r){
+      if(destroyed) return;
+      if(!r || !r.candles || !r.candles.length) return;
+      try{
+        var linePoints = r.candles.map(function(c){ return {time:c.t, value:c.c}; });
+        created.series.setData(linePoints);
+        var lastPoint = linePoints[linePoints.length-1];
+        if(priceLine){ try{ created.series.removePriceLine(priceLine); }catch(e){} }
+        priceLine = created.series.createPriceLine({
+          price: lastPoint.value,
+          color: '#ff7a3d',
+          lineWidth: 1,
+          lineStyle: LightweightCharts.LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: _fmtPrice(lastPoint.value),
+        });
+        created.chart.timeScale().fitContent();
+      }catch(e){}
+    });
+  }
+
+  renderOnce();
+  timer = setInterval(function(){
+    if(destroyed){ clearInterval(timer); return; }
+    renderOnce();
+  }, 5000);
+
+  return {
+    destroy: function(){
+      destroyed = true;
+      if(timer){ clearInterval(timer); timer=null; }
+      try{ created.resizeObserver.disconnect(); }catch(e){}
+      try{ created.chart.remove(); }catch(e){}
+    }
+  };
 }
 
 /* Restarts (or stops) the ~5s live-refresh loop that keeps the fomo chart's
