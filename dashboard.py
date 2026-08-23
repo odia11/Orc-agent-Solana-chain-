@@ -4075,8 +4075,19 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
     _execute_user_swap() is a thin backward-compatible wrapper around this
     for its ~15 existing call sites that only need success/fail; new
     callers that need the actual signature (e.g. _narrative_agent_cycle())
-    should call this instead. Returns (success, tx_hash) -- tx_hash is ''
-    on failure or if no 'TX:' token was found in stdout."""
+    should call this instead. Returns (success, tx_hash, err_msg) -- tx_hash
+    is '' on failure or if no 'TX:' token was found; err_msg is '' on
+    success.
+
+    err_msg is the last non-empty line of the subprocess's STDOUT, not
+    stderr -- orcagent_solana.py's [TRADE] diagnostics and its caught-
+    exception traceback (execute_single_swap()'s except block) all go
+    through plain print(), which Python sends to stdout, so stderr is
+    normally empty even on a real failure. That last line is usually the
+    exception's own message (e.g. 'RPC sendTransaction error: ...',
+    'insufficient funds', a Jupiter error) -- previously this was discarded
+    entirely and every failure surfaced to the user as the same generic
+    'Swap failed — check logs' with no actual logs for them to check."""
     try:
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
@@ -4093,21 +4104,33 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
             add_user_log(wallet, 'Swap err: ' + _redact_keys(result.stderr.strip()[-400:]))
         ok = result.returncode == 0 and bool(result.stdout.strip())
         tx_hash = ''
+        err_msg = ''
         if ok:
             for line in result.stdout.split('\n'):
                 if 'TX:' in line:
                     tx_hash = line.split('TX:')[-1].strip().split()[0]
                     break
-        return ok, tx_hash
+        else:
+            stdout_lines = [l for l in (result.stdout or '').strip().split('\n') if l.strip()]
+            err_msg = _redact_keys(stdout_lines[-1].strip()) if stdout_lines else ''
+            if not err_msg and result.stderr:
+                stderr_lines = [l for l in result.stderr.strip().split('\n') if l.strip()]
+                err_msg = _redact_keys(stderr_lines[-1].strip()) if stderr_lines else ''
+            if not err_msg:
+                err_msg = 'swap failed with no output'
+        return ok, tx_hash, err_msg
+    except subprocess.TimeoutExpired:
+        add_user_log(wallet, 'Swap error: timed out after 120s')
+        return False, '', 'timed out after 120s'
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
-        return False, ''
+        return False, '', str(e)[:200]
 
 def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
     """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output.
     Key is passed via env var to the subprocess and the env dict is discarded after launch.
     Thin wrapper over _execute_user_swap_ex() -- see that function if you also need the tx hash."""
-    ok, _tx_hash = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str)
+    ok, _tx_hash, _err_msg = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str)
     return ok
 
 def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chain: str,
@@ -4437,8 +4460,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
             # every other USD->SOL site in this file (e.g. min_trade_usdc /
             # _sol_price_usd in the BSC-cap-mirroring bot-buy paths).
             amount_sol = amount / _sol_price_usd if _sol_price_usd else 0
-            ok, tx_hash = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
-            err = '' if ok else 'swap failed'
+            ok, tx_hash, err = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
         else:
             ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
 
@@ -14195,9 +14217,9 @@ def api_trade_buy():
         symbol = td.get('symbol', mint[:8])
     buy_ok = False
     with _use_key(enc_blob, wallet) as pk:
-        buy_ok = _execute_user_swap(wallet, pk, 'buy', mint, str(amount_sol))
+        buy_ok, _tx_hash, buy_err = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
     if not buy_ok:
-        return jsonify({'ok': False, 'msg': 'Swap failed — check logs'}), 502
+        return jsonify({'ok': False, 'msg': buy_err or 'Swap failed — check logs'}), 502
     us        = get_user_state(wallet)
     positions = us['positions']
     pos = positions.get(mint, {})
