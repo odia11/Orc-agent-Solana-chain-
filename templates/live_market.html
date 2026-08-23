@@ -1381,6 +1381,12 @@ async function _lmConfirmBuy(idx, sym, addr, chain){
       _lmBuyMsg(idx, 'Bought $'+sym+' for '+amountSol.toFixed(4)+' SOL', true);
       if(inputEl) inputEl.value = '';
       setTimeout(function(){ if(_lmOpenBuyPanelIdx === idx) _lmCloseBuyPanel(); }, 2500);
+    } else if(r.status === 401 && d.msg === 'No wallet connected'){
+      // A readonly session (pasted-address view, no signed-in wallet) hits
+      // this same 401 -- the generic message reads like a bug to someone
+      // who thinks they're already logged in, when what's actually missing
+      // is a real (non-read-only) wallet connection.
+      _lmBuyMsg(idx, 'Verbind een echte wallet (geen read-only) om te kunnen handelen', false);
     } else {
       _lmBuyMsg(idx, d.msg || 'Buy failed', false);
     }
