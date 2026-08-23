@@ -144,6 +144,74 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .chg-dn{color:var(--red);font-weight:700}
 .chg-fl{color:var(--muted)}
 
+/* ── POSTER CARD VIEW — alternate to the table, same underlying _pairs data
+   (ported from LiveMarket5D.jsx). Toggled via .lm-view-toggle; see
+   _lmToggleViewMode()/_lmRenderPosterView()/_posterCardHtml(). Card art uses
+   the token's real DexScreener logo (info.imageUrl) blurred as a background
+   fill rather than curated poster art (which doesn't exist for real
+   tokens); LP-lock/mint-authority badges are fetched lazily per card via
+   IntersectionObserver against the existing /api/token/<mint>/safety route
+   as each card scrolls into view, not all at once. The mockup's animated
+   fake live chart is replaced with the existing (previously unused)
+   _sparkline() — 4 real 5m/1h/6h/24h change-magnitude bars — rather than
+   fabricate motion that isn't real. Holders count and a 0-5 star score are
+   omitted entirely: no reliable data source exists for either without a
+   new external integration. ── */
+.lm-view-toggle{background:var(--bg2);border:1px solid var(--bg4);color:var(--muted);width:34px;height:34px;border-radius:10px;font-size:14px;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.lm-view-toggle:hover{color:var(--text);border-color:var(--bg3)}
+.lm-view-toggle.active{background:rgba(245,181,68,.12);color:var(--accent);border-color:rgba(245,181,68,.25)}
+
+.lm-poster-wrap{padding:0 16px 16px}
+.lm-poster-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
+
+.lm-poster-card{position:relative;height:430px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif}
+.lm-poster-bg{position:absolute;inset:-10%;width:120%;height:120%;object-fit:cover;filter:blur(22px) brightness(.55) saturate(1.2);transform:scale(1.1)}
+.lm-poster-bg-fallback{position:absolute;inset:0;background:linear-gradient(160deg,var(--poster-color,var(--accent)) 0%,var(--bg1) 78%)}
+.lm-poster-scrim{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(6,7,10,.86) 0%,rgba(6,7,10,.35) 32%,rgba(6,7,10,.55) 62%,rgba(6,7,10,.95) 100%)}
+
+.lm-poster-top{position:absolute;top:14px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.lm-poster-id{display:flex;align-items:center;gap:10px}
+.lm-poster-logo,.lm-poster-logo-ph{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}
+.lm-poster-logo-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;color:var(--muted)}
+.lm-poster-sym{font-size:15px;font-weight:800;line-height:1.1;color:var(--text)}
+.lm-poster-name{font-size:11px;color:#c7ccd4;margin-top:2px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-poster-age{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;background:rgba(16,18,22,.82);border:1px solid var(--bg4);border-radius:8px;padding:5px 9px;backdrop-filter:blur(6px);color:var(--text)}
+.lm-poster-star{position:absolute;top:60px;right:14px;background:none;border:none;color:var(--bg4);font-size:16px;cursor:pointer;padding:6px;line-height:1;z-index:2}
+.lm-poster-star:hover{color:#565d68}
+.lm-poster-star.active{color:var(--accent)}
+
+.lm-poster-rail{position:absolute;top:78px;display:flex;flex-direction:column;gap:6px;pointer-events:none;max-width:150px}
+.lm-poster-rail-left{left:14px}
+.lm-poster-rail-right{right:14px;align-items:flex-end}
+.lm-poster-chip{background:rgba(16,18,22,.72);border:1px solid var(--bg4);border-radius:9px;padding:6px 9px;backdrop-filter:blur(6px)}
+.lm-poster-chip-strong{background:rgba(16,18,22,.82);border-color:#2c313a;border-radius:11px;padding:8px 10px}
+.lm-poster-chip-row{display:flex;align-items:center;gap:7px}
+.lm-poster-chip-icon{font-size:10px;flex-shrink:0}
+.lm-poster-chip-lbl{font-size:10.5px;color:#c7ccd4;font-weight:600;white-space:nowrap}
+.lm-poster-stat-lbl{font-size:8.5px;letter-spacing:.08em;color:var(--muted);font-weight:700}
+.lm-poster-stat-val{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--text);margin-top:2px}
+
+.lm-poster-bottom{position:absolute;left:14px;right:14px;bottom:12px;display:flex;flex-direction:column;gap:10px;pointer-events:none}
+.lm-poster-price{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:var(--text);text-shadow:0 4px 20px rgba(0,0,0,.7)}
+.lm-poster-chg-row{display:flex;align-items:center;gap:8px;margin-top:3px}
+.lm-poster-chg{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
+.lm-poster-chg-sub{font-size:11px;color:var(--muted)}
+
+.lm-poster-bottom .lm-sparkline{height:44px;gap:3px}
+.lm-poster-bottom .lm-spark-bar{flex:1;width:auto;min-height:3px;opacity:.85}
+
+.lm-poster-stats-row{display:flex;gap:7px}
+.lm-poster-stats-row>div{flex:1;min-width:0}
+
+.lm-poster-actions{display:flex;gap:8px;pointer-events:auto}
+.lm-poster-trade-btn{flex:1;background:var(--accent);color:#06210f;border:none;border-radius:11px;padding:10px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:opacity .15s}
+.lm-poster-trade-btn:hover{opacity:.88}
+
+@media(max-width:767px){
+  .lm-poster-wrap{padding:0 8px 8px}
+  .lm-poster-card{height:400px}
+}
+
 /* trade button */
 .lm-btn-trade{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;border:none;border-radius:10px;padding:8px 18px;cursor:pointer;transition:opacity .15s;background:var(--accent);color:#0a0b0e;white-space:nowrap}
 .lm-btn-trade:disabled{background:var(--bg3);color:var(--muted);cursor:not-allowed}
@@ -377,6 +445,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
     <span class="lm-scan-label">SCANNING</span>
   </div>
   <button class="lm-watchlist-toggle" id="lm-watchlist-toggle" onclick="_lmToggleWatchlistView()" title="Watchlist">★</button>
+  <button class="lm-view-toggle" id="lm-view-toggle" onclick="_lmToggleViewMode()" title="Poster view">▤</button>
 </header>
 
 <div class="lm-global-search-dim" id="lm-global-search-dim"></div>
@@ -404,6 +473,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 <div class="lm-leaders-strip" id="lm-leaders-strip" style="display:none;"></div>
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
+<div id="lm-poster-wrap" class="lm-poster-wrap" style="display:none;"></div>
 
 <!-- token detail modal (Focus / Terminal — see PROMPT.md spec) -->
 <div id="lm-token-modal" onclick="if(event.target===this)_lmtdCloseModal()">
@@ -847,12 +917,194 @@ function _lmSortedPairs(){
 
 function _lmApplyChipFilter(){
   var sorted = _lmSortedPairs();
+  if(_lmViewMode === 'poster') _lmRenderPosterView(sorted);
+  else _lmRenderTableView(sorted);
+}
+
+function _lmRenderTableView(sorted){
   var wrap = document.getElementById('lm-table-wrap');
   if(!sorted.length){
     wrap.innerHTML = _buildTable('<tr class="lm-status-row"><td colspan="8">No tokens found</td></tr>');
     return;
   }
   wrap.innerHTML = _buildTable(sorted.map(function(p,i){ return _rowHtml(p,i); }).join(''));
+}
+
+/* ── poster card view — alternate to the table, same _pairs/_lmSortedPairs()
+   data. Only rendered while active (view toggled via _lmToggleViewMode()),
+   so the periodic 15s silent refresh doesn't churn poster-card DOM (images,
+   per-card safety fetches) while the table is what's actually showing, and
+   vice versa. ── */
+var _lmViewMode = 'table'; // 'table' | 'poster'
+
+function _lmToggleViewMode(){
+  _lmViewMode = (_lmViewMode === 'table') ? 'poster' : 'table';
+  var toggle = document.getElementById('lm-view-toggle');
+  if(toggle){
+    toggle.classList.toggle('active', _lmViewMode === 'poster');
+    toggle.title = _lmViewMode === 'poster' ? 'Table view' : 'Poster view';
+  }
+  document.getElementById('lm-table-wrap').style.display  = _lmViewMode === 'table'  ? '' : 'none';
+  document.getElementById('lm-poster-wrap').style.display = _lmViewMode === 'poster' ? '' : 'none';
+  _lmApplyChipFilter();
+}
+
+function _lmColorFromAddr(addr){
+  var hash = 0;
+  for(var i=0;i<addr.length;i++){ hash = (hash*31 + addr.charCodeAt(i)) & 0xffffffff; }
+  return 'hsl('+(Math.abs(hash)%360)+',65%,45%)';
+}
+
+/* LP-lock / mint-authority badges — lazy per-card via IntersectionObserver
+   against the existing /api/token/<mint>/safety route (also used by the
+   Token Detail modal), not fetched for all cards up front. Cached per mint
+   for the page session so scrolling back up never re-fetches. */
+var _lmSafetyCache    = {}; // mint -> safety response object | 'pending' | 'error'
+var _lmSafetyObserver = null;
+
+function _lmSafetyChipHtml(addr){
+  var s = _lmSafetyCache[addr];
+  if(s === undefined || s === 'pending'){
+    return '<div class="lm-poster-chip"><div class="lm-poster-chip-row"><span class="lm-poster-chip-icon" style="color:var(--muted)">…</span><span class="lm-poster-chip-lbl">Checking safety</span></div></div>';
+  }
+  if(s === 'error'){
+    return '<div class="lm-poster-chip"><div class="lm-poster-chip-row"><span class="lm-poster-chip-icon" style="color:var(--muted)">?</span><span class="lm-poster-chip-lbl">Safety unknown</span></div></div>';
+  }
+  var lpOk   = (s.lp_locked_pct||0) >= 50;
+  var mintOk = !s.mint_authority_active && !s.freeze_authority_active;
+  return '<div class="lm-poster-chip"><div class="lm-poster-chip-row"><span class="lm-poster-chip-icon" style="color:'+(lpOk?'var(--green)':'var(--red)')+'">'+(lpOk?'✓':'✕')+'</span><span class="lm-poster-chip-lbl">'+(lpOk?'LP locked':'LP unlocked')+'</span></div></div>'
+    +'<div class="lm-poster-chip"><div class="lm-poster-chip-row"><span class="lm-poster-chip-icon" style="color:'+(mintOk?'var(--green)':'var(--red)')+'">'+(mintOk?'✓':'✕')+'</span><span class="lm-poster-chip-lbl">'+(mintOk?'Mint revoked':'Mint active')+'</span></div></div>';
+}
+
+function _lmFetchCardSafety(addr, railId){
+  if(!addr || _lmSafetyCache[addr] !== undefined) return;
+  _lmSafetyCache[addr] = 'pending';
+  fetch('/api/token/'+encodeURIComponent(addr)+'/safety', {credentials:'include'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      _lmSafetyCache[addr] = d && d.ok ? d : 'error';
+      var el = document.getElementById(railId);
+      if(el) el.innerHTML = _lmSafetyChipHtml(addr);
+    })
+    .catch(function(){
+      _lmSafetyCache[addr] = 'error';
+      var el = document.getElementById(railId);
+      if(el) el.innerHTML = _lmSafetyChipHtml(addr);
+    });
+}
+
+function _lmObservePosterSafety(){
+  var cards = document.querySelectorAll('.lm-poster-card');
+  if(!('IntersectionObserver' in window)){
+    // No IO support — fetch everything rather than never showing safety
+    // data at all; still capped by the per-mint cache above.
+    cards.forEach(function(card){ _lmFetchCardSafety(card.dataset.mint, 'lm-poster-safety-'+card.dataset.idx); });
+    return;
+  }
+  if(_lmSafetyObserver) _lmSafetyObserver.disconnect();
+  _lmSafetyObserver = new IntersectionObserver(function(entries){
+    entries.forEach(function(entry){
+      if(!entry.isIntersecting) return;
+      var card = entry.target;
+      _lmFetchCardSafety(card.dataset.mint, 'lm-poster-safety-'+card.dataset.idx);
+      _lmSafetyObserver.unobserve(card);
+    });
+  }, {rootMargin:'200px 0px', threshold:0.1});
+  cards.forEach(function(card){ _lmSafetyObserver.observe(card); });
+}
+
+function _posterCardHtml(p, idx){
+  var sym    = (p.baseToken&&p.baseToken.symbol)||'?';
+  var name   = (p.baseToken&&p.baseToken.name)||sym;
+  var addr   = (p.baseToken&&p.baseToken.address)||'';
+  var chain  = p.chainId||'solana';
+  var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
+  var color  = _lmColorFromAddr(addr||sym);
+
+  var bg = (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : '')
+    + '<div class="lm-poster-bg-fallback" style="--poster-color:'+color+'"></div>';
+
+  var logo = imgUrl
+    ? '<img class="lm-poster-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+      +'<div class="lm-poster-logo-ph" style="display:none">'+_esc(sym.slice(0,2))+'</div>'
+    : '<div class="lm-poster-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+
+  var chg24  = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
+  var chgCls = chg24==null?'chg-fl':(chg24>=0?'chg-up':'chg-dn');
+  var chgStr = chg24==null?'—':(chg24>=0?'+':'')+chg24.toFixed(2)+'%';
+
+  var liq  = _fmtNum(p.liquidity&&p.liquidity.usd!=null?p.liquidity.usd:null);
+  var mcap = _fmtNum(p.marketCap||p.fdv||null);
+  var vol  = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
+
+  var buys  = (p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
+  var sells = (p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
+  var totalTx = buys+sells;
+  var ratio = totalTx>0 ? Math.round(buys/totalTx*100)+'/'+Math.round(sells/totalTx*100) : '—';
+
+  var railId = 'lm-poster-safety-'+idx;
+
+  return '<div class="lm-poster-card" data-mint="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-chain="'+_esc(chain)+'" data-idx="'+idx+'">'
+    +bg
+    +'<div class="lm-poster-scrim"></div>'
+    +'<div class="lm-poster-top">'
+      +'<div class="lm-poster-id">'+logo
+        +'<div><div class="lm-poster-sym">$'+_esc(sym)+'</div><div class="lm-poster-name">'+_esc(name)+'</div></div>'
+      +'</div>'
+      +'<span class="lm-poster-age">'+_fmtAge(p.pairCreatedAt).toUpperCase()+' OLD</span>'
+    +'</div>'
+    +'<button class="lm-poster-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
+    +'<div class="lm-poster-rail lm-poster-rail-left" id="'+railId+'">'+_lmSafetyChipHtml(addr)+'</div>'
+    +'<div class="lm-poster-rail lm-poster-rail-right">'
+      +'<div class="lm-poster-chip" style="text-align:right"><div class="lm-poster-stat-lbl">LIQUIDITY</div><div class="lm-poster-stat-val">'+liq+'</div></div>'
+      +'<div class="lm-poster-chip" style="text-align:right"><div class="lm-poster-stat-lbl">MARKET CAP</div><div class="lm-poster-stat-val">'+mcap+'</div></div>'
+      +'<div class="lm-poster-chip" style="text-align:right"><div class="lm-poster-stat-lbl">BUY / SELL</div><div class="lm-poster-stat-val" style="color:'+(chg24!=null&&chg24>=0?'var(--green)':'var(--red)')+'">'+ratio+'</div></div>'
+    +'</div>'
+    +'<div class="lm-poster-bottom">'
+      +'<div><div class="lm-poster-price">'+_fmtPrice(p.priceUsd)+'</div>'
+        +'<div class="lm-poster-chg-row"><span class="lm-poster-chg '+chgCls+'">'+chgStr+'</span><span class="lm-poster-chg-sub">24h</span></div></div>'
+      +_sparkline(p)
+      +'<div class="lm-poster-stats-row">'
+        +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">LIQUIDITY</div><div class="lm-poster-stat-val">'+liq+'</div></div>'
+        +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">MARKET CAP</div><div class="lm-poster-stat-val">'+mcap+'</div></div>'
+        +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">VOLUME 24H</div><div class="lm-poster-stat-val">'+vol+'</div></div>'
+      +'</div>'
+      +'<div class="lm-poster-actions"><button class="lm-poster-trade-btn" data-action="trade" data-sym="'+_esc(sym)+'">Trade $'+_esc(sym)+'</button></div>'
+    +'</div>'
+  +'</div>';
+}
+
+var _lmPosterDelegated = false;
+function _lmBindPosterEvents(wrap){
+  if(_lmPosterDelegated) return;
+  _lmPosterDelegated = true;
+  wrap.addEventListener('click', function(event){
+    var watchBtn = event.target.closest('.lm-poster-star');
+    if(watchBtn){
+      event.stopPropagation();
+      _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
+      return;
+    }
+    var card = event.target.closest('.lm-poster-card');
+    if(!card) return;
+    if(card.dataset.chain === 'bsc'){
+      alert('BSC token details are coming soon.');
+      return;
+    }
+    showTokenCard(card.dataset.sym, card.dataset.mint, card.dataset.pair);
+  });
+}
+
+function _lmRenderPosterView(sorted){
+  var wrap = document.getElementById('lm-poster-wrap');
+  if(!wrap) return;
+  if(!sorted.length){
+    wrap.innerHTML = '<div class="lm-poster-empty">No tokens found</div>';
+    return;
+  }
+  wrap.innerHTML = sorted.map(function(p,i){ return _posterCardHtml(p,i); }).join('');
+  _lmBindPosterEvents(wrap);
+  _lmObservePosterSafety();
 }
 
 /* ── global token search — separate from the chip-search above: hits
