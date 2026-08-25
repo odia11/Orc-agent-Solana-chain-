@@ -163,35 +163,24 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-wrap{max-width:520px;margin:0 auto;padding:0 16px 16px}
 .lm-poster-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
 
-.lm-poster-card{position:relative;height:486px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif;transition:border-color .3s,box-shadow .3s}
+.lm-poster-card{position:relative;display:flex;flex-direction:column;gap:12px;padding:14px;border-radius:20px;overflow:hidden;border:1px solid var(--bg3);cursor:pointer;margin-bottom:16px;font-family:'Geist',system-ui,sans-serif;transition:border-color .3s,box-shadow .3s}
 /* Brief highlight after jumping here from the leaders strip (see
    _lmBindLeadersEvents()) -- removed via setTimeout, not meant to persist. */
 .lm-poster-card-highlight{border-color:var(--accent);box-shadow:0 0 0 2px rgba(245,181,68,.4),0 0 24px rgba(245,181,68,.35)}
-.lm-poster-bg{position:absolute;inset:-10%;width:120%;height:120%;object-fit:cover;filter:blur(22px) brightness(.55) saturate(1.2);transform:scale(1.1)}
-/* A real banner (DexScreener's info.header) is purpose-made card art, not
-   a tiny logo blown up -- show it crisp and full instead of blurred/
-   scaled like the logo fallback above. Compound selector so this always
-   wins over .lm-poster-bg's own filter/transform regardless of CSS source
-   order. Same rule applies on every screen size -- no mobile override to
-   duplicate this in. */
-.lm-poster-bg.lm-poster-bg-full{inset:0;width:100%;height:100%;filter:none;transform:none}
-.lm-poster-bg-fallback{position:absolute;inset:0;background:linear-gradient(160deg,var(--poster-color,var(--accent)) 0%,var(--bg1) 78%)}
-.lm-poster-scrim{position:absolute;inset:0;pointer-events:none;background:linear-gradient(180deg,rgba(6,7,10,.86) 0%,rgba(6,7,10,.35) 32%,rgba(6,7,10,.55) 62%,rgba(6,7,10,.95) 100%)}
 
-.lm-poster-top{position:absolute;top:14px;left:14px;right:14px;display:flex;justify-content:space-between;align-items:flex-start;pointer-events:none}
+.lm-poster-header{display:flex;justify-content:space-between;align-items:flex-start}
 .lm-poster-id{display:flex;align-items:center;gap:10px}
-.lm-poster-logo,.lm-poster-logo-ph{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0}
+.lm-poster-logo,.lm-poster-logo-ph{width:36px;height:36px;border-radius:11px;object-fit:cover;flex-shrink:0}
 .lm-poster-logo-ph{background:var(--bg4);display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-weight:700;font-size:11px;color:var(--muted)}
 .lm-poster-sym{font-size:15px;font-weight:800;line-height:1.1;color:var(--text)}
 .lm-poster-name{font-size:11px;color:#c7ccd4;margin-top:2px;max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-poster-header-right{display:flex;align-items:center;gap:8px}
 .lm-poster-age{font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;letter-spacing:.06em;background:rgba(16,18,22,.82);border:1px solid var(--bg4);border-radius:8px;padding:5px 9px;backdrop-filter:blur(6px);color:var(--text)}
-.lm-poster-star{position:absolute;top:60px;right:14px;background:none;border:none;color:var(--bg4);font-size:16px;cursor:pointer;padding:6px;line-height:1;z-index:2}
+.lm-poster-star{background:none;border:none;color:var(--bg4);font-size:16px;cursor:pointer;padding:6px;line-height:1}
 .lm-poster-star:hover{color:#565d68}
 .lm-poster-star.active{color:var(--accent)}
 
-.lm-poster-rail{position:absolute;top:78px;display:flex;flex-direction:column;gap:6px;pointer-events:none;max-width:150px}
-.lm-poster-rail-left{left:14px}
-.lm-poster-rail-right{right:14px;align-items:flex-end}
+.lm-poster-safety-row{display:flex;flex-wrap:wrap;gap:6px}
 .lm-poster-chip{background:rgba(16,18,22,.72);border:1px solid var(--bg4);border-radius:9px;padding:6px 9px;backdrop-filter:blur(6px)}
 .lm-poster-chip-strong{background:rgba(16,18,22,.82);border-color:#2c313a;border-radius:11px;padding:8px 10px}
 .lm-poster-chip-row{display:flex;align-items:center;gap:7px}
@@ -200,18 +189,18 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-stat-lbl{font-size:8.5px;letter-spacing:.08em;color:var(--muted);font-weight:700}
 .lm-poster-stat-val{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;color:var(--text);margin-top:2px}
 
-.lm-poster-bottom{position:absolute;left:14px;right:14px;bottom:12px;display:flex;flex-direction:column;gap:10px;pointer-events:none}
-.lm-poster-price{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:var(--text);text-shadow:0 4px 20px rgba(0,0,0,.7)}
+.lm-poster-price-row{display:flex;flex-direction:column}
+.lm-poster-price{font-family:'JetBrains Mono',monospace;font-size:34px;font-weight:800;letter-spacing:-.02em;line-height:1.05;color:var(--text)}
 .lm-poster-chg-row{display:flex;align-items:center;gap:8px;margin-top:3px}
 .lm-poster-chg{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
 .lm-poster-chg-sub{font-size:11px;color:var(--muted)}
 
-.lm-poster-chart{height:100px;border-radius:8px;overflow:hidden;pointer-events:auto}
+.lm-poster-chart{height:100px;background:#0b0906;border:1px solid #1c1409;border-radius:12px;overflow:hidden}
 
 .lm-poster-stats-row{display:flex;gap:7px}
 .lm-poster-stats-row>div{flex:1;min-width:0}
 
-.lm-poster-actions{display:flex;gap:8px;pointer-events:auto}
+.lm-poster-actions{display:flex;gap:8px}
 .lm-poster-trade-btn{flex:1;background:var(--accent);color:#06210f;border:none;border-radius:11px;padding:10px;font-family:'Geist',system-ui,sans-serif;font-size:13px;font-weight:800;cursor:pointer;transition:opacity .15s}
 .lm-poster-trade-btn:hover{opacity:.88}
 
@@ -242,7 +231,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 @media(max-width:767px){
   .lm-poster-wrap{max-width:none;padding:0 8px 8px}
-  .lm-poster-card{height:456px}
 }
 
 /* trade button */
@@ -1010,12 +998,6 @@ function _lmToggleViewMode(){
   _lmApplyChipFilter();
 }
 
-function _lmColorFromAddr(addr){
-  var hash = 0;
-  for(var i=0;i<addr.length;i++){ hash = (hash*31 + addr.charCodeAt(i)) & 0xffffffff; }
-  return 'hsl('+(Math.abs(hash)%360)+',65%,45%)';
-}
-
 /* LP-lock / mint-authority badges — lazy per-card via IntersectionObserver
    against the existing /api/token/<mint>/safety route (also used by the
    Token Detail modal), not fetched for all cards up front. Cached per mint
@@ -1144,20 +1126,6 @@ function _posterCardHtml(p, idx){
   var addr   = (p.baseToken&&p.baseToken.address)||'';
   var chain  = p.chainId||'solana';
   var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
-  // Banner (DexScreener's info.header) is the real per-token background art
-  // when it exists -- falls back to the small logo (blurred, same as
-  // before) and then the gradient fallback below when neither is present.
-  var bannerUrl = (p.info&&p.info.header)||'';
-  var color  = _lmColorFromAddr(addr||sym);
-
-  // Fallback painted FIRST (behind), the real image SECOND (in front) --
-  // previously this was the other way round, so the solid gradient
-  // fallback always covered the actual banner/logo image completely and
-  // no banner was ever visible, regardless of whether one existed.
-  var bg = '<div class="lm-poster-bg-fallback" style="--poster-color:'+color+'"></div>'
-    + (bannerUrl
-        ? '<img class="lm-poster-bg lm-poster-bg-full" src="'+_esc(bannerUrl)+'" onerror="this.remove()">'
-        : (imgUrl ? '<img class="lm-poster-bg" src="'+_esc(imgUrl)+'" onerror="this.remove()">' : ''));
 
   var logo = imgUrl
     ? '<img class="lm-poster-logo" src="'+_esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
@@ -1172,40 +1140,28 @@ function _posterCardHtml(p, idx){
   var mcap = _fmtNum(p.marketCap||p.fdv||null);
   var vol  = _fmtNum(p.volume&&p.volume.h24!=null?p.volume.h24:null);
 
-  var buys  = (p.txns&&p.txns.h24&&p.txns.h24.buys)||0;
-  var sells = (p.txns&&p.txns.h24&&p.txns.h24.sells)||0;
-  var totalTx = buys+sells;
-  var ratio = totalTx>0 ? Math.round(buys/totalTx*100)+'/'+Math.round(sells/totalTx*100) : '—';
-
   var railId = 'lm-poster-safety-'+idx;
 
   return '<div class="lm-poster-card" data-mint="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" data-pair="'+_esc(p.pairAddress||'')+'" data-chain="'+_esc(chain)+'" data-idx="'+idx+'">'
-    +bg
-    +'<div class="lm-poster-scrim"></div>'
-    +'<div class="lm-poster-top">'
+    +'<div class="lm-poster-header">'
       +'<div class="lm-poster-id">'+logo
         +'<div><div class="lm-poster-sym">$'+_esc(sym)+'</div><div class="lm-poster-name">'+_esc(name)+'</div></div>'
       +'</div>'
-      +'<span class="lm-poster-age">'+_fmtAge(p.pairCreatedAt).toUpperCase()+' OLD</span>'
-    +'</div>'
-    +'<button class="lm-poster-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
-    +'<div class="lm-poster-rail lm-poster-rail-left" id="'+railId+'">'+_lmSafetyChipHtml(addr)+'</div>'
-    +'<div class="lm-poster-rail lm-poster-rail-right">'
-      +'<div class="lm-poster-chip" style="text-align:right"><div class="lm-poster-stat-lbl">LIQUIDITY</div><div class="lm-poster-stat-val">'+liq+'</div></div>'
-      +'<div class="lm-poster-chip" style="text-align:right"><div class="lm-poster-stat-lbl">MARKET CAP</div><div class="lm-poster-stat-val">'+mcap+'</div></div>'
-      +'<div class="lm-poster-chip" style="text-align:right"><div class="lm-poster-stat-lbl">BUY / SELL</div><div class="lm-poster-stat-val" style="color:'+(chg24!=null&&chg24>=0?'var(--green)':'var(--red)')+'">'+ratio+'</div></div>'
-    +'</div>'
-    +'<div class="lm-poster-bottom">'
-      +'<div><div class="lm-poster-price">'+_fmtPrice(p.priceUsd)+'</div>'
-        +'<div class="lm-poster-chg-row"><span class="lm-poster-chg '+chgCls+'">'+chgStr+'</span><span class="lm-poster-chg-sub">24h</span></div></div>'
-      +'<div id="lm-chart-'+idx+'" class="lm-poster-chart"></div>'
-      +'<div class="lm-poster-stats-row">'
-        +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">LIQUIDITY</div><div class="lm-poster-stat-val">'+liq+'</div></div>'
-        +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">MARKET CAP</div><div class="lm-poster-stat-val">'+mcap+'</div></div>'
-        +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">VOLUME 24H</div><div class="lm-poster-stat-val">'+vol+'</div></div>'
+      +'<div class="lm-poster-header-right">'
+        +'<button class="lm-poster-star'+(_lmWatchSet.has(addr)?' active':'')+'" data-action="watch" data-addr="'+_esc(addr)+'" data-sym="'+_esc(sym)+'" title="'+(_lmWatchSet.has(addr)?'Remove from watchlist':'Add to watchlist')+'">★</button>'
+        +'<span class="lm-poster-age">'+_fmtAge(p.pairCreatedAt).toUpperCase()+' OLD</span>'
       +'</div>'
-      +'<div class="lm-poster-actions"><button class="lm-poster-trade-btn" data-action="trade" data-sym="'+_esc(sym)+'">Trade $'+_esc(sym)+'</button></div>'
     +'</div>'
+    +'<div class="lm-poster-safety-row" id="'+railId+'">'+_lmSafetyChipHtml(addr)+'</div>'
+    +'<div class="lm-poster-price-row"><div class="lm-poster-price">'+_fmtPrice(p.priceUsd)+'</div>'
+      +'<div class="lm-poster-chg-row"><span class="lm-poster-chg '+chgCls+'">'+chgStr+'</span><span class="lm-poster-chg-sub">24h</span></div></div>'
+    +'<div id="lm-chart-'+idx+'" class="lm-poster-chart"></div>'
+    +'<div class="lm-poster-stats-row">'
+      +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">LIQUIDITY</div><div class="lm-poster-stat-val">'+liq+'</div></div>'
+      +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">MARKET CAP</div><div class="lm-poster-stat-val">'+mcap+'</div></div>'
+      +'<div class="lm-poster-chip lm-poster-chip-strong"><div class="lm-poster-stat-lbl">VOLUME 24H</div><div class="lm-poster-stat-val">'+vol+'</div></div>'
+    +'</div>'
+    +'<div class="lm-poster-actions"><button class="lm-poster-trade-btn" data-action="trade" data-sym="'+_esc(sym)+'">Trade $'+_esc(sym)+'</button></div>'
     +'<div class="lm-poster-buy-panel" id="lm-buy-panel-'+idx+'" style="display:none;"></div>'
   +'</div>';
 }
