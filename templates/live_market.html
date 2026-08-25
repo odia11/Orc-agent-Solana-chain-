@@ -552,8 +552,8 @@ function _toggleWatch(btn, addr, sym){
 function _setTab(tab){
   _activeTab = tab;
   _lmCloseGlobalSearch(); // don't leave a stale results dropdown floating over a newly-switched table
-  if(_cache[tab]){ _renderTable(_cache[tab]); }
-  else { _loadTab(tab); }
+  if(_cache[tab]){ _renderTable(_cache[tab]); return; }
+  return _loadTab(tab);
 }
 
 /* ── filter chips drive both the fetch (trending/gainers/new — reuse the
@@ -566,8 +566,8 @@ function _lmSetChip(chip){
   ['trending','gainers','new','volume','all'].forEach(function(c){
     document.getElementById('chip-'+c).classList.toggle('active', c===chip);
   });
-  if(chip === 'volume'){ _lmApplyChipFilter(); }
-  else { _setTab(chip); }
+  if(chip === 'volume'){ return _lmApplyChipFilter(); }
+  return _setTab(chip);
 }
 
 function _lmToggleWatchlistView(){
@@ -834,18 +834,21 @@ function _lmBindLeadersEvents(){
   _lmLeadersDelegated = true;
   var el = document.getElementById('lm-leaders-strip');
   if(!el) return;
-  el.addEventListener('click', function(e){
+  el.addEventListener('click', async function(e){
     var card = e.target.closest('.lm-leader-circle');
     if(!card) return;
     // Jump to the matching poster card in the feed below instead of
     // opening the modal -- only makes sense in poster view (the table has
-    // its own row-click already); the poster card might not exist in the
-    // currently-loaded/filtered feed at all (different tab active), so
-    // that's handled explicitly rather than silently doing nothing.
-    var target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(card.dataset.addr)+'"]');
+    // its own row-click already). The poster card might not exist in the
+    // currently-loaded/filtered feed at all (different tab active) -- if
+    // so, switch to "All tokens" via the same _lmSetChip() the ALL-tab
+    // button uses and wait for its re-render before looking again.
+    var addr = card.dataset.addr;
+    var target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(addr)+'"]');
     if(!target){
-      _toast("Wissel naar 'Alle tokens' om deze te zien", false);
-      return;
+      await _lmSetChip('all');
+      target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(addr)+'"]');
+      if(!target) return;
     }
     target.scrollIntoView({behavior:'smooth', block:'center'});
     target.classList.add('lm-poster-card-highlight');
