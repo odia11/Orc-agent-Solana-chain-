@@ -14210,7 +14210,7 @@ def api_trade_buy():
         amount_sol = float(amount_sol)
     except (TypeError, ValueError):
         return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
-    amount_sol = max(min_size, min(max_size, amount_sol))
+    amount_sol = min(max_size, amount_sol)
     # Same pre-check /api/instant-trade already does -- 0.005 SOL buffer
     # covers both the network fee and, if this is the first time the
     # wallet holds this token, the associated-token-account rent (~0.002
