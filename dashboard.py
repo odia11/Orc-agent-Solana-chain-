@@ -14211,6 +14211,17 @@ def api_trade_buy():
     except (TypeError, ValueError):
         return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
     amount_sol = max(min_size, min(max_size, amount_sol))
+    # Same pre-check /api/instant-trade already does -- 0.005 SOL buffer
+    # covers both the network fee and, if this is the first time the
+    # wallet holds this token, the associated-token-account rent (~0.002
+    # SOL). Without this, a too-small balance always reached a real
+    # Jupiter simulation and failed there with a lamports-level error
+    # ("insufficient lamports 715720, need 1000000") instead of failing
+    # fast with a clear message.
+    fetch_user_balances(wallet)
+    current_sol = get_user_state(wallet).get('sol', 0)
+    if current_sol < amount_sol + 0.005:
+        return jsonify({'ok': False, 'msg': f'Insufficient SOL balance. You have {current_sol:.4f} SOL, need at least {amount_sol + 0.005:.4f} SOL (includes network fee + new-token account rent).'}), 400
     td = get_token_data(mint)
     entry_price = float(td['price']) if td and td.get('price') else 0.0
     if not symbol and td:
