@@ -14202,7 +14202,6 @@ def api_trade_buy():
     if not row or not row[1]:
         return jsonify({'ok': False, 'msg': 'No trading key configured'}), 400
     user_id, enc_blob = row[0], row[1]
-    min_size = float(row[2]) if row[2] is not None else 1.0
     max_size = float(row[3]) if row[3] is not None else 10.0
     if amount_sol is None:
         amount_sol = max_size
