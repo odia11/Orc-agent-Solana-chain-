@@ -195,7 +195,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-chg{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
 .lm-poster-chg-sub{font-size:11px;color:var(--muted)}
 
-.lm-poster-chart{height:100px;background:#0b0906;border:1px solid #1c1409;border-radius:12px;overflow:hidden}
+.lm-poster-chart{position:relative;height:100px;background:#0b0906;border:1px solid #1c1409;border-radius:12px;overflow:hidden}
+.lm-poster-chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#0b0906;color:#6b5c4a;font-size:10.5px;font-family:'JetBrains Mono',monospace;pointer-events:none}
 
 .lm-poster-stats-row{display:flex;gap:7px}
 .lm-poster-stats-row>div{flex:1;min-width:0}
@@ -1074,6 +1075,59 @@ function _lmObservePosterSafety(){
 var _lmChartInstances = {}; // idx -> {destroy()} handle, only present while mounted
 var _lmChartObserver  = null;
 
+// Chart-init concurrency queue -- a fast scroll through 10+ freshly-rendered
+// cards would otherwise fire 10+ simultaneous cold /api/chart fetches at
+// once (all cache misses, all hitting GeckoTerminal together). Cap it to
+// _lmChartMaxConcurrent actually initializing at a time; anything past that
+// waits in _lmChartQueue for an earlier card's first fetch to settle (via
+// _lmtdInitEmbeddedChart's onResult callback) before its own chart starts.
+var _lmChartQueue         = []; // cards waiting for a free init slot
+var _lmChartActiveCount   = 0;
+var _lmChartMaxConcurrent = 3;
+
+function _lmChartEmptyEl(idx){
+  var chartEl = document.getElementById('lm-chart-'+idx);
+  if(!chartEl) return null;
+  var el = chartEl.querySelector('.lm-poster-chart-empty');
+  if(!el){
+    el = document.createElement('div');
+    el.className = 'lm-poster-chart-empty';
+    el.textContent = 'Nog te weinig data';
+    chartEl.appendChild(el);
+  }
+  return el;
+}
+
+function _lmDrainChartQueue(){
+  while(_lmChartActiveCount < _lmChartMaxConcurrent && _lmChartQueue.length){
+    var next = _lmChartQueue.shift();
+    if(!document.body.contains(next)) continue; // scrolled away/removed while queued
+    _lmStartChart(next);
+  }
+}
+
+function _lmStartChart(card){
+  var idx = card.dataset.idx;
+  _lmChartActiveCount++;
+  var handle = (typeof _lmtdInitEmbeddedChart === 'function')
+    ? _lmtdInitEmbeddedChart('lm-chart-'+idx, card.dataset.mint, card.dataset.chain, function(r, isFirst){
+        if(isFirst){ _lmChartActiveCount--; _lmDrainChartQueue(); }
+        // Whether it's the first fetch or a later 5s poll: candles.length===0
+        // (no real OHLCV and no priceChange fallback either) means there's
+        // truly nothing to draw -- show "Nog te weinig data" instead of a
+        // blank frame. Any candles at all (including a <=4-point
+        // priceChange-derived fallback, response.fallback===true) already
+        // render as a rough line via the unchanged setData() path below, so
+        // hiding the empty-state here is enough -- no separate fallback
+        // rendering needed.
+        var el = _lmChartEmptyEl(idx);
+        if(el) el.style.display = (r && r.candles && r.candles.length) ? 'none' : 'flex';
+      })
+    : null;
+  if(handle) _lmChartInstances[idx] = handle;
+  else{ _lmChartActiveCount--; _lmDrainChartQueue(); } // nothing started (no lib/wrong chain) -- free the slot immediately
+}
+
 function _lmObservePosterCharts(){
   // Old cards' containers are gone the moment wrap.innerHTML is replaced --
   // destroy whatever was still mounted from the previous render first, or
@@ -1081,7 +1135,9 @@ function _lmObservePosterCharts(){
   Object.keys(_lmChartInstances).forEach(function(idx){
     try{ _lmChartInstances[idx].destroy(); }catch(e){}
   });
-  _lmChartInstances = {};
+  _lmChartInstances     = {};
+  _lmChartQueue         = [];
+  _lmChartActiveCount   = 0;
 
   var cards = document.querySelectorAll('.lm-poster-card');
   if(!('IntersectionObserver' in window)) return; // no fallback here — an always-mounted chart per card defeats the entire point
@@ -1089,10 +1145,9 @@ function _lmObservePosterCharts(){
   function mountIfNeeded(card){
     var idx = card.dataset.idx;
     if(_lmChartInstances[idx]) return; // already mounted
-    var handle = (typeof _lmtdInitEmbeddedChart === 'function')
-      ? _lmtdInitEmbeddedChart('lm-chart-'+idx, card.dataset.mint, card.dataset.chain)
-      : null;
-    if(handle) _lmChartInstances[idx] = handle;
+    if(_lmChartQueue.indexOf(card) !== -1) return; // already queued
+    if(_lmChartActiveCount >= _lmChartMaxConcurrent){ _lmChartQueue.push(card); return; }
+    _lmStartChart(card);
   }
 
   if(_lmChartObserver) _lmChartObserver.disconnect();
@@ -1101,9 +1156,13 @@ function _lmObservePosterCharts(){
       var card = entry.target;
       var idx  = card.dataset.idx;
       if(entry.isIntersecting) mountIfNeeded(card);
-      else if(_lmChartInstances[idx]){
-        try{ _lmChartInstances[idx].destroy(); }catch(e){}
-        delete _lmChartInstances[idx];
+      else{
+        var qi = _lmChartQueue.indexOf(card);
+        if(qi !== -1) _lmChartQueue.splice(qi, 1);
+        if(_lmChartInstances[idx]){
+          try{ _lmChartInstances[idx].destroy(); }catch(e){}
+          delete _lmChartInstances[idx];
+        }
       }
     });
   }, {rootMargin:'100px 0px', threshold:0.15});

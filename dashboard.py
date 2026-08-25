@@ -17782,8 +17782,49 @@ def api_chart(mint):
             if len(candles) >= 5 or i == len(chain) - 1:
                 break
 
+        # ── Step 3: priceChange fallback — GeckoTerminal had nothing usable at
+        # any granularity (brand-new pool with too little history, or a 429).
+        # Reconstruct a rough <=4-point trend from the pair's priceChange
+        # percentages (m5/h1/h6/24h -- the same fields _sparkline() in
+        # live_market.html already uses) instead of handing the frontend an
+        # empty candles array. Only hit when candles are still empty, so the
+        # common already-has-real-candles path pays no extra request. ──
+        is_fallback = False
+        if not candles:
+            try:
+                pr = _dex_get('https://api.dexscreener.com/latest/dex/pairs/solana/' + pair_address, timeout=8)
+                pdata = pr.json() if (pr and pr.status_code == 200) else {}
+                pair_data = pdata.get('pair') or (pdata.get('pairs') or [None])[0] or {}
+                price_change = pair_data.get('priceChange') or {}
+                cur_price = float(pair_data.get('priceUsd') or 0) or None
+            except Exception as e:
+                print(f'[chart] fallback priceChange fetch error: {e}', flush=True)
+                price_change, cur_price = {}, None
+
+            if cur_price:
+                now_i = int(now)
+                fallback_candles = []
+                for pc_key, secs_ago in (('h24', 86400), ('h6', 21600), ('h1', 3600), ('m5', 300)):
+                    pct = price_change.get(pc_key)
+                    if pct is None:
+                        continue
+                    denom = 1 + (pct / 100.0)
+                    if denom <= 0:
+                        continue
+                    past_price = cur_price / denom
+                    fallback_candles.append({
+                        't': now_i - secs_ago, 'o': past_price, 'h': past_price,
+                        'l': past_price, 'c': past_price, 'v': 0,
+                    })
+                fallback_candles.sort(key=lambda x: x['t'])
+                if fallback_candles:
+                    candles = fallback_candles
+                    is_fallback = True
+
         current_price = candles[-1]['c'] if candles else _fetch_current_price()
 
+        if is_fallback:
+            return jsonify({'candles': candles, 'pair_address': pair_address, 'tf_used': tf_used, 'current_price': current_price, 'fallback': True})
         if candles:
             return jsonify({'candles': candles, 'pair_address': pair_address, 'tf_used': tf_used, 'current_price': current_price})
         return jsonify({'candles': [], 'error': 'Chart unavailable', 'pair_address': pair_address, 'tf_used': tf_used, 'current_price': current_price})

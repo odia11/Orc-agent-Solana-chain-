@@ -833,7 +833,7 @@ function _lmtdInitFomoChart(){
    {destroy()} for the caller to tear down (see live_market.html's
    IntersectionObserver), or null if the container/library/chain isn't
    available. */
-function _lmtdInitEmbeddedChart(containerId, mint, chain){
+function _lmtdInitEmbeddedChart(containerId, mint, chain, onResult){
   if(chain && chain !== 'solana') return null;
   var created = _lmtdCreateFomoChart(containerId);
   if(!created) return null;
@@ -842,13 +842,29 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain){
   // changed in _lmtdCreateFomoChart() itself, so the modal's chart (which
   // wants its solid #16191f panel) is completely unaffected.
   try{ created.chart.applyOptions({layout:{background:{type:'solid', color:'transparent'}}}); }catch(e){}
-  var destroyed = false;
-  var priceLine = null;
-  var timer     = null;
+  var destroyed      = false;
+  var priceLine       = null;
+  var timer           = null;
+  var firstReported   = false;
 
-  function renderOnce(){
+  // onResult(r, isFirst) -- optional, lets the caller (live_market.html's
+  // chart-init queue) know when this card's first fetch has settled, so it
+  // can free up a concurrency slot for the next queued card, and show/hide
+  // its own "not enough data yet" state. Called at most once with isFirst
+  // true; guaranteed to fire even if destroy() happens before the first
+  // fetch resolves, so a card scrolled away mid-fetch never leaves the
+  // queue permanently short a slot.
+  function reportFirst(r){
+    if(firstReported) return;
+    firstReported = true;
+    if(typeof onResult === 'function') onResult(r || null, true);
+  }
+
+  function renderOnce(isFirst){
     _lmtdFetchChartData(mint, '5m', '').then(function(r){
       if(destroyed) return;
+      if(isFirst) reportFirst(r);
+      else if(typeof onResult === 'function') onResult(r, false);
       if(!r || !r.candles || !r.candles.length) return;
       try{
         var linePoints = r.candles.map(function(c){ return {time:c.t, value:c.c}; });
@@ -868,15 +884,16 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain){
     });
   }
 
-  renderOnce();
+  renderOnce(true);
   timer = setInterval(function(){
     if(destroyed){ clearInterval(timer); return; }
-    renderOnce();
+    renderOnce(false);
   }, 5000);
 
   return {
     destroy: function(){
       destroyed = true;
+      reportFirst(null); // release a pending queue slot even if torn down before the first fetch resolved
       if(timer){ clearInterval(timer); timer=null; }
       try{ created.resizeObserver.disconnect(); }catch(e){}
       try{ created.chart.remove(); }catch(e){}
