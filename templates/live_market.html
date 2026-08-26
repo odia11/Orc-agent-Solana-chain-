@@ -1012,7 +1012,8 @@ async function _lmLoadSidebarLeaderboard(){
   try{
     var rows = await fetch('/api/leaderboard').then(function(r){ return r.json(); });
     var top = (Array.isArray(rows) ? rows : []).slice(0, 5);
-    if(!top.length){ host.innerHTML = ''; return; }
+    if(!top.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
+    host.style.display = '';
     host.innerHTML = '<div class="lm-sidebar-title">Top Traders</div>' + top.map(function(r){
       var pnl    = r.total_pnl || 0;
       var pnlCls = pnl >= 0 ? 'chg-up' : 'chg-dn';
@@ -1032,6 +1033,7 @@ async function _lmLoadSidebarLeaderboard(){
   }catch(e){
     console.error('[live-market] sidebar leaderboard load failed', e);
     host.innerHTML = '';
+    host.style.display = 'none';
   }
 }
 
@@ -1062,12 +1064,13 @@ async function _lmLoadSidebarPositions(){
       var items = posResp.positions.map(function(p){
         return {mint: p.mint, symbol: p.symbol, price: p.current_price, chg: p.pnl_pct};
       });
+      host.style.display = '';
       host.innerHTML = '<div class="lm-sidebar-title">Open Positions</div>' + _lmSidebarItemsHtml(items);
       return;
     }
     var wl = await fetch('/api/watchlist').then(function(r){ return r.json(); }).catch(function(){ return null; });
     var tokens = (wl && wl.ok && wl.tokens) ? wl.tokens : [];
-    if(!tokens.length){ host.innerHTML = ''; return; }
+    if(!tokens.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
     var addresses = tokens.map(function(t){ return t.token_address; }).join(',');
     var pd = await fetch('/api/dexscreener/tokens/'+addresses).then(function(r){ return r.json(); }).catch(function(){ return null; });
     var pairMap = {};
@@ -1085,10 +1088,12 @@ async function _lmLoadSidebarPositions(){
         chg: chg24,
       };
     });
+    host.style.display = '';
     host.innerHTML = '<div class="lm-sidebar-title">Watchlist</div>' + _lmSidebarItemsHtml(wlItems);
   }catch(e){
     console.error('[live-market] sidebar positions load failed', e);
     host.innerHTML = '';
+    host.style.display = 'none';
   }
 }
 
