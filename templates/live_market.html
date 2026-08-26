@@ -1862,38 +1862,50 @@ _lmInitLeaders();
 })();
 
 (function(){
-  var resultsBox = document.getElementById('lm-global-search-results');
-  if(resultsBox){
-    // Rows are now real _rowHtml() <tr class="lm-row"> markup (see
-    // _lmRenderGlobalResults), which also carries a watch-star and a Trade
-    // button. The watch-star toggles the watchlist in place, same as the
-    // main table. The Trade button is deliberately NOT wired to the inline
-    // buy-dropdown (_openBuyDrop) here -- that keys off
-    // document.getElementById('lm-row-'+idx), and since this box's rows
-    // reuse the same idx numbering (0..N) as whatever's in the main table
-    // at the same time, that lookup would collide with the main table's own
-    // rows. Any other click on a row -- including the Trade button --
-    // closes the search box and jumps to the matching poster card instead,
-    // which has its own working buy/sell UI.
-    resultsBox.addEventListener('click', function(e){
-      var watchBtn = e.target.closest('.lm-watch-star');
-      if(watchBtn){
-        e.stopPropagation();
-        _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
-        return;
-      }
-      var row = e.target.closest('.lm-row');
-      if(!row || !row.dataset.addr) return;
-      _lmCloseGlobalSearch();
-      _lmJumpToCard(row.dataset.addr);
-    });
-  }
+  // Rows are now real _rowHtml() <tr class="lm-row"> markup (see
+  // _lmRenderGlobalResults), which also carries a watch-star and a Trade
+  // button. The watch-star toggles the watchlist in place, same as the
+  // main table. The Trade button is deliberately NOT wired to the inline
+  // buy-dropdown (_openBuyDrop) here -- that keys off
+  // document.getElementById('lm-row-'+idx), and since this box's rows
+  // reuse the same idx numbering (0..N) as whatever's in the main table
+  // at the same time, that lookup would collide with the main table's own
+  // rows. Any other click on a row -- including the Trade button --
+  // closes the search box and jumps to the matching poster card instead,
+  // which has its own working buy/sell UI.
+  //
+  // Delegated on document, NOT bound directly to a getElementById() lookup
+  // of #lm-global-search-results the way this used to be -- that element
+  // now lives right before </body> (see its comment there), so a direct
+  // lookup this early in the page always returned null and silently never
+  // attached anything, which is exactly why clicking a search result did
+  // nothing. Delegation on document works regardless of where in the DOM
+  // (or how late) the element ends up.
+  document.addEventListener('click', function(e){
+    var resultsBox = e.target.closest('#lm-global-search-results');
+    if(!resultsBox) return;
+    var watchBtn = e.target.closest('.lm-watch-star');
+    if(watchBtn){
+      e.stopPropagation();
+      _toggleWatch(watchBtn, watchBtn.dataset.addr, watchBtn.dataset.sym);
+      return;
+    }
+    var row = e.target.closest('.lm-row');
+    if(!row || !row.dataset.addr) return;
+    _lmCloseGlobalSearch();
+    _lmJumpToCard(row.dataset.addr);
+  });
   document.addEventListener('click', function(e){
     var wrap = document.getElementById('lm-global-search-wrap');
+    var resultsBox = document.getElementById('lm-global-search-results');
     // full _lmCloseGlobalSearch(), not just hiding the box -- otherwise the
     // typed query stays in the input and the stale results stay cached in
-    // the box's innerHTML with nothing left to ever re-show or clear them
-    if(wrap && resultsBox && resultsBox.classList.contains('open') && !wrap.contains(e.target)) _lmCloseGlobalSearch();
+    // the box's innerHTML with nothing left to ever re-show or clear them.
+    // resultsBox is no longer nested inside wrap (see its comment near
+    // </body>), so a click inside the dropdown itself has to be excluded
+    // explicitly too, not just clicks inside wrap.
+    if(wrap && resultsBox && resultsBox.classList.contains('open')
+       && !wrap.contains(e.target) && !resultsBox.contains(e.target)) _lmCloseGlobalSearch();
   });
   document.addEventListener('keydown', function(e){
     if(e.key === 'Escape') _lmCloseGlobalSearch();
