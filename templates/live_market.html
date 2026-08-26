@@ -51,7 +51,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 /* global token search — hits DexScreener directly (proxied), independent of
    the loaded/tracked list above; opens the Token Detail modal on a result
    click, same as a normal row click does */
-.lm-global-search-wrap{position:relative;margin:12px 16px 0}
+.lm-global-search-wrap{position:sticky;top:108px;z-index:20;background:var(--bg);margin:12px 16px 0}
 .lm-global-search{width:100%;background:var(--bg2);border:1px solid var(--bg3);border-radius:10px;padding:9px 12px 9px 34px;color:var(--text);font-size:12px;font-family:'JetBrains Mono',monospace;outline:none;transition:border-color .15s}
 .lm-global-search:focus{border-color:var(--accent)}
 .lm-global-search::placeholder{color:var(--muted)}
@@ -125,7 +125,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
    horizontal row of ring-avatar circles (colored by direction) instead of
    rectangular cards. overflow-x:auto rather than a grid, so the exact same
    markup/CSS works on narrow screens too -- no separate mobile layout. */
-.lm-leaders-strip{display:flex;gap:14px;margin:16px 16px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 4px}
+.lm-leaders-strip{position:sticky;top:142px;z-index:20;background:var(--bg);display:flex;gap:14px;margin:16px 16px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 4px}
 .lm-leader-circle{flex-shrink:0;width:62px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;text-align:center}
 .lm-leader-ring{width:56px;height:56px;border-radius:50%;padding:2.5px;flex-shrink:0;transition:opacity .15s}
 .lm-leader-circle:hover .lm-leader-ring{opacity:.8}
@@ -475,12 +475,6 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 <div class="lm-global-search-dim" id="lm-global-search-dim"></div>
 
-<div class="lm-global-search-wrap" id="lm-global-search-wrap">
-  <span class="lm-global-search-icon">⌕</span>
-  <input class="lm-global-search" id="lm-global-search" type="text" placeholder="Search any token by name or address…" autocomplete="off" oninput="_lmGlobalSearchDebounce(this.value)">
-  <div class="lm-global-search-results" id="lm-global-search-results"></div>
-</div>
-
 <div class="lm-chips-row">
   <div class="lm-chips" id="lm-chips">
     <button class="lm-chip active" id="chip-trending" onclick="_lmSetChip('trending')">Trending</button>
@@ -491,11 +485,17 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
 </div>
 
-<div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
-  <div class="lm-featured-slide" id="lm-featured-slide"></div>
+<div class="lm-global-search-wrap" id="lm-global-search-wrap">
+  <span class="lm-global-search-icon">⌕</span>
+  <input class="lm-global-search" id="lm-global-search" type="text" placeholder="Search any token by name or address…" autocomplete="off" oninput="_lmGlobalSearchDebounce(this.value)">
+  <div class="lm-global-search-results" id="lm-global-search-results"></div>
 </div>
 
 <div class="lm-leaders-strip" id="lm-leaders-strip" style="display:none;"></div>
+
+<div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
+  <div class="lm-featured-slide" id="lm-featured-slide"></div>
+</div>
 
 <div id="lm-table-wrap" class="lm-table-wrap"></div>
 <div id="lm-poster-wrap" class="lm-poster-wrap" style="display:none;"></div>
@@ -841,8 +841,16 @@ var _lmLeadersDelegated = false;
    might also not exist in the currently-loaded/filtered feed at all
    (different tab active) -- if so, switch to "All tokens" via the same
    _lmSetChip() the ALL-tab button uses and wait for its re-render before
-   looking again. Returns true if a card was found and scrolled to, false
-   otherwise (e.g. mint isn't in the feed at all). */
+   looking again. If it STILL isn't found (not in any tracked list at all --
+   a low-volume or brand-new token someone is deep-linking straight to),
+   fetch it directly via the same DexScreener search endpoint search_tokens()
+   uses (proxied here as the full-pair-shape /api/dexscreener/search, same
+   one the global search bar already calls),
+   build a poster card for it with the normal _posterCardHtml() every other
+   card uses, and prepend it to the feed -- so looking up a specific token
+   always shows *something*, not just a shrug. Returns true if a card was
+   found/built and scrolled to, false otherwise (token doesn't exist / no
+   Solana pair for it). */
 async function _lmJumpToCard(mint){
   if(_lmViewMode !== 'poster'){
     _lmViewMode = 'poster';
@@ -854,8 +862,28 @@ async function _lmJumpToCard(mint){
   if(!target){
     await _lmSetChip('all');
     target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(mint)+'"]');
-    if(!target) return false;
   }
+  if(!target){
+    try{
+      var r = await fetch('/api/dexscreener/search?q='+encodeURIComponent(mint));
+      var d = await r.json();
+      var p = (d.pairs||[]).find(function(x){
+        return x.chainId==='solana' && ((x.baseToken&&x.baseToken.address)||'')===mint;
+      });
+      var wrap = document.getElementById('lm-poster-wrap');
+      if(p && wrap){
+        var idx = _pairs.length; // fresh, never-used idx -- can't collide with an existing card's
+        _pairs.push(p);
+        wrap.insertAdjacentHTML('afterbegin', _posterCardHtml(p, idx));
+        _lmObservePosterSafety(); // re-scan so the prepended card's safety chips also init
+        _lmObservePosterCharts(); // re-scan so the prepended card's chart also init (existing click delegation on wrap already covers it)
+        target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(mint)+'"]');
+      }
+    }catch(e){
+      console.error('[live-market] _lmJumpToCard fallback fetch failed', e);
+    }
+  }
+  if(!target) return false;
   target.scrollIntoView({behavior:'smooth', block:'center'});
   target.classList.add('lm-poster-card-highlight');
   setTimeout(function(){ target.classList.remove('lm-poster-card-highlight'); }, 1800);
