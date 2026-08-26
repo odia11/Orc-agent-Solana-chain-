@@ -7709,7 +7709,15 @@ function loadInlineSidebar(){
 }
 
 /* ── Live chart cards ── */
-var _liveChartTimers  = {};  /* cardEl.id -> intervalId */
+// _liveChartTimers is keyed by cardEl.id, but that id is NOT a stable proxy
+// for "this exact DOM node" -- a full feed re-render (renderHomeFeed()'s
+// innerHTML replace, from the 60s auto-refresh or infinite-scroll paging)
+// detaches the old card and mounts a brand-new one with the same id for the
+// same underlying post. Storing {timer, cardEl} (not just the interval id)
+// lets every check below tell "still the original, still-attached node" apart
+// from "a different, newer node that merely reused the id" -- see
+// startLiveChart()/_initLiveCharts()/_liveChartPoll().
+var _liveChartTimers  = {};  /* cardEl.id -> {timer, cardEl} */
 var _liveChartHistory = {};  /* cardEl.id -> [price, ...] */
 
 function _ccFmt(n){ if(n==null||isNaN(n)) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); }
@@ -7749,11 +7757,16 @@ function _ccDrawSparkline(lineEl, pts){
 }
 
 async function _liveChartPoll(cardEl, pairAddress, symbol){
-  /* stop if card left DOM */
+  /* stop if card left DOM -- but only clear the registry entry if it's still
+     ours (a newer node for the same id may have already taken over, via
+     startLiveChart()'s stale-entry replacement below) */
   if(!document.contains(cardEl)){
-    clearInterval(_liveChartTimers[cardEl.id]);
-    delete _liveChartTimers[cardEl.id];
-    delete _liveChartHistory[cardEl.id];
+    var _entry = _liveChartTimers[cardEl.id];
+    if(_entry && _entry.cardEl === cardEl){
+      clearInterval(_entry.timer);
+      delete _liveChartTimers[cardEl.id];
+      delete _liveChartHistory[cardEl.id];
+    }
     return;
   }
   try{
@@ -7813,7 +7826,18 @@ async function _liveChartPoll(cardEl, pairAddress, symbol){
 
 function startLiveChart(cardEl, pairAddress, symbol){
   var key = cardEl.id;
-  if(_liveChartTimers[key]) return;
+  var existing = _liveChartTimers[key];
+  if(existing){
+    if(existing.cardEl === cardEl) return; // already live for this exact node
+    // Stale entry left over from a previous node that used to have this id
+    // (replaced wholesale by a full feed re-render). Its own poll would
+    // eventually notice via document.contains() and self-clear, but that can
+    // take up to the full 10s tick -- during which this brand-new, visible
+    // card would otherwise be wrongly treated as "already handled" above and
+    // never get its own timer, leaving its chart frozen forever. Clear it
+    // immediately instead of waiting.
+    clearInterval(existing.timer);
+  }
   /* immediately draw from stored embed priceChange values so sparkline is never blank */
   var snap = _ccSnapHistory(cardEl);
   if(snap.length >= 2){
@@ -7821,16 +7845,21 @@ function startLiveChart(cardEl, pairAddress, symbol){
     _ccDrawSparkline(cardEl.querySelector('[data-cc="line"]'), snap);
   }
   _liveChartPoll(cardEl, pairAddress, symbol);
-  _liveChartTimers[key] = setInterval(function(){
+  var timer = setInterval(function(){
     _liveChartPoll(cardEl, pairAddress, symbol);
   }, 10000);
+  _liveChartTimers[key] = {timer: timer, cardEl: cardEl};
 }
 
 function _initLiveCharts(){
-  /* clean up stale intervals */
+  /* clean up stale intervals -- node-identity check (not id lookup): an id
+     match alone doesn't prove the ORIGINAL node this timer was created for
+     is still attached, since a re-render can mount a new node with the same
+     id (see _liveChartTimers comment above). */
   Object.keys(_liveChartTimers).forEach(function(key){
-    if(!document.getElementById(key)){
-      clearInterval(_liveChartTimers[key]);
+    var entry = _liveChartTimers[key];
+    if(!document.contains(entry.cardEl)){
+      clearInterval(entry.timer);
       delete _liveChartTimers[key];
       delete _liveChartHistory[key];
     }
