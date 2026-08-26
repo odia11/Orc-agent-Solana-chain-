@@ -56,7 +56,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-global-search:focus{border-color:var(--accent)}
 .lm-global-search::placeholder{color:var(--muted)}
 .lm-global-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted);pointer-events:none;font-size:13px}
-.lm-global-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--bg2);border:1px solid var(--bg3);border-top:2px solid var(--accent);border-radius:10px;max-height:320px;overflow-y:auto;z-index:50;display:none;box-shadow:0 12px 32px rgba(0,0,0,.5)}
+.lm-global-search-results{position:fixed;background:var(--bg2);border:1px solid var(--bg3);border-top:2px solid var(--accent);border-radius:10px;max-height:320px;overflow-y:auto;z-index:50;display:none;box-shadow:0 12px 32px rgba(0,0,0,.5)}
 .lm-global-search-results.open{display:block}
 .lm-gsr-header{padding:10px 12px;font-size:11px;color:var(--muted);border-bottom:1px solid var(--bg3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .lm-gsr-empty,.lm-gsr-loading{padding:12px;color:var(--muted);font-size:12px;text-align:center}
@@ -1542,6 +1542,24 @@ function _lmSetSearchDim(on){
   if(dim) dim.classList.toggle('open', on);
 }
 
+/* .lm-global-search-results is position:fixed (not absolute/nested in
+   .lm-global-search-wrap) specifically so it's never clipped or reordered
+   by a sticky ancestor's own stacking context -- .lm-global-search-wrap
+   itself is sticky now, alongside the header/chips-row/leaders-strip, so a
+   z-index alone couldn't be trusted to always win. Since fixed positioning
+   means the box no longer inherits its position from the wrap in CSS, its
+   on-screen position has to be computed and applied explicitly, every time
+   it's (re)opened. */
+function _lmPositionSearchResults(){
+  var wrap = document.getElementById('lm-global-search-wrap');
+  var box  = document.getElementById('lm-global-search-results');
+  if(!wrap || !box) return;
+  var r = wrap.getBoundingClientRect();
+  box.style.top   = (r.bottom + 6) + 'px';
+  box.style.left  = r.left + 'px';
+  box.style.width = r.width + 'px';
+}
+
 /* Header pinned atop the dropdown so it always reads as "these are separate
    search results", not the Live Market list itself -- suffix is the trailing
    " · N found" bit, omitted while still loading. */
@@ -1559,6 +1577,7 @@ function _lmRenderGlobalResults(state){
     return;
   }
   _lmSetSearchDim(true);
+  _lmPositionSearchResults();
   if(state === 'loading'){
     box.innerHTML = _lmGsrHeaderHtml() + '<div class="lm-gsr-loading">Searching…</div>';
     box.classList.add('open');
