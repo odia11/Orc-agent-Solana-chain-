@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover">
+<title>Live Trades — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&display=swap"></noscript>
+<style>
+/* same dark/gold palette as templates/live_market.html */
+:root{--bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;--accent:#f5b544;--text:#eef1f5;--muted:#565d68;--green:#3ad29b;--red:#f76b62}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
+
+.lt-header{position:sticky;top:0;z-index:10;background:var(--bg);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bg3)}
+.lt-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s}
+.lt-back:hover{color:var(--text)}
+.lt-title{font-size:15px;font-weight:700;color:var(--text)}
+.lt-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:auto;animation:ltPulse 1.8s ease-in-out infinite}
+@keyframes ltPulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
+
+.lt-wrap{max-width:640px;margin:0 auto;padding:16px}
+.lt-empty{text-align:center;padding:60px 20px;color:var(--muted);font-size:13px}
+
+.lt-row{display:flex;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.lt-row-main{flex:1;min-width:0}
+.lt-row-sym{font-size:14px;font-weight:700;color:var(--text)}
+.lt-row-sub{font-size:10.5px;color:var(--muted);margin-top:2px}
+.lt-row-right{text-align:right;flex-shrink:0}
+.lt-row-price{font-size:13px;font-weight:700;color:var(--text)}
+.lt-row-chg{font-size:12px;font-weight:700;margin-top:2px}
+.chg-up{color:var(--green)}
+.chg-dn{color:var(--red)}
+.chg-fl{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<header class="lt-header">
+  <a class="lt-back" href="/bot">← Back</a>
+  <span class="lt-title">Live Trades</span>
+  <span class="lt-live-dot"></span>
+</header>
+
+<div class="lt-wrap">
+  <div id="lt-list">
+    {% if open_positions %}
+      {% for p in open_positions %}
+      <div class="lt-row">
+        <div class="lt-row-main">
+          <div class="lt-row-sym">${{ p.token }}</div>
+          <div class="lt-row-sub">Inzet {{ '%.4f' | format(p.stake_sol) }} SOL &middot; Open sinds {{ p.opened_at if p.opened_at else '—' }}</div>
+        </div>
+        <div class="lt-row-right">
+          <div class="lt-row-price">${{ '%.6f' | format(p.current_price) }}</div>
+          <div class="lt-row-chg {{ 'chg-up' if p.pnl_pct >= 0 else 'chg-dn' }}">{{ '+' if p.pnl_pct >= 0 else '' }}{{ '%.2f' | format(p.pnl_pct) }}%</div>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="lt-empty">No open positions</div>
+    {% endif %}
+  </div>
+</div>
+
+<script>
+function _ltEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function _ltRowHtml(p){
+  var chgCls = p.pnl_pct == null ? 'chg-fl' : (p.pnl_pct >= 0 ? 'chg-up' : 'chg-dn');
+  var chgStr = p.pnl_pct == null ? '—' : (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%';
+  return '<div class="lt-row">'
+    +'<div class="lt-row-main">'
+      +'<div class="lt-row-sym">$'+_ltEsc(p.token)+'</div>'
+      +'<div class="lt-row-sub">Inzet '+p.stake_sol.toFixed(4)+' SOL &middot; Open sinds '+_ltEsc(p.opened_at || '—')+'</div>'
+    +'</div>'
+    +'<div class="lt-row-right">'
+      +'<div class="lt-row-price">$'+Number(p.current_price).toFixed(6)+'</div>'
+      +'<div class="lt-row-chg '+chgCls+'">'+chgStr+'</div>'
+    +'</div>'
+  +'</div>';
+}
+
+function _ltRender(positions){
+  var list = document.getElementById('lt-list');
+  if(!list) return;
+  if(!positions || !positions.length){
+    list.innerHTML = '<div class="lt-empty">No open positions</div>';
+    return;
+  }
+  list.innerHTML = positions.map(_ltRowHtml).join('');
+}
+
+// Polls the same open_positions query /live-trades rendered with server-side
+// (see api_live_trades() / _fetch_open_bot_positions() in dashboard.py) and
+// updates the list in place -- no full page reload, same pattern as
+// dashboard.js's loadHomeFeed().
+async function _ltPoll(){
+  try{
+    var r = await fetch('/api/live-trades');
+    var d = await r.json();
+    if(d && d.ok) _ltRender(d.positions);
+  }catch(e){
+    console.error('[live-trades] poll failed', e);
+  }
+}
+setInterval(_ltPoll, 12000);
+</script>
+
+</body>
+</html>

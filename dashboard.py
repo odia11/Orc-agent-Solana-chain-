@@ -7474,6 +7474,74 @@ def history():
     )
 
 
+def _fetch_open_bot_positions(wallet):
+    """Same open_positions query as /history's open-positions block above
+    (WHERE user_id=? AND source='bot') -- shared by /live-trades (page) and
+    /api/live-trades (JSON poll) so both stay in sync off one query. Adds
+    stake_sol (entry_price * amount) for the "Inzet" column, which /history
+    doesn't show."""
+    open_positions = []
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        c = conn.cursor()
+        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+        row = c.fetchone()
+        if row:
+            user_id = row[0]
+            c.execute(
+                '''SELECT mint_address, symbol, amount, buy_price, opened_at
+                   FROM open_positions WHERE user_id=? AND source='bot' ORDER BY opened_at DESC''',
+                (user_id,)
+            )
+            live_map = {t['mint']: t for t in state.get('tokens', [])}
+            for mint_addr, symbol, amount, buy_price, opened_at in c.fetchall():
+                live       = live_map.get(mint_addr, {})
+                cur_price  = live.get('price', buy_price)
+                pnl_pct    = round((cur_price - buy_price) / buy_price * 100, 2) if buy_price > 0 else 0.0
+                opened_str = ''
+                if opened_at:
+                    try:
+                        opened_str = datetime.datetime.utcfromtimestamp(float(opened_at)).strftime('%Y-%m-%d %H:%M')
+                    except Exception:
+                        pass
+                open_positions.append({
+                    'token':         symbol or (mint_addr[:8] if mint_addr else '—'),
+                    'entry_price':   round(buy_price, 6),
+                    'current_price': round(cur_price, 6),
+                    'amount':        round(amount, 4),
+                    'stake_sol':     round(buy_price * amount, 4),
+                    'pnl_pct':       pnl_pct,
+                    'opened_at':     opened_str,
+                    'mint_address':  mint_addr or '',
+                })
+        conn.close()
+    except Exception as e:
+        print(f'[live-trades] DB error: {e}', flush=True)
+    return open_positions
+
+
+@app.route('/live-trades')
+def live_trades():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return redirect('/')
+    return render_template(
+        'live_trades.html',
+        open_positions=_fetch_open_bot_positions(wallet),
+        wallet=wallet,
+        wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
+    )
+
+
+@app.route('/api/live-trades')
+@rate_limit(30, 60)
+def api_live_trades():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'positions': []}), 401
+    return jsonify({'ok': True, 'positions': _fetch_open_bot_positions(wallet)})
+
+
 @app.route('/bot')
 def bot_overview_page():
     _log_readonly_attempt()
