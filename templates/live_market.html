@@ -68,6 +68,35 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-global-search-dim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:24;pointer-events:none}
 .lm-global-search-dim.open{display:block}
 
+/* desktop sidebar layout -- below 1100px .lm-main-layout is a plain block
+   (default display), so .lm-feed-col/.lm-table-wrap/.lm-poster-wrap render
+   exactly as before this existed; at 1100px+ it becomes a 2-column grid so
+   #lm-sidebar (hidden below that width) sits beside the feed. */
+.lm-sidebar{display:none}
+@media(min-width:1100px){
+  .lm-main-layout{display:grid;grid-template-columns:1fr 320px;gap:20px;align-items:start}
+  .lm-sidebar{display:block}
+}
+
+/* sidebar content blocks -- same dark/gold-accent language as the rest of
+   the page (var(--bg2) panels, var(--accent) for section titles, the
+   existing .chg-up/.chg-dn colors for pnl/change) */
+.lm-sidebar-block{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;padding:14px;margin-bottom:16px}
+.lm-sidebar-title{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.lm-sidebar-lb-row{display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--bg3)}
+.lm-sidebar-lb-row:last-child{border-bottom:none}
+.lm-sidebar-lb-rank{width:18px;flex-shrink:0;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);font-weight:700}
+.lm-sidebar-lb-avatar,.lm-sidebar-lb-avatar-ph{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--bg3)}
+.lm-sidebar-lb-avatar-ph{display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.lm-sidebar-lb-name{flex:1;min-width:0;font-size:12px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-sidebar-lb-pnl{font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;flex-shrink:0}
+.lm-sidebar-item{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--bg3);cursor:pointer;transition:opacity .15s}
+.lm-sidebar-item:last-child{border-bottom:none}
+.lm-sidebar-item:hover{opacity:.8}
+.lm-sidebar-item-sym{flex:1;min-width:0;font-size:12px;font-weight:700;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-sidebar-item-price{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);flex-shrink:0}
+.lm-sidebar-item-chg{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;flex-shrink:0;width:56px;text-align:right}
+
 /* table wrapper */
 .lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:visible;margin:16px}
 .lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
@@ -513,12 +542,26 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 
 <div class="lm-leaders-strip" id="lm-leaders-strip" style="display:none;"></div>
 
-<div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
-  <div class="lm-featured-slide" id="lm-featured-slide"></div>
-</div>
+<!-- .lm-main-layout is a plain block below 1100px (children keep rendering
+     exactly as before -- .lm-poster-wrap's own max-width:520px;margin:0 auto
+     still centers it, .lm-table-wrap's own margin is untouched), and becomes
+     a 1fr+320px grid at 1100px+ so #lm-sidebar sits beside the feed instead
+     of below it. See .lm-main-layout/.lm-sidebar CSS above. -->
+<div class="lm-main-layout">
+  <div class="lm-feed-col">
+    <div class="lm-featured-banner" id="lm-featured-banner" style="display:none;">
+      <div class="lm-featured-slide" id="lm-featured-slide"></div>
+    </div>
 
-<div id="lm-table-wrap" class="lm-table-wrap"></div>
-<div id="lm-poster-wrap" class="lm-poster-wrap" style="display:none;"></div>
+    <div id="lm-table-wrap" class="lm-table-wrap"></div>
+    <div id="lm-poster-wrap" class="lm-poster-wrap" style="display:none;"></div>
+  </div>
+
+  <aside id="lm-sidebar" class="lm-sidebar">
+    <div class="lm-sidebar-block" id="lm-sidebar-leaderboard"></div>
+    <div class="lm-sidebar-block" id="lm-sidebar-positions"></div>
+  </aside>
+</div>
 
 <!-- token detail modal (Focus / Terminal — see PROMPT.md spec) -->
 <div id="lm-token-modal" onclick="if(event.target===this)_lmtdCloseModal()">
@@ -943,6 +986,109 @@ async function _lmRefreshLeaders(){
     _lmRenderLeadersStrip(pairs);
   }catch(e){
     console.error('[live-market] leaders refresh failed', e);
+  }
+}
+
+/* ── desktop sidebar (#lm-sidebar, 1100px+ only, but always loaded -- cheap,
+   and no reason to make the two calls conditional on a width check that
+   would just have to be redone on resize). Clicks on either block reuse
+   _lmJumpToCard(), same as everywhere else that opens a token. ── */
+var _lmSidebarDelegated = false;
+function _lmBindSidebarEvents(){
+  if(_lmSidebarDelegated) return;
+  _lmSidebarDelegated = true;
+  var el = document.getElementById('lm-sidebar');
+  if(!el) return;
+  el.addEventListener('click', function(e){
+    var item = e.target.closest('.lm-sidebar-item');
+    if(!item || !item.dataset.addr) return;
+    _lmJumpToCard(item.dataset.addr);
+  });
+}
+
+async function _lmLoadSidebarLeaderboard(){
+  var host = document.getElementById('lm-sidebar-leaderboard');
+  if(!host) return;
+  try{
+    var rows = await fetch('/api/leaderboard').then(function(r){ return r.json(); });
+    var top = (Array.isArray(rows) ? rows : []).slice(0, 5);
+    if(!top.length){ host.innerHTML = ''; return; }
+    host.innerHTML = '<div class="lm-sidebar-title">Top Traders</div>' + top.map(function(r){
+      var pnl    = r.total_pnl || 0;
+      var pnlCls = pnl >= 0 ? 'chg-up' : 'chg-dn';
+      var pnlStr = (pnl >= 0 ? '+' : '') + pnl.toFixed(2) + ' SOL';
+      var initials = _esc((r.username || '?').slice(0, 2).toUpperCase());
+      var avatar = r.avatar_url
+        ? '<img class="lm-sidebar-lb-avatar" src="'+_esc(r.avatar_url)+'" onerror="this.style.display=\'none\';this.nextSibling.style.display=\'flex\'">'
+          +'<div class="lm-sidebar-lb-avatar-ph" style="display:none">'+initials+'</div>'
+        : '<div class="lm-sidebar-lb-avatar-ph">'+initials+'</div>';
+      return '<div class="lm-sidebar-lb-row">'
+        +'<span class="lm-sidebar-lb-rank">#'+r.rank+'</span>'
+        +avatar
+        +'<span class="lm-sidebar-lb-name">'+_esc(r.username || '')+'</span>'
+        +'<span class="lm-sidebar-lb-pnl '+pnlCls+'">'+pnlStr+'</span>'
+        +'</div>';
+    }).join('');
+  }catch(e){
+    console.error('[live-market] sidebar leaderboard load failed', e);
+    host.innerHTML = '';
+  }
+}
+
+function _lmSidebarItemsHtml(items){
+  return items.slice(0, 8).map(function(it){
+    var chgCls = it.chg == null ? 'chg-fl' : (it.chg >= 0 ? 'chg-up' : 'chg-dn');
+    var chgStr = it.chg == null ? '—' : (it.chg >= 0 ? '+' : '') + it.chg.toFixed(2) + '%';
+    return '<div class="lm-sidebar-item" data-addr="'+_esc(it.mint)+'">'
+      +'<span class="lm-sidebar-item-sym">$'+_esc(it.symbol)+'</span>'
+      +'<span class="lm-sidebar-item-price">'+_fmtPrice(it.price)+'</span>'
+      +'<span class="lm-sidebar-item-chg '+chgCls+'">'+chgStr+'</span>'
+      +'</div>';
+  }).join('');
+}
+
+async function _lmLoadSidebarPositions(){
+  var host = document.getElementById('lm-sidebar-positions');
+  if(!host) return;
+  try{
+    // Open positions take priority when there are any -- /api/bot/positions
+    // already carries current_price/pnl_pct, no extra lookup needed. Falls
+    // back to the watchlist (logged out, or no open positions), which only
+    // has token addresses -- enriched with live price/24h change via the
+    // same /api/dexscreener/tokens/<addresses> batch lookup _fetchTrending()/
+    // _fetchNew() already use elsewhere in this file.
+    var posResp = await fetch('/api/bot/positions').then(function(r){ return r.json(); }).catch(function(){ return null; });
+    if(posResp && posResp.ok && posResp.positions && posResp.positions.length){
+      var items = posResp.positions.map(function(p){
+        return {mint: p.mint, symbol: p.symbol, price: p.current_price, chg: p.pnl_pct};
+      });
+      host.innerHTML = '<div class="lm-sidebar-title">Open Positions</div>' + _lmSidebarItemsHtml(items);
+      return;
+    }
+    var wl = await fetch('/api/watchlist').then(function(r){ return r.json(); }).catch(function(){ return null; });
+    var tokens = (wl && wl.ok && wl.tokens) ? wl.tokens : [];
+    if(!tokens.length){ host.innerHTML = ''; return; }
+    var addresses = tokens.map(function(t){ return t.token_address; }).join(',');
+    var pd = await fetch('/api/dexscreener/tokens/'+addresses).then(function(r){ return r.json(); }).catch(function(){ return null; });
+    var pairMap = {};
+    ((pd && pd.pairs) || []).forEach(function(p){
+      var a = (p.baseToken && p.baseToken.address) || '';
+      if(a && !pairMap[a]) pairMap[a] = p;
+    });
+    var wlItems = tokens.map(function(t){
+      var p = pairMap[t.token_address];
+      var chg24 = p && p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
+      return {
+        mint: t.token_address,
+        symbol: t.symbol || (p && p.baseToken && p.baseToken.symbol) || '?',
+        price: p ? p.priceUsd : null,
+        chg: chg24,
+      };
+    });
+    host.innerHTML = '<div class="lm-sidebar-title">Watchlist</div>' + _lmSidebarItemsHtml(wlItems);
+  }catch(e){
+    console.error('[live-market] sidebar positions load failed', e);
+    host.innerHTML = '';
   }
 }
 
@@ -1846,6 +1992,9 @@ _lmApplyViewModeUI();
 _loadTab('trending');
 _lmInitFeatured();
 _lmInitLeaders();
+_lmBindSidebarEvents();
+_lmLoadSidebarLeaderboard();
+_lmLoadSidebarPositions();
 
 (function(){
   var _params = new URLSearchParams(location.search);
