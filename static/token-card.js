@@ -769,6 +769,16 @@ function _lmtdInitCandleChart(){
   // created every call). Same behavior, unchanged.
 }
 
+/* containerId -> {chart, resizeObserver} for whatever fomo-chart instance is
+   currently live in that container. Exists purely as a defensive guard: if
+   _lmtdCreateFomoChart() is ever called again for a container whose previous
+   instance was never properly torn down (caller forgot destroy(), or a race
+   let two init calls through), the stale instance -- canvas AND its own
+   floating price-line label -- gets removed here before the new one is
+   built, instead of the two silently coexisting (visible as two stacked
+   price labels in the same corner). */
+var _lmtdFomoChartsByContainer = {};
+
 /* Shared FOMO-style area chart constructor — same extraction pattern
    as _lmtdCreateChart() above, pulled out of _lmtdInitFomoChart() so both
    the modal (unchanged behavior) and _lmtdInitEmbeddedChart() below build
@@ -777,25 +787,32 @@ function _lmtdInitCandleChart(){
 function _lmtdCreateFomoChart(containerId){
   var container = document.getElementById(containerId);
   if(!container || typeof LightweightCharts === 'undefined') return null;
+  var stale = _lmtdFomoChartsByContainer[containerId];
+  if(stale){
+    try{ stale.resizeObserver.disconnect(); }catch(e){}
+    try{ stale.chart.remove(); }catch(e){}
+    delete _lmtdFomoChartsByContainer[containerId];
+  }
   var chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight || 340,
     layout:{background:{type:'solid',color:'#0b0906'},textColor:'#e8dcc0'},
     grid:{vertLines:{color:'transparent'},horzLines:{color:'#1c1409'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
-    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.15,bottom:0.1}},
+    rightPriceScale:{visible:false},
     timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
     handleScroll:true,handleScale:true
   });
   var series = chart.addAreaSeries({
     lineColor:'#f2b840', lineWidth:2, lineType: LightweightCharts.LineType.Curved,
     topColor:'rgba(242,184,64,.18)', bottomColor:'rgba(255,122,61,0)',
-    priceLineVisible:false,
+    priceLineVisible:false, lastValueVisible:false,
   });
   var resizeObserver = new ResizeObserver(function(){
     if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
   });
   resizeObserver.observe(container);
+  _lmtdFomoChartsByContainer[containerId] = {chart:chart, resizeObserver:resizeObserver};
   return {chart:chart, series:series, resizeObserver:resizeObserver};
 }
 
@@ -896,6 +913,9 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain, onResult){
       if(timer){ clearInterval(timer); timer=null; }
       try{ created.resizeObserver.disconnect(); }catch(e){}
       try{ created.chart.remove(); }catch(e){}
+      if(_lmtdFomoChartsByContainer[containerId] && _lmtdFomoChartsByContainer[containerId].chart === created.chart){
+        delete _lmtdFomoChartsByContainer[containerId];
+      }
     }
   };
 }

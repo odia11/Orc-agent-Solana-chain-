@@ -195,8 +195,11 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-poster-chg{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700}
 .lm-poster-chg-sub{font-size:11px;color:var(--muted)}
 
-.lm-poster-chart{position:relative;height:100px;background:#0b0906;border:1px solid #1c1409;border-radius:12px;overflow:hidden}
+.lm-poster-chart{position:relative;height:170px;background:#0b0906;border:1px solid #1c1409;border-radius:12px;overflow:hidden}
 .lm-poster-chart-empty{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#0b0906;color:#6b5c4a;font-size:10.5px;font-family:'JetBrains Mono',monospace;pointer-events:none}
+.lm-poster-live-badge{position:absolute;top:8px;left:8px;z-index:1;display:none;align-items:center;gap:5px;font-size:8.5px;letter-spacing:.08em;font-weight:700;color:var(--muted);font-family:'JetBrains Mono',monospace;text-transform:uppercase;pointer-events:none}
+.lm-poster-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:lm-poster-live-pulse 1.8s ease-in-out infinite}
+@keyframes lm-poster-live-pulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
 
 .lm-poster-stats-row{display:flex;gap:7px}
 .lm-poster-stats-row>div{flex:1;min-width:0}
@@ -1098,6 +1101,19 @@ function _lmChartEmptyEl(idx){
   return el;
 }
 
+function _lmChartLiveEl(idx){
+  var chartEl = document.getElementById('lm-chart-'+idx);
+  if(!chartEl) return null;
+  var el = chartEl.querySelector('.lm-poster-live-badge');
+  if(!el){
+    el = document.createElement('div');
+    el.className = 'lm-poster-live-badge';
+    el.innerHTML = '<span class="lm-poster-live-dot"></span>LIVE';
+    chartEl.appendChild(el);
+  }
+  return el;
+}
+
 function _lmDrainChartQueue(){
   while(_lmChartActiveCount < _lmChartMaxConcurrent && _lmChartQueue.length){
     var next = _lmChartQueue.shift();
@@ -1119,9 +1135,14 @@ function _lmStartChart(card){
         // priceChange-derived fallback, response.fallback===true) already
         // render as a rough line via the unchanged setData() path below, so
         // hiding the empty-state here is enough -- no separate fallback
-        // rendering needed.
-        var el = _lmChartEmptyEl(idx);
-        if(el) el.style.display = (r && r.candles && r.candles.length) ? 'none' : 'flex';
+        // rendering needed. The LIVE badge mirrors the opposite of that same
+        // condition -- it's only "actually refreshing" once there's
+        // something on the chart to refresh.
+        var hasData = !!(r && r.candles && r.candles.length);
+        var emptyEl = _lmChartEmptyEl(idx);
+        if(emptyEl) emptyEl.style.display = hasData ? 'none' : 'flex';
+        var liveEl = _lmChartLiveEl(idx);
+        if(liveEl) liveEl.style.display = hasData ? 'flex' : 'none';
       })
     : null;
   if(handle) _lmChartInstances[idx] = handle;
