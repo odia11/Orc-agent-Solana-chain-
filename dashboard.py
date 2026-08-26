@@ -5936,6 +5936,19 @@ def _get_index_base_html():
         _INDEX_BASE_CACHE['html'] = html
         return html
 
+def _render_no_cache(*args, **kwargs):
+    """render_template() wrapper that also marks the response no-cache --
+    full HTML pages otherwise have no explicit Cache-Control at all, which
+    lets browsers (mobile especially) keep serving an old disk-cached copy
+    after a deploy. Same headers _get_index_base_html()'s "/" response
+    already sets, just reusable for every other full-page route instead of
+    each one hand-rolling it."""
+    resp = make_response(render_template(*args, **kwargs))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
+
 @app.route('/')
 def index():
     # Inject the client secret (if configured) so the frontend can echo it back
@@ -6295,7 +6308,7 @@ def profile():
             sol_balance = round(r.json()['result']['value'] / 1e9, 4)
         except Exception:
             pass
-        return render_template(
+        return _render_no_cache(
             'profile.html',
             wallet=wallet,
             wallet_short=wallet_short,
@@ -6410,7 +6423,7 @@ def profile_view(wallet_address: str):
             can_view_sensitive = is_own or viewer_role in ('admin', 'moderator', 'analyst')
         else:
             can_view_sensitive = True
-        return render_template(
+        return _render_no_cache(
             'profile.html',
             wallet=wallet_address,
             wallet_short=wallet_short,
@@ -7042,7 +7055,7 @@ def traders():
         })
     wallet_short = ((session_wallet[:4] + '…' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
-    return render_template(
+    return _render_no_cache(
         'traders.html',
         entries=entries,
         wallet=session_wallet,
@@ -7306,7 +7319,7 @@ def calls_page():
     session_wallet = _current_wallet()  # may be '' — page is public, like leaderboard
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
-    return render_template(
+    return _render_no_cache(
         'calls.html',
         wallet=session_wallet,
         wallet_short=wallet_short,
@@ -7362,7 +7375,7 @@ def leaderboard():
         })
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
-    return render_template(
+    return _render_no_cache(
         'leaderboard.html',
         entries=entries,
         wallet=session_wallet,
@@ -7376,7 +7389,7 @@ def live_market():
     session_wallet = _current_wallet()
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
-    return render_template('live_market.html',
+    return _render_no_cache('live_market.html',
                            wallet_short=wallet_short,
                            csrf_token=_get_csrf_token(),
                            client_secret=API_SHARED_SECRET)
@@ -7464,7 +7477,7 @@ def history():
         conn.close()
     except Exception as e:
         print(f'[history] DB error: {e}', flush=True)
-    return render_template(
+    return _render_no_cache(
         'history.html',
         trades=trades,
         open_positions=open_positions,
@@ -7525,7 +7538,7 @@ def live_trades():
     wallet = _authenticated_wallet()
     if not wallet:
         return redirect('/')
-    return render_template(
+    return _render_no_cache(
         'live_trades.html',
         open_positions=_fetch_open_bot_positions(wallet),
         wallet=wallet,
@@ -7554,22 +7567,14 @@ def bot_overview_page():
     finally:
         conn.close()
     narrative_agent_enabled = bool(row[0]) if row else False
-    # No explicit cache headers here meant this page could be served stale
-    # from browser/mobile disk cache after a deploy (e.g. the new Live
-    # Trades drawer link not showing up until a hard refresh) -- same fix
-    # as the "/" route's _get_index_base_html() response already applies.
-    resp = make_response(render_template(
+    return _render_no_cache(
         'bot.html',
         wallet=wallet,
         wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
         is_admin=_is_owner(wallet),
         csrf_token=_get_csrf_token(),
         narrative_agent_enabled=narrative_agent_enabled,
-    ))
-    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
-    resp.headers['Pragma'] = 'no-cache'
-    resp.headers['Expires'] = '0'
-    return resp
+    )
 
 
 @app.route('/wallet')
@@ -7616,7 +7621,7 @@ def wallet_page():
             except Exception as e:
                 print(f'[wallet] key error for {wallet_short}: {type(e).__name__}: {e}', flush=True)
 
-        return render_template(
+        return _render_no_cache(
             'wallet.html',
             wallet_address=wallet_address,
             wallet_short=wallet_short,
@@ -7899,7 +7904,7 @@ def referrals_page():
         referral_balance_usd = (round(referral_balance * _sol_price_usd, 2)
                                  if _sol_price_usd else None)
 
-        return render_template(
+        return _render_no_cache(
             'referrals.html',
             wallet_address=wallet,
             wallet_short=wallet_short,
@@ -7932,7 +7937,7 @@ def settings_page():
             x_handle, x_share_trade, x_share_badge = xrow[0], bool(xrow[1]), bool(xrow[2])
     finally:
         conn.close()
-    return render_template(
+    return _render_no_cache(
         'settings.html',
         wallet=wallet,
         wallet_short=wallet_short,
@@ -7950,7 +7955,7 @@ def promote_page():
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
-    return render_template(
+    return _render_no_cache(
         'promote.html',
         wallet_short=wallet_short,
         # Deliberately compared against ADMIN_WALLET (not _is_owner()/OWNER_WALLET) —
@@ -8151,7 +8156,7 @@ def messages_page():
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
-    return render_template(
+    return _render_no_cache(
         'messages.html',
         wallet=wallet,
         wallet_short=wallet_short,
@@ -8171,7 +8176,7 @@ def message_thread(wallet_address):
         open_peer_id = row[0] if row else None
     finally:
         conn.close()
-    return render_template(
+    return _render_no_cache(
         'messages.html',
         wallet=wallet,
         wallet_short=wallet_short,
@@ -8198,7 +8203,7 @@ def groups_page():
     if not wallet:
         return redirect('/?connect=1')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
-    return render_template(
+    return _render_no_cache(
         'groups.html',
         wallet=wallet,
         wallet_short=wallet_short,
@@ -9693,7 +9698,7 @@ def notifications_page():
     if not wallet:
         return redirect('/?next=notifications')
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
-    return render_template(
+    return _render_no_cache(
         'notifications.html',
         wallet=wallet,
         wallet_short=wallet_short,
