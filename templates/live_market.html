@@ -488,8 +488,18 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 <div class="lm-global-search-wrap" id="lm-global-search-wrap">
   <span class="lm-global-search-icon">⌕</span>
   <input class="lm-global-search" id="lm-global-search" type="text" placeholder="Search any token by name or address…" autocomplete="off" oninput="_lmGlobalSearchDebounce(this.value)">
-  <div class="lm-global-search-results" id="lm-global-search-results"></div>
 </div>
+<!-- #lm-global-search-results lives as a direct child of <body> (see near
+     </body> below), NOT nested in .lm-global-search-wrap -- .lm-global-search-wrap
+     is position:sticky + z-index:20, which forms its own stacking context, so a
+     position:fixed child's z-index would only ever be compared against its
+     wrap's OTHER children, never against siblings of the wrap itself (like
+     .lm-leaders-strip, also z-index:20 -- equal z-index there is broken by DOM
+     order, and .lm-leaders-strip comes after the wrap, so it always painted on
+     top regardless of the child's own z-index). Position is computed and applied
+     via _lmPositionSearchResults() off .lm-global-search-wrap's own
+     getBoundingClientRect(), so being elsewhere in the DOM doesn't move it
+     visually. -->
 
 <div class="lm-leaders-strip" id="lm-leaders-strip" style="display:none;"></div>
 
@@ -2149,6 +2159,8 @@ window.addEventListener('pageshow', function(e){
 
 
 <script src="/static/auto-refresh.js?v={{ app_version }}"></script>
+
+<div class="lm-global-search-results" id="lm-global-search-results"></div>
 
 </body>
 </html>
