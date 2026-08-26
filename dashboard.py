@@ -7554,14 +7554,22 @@ def bot_overview_page():
     finally:
         conn.close()
     narrative_agent_enabled = bool(row[0]) if row else False
-    return render_template(
+    # No explicit cache headers here meant this page could be served stale
+    # from browser/mobile disk cache after a deploy (e.g. the new Live
+    # Trades drawer link not showing up until a hard refresh) -- same fix
+    # as the "/" route's _get_index_base_html() response already applies.
+    resp = make_response(render_template(
         'bot.html',
         wallet=wallet,
         wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
         is_admin=_is_owner(wallet),
         csrf_token=_get_csrf_token(),
         narrative_agent_enabled=narrative_agent_enabled,
-    )
+    ))
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    resp.headers['Pragma'] = 'no-cache'
+    resp.headers['Expires'] = '0'
+    return resp
 
 
 @app.route('/wallet')
