@@ -825,7 +825,11 @@ async function _lmFetchLeaders(){
     var bv = Math.abs(b.priceChange&&b.priceChange.h24!=null?b.priceChange.h24:0);
     return bv-av;
   });
-  return merged.slice(0,6);
+  // More room to show more movers on desktop -- mobile keeps the tighter
+  // cap (same 767px breakpoint used everywhere else in this file) since
+  // there's less screen width to fill and less reason to load extra icons.
+  var limit = window.innerWidth > 767 ? 14 : 6;
+  return merged.slice(0, limit);
 }
 
 function _lmRenderLeadersStrip(pairs){
