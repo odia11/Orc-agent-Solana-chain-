@@ -125,7 +125,16 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
    horizontal row of ring-avatar circles (colored by direction) instead of
    rectangular cards. overflow-x:auto rather than a grid, so the exact same
    markup/CSS works on narrow screens too -- no separate mobile layout. */
-.lm-leaders-strip{position:sticky;top:142px;z-index:20;background:var(--bg);display:flex;gap:14px;margin:16px 16px 0;overflow-x:auto;-webkit-overflow-scrolling:touch;padding:2px 2px 4px}
+.lm-leaders-strip{position:sticky;top:142px;z-index:20;background:var(--bg);margin:16px 16px 0;overflow:hidden;padding:2px 2px 4px}
+/* Auto-scrolls right-to-left, gently, like an Instagram-stories row -- the
+   rendered content is duplicated back-to-back (see _lmRenderLeadersStrip())
+   so translateX(-50%) is exactly one full copy-width, making the loop
+   seamless. Paused on hover so a moving target never has to be chased to
+   click it -- transforms don't affect hit-testing either way, but a
+   stationary row is what actually makes "still clickable" true in practice. */
+.lm-leaders-track{display:flex;gap:14px;width:max-content;animation:lmLeadersScroll 34s linear infinite}
+.lm-leaders-strip:hover .lm-leaders-track{animation-play-state:paused}
+@keyframes lmLeadersScroll{from{transform:translateX(0)}to{transform:translateX(-50%)}}
 .lm-leader-circle{flex-shrink:0;width:62px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer;text-align:center}
 .lm-leader-ring{width:56px;height:56px;border-radius:50%;padding:2.5px;flex-shrink:0;transition:opacity .15s}
 .lm-leader-circle:hover .lm-leader-ring{opacity:.8}
@@ -310,7 +319,8 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   }
   .lm-table-wrap{margin:8px}
   .lm-featured-banner{margin:8px 8px 0}
-  .lm-leaders-strip{margin:8px 8px 0;gap:10px}
+  .lm-leaders-strip{margin:8px 8px 0}
+  .lm-leaders-track{gap:10px}
   .col-hide{display:none!important}
   .lm-scanning-pill .lm-scan-label{display:none}
 
@@ -822,8 +832,8 @@ function _lmRenderLeadersStrip(pairs){
   var el = document.getElementById('lm-leaders-strip');
   if(!el) return;
   if(!pairs || !pairs.length){ el.style.display='none'; el.innerHTML=''; return; }
-  el.style.display='flex';
-  el.innerHTML = pairs.map(function(p){
+  el.style.display='block';
+  var circlesHtml = pairs.map(function(p){
     var sym  = (p.baseToken&&p.baseToken.symbol)||'?';
     var addr = (p.baseToken&&p.baseToken.address)||'';
     var imgUrl = (p.info&&p.info.imageUrl)||p._icon||'';
@@ -840,6 +850,11 @@ function _lmRenderLeadersStrip(pairs){
       +'<span class="lm-leader-chg '+chgCls+'">'+chgStr+'</span>'
       +'</div>';
   }).join('');
+  // Duplicated back-to-back so the CSS animation's translateX(-50%) loops
+  // seamlessly (see .lm-leaders-track) -- both copies carry the same
+  // data-addr/data-sym/data-pair, so a click on either one resolves exactly
+  // the same as before via the existing delegated listener.
+  el.innerHTML = '<div class="lm-leaders-track">'+circlesHtml+circlesHtml+'</div>';
 }
 
 var _lmLeadersDelegated = false;
