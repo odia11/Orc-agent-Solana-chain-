@@ -63,7 +63,7 @@ var _lmtdSolBalance = 0;
 var _lmtdChart      = null;
 var _lmtdSeries     = null;
 var _lmtdVolSeries  = null;
-var _lmtdChartStyle = 'candles'; // 'candles' or 'fomo' (live step-area chart)
+var _lmtdChartStyle = 'candles'; // 'candles' or 'fomo' (live area chart)
 var _lmtdFomoTimer  = null;      // live-refresh interval while the 'fomo' style is active
 var _lmtdPriceLine  = null;      // the dashed current-price line + floating label on the fomo chart
 var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fetch (pending or resolved) for
@@ -769,7 +769,7 @@ function _lmtdInitCandleChart(){
   // created every call). Same behavior, unchanged.
 }
 
-/* Shared FOMO-style step-area chart constructor — same extraction pattern
+/* Shared FOMO-style area chart constructor — same extraction pattern
    as _lmtdCreateChart() above, pulled out of _lmtdInitFomoChart() so both
    the modal (unchanged behavior) and _lmtdInitEmbeddedChart() below build
    this chart style identically. No volume series (the FOMO style never
@@ -780,17 +780,16 @@ function _lmtdCreateFomoChart(containerId){
   var chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight || 340,
-    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
-    grid:{vertLines:{color:'transparent'},horzLines:{color:'#21252c'}},
+    layout:{background:{type:'solid',color:'#0b0906'},textColor:'#e8dcc0'},
+    grid:{vertLines:{color:'transparent'},horzLines:{color:'#1c1409'}},
     crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
     rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.15,bottom:0.1}},
     timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
     handleScroll:true,handleScale:true
   });
   var series = chart.addAreaSeries({
-    lineColor:'#ff7a3d', lineWidth:2,
-    topColor:'rgba(255,122,61,.32)', bottomColor:'rgba(255,122,61,0)',
-    lineType: LightweightCharts.LineType.WithSteps,
+    lineColor:'#f2b840', lineWidth:2, lineType: LightweightCharts.LineType.Curved,
+    topColor:'rgba(242,184,64,.18)', bottomColor:'rgba(255,122,61,0)',
     priceLineVisible:false,
   });
   var resizeObserver = new ResizeObserver(function(){
@@ -800,10 +799,10 @@ function _lmtdCreateFomoChart(containerId){
   return {chart:chart, series:series, resizeObserver:resizeObserver};
 }
 
-/* "Live" step-area chart — same visual pattern popularized by apps like
-   FOMO Family: an angular (stepped, not smoothed) area series with a
-   gradient fill, plus a dashed price-line with a floating label pinned to
-   the latest value. Built entirely with LightweightCharts features already
+/* "Live" area chart — same visual pattern popularized by apps like
+   FOMO Family: a curved, gold-accented area series (Clean Editorial theme)
+   with a gradient fill, plus a dashed price-line with a floating label
+   pinned to the latest value. Built entirely with LightweightCharts features already
    in use elsewhere in this file (candlesticks, the PNL area chart) — no new
    library, just a different series type + createPriceLine(). Sourced from
    the same /api/chart/<mint> candle data, using each candle's close price
@@ -819,7 +818,7 @@ function _lmtdInitFomoChart(){
 }
 
 /* Embedded, "live" mini chart for live_market.html's poster cards -- same
-   FOMO-style step-area look + gradient fill + dashed price-line as the
+   FOMO-style area look + gradient fill + dashed price-line as the
    modal's Live chart style (_lmtdInitFomoChart() above), via the shared
    _lmtdCreateFomoChart() constructor, but owning its own series/timer
    state locally instead of the modal's globals, so many can run at once
