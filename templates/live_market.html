@@ -2380,11 +2380,17 @@ window.addEventListener('pageshow', function(e){
   // to reach for the input themselves, which misses the actual point
   // (users who scrolled down still want to search, per the original
   // report this button exists for).
+  //
+  // Instant (not smooth) scroll deliberately -- this page re-renders parts
+  // of the feed on its own timers (poster chart polling, the 15s tab
+  // refresh), and a multi-hundred-ms smooth-scroll animation was observed
+  // getting silently fought back to its starting position by one of those,
+  // landing nowhere near the top. An instant jump has no window for that to
+  // happen in.
   btn.addEventListener('click', function(){
-    window.scrollTo({top: 0, behavior: 'smooth'});
+    window.scrollTo(0, 0);
     var input = document.getElementById('lm-global-search');
-    if(!input) return;
-    setTimeout(function(){ input.focus(); }, 350);
+    if(input) input.focus();
   });
 })();
 </script>
