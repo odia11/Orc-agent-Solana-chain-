@@ -68,6 +68,17 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-global-search-dim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:24;pointer-events:none}
 .lm-global-search-dim.open{display:block}
 
+/* Floating "back to top / search" button -- appears once the user has
+   scrolled past the sticky header+chips+search+leaders stack, so there's
+   always a one-tap way back to search even if they've scrolled deep into
+   a long feed. z-index above everything except the search-results dropdown
+   itself (50), which should never be open at the same time this is visible
+   anyway (opening search scrolls you back up first). */
+.lm-scroll-top-btn{display:none;position:fixed;right:20px;bottom:20px;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#0a0b0e;border:none;font-size:20px;font-weight:900;line-height:1;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.45);z-index:40;align-items:center;justify-content:center;transition:opacity .15s,transform .15s}
+.lm-scroll-top-btn.visible{display:flex}
+.lm-scroll-top-btn:hover{transform:translateY(-2px)}
+.lm-scroll-top-btn:active{transform:translateY(0)}
+
 /* desktop sidebar layout -- below 1100px .lm-main-layout is a plain block
    (default display), so .lm-feed-col/.lm-table-wrap/.lm-poster-wrap render
    exactly as before this existed; at 1100px+ it becomes a 2-column grid so
@@ -325,7 +336,15 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 }
 /* mobile — CSS grid layout replaces table layout entirely */
 @media(max-width:767px){
-  html,body{overflow-x:hidden}
+  /* overflow-y:visible is required alongside overflow-x:hidden here -- per
+     spec, setting only one axis to non-visible computes the other to auto,
+     so html AND body would otherwise both silently become scroll
+     containers of their own. Two nested scrolling boxes is exactly the
+     setup that breaks position:sticky on the header/chips-row/search-bar/
+     leaders-strip on mobile browsers (notably iOS Safari) -- they'd stick
+     relative to the wrong box, or not at all, once scrolled far enough
+     into a long feed. */
+  html,body{overflow-x:hidden;overflow-y:visible}
   .lm-modal-close{min-width:44px;min-height:44px}
   .lm-header{display:none!important}
   .mobile-back-bar{height:52px}
@@ -2346,6 +2365,29 @@ window.addEventListener('pageshow', function(e){
 <script src="/static/auto-refresh.js?v={{ app_version }}"></script>
 
 <div class="lm-global-search-results" id="lm-global-search-results"></div>
+
+<button id="lm-scroll-top-btn" class="lm-scroll-top-btn" title="Terug naar boven / zoeken" aria-label="Terug naar boven en zoeken">↑</button>
+<script>
+(function(){
+  var btn = document.getElementById('lm-scroll-top-btn');
+  if(!btn) return;
+  var SHOW_AFTER_PX = 400;
+  window.addEventListener('scroll', function(){
+    btn.classList.toggle('visible', window.scrollY > SHOW_AFTER_PX);
+  }, {passive: true});
+  // Scrolls back to the sticky search bar and focuses it in one tap --
+  // scrolling alone would leave the user back at the top but still having
+  // to reach for the input themselves, which misses the actual point
+  // (users who scrolled down still want to search, per the original
+  // report this button exists for).
+  btn.addEventListener('click', function(){
+    window.scrollTo({top: 0, behavior: 'smooth'});
+    var input = document.getElementById('lm-global-search');
+    if(!input) return;
+    setTimeout(function(){ input.focus(); }, 350);
+  });
+})();
+</script>
 
 </body>
 </html>
