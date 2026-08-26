@@ -772,7 +772,7 @@ function _lmRenderFeaturedBanner(featuredPairs){
       +'<span class="lm-featured-sym">$'+_esc(sym)+'</span>'
       +'<span class="lm-featured-price"'+priceStyle+'>'+price+'</span>'
       +'<span class="lm-featured-mcap">'+mcap+'</span>';
-    slide.onclick = function(){ showTokenCard(sym, addr, p.pairAddress||''); };
+    slide.onclick = function(){ _lmJumpToCard(addr); };
     slide.classList.remove('lm-slide-anim');
     void slide.offsetWidth; // force reflow so the enter animation restarts on every slide change
     slide.classList.add('lm-slide-anim');
@@ -833,30 +833,44 @@ function _lmRenderLeadersStrip(pairs){
 }
 
 var _lmLeadersDelegated = false;
+/* Jump to the matching poster card and highlight it -- shared by the leaders
+   strip, the featured banner, global search results, the old table's row
+   click, and the ?addr=/?token= direct-link handler below. Poster cards only
+   exist in poster view, so switch to it first if table view is currently
+   active (mirrors _lmToggleViewMode(), minus the toggle direction). The card
+   might also not exist in the currently-loaded/filtered feed at all
+   (different tab active) -- if so, switch to "All tokens" via the same
+   _lmSetChip() the ALL-tab button uses and wait for its re-render before
+   looking again. Returns true if a card was found and scrolled to, false
+   otherwise (e.g. mint isn't in the feed at all). */
+async function _lmJumpToCard(mint){
+  if(_lmViewMode !== 'poster'){
+    _lmViewMode = 'poster';
+    try{ localStorage.setItem('orca_lm_view_mode', 'poster'); }catch(e){}
+    _lmApplyViewModeUI();
+    _lmApplyChipFilter();
+  }
+  var target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(mint)+'"]');
+  if(!target){
+    await _lmSetChip('all');
+    target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(mint)+'"]');
+    if(!target) return false;
+  }
+  target.scrollIntoView({behavior:'smooth', block:'center'});
+  target.classList.add('lm-poster-card-highlight');
+  setTimeout(function(){ target.classList.remove('lm-poster-card-highlight'); }, 1800);
+  return true;
+}
+
 function _lmBindLeadersEvents(){
   if(_lmLeadersDelegated) return;
   _lmLeadersDelegated = true;
   var el = document.getElementById('lm-leaders-strip');
   if(!el) return;
-  el.addEventListener('click', async function(e){
+  el.addEventListener('click', function(e){
     var card = e.target.closest('.lm-leader-circle');
     if(!card) return;
-    // Jump to the matching poster card in the feed below instead of
-    // opening the modal -- only makes sense in poster view (the table has
-    // its own row-click already). The poster card might not exist in the
-    // currently-loaded/filtered feed at all (different tab active) -- if
-    // so, switch to "All tokens" via the same _lmSetChip() the ALL-tab
-    // button uses and wait for its re-render before looking again.
-    var addr = card.dataset.addr;
-    var target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(addr)+'"]');
-    if(!target){
-      await _lmSetChip('all');
-      target = document.querySelector('.lm-poster-card[data-mint="'+CSS.escape(addr)+'"]');
-      if(!target) return;
-    }
-    target.scrollIntoView({behavior:'smooth', block:'center'});
-    target.classList.add('lm-poster-card-highlight');
-    setTimeout(function(){ target.classList.remove('lm-poster-card-highlight'); }, 1800);
+    _lmJumpToCard(card.dataset.addr);
   });
 }
 
@@ -1632,15 +1646,16 @@ function _rowHtml(p, idx){
 function _rowClick(e, sym, addr, pairAddr, chain){
   if(e.target.tagName==='BUTTON'||e.target.closest('button')) return;
   if(chain === 'bsc'){
-    // showTokenCard() is Solana-only end to end (chart, safety checks, buy
-    // flow) -- opening it for a BSC address would silently misbehave rather
-    // than cleanly fail, so this is blocked at the row level too, not just
-    // the Trade button. No toast utility exists in this file, so this uses
-    // a plain, guaranteed-visible fallback rather than a silent no-op.
+    // _lmJumpToCard()'s poster cards are Solana-only end to end (chart,
+    // safety checks, buy flow) -- jumping to one for a BSC address would
+    // silently misbehave rather than cleanly fail, so this is blocked at the
+    // row level too, not just the Trade button. No toast utility exists in
+    // this file, so this uses a plain, guaranteed-visible fallback rather
+    // than a silent no-op.
     alert('BSC token details are coming soon.');
     return;
   }
-  showTokenCard(sym, addr, pairAddr);
+  _lmJumpToCard(addr);
 }
 
 /* ── inline trade dropdown ── */
@@ -1766,16 +1781,26 @@ _lmInitLeaders();
   // to the symbol-search path since the address isn't known yet.
   var _urlToken = _params.get('token');
   if(!_urlAddr && !_urlToken) return;
-  // showTokenCard() -> _lmtdInitChart() needs LightweightCharts, loaded via
-  // a deferred <script> above -- deferred scripts only run once the document
-  // has finished parsing. This inline script runs immediately as the parser
-  // reaches it, which is BEFORE that, so calling showTokenCard() straight
-  // away here raced it (ReferenceError: LightweightCharts is not defined).
-  // Waiting for DOMContentLoaded guarantees the deferred script has already
-  // run by the time we call it.
+  // _lmJumpToCard() needs the poster-card DOM to exist, which needs a full
+  // script pass to have rendered it -- this inline script runs immediately
+  // as the parser reaches it, which is before that. DOMContentLoaded is
+  // enough of a wait for the DOM itself.
   document.addEventListener('DOMContentLoaded', function(){
-    if(_urlAddr){ showTokenCard(_urlAddr, _urlAddr); return; }
-    showTokenCard(_urlToken);
+    if(_urlAddr){ _lmJumpToCard(_urlAddr); return; }
+    // ?token= only gives a symbol, not a mint -- _lmJumpToCard() needs a
+    // mint to find the right card, and _loadTab('trending') above may not
+    // have finished fetching _pairs yet by the time DOMContentLoaded fires.
+    // Retry a few times with a short delay instead of failing once.
+    var _attemptsLeft = 10;
+    (function _tryFindBySymbol(){
+      var match = (_pairs||[]).find(function(p){
+        return ((p.baseToken&&p.baseToken.symbol)||'').toLowerCase() === _urlToken.toLowerCase();
+      });
+      var mint = match ? ((match.baseToken&&match.baseToken.address)||'') : '';
+      if(mint){ _lmJumpToCard(mint); return; }
+      if(--_attemptsLeft <= 0) return;
+      setTimeout(_tryFindBySymbol, 500);
+    })();
   });
 })();
 
@@ -1791,7 +1816,7 @@ _lmInitLeaders();
     // reuse the same idx numbering (0..N) as whatever's in the main table
     // at the same time, that lookup would collide with the main table's own
     // rows. Any other click on a row -- including the Trade button --
-    // closes the search box and opens the full Token Detail modal instead,
+    // closes the search box and jumps to the matching poster card instead,
     // which has its own working buy/sell UI.
     resultsBox.addEventListener('click', function(e){
       var watchBtn = e.target.closest('.lm-watch-star');
@@ -1803,7 +1828,7 @@ _lmInitLeaders();
       var row = e.target.closest('.lm-row');
       if(!row || !row.dataset.addr) return;
       _lmCloseGlobalSearch();
-      showTokenCard(row.dataset.sym, row.dataset.addr, row.dataset.pair);
+      _lmJumpToCard(row.dataset.addr);
     });
   }
   document.addEventListener('click', function(e){
