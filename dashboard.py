@@ -9377,25 +9377,38 @@ def get_notifications():
         })
     return jsonify(result)
 
+NOTIF_TRADE_TYPES = ('trade', 'bridge')
+
 @app.route('/api/notifications/mine', methods=['GET'])
 @rate_limit(60, 60)
 def notifications_mine():
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    category = request.args.get('category', 'all')
     conn = sqlite3.connect(DB_FILE)
     try:
         me = _get_uid(conn, wallet)
         if not me:
             return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        placeholders = ','.join('?' * len(NOTIF_TRADE_TYPES))
+        if category == 'trades':
+            type_filter = f' AND n.type IN ({placeholders})'
+            type_params = NOTIF_TRADE_TYPES
+        elif category == 'social':
+            type_filter = f' AND n.type NOT IN ({placeholders})'
+            type_params = NOTIF_TRADE_TYPES
+        else:
+            type_filter = ''
+            type_params = ()
         rows = conn.execute(
             '''SELECT n.id, n.type, n.content, n.link, n.is_read, n.created_at,
                       u.avatar_url, u.username, u.is_verified
                FROM notifications n
                LEFT JOIN users u ON u.wallet_address = n.actor_wallet
-               WHERE n.user_id=?
+               WHERE n.user_id=?''' + type_filter + '''
                ORDER BY n.created_at DESC LIMIT 30''',
-            (me,)
+            (me,) + type_params
         ).fetchall()
     finally:
         conn.close()
