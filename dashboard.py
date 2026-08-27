@@ -1307,6 +1307,22 @@ def init_db():
         UNIQUE(user_id, mint_address),
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
+    # Rug-risk signals captured at buy time (rugcheck.xyz + on-chain mint/freeze
+    # authority — see _check_lp_locked()/_check_mint_safety()), carried through
+    # open_positions so a restart doesn't lose them, then copied onto the closed
+    # `trades` row so outcomes can later be correlated against entry-time risk.
+    try:
+        c.execute('ALTER TABLE open_positions ADD COLUMN entry_lp_locked_pct REAL DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE open_positions ADD COLUMN entry_mint_authority_active INTEGER DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE open_positions ADD COLUMN entry_freeze_authority_active INTEGER DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
     c.execute('CREATE INDEX IF NOT EXISTS idx_open_positions_user ON open_positions(user_id)')
     # Bridge transactions: one row per Solana<->BSC bridge attempt (Mayan Finance),
     # from quote-acceptance through on-chain confirmation. Kept even after
@@ -1447,6 +1463,30 @@ def init_db():
         pass
     try:
         c.execute("ALTER TABLE trades ADD COLUMN source TEXT DEFAULT 'bot'")
+    except sqlite3.OperationalError:
+        pass
+    # Same rug-risk signals as open_positions, plus exit_reason (previously computed
+    # for logging/cooldown purposes in _record_user_trade() but never persisted) --
+    # together these let a closed trade be labeled "good" vs "rug/loss" and correlated
+    # against the risk signals seen at entry.
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN exit_reason TEXT DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN entry_liquidity REAL DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN entry_lp_locked_pct REAL DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN entry_mint_authority_active INTEGER DEFAULT NULL')
+    except sqlite3.OperationalError:
+        pass
+    try:
+        c.execute('ALTER TABLE trades ADD COLUMN entry_freeze_authority_active INTEGER DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
     c.execute('''CREATE TABLE IF NOT EXISTS follows (
@@ -2876,12 +2916,14 @@ def _hydrate_positions_from_db(wallet: str, us: dict):
             if not row:
                 return
             rows = conn.execute(
-                '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain
+                '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain,
+                          entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active
                    FROM open_positions WHERE user_id=?''', (row[0],)
             ).fetchall()
         finally:
             conn.close()
-        for mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain in rows:
+        for (mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain,
+             entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active) in rows:
             # chain must be carried into the restored dict, not just the DB row --
             # every place that iterates us['positions'] and calls the Solana-only
             # _execute_user_swap() relies on pos['chain'] to skip BSC entries.
@@ -2889,6 +2931,9 @@ def _hydrate_positions_from_db(wallet: str, us: dict):
                 'amount': amount, 'buy_price': buy_price, 'spend': spend,
                 'symbol': symbol, 'opened_at': opened_at, 'entry_liquidity': entry_liquidity,
                 'chain': chain or 'solana',
+                'entry_lp_locked_pct': entry_lp_locked_pct,
+                'entry_mint_authority_active': bool(entry_mint_authority_active) if entry_mint_authority_active is not None else None,
+                'entry_freeze_authority_active': bool(entry_freeze_authority_active) if entry_freeze_authority_active is not None else None,
             }
         if rows:
             print(f'[open_positions] restored {len(rows)} open position(s) for {wallet[:8]}…', flush=True)
@@ -3682,15 +3727,23 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
             conn.execute('PRAGMA busy_timeout=3000')
             conn.execute(
                 '''INSERT INTO open_positions
-                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, source, copy_of_wallet, chain, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity,
+                    entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active,
+                    opened_at, source, copy_of_wallet, chain, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                    ON CONFLICT(user_id, mint_address) DO UPDATE SET
                        symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
                        spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
+                       entry_lp_locked_pct=excluded.entry_lp_locked_pct,
+                       entry_mint_authority_active=excluded.entry_mint_authority_active,
+                       entry_freeze_authority_active=excluded.entry_freeze_authority_active,
                        opened_at=excluded.opened_at, source=excluded.source,
                        copy_of_wallet=excluded.copy_of_wallet, chain=excluded.chain, updated_at=CURRENT_TIMESTAMP''',
                 (user_id, mint, pos.get('symbol', ''), pos.get('amount', 0.0), pos.get('buy_price', 0.0),
-                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0), pos.get('opened_at', 0.0), source, copy_of_wallet, chain))
+                 pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0),
+                 pos.get('entry_lp_locked_pct'), pos.get('entry_mint_authority_active'),
+                 pos.get('entry_freeze_authority_active'),
+                 pos.get('opened_at', 0.0), source, copy_of_wallet, chain))
             conn.commit()
         finally:
             conn.close()
@@ -3835,7 +3888,8 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
                        exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True,
-                       source: str = 'bot'):
+                       source: str = 'bot', entry_liquidity: float = None, entry_lp_locked_pct: float = None,
+                       entry_mint_authority_active: bool = None, entry_freeze_authority_active: bool = None):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -3896,11 +3950,14 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         try:
             _cur = conn.execute(
                 '''INSERT INTO trades
-                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''',
+                   (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source,
+                    exit_reason, entry_liquidity, entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
-                 mint or None, source))
+                 mint or None, source,
+                 exit_reason or None, entry_liquidity, entry_lp_locked_pct,
+                 entry_mint_authority_active, entry_freeze_authority_active))
             conn.commit()
             _trade_id = _cur.lastrowid
         finally:
@@ -5262,7 +5319,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
-                                       pref_notifications=pref_notifications)
+                                       pref_notifications=pref_notifications,
+                                       entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
+                                       entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
+                                       entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
                 _close_open_position(user_id, wallet, _mint)
             else:
                 add_user_log(wallet, f'[{short}] ✗ [crash-exit] {_label} sell failed — position kept open, will retry next scan')
@@ -5276,7 +5336,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
-                                       pref_notifications=pref_notifications)
+                                       pref_notifications=pref_notifications,
+                                       entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
+                                       entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
+                                       entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
                 _close_open_position(user_id, wallet, _mint)
             else:
                 add_user_log(wallet, f'[{short}] ✗ STARTUP FORCE SELL {_label} failed — position kept open, will retry next scan')
@@ -5441,7 +5504,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications)
+                                                   pref_notifications=pref_notifications,
+                                                   entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                                   entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
@@ -5458,7 +5524,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications)
+                                                   pref_notifications=pref_notifications,
+                                                   entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                                   entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
@@ -5478,7 +5547,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications)
+                                                   pref_notifications=pref_notifications,
+                                                   entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                                   entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
@@ -5636,6 +5708,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['symbol']          = label
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
+                                pos['entry_lp_locked_pct'] = _lp.get('lp_locked_pct') if _lp.get('ok') else None
+                                pos['entry_mint_authority_active'] = _safety.get('mint_authority_active') if _safety.get('ok') else None
+                                pos['entry_freeze_authority_active'] = _safety.get('freeze_authority_active') if _safety.get('ok') else None
                                 _upsert_open_position(user_id, wallet, bmint, pos, source='bot')
                                 _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy')
                                 open_pos += 1
@@ -14377,7 +14452,10 @@ def api_trade_sell():
             _record_user_trade(user_id, us, symbol, entry, exit_price,
                                pos['amount'], pos.get('spend', 0.0),
                                wallet=wallet, private_key=pk, mint=mint,
-                               exit_reason='MANUAL SELL', opened_at=opened_at, source='manual')
+                               exit_reason='MANUAL SELL', opened_at=opened_at, source='manual',
+                               entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                               entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                               entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
         _close_open_position(user_id, wallet, mint)
     return jsonify({'ok': True, 'pnl': pnl, 'exit_price': exit_price, 'sell_executed': sell_ok})
 
@@ -16377,7 +16455,10 @@ def api_manual_sell():
         with _use_key(enc_blob, wallet) as _pk:
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                                wallet=wallet, private_key=_pk, mint=mint,
-                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual')
+                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual',
+                               entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                               entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                               entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
         _close_open_position(user_id, wallet, mint)
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
     else:
@@ -16554,7 +16635,10 @@ def _liquidate_all_positions(wallet: str):
                         _record_user_trade(user_id, us, symbol, entry, exit_price,
                                            pos['amount'], pos.get('spend', 0.0),
                                            wallet=wallet, private_key=pk, mint=mint,
-                                           exit_reason='STOP TRADING', opened_at=opened_at, source='manual')
+                                           exit_reason='STOP TRADING', opened_at=opened_at, source='manual',
+                                           entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                           entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
                     _close_open_position(user_id, wallet, mint)
                     add_user_log(wallet, f'[stop] {short} sold {symbol} (Stop Trading)')
                 else:
@@ -16805,7 +16889,10 @@ def manual_sell():
         with _use_key(enc_blob, wallet) as _pk:
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
                                wallet=wallet, private_key=_pk, mint=mint,
-                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual')
+                               exit_reason='MANUAL SELL', opened_at=pos.get('opened_at', 0.0), source='manual',
+                               entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                               entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                               entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
         _close_open_position(user_id, wallet, mint)
         add_user_log(wallet, f'[{short}] MANUAL SELL: {symbol} ✓')
     else:
