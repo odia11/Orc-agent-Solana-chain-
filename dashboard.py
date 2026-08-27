@@ -7505,7 +7505,7 @@ def leaderboard():
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
-              AND (t.source = \'manual\' OR (t.source IS NULL AND t.mint_address IS NOT NULL))
+              AND (t.source IN (\'manual\', \'bot\', \'copy\') OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
             ORDER BY total_pnl DESC
             LIMIT 50
@@ -11070,7 +11070,7 @@ def get_leaderboard():
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE date(t.timestamp) = date('now')
-              AND (t.source = 'manual' OR (t.source IS NULL AND t.mint_address IS NOT NULL))
+              AND (t.source IN ('manual', 'bot', 'copy') OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
             ORDER BY total_pnl DESC
             LIMIT 10
@@ -11124,7 +11124,7 @@ def get_leaderboard_full():
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != ''
-              AND (t.source = 'manual' OR (t.source IS NULL AND t.mint_address IS NOT NULL))
+              AND (t.source IN ('manual', 'bot', 'copy') OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
             ORDER BY total_pnl DESC
             LIMIT 50
