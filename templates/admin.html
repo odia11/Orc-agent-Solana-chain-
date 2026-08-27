@@ -1486,7 +1486,7 @@ async function _supAdminLoadThreadMessages() {
   var atBottom = msgsEl.scrollTop + msgsEl.clientHeight >= msgsEl.scrollHeight - 40;
   msgsEl.innerHTML = (r.messages || []).map(function(m) {
     var cls = m.sender_role === 'staff' ? 'role-staff' : 'role-user';
-    var t = new Date(m.created_at.replace(' ', 'T') + 'Z').toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
+    var t = new Date(m.created_at.replace(' ', 'T') + 'Z').toLocaleString('en-US', {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'});
     return '<div class="sup-msg ' + cls + '">' + _supEsc(m.message) + '<div class="sup-msg-time">' + t + '</div></div>';
   }).join('') || '<div class="tbl-empty">No messages yet</div>';
   if (atBottom) msgsEl.scrollTop = msgsEl.scrollHeight;
@@ -1895,7 +1895,7 @@ function _renderBans(bans, bodyId, countId) {
     ? list.map(b =>
         '<div class="tbl-row col-bans">' +
         '<div class="mono">' + b.ip + '</div>' +
-        '<div class="mono-sm">' + (b.permanent ? 'Permanent' : new Date(b.expires_at * 1000).toLocaleTimeString()) + '</div>' +
+        '<div class="mono-sm">' + (b.permanent ? 'Permanent' : new Date(b.expires_at * 1000).toLocaleTimeString('en-US')) + '</div>' +
         '<div class="mono ' + (b.mins_left > 5 ? 'neg' : 'pos') + '">' + (b.permanent ? '∞' : b.mins_left + 'm') + '</div>' +
         '<div><button class="btn btn-ghost" onclick="clearBan(\'' + b.ip + '\')">Unban</button></div>' +
         '</div>').join('')

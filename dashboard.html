@@ -4381,9 +4381,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       var t=document.getElementById('rs-stat-trades');
       var s=document.getElementById('rs-stat-sol');
       var o=document.getElementById('rs-stat-online');
-      if(t&&d.total_trades!=null) t.textContent=Number(d.total_trades).toLocaleString();
-      if(s&&d.net_sol!=null) s.textContent=(d.net_sol>=0?'+':'')+Number(d.net_sol).toLocaleString();
-      if(o&&d.active_traders!=null) o.textContent=Number(d.active_traders).toLocaleString();
+      if(t&&d.total_trades!=null) t.textContent=Number(d.total_trades).toLocaleString('en-US');
+      if(s&&d.net_sol!=null) s.textContent=(d.net_sol>=0?'+':'')+Number(d.net_sol).toLocaleString('en-US');
+      if(o&&d.active_traders!=null) o.textContent=Number(d.active_traders).toLocaleString('en-US');
     }
     function _rsFetchStats(){
       fetch('/api/platform/stats').then(function(r){return r.json()}).then(function(d){
