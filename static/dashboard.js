@@ -1012,7 +1012,7 @@ async function _loadRrTraders(){
         +'<span class="rr-trader-rank">'+t.rank+'</span>'
         +'<div class="rr-trader-av" style="background:'+bg+'">'+ini+'</div>'
         +'<div class="rr-trader-info">'
-        +'<div class="rr-trader-name">'+esc(t.username||ini)+badge+'</div>'
+        +'<div class="rr-trader-name"><span class="rr-trader-uname">'+esc(t.username||ini)+'</span>'+badge+'</div>'
         +'<div class="rr-trader-handle">@'+esc(t.username||t.wallet_address.slice(0,6))+'</div>'
         +'</div>'
         +'<div class="rr-trader-pnl">'+pnl+'</div>'
