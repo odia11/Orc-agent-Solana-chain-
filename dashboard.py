@@ -5042,6 +5042,89 @@ def _check_lp_locked(mint_address: str) -> dict:
         print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
         return {'lp_locked_pct': 0, 'ok': False}
 
+def _bucket_lp_pct(pct: float) -> str:
+    """Groups an entry-time LP-locked % into a 10-wide bucket. The buy filter
+    already requires >=50 (see the qualifying-token check in the bot loop), so
+    every bucket below that is expected to stay empty unless the filter itself
+    changes -- kept anyway so a future threshold change shows up here too."""
+    if pct >= 100:
+        return '100%'
+    lo = int(pct // 10) * 10
+    return f'{lo}-{lo + 10}%'
+
+def _summarize_trade_rows(rows: list) -> dict:
+    """rows: list of (pnl, exit_reason) tuples. A trade counts as a 'rug' if its
+    exit_reason starts with 'RUGPULL' (set only by the in-position rugpull
+    detector -- see _rug_reason in the bot loop), not just any losing trade."""
+    n = len(rows)
+    if n == 0:
+        return {'count': 0, 'win_rate_pct': None, 'rug_rate_pct': None, 'avg_pnl_sol': None}
+    wins = sum(1 for pnl, _ in rows if (pnl or 0) > 0)
+    rugs = sum(1 for _, reason in rows if (reason or '').startswith('RUGPULL'))
+    avg_pnl = sum((pnl or 0) for pnl, _ in rows) / n
+    return {
+        'count': n,
+        'win_rate_pct': round(wins / n * 100, 1),
+        'rug_rate_pct': round(rugs / n * 100, 1),
+        'avg_pnl_sol': round(avg_pnl, 4),
+    }
+
+def _compute_risk_win_rates(min_sample: int = 5) -> dict:
+    """Correlates closed bot trades against the rug-risk signals captured at buy
+    time (entry_lp_locked_pct, entry_mint_authority_active/entry_freeze_authority_active
+    -- see _check_lp_locked()/_check_mint_safety() and the pos['entry_*'] assignments
+    at buy time) so the fixed buy-filter thresholds (currently a hardcoded 50%
+    LP-locked minimum) can eventually be checked against real outcomes instead of
+    staying a guess. Scoped to source='bot' trades only -- manual/copy-trade
+    entries never ran the buy-time check, so their entry_lp_locked_pct is NULL
+    and would just be noise here (see _record_user_trade() callers).
+    `min_sample` doesn't filter buckets out -- it's surfaced per-bucket as
+    `low_sample` so a caller can gray out/ignore buckets too thin to trust."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        all_rows = conn.execute(
+            '''SELECT pnl, exit_reason, entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active
+               FROM trades WHERE source='bot' AND exit_price IS NOT NULL'''
+        ).fetchall()
+    finally:
+        conn.close()
+
+    overall = _summarize_trade_rows([(r[0], r[1]) for r in all_rows])
+
+    lp_buckets: dict = {}
+    unknown_lp_rows = []
+    for pnl, reason, lp_pct, _mint_auth, _freeze_auth in all_rows:
+        if lp_pct is None:
+            unknown_lp_rows.append((pnl, reason))
+            continue
+        lp_buckets.setdefault(_bucket_lp_pct(lp_pct), []).append((pnl, reason))
+    lp_stats = {k: dict(_summarize_trade_rows(v), low_sample=len(v) < min_sample)
+                for k, v in lp_buckets.items()}
+    if unknown_lp_rows:
+        lp_stats['unknown (rugcheck failed at buy time)'] = dict(
+            _summarize_trade_rows(unknown_lp_rows), low_sample=len(unknown_lp_rows) < min_sample)
+
+    def _authority_stats(idx: int) -> dict:
+        # idx 3 = entry_mint_authority_active, idx 4 = entry_freeze_authority_active.
+        # Both are hard-skipped at buy time when True (see the mint/freeze authority
+        # gate right before the LP-locked check), so in practice only the "False"
+        # bucket should ever have trades -- any "True"/"unknown" rows here would mean
+        # the gate was bypassed or the safety check failed silently.
+        buckets: dict = {}
+        for r in all_rows:
+            val = r[idx]
+            key = 'unknown' if val is None else ('active' if val else 'inactive')
+            buckets.setdefault(key, []).append((r[0], r[1]))
+        return {k: dict(_summarize_trade_rows(v), low_sample=len(v) < min_sample) for k, v in buckets.items()}
+
+    return {
+        'overall': overall,
+        'by_entry_lp_locked_pct': lp_stats,
+        'by_entry_mint_authority': _authority_stats(3),
+        'by_entry_freeze_authority': _authority_stats(4),
+        'min_sample': min_sample,
+    }
+
 def _get_deepest_pair_liquidity(mint: str) -> dict:
     """Fetches the full DexScreener pairs list for `mint` directly and
     returns the liquidity/age of whichever pair actually has the most
@@ -18384,6 +18467,20 @@ def admin_stats():
         active_bots = sum(1 for us in list(user_states.values()) if us.get('trader_running'))
         return jsonify({'ok': True, 'users': total_users, 'trades': total_trades,
                         'volume_sol': volume_sol, 'active_bots': active_bots})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/risk-stats')
+@rate_limit(20, 60)
+def admin_risk_stats():
+    """Win-rate / rug-rate of closed bot trades, broken down by the entry-time
+    rug-risk signals (LP-locked %, mint/freeze authority) -- see
+    _compute_risk_win_rates(). First step toward letting the buy-filter's
+    fixed thresholds be checked against real outcomes instead of staying a guess."""
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
+    if err: return err
+    try:
+        return jsonify({'ok': True, **_compute_risk_win_rates()})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
