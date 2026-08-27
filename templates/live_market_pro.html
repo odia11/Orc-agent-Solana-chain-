@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="csrf-token" content="{{ csrf_token }}">
+<meta name="client-secret" content="{{ client_secret }}">
+<title>Live Market — OrcAgent</title>
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icon-180.png?v=5">
+<link rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=2">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap"></noscript>
+<style>
+:root{
+  --bg:#0a0b0e; --panel:#0a0b0e; --panel-border:#1c2027;
+  --line:#16191f; --line2:#21252c;
+  --card:#0d0f12; --card2:#101216;
+  --accent:#f5b544; --accent-soft:rgba(245,181,68,.12); --accent-border:rgba(245,181,68,.3);
+  --text:#eef1f5; --muted:#8a919c; --muted2:#565d68;
+  --green:#3ad29b; --red:#f76b62;
+  --ui:'Geist',system-ui,-apple-system,sans-serif;
+  --mono:'JetBrains Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow-x:auto}
+a{color:inherit;text-decoration:none}
+button{font-family:inherit;cursor:pointer}
+input{font-family:inherit}
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-thumb{background:var(--line2);border-radius:8px}
+::-webkit-scrollbar-track{background:transparent}
+.mono{font-family:var(--mono)}
+.up{color:var(--green)}
+.down{color:var(--red)}
+
+/* ── shell ── */
+.pt-shell{max-width:1440px;margin:0 auto;padding:16px 16px 40px;min-width:1220px}
+
+/* ── top bar ── */
+.pt-topbar{display:flex;align-items:center;gap:22px;padding:10px 6px}
+.pt-logo{display:flex;align-items:center;gap:9px;flex-shrink:0}
+.pt-logo-mark{width:32px;height:32px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.pt-logo-mark::before{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
+.pt-wordmark{font-size:17px;font-weight:700;letter-spacing:-.02em}
+.pt-nav{display:flex;align-items:center;gap:4px;flex-shrink:0}
+.pt-nav a{font-size:13.5px;font-weight:600;color:var(--muted);padding:8px 13px;border-radius:9px;transition:color .15s,background .15s}
+.pt-nav a:hover{color:var(--text);background:var(--line)}
+.pt-nav a.active{color:var(--accent);background:var(--accent-soft)}
+.pt-search-wrap{flex:1;position:relative;max-width:420px;margin-left:8px}
+.pt-search{width:100%;background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:9px 14px 9px 34px;color:var(--text);font-size:12.5px;outline:none;transition:border-color .15s}
+.pt-search:focus{border-color:var(--accent)}
+.pt-search::placeholder{color:var(--muted2)}
+.pt-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted2);font-size:13px;pointer-events:none}
+.pt-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card2);border:1px solid var(--line2);border-top:2px solid var(--accent);border-radius:12px;max-height:340px;overflow-y:auto;z-index:80;display:none;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.pt-search-results.open{display:block}
+.pt-sr-hd{padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
+.pt-sr-row{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .15s}
+.pt-sr-row:hover{background:var(--line)}
+.pt-sr-logo,.pt-sr-logo-ph{width:26px;height:26px;border-radius:8px;flex-shrink:0;object-fit:cover;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted)}
+.pt-sr-name{flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-sr-sub{font-size:11px;color:var(--muted2)}
+.pt-sr-empty{padding:16px;text-align:center;color:var(--muted2);font-size:12px}
+.pt-right-chips{display:flex;align-items:center;gap:12px;margin-left:auto;flex-shrink:0}
+.pt-sol-chip{display:flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:7px 13px;font-size:12.5px;font-weight:600}
+.pt-sol-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.pt-avatar{width:34px;height:34px;border-radius:50%;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;object-fit:cover;border:1px solid var(--line2)}
+
+/* ── main 3-col panel ── */
+.pt-panel{margin-top:14px;background:var(--panel);border:1px solid var(--panel-border);border-radius:22px;display:grid;grid-template-columns:246px 1fr 300px;overflow:hidden}
+.pt-left{border-right:1px solid var(--line);padding:18px 16px;display:flex;flex-direction:column;gap:22px;overflow-y:auto;max-height:calc(100vh - 110px)}
+.pt-right{border-left:1px solid var(--line);padding:16px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:calc(100vh - 110px)}
+.pt-center{min-width:0;overflow-y:auto;max-height:calc(100vh - 110px)}
+
+/* ── left rail sections ── */
+.pt-sec-title{font-size:10.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px}
+.pt-sort-row{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:9px 10px;border-radius:11px;cursor:pointer;transition:background .15s,color .15s;color:var(--muted);font-size:13px;font-weight:600}
+.pt-sort-row:hover{background:var(--line)}
+.pt-sort-row.active{background:var(--accent-soft);color:var(--accent)}
+.pt-sort-count{font-family:var(--mono);font-size:10.5px;font-weight:700;color:var(--muted2);background:var(--line);border-radius:999px;padding:2px 7px;flex-shrink:0}
+.pt-sort-row.active .pt-sort-count{color:var(--accent);background:rgba(245,181,68,.16)}
+
+.pt-toggle-row{display:flex;align-items:center;justify-content:space-between;padding:7px 2px;font-size:12.5px;color:var(--text)}
+.pt-switch{width:34px;height:19px;border-radius:999px;background:var(--line2);position:relative;flex-shrink:0;transition:background .18s;border:none}
+.pt-switch::after{content:'';position:absolute;top:2px;left:2px;width:15px;height:15px;border-radius:50%;background:var(--muted2);transition:transform .18s,background .18s}
+.pt-switch.on{background:var(--accent-soft);border:1px solid var(--accent-border)}
+.pt-switch.on::after{transform:translateX(15px);background:#0a0b0e}
+
+.pt-liq-value{font-family:var(--mono);font-size:12px;color:var(--accent);font-weight:700;margin-bottom:8px}
+.pt-liq-slider{width:100%;-webkit-appearance:none;height:4px;border-radius:4px;background:var(--line2);outline:none}
+.pt-liq-slider::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;border-radius:50%;background:var(--accent);cursor:pointer;box-shadow:0 0 0 3px rgba(245,181,68,.18)}
+.pt-liq-slider::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);border:none;cursor:pointer}
+.pt-liq-fill{height:4px;border-radius:4px;background:var(--accent);margin-top:-4px;pointer-events:none}
+
+.pt-age-row{display:flex;gap:6px;flex-wrap:wrap}
+.pt-age-chip{padding:6px 11px;font-size:10.5px;font-weight:700;letter-spacing:.03em;border-radius:999px;background:var(--card2);border:1px solid var(--line2);color:var(--muted);transition:all .15s}
+.pt-age-chip:hover{color:var(--text)}
+.pt-age-chip.active{background:var(--accent);border-color:var(--accent);color:#0a0b0e}
+
+.pt-bot-card{background:var(--accent-soft);border:1px solid var(--accent-border);border-radius:16px;padding:14px;margin-top:auto}
+.pt-bot-title{font-size:13px;font-weight:700;color:var(--accent);margin-bottom:5px;display:flex;align-items:center;gap:7px}
+.pt-bot-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);animation:ptPulse 1.6s ease-in-out infinite}
+.pt-bot-sub{font-size:11.5px;color:var(--muted);line-height:1.5;margin-bottom:11px}
+.pt-bot-btn{width:100%;background:var(--card2);border:1px solid var(--accent-border);color:var(--accent);font-size:12px;font-weight:700;border-radius:10px;padding:9px;transition:background .15s}
+.pt-bot-btn:hover{background:var(--line)}
+
+@keyframes ptPulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── center header ── */
+.pt-feed-hd{display:flex;align-items:center;justify-content:space-between;padding:18px 22px 14px;border-bottom:1px solid var(--line)}
+.pt-feed-title{font-size:19px;font-weight:700}
+.pt-feed-sub{font-size:11.5px;color:var(--muted2);margin-top:3px;font-family:var(--mono)}
+.pt-scanning-pill{display:flex;align-items:center;gap:6px;background:rgba(58,210,155,.12);border-radius:999px;padding:6px 12px;font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--green)}
+.pt-scan-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:ptPulse 1.4s ease-in-out infinite}
+
+/* ── story rail ── */
+.pt-story-rail{display:flex;gap:16px;padding:16px 22px;overflow-x:auto;overflow-y:hidden;border-bottom:1px solid var(--line);scrollbar-width:none}
+.pt-story-rail::-webkit-scrollbar{display:none}
+.pt-story{flex-shrink:0;width:66px;display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.pt-story-ring{width:62px;height:62px;border-radius:50%;padding:2.5px;background:linear-gradient(135deg,var(--accent),var(--green))}
+.pt-story-ring.down{background:linear-gradient(135deg,var(--red),var(--accent))}
+.pt-story-inner{width:100%;height:100%;border-radius:50%;padding:2px;background:var(--bg)}
+.pt-story-img,.pt-story-img-ph{width:100%;height:100%;border-radius:50%;object-fit:cover;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:var(--muted)}
+.pt-story-name{font-size:10px;font-weight:700;color:var(--text);max-width:66px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-story-chg{font-family:var(--mono);font-size:9.5px;font-weight:700}
+
+/* ── poster cards ── */
+.pt-feed-list{padding:16px 22px 32px;display:flex;flex-direction:column;gap:16px}
+.pt-empty{text-align:center;color:var(--muted2);font-size:13px;padding:50px 0}
+.pt-card{border:1px solid var(--line2);border-radius:18px;overflow:hidden;background:var(--card)}
+.pt-card.hi{border-color:var(--accent-border);box-shadow:0 0 0 1px rgba(245,181,68,.22)}
+.pt-card-hd{display:flex;align-items:center;gap:11px;padding:13px 15px;border-bottom:1px solid var(--line)}
+.pt-tok-logo,.pt-tok-logo-ph{width:38px;height:38px;border-radius:11px;object-fit:cover;flex-shrink:0;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted)}
+.pt-tok-id{min-width:0}
+.pt-tok-sym{font-size:14px;font-weight:700}
+.pt-stars{font-size:11px;letter-spacing:1px}
+.pt-stars.s-hi{color:var(--accent)}
+.pt-stars.s-mid{color:var(--muted)}
+.pt-stars.s-lo{color:var(--red)}
+.pt-tok-meta{font-size:11px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pt-card-hd-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
+.pt-badge{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--muted2);white-space:nowrap}
+.pt-badge .ico{font-size:10px}
+.pt-badge.ok .ico{color:var(--green)}
+.pt-badge.bad .ico{color:var(--red)}
+.pt-watch-btn{background:none;border:none;color:var(--line2);font-size:17px;line-height:1;padding:2px;transition:color .15s;flex-shrink:0}
+.pt-watch-btn:hover{color:var(--muted)}
+.pt-watch-btn.active{color:var(--accent)}
+
+.pt-card-body{display:grid;grid-template-columns:210px 1fr}
+.pt-card-stats{padding:14px 15px;border-right:1px solid var(--line);display:flex;flex-direction:column}
+.pt-price{font-family:var(--mono);font-size:21px;font-weight:700}
+.pt-chg{font-family:var(--mono);font-size:12.5px;font-weight:700;margin-top:2px}
+.pt-stat-row{display:flex;align-items:center;justify-content:space-between;padding:7px 0;border-top:1px solid var(--line);font-size:11px}
+.pt-stat-row:first-of-type{margin-top:10px}
+.pt-stat-lbl{color:var(--muted2);letter-spacing:.04em;font-size:10px;font-weight:700;text-transform:uppercase}
+.pt-stat-val{font-family:var(--mono);font-weight:700;color:var(--text)}
+.pt-trade-btns{display:flex;gap:8px;margin-top:12px}
+.pt-buy-btn,.pt-sell-btn{flex:1;padding:9px 0;border-radius:10px;font-size:12px;font-weight:700;transition:filter .15s,background .15s}
+.pt-buy-btn{background:var(--accent);color:#0a0b0e;border:none}
+.pt-buy-btn:hover{filter:brightness(1.08)}
+.pt-sell-btn{background:transparent;color:var(--red);border:1px solid rgba(247,107,98,.4)}
+.pt-sell-btn:hover{background:rgba(247,107,98,.1)}
+.pt-buy-panel{margin-top:10px;display:flex;flex-direction:column;gap:7px}
+.pt-buy-input{width:100%;background:var(--bg);border:1px solid var(--line2);border-radius:8px;padding:7px 9px;color:var(--text);font-family:var(--mono);font-size:12px;outline:none}
+.pt-buy-input:focus{border-color:var(--accent)}
+.pt-buy-confirm{width:100%;background:var(--accent);color:#0a0b0e;border:none;border-radius:8px;padding:8px;font-size:11.5px;font-weight:700}
+.pt-buy-msg{font-size:11px;margin-top:2px}
+.pt-buy-msg.ok{color:var(--green)}
+.pt-buy-msg.err{color:var(--red)}
+
+.pt-chart-wrap{position:relative;height:222px;background:var(--bg)}
+.pt-chart-svg{width:100%;height:200px;display:block}
+.pt-chart-live{position:absolute;top:9px;left:10px;display:flex;align-items:center;gap:5px;font-size:9.5px;font-weight:700;color:var(--green);letter-spacing:.06em}
+.pt-chart-live-dot{width:5px;height:5px;border-radius:50%;background:var(--green);animation:ptPulse 1.4s ease-in-out infinite}
+.pt-chart-tfs{position:absolute;top:8px;right:10px;display:flex;gap:3px}
+.pt-tf-pill{padding:3px 7px;font-size:9.5px;font-weight:700;border-radius:6px;background:var(--card2);color:var(--muted2);border:1px solid var(--line2)}
+.pt-tf-pill.active{background:var(--accent);color:#0a0b0e;border-color:var(--accent)}
+.pt-price-pill{position:absolute;left:0;transform:translateY(-50%);background:var(--accent);color:#0a0b0e;font-family:var(--mono);font-size:9.5px;font-weight:700;padding:2px 6px;border-radius:0 4px 4px 0}
+.pt-chart-axis{height:22px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-family:var(--mono);font-size:9px;color:var(--muted2)}
+.pt-chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:10.5px;font-family:var(--mono)}
+
+.pt-card-ft{display:flex;align-items:center;justify-content:space-between;padding:10px 15px;border-top:1px solid var(--line);grid-column:1/3}
+.pt-friends{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.pt-friend-avs{display:flex}
+.pt-friend-avs img,.pt-friend-avs .ph{width:20px;height:20px;border-radius:50%;object-fit:cover;border:2px solid var(--card);margin-left:-7px;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--muted)}
+.pt-friend-avs img:first-child,.pt-friend-avs .ph:first-child{margin-left:0}
+.pt-card-ft-right{font-family:var(--mono);font-size:10.5px;color:var(--muted2);margin-left:auto}
+
+/* ── right rail cards ── */
+.pt-rcard{background:var(--card);border-radius:15px;padding:13px 14px;flex-shrink:0}
+.pt-rcard-hd{font-size:10.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2);margin-bottom:10px}
+.pt-tape-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--line);font-size:11.5px}
+.pt-tape-row:last-child{border-bottom:none}
+.pt-tape-pill{font-family:var(--mono);font-size:9px;font-weight:700;padding:2px 6px;border-radius:5px;flex-shrink:0}
+.pt-tape-pill.buy{background:rgba(58,210,155,.14);color:var(--green)}
+.pt-tape-pill.sell{background:rgba(247,107,98,.14);color:var(--red)}
+.pt-tape-sym{font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-tape-amt{font-family:var(--mono);color:var(--muted);font-size:10.5px}
+.pt-tape-age{font-family:var(--mono);color:var(--muted2);font-size:9.5px;flex-shrink:0}
+.pt-tape-empty{color:var(--muted2);font-size:11px;text-align:center;padding:10px 0}
+
+.pt-trader-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+.pt-trader-row:last-child{border-bottom:none}
+.pt-trader-rank{width:14px;font-family:var(--mono);font-size:10.5px;color:var(--muted2);font-weight:700;flex-shrink:0}
+.pt-trader-av,.pt-trader-av-ph{width:28px;height:28px;border-radius:50%;object-fit:cover;flex-shrink:0;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted)}
+.pt-trader-mid{min-width:0;flex:1}
+.pt-trader-name{font-size:11.5px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pt-trader-sub{font-size:10px;color:var(--muted2);font-family:var(--mono)}
+.pt-trader-right{text-align:right;flex-shrink:0}
+.pt-trader-pnl{font-family:var(--mono);font-size:11px;font-weight:700}
+.pt-copy-link{font-size:10px;font-weight:700;color:var(--accent);background:none;border:none;padding:0;margin-top:2px}
+.pt-copy-link.active{color:var(--green)}
+
+.pt-wl-row{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid var(--line)}
+.pt-wl-row:last-child{border-bottom:none}
+.pt-wl-edit{font-size:10.5px;font-weight:700;color:var(--accent);background:none;border:none}
+.pt-wl-remove{background:none;border:none;color:var(--red);font-size:14px;padding:0 4px;display:none}
+.pt-wl-remove.show{display:block}
+
+.pt-pulse-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.pt-pulse-tile{background:var(--card2);border-radius:11px;padding:10px}
+.pt-pulse-lbl{font-size:9.5px;color:var(--muted2);letter-spacing:.04em;text-transform:uppercase;font-weight:700}
+.pt-pulse-val{font-family:var(--mono);font-size:16px;font-weight:700;margin-top:4px}
+.pt-pulse-val.green{color:var(--green)}
+.pt-pulse-val.amber{color:var(--accent)}
+
+.pt-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:10px 18px;font-size:12.5px;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
+.pt-toast.show{opacity:1}
+</style>
+</head>
+<body>
+
+<div class="pt-shell">
+  <header class="pt-topbar">
+    <a class="pt-logo" href="/live-market/pro">
+      <div class="pt-logo-mark"></div>
+      <div class="pt-wordmark">OrcAgent</div>
+    </a>
+    <nav class="pt-nav">
+      <a href="/live-market/pro" class="active">Live Market</a>
+      <a href="/">Feed</a>
+      <a href="/calls">Calls</a>
+      <a href="/leaderboard">Leaderboard</a>
+      <a href="/wallet">Wallet</a>
+    </nav>
+    <div class="pt-search-wrap">
+      <span class="pt-search-icon">⌕</span>
+      <input class="pt-search" id="pt-search-input" placeholder="Search token, address, trader…" autocomplete="off">
+      <div class="pt-search-results" id="pt-search-results"></div>
+    </div>
+    <div class="pt-right-chips">
+      <div class="pt-sol-chip"><span class="dot"></span><span class="mono" id="pt-sol-balance">0.00</span> SOL</div>
+      <img class="pt-avatar" id="pt-avatar" style="display:none">
+      <div class="pt-avatar" id="pt-avatar-ph">{{ (wallet_short or '?')[0]|upper }}</div>
+    </div>
+  </header>
+
+  <div class="pt-panel">
+    <!-- LEFT RAIL -->
+    <aside class="pt-left">
+      <div>
+        <div class="pt-sec-title">Sort feed</div>
+        <div id="pt-sort-list"></div>
+      </div>
+
+      <div>
+        <div class="pt-sec-title">Safety filter</div>
+        <div class="pt-toggle-row"><span>LP locked only</span><button class="pt-switch" data-filter="lp_locked"></button></div>
+        <div class="pt-toggle-row"><span>Mint revoked</span><button class="pt-switch" data-filter="mint_revoked"></button></div>
+        <div class="pt-toggle-row"><span>Hide honeypots</span><button class="pt-switch" data-filter="hide_honeypots"></button></div>
+        <div class="pt-toggle-row"><span>Verified socials</span><button class="pt-switch" data-filter="verified_socials"></button></div>
+      </div>
+
+      <div>
+        <div class="pt-sec-title">Min liquidity</div>
+        <div class="pt-liq-value" id="pt-liq-value">$25K of $500K</div>
+        <input type="range" class="pt-liq-slider" id="pt-liq-slider" min="0" max="500000" step="5000" value="25000">
+      </div>
+
+      <div>
+        <div class="pt-sec-title">Age</div>
+        <div class="pt-age-row" id="pt-age-row">
+          <button class="pt-age-chip" data-age="1h">&lt; 1H</button>
+          <button class="pt-age-chip" data-age="6h">&lt; 6H</button>
+          <button class="pt-age-chip" data-age="24h">&lt; 24H</button>
+          <button class="pt-age-chip active" data-age="any">ANY</button>
+        </div>
+      </div>
+
+      <div class="pt-bot-card">
+        <div class="pt-bot-title"><span class="pt-bot-dot"></span>Bot is scanning</div>
+        <div class="pt-bot-sub"><span id="pt-bot-count">0</span> tokens tracked · auto-buys on ≥5% breakout with these filters</div>
+        <a class="pt-bot-btn" href="/bot">Bot settings</a>
+      </div>
+    </aside>
+
+    <!-- CENTER FEED -->
+    <main class="pt-center">
+      <div class="pt-feed-hd">
+        <div>
+          <div class="pt-feed-title">Live Market</div>
+          <div class="pt-feed-sub"><span id="pt-tok-count">0</span> tokens tracked · refreshes every 15s</div>
+        </div>
+        <div class="pt-scanning-pill"><span class="pt-scan-dot"></span>SCANNING</div>
+      </div>
+
+      <div class="pt-story-rail" id="pt-story-rail"></div>
+
+      <div class="pt-feed-list" id="pt-feed-list"><div class="pt-empty">Loading…</div></div>
+    </main>
+
+    <!-- RIGHT RAIL -->
+    <aside class="pt-right">
+      <div class="pt-rcard">
+        <div class="pt-rcard-hd">Live trades</div>
+        <div id="pt-tape-list"><div class="pt-tape-empty">Waiting for trades…</div></div>
+      </div>
+
+      <div class="pt-rcard">
+        <div class="pt-rcard-hd">Top traders · 24h</div>
+        <div id="pt-traders-list"></div>
+      </div>
+
+      <div class="pt-rcard">
+        <div class="pt-rcard-hd" style="display:flex;align-items:center;justify-content:space-between">
+          <span>Watchlist</span>
+          <button class="pt-wl-edit" id="pt-wl-edit-btn">Edit</button>
+        </div>
+        <div id="pt-wl-list"><div class="pt-tape-empty">No tokens watched</div></div>
+      </div>
+
+      <div class="pt-rcard">
+        <div class="pt-rcard-hd">Market pulse · 24h</div>
+        <div class="pt-pulse-grid">
+          <div class="pt-pulse-tile"><div class="pt-pulse-lbl">Trades 24h</div><div class="pt-pulse-val mono" id="pt-pulse-trades">—</div></div>
+          <div class="pt-pulse-tile"><div class="pt-pulse-lbl">Net SOL</div><div class="pt-pulse-val green mono" id="pt-pulse-net">—</div></div>
+          <div class="pt-pulse-tile"><div class="pt-pulse-lbl">Traders online</div><div class="pt-pulse-val mono" id="pt-pulse-online">—</div></div>
+          <div class="pt-pulse-tile"><div class="pt-pulse-lbl">Tokens tracked</div><div class="pt-pulse-val amber mono" id="pt-pulse-tokens">—</div></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<div class="pt-toast" id="pt-toast"></div>
+
+<script src="/static/live-market-pro.js?v={{ app_version }}" defer></script>
+</body>
+</html>

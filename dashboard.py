@@ -3,6 +3,8 @@ import io
 import socket
 import ipaddress
 import urllib.parse
+import calendar
+from concurrent.futures import ThreadPoolExecutor
 from datetime import timedelta
 from PIL import Image, ImageDraw, ImageFont
 import bcrypt as _bcrypt
@@ -7548,6 +7550,20 @@ def live_market():
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
     return _render_no_cache('live_market.html',
+                           wallet_short=wallet_short,
+                           csrf_token=_get_csrf_token(),
+                           client_secret=API_SHARED_SECRET)
+
+
+@app.route('/live-market/pro')
+def live_market_pro():
+    """Desktop 'Pro terminal' Live Market layout -- same public/no-login-gate
+    pattern as /live-market above (individual API calls handle their own 401s
+    client-side), just a different template."""
+    session_wallet = _current_wallet()
+    wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
+                    if len(session_wallet) >= 8 else '')
+    return _render_no_cache('live_market_pro.html',
                            wallet_short=wallet_short,
                            csrf_token=_get_csrf_token(),
                            client_secret=API_SHARED_SECRET)
@@ -17912,6 +17928,324 @@ def api_market_live():
         _market_live_cache['data'] = result
 
     return jsonify({'ok': True, 'tokens': result, 'cached': False})
+
+
+# ── Live Market "Pro terminal" scanner ──────────────────────────────────────
+# Server-side sort/filter over a boosted+trending DexScreener candidate pool
+# (same upstream endpoints as _get_narrative_candidates(), sharing _dex_get()'s
+# per-URL cache, so this adds no extra upstream load), extended with the
+# buy/sell split, socials presence and pair-created-at that the desktop
+# scanner UI's filters need, plus an on-demand safety enrichment step.
+_scanner_cache: dict = {'ts': 0.0, 'data': []}
+_scanner_lock = threading.Lock()
+_scanner_safety_cache: dict = {}  # mint -> (ts, {lp_locked_pct, mint_authority_active, freeze_authority_active})
+_scanner_safety_lock = threading.Lock()
+_SCANNER_SAFETY_TTL = 600  # 10 min -- mint/freeze authority + LP-lock state rarely change
+_AGE_BUCKET_SECONDS = {'1h': 3600, '6h': 21600, '24h': 86400}
+
+
+def _get_scanner_candidates() -> list:
+    """Boosted + trending Solana pairs, richer than _get_narrative_candidates()
+    (keeps the buys/sells split, pair address and socials presence the
+    scanner's filters/badges need)."""
+    def _f(v):
+        try:
+            return float(v) if v not in (None, '', 'null') else 0.0
+        except (TypeError, ValueError):
+            return 0.0
+
+    def _extract(p):
+        base = p.get('baseToken') or {}
+        addr = base.get('address', '')
+        if not addr:
+            return None
+        info    = p.get('info') or {}
+        pc      = p.get('priceChange') or {}
+        vol     = p.get('volume') or {}
+        liq     = p.get('liquidity') or {}
+        txns    = p.get('txns') or {}
+        h24t    = txns.get('h24') or {}
+        socials = info.get('socials') or []
+        websites = info.get('websites') or []
+        return {
+            'mint':             addr,
+            'symbol':           base.get('symbol', ''),
+            'name':             base.get('name', '') or base.get('symbol', ''),
+            'chain':            p.get('chainId', 'solana'),
+            'pair_address':     p.get('pairAddress', ''),
+            'image_url':        info.get('imageUrl') or '',
+            'price_usd':        _f(p.get('priceUsd')),
+            'market_cap':       _f(p.get('marketCap')) or _f(p.get('fdv')),
+            'liquidity_usd':    _f(liq.get('usd')),
+            'volume_24h':       _f(vol.get('h24')),
+            'buys_24h':         int(_f(h24t.get('buys'))),
+            'sells_24h':        int(_f(h24t.get('sells'))),
+            'price_change_24h': _f(pc.get('h24')),
+            'pair_created_at':  int(p.get('pairCreatedAt')) if p.get('pairCreatedAt') else None,
+            'verified_socials': bool(socials or websites),
+        }
+
+    seen, boost_addrs = set(), []
+    r = _dex_get('https://api.dexscreener.com/token-boosts/top/v1')
+    if r and r.status_code == 200:
+        try:
+            for item in (r.json() if isinstance(r.json(), list) else []):
+                if item.get('chainId') == 'solana':
+                    a = item.get('tokenAddress', '')
+                    if a and a not in seen:
+                        seen.add(a)
+                        boost_addrs.append(a)
+        except Exception:
+            pass
+
+    r2 = _dex_get('https://api.dexscreener.com/token-profiles/latest/v1')
+    if r2 and r2.status_code == 200:
+        try:
+            for item in (r2.json() if isinstance(r2.json(), list) else []):
+                if item.get('chainId') == 'solana':
+                    a = item.get('tokenAddress', '')
+                    if a and a not in seen:
+                        seen.add(a)
+                        boost_addrs.append(a)
+        except Exception:
+            pass
+
+    best_pair: dict = {}
+    for i in range(0, len(boost_addrs), 30):
+        batch = boost_addrs[i:i + 30]
+        rb = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + ','.join(batch), timeout=10)
+        if rb and rb.status_code == 200:
+            try:
+                for p in (rb.json().get('pairs') or []):
+                    if p.get('chainId') != 'solana':
+                        continue
+                    a = (p.get('baseToken') or {}).get('address', '')
+                    if not a:
+                        continue
+                    cur_liq  = _f((p.get('liquidity') or {}).get('usd'))
+                    existing = best_pair.get(a)
+                    old_liq  = _f((existing.get('liquidity') or {}).get('usd')) if existing else -1
+                    if cur_liq > old_liq:
+                        best_pair[a] = p
+            except Exception:
+                pass
+
+    rt = _dex_get('https://api.dexscreener.com/latest/dex/search?q=solana&rankBy=trendingScoreH6')
+    if rt and rt.status_code == 200:
+        try:
+            d = rt.json()
+            for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
+                if p.get('chainId') == 'solana':
+                    a = (p.get('baseToken') or {}).get('address', '')
+                    if a and a not in best_pair:
+                        best_pair[a] = p
+        except Exception:
+            pass
+
+    out = []
+    for addr in best_pair:
+        tok = _extract(best_pair[addr])
+        if tok:
+            out.append(tok)
+    return out[:80]
+
+
+def _get_scanner_cached() -> list:
+    now = time.time()
+    with _scanner_lock:
+        if now - _scanner_cache['ts'] < 15 and _scanner_cache['data']:
+            return _scanner_cache['data']
+    data = _get_scanner_candidates()
+    with _scanner_lock:
+        _scanner_cache['ts']   = time.time()
+        _scanner_cache['data'] = data
+    return data
+
+
+def _scanner_get_safety(mint: str) -> dict:
+    now = time.time()
+    with _scanner_safety_lock:
+        cached = _scanner_safety_cache.get(mint)
+        if cached and now - cached[0] < _SCANNER_SAFETY_TTL:
+            return cached[1]
+    safety_raw = _check_mint_safety(mint)
+    lp         = _check_lp_locked(mint)
+    result = {
+        'lp_locked_pct':           float(lp.get('lp_locked_pct') or 0),
+        'mint_authority_active':   bool(safety_raw.get('mint_authority_active')),
+        'freeze_authority_active': bool(safety_raw.get('freeze_authority_active')),
+    }
+    with _scanner_safety_lock:
+        _scanner_safety_cache[mint] = (time.time(), result)
+    return result
+
+
+def _scanner_score(tok: dict, safety: dict | None) -> int:
+    score = 1
+    if safety and safety.get('lp_locked_pct', 0) >= 50:
+        score += 1
+    if safety and not safety.get('mint_authority_active', True) and not safety.get('freeze_authority_active', True):
+        score += 1
+    if tok.get('liquidity_usd', 0) >= 50000:
+        score += 1
+    if tok.get('volume_24h', 0) >= 100000:
+        score += 1
+    return max(1, min(5, score))
+
+
+@app.route('/api/market/scanner', methods=['GET'])
+@rate_limit(30, 60)
+def api_market_scanner():
+    """Server-side filtered/sorted feed for the Live Market 'Pro terminal'
+    desktop page's left-rail SORT FEED / SAFETY FILTER / MIN LIQUIDITY / AGE
+    controls -- every one of those actually narrows this response, including
+    the per-sort-mode counts shown next to each SORT FEED row."""
+    sort_mode = request.args.get('sort', 'trending')
+    try:
+        min_liquidity = float(request.args.get('min_liquidity', 0) or 0)
+    except ValueError:
+        min_liquidity = 0.0
+    age               = request.args.get('age', 'any')
+    lp_locked         = request.args.get('lp_locked') in ('1', 'true')
+    mint_revoked      = request.args.get('mint_revoked') in ('1', 'true')
+    hide_honeypots    = request.args.get('hide_honeypots') in ('1', 'true')
+    verified_socials  = request.args.get('verified_socials') in ('1', 'true')
+
+    candidates = list(_get_scanner_cached())
+    now = time.time()
+
+    def _passes_fast(t):
+        if min_liquidity and t.get('liquidity_usd', 0) < min_liquidity:
+            return False
+        if age in _AGE_BUCKET_SECONDS:
+            created = t.get('pair_created_at')
+            if not created or (now - created / 1000.0) > _AGE_BUCKET_SECONDS[age]:
+                return False
+        if verified_socials and not t.get('verified_socials'):
+            return False
+        if hide_honeypots and t.get('buys_24h', 0) > 0 and t.get('sells_24h', 0) == 0:
+            return False
+        return True
+
+    filtered = [dict(t) for t in candidates if _passes_fast(t)]
+
+    if lp_locked or mint_revoked:
+        subset = filtered[:40]
+        if subset:
+            with ThreadPoolExecutor(max_workers=8) as ex:
+                safety_list = list(ex.map(lambda t: _scanner_get_safety(t['mint']), subset))
+            for t, s in zip(subset, safety_list):
+                t['_safety'] = s
+
+        def _passes_safety(t):
+            s = t.get('_safety')
+            if s is None:
+                return False
+            if lp_locked and s.get('lp_locked_pct', 0) < 50:
+                return False
+            if mint_revoked and (s.get('mint_authority_active') or s.get('freeze_authority_active')):
+                return False
+            return True
+
+        filtered = [t for t in subset if _passes_safety(t)]
+    else:
+        for t in filtered:
+            t['_safety'] = None
+
+    gainers_set = [t for t in filtered if t.get('price_change_24h', 0) > 0]
+    new_set     = [t for t in filtered
+                   if t.get('pair_created_at') and (now - t['pair_created_at'] / 1000.0) <= 86400]
+
+    my_wallet   = _current_wallet()
+    friends_set = []
+    if my_wallet:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            me = conn.execute('SELECT id FROM users WHERE wallet_address=?', (my_wallet,)).fetchone()
+            if me:
+                mints_held = {row[0] for row in conn.execute('''
+                    SELECT DISTINCT op.mint_address FROM open_positions op
+                    JOIN follows f ON f.following_id = op.user_id
+                    WHERE f.follower_id = ?
+                ''', (me[0],)).fetchall()}
+                friends_set = [t for t in filtered if t['mint'] in mints_held]
+            conn.close()
+        except Exception:
+            friends_set = []
+
+    counts = {
+        'trending': len(filtered),
+        'gainers':  len(gainers_set),
+        'new':      len(new_set),
+        'volume':   len(filtered),
+        'friends':  len(friends_set),
+    }
+
+    if sort_mode == 'gainers':
+        tokens = sorted(gainers_set, key=lambda t: t.get('price_change_24h', 0), reverse=True)
+    elif sort_mode == 'new':
+        tokens = sorted(new_set, key=lambda t: t.get('pair_created_at') or 0, reverse=True)
+    elif sort_mode == 'volume':
+        tokens = sorted(filtered, key=lambda t: t.get('volume_24h', 0), reverse=True)
+    elif sort_mode == 'friends':
+        tokens = friends_set
+    else:
+        tokens = filtered
+
+    tokens = tokens[:30]
+    for t in tokens:
+        t['score'] = _scanner_score(t, t.get('_safety'))
+        t.pop('_safety', None)
+
+    return jsonify({'ok': True, 'tokens': tokens, 'counts': counts})
+
+
+@app.route('/api/market/tape', methods=['GET'])
+@rate_limit(30, 60)
+def api_market_tape():
+    """Global BUY/SELL activity tape for the Live Market right rail. Real
+    cross-user events, not per-session: BUY rows are the most recently
+    opened positions (open_positions.opened_at), SELL rows the most recently
+    closed trades (trades.timestamp). No wallet/username is exposed -- just
+    token + SOL size + age, matching the tape's own footprint."""
+    now = time.time()
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        buys = conn.execute('''
+            SELECT symbol, spend, opened_at FROM open_positions
+            WHERE opened_at > 0 ORDER BY opened_at DESC LIMIT 30
+        ''').fetchall()
+        sells = conn.execute('''
+            SELECT token, amount, exit_price, timestamp FROM trades
+            WHERE exit_price IS NOT NULL AND exit_price > 0
+            ORDER BY timestamp DESC LIMIT 30
+        ''').fetchall()
+    finally:
+        conn.close()
+
+    rows = []
+    for symbol, spend, opened_at in buys:
+        if not symbol or not opened_at:
+            continue
+        rows.append({'side': 'buy', 'symbol': symbol, 'sol_amount': round(float(spend or 0), 4), 'ts': float(opened_at)})
+    for token, amount, exit_price, ts in sells:
+        if not token or not ts:
+            continue
+        try:
+            dt    = datetime.datetime.strptime(str(ts)[:19].replace('T', ' '), '%Y-%m-%d %H:%M:%S')
+            epoch = calendar.timegm(dt.timetuple())
+        except Exception:
+            epoch = now
+        rows.append({'side': 'sell', 'symbol': token, 'sol_amount': round(float(amount or 0) * float(exit_price or 0), 4), 'ts': epoch})
+
+    rows.sort(key=lambda r: r['ts'], reverse=True)
+    rows = rows[:30]
+    for r in rows:
+        r['age_seconds'] = max(0, round(now - r['ts']))
+        del r['ts']
+
+    return jsonify({'ok': True, 'trades': rows})
+
 
 @app.route('/api/totd')
 @rate_limit(60, 60)
