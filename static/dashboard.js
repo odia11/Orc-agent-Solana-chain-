@@ -1324,7 +1324,7 @@ function fmtNum(n){
 }
 function fmtInt(n){
   if(!n||n===0) return '—';
-  return Math.round(n).toLocaleString();
+  return Math.round(n).toLocaleString('en-US');
 }
 function _fmtViewCount(n){
   n = n || 0;
@@ -1356,7 +1356,7 @@ function renderMarket(tokens){
 
   const fmtChg=v=>(v>=0?'+':'')+((v??0).toFixed(1))+'%';
   const chgCls=v=>(v??0)>=0?'up':'dn';
-  const fmtTxns=n=>n>0?n.toLocaleString():'—';
+  const fmtTxns=n=>n>0?n.toLocaleString('en-US'):'—';
 
   const makeCard=t=>{
     const hot=t.score>=7,cold=t.score<=2;
@@ -2236,7 +2236,7 @@ function renderPerfPanel(r){
   document.getElementById('p-best').textContent=d.best!=null?'+'+d.best.toFixed(1)+'%':'—';
   document.getElementById('p-worst').textContent=d.worst!=null?d.worst.toFixed(1)+'%':'—';
   const _now=new Date();
-  document.getElementById('perf-date').textContent=_now.toLocaleDateString(navigator.language,{weekday:'short',month:'short',day:'numeric'});
+  document.getElementById('perf-date').textContent=_now.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
   const _tzOff=-_now.getTimezoneOffset(),_tzH=Math.floor(Math.abs(_tzOff)/60),_tzM=Math.abs(_tzOff)%60;
   document.getElementById('perf-tz').textContent='UTC'+(_tzOff>=0?'+':'-')+_tzH+(_tzM?':'+String(_tzM).padStart(2,'0'):'');
 
@@ -2254,7 +2254,7 @@ function renderPerfPanel(r){
     const sign=p>=0?'+':'';
     const avoidBtn=t.mint?`<button class="avoid-btn" onclick="avoidToken(this.closest('tr').dataset.mint,this.closest('tr').dataset.symbol)" title="Avoid — bot will skip this token">🚫</button>`:'';
     return `<tr data-mint="${esc(t.mint||'')}" data-symbol="${esc(t.symbol||'???')}">
-      <td>${t.ts?new Date(t.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(t.time||'—')}</td>
+      <td>${t.ts?new Date(t.ts*1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):(t.time||'—')}</td>
       <td class="td-sym">${esc(t.symbol||'???')}</td>
       <td>${fmtPrice(t.entry||0)}</td>
       <td>${fmtPrice(t.exit||0)}</td>
@@ -2543,7 +2543,7 @@ function renderLiveFeed(){
     const amtHtml=spendSol>0
       ?`<div class="lf-amt">◎${spendSol.toFixed(4)} <span style="color:var(--dim)">/ $${(spendSol*_solPrice).toFixed(2)}</span></div>`
       :'';
-    const timeStr=item.ts?new Date(item.ts*1000).toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'}):(item.time||'—');
+    const timeStr=item.ts?new Date(item.ts*1000).toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'}):(item.time||'—');
     const txHtml=mint?`<a href="https://solscan.io/token/${mint}" target="_blank" rel="noopener" class="lf-tx">View ↗</a>`:'';
     return `<div class="${itemCls}">
       ${logoHtml}
@@ -4943,7 +4943,7 @@ function _supportRenderMessages(msgs){
   const atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
   el.innerHTML = msgs.map(function(m){
     const cls = m.sender_role==='staff' ? 'staff' : 'user';
-    const t = new Date(m.created_at.replace(' ','T')+'Z').toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+    const t = new Date(m.created_at.replace(' ','T')+'Z').toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit'});
     return '<div class="support-msg '+cls+'">'+_esc(m.message)+
            '<div class="support-msg-time">'+(cls==='staff'?'Support · ':'')+t+'</div></div>';
   }).join('');
@@ -6379,7 +6379,7 @@ document.addEventListener('DOMContentLoaded', function(){
         stat('FDV',     _fmt(data.fdv))+
         stat('Liquidity',_fmt(data.liquidity_usd));
       // activity
-      const n = v => v!=null?Number(v).toLocaleString():'—';
+      const n = v => v!=null?Number(v).toLocaleString('en-US'):'—';
       const act = (l,v,cls='') => `<div class="tdp-act"><div class="tdp-act-lbl">${l}</div><div class="tdp-act-val${cls?' '+cls:''}">${v}</div></div>`;
       const b5=data.txns_5m_buys, s5=data.txns_5m_sells;
       const b1=data.txns_1h_buys, s1=data.txns_1h_sells;
@@ -7359,7 +7359,7 @@ function _ptcdSearch(q){
       dd.innerHTML = pairs.map(function(p,i){
         var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
         var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
-        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
         var sym = (p.baseToken&&p.baseToken.symbol)||'?';
         var name = (p.baseToken&&p.baseToken.name)||'';
         return '<div class="ptcd-row" data-idx="'+i+'" onmousedown="event.preventDefault();_selectCashtagResult('+i+')">'
@@ -7443,7 +7443,7 @@ function _chartSearch(q){
       res.innerHTML = pairs.map(function(p,i){
         var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
         var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
-        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
         var sym = (p.baseToken&&p.baseToken.symbol)||'?';
         var name = (p.baseToken&&p.baseToken.name)||'';
         var safeIdx = i;
@@ -7485,7 +7485,7 @@ function _renderComposerChartPreview(){
   var chg24 = c.chg24h;
   var chgColor = chg24!=null ? (chg24>=0?'#3ad29b':'#f76b62') : '#565d68';
   var chgStr  = chg24!=null ? (chg24>=0?'+':'')+chg24.toFixed(2)+'%' : '—';
-  var price   = c.price ? '$'+parseFloat(c.price).toLocaleString(undefined,{maximumSignificantDigits:6}) : '—';
+  var price   = c.price ? '$'+parseFloat(c.price).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
   var fmt = function(n){ if(n==null) return '—'; if(n>=1e9) return '$'+(n/1e9).toFixed(2)+'B'; if(n>=1e6) return '$'+(n/1e6).toFixed(2)+'M'; if(n>=1e3) return '$'+(n/1e3).toFixed(1)+'K'; return '$'+n.toFixed(2); };
 
   /* mini bar chart from timeframe changes */
@@ -8068,8 +8068,8 @@ async function showTokenCard(symbol){
     const d=await r.json()
     const p=(d.pairs||[]).find(x=>x.chainId==='solana')
     if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No Solana pair found for <b style="color:#eef1f5">$'+esc(symbol)+'</b></div>';return}
-    const fmt=n=>n==null?'—':parseFloat(n)<0.0001?'$'+parseFloat(n).toExponential(3):'$'+parseFloat(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})
-    const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString()
+    const fmt=n=>n==null?'—':parseFloat(n)<0.0001?'$'+parseFloat(n).toExponential(3):'$'+parseFloat(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6})
+    const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString('en-US')
     const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#3ad29b':'#f76b62',bg=n>=0?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:\'JetBrains Mono\',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
     const ch24=parseFloat(p.priceChange?.h24||0)
     const _links=[...(p.info?.socials||[]),...(p.info?.websites||[]).map(function(w){return{type:'website',url:w.url}}),...(p.info?.links||[])]
