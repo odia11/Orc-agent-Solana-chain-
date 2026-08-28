@@ -369,7 +369,13 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #s-sol{font-size:13px!important;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--text)!important;text-shadow:none}
 #s-pos{font-size:13px!important;font-weight:600;font-family:'JetBrains Mono',monospace;color:var(--text)!important}
 /* ── FEED LAYOUT ── */
-.feed-hdr{position:sticky;top:0;z-index:50;background:rgba(10,11,14,0.82);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
+/* Solid background, no backdrop-filter -- a position:sticky header with a
+   blur behind it forces the browser to re-sample/re-blur everything
+   scrolling underneath on every single frame, which is one of the most
+   common, well-documented causes of scroll jank on mobile. This header sits
+   directly on the app's own background color anyway, so a solid fill reads
+   the same without that per-frame cost. */
+.feed-hdr{position:sticky;top:0;z-index:50;background:var(--bg);border-bottom:1px solid var(--bg3);margin:-20px -20px 0}
 .feed-hdr-top{display:flex;align-items:center;gap:10px;padding:16px 20px 12px}
 .feed-hdr-title-wrap{display:flex;flex-direction:column;gap:2px;flex:1}
 .feed-hdr-title{font-size:20px;font-weight:600;color:var(--text);letter-spacing:-.02em}
