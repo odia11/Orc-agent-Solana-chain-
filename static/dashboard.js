@@ -5683,8 +5683,15 @@ async function _dmFetchMessages(){
 
 function _dmBuildMessageEl(m, myId){
   const mine=myId!=null&&m.sender_id===myId;
-  const isTradeShare=m.message_type==='trade_share'||
-    (m.message&&m.message.startsWith('{"type":"trade_share"'));
+  // Trust only the server-set message_type -- share_trade_dm() is the sole
+  // place that ever writes 'trade_share', and it validates token_address
+  // server-side before storing it. A plain text DM's *content* must never
+  // be sniffed to decide this (it used to fall back to
+  // m.message.startsWith('{"type":"trade_share"'), which let anyone send a
+  // crafted JSON-looking text message and have it rendered as a trade card
+  // below with unescaped values spliced into an onclick="..." attribute --
+  // stored XSS via DM).
+  const isTradeShare=m.message_type==='trade_share';
   const div=document.createElement('div');
   if(isTradeShare){
     div.className='dm-msg '+(mine?'mine':'theirs')+' trade-share';
@@ -5721,7 +5728,7 @@ function _dmBuildMessageEl(m, myId){
             <span class="dm-trade-card-val">${amtSol}</span>
           </div>
         </div>
-        <button class="dm-copy-btn" id="${btnId}" ${closed||mine?'disabled':''} onclick="_dmCopyTrade(this,'${btnId}','${errId}',${JSON.stringify(addr)},${JSON.stringify(td.entry_price||0)},${JSON.stringify(td.amount_sol||0)})">
+        <button class="dm-copy-btn" id="${btnId}" ${closed||mine?'disabled':''} onclick="_dmCopyTrade(this,'${btnId}','${errId}',${_esc(JSON.stringify(addr))},${_esc(JSON.stringify(td.entry_price||0))},${_esc(JSON.stringify(td.amount_sol||0))})">
           ${closed?'Trade Closed':mine?'Your Trade':'⚡ Copy Trade'}
         </button>
         <div class="dm-copy-err" id="${errId}" style="display:none"></div>

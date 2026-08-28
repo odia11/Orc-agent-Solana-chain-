@@ -8554,9 +8554,17 @@ def messages_page():
 
 @app.route('/messages/<wallet_address>')
 def message_thread(wallet_address):
-    if 'wallet' not in session:
+    # Was reading session['wallet'] directly instead of _authenticated_wallet()
+    # like every sibling page route (including messages_page() right above) --
+    # a read-only session (anyone can set session['wallet'] to an arbitrary
+    # address via /api/wallet/connect-readonly, with no signature proof) could
+    # load this page with is_admin computed against an unverified address. The
+    # real data endpoints (/api/messages/*) already independently require
+    # _authenticated_wallet(), so this was a hardening gap rather than a
+    # confirmed data leak -- fixed for consistency with the rest of the app.
+    wallet = _authenticated_wallet()
+    if not wallet:
         return redirect('/?connect=1')
-    wallet = session['wallet']
     wallet_short = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -11042,6 +11050,55 @@ def wallet_reveal_key():
     if not wallet:
         _record_ip_failure(ip)
         return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    # Step-up auth: this is the one endpoint that returns a plaintext trading
+    # key, so an already-authenticated session isn't enough on its own -- a
+    # stolen session cookie or an XSS-riding request could otherwise pull the
+    # key with nothing more than the ambient session. Re-prove ownership of
+    # THIS wallet right now, same nonce+signature scheme already used to
+    # establish the session in the first place (see set_wallet(),
+    # '/api/wallet/set') -- client fetches a nonce from the existing
+    # /api/auth/nonce endpoint, signs it, and includes {nonce, signature}
+    # here. No UI currently calls this endpoint, so this doesn't break an
+    # existing flow.
+    body      = request.json or {}
+    nonce     = str(body.get('nonce', '')).strip()
+    signature = str(body.get('signature', '')).strip()
+    if not nonce or not signature:
+        return jsonify({'ok': False, 'msg': 'A fresh wallet signature is required to reveal the key -- '
+                                             'fetch a nonce from /api/auth/nonce, sign it, and resend'}), 400
+    _nonce_conn = sqlite3.connect(DB_FILE)
+    try:
+        nrow = _nonce_conn.execute(
+            'SELECT created_at FROM auth_nonces WHERE nonce=?', (nonce,)
+        ).fetchone()
+        if nrow:
+            cur = _nonce_conn.execute('DELETE FROM auth_nonces WHERE nonce=?', (nonce,))
+            _nonce_conn.commit()
+            # Same anti-race hardening as set_wallet(): only the DELETE that
+            # actually removed a row may treat the nonce as claimed.
+            if cur.rowcount != 1:
+                nrow = None
+    finally:
+        _nonce_conn.close()
+    if not nrow:
+        return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
+    try:
+        created = datetime.datetime.strptime(nrow[0], '%Y-%m-%d %H:%M:%S')
+        age_s   = (datetime.datetime.utcnow() - created).total_seconds()
+    except Exception:
+        age_s = 9999
+    if age_s > 1200:
+        return jsonify({'ok': False, 'msg': 'Nonce expired, try again'}), 400
+    if not _NACL_OK or _nacl_signing is None:
+        return jsonify({'ok': False, 'msg': 'Signature verification unavailable'}), 503
+    expected_msg = 'OrcAgent verification\n\nCode: ' + nonce
+    try:
+        _nacl_signing.VerifyKey(_b58dec(wallet)).verify(
+            expected_msg.encode(), _b58dec(signature)
+        )
+    except Exception:
+        _record_ip_failure(ip)
+        return jsonify({'ok': False, 'msg': 'Signature verification failed'}), 401
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?',
