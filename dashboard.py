@@ -509,24 +509,58 @@ def _min_marketcap_for_stake(stake_usd: float) -> int:
     else:
         return 100_000
 
-# ── LEARNED LIQUIDITY-TIER BIAS ── the bot's other self-training signal,
+# ── LEARNED ENTRY-CONDITION BIAS ── the bot's other self-training signal,
 # proactive rather than reactive: instead of only responding to a run of
 # losses (LOSS_STREAK_* above), this continuously nudges Pass 2's qualifying
 # score for every candidate up or down based on how well THIS wallet's own
-# past trades have actually done in that token's liquidity bracket -- the
-# entry bar is trained from its own realized trade history instead of being
-# the same fixed number for every token forever.
+# past trades have actually done under similar entry conditions -- the entry
+# bar is trained from its own realized trade history instead of being the
+# same fixed number forever. Two independent dimensions feed it (liquidity
+# bracket, LP-locked-% bracket), both already recorded on every close --
+# see _record_user_trade(), which also invalidates both caches below the
+# instant a new trade closes, so the very next scan re-learns from it
+# immediately rather than waiting out the TTL.
 _LIQUIDITY_TIER_BOUNDS   = (10_000, 50_000, 200_000)  # upper bound of tiers 0..2; tier 3 is "and above"
-LEARNED_BIAS_MIN_SAMPLES = 5    # a tier needs at least this many of the wallet's own closed trades before it's trusted
-LEARNED_BIAS_MAX         = 2.0  # clamp -- this can never move the score gate by more than +-2.0
-LEARNED_BIAS_SCALE       = 4.0  # (tier win-rate - overall win-rate), which is in [-1, 1], times this = raw bias
-LEARNED_BIAS_TTL_SEC     = 300  # how long a computed bias is trusted before being recomputed from fresh trades
+_LP_LOCKED_TIER_BOUNDS   = (70, 90)                   # upper bound of tiers 0..1; tier 2 is "90%+"
+LEARNED_BIAS_MIN_SAMPLES = 5    # a bracket needs at least this many of the wallet's own closed trades before it's trusted
+LEARNED_BIAS_MAX         = 2.0  # clamp per dimension -- neither can move the score gate by more than +-2.0
+LEARNED_BIAS_SCALE       = 4.0  # (bracket win-rate - overall win-rate), which is in [-1, 1], times this = raw bias
+LEARNED_BIAS_TTL_SEC     = 300  # fallback staleness limit -- normally moot since a trade close invalidates it directly
 
 def _liquidity_tier(liquidity: float) -> int:
     for i, bound in enumerate(_LIQUIDITY_TIER_BOUNDS):
         if liquidity < bound:
             return i
     return len(_LIQUIDITY_TIER_BOUNDS)
+
+def _lp_locked_tier(lp_locked_pct: float) -> int:
+    for i, bound in enumerate(_LP_LOCKED_TIER_BOUNDS):
+        if lp_locked_pct < bound:
+            return i
+    return len(_LP_LOCKED_TIER_BOUNDS)
+
+def _bracket_bias_from_rows(rows) -> dict:
+    """Shared by _learned_liquidity_bias()/_learned_lp_bias(): rows is an
+    iterable of (bracket_index, pnl). Returns {bracket_index: score_bias} --
+    see _learned_liquidity_bias()'s docstring for what the numbers mean."""
+    brackets: dict = {}
+    total_wins = total_n = 0
+    for bracket, pnl in rows:
+        d = brackets.setdefault(bracket, {'wins': 0, 'n': 0})
+        d['n'] += 1
+        total_n += 1
+        if pnl > 0:
+            d['wins'] += 1
+            total_wins += 1
+    bias = {}
+    if total_n >= LEARNED_BIAS_MIN_SAMPLES:
+        overall_wr = total_wins / total_n
+        for bracket, d in brackets.items():
+            if d['n'] < LEARNED_BIAS_MIN_SAMPLES:
+                continue
+            wr = d['wins'] / d['n']
+            bias[bracket] = max(-LEARNED_BIAS_MAX, min(LEARNED_BIAS_MAX, (wr - overall_wr) * LEARNED_BIAS_SCALE))
+    return bias
 
 def _learned_liquidity_bias(user_id: int) -> dict:
     """{tier_index: score_bias}, learned from this user's own closed trades
@@ -536,10 +570,7 @@ def _learned_liquidity_bias(user_id: int) -> dict:
     candidate in that bracket clear the qualifying floor); a tier that's lost
     more than average gets a negative one. A tier without
     LEARNED_BIAS_MIN_SAMPLES closed trades yet gets no entry at all -- not
-    enough evidence to trust either way, so it's left neutral. Cached per
-    user for LEARNED_BIAS_TTL_SEC since this runs on every Pass 2 scan
-    (every few seconds while the bot is active) but the trade history behind
-    it only changes when a position actually closes."""
+    enough evidence to trust either way, so it's left neutral."""
     _cached = _learned_bias_cache.get(user_id)
     if _cached and time.time() - _cached[0] < LEARNED_BIAS_TTL_SEC:
         return _cached[1]
@@ -552,25 +583,39 @@ def _learned_liquidity_bias(user_id: int) -> dict:
         ).fetchall()
     finally:
         conn.close()
-    tiers: dict = {}
-    total_wins = total_n = 0
-    for liq, pnl in rows:
-        d = tiers.setdefault(_liquidity_tier(liq), {'wins': 0, 'n': 0})
-        d['n'] += 1
-        total_n += 1
-        if pnl > 0:
-            d['wins'] += 1
-            total_wins += 1
-    bias = {}
-    if total_n >= LEARNED_BIAS_MIN_SAMPLES:
-        overall_wr = total_wins / total_n
-        for tier, d in tiers.items():
-            if d['n'] < LEARNED_BIAS_MIN_SAMPLES:
-                continue
-            wr = d['wins'] / d['n']
-            bias[tier] = max(-LEARNED_BIAS_MAX, min(LEARNED_BIAS_MAX, (wr - overall_wr) * LEARNED_BIAS_SCALE))
+    bias = _bracket_bias_from_rows((_liquidity_tier(liq), pnl) for liq, pnl in rows)
     _learned_bias_cache[user_id] = (time.time(), bias)
     return bias
+
+def _learned_lp_bias(user_id: int) -> dict:
+    """Same idea as _learned_liquidity_bias(), bucketed by LP-locked-%
+    instead of liquidity (trades.entry_lp_locked_pct). Since the bot already
+    hard-requires >=50% LP locked before ever buying, every bracket here
+    starts from that floor -- this only distinguishes "barely cleared the
+    bar" from "fully locked/burned" once there's enough evidence either way
+    actually matters for this wallet."""
+    _cached = _learned_lp_bias_cache.get(user_id)
+    if _cached and time.time() - _cached[0] < LEARNED_BIAS_TTL_SEC:
+        return _cached[1]
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            'SELECT entry_lp_locked_pct, pnl FROM trades '
+            'WHERE user_id=? AND entry_lp_locked_pct IS NOT NULL AND pnl IS NOT NULL',
+            (user_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    bias = _bracket_bias_from_rows((_lp_locked_tier(pct), pnl) for pct, pnl in rows)
+    _learned_lp_bias_cache[user_id] = (time.time(), bias)
+    return bias
+
+def _invalidate_learned_bias(user_id: int) -> None:
+    """Called right after a trade closes (see _record_user_trade()) so the
+    next Pass 2 scan learns from it immediately instead of waiting up to
+    LEARNED_BIAS_TTL_SEC for the cache to go stale on its own."""
+    _learned_bias_cache.pop(user_id, None)
+    _learned_lp_bias_cache.pop(user_id, None)
 
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -2622,6 +2667,7 @@ _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previou
 cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
 profit_cooldown:  dict = {}  # user_id -> expiry_timestamp — 1-hour pause after 60% profit in 2h
 _learned_bias_cache: dict = {}  # user_id -> (computed_at, {tier: bias}) — see _learned_liquidity_bias()
+_learned_lp_bias_cache: dict = {}  # user_id -> (computed_at, {tier: bias}) — see _learned_lp_bias()
 
 # ── FAST-PUMP DETECTION (6%+ within 15s) ──────────────────────────────────
 # token_loop() only refreshes the full candidate list every 120s, which is far
@@ -4071,6 +4117,10 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             _trade_id = _cur.lastrowid
         finally:
             conn.close()
+        # Learn from this trade right away -- see _invalidate_learned_bias() --
+        # instead of leaving the next scan to reuse a stale, pre-this-trade bias
+        # for up to LEARNED_BIAS_TTL_SEC.
+        _invalidate_learned_bias(user_id)
     except Exception as e:
         print(f'[trade_record] DB write failed: {e}', flush=True)
     if wallet:
@@ -5810,9 +5860,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                     except Exception:
                         _blacklisted = frozenset()
                     # Trained from this wallet's own trade history -- see
-                    # _learned_liquidity_bias() -- {} until there's enough
-                    # closed-trade evidence to say anything.
-                    _learned_bias = _learned_liquidity_bias(user_id)
+                    # _learned_liquidity_bias()/_learned_lp_bias() -- {} until
+                    # there's enough closed-trade evidence to say anything.
+                    _learned_bias    = _learned_liquidity_bias(user_id)
+                    _learned_lp_bias_map = _learned_lp_bias(user_id)
                     not_held = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = []
                     _skip_log  = []
@@ -5920,6 +5971,21 @@ def user_trader_loop(stop_event, config, wallet: str):
                             add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
                                          ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (rug risk)')
                             continue
+                        # Learned LP-locked-% bracket check: unlike the liquidity
+                        # bias above (known for every candidate up front), the
+                        # actual lp_locked_pct is only known now, for the one
+                        # candidate that already won Pass 2 -- so this can only
+                        # veto the pick, not shape which candidate got picked.
+                        # A strongly negative bias here means this wallet has
+                        # historically lost more than it's won at this exact LP-
+                        # locked bracket, so skip and let the next scan try again.
+                        if _lp['ok']:
+                            _lp_bias_val = _learned_lp_bias_map.get(_lp_locked_tier(_lp['lp_locked_pct']), 0.0)
+                            if _lp_bias_val <= -1.0:
+                                add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                             ' — learned: this wallet has historically lost more than won at '
+                                             + str(round(_lp['lp_locked_pct'])) + '% LP locked')
+                                continue
                         # Stake scales continuously with the score, from 1x the user's
                         # min_trade_size at the qualifying floor (score 5.0) up to 3x at
                         # a perfect score (10.0) -- so with the $1 default min_trade_size,
