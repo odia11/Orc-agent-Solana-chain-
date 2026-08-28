@@ -195,12 +195,12 @@ function renderChartSvg(idx, candles, currentPrice){
   var gradId = 'pt-grad-'+idx;
   svg.innerHTML =
       '<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1">'
-    +   '<stop offset="0%" stop-color="#f5b544" stop-opacity="0.22"/>'
-    +   '<stop offset="100%" stop-color="#f5b544" stop-opacity="0"/>'
+    +   '<stop offset="0%" stop-color="#f7b955" stop-opacity="0.22"/>'
+    +   '<stop offset="100%" stop-color="#f7b955" stop-opacity="0"/>'
     + '</linearGradient></defs>'
     + '<path d="'+areaPath+'" fill="url(#'+gradId+')" stroke="none"></path>'
-    + '<line x1="0" y1="'+priceY.toFixed(2)+'" x2="'+w+'" y2="'+priceY.toFixed(2)+'" stroke="#f5b544" stroke-width="1" stroke-dasharray="3,4" opacity="0.55" vector-effect="non-scaling-stroke"></line>'
-    + '<path d="'+linePath+'" fill="none" stroke="#f5b544" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round"></path>';
+    + '<line x1="0" y1="'+priceY.toFixed(2)+'" x2="'+w+'" y2="'+priceY.toFixed(2)+'" stroke="#f7b955" stroke-width="1" stroke-dasharray="3,4" opacity="0.55" vector-effect="non-scaling-stroke"></line>'
+    + '<path d="'+linePath+'" fill="none" stroke="#f7b955" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round"></path>';
 
   var pill = document.createElement('div');
   pill.className = 'pt-price-pill';
