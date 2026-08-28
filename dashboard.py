@@ -7912,6 +7912,7 @@ def _fetch_open_bot_positions(wallet):
                     'amount':        round(amount, 4),
                     'stake_sol':     round(buy_price * amount, 4),
                     'pnl_pct':       pnl_pct,
+                    'pnl_sol':       round((cur_price - buy_price) * amount, 6),
                     'opened_at':     opened_str,
                     'mint_address':  mint_addr or '',
                 })
@@ -7929,6 +7930,7 @@ def live_trades():
     return _render_no_cache(
         'live_trades.html',
         open_positions=_fetch_open_bot_positions(wallet),
+        bot_status=_bot_status_summary(wallet),
         wallet=wallet,
         wallet_short=(wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else wallet,
     )
@@ -17155,18 +17157,15 @@ def bot_stop():
     _liquidate_all_positions(wallet)
     return jsonify({'ok': True, 'status': 'stopped'})
 
-@app.route('/api/bot/status', methods=['GET'])
-@rate_limit(60, 60)
-def bot_status():
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'running': False}), 401
+def _bot_status_summary(wallet: str) -> dict:
+    """Shared by /api/bot/status (JS polling) and /live-trades (initial
+    server-render, so the summary strip doesn't flash in empty a beat after
+    the page loads) -- running state + SOL ready from in-memory user state,
+    win rate over the last 7 days from the trades table."""
     us = get_user_state(wallet)
     running = bool(us.get('trader_running', False))
     open_positions = sum(1 for p in us.get('positions', {}).values() if p.get('amount', 0) > 0)
-    # SOL balance from in-memory state
     sol_ready = round(float(us.get('sol', 0) or 0), 4)
-    # Win rate: last 30 trades
     win_rate = 0.0
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -17187,13 +17186,20 @@ def bot_status():
         conn.close()
     except Exception:
         pass
-    return jsonify({
-        'ok': True,
+    return {
         'running': running,
         'sol_ready': sol_ready,
         'open_positions': open_positions,
         'win_rate': win_rate,
-    })
+    }
+
+@app.route('/api/bot/status', methods=['GET'])
+@rate_limit(60, 60)
+def bot_status():
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'running': False}), 401
+    return jsonify(dict(ok=True, **_bot_status_summary(wallet)))
 
 @app.route('/api/bot/positions', methods=['GET'])
 @rate_limit(30, 60)
