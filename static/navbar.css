@@ -49,7 +49,7 @@
 .pt-nb-avatar{width:34px;height:34px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:#8a919c;flex-shrink:0;object-fit:cover;border:1px solid #21252c;font-family:'JetBrains Mono',monospace}
 
 .pt-nb-more-wrap{position:relative}
-.pt-nb-more-dd{display:none;position:absolute;top:calc(100% + 8px);right:0;background:#101216;border:1px solid #21252c;border-radius:13px;padding:6px;min-width:210px;z-index:280;box-shadow:0 16px 40px rgba(0,0,0,.5)}
+.pt-nb-more-dd{display:none;position:absolute;top:calc(100% + 8px);right:0;background:#101216;border:1px solid #21252c;border-radius:13px;padding:6px;min-width:210px;max-height:calc(100vh - 90px);overflow-y:auto;z-index:280;box-shadow:0 16px 40px rgba(0,0,0,.5)}
 .pt-nb-more-dd.open{display:block}
 .pt-nb-more-item{display:flex;align-items:center;gap:6px;width:100%;padding:10px 12px;border-radius:9px;font-size:13px;font-weight:600;color:#c7ccd4;background:none;border:none;text-align:left;transition:background .15s,color .15s}
 .pt-nb-more-item:hover{background:#16191f;color:#eef1f5}
