@@ -7906,7 +7906,7 @@ function _initLiveCharts(){
           stopLiveChart(entry.target);
         }
       });
-    }, {rootMargin: '600px 0px', threshold: 0.01});
+    }, {rootMargin: '400px 0px', threshold: 0.01});
   }
   /* observe each chart card found in DOM -- start/stop now driven by
      _liveChartObserver above rather than starting every card unconditionally */
@@ -7980,8 +7980,22 @@ function renderHomeFeed(appendItems){
   _initTradeBanners();
   el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
     _feedViewObserver.observe(card);
+    _onScreenCardObserver.observe(card);
   });
 }
+
+// Ongoing (non-one-shot) on-screen tracking for _refreshVisibleReactions below
+// -- _feedViewObserver above unobserves after the first hit, so it can't
+// answer "what's on screen right now". rootMargin gives a screen's worth of
+// read-ahead so a reaction update lands just before a card scrolls into view.
+var _onScreenCardIds = new Set();
+var _onScreenCardObserver = new IntersectionObserver(function(entries){
+  entries.forEach(function(entry){
+    var id = entry.target.id.slice('fc-card-'.length);
+    if(entry.isIntersecting) _onScreenCardIds.add(id);
+    else _onScreenCardIds.delete(id);
+  });
+}, {rootMargin: '400px 0px'});
 
 var _bottomHoldTimer = null;
 var _bottomHoldLastCheck = 0;
@@ -8647,10 +8661,12 @@ function _feedRenderPills(postId, counts, mine){
 
 
 async function _refreshVisibleReactions(){
-  var cards = document.querySelectorAll('.fc-card[id^="fc-card-"]');
-  if(!cards.length) return;
-  var ids = [];
-  cards.forEach(function(c){ var m = c.id.match(/^fc-card-([A-Za-z0-9_]+)$/); if(m) ids.push(m[1]); });
+  // Despite the name, this used to refresh EVERY loaded card, not just
+  // visible ones -- a feed grown to hundreds of posts via infinite scroll
+  // meant an innerHTML write per card, every 12s, for posts nowhere near
+  // the screen. Scoped to _onScreenCardIds (see the observer above) so the
+  // cost tracks what's actually on screen instead of total feed size.
+  var ids = Array.from(_onScreenCardIds);
   if(!ids.length) return;
   try{
     var r = await fetch('/api/feed/reactions/batch?ids='+ids.map(encodeURIComponent).join(','))

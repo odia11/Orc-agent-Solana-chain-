@@ -443,7 +443,15 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 #center-feed{display:flex;flex-direction:column}
 .fc-loading{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
 .fc-empty{padding:40px 22px;text-align:center;color:var(--muted);font-size:13px}
-.fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s;position:relative}
+/* content-visibility:auto skips layout/paint/style work entirely for cards
+   far outside the viewport -- the single biggest lever for scroll cost on a
+   feed that can grow into the hundreds of posts via infinite scroll.
+   contain-intrinsic-size gives it a placeholder height for off-screen cards
+   it hasn't measured yet; the "auto" keyword makes it remember each card's
+   real height after that so nothing jumps once it's been rendered once.
+   No-op (silently ignored) on browsers that don't support it -- purely
+   additive, nothing to fall back to. */
+.fc-card{padding:18px 22px;border-bottom:1px solid #16191f;display:flex;gap:14px;cursor:pointer;transition:background .12s;position:relative;content-visibility:auto;contain-intrinsic-size:auto 220px}
 .fc-card-highlight{background:rgba(247,185,85,.09);box-shadow:inset 3px 0 0 0 #f7b955;transition:background .4s ease,box-shadow .4s ease}
 @media(prefers-reduced-motion:reduce){.fc-card-highlight{transition:none}}
 .token-tag{color:#f7b955;font-weight:700;text-decoration:underline;cursor:pointer}
