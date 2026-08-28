@@ -182,6 +182,20 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
     <div class="narrative-desc">Experimentele functie -- de agent zoekt zelf naar tokens op basis van online signalen en koopt automatisch, tot $10 per trade, max $25 per dag. Nog in vroege testfase.</div>
   </div>
 
+  <!-- TIERED TAKE-PROFIT -->
+  <div class="narrative-card">
+    <div class="narrative-hdr">
+      <div class="narrative-title-wrap">
+        <span class="narrative-title">Tiered Take-Profit</span>
+      </div>
+      <label class="na-toggle">
+        <input type="checkbox" id="ttp-toggle-input" {% if tiered_tp_enabled %}checked{% endif %} onchange="_saveTieredTpToggle(this.checked)">
+        <span class="na-track"></span>
+      </label>
+    </div>
+    <div class="narrative-desc">Verkoopt {{ tp1_sell_fraction }}% van een positie zodra de koers {{ tp1_multiple|int }}x de instapprijs bereikt, en laat de rest lopen met een trailing stop van {{ trailing_stop_pct }}% onder de hoogste koers sindsdien. Vervangt voor die positie de vaste take-profit hierboven; stop-loss blijft actief tot het eerste doel is geraakt.</div>
+  </div>
+
 </div><!-- /page-wrap -->
 
 <script>
@@ -207,6 +221,21 @@ async function _saveNarrativeAgentToggle(enabled) {
       credentials: 'include',
       headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
       body: JSON.stringify({narrative_agent_enabled: enabled}),
+    }).then(function(r){return r.json()}).catch(function(){return null});
+    if (!r || !r.ok) el.checked = !enabled;
+  } catch (e) {
+    el.checked = !enabled;
+  }
+}
+
+async function _saveTieredTpToggle(enabled) {
+  var el = document.getElementById('ttp-toggle-input');
+  try {
+    var r = await fetch('/api/settings/save', {
+      method: 'POST',
+      credentials: 'include',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrfToken},
+      body: JSON.stringify({tiered_tp_enabled: enabled}),
     }).then(function(r){return r.json()}).catch(function(){return null});
     if (!r || !r.ok) el.checked = !enabled;
   } catch (e) {

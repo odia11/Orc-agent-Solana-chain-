@@ -484,6 +484,13 @@ CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
 # stop_loss = worst-case loss if SL fires cleanly). Only ever shrinks the
 # existing score-based stake in user_trader_loop(), never grows it.
 MAX_RISK_PCT_PER_TRADE = 0.02  # 2% of capital at risk per trade
+# Opt-in tiered take-profit (users.tiered_tp_enabled) -- sell TP1_SELL_FRACTION
+# of the position once price reaches TP1_MULTIPLE x entry, then trail the
+# remainder with TRAILING_STOP_PCT off its peak instead of the flat
+# take_profit %. Off by default; see the ALTER TABLE comment for why.
+TP1_MULTIPLE       = 2.0   # first target: 2x entry price
+TP1_SELL_FRACTION  = 0.5   # sell 50% of the position at TP1
+TRAILING_STOP_PCT  = 0.15  # trail the remainder 15% below its post-TP1 peak
 MIN_MARKETCAP_USD = 15_000  # fallback only — see _min_marketcap_for_stake() below, which is
                              # what actually gates entries per-user based on their stake size
 
@@ -2019,6 +2026,12 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN bot_enabled INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN bridging_enabled INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN narrative_agent_enabled INTEGER DEFAULT 0",
+        # Opt-in tiered take-profit: sell TP1_SELL_FRACTION at TP1_MULTIPLE x
+        # entry, then trail the remainder with TRAILING_STOP_PCT instead of the
+        # flat take_profit % above. Off by default -- the flat take_profit is
+        # what most positions realize a small, quick win on today; this is an
+        # explicit strategy swap a user opts into, not a silent replacement.
+        "ALTER TABLE users ADD COLUMN tiered_tp_enabled INTEGER DEFAULT 0",
         "ALTER TABLE agent_journal ADD COLUMN user_id INTEGER",
         "ALTER TABLE users ADD COLUMN breakout_trigger REAL DEFAULT 3.0",
         "ALTER TABLE users ADD COLUMN take_profit REAL DEFAULT 15.0",
@@ -3955,6 +3968,12 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
     # the time it closes, always recording the closing trade as source='bot'
     # (see the _record_user_trade() call sites that now read pos['source']).
     pos['source'] = source
+    # Same reasoning as pos['source'] above: needed on the in-memory dict so a
+    # later re-upsert of this same position (e.g. after a partial take-profit
+    # sell -- see the TP1 branch in user_trader_loop()) can pass the original
+    # copy_of_wallet back through instead of losing it to None.
+    if copy_of_wallet is not None:
+        pos['copy_of_wallet'] = copy_of_wallet
     get_user_state(wallet)['positions'][mint] = pos
     # Every open position is fast-polled from the moment it exists (see the
     # Pass-1 loop in user_trader_loop) -- registering here means every call
@@ -5621,7 +5640,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -5648,6 +5667,7 @@ def user_trader_loop(stop_event, config, wallet: str):
     pref_scam_filter   = bool(row[9]  if row[9]  is not None else 1)
     pref_notifications = bool(row[10] if row[10] is not None else 1)
     user_trade_pct = float(row[11]) if (len(row) > 11 and row[11] is not None) else 0.20
+    tiered_tp_enabled = bool(row[12]) if (len(row) > 12 and row[12] is not None) else False
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -5930,8 +5950,52 @@ def user_trader_loop(stop_event, config, wallet: str):
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position kept open, will retry next scan')
                         continue  # skip normal TP/SL — crash exit already handled (or will retry)
+
+                    # ── Tiered take-profit (opt-in, users.tiered_tp_enabled) ──
+                    # Sell TP1_SELL_FRACTION once price reaches TP1_MULTIPLE x entry, then
+                    # switch the remainder to a trailing stop below instead of the flat
+                    # take_profit % -- a deliberate strategy swap the user opts into, not
+                    # a change to the default flat-TP behavior everyone else keeps.
+                    if tiered_tp_enabled and not pos.get('tp1_hit') and price >= pos['buy_price'] * TP1_MULTIPLE:
+                        _tp1_amount = round(pos['amount'] * TP1_SELL_FRACTION, 6)
+                        _tp1_spend  = round(pos['spend']  * TP1_SELL_FRACTION, 6)
+                        if _tp1_amount > 0:
+                            add_user_log(wallet, '[' + short + '] TAKE PROFIT 1 (' + str(round(chg*100,1)) +
+                                         '%) — selling ' + str(int(TP1_SELL_FRACTION*100)) + '% of ' + label +
+                                         ', trailing the rest')
+                            with _use_key(_enc_blob, wallet) as _pk:
+                                _tp1_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(_tp1_amount))
+                            if _tp1_ok:
+                                with _use_key(_enc_blob, wallet) as _pk:
+                                    _record_user_trade(user_id, us, label, pos['buy_price'], price, _tp1_amount, _tp1_spend,
+                                                       wallet=wallet, private_key=_pk, mint=mint,
+                                                       exit_reason='TAKE PROFIT 1 (' + str(TP1_MULTIPLE) + 'x)',
+                                                       opened_at=pos.get('opened_at', 0.0),
+                                                       pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
+                                                       entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                                       entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                                       entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
+                                pos['amount']     = round(pos['amount'] - _tp1_amount, 6)
+                                pos['spend']      = round(pos['spend']  - _tp1_spend, 6)
+                                pos['tp1_hit']    = True
+                                pos['trail_peak'] = price
+                                _upsert_open_position(user_id, wallet, mint, pos, source=pos.get('source', 'bot'),
+                                                       copy_of_wallet=pos.get('copy_of_wallet'), chain=pos.get('chain', 'solana'))
+                            else:
+                                add_user_log(wallet, '[' + short + '] ✗ TAKE PROFIT 1 sell failed — will retry next scan')
+                        continue  # re-enter fresh next scan either way
+
                     exit_reason = None
-                    if chg <= -stop_loss:
+                    if tiered_tp_enabled and pos.get('tp1_hit'):
+                        # First target already banked -- only the trailing stop governs
+                        # the rest from here. The flat stop_loss/take_profit and the
+                        # momentum-exit below no longer apply: "let the rest run" is the
+                        # whole point once profit on this position is already locked in.
+                        pos['trail_peak'] = max(pos.get('trail_peak', price), price)
+                        _trail_dd = ((pos['trail_peak'] - price) / pos['trail_peak']) if pos['trail_peak'] > 0 else 0.0
+                        if _trail_dd >= TRAILING_STOP_PCT:
+                            exit_reason = 'TRAILING STOP -' + str(round(_trail_dd*100,1)) + '% from peak'
+                    elif chg <= -stop_loss:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
                     elif chg >= take_profit:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
@@ -8131,10 +8195,11 @@ def bot_overview_page():
         return redirect('/')
     conn = sqlite3.connect(DB_FILE)
     try:
-        row = conn.execute('SELECT narrative_agent_enabled FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        row = conn.execute('SELECT narrative_agent_enabled, tiered_tp_enabled FROM users WHERE wallet_address=?', (wallet,)).fetchone()
     finally:
         conn.close()
     narrative_agent_enabled = bool(row[0]) if row else False
+    tiered_tp_enabled       = bool(row[1]) if row else False
     return _render_no_cache(
         'bot.html',
         wallet=wallet,
@@ -8142,6 +8207,10 @@ def bot_overview_page():
         is_admin=_is_owner(wallet),
         csrf_token=_get_csrf_token(),
         narrative_agent_enabled=narrative_agent_enabled,
+        tiered_tp_enabled=tiered_tp_enabled,
+        tp1_multiple=TP1_MULTIPLE,
+        tp1_sell_fraction=int(TP1_SELL_FRACTION * 100),
+        trailing_stop_pct=int(TRAILING_STOP_PCT * 100),
     )
 
 
@@ -11089,7 +11158,8 @@ def settings_get():
             '''SELECT encrypted_private_key, breakout_trigger, take_profit,
                       stop_loss, max_positions, pref_notifications,
                       pref_scam_filter, pref_sound_alerts, bot_enabled,
-                      avatar_url, username, is_verified, bio, min_trade_size
+                      avatar_url, username, is_verified, bio, min_trade_size,
+                      tiered_tp_enabled
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
@@ -11101,7 +11171,7 @@ def settings_get():
                         'stop_loss': 8.0, 'max_positions': 3,
                         'pref_notifications': True, 'pref_scam_filter': True,
                         'pref_sound_alerts': False, 'bot_running': bot_running,
-                        'min_trade_size': 1.0})
+                        'min_trade_size': 1.0, 'tiered_tp_enabled': False})
     return jsonify({
         'ok': True,
         'has_trading_key': bool(row[0]),
@@ -11118,6 +11188,7 @@ def settings_get():
         'is_verified': bool(row[11]),
         'bio': row[12] or '',
         'min_trade_size': row[13] if row[13] is not None else 1.0,
+        'tiered_tp_enabled': bool(row[14] if row[14] is not None else 0),
     })
 
 @app.route('/api/settings/save', methods=['POST'])
@@ -11167,6 +11238,9 @@ def settings_save():
     if 'narrative_agent_enabled' in data:
         updates.append('narrative_agent_enabled=?')
         params.append(1 if data['narrative_agent_enabled'] else 0)
+    if 'tiered_tp_enabled' in data:
+        updates.append('tiered_tp_enabled=?')
+        params.append(1 if data['tiered_tp_enabled'] else 0)
     if not updates:
         return jsonify({'ok': True, 'msg': 'Nothing to update'})
     params.append(wallet)
