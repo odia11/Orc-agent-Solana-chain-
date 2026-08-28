@@ -1034,7 +1034,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .s-modal{display:none;position:fixed;inset:0;z-index:200;background:rgba(10,18,30,.92);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:1rem}
 .s-modal.open{display:flex}
 .s-card{background:var(--bg2);border:1px solid rgba(247,185,85,.3);border-radius:14px;padding:26px 24px;width:100%;max-width:480px;position:relative;box-shadow:0 0 60px rgba(0,0,0,.5)}
-.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px}
+.s-close{position:absolute;top:14px;right:16px;background:none;border:none;color:var(--muted);font-size:18px;cursor:pointer;line-height:1;padding:4px;display:inline-flex;align-items:center}
 .s-close:hover{color:var(--text)}
 .s-title{font-family:'Orbitron',monospace;font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px}
 .s-sub{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:18px}
@@ -3541,7 +3541,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="ob-step active" id="step-0">
       <!-- Post-connect success row (shown by connectWalletOnboard) -->
       <div id="wallet-connected" style="display:none" class="ob-connected">
-        <div class="ob-check">✓</div>
+        <div class="ob-check"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></div>
         <div class="ob-conn-text">
           <div class="ob-conn-name" id="wallet-type-label">Wallet connected</div>
           <div class="ob-conn-sub" id="wallet-addr"></div>
@@ -3591,7 +3591,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="ob-step" id="step-1">
       <div style="font-size:18px;font-weight:700;color:var(--text);margin-bottom:.5rem;letter-spacing:-.02em">Enable Bot Trading</div>
       <p style="font-size:12px;color:var(--muted);margin-bottom:1rem;line-height:1.65;text-align:left">Paste your <strong style="color:var(--text)">dedicated trading wallet's</strong> private key so the bot can execute trades. It is double-encrypted and never exposed in logs or API responses.</p>
-      <div class="sg-warn" style="font-size:12px;border-radius:10px;margin-bottom:1rem">⚠ Never use your main wallet — create a separate wallet just for the bot.</div>
+      <div class="sg-warn" style="font-size:12px;border-radius:10px;margin-bottom:1rem;display:flex;align-items:flex-start;gap:6px"><span style="flex-shrink:0;margin-top:1px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span>Never use your main wallet — create a separate wallet just for the bot.</div>
       <textarea id="ob-privkey" rows="3" placeholder="Paste base58 private key…" style="width:100%;background:var(--bg3);border:1px solid var(--border2);border-radius:10px;padding:11px 14px;font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--text);outline:none;resize:none;margin-bottom:4px;box-sizing:border-box;line-height:1.5;transition:border-color .15s" onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border2)'"></textarea>
       <div id="ob-key-err" style="font-size:11px;color:var(--red);min-height:14px;margin-bottom:8px;text-align:left"></div>
       <button class="ob-btn" id="ob-save-key-btn" onclick="_obSaveKey()" style="background:var(--accent);color:#0a0b0e;font-weight:700">Save Key &amp; Start Trading ▶</button>
@@ -3604,16 +3604,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <!-- SETTINGS MODAL -->
 <div class="s-modal" id="settings-modal" onclick="if(event.target===this)closeSettings()">
   <div class="s-card">
-    <button class="s-close" onclick="closeSettings()">✕</button>
-    <div class="s-title">⚙ TRADING SETTINGS</div>
+    <button class="s-close" onclick="closeSettings()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div class="s-title" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>TRADING SETTINGS</div>
     <div class="s-sub" id="s-user-label">Connect a wallet to save per-wallet settings</div>
 
     <div class="s-key-saved-row" id="s-key-saved" style="display:none">
-      <span style="font-size:11px;color:var(--green)">✓ Trading key saved</span>
+      <span style="font-size:11px;color:var(--green);display:inline-flex;align-items:center;gap:4px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>Trading key saved</span>
       <button class="s-remove-key-btn" onclick="removeKey()">Remove Key</button>
     </div>
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
-      <button class="s-manage-key-btn" onclick="_openManage()">🔑 Manage Trading Key</button>
+      <button class="s-manage-key-btn" onclick="_openManage()" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Manage Trading Key</button>
       <span class="s-key-hint" id="s-key-hint"></span>
     </div>
 
@@ -3641,7 +3641,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
     <!-- Face ID setup prompt — revealed after private key is saved -->
     <div id="s-faceid-prompt" style="display:none;margin-top:14px;padding:14px 16px;background:rgba(247,185,85,.07);border:1px solid rgba(247,185,85,.22);border-radius:10px">
-      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px">🔑 Login faster with Face ID?</div>
+      <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:6px;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Login faster with Face ID?</div>
       <div style="font-size:11px;color:var(--muted);margin-bottom:12px;line-height:1.5">Next time, just scan your face — no wallet needed.</div>
       <div style="display:flex;gap:8px">
         <button id="s-faceid-prompt-btn" onclick="_setupFaceID()" style="flex:1;padding:10px;background:var(--accent);color:#0a0b0e;border:none;border-radius:7px;font-size:12px;font-weight:700;cursor:pointer;transition:opacity .15s">Setup Face ID</button>
@@ -3658,7 +3658,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
      it isn't hidden if #dash-settings itself is display:none at the time) ── -->
 <div class="modal-back" id="manage-modal" onclick="if(event.target===this)_closeManage()">
   <div class="modal-box">
-    <button class="modal-close" onclick="_closeManage()">✕</button>
+    <button class="modal-close" onclick="_closeManage()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     <div class="modal-title">Enter Private Key</div>
     <textarea id="manage-inp" class="modal-textarea" placeholder="Paste your base58 private key here…" autocomplete="new-password" spellcheck="false"></textarea>
     <div class="manage-warn">
@@ -3685,8 +3685,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <!-- INCINERATOR MODAL -->
 <div class="s-modal" id="incinerator-modal" onclick="if(event.target===this)closeIncinerator()">
   <div class="s-card inc-card">
-    <button class="s-close" onclick="closeIncinerator()">✕</button>
-    <div class="s-title">🔥 Token Incinerator</div>
+    <button class="s-close" onclick="closeIncinerator()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div class="s-title" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>Token Incinerator</div>
     <div class="s-sub">Burn empty &amp; dust token accounts — recover ~0.002 SOL rent per account</div>
     <div id="inc-status" class="s-msg" style="display:none"></div>
     <div id="inc-loading" class="inc-loading">⏳ Scanning wallet &amp; fetching token prices…</div>
@@ -3694,11 +3694,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div class="inc-scan-bar">
         <span class="inc-scan-label">Mode: <span class="inc-scan-pill smart" id="inc-mode-pill">Smart Scan</span></span>
         <div class="inc-ctrl-btns">
-          <button class="inc-ctrl-btn scan-all-btn" id="inc-scan-all-btn" onclick="_incSetMode(true)">📋 Scan All Tokens</button>
-          <button class="inc-ctrl-btn scan-smart-btn" id="inc-scan-smart-btn" onclick="_incSetMode(false)" style="display:none">🎯 Smart Scan</button>
+          <button class="inc-ctrl-btn scan-all-btn" id="inc-scan-all-btn" onclick="_incSetMode(true)" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>Scan All Tokens</button>
+          <button class="inc-ctrl-btn scan-smart-btn" id="inc-scan-smart-btn" onclick="_incSetMode(false)" style="display:none;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Smart Scan</button>
         </div>
       </div>
-      <div class="inc-scan-warn" id="inc-scan-warn">⚠ Scan All mode shows tokens that may have value. Unchecked by default — only select accounts you are sure you want to close.</div>
+      <div class="inc-scan-warn" id="inc-scan-warn" style="display:flex;align-items:flex-start;gap:6px"><span style="flex-shrink:0;margin-top:1px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span><span>Scan All mode shows tokens that may have value. Unchecked by default — only select accounts you are sure you want to close.</div>
       <div class="inc-controls">
         <span class="inc-found" id="inc-found-count">Scanning…</span>
         <div class="inc-ctrl-btns">
@@ -3711,12 +3711,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <span class="inc-summary-text" id="inc-summary-text">0 selected</span>
         <span class="inc-sol-est" id="inc-sol-est">~0.0000 SOL</span>
       </div>
-      <button class="inc-burn-btn" id="inc-burn-btn" onclick="burnSelected()" disabled>🔥 Burn &amp; Claim SOL</button>
+      <button class="inc-burn-btn" id="inc-burn-btn" onclick="burnSelected()" disabled style="display:inline-flex;align-items:center;justify-content:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>Burn &amp; Claim SOL</button>
     </div>
     <div id="inc-empty" class="inc-empty" style="display:none">
-      <div style="font-size:22px;margin-bottom:8px">✅</div>
+      <div style="margin-bottom:8px;display:flex;justify-content:center;color:var(--green)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
       <b>Wallet is clean!</b><br>No empty or dust token accounts found.<br>
-      <button class="inc-ctrl-btn" style="margin-top:12px" onclick="_incSetMode(true)">📋 Scan All Tokens</button>
+      <button class="inc-ctrl-btn" style="margin-top:12px;display:inline-flex;align-items:center;gap:6px" onclick="_incSetMode(true)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>Scan All Tokens</button>
     </div>
   </div>
 </div>
@@ -3724,8 +3724,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <!-- BLACKLIST MANAGER MODAL -->
 <div class="s-modal" id="blacklist-modal" onclick="if(event.target===this)closeBlacklistModal()">
   <div class="s-card" style="max-width:600px">
-    <button class="s-close" onclick="closeBlacklistModal()">✕</button>
-    <div class="s-title">🚫 BLACKLIST MANAGER</div>
+    <button class="s-close" onclick="closeBlacklistModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div class="s-title" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>BLACKLIST MANAGER</div>
     <div class="s-sub">Tokens the bot will skip when scanning. Unban any token to allow it again.</div>
     <div id="bl-mgr-status" class="s-msg" style="display:none;margin-top:10px"></div>
     <div id="bl-mgr-loading" style="font-size:11px;color:var(--muted);padding:20px 0;text-align:center">Loading…</div>
@@ -3744,9 +3744,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </table>
     </div>
     <div id="bl-mgr-empty" class="bl-mgr-empty" style="display:none">
-      <div class="bl-mgr-empty-icon">✅</div>
+      <div class="bl-mgr-empty-icon" style="display:flex;justify-content:center;color:var(--green)"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
       <strong>No blacklisted tokens</strong><br>
-      Use 🚫 Avoid on any token to add it here.
+      Use <span style="display:inline-flex;align-items:center;vertical-align:-2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg></span> Avoid on any token to add it here.
     </div>
   </div>
 </div>
@@ -3754,7 +3754,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 <!-- INACTIVITY WARNING POPUP -->
 <div class="inact-overlay" id="inact-overlay" style="display:none" role="alertdialog" aria-modal="true" aria-labelledby="inact-title" onclick="stayConnected()">
   <div class="inact-card" onclick="event.stopPropagation()">
-    <div class="inact-icon">⚠️</div>
+    <div class="inact-icon" style="display:flex;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
     <div class="inact-title" id="inact-title">INACTIVITY WARNING</div>
     <div class="inact-msg">You will be logged out in 2 minutes due to inactivity. Click anywhere to stay logged in.</div>
     <div class="inact-timer" id="inact-countdown">120</div>
@@ -3770,7 +3770,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         SYSTEM AUDIT
         <span class="audit-status-badge unknown" id="audit-badge">—</span>
       </div>
-      <button class="audit-close" onclick="closeHealthPanel()">✕</button>
+      <button class="audit-close" onclick="closeHealthPanel()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="audit-ran-at" id="audit-ran-at">Last run: —</div>
     <div class="audit-checks" id="audit-checks">
@@ -3785,8 +3785,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
 <!-- GUEST BANNER -->
 <div id="guest-banner">
-  <span>👋 Browsing as guest · <button class="gb-link" onclick="_guestConnect()">Connect wallet</button></span>
-  <button class="gb-min" onclick="_minimizeGuestBanner()" title="Minimize">✕</button>
+  <span style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Browsing as guest · <button class="gb-link" onclick="_guestConnect()">Connect wallet</button></span>
+  <button class="gb-min" onclick="_minimizeGuestBanner()" title="Minimize"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
 </div>
 
 <!-- MAIN APP -->
@@ -3795,7 +3795,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   <!-- READ-ONLY BANNER -->
   <div id="readonly-banner">
-    👁 Read-only mode — connect a wallet extension to trade
+    <span style="display:inline-flex;align-items:center;gap:5px;vertical-align:-3px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span> Read-only mode — connect a wallet extension to trade
     <button onclick="document.getElementById('onboard').classList.remove('hide');currentStep=0;showStep(0);document.getElementById('app').style.display='none'">Connect Wallet</button>
   </div>
 
@@ -3813,7 +3813,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
       <span class="health-dot" id="health-dot"></span>HEALTH
     </button>
-    <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:#2e2e2e;color:#767676" title="Owner admin dashboard">👑 Admin</button>
+    <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:#2e2e2e;color:#767676" title="Owner admin dashboard" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zM5 19h14"/></svg>Admin</button>
   </div>
   <div class="app-body">
     <!-- SIDEBAR -->
@@ -3906,12 +3906,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
   <!-- ⚠ No-key banner: shown when wallet connected but no private key saved -->
   <div id="welcome-banner" class="welcome-banner hide" style="margin:12px 20px 0;border-radius:10px;background:rgba(247,185,85,.07);border:1px solid rgba(247,185,85,.25);color:var(--text)">
-    <span style="font-size:16px;flex-shrink:0;line-height:1.4">⚠️</span>
+    <span style="flex-shrink:0;line-height:1.4;display:flex"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></span>
     <div style="flex:1;line-height:1.55">
-      <strong>⚠️ Add private key in Settings</strong><br>
+      <strong>Add private key in Settings</strong><br>
       <span style="color:var(--muted)">Go to <a href="/settings" style="color:var(--accent);text-decoration:underline;text-underline-offset:2px">Settings</a> and paste your trading wallet's private key to enable bot trading.</span>
     </div>
-    <button onclick="dismissWelcome()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;line-height:1;flex-shrink:0;align-self:flex-start" title="Dismiss">✕</button>
+    <button onclick="dismissWelcome()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:0;line-height:1;flex-shrink:0;align-self:flex-start" title="Dismiss"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
 
   <!-- BOT STATUS CARD — amber dot + idle text + Start Trading -->
@@ -4030,7 +4030,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <!-- LOW SOL BALANCE MODAL -->
   <div id="low-sol-modal" onclick="if(event.target===this)closeLowSolModal()">
     <div class="low-sol-wrap">
-      <div class="low-sol-icon">⚠️</div>
+      <div class="low-sol-icon" style="display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
       <div class="low-sol-title">Insufficient SOL Balance</div>
       <div class="low-sol-msg">Please send SOL to your trading wallet to start trading.</div>
       <div class="low-sol-addr-row">
@@ -4046,7 +4046,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
     <div class="pos-chart-wrap">
       <div class="pos-chart-hdr">
         <div class="pos-chart-title" id="pos-chart-title">CHART</div>
-        <button class="pos-chart-close" onclick="closePosChart()">✕</button>
+        <button class="pos-chart-close" onclick="closePosChart()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
       <div class="pos-chart-tf-bar" id="pos-chart-tf-bar">
         <button class="chart-tf-btn" onclick="setPosChartTf('1m',this)">1m</button>
@@ -4101,7 +4101,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   <div id="dash-admin" class="dash-section" style="display:none">
     <div class="adash-wrap">
       <div class="adash-hdr">
-        <span class="adash-title">👑 Admin Dashboard</span>
+        <span class="adash-title" style="display:inline-flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zM5 19h14"/></svg>Admin Dashboard</span>
         <button class="adash-back-btn" onclick="toggleAdminView()">← Dashboard</button>
       </div>
       <!-- Overview stat cards -->
@@ -4113,12 +4113,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
       <!-- Tabs -->
       <div class="adash-tabs">
-        <button class="adash-tab active" id="adtab-users"    onclick="showAdminTab('users')">👤 Users</button>
-        <button class="adash-tab"        id="adtab-fees"     onclick="showAdminTab('fees')">💰 Fees</button>
-        <button class="adash-tab"        id="adtab-tokens"   onclick="showAdminTab('tokens')">📊 Tokens</button>
-        <button class="adash-tab"        id="adtab-health"   onclick="showAdminTab('health')">⚙ Health</button>
-        <button class="adash-tab"        id="adtab-security" onclick="showAdminTab('security')">🔐 Security</button>
-        <button class="adash-tab"        id="adtab-test"      onclick="showAdminTab('test')">🧪 Test Trade</button>
+        <button class="adash-tab active" id="adtab-users"    onclick="showAdminTab('users')" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>Users</button>
+        <button class="adash-tab"        id="adtab-fees"     onclick="showAdminTab('fees')" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>Fees</button>
+        <button class="adash-tab"        id="adtab-tokens"   onclick="showAdminTab('tokens')" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>Tokens</button>
+        <button class="adash-tab"        id="adtab-health"   onclick="showAdminTab('health')" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>Health</button>
+        <button class="adash-tab"        id="adtab-security" onclick="showAdminTab('security')" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Security</button>
+        <button class="adash-tab"        id="adtab-test"      onclick="showAdminTab('test')" style="display:inline-flex;align-items:center;gap:5px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/></svg>Test Trade</button>
       </div>
       <!-- Users pane -->
       <div id="adpane-users">
@@ -4143,14 +4143,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
             Finds all trades where fee_paid=0 and pnl&gt;0, sums 5% per user, sends one SOL transfer to OWNER_WALLET, and marks trades paid.
           </div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-            <button id="recover-fees-btn" onclick="runFeeRecovery()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:7px 18px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;font-weight:600">💰 RECOVER FEES NOW</button>
+            <button id="recover-fees-btn" onclick="runFeeRecovery()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:7px 18px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer;font-weight:600"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>RECOVER FEES NOW</button>
           </div>
           <div id="recover-fees-result" style="font-size:11px;margin-top:10px;line-height:1.8"></div>
         </div>
         <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(118,118,118,.15)">
           <div class="adash-section-hdr">Fee Transfer Test</div>
           <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:6px">
-            <button id="test-fee-btn" onclick="testFeeTransfer()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:6px 16px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer">🧪 Test Fee Transfer ($0.01)</button>
+            <button id="test-fee-btn" onclick="testFeeTransfer()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:6px 16px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 2v7.31"/><path d="M14 9.3V1.99"/><path d="M8.5 2h7"/><path d="M14 9.3a6.5 6.5 0 1 1-4 0"/><path d="M5.52 16h12.96"/></svg>Test Fee Transfer ($0.01)</button>
           </div>
           <div id="test-fee-result" style="font-size:11px;margin-top:8px;line-height:1.7"></div>
         </div>
@@ -4170,7 +4170,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
           <div style="text-align:center;color:var(--muted);grid-column:1/-1;padding:16px">Loading…</div>
         </div>
         <div style="margin-top:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
-          <button id="test-ai-btn" onclick="testAIKey()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:6px 16px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer">⚡ Test AI Key</button>
+          <button id="test-ai-btn" onclick="testAIKey()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:6px 16px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Test AI Key</button>
           <span id="test-ai-result" style="font-size:11px;color:var(--muted)"></span>
         </div>
       </div>
@@ -4182,7 +4182,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
             <span>Banned IPs &amp; Rate Limits</span>
             <div style="display:flex;gap:8px">
               <button onclick="fetchAdminBans()" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:6px;padding:4px 12px;color:#ffffff;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">↺ Refresh</button>
-              <button onclick="clearAllBans()" style="background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:6px;padding:4px 12px;color:#ef4444;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer">✕ Clear All Bans</button>
+              <button onclick="clearAllBans()" style="background:rgba(255,77,106,.1);border:1px solid rgba(255,77,106,.3);border-radius:6px;padding:4px 12px;color:#ef4444;font-size:10px;font-family:'Share Tech Mono',monospace;cursor:pointer"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:3px"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>Clear All Bans</button>
             </div>
           </div>
           <div id="ad-bans-list" style="font-size:11px;font-family:'Share Tech Mono',monospace;color:var(--muted)">Loading…</div>
@@ -4201,7 +4201,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
         <div class="adash-section-hdr">$1 USDC test buy — verifies full on-chain swap path</div>
         <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
           <input id="test-trade-mint" type="text" placeholder="Token mint address" style="flex:1;min-width:240px;background:var(--bg3);border:1px solid rgba(118,118,118,.3);border-radius:7px;padding:7px 10px;color:#e8eaf0;font-size:12px;font-family:monospace">
-          <button id="test-trade-btn" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:7px 16px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer" onclick="runTestTrade()">⚡ Test Trade ($1)</button>
+          <button id="test-trade-btn" style="background:#1c1c1c;border:1px solid #2e2e2e;border-radius:7px;padding:7px 16px;color:#ffffff;font-size:11px;font-family:'Share Tech Mono',monospace;cursor:pointer" onclick="runTestTrade()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Test Trade ($1)</button>
         </div>
         <div id="test-trade-result" style="display:none;margin-top:10px;background:var(--bg3);border:1px solid rgba(0,0,0,.2);border-radius:8px;padding:12px;font-size:11px;font-family:monospace;white-space:pre-wrap;word-break:break-all;line-height:1.6;color:#a0aec0;max-height:280px;overflow-y:auto"></div>
       </div>
@@ -4214,7 +4214,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <div class="feed-hdr-top"><h1 class="feed-hdr-title">Notifications</h1></div>
     </div>
     <div id="notif-list" style="padding:40px 22px;text-align:center;color:var(--muted)">
-      <div style="font-size:28px;margin-bottom:12px">🔔</div>
+      <div style="margin-bottom:12px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg></div>
       <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">No new notifications</div>
       <div style="font-size:13px">Trade alerts and activity will appear here.</div>
     </div>
@@ -4325,8 +4325,8 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <!-- Conversations sidebar -->
       <div class="dm-sidebar" id="dm-sidebar">
         <div class="dm-sidebar-hdr">
-          <span class="dm-sidebar-hdr-title">💬 Messages</span>
-          <button class="dm-sidebar-close" onclick="closeMessagesView()" title="Close">✕</button>
+          <span class="dm-sidebar-hdr-title" style="display:inline-flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>Messages</span>
+          <button class="dm-sidebar-close" onclick="closeMessagesView()" title="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
         </div>
         <div class="dm-search-wrap" id="dm-search-wrap">
           <input class="dm-search-input" id="dm-search-input" type="text"
@@ -4342,7 +4342,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <!-- Chat area -->
       <div class="dm-chat" id="dm-chat">
         <div class="dm-chat-placeholder" id="dm-chat-placeholder">
-          <div class="dm-chat-placeholder-icon">💬</div>
+          <div class="dm-chat-placeholder-icon" style="display:flex;justify-content:center"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg></div>
           <div class="dm-chat-placeholder-text">Select a conversation to start messaging</div>
         </div>
         <div id="dm-chat-active" style="display:none">
@@ -4380,14 +4380,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       <span class="gc-online"><span class="gc-online-dot"></span><span id="gc-online-count">—</span> online</span>
     </div>
     <div class="gc-messages" id="gc-messages">
-      <div class="gc-empty" id="gc-empty">Be the first to share your OrcAgent experience! 🚀</div>
+      <div class="gc-empty" id="gc-empty">Be the first to share your OrcAgent experience! <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></div>
     </div>
     <button id="gc-new-btn" onclick="gcScrollToBottom()">↓ New messages</button>
     <div class="gc-img-preview" id="gc-img-preview">
       <div class="gc-img-preview-inner">
         <img class="gc-img-preview-thumb" id="gc-img-preview-thumb" src="" alt="">
         <span class="gc-img-preview-name" id="gc-img-preview-name"></span>
-        <button class="gc-img-preview-cancel" onclick="gcCancelPreview()" title="Cancel">✕</button>
+        <button class="gc-img-preview-cancel" onclick="gcCancelPreview()" title="Cancel"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
       </div>
     </div>
     <div class="gc-input-row">
@@ -4443,7 +4443,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
       </div>
 
       <div id="lb-empty" class="empty" style="display:none">
-        <div class="empty-icon">🏆</div>
+        <div class="empty-icon" style="display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></div>
         No trades on the board yet.<br>
         Start the bot — your first trade will appear here.
       </div>
@@ -4456,7 +4456,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
       <!-- ── CARD 1: Trading Strategy ── -->
       <div class="st-card">
-        <div class="st-card-hdr">⚡ Trading Strategy</div>
+        <div class="st-card-hdr" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>Trading Strategy</div>
 
         <div class="st-row">
           <div class="st-row-left">
@@ -4506,7 +4506,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
       <!-- ── CARD 2: Preferences ── -->
       <div class="st-card">
-        <div class="st-card-hdr">🔔 Preferences</div>
+        <div class="st-card-hdr" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>Preferences</div>
 
         <div class="st-tog-row">
           <div>
@@ -4566,7 +4566,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
       <!-- ── CARD 3: Account & Wallet ── -->
       <div class="st-card">
-        <div class="st-card-hdr">🔑 Account &amp; Wallet</div>
+        <div class="st-card-hdr" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>Account &amp; Wallet</div>
 
         <div class="st-wallet-row">
           <span class="st-wallet-addr" id="st-wallet-addr"></span>
@@ -4598,7 +4598,7 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 
       <!-- ── CARD: Accepted Terms ── -->
       <div class="st-card">
-        <div class="st-card-hdr">📄 Your Accepted Terms</div>
+        <div class="st-card-hdr" style="display:flex;align-items:center;gap:7px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Your Accepted Terms</div>
         <div id="st-tos-body">
           <div class="st-row-sub">Loading…</div>
         </div>
@@ -4682,7 +4682,7 @@ if (window.__SESSION_WALLET) {
   <div id="tdp-hero">
     <div id="tdp-banner-bg"></div>
     <button id="tdp-close" onclick="closeTokenPanel()" title="Close">
-      <span class="tdp-close-x">✕</span>
+      <span class="tdp-close-x"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></span>
       <span class="tdp-close-back">← Back</span>
     </button>
     <div id="tdp-hero-info">
@@ -4740,17 +4740,17 @@ if (window.__SESSION_WALLET) {
 <!-- ── DEPOSIT SOL MODAL ── -->
 <div id="deposit-modal" class="s-modal" onclick="if(event.target===this)closeDepositModal()">
   <div class="s-card" style="max-width:360px;text-align:center">
-    <button class="s-close" onclick="closeDepositModal()">✕</button>
+    <button class="s-close" onclick="closeDepositModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     <div class="s-title" style="margin-bottom:4px">⬇ Deposit SOL</div>
     <div class="s-sub">SCAN QR OR COPY ADDRESS</div>
     <div id="dep-qr" style="display:flex;align-items:center;justify-content:center;margin:16px 0 14px;background:#fff;border-radius:10px;padding:8px;width:fit-content;margin-left:auto;margin-right:auto"></div>
     <div style="background:var(--bg3);border:1px solid var(--border2);border-radius:8px;padding:10px 14px;font-size:11px;color:var(--blue);word-break:break-all;display:flex;align-items:center;gap:8px;justify-content:space-between;text-align:left;margin-bottom:6px">
       <span id="dep-addr-text" style="flex:1;word-break:break-all"></span>
-      <button onclick="copyDepositAddr()" id="dep-copy-btn" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;flex-shrink:0;padding:0;line-height:1;transition:color .15s" title="Copy address">📋</button>
+      <button onclick="copyDepositAddr()" id="dep-copy-btn" style="background:none;border:none;color:var(--dim);cursor:pointer;font-size:14px;flex-shrink:0;padding:0;line-height:1;transition:color .15s;display:inline-flex;align-items:center" title="Copy address"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></button>
     </div>
     <div id="dep-copy-msg" style="font-size:10px;color:var(--green);min-height:14px;margin-bottom:10px;letter-spacing:.04em"></div>
     <div style="background:rgba(118,118,118,.07);border:1px solid rgba(118,118,118,.25);border-radius:8px;padding:10px 14px;font-size:10px;color:var(--yellow);text-align:left;line-height:1.65;margin-bottom:16px">
-      ⚠ <strong>Only send SOL on the Solana network.</strong><br>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <strong>Only send SOL on the Solana network.</strong><br>
       Sending other assets or using a different network will result in permanent loss of funds.
     </div>
     <button onclick="closeDepositModal()" style="width:100%;padding:11px;background:var(--bg3);border:1px solid var(--border2);border-radius:8px;font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--muted);cursor:pointer;transition:border-color .15s,color .15s" onmouseover="this.style.borderColor='var(--border2)';this.style.color='var(--text)'" onmouseout="this.style.borderColor='var(--border2)';this.style.color='var(--muted)'">Close</button>
@@ -4760,7 +4760,7 @@ if (window.__SESSION_WALLET) {
 <!-- ── WITHDRAW SOL MODAL ── -->
 <div id="withdraw-modal" class="s-modal" onclick="if(event.target===this)closeWithdrawModal()">
   <div class="s-card" style="max-width:400px">
-    <button class="s-close" onclick="closeWithdrawModal()">✕</button>
+    <button class="s-close" onclick="closeWithdrawModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     <div class="s-title" style="margin-bottom:3px">⬆ Withdraw SOL</div>
     <div class="s-sub">SEND SOL FROM YOUR TRADING WALLET</div>
 
@@ -4785,7 +4785,7 @@ if (window.__SESSION_WALLET) {
     </div>
 
     <div style="background:rgba(255,77,106,.06);border:1px solid rgba(255,77,106,.25);border-radius:8px;padding:10px 14px;font-size:10px;color:#ff9a9a;line-height:1.65;margin-bottom:16px">
-      ⚠ <strong>Double-check the address — transactions are irreversible.</strong><br>
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg> <strong>Double-check the address — transactions are irreversible.</strong><br>
       Only send to Solana wallets. 0.001 SOL is reserved to cover the network fee.
     </div>
 
@@ -4811,8 +4811,8 @@ __ALERT_MODAL__
 <!-- ── LIKED BY MODAL ── -->
 <div id="liked-by-modal" class="s-modal" onclick="if(event.target===this)_fcCloseLikedBy()">
   <div class="s-card" style="max-width:380px;max-height:70vh;display:flex;flex-direction:column">
-    <button class="s-close" onclick="_fcCloseLikedBy()">✕</button>
-    <div class="s-title" style="margin-bottom:3px">❤ Liked by</div>
+    <button class="s-close" onclick="_fcCloseLikedBy()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
+    <div class="s-title" style="margin-bottom:3px;display:flex;align-items:center;gap:6px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>Liked by</div>
     <div class="s-sub" id="liked-by-count">&nbsp;</div>
     <div id="liked-by-list" style="overflow-y:auto;flex:1;margin:0 -8px;padding:0 8px"></div>
   </div>
@@ -4839,7 +4839,7 @@ __ALERT_MODAL__
   <div class="tips-box">
     <div class="tips-top">
       <div class="tips-counter" id="tips-counter">1 / 6</div>
-      <button class="tips-close" onclick="closeTipsModal()" title="Close">✕</button>
+      <button class="tips-close" onclick="closeTipsModal()" title="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="tips-dots" id="tips-dots"></div>
     <div id="tips-content"></div>
@@ -4867,7 +4867,7 @@ __ALERT_MODAL__
 
 <!-- SUPPORT CHAT -->
 <button id="support-fab" onclick="toggleSupportChat()" title="Help &amp; Support">
-  💬
+  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
   <span id="support-fab-badge" class="support-fab-badge" style="display:none"></span>
 </button>
 <div id="support-panel">
@@ -4876,13 +4876,13 @@ __ALERT_MODAL__
       <div class="support-panel-title">SUPPORT</div>
       <div class="support-panel-sub" id="support-status-sub">We usually reply within a few hours</div>
     </div>
-    <button class="support-close" onclick="toggleSupportChat(false)" title="Close">✕</button>
+    <button class="support-close" onclick="toggleSupportChat(false)" title="Close"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
   </div>
   <div id="support-messages"></div>
   <div class="support-panel-input">
     <textarea id="support-input" placeholder="Type a message…" rows="1"
       onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendSupportMessage();}"></textarea>
-    <button id="support-send-btn" onclick="sendSupportMessage()" title="Send">➤</button>
+    <button id="support-send-btn" onclick="sendSupportMessage()" title="Send" style="display:inline-flex;align-items:center;justify-content:center"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button>
   </div>
 </div>
 <script>
@@ -4930,7 +4930,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <style>@keyframes tcSpin{to{transform:rotate(360deg)}}</style>
 <div id="tokenCard" style="display:none;position:fixed;inset:0;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.75);z-index:9999;align-items:center;justify-content:center;padding:16px;overflow-y:auto" onclick="if(event.target===this)this.style.display='none'">
   <div style="background:#0d1117;border:1px solid #21252c;border-radius:20px;width:100%;max-width:380px;max-height:90vh;overflow-y:auto;position:relative">
-    <button onclick="document.getElementById('tokenCard').style.display='none'" style="position:absolute;top:14px;right:14px;background:none;border:none;color:#565d68;cursor:pointer;font-size:20px;z-index:1;line-height:1">✕</button>
+    <button onclick="document.getElementById('tokenCard').style.display='none'" style="position:absolute;top:14px;right:14px;background:none;border:none;color:#565d68;cursor:pointer;font-size:20px;z-index:1;line-height:1"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     <div id="tc-body" style="padding:20px"></div>
   </div>
 </div>
@@ -4950,7 +4950,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- ADMIN INVITE MODAL -->
 <div id="admin-invite-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
   <div style="background:#101216;border:1px solid #21252c;border-radius:16px;padding:28px;max-width:340px;width:100%;font-family:'Geist',system-ui,sans-serif">
-    <div style="font-size:24px;margin-bottom:12px;text-align:center">👑</div>
+    <div style="margin-bottom:12px;display:flex;justify-content:center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 16L3 5l5.5 5L12 4l3.5 6L21 5l-2 11H5zM5 19h14"/></svg></div>
     <div style="font-size:17px;font-weight:700;margin-bottom:8px;color:#eef1f5;text-align:center" id="aim-title">You have been invited</div>
     <div style="font-size:13px;color:#565d68;margin-bottom:6px;text-align:center;line-height:1.5" id="aim-body">You have been invited as a <strong id="aim-role" style="color:#f7b955"></strong> on OrcAgent.</div>
     <div style="font-size:11px;color:#565d68;margin-bottom:22px;text-align:center" id="aim-sub">Accepting grants you access to the admin panel.</div>
@@ -4964,7 +4964,7 @@ document.addEventListener('DOMContentLoaded', function() {
 <!-- GUEST WALL MODAL -->
 <div id="guest-wall-modal" style="display:none;position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.72);backdrop-filter:blur(6px);align-items:center;justify-content:center;padding:20px">
   <div style="background:#101216;border:1px solid #21252c;border-radius:16px;padding:24px;max-width:320px;width:100%;text-align:center">
-    <div style="font-size:28px;margin-bottom:12px">🔒</div>
+    <div style="margin-bottom:12px;display:flex;justify-content:center"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
     <div style="font-size:17px;font-weight:700;margin-bottom:8px;color:#eef1f5;font-family:'Geist',system-ui,sans-serif">Connect your wallet</div>
     <div style="font-size:13px;color:#565d68;margin-bottom:20px;line-height:1.5;font-family:'Geist',system-ui,sans-serif">You need a wallet to use this feature</div>
     <button onclick="_guestWallConnect()" style="width:100%;padding:11px;background:#f7b955;color:#0a0b0e;border:none;border-radius:10px;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:10px;font-family:'Geist',system-ui,sans-serif">Connect Wallet</button>

@@ -4799,7 +4799,7 @@ function openDepositModal() {
   document.getElementById('deposit-modal').classList.add('open');
   document.getElementById('dep-addr-text').textContent = phantomKey;
   document.getElementById('dep-copy-msg').textContent = '';
-  document.getElementById('dep-copy-btn').textContent = '📋';
+  document.getElementById('dep-copy-btn').innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>';
   const qrEl = document.getElementById('dep-qr');
   qrEl.innerHTML = '<img src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=' + encodeURIComponent(phantomKey) + '" style="width:180px;height:180px;border-radius:4px" alt="QR code" onerror="this.parentElement.innerHTML=\'<p style=\\\'color:var(--muted);font-size:10px\\\'>QR unavailable</p>\'">';
 }
@@ -4820,11 +4820,11 @@ function copyDepositAddr() {
     document.body.removeChild(ta);
   };
   const done = () => {
-    document.getElementById('dep-copy-msg').textContent = '✓ Copied to clipboard';
-    document.getElementById('dep-copy-btn').textContent = '✓';
+    document.getElementById('dep-copy-msg').innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg> Copied to clipboard';
+    document.getElementById('dep-copy-btn').innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
     setTimeout(() => {
       document.getElementById('dep-copy-msg').textContent = '';
-      document.getElementById('dep-copy-btn').textContent = '📋';
+      document.getElementById('dep-copy-btn').innerHTML = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>';
     }, 2000);
   };
   if (navigator.clipboard && navigator.clipboard.writeText) {
@@ -4840,27 +4840,27 @@ function copyDepositAddr() {
 
 // ── TIPS MODAL ───────────────────────────────────────────────────────────────
 const _TIPS_DATA=[
-  {icon:'🔄',title:'Two Ways to Trade',
-   items:['🤖 <b>Auto Mode</b> — bot scans and trades automatically for you 24/7',
-          '🖐️ <b>Manual Mode</b> — pick tokens from Live Market and buy/sell yourself'],
+  {icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>',title:'Two Ways to Trade',
+   items:['<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg> <b>Auto Mode</b> — bot scans and trades automatically for you 24/7',
+          '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg> <b>Manual Mode</b> — pick tokens from Live Market and buy/sell yourself'],
    note:'Or use both at the same time!'},
-  {icon:'🤖',title:'Auto Trading',
+  {icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',title:'Auto Trading',
    items:['Scans up to 100 Solana tokens and re-checks your positions every 5 minutes',
           'Buys when momentum + volume are rising and price breaks your <b>Breakout Trigger</b>',
           'Sells automatically at <b>Take Profit</b> or <b>Stop Loss</b> — always 100% of the position']},
-  {icon:'🖐️',title:'Manual Trading',
+  {icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3l7.07 16.97 2.51-7.39 7.39-2.51L3 3z"/><path d="M13 13l6 6"/></svg>',title:'Manual Trading',
    items:['Go to Live Market and pick any token yourself',
           'BUY instantly buys your minimum trade size (set in Settings)',
           'SELL exits the full position — auto TP/SL only applies while Auto Mode is also running']},
-  {icon:'⚙️',title:'Strategy Settings (Auto)',
+  {icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',title:'Strategy Settings (Auto)',
    items:['Defaults: <b>Breakout</b> ≥3%, <b>Take Profit</b> +15%, <b>Stop Loss</b> -8%',
           'Fully adjustable in Settings, including Max Positions',
           'Built-in rugpull detection + emergency exit if a token crashes -15% from entry']},
-  {icon:'💰',title:'Deposit SOL',
+  {icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',title:'Deposit SOL',
    items:['Deposit at least ~0.02 SOL to cover a trade plus network fees',
           '<b>Auto Mode</b>: max concurrent positions is adjustable in Settings (default 3)',
           '<b>Manual Mode</b>: hard cap of 5 open positions']},
-  {icon:'🔒',title:'Stay Safe',
+  {icon:'<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',title:'Stay Safe',
    items:['Never share your private key',
           'Start with small trade sizes']},
 ];
