@@ -1508,6 +1508,22 @@ def init_db():
         tx_hash       TEXT,
         created_at    TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
+    # AI self-analysis loop: once a day, the last 24h's best/worst closed
+    # trades are sent to Claude, which proposes new values for the entry
+    # filters below (see get_ai_active_filters()/run_ai_self_analysis()).
+    # Proposals never take effect on their own -- an admin has to approve one
+    # via the admin dashboard before it's copied into server_config, so a bad
+    # or hallucinated analysis can never silently change live trading.
+    c.execute('''CREATE TABLE IF NOT EXISTS ai_filter_proposals (
+        id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+        proposed_json        TEXT NOT NULL,
+        reasoning            TEXT DEFAULT '',
+        trades_analyzed      INTEGER DEFAULT 0,
+        status               TEXT DEFAULT 'pending',
+        reviewed_by          TEXT DEFAULT NULL,
+        reviewed_at          TEXT DEFAULT NULL,
+        created_at           TEXT DEFAULT CURRENT_TIMESTAMP
+    )''')
     c.execute('''CREATE TABLE IF NOT EXISTS portfolio_snapshots (
         id              INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id         INTEGER NOT NULL,
@@ -3404,6 +3420,149 @@ def get_ai_trade_decision(token_data: dict, mint: str, symbol: str, spend_sol: f
     except Exception as e:
         print(f'[ai-trade-gate] error for {mint[:8]}: {e}', flush=True)
     return decision
+
+# ── AI SELF-ANALYSIS LOOP ──
+# Once a day, run_ai_self_analysis() sends the last 24h's 10 best and 10 worst
+# closed trades to Claude and asks it to propose new values for these three
+# entry filters -- the ones with a concrete, already-fetched number behind
+# them (liquidity, pair age, LP-locked %). Holder concentration was part of
+# the original spec too, but nothing in this codebase fetches real on-chain
+# holder distribution yet (the /api/token/<mint>/holders endpoint only counts
+# OrcAgent's own users, not actual on-chain holders), so it's left out rather
+# than faked.
+#
+# A proposal is stored in ai_filter_proposals and never takes effect on its
+# own -- see get_ai_active_filters()/apply below. An admin has to approve it
+# from the admin dashboard first, so a single bad or overfit day of analysis
+# can't silently change every user's live trading.
+AI_FILTER_DEFAULTS = {
+    'min_liquidity_usd':     20000,  # matches the narrative agent's own existing floor
+    'min_pair_age_minutes':  30,
+    'min_lp_locked_pct':     50,
+}
+# (min, max) a proposed value is clamped into before it can even be stored as
+# a pending proposal -- keeps a hallucinated or extreme suggestion from ever
+# being one click away from going live, regardless of admin review.
+AI_FILTER_BOUNDS = {
+    'min_liquidity_usd':    (5_000, 250_000),
+    'min_pair_age_minutes': (0, 1440),
+    'min_lp_locked_pct':    (0, 100),
+}
+
+def get_ai_active_filters() -> dict:
+    """Currently-applied AI-tunable entry filters -- defaults until an admin
+    approves a proposal (see the admin_ai_filters_* routes)."""
+    filters = dict(AI_FILTER_DEFAULTS)
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute("SELECT value FROM server_config WHERE key='ai_active_filters'").fetchone()
+        conn.close()
+        if row:
+            saved = json.loads(row[0])
+            for k in AI_FILTER_DEFAULTS:
+                if k in saved:
+                    filters[k] = saved[k]
+    except Exception as e:
+        print(f'[ai-filters] failed to load active filters, using defaults: {e}', flush=True)
+    return filters
+
+def run_ai_self_analysis() -> dict:
+    """Pulls the 10 best and 10 worst trades (by pnl_pct) closed across ALL
+    users in the last 24h, asks Claude to spot the pattern behind the losses,
+    and stores a pending ai_filter_proposals row with its suggested new
+    values for the three filters above -- constrained to strict JSON and
+    clamped into AI_FILTER_BOUNDS so a bad response can only ever produce a
+    reviewable proposal, never something out of range or unparseable.
+    Returns {'ok': bool, 'msg'/'proposal_id': ...}. Safe to call manually
+    (the admin 'Run now' button) or from the daily scheduler."""
+    if not ANTHROPIC_API_KEY:
+        return {'ok': False, 'msg': 'ANTHROPIC_API_KEY not configured'}
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        rows = conn.execute('''
+            SELECT token, pnl, entry_price, exit_price, exit_reason,
+                   entry_liquidity, entry_lp_locked_pct, opened_at, timestamp
+            FROM trades
+            WHERE timestamp >= datetime('now', '-1 day') AND entry_price > 0
+        ''').fetchall()
+        conn.close()
+    except Exception as e:
+        return {'ok': False, 'msg': f'DB error: {e}'}
+
+    if len(rows) < 4:
+        return {'ok': False, 'msg': f'not enough closed trades in the last 24h to analyze ({len(rows)})'}
+
+    def _fmt(r):
+        token, pnl, entry, exit_p, exit_reason, liq, lp_pct, opened_at, ts = r
+        pnl_pct = round((exit_p - entry) / entry * 100, 1) if entry > 0 else 0.0
+        age_min = round((datetime.datetime.strptime(ts[:19], '%Y-%m-%dT%H:%M:%S')
+                          - datetime.datetime.utcfromtimestamp(opened_at)).total_seconds() / 60, 1) \
+                  if opened_at else None
+        return (f'{token}: {pnl_pct:+.1f}% (reden: {exit_reason or "onbekend"}, '
+                f'liquidity bij instap: ${liq or 0:,.0f}, LP locked: {lp_pct if lp_pct is not None else "?"}%, '
+                f'gehouden: {age_min if age_min is not None else "?"}min)')
+
+    scored = sorted(rows, key=lambda r: ((r[3] - r[2]) / r[2]) if r[2] > 0 else 0.0)
+    worst  = scored[:10]
+    best   = list(reversed(scored[-10:]))
+
+    system_prompt = (
+        'Je bent de hoofd-strateeg van onze Solana AI trading bot. Analyseer welke patronen of '
+        'indicatoren hebben geleid tot verliezen (bijvoorbeeld: te snel gekocht na lancering, te lage '
+        'liquiditeit, te weinig LP locked). Op basis daarvan stel je NIEUWE waarden voor voor precies '
+        'deze drie instap-filters: min_liquidity_usd, min_pair_age_minutes, min_lp_locked_pct. '
+        'Reageer UITSLUITEND met JSON, geen andere tekst, in exact dit formaat: '
+        '{"min_liquidity_usd": 0, "min_pair_age_minutes": 0, "min_lp_locked_pct": 0, '
+        '"reasoning": "korte motivatie voor de logboeken"}'
+    )
+    user_prompt = (
+        'HUIDIGE FILTERS: ' + json.dumps(get_ai_active_filters()) + '\n\n'
+        'SUCCESVOLLE TRADES (afgelopen 24u):\n' + '\n'.join('- ' + _fmt(r) for r in best) + '\n\n'
+        'VERLIESGEVENDE TRADES (afgelopen 24u):\n' + '\n'.join('- ' + _fmt(r) for r in worst)
+    )
+    try:
+        resp = requests.post(
+            _ANTHROPIC_URL,
+            headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+            json={'model': 'claude-sonnet-5', 'max_tokens': 500,
+                  'system': system_prompt,
+                  'messages': [{'role': 'user', 'content': user_prompt}]},
+            timeout=30,
+        )
+        if resp.status_code != 200:
+            return {'ok': False, 'msg': f'HTTP {resp.status_code}: {resp.text[:300]}'}
+        text = ((resp.json().get('content') or [{}])[0].get('text') or '').strip()
+        if text.startswith('```'):
+            text = text.strip('`')
+            if text.lower().startswith('json'):
+                text = text[4:]
+            text = text.strip()
+        parsed = json.loads(text)
+    except Exception as e:
+        return {'ok': False, 'msg': f'AI call/parse failed: {e}'}
+
+    proposed = {}
+    for key, (lo, hi) in AI_FILTER_BOUNDS.items():
+        try:
+            v = float(parsed.get(key, AI_FILTER_DEFAULTS[key]))
+        except (ValueError, TypeError):
+            v = AI_FILTER_DEFAULTS[key]
+        proposed[key] = max(lo, min(v, hi))
+    reasoning = str(parsed.get('reasoning', ''))[:500]
+
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        cur = conn.execute(
+            'INSERT INTO ai_filter_proposals (proposed_json, reasoning, trades_analyzed) VALUES (?,?,?)',
+            (json.dumps(proposed), reasoning, len(rows)))
+        conn.commit()
+        proposal_id = cur.lastrowid
+        conn.close()
+    except Exception as e:
+        return {'ok': False, 'msg': f'failed to store proposal: {e}'}
+
+    print(f'[ai-self-analysis] proposal #{proposal_id} from {len(rows)} trades: {proposed} — {reasoning}', flush=True)
+    return {'ok': True, 'proposal_id': proposal_id, 'proposed': proposed, 'reasoning': reasoning}
 
 def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
     """Research-driven narrative signal via Claude + web search -- heavier
@@ -6180,10 +6339,27 @@ def user_trader_loop(stop_event, config, wallet: str):
                             add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
                                          ' — mint/freeze authority still active (rug risk)')
                             continue
-                        _lp = _check_lp_locked(bmint)
-                        if _lp['ok'] and _lp['lp_locked_pct'] < 50:
+                        # AI-tunable entry filters -- defaults until an admin approves a
+                        # proposal from the daily self-analysis loop (run_ai_self_analysis()).
+                        _ai_filters = get_ai_active_filters()
+                        _best_liq = float(best.get('liquidity', 0) or 0)
+                        if _best_liq < _ai_filters['min_liquidity_usd']:
                             add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
-                                         ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (rug risk)')
+                                         ' — liquidity $' + str(int(_best_liq)) + ' below AI filter minimum $' +
+                                         str(int(_ai_filters['min_liquidity_usd'])))
+                            continue
+                        _pair_created = best.get('pairCreatedAt', 0) or 0
+                        _pair_age_min = (time.time() - _pair_created / 1000) / 60 if _pair_created > 0 else 0
+                        if _pair_created > 0 and _pair_age_min < _ai_filters['min_pair_age_minutes']:
+                            add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                         ' — pair age ' + str(round(_pair_age_min)) + 'm below AI filter minimum ' +
+                                         str(int(_ai_filters['min_pair_age_minutes'])) + 'm')
+                            continue
+                        _lp = _check_lp_locked(bmint)
+                        if _lp['ok'] and _lp['lp_locked_pct'] < _ai_filters['min_lp_locked_pct']:
+                            add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                         ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (AI filter needs >=' +
+                                         str(int(_ai_filters['min_lp_locked_pct'])) + '%)')
                             continue
                         # Learned LP-locked-% bracket check: unlike the liquidity
                         # bias above (known for every candidate up front), the
@@ -21078,6 +21254,91 @@ def admin_test_trade():
         'elapsed_s':   elapsed,
     })
 
+# ── AI SELF-ANALYSIS ADMIN ──
+@app.route('/api/admin/ai-filters', methods=['GET'])
+def admin_ai_filters():
+    """Current active filters + recent proposals (pending first) for the
+    admin dashboard's AI Filters tab. Read access for the same roles that
+    can already see the rest of the admin dashboard."""
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
+    if err: return err
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            '''SELECT id, proposed_json, reasoning, trades_analyzed, status,
+                      reviewed_by, reviewed_at, created_at
+               FROM ai_filter_proposals ORDER BY id DESC LIMIT 20'''
+        ).fetchall()
+    finally:
+        conn.close()
+    proposals = [{
+        'id': r[0], 'proposed': json.loads(r[1]), 'reasoning': r[2],
+        'trades_analyzed': r[3], 'status': r[4], 'reviewed_by': r[5],
+        'reviewed_at': r[6], 'created_at': r[7],
+    } for r in rows]
+    return jsonify({'ok': True, 'active_filters': get_ai_active_filters(), 'proposals': proposals})
+
+@app.route('/api/admin/ai-filters/run-now', methods=['POST'])
+@rate_limit(6, 3600)
+def admin_ai_filters_run_now():
+    """Manual trigger for run_ai_self_analysis() -- same purpose as
+    /admin/narrative-test: verify the pipeline works without waiting for the
+    daily schedule. Still only ever produces a pending proposal."""
+    err = _require_role('admin', 'executive')
+    if err: return err
+    result = run_ai_self_analysis()
+    return jsonify(result), (200 if result.get('ok') else 400)
+
+@app.route('/api/admin/ai-filters/approve', methods=['POST'])
+@rate_limit(20, 3600)
+def admin_ai_filters_approve():
+    wallet = _authenticated_wallet()
+    err = _require_role('admin', 'executive')
+    if err: return err
+    proposal_id = (request.get_json(silent=True) or {}).get('proposal_id')
+    if not proposal_id:
+        return jsonify({'ok': False, 'msg': 'proposal_id required'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute('SELECT proposed_json, status FROM ai_filter_proposals WHERE id=?',
+                            (proposal_id,)).fetchone()
+        if not row:
+            return jsonify({'ok': False, 'msg': 'proposal not found'}), 404
+        if row[1] != 'pending':
+            return jsonify({'ok': False, 'msg': f'proposal already {row[1]}'}), 400
+        conn.execute("INSERT OR REPLACE INTO server_config (key, value) VALUES ('ai_active_filters', ?)",
+                     (row[0],))
+        conn.execute(
+            "UPDATE ai_filter_proposals SET status='approved', reviewed_by=?, reviewed_at=CURRENT_TIMESTAMP WHERE id=?",
+            (wallet, proposal_id))
+        conn.commit()
+    finally:
+        conn.close()
+    _log_security_event('ai_filters_approved', wallet, f'proposal #{proposal_id}')
+    print(f'[ai-filters] proposal #{proposal_id} approved by {wallet[:8]}… — now live', flush=True)
+    return jsonify({'ok': True, 'active_filters': get_ai_active_filters()})
+
+@app.route('/api/admin/ai-filters/reject', methods=['POST'])
+@rate_limit(20, 3600)
+def admin_ai_filters_reject():
+    wallet = _authenticated_wallet()
+    err = _require_role('admin', 'executive')
+    if err: return err
+    proposal_id = (request.get_json(silent=True) or {}).get('proposal_id')
+    if not proposal_id:
+        return jsonify({'ok': False, 'msg': 'proposal_id required'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cur = conn.execute(
+            "UPDATE ai_filter_proposals SET status='rejected', reviewed_by=?, reviewed_at=CURRENT_TIMESTAMP "
+            "WHERE id=? AND status='pending'", (wallet, proposal_id))
+        conn.commit()
+        if cur.rowcount == 0:
+            return jsonify({'ok': False, 'msg': 'proposal not found or not pending'}), 404
+    finally:
+        conn.close()
+    return jsonify({'ok': True})
+
 # ── STARTUP ──
 if not OWNER_WALLET:
     print('WARNING: OWNER_WALLET is not set in environment variables.')
@@ -21223,11 +21484,18 @@ def _start_backup_scheduler():
         _sched.add_job(_recover_uncollected_fees, _CronTrigger(minute=0), id='hourly_fee_recovery', replace_existing=True, kwargs={'triggered_by': 'scheduled'})
         # Hourly, on the hour
         _sched.add_job(_snapshot_portfolios, _CronTrigger(minute=0), id='hourly_portfolio_snapshot', replace_existing=True, kwargs={'triggered_by': 'scheduled'})
+        # Daily at 04:00 UTC -- an hour after the DB backup, so it reads a
+        # database that's already been safely snapshotted for the day.
+        # Only ever produces a pending ai_filter_proposals row; see
+        # run_ai_self_analysis()'s own docstring for why it never applies
+        # itself.
+        _sched.add_job(run_ai_self_analysis, _CronTrigger(hour=4, minute=0), id='daily_ai_self_analysis', replace_existing=True)
         # One-shot startup backup after 60 s
         run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         _sched.add_job(backup_database, 'date', run_date=run_at, id='startup_backup')
         _sched.start()
-        print('[backup] scheduler started — daily 03:00 UTC, hourly fee recovery, hourly portfolio snapshot, startup in 60 s', flush=True)
+        print('[backup] scheduler started — daily 03:00 UTC, hourly fee recovery, hourly portfolio snapshot, '
+              'daily AI self-analysis 04:00 UTC, startup in 60 s', flush=True)
     except Exception as e:
         print(f'[backup] scheduler error: {e}', flush=True)
 

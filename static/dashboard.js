@@ -1931,7 +1931,7 @@ function toggleAdminView(){
 }
 
 function showAdminTab(tab){
-  const tabs=['users','fees','tokens','health','security','test'];
+  const tabs=['users','fees','tokens','health','security','test','aifilters'];
   tabs.forEach(t=>{
     const btn=document.getElementById('adtab-'+t);
     const pane=document.getElementById('adpane-'+t);
@@ -1945,7 +1945,61 @@ function showAdminTab(tab){
     else if(tab==='tokens')   fetchAdminTokens();
     else if(tab==='health')   fetchAdminHealth();
     else if(tab==='security') fetchAdminSecurity();
+    else if(tab==='aifilters') fetchAdminAiFilters();
   }
+}
+
+async function fetchAdminAiFilters(){
+  const activeEl=document.getElementById('ai-filters-active');
+  const propsEl=document.getElementById('ai-filters-proposals');
+  const r=await fetch('/api/admin/ai-filters').then(r=>r.json()).catch(()=>null);
+  if(!r||!r.ok){ if(activeEl) activeEl.textContent='Failed to load'; return; }
+  const f=r.active_filters||{};
+  if(activeEl) activeEl.innerHTML=`
+    <div><span style="color:var(--muted)">Min liquidity</span><br>$${(f.min_liquidity_usd||0).toLocaleString()}</div>
+    <div><span style="color:var(--muted)">Min pair age</span><br>${f.min_pair_age_minutes||0}m</div>
+    <div><span style="color:var(--muted)">Min LP locked</span><br>${f.min_lp_locked_pct||0}%</div>
+  `;
+  const props=r.proposals||[];
+  if(!props.length){ if(propsEl) propsEl.innerHTML='<div style="padding:12px;text-align:center">Nog geen voorstellen — draait dagelijks om 04:00 UTC, of klik "Run analyse nu".</div>'; return; }
+  if(propsEl) propsEl.innerHTML=props.map(p=>{
+    const badgeColor=p.status==='pending'?'#f7b955':(p.status==='approved'?'#3ad29b':'#f76b62');
+    const pj=p.proposed||{};
+    const actions=p.status==='pending'
+      ? `<div style="display:flex;gap:8px;margin-top:8px">
+           <button onclick="reviewAiFilterProposal(${p.id},'approve')" style="background:rgba(58,210,155,.1);border:1px solid rgba(58,210,155,.3);border-radius:6px;padding:4px 12px;color:#3ad29b;font-size:10px;cursor:pointer">✓ Goedkeuren</button>
+           <button onclick="reviewAiFilterProposal(${p.id},'reject')" style="background:rgba(247,107,98,.1);border:1px solid rgba(247,107,98,.3);border-radius:6px;padding:4px 12px;color:#f76b62;font-size:10px;cursor:pointer">✗ Afwijzen</button>
+         </div>`
+      : `<div style="color:var(--muted);font-size:10px;margin-top:6px">${esc(p.status)} door ${esc((p.reviewed_by||'').slice(0,8))}… op ${esc(p.reviewed_at||'')}</div>`;
+    return `<div style="background:var(--bg3);border:1px solid rgba(118,118,118,.2);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span style="font-family:monospace;font-size:10px;color:var(--muted)">#${p.id} — ${esc(p.created_at||'')} — ${p.trades_analyzed} trades geanalyseerd</span>
+        <span style="color:${badgeColor};font-size:10px;font-weight:700;text-transform:uppercase">${esc(p.status)}</span>
+      </div>
+      <div style="font-family:monospace;font-size:11px;margin-bottom:6px">liquidity ≥ $${(pj.min_liquidity_usd||0).toLocaleString()} · leeftijd ≥ ${pj.min_pair_age_minutes||0}m · LP locked ≥ ${pj.min_lp_locked_pct||0}%</div>
+      <div style="font-size:11px;color:#a0aec0">${esc(p.reasoning||'')}</div>
+      ${actions}
+    </div>`;
+  }).join('');
+}
+
+async function runAiFilterAnalysis(){
+  const btn=document.getElementById('ai-filters-run-btn');
+  btn.disabled=true; btn.textContent='Bezig…';
+  const r=await fetch('/api/admin/ai-filters/run-now',{method:'POST',headers:{'X-CSRF-Token':_csrfToken}}).then(r=>r.json()).catch(()=>null);
+  btn.disabled=false; btn.textContent='▶ Run analyse nu';
+  if(!r||!r.ok){ alert('Analyse mislukt: '+((r&&r.msg)||'onbekende fout')); return; }
+  fetchAdminAiFilters();
+}
+
+async function reviewAiFilterProposal(id,action){
+  const r=await fetch('/api/admin/ai-filters/'+action,{
+    method:'POST',
+    headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken},
+    body:JSON.stringify({proposal_id:id}),
+  }).then(r=>r.json()).catch(()=>null);
+  if(!r||!r.ok){ alert('Actie mislukt: '+((r&&r.msg)||'onbekende fout')); return; }
+  fetchAdminAiFilters();
 }
 
 async function fetchAdminOverview(){
