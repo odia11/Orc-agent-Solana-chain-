@@ -410,13 +410,6 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
           <div class="pf-tile-sub">realized</div>
         </div>
         <div class="pf-tile">
-          <div class="pf-tile-lbl">Avg PnL</div>
-          <div class="pf-tile-val {% if avg_pnl_positive %}pos{% else %}neg{% endif %}">
-            {{ '+' if avg_pnl_positive else '' }}{{ avg_pnl }} SOL
-          </div>
-          <div class="pf-tile-sub">per trade</div>
-        </div>
-        <div class="pf-tile">
           <div class="pf-tile-lbl">SOL Balance</div>
           <div class="pf-tile-val">{{ '%.4f'|format(sol_balance) if sol_balance is not none else '—' }} SOL</div>
           <div class="pf-tile-sub">on-chain</div>
