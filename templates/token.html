@@ -22,9 +22,7 @@
 html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
 @keyframes spin{to{transform:rotate(360deg)}}
 
-.tc-header{position:sticky;top:0;z-index:30;background:var(--bg);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bg3)}
-.tc-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s;flex-shrink:0}
-.tc-back:hover{color:var(--text)}
+.tc-header{max-width:900px;margin:16px auto 0;padding:0 16px;display:flex;align-items:center;gap:12px}
 .tc-title-wrap{display:flex;flex-direction:column;gap:1px;flex-shrink:0}
 .tc-title{font-size:15px;font-weight:700;color:var(--text);white-space:nowrap}
 .tc-subtitle{font-size:10px;color:var(--muted);white-space:nowrap}
@@ -42,8 +40,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 </head>
 <body>
 
+{{ navbar_html('') }}
+
 <header class="tc-header">
-  <a class="tc-back" href="/">← Back</a>
   <div class="tc-title-wrap">
     <div class="tc-title">Token Detail</div>
     <div class="tc-subtitle">{{ mint_short }}</div>
