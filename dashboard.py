@@ -479,6 +479,11 @@ _narrative_seen_mints: set = set()
 STOP_LOSS       = 0.03   # 3%  — universal stop loss
 EXIT_PERCENTAGE = 1.0    # sell 100% of position on any exit
 CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
+# Position-sizing risk cap: never risk more than this fraction of a wallet's
+# trading SOL balance on a single position's stop-loss distance (spend *
+# stop_loss = worst-case loss if SL fires cleanly). Only ever shrinks the
+# existing score-based stake in user_trader_loop(), never grows it.
+MAX_RISK_PCT_PER_TRADE = 0.02  # 2% of capital at risk per trade
 MIN_MARKETCAP_USD = 15_000  # fallback only — see _min_marketcap_for_stake() below, which is
                              # what actually gates entries per-user based on their stake size
 
@@ -6143,6 +6148,25 @@ def user_trader_loop(stop_event, config, wallet: str):
                         factor = 1 + (_sc_clamped - 5.0) / 5.0 * 2
                         min_spend_sol = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
                         spend = round(min_spend_sol * factor, 4)
+                        # Risk cap: never put more than MAX_RISK_PCT_PER_TRADE of this
+                        # wallet's trading capital into a single position, full stop.
+                        # (The textbook version of this rule scales the cap by 1/stop_loss
+                        # -- a tighter SL "affording" a bigger stake for the same $ at risk
+                        # -- but that assumes the stop-loss actually fires at the modeled
+                        # price. It doesn't always: illiquid microcaps can slip well past
+                        # it, which is exactly why the momentum-deterioration exit above
+                        # exists. A flat cap on allocation stays protective even when a
+                        # stop-loss doesn't execute cleanly, which matters more here than
+                        # in the classic formula's assumptions.) Only ever shrinks the
+                        # score-based stake above, never grows it -- the score/LP-lock/
+                        # AI-gate checks already decide whether to take the trade at all.
+                        # Floored at min_spend_sol (this user's own configured minimum
+                        # stake) so the cap never overrides their explicit floor -- on a
+                        # small trading balance, 2% can be less than their own min trade
+                        # size, and silently shrinking every trade toward zero there would
+                        # make the bot stop trading meaningfully rather than manage risk.
+                        _risk_cap_spend = max(min_spend_sol, round(us_sol * MAX_RISK_PCT_PER_TRADE, 4))
+                        spend = min(spend, _risk_cap_spend)
                         if spend >= 0.001 and spend <= us_sol:
                             # Last-look AI sanity check on top of every local filter above --
                             # see get_ai_trade_decision()'s own docstring for why this can only
