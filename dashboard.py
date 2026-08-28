@@ -9988,18 +9988,28 @@ def _navbar_html(active_nav: str = '') -> Markup:
 <link rel="stylesheet" href="/static/navbar.css?v=%(v)s">
 <header class="pt-nb-topbar">
   <a class="pt-nb-logo" href="/"><div class="pt-nb-logo-mark"></div><div class="pt-nb-wordmark">OrcAgent</div></a>
-  <button class="pt-nb-menu-btn" id="pt-nb-menu-btn" aria-label="Menu">&#9776;</button>
+  <button class="pt-nb-menu-btn" id="pt-nb-menu-btn" aria-label="Menu">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+  </button>
   <nav class="pt-nb-nav" id="pt-nb-nav">%(nav_links)s</nav>
   <div class="pt-nb-search-wrap">
-    <span class="pt-nb-search-icon">&#8981;</span>
+    <span class="pt-nb-search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
     <input class="pt-nb-search" id="pt-nb-search-input" placeholder="Search token, address, trader&#8230;" autocomplete="off">
     <div class="pt-nb-search-results" id="pt-nb-search-results"></div>
   </div>
   <div class="pt-nb-right">
-    <a class="pt-nb-icon-btn" href="/messages" title="Messages">&#9993;<span class="pt-nb-badge" id="pt-nb-msg-badge"></span></a>
-    <a class="pt-nb-icon-btn" href="/notifications" title="Notifications">&#128276;<span class="pt-nb-badge" id="pt-nb-notif-badge"></span></a>
+    <a class="pt-nb-icon-btn" href="/messages" title="Messages">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+      <span class="pt-nb-badge" id="pt-nb-msg-badge"></span>
+    </a>
+    <a class="pt-nb-icon-btn" href="/notifications" title="Notifications">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+      <span class="pt-nb-badge" id="pt-nb-notif-badge"></span>
+    </a>
     <div class="pt-nb-more-wrap">
-      <button class="pt-nb-icon-btn" id="pt-nb-more-btn" title="More">&#8942;</button>
+      <button class="pt-nb-icon-btn" id="pt-nb-more-btn" title="More">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
+      </button>
       <div class="pt-nb-more-dd" id="pt-nb-more-dd">
         <a class="pt-nb-more-item" href="/traders">Traders</a>
         <a class="pt-nb-more-item" href="/groups">Groups</a>
