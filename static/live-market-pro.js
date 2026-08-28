@@ -86,10 +86,10 @@ function showMsg(el, text, ok){
 /* ── mobile drawer/menu overlays (no-ops on desktop, where the classes
    toggled here have no matching CSS) ── */
 function closeMobileOverlays(){
-  var nav = document.getElementById('pt-nav');
+  // The nav drawer itself is now the shared navbar's (static/navbar.js) --
+  // this only owns the filters drawer that's unique to this page.
   var left = document.getElementById('pt-left');
   var scrim = document.getElementById('pt-scrim');
-  if(nav) nav.classList.remove('mobile-open');
   if(left) left.classList.remove('mobile-open');
   if(scrim) scrim.classList.remove('show');
 }
@@ -671,22 +671,7 @@ function loadPulse(){
   }).catch(function(){});
 }
 
-/* ── current user (avatar / SOL balance) ── */
-function loadMe(){
-  fetch('/api/me', {credentials:'include'}).then(function(r){ return r.json(); }).then(function(d){
-    if(!d || !d.ok) return;
-    var balEl = document.getElementById('pt-sol-balance');
-    if(balEl) balEl.textContent = Number(d.balance||0).toFixed(2);
-    if(d.avatar){
-      var img = document.getElementById('pt-avatar');
-      var ph  = document.getElementById('pt-avatar-ph');
-      if(img){ img.src = d.avatar; img.style.display = 'block'; }
-      if(ph) ph.style.display = 'none';
-    }
-  }).catch(function(){});
-}
-
-/* ── global search ── */
+/* ── deep-linked token (shared navbar's search redirects here as ?mint=) ── */
 function scrollToCard(idx){
   var card = document.getElementById('pt-card-'+idx);
   if(!card) return;
@@ -722,36 +707,6 @@ function prependSearchedToken(mint, sym, pairAddr){
   }).catch(function(){});
 }
 
-function runSearch(q, searchResults){
-  Promise.allSettled([
-    fetch('/api/dexscreener/search?q='+encodeURIComponent(q)).then(function(r){ return r.json(); }),
-    fetch('/api/users/search?q='+encodeURIComponent(q), {credentials:'include'}).then(function(r){ return r.json(); })
-  ]).then(function(results){
-    var tokRes  = results[0].status==='fulfilled' ? results[0].value : null;
-    var userRes = results[1].status==='fulfilled' ? results[1].value : null;
-    var pairs = ((tokRes && tokRes.pairs) || []).filter(function(p){ return p.chainId==='solana'; }).slice(0,6);
-    var users = (userRes && userRes.ok && userRes.users) || [];
-    var html = '';
-    if(pairs.length){
-      html += '<div class="pt-sr-hd">Tokens</div>' + pairs.map(function(p){
-        var sym = p.baseToken.symbol, addr = p.baseToken.address, img = p.info && p.info.imageUrl;
-        return '<div class="pt-sr-row" data-action="search-token" data-mint="'+esc(addr)+'" data-pair="'+esc(p.pairAddress||'')+'" data-sym="'+esc(sym)+'">'
-          + logoTile(img, sym, 'pt-sr-logo', 'pt-sr-logo-ph')
-          + '<div class="pt-sr-name">$'+esc(sym)+'</div><div class="pt-sr-sub mono">'+fmtPrice(p.priceUsd)+'</div></div>';
-      }).join('');
-    }
-    if(users.length){
-      html += '<div class="pt-sr-hd">Traders</div>' + users.slice(0,5).map(function(u){
-        return '<div class="pt-sr-row" data-action="search-trader" data-wallet="'+esc(u.wallet)+'">'
-          + logoTile(u.avatar_url, u.username, 'pt-sr-logo', 'pt-sr-logo-ph')
-          + '<div class="pt-sr-name">'+esc(u.username||'')+'</div></div>';
-      }).join('');
-    }
-    searchResults.innerHTML = html || '<div class="pt-sr-empty">No results</div>';
-    searchResults.classList.add('open');
-  });
-}
-
 /* ── event wiring ── */
 document.addEventListener('click', function(e){
   var el;
@@ -773,18 +728,6 @@ document.addEventListener('click', function(e){
   if((el = e.target.closest('.pt-switch'))){ toggleFilter(el); return; }
   if((el = e.target.closest('#pt-wl-edit-btn'))){ toggleWlEdit(); return; }
   if((el = e.target.closest('.pt-wl-remove'))){ removeWatchFromList(el.dataset.mint); return; }
-  var searchResults = document.getElementById('pt-search-results');
-  if((el = e.target.closest('[data-action="search-token"]'))){
-    searchResults.classList.remove('open');
-    document.getElementById('pt-search-input').value = '';
-    prependSearchedToken(el.dataset.mint, el.dataset.sym, el.dataset.pair);
-    return;
-  }
-  if((el = e.target.closest('[data-action="search-trader"]'))){
-    window.location.href = '/profile/'+encodeURIComponent(el.dataset.wallet);
-    return;
-  }
-  if(!e.target.closest('.pt-search-wrap') && searchResults) searchResults.classList.remove('open');
 });
 
 /* ── init ── */
@@ -799,27 +742,11 @@ document.addEventListener('DOMContentLoaded', function(){
     _liqDebounce = setTimeout(loadFeed, 350);
   });
 
-  var searchInput   = document.getElementById('pt-search-input');
-  var searchResults = document.getElementById('pt-search-results');
-  var _searchTimer  = null;
-  searchInput.addEventListener('input', function(){
-    var q = searchInput.value.trim();
-    clearTimeout(_searchTimer);
-    if(q.length<2){ searchResults.classList.remove('open'); return; }
-    _searchTimer = setTimeout(function(){ runSearch(q, searchResults); }, 300);
-  });
-
-  /* mobile: hamburger nav drawer + left-rail filters drawer, sharing one scrim */
-  var menuBtn    = document.getElementById('pt-menu-btn');
+  /* mobile: left-rail filters drawer (the nav drawer is the shared navbar's
+     own, see static/navbar.js) */
   var filtersBtn = document.getElementById('pt-mobile-filters-btn');
-  var navEl      = document.getElementById('pt-nav');
   var leftEl     = document.getElementById('pt-left');
   var scrimEl    = document.getElementById('pt-scrim');
-  if(menuBtn) menuBtn.addEventListener('click', function(){
-    var opening = !navEl.classList.contains('mobile-open');
-    closeMobileOverlays();
-    if(opening){ navEl.classList.add('mobile-open'); scrimEl.classList.add('show'); }
-  });
   if(filtersBtn) filtersBtn.addEventListener('click', function(){
     var opening = !leftEl.classList.contains('mobile-open');
     closeMobileOverlays();
@@ -844,10 +771,20 @@ document.addEventListener('DOMContentLoaded', function(){
   loadTraders();
   loadWatchlist();
   loadPulse();
-  loadMe();
   fetch('/api/copy-trade/status', {credentials:'include'}).then(function(r){ return r.json(); }).then(function(d){
     if(d && d.ok){ _copyStatus.copying = d.copying; _copyStatus.target = d.target_wallet; loadTraders(); }
   }).catch(function(){});
+
+  // A token opened via the shared navbar's search lands here as ?mint=<addr>
+  // (a plain full-page navigation, since the navbar itself has no feed to
+  // inject into on every other page) -- inject it once the first scanner
+  // load has had a chance to populate ST.tokens, so it isn't immediately
+  // overwritten by that response.
+  var _qMint = new URLSearchParams(location.search).get('mint');
+  if(_qMint){
+    history.replaceState(null, '', location.pathname);
+    setTimeout(function(){ prependSearchedToken(_qMint, '', ''); }, 900);
+  }
 
   setInterval(loadFeed, 15000);
   setInterval(loadTape, 8000);

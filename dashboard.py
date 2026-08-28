@@ -43,6 +43,7 @@ except ImportError:
     _COMPRESS_OK = False
 from contextlib import contextmanager
 from flask import Flask, jsonify, request, session, render_template, redirect, make_response, send_from_directory
+from markupsafe import Markup
 from werkzeug.middleware.proxy_fix import ProxyFix
 from werkzeug.utils import secure_filename
 from cryptography.fernet import Fernet, InvalidToken
@@ -9977,12 +9978,12 @@ _NAVBAR_PRIMARY = [
     ('wallet',      'Wallet',      '/wallet'),
 ]
 
-def _navbar_html(active_nav: str = '') -> str:
+def _navbar_html(active_nav: str = '') -> Markup:
     nav_links = ''.join(
         '<a href="%s"%s>%s</a>' % (href, ' class="active"' if key == active_nav else '', label)
         for key, label, href in _NAVBAR_PRIMARY
     )
-    return '''
+    return Markup('''
 <link rel="stylesheet" href="/static/navbar.css?v=%(v)s">
 <header class="pt-nb-topbar">
   <a class="pt-nb-logo" href="/"><div class="pt-nb-logo-mark"></div><div class="pt-nb-wordmark">OrcAgent</div></a>
@@ -10027,7 +10028,7 @@ def _navbar_html(active_nav: str = '') -> str:
 </header>
 <div class="pt-nb-scrim" id="pt-nb-scrim"></div>
 <script src="/static/navbar.js?v=%(v)s" defer></script>
-''' % {'v': _APP_VERSION, 'nav_links': nav_links}
+''' % {'v': _APP_VERSION, 'nav_links': nav_links})
 
 @app.route('/api/version')
 @rate_limit(120, 60)

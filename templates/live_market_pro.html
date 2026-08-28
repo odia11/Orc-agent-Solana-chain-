@@ -39,34 +39,9 @@ input{font-family:inherit}
 /* ── shell ── */
 .pt-shell{max-width:1440px;margin:0 auto;padding:16px 16px 40px;min-width:1220px}
 
-/* ── top bar ── */
-.pt-topbar{display:flex;align-items:center;gap:22px;padding:10px 6px}
-.pt-logo{display:flex;align-items:center;gap:9px;flex-shrink:0}
-.pt-logo-mark{width:32px;height:32px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.pt-logo-mark::before{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
-.pt-wordmark{font-size:17px;font-weight:700;letter-spacing:-.02em}
-.pt-nav{display:flex;align-items:center;gap:4px;flex-shrink:0}
-.pt-nav a{font-size:13.5px;font-weight:600;color:var(--muted);padding:8px 13px;border-radius:9px;transition:color .15s,background .15s}
-.pt-nav a:hover{color:var(--text);background:var(--line)}
-.pt-nav a.active{color:var(--accent);background:var(--accent-soft)}
-.pt-search-wrap{flex:1;position:relative;max-width:420px;margin-left:8px}
-.pt-search{width:100%;background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:9px 14px 9px 34px;color:var(--text);font-size:12.5px;outline:none;transition:border-color .15s}
-.pt-search:focus{border-color:var(--accent)}
-.pt-search::placeholder{color:var(--muted2)}
-.pt-search-icon{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:var(--muted2);font-size:13px;pointer-events:none}
-.pt-search-results{position:absolute;top:calc(100% + 6px);left:0;right:0;background:var(--card2);border:1px solid var(--line2);border-top:2px solid var(--accent);border-radius:12px;max-height:340px;overflow-y:auto;z-index:80;display:none;box-shadow:0 16px 40px rgba(0,0,0,.5)}
-.pt-search-results.open{display:block}
-.pt-sr-hd{padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted2)}
-.pt-sr-row{display:flex;align-items:center;gap:10px;padding:8px 12px;cursor:pointer;transition:background .15s}
-.pt-sr-row:hover{background:var(--line)}
-.pt-sr-logo,.pt-sr-logo-ph{width:26px;height:26px;border-radius:8px;flex-shrink:0;object-fit:cover;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:var(--muted)}
-.pt-sr-name{flex:1;min-width:0;font-size:12.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pt-sr-sub{font-size:11px;color:var(--muted2)}
-.pt-sr-empty{padding:16px;text-align:center;color:var(--muted2);font-size:12px}
-.pt-right-chips{display:flex;align-items:center;gap:12px;margin-left:auto;flex-shrink:0}
-.pt-sol-chip{display:flex;align-items:center;gap:7px;background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:7px 13px;font-size:12.5px;font-weight:600}
-.pt-sol-chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
-.pt-avatar{width:34px;height:34px;border-radius:50%;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0;object-fit:cover;border:1px solid var(--line2)}
+/* Top bar is now the shared navbar component (static/navbar.css /
+   dashboard.py's navbar_html Jinja global) -- see the call to it in the
+   body below instead of an inline .pt-topbar block. */
 
 /* ── main 3-col panel ── */
 .pt-panel{margin-top:14px;background:var(--panel);border:1px solid var(--panel-border);border-radius:22px;display:grid;grid-template-columns:246px 1fr 300px;overflow:hidden}
@@ -231,26 +206,19 @@ input{font-family:inherit}
 .pt-toast.show{opacity:1}
 
 /* ── mobile chrome (hidden on desktop) ── */
-.pt-menu-btn{display:none;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-size:15px;flex-shrink:0}
 .pt-mobile-filters-btn{display:none;align-items:center;gap:5px;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-size:11px;font-weight:700;border-radius:9px;padding:7px 11px;flex-shrink:0;white-space:nowrap}
 .pt-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80}
 .pt-scrim.show{display:block}
 
-/* ── responsive: single-column layout, drawer nav + filters ── */
+/* ── responsive: single-column layout, drawer filters (nav drawer is the
+   shared navbar's own, see static/navbar.css) ── */
 @media (max-width: 900px){
   .pt-shell{min-width:0;padding:10px 10px 28px;overflow-x:hidden}
   html,body{overflow-x:hidden}
 
-  .pt-topbar{flex-wrap:wrap;gap:10px;padding:8px 4px;position:relative}
-  .pt-menu-btn{display:flex}
-  .pt-nav{display:none;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:48px;left:0;right:0;background:var(--card2);border:1px solid var(--line2);border-radius:12px;padding:8px;z-index:90;box-shadow:0 16px 40px rgba(0,0,0,.55)}
-  .pt-nav.mobile-open{display:flex}
-  .pt-nav a{padding:12px 14px;text-align:left}
-  .pt-search-wrap{order:5;flex-basis:100%;max-width:none;margin-left:0}
-  .pt-right-chips{margin-left:auto}
   /* iOS Safari force-zooms on focusing any input under 16px, regardless of
      the viewport meta or touch-action -- this is the actual fix for that */
-  .pt-search,.pt-buy-input{font-size:16px}
+  .pt-buy-input{font-size:16px}
 
   .pt-panel{grid-template-columns:1fr;border-radius:16px}
   .pt-left{display:none;max-height:none}
@@ -272,8 +240,6 @@ input{font-family:inherit}
   .pt-chart-svg{height:188px}
 }
 @media (max-width: 480px){
-  .pt-wordmark{display:none}
-  .pt-sol-unit{display:none}
   .pt-story{width:58px}
   .pt-story-ring{width:54px;height:54px}
 }
@@ -281,32 +247,9 @@ input{font-family:inherit}
 </head>
 <body>
 
-<div class="pt-shell">
-  <header class="pt-topbar">
-    <a class="pt-logo" href="/live-market">
-      <div class="pt-logo-mark"></div>
-      <div class="pt-wordmark">OrcAgent</div>
-    </a>
-    <button class="pt-menu-btn" id="pt-menu-btn" aria-label="Menu">☰</button>
-    <nav class="pt-nav" id="pt-nav">
-      <a href="/live-market" class="active">Live Market</a>
-      <a href="/">Feed</a>
-      <a href="/calls">Calls</a>
-      <a href="/leaderboard">Leaderboard</a>
-      <a href="/wallet">Wallet</a>
-    </nav>
-    <div class="pt-search-wrap">
-      <span class="pt-search-icon">⌕</span>
-      <input class="pt-search" id="pt-search-input" placeholder="Search token, address, trader…" autocomplete="off">
-      <div class="pt-search-results" id="pt-search-results"></div>
-    </div>
-    <div class="pt-right-chips">
-      <a class="pt-sol-chip" href="/wallet"><span class="dot"></span><span class="mono" id="pt-sol-balance">0.00</span> <span class="pt-sol-unit">SOL</span></a>
-      <a href="/profile"><img class="pt-avatar" id="pt-avatar" style="display:none"></a>
-      <a href="/profile"><div class="pt-avatar" id="pt-avatar-ph">{{ (wallet_short or '?')[0]|upper }}</div></a>
-    </div>
-  </header>
+{{ navbar_html('live-market') }}
 
+<div class="pt-shell">
   <div class="pt-panel">
     <!-- LEFT RAIL -->
     <aside class="pt-left" id="pt-left">
