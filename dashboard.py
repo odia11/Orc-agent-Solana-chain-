@@ -7546,20 +7546,11 @@ def leaderboard():
 
 @app.route('/live-market')
 def live_market():
-    session_wallet = _current_wallet()
-    wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
-                    if len(session_wallet) >= 8 else '')
-    return _render_no_cache('live_market.html',
-                           wallet_short=wallet_short,
-                           csrf_token=_get_csrf_token(),
-                           client_secret=API_SHARED_SECRET)
-
-
-@app.route('/live-market/pro')
-def live_market_pro():
-    """Desktop 'Pro terminal' Live Market layout -- same public/no-login-gate
-    pattern as /live-market above (individual API calls handle their own 401s
-    client-side), just a different template."""
+    """Live Market -- now the desktop 'Pro terminal' layout (see
+    live_market_pro.html). Same public/no-login-gate pattern as before:
+    individual API calls handle their own 401s client-side rather than
+    gating the page itself. The previous mobile-oriented template is kept
+    on disk (live_market.html, unrouted) in case it's needed again."""
     session_wallet = _current_wallet()
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
@@ -7567,6 +7558,14 @@ def live_market_pro():
                            wallet_short=wallet_short,
                            csrf_token=_get_csrf_token(),
                            client_secret=API_SHARED_SECRET)
+
+
+@app.route('/live-market/pro')
+def live_market_pro():
+    """Old dedicated URL for the Pro terminal layout, now that /live-market
+    itself serves it -- kept as a redirect so any existing links/bookmarks
+    still land on the right page."""
+    return redirect('/live-market')
 
 
 @app.route('/history')
