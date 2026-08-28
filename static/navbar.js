@@ -64,15 +64,19 @@ document.addEventListener('DOMContentLoaded', function(){
   });
   if(scrimEl) scrimEl.addEventListener('click', closeAllOverlays);
 
-  var disconnectBtn = document.getElementById('pt-nb-disconnect');
-  if(disconnectBtn) disconnectBtn.addEventListener('click', function(){
-    // dashboard.html defines a richer disconnectWallet() (disconnects the
-    // wallet-adapter provider too, clears per-user caches) -- prefer it when
-    // present; every other page just does the plain logout.
-    if(typeof window.disconnectWallet === 'function'){ window.disconnectWallet(); return; }
-    fetch('/api/logout', {method:'POST', credentials:'include'})
-      .catch(function(){})
-      .finally(function(){ window.location.href = '/'; });
+  // Two copies exist (the desktop-only "More" popup, and the same list
+  // folded into the mobile hamburger menu) so a visitor only ever sees one
+  // merged menu on mobile instead of two competing ones -- wire up both.
+  document.querySelectorAll('.pt-nb-disconnect-btn').forEach(function(disconnectBtn){
+    disconnectBtn.addEventListener('click', function(){
+      // dashboard.html defines a richer disconnectWallet() (disconnects the
+      // wallet-adapter provider too, clears per-user caches) -- prefer it
+      // when present; every other page just does the plain logout.
+      if(typeof window.disconnectWallet === 'function'){ window.disconnectWallet(); return; }
+      fetch('/api/logout', {method:'POST', credentials:'include'})
+        .catch(function(){})
+        .finally(function(){ window.location.href = '/'; });
+    });
   });
   document.addEventListener('click', function(e){
     if(moreDd && moreDd.classList.contains('open') && !e.target.closest('.pt-nb-more-wrap')) moreDd.classList.remove('open');
@@ -137,8 +141,9 @@ document.addEventListener('DOMContentLoaded', function(){
       if(ph) ph.style.display = 'none';
     }
     if(d.is_admin){
-      var adminItem = document.getElementById('pt-nb-more-admin');
-      if(adminItem) adminItem.style.display = 'flex';
+      document.querySelectorAll('.pt-nb-admin-link').forEach(function(adminItem){
+        adminItem.style.display = 'flex';
+      });
     }
   }).catch(function(){});
 

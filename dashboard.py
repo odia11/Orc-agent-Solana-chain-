@@ -9979,11 +9979,54 @@ _NAVBAR_PRIMARY = [
     ('wallet',      'Wallet',      '/wallet'),
 ]
 
+_NAVBAR_MORE_LINKS = [
+    ('/traders', 'Traders'),
+    ('/groups', 'Groups'),
+    ('/promote', 'Promote'),
+    ('/referrals', 'Referrals'),
+    ('/history', 'History'),
+    ('/bot', 'Bot'),
+    ('/live-trades', 'Live Trades'),
+    None,  # separator
+    ('/profile', 'Profile'),
+    ('/settings', 'Settings'),
+    ('/admin', 'Admin Console', 'pt-nb-admin-link', 'display:none'),
+    None,
+    ('/info#about', 'About'),
+    ('/info#docs', 'Docs'),
+    ('/info#fees', 'Fees'),
+    ('/info#security', 'Security'),
+    ('/info#terms', 'Terms'),
+]
+
+def _navbar_more_items_html(extra_class: str = '') -> str:
+    """Renders the 'More' destinations list -- used twice by _navbar_html()
+    below: once inside the desktop-only #pt-nb-more-dd popup, and once
+    (extra_class='pt-nb-mobile-only') folded into #pt-nb-nav itself, so a
+    mobile visitor gets ONE merged menu off the hamburger instead of a
+    separate hamburger menu and a separate "more" menu fighting for the
+    same job. One Python source for both so they can't drift apart."""
+    cls_suffix = (' ' + extra_class) if extra_class else ''
+    parts = []
+    for entry in _NAVBAR_MORE_LINKS:
+        if entry is None:
+            parts.append('<div class="pt-nb-more-sep%s"></div>' % cls_suffix)
+            continue
+        href, label = entry[0], entry[1]
+        extra_cls = (' ' + entry[2]) if len(entry) > 2 else ''
+        style = (' style="%s"' % entry[3]) if len(entry) > 3 else ''
+        parts.append('<a class="pt-nb-more-item%s%s" href="%s"%s>%s</a>' % (cls_suffix, extra_cls, href, style, label))
+    parts.append('<div class="pt-nb-more-sep%s"></div>' % cls_suffix)
+    parts.append('<button class="pt-nb-more-item%s danger pt-nb-disconnect-btn">Disconnect Wallet</button>' % cls_suffix)
+    return ''.join(parts)
+
 def _navbar_html(active_nav: str = '') -> Markup:
     nav_links = ''.join(
         '<a href="%s"%s>%s</a>' % (href, ' class="active"' if key == active_nav else '', label)
         for key, label, href in _NAVBAR_PRIMARY
     )
+    more_items_desktop = _navbar_more_items_html()
+    more_items_mobile = _navbar_more_items_html('pt-nb-mobile-only')
     return Markup('''
 <link rel="stylesheet" href="/static/navbar.css?v=%(v)s">
 <header class="pt-nb-topbar">
@@ -9991,7 +10034,7 @@ def _navbar_html(active_nav: str = '') -> Markup:
   <button class="pt-nb-menu-btn" id="pt-nb-menu-btn" aria-label="Menu">
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
   </button>
-  <nav class="pt-nb-nav" id="pt-nb-nav">%(nav_links)s</nav>
+  <nav class="pt-nb-nav" id="pt-nb-nav">%(nav_links)s<div class="pt-nb-nav-sep pt-nb-mobile-only"></div>%(more_items_mobile)s</nav>
   <div class="pt-nb-search-wrap">
     <span class="pt-nb-search-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></span>
     <input class="pt-nb-search" id="pt-nb-search-input" placeholder="Search token, address, trader&#8230;" autocomplete="off">
@@ -10010,27 +10053,7 @@ def _navbar_html(active_nav: str = '') -> Markup:
       <button class="pt-nb-icon-btn" id="pt-nb-more-btn" title="More">
         <svg width="17" height="17" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="19" r="1.6"/></svg>
       </button>
-      <div class="pt-nb-more-dd" id="pt-nb-more-dd">
-        <a class="pt-nb-more-item" href="/traders">Traders</a>
-        <a class="pt-nb-more-item" href="/groups">Groups</a>
-        <a class="pt-nb-more-item" href="/promote">Promote</a>
-        <a class="pt-nb-more-item" href="/referrals">Referrals</a>
-        <a class="pt-nb-more-item" href="/history">History</a>
-        <a class="pt-nb-more-item" href="/bot">Bot</a>
-        <a class="pt-nb-more-item" href="/live-trades">Live Trades</a>
-        <div class="pt-nb-more-sep"></div>
-        <a class="pt-nb-more-item" href="/profile">Profile</a>
-        <a class="pt-nb-more-item" href="/settings">Settings</a>
-        <a class="pt-nb-more-item" href="/admin" id="pt-nb-more-admin" style="display:none">Admin Console</a>
-        <div class="pt-nb-more-sep"></div>
-        <a class="pt-nb-more-item" href="/info#about">About</a>
-        <a class="pt-nb-more-item" href="/info#docs">Docs</a>
-        <a class="pt-nb-more-item" href="/info#fees">Fees</a>
-        <a class="pt-nb-more-item" href="/info#security">Security</a>
-        <a class="pt-nb-more-item" href="/info#terms">Terms</a>
-        <div class="pt-nb-more-sep"></div>
-        <button class="pt-nb-more-item danger" id="pt-nb-disconnect">Disconnect Wallet</button>
-      </div>
+      <div class="pt-nb-more-dd" id="pt-nb-more-dd">%(more_items_desktop)s</div>
     </div>
     <div class="pt-nb-sol-chip"><span class="dot"></span><span class="pt-nb-sol-num" id="pt-nb-sol-balance">0.00</span> <span class="pt-nb-sol-unit">SOL</span></div>
     <a href="/profile"><img class="pt-nb-avatar" id="pt-nb-avatar" style="display:none"></a>
@@ -10039,7 +10062,7 @@ def _navbar_html(active_nav: str = '') -> Markup:
 </header>
 <div class="pt-nb-scrim" id="pt-nb-scrim"></div>
 <script src="/static/navbar.js?v=%(v)s" defer></script>
-''' % {'v': _APP_VERSION, 'nav_links': nav_links})
+''' % {'v': _APP_VERSION, 'nav_links': nav_links, 'more_items_desktop': more_items_desktop, 'more_items_mobile': more_items_mobile})
 
 @app.route('/api/version')
 @rate_limit(120, 60)

@@ -62,15 +62,32 @@
 .pt-nb-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:190}
 .pt-nb-scrim.show{display:block}
 
+/* On mobile, everything from the "More" popup is folded straight into the
+   hamburger's own dropdown (#pt-nb-nav) -- one menu instead of two separate
+   ones (hamburger for the primary 5, a separate "..." for the rest). Hidden
+   here by default (desktop: #pt-nb-nav is the inline pill row, this content
+   would look like a stray list bolted onto it); shown below only inside the
+   mobile breakpoint, where #pt-nb-nav becomes a dropdown panel anyway. */
+.pt-nb-mobile-only{display:none}
+
 @media (max-width: 900px){
   .pt-nb-topbar{flex-wrap:wrap;gap:10px;padding:8px 10px;position:relative}
   .pt-nb-menu-btn{display:flex}
-  .pt-nb-nav{display:none;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:52px;left:10px;right:10px;background:#101216;border:1px solid #21252c;border-radius:12px;padding:8px;z-index:210;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  .pt-nb-nav{display:none;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:52px;left:10px;right:10px;max-height:calc(100vh - 72px);overflow-y:auto;background:#101216;border:1px solid #21252c;border-radius:12px;padding:8px;z-index:210;box-shadow:0 16px 40px rgba(0,0,0,.55)}
   .pt-nb-nav.mobile-open{display:flex}
   .pt-nb-nav a{padding:12px 14px;text-align:left}
   .pt-nb-search-wrap{order:5;flex-basis:100%;max-width:none;margin-left:0}
   .pt-nb-search{font-size:16px}
   .pt-nb-sol-unit{display:none}
+  /* The separate "More" (⋮) button is now redundant -- its destinations are
+     merged into the hamburger menu above. */
+  .pt-nb-more-wrap{display:none}
+  .pt-nb-mobile-only{display:block}
+  .pt-nb-nav-sep{height:1px;background:#16191f;margin:6px 4px;flex-shrink:0}
+  .pt-nb-nav .pt-nb-more-item{width:100%;text-align:left;font-size:13.5px;padding:12px 14px;color:#8a919c;background:none;border:none;font-family:inherit;cursor:pointer;border-radius:9px;transition:background .15s,color .15s}
+  .pt-nb-nav .pt-nb-more-item:hover{background:#16191f;color:#eef1f5}
+  .pt-nb-nav .pt-nb-more-item.danger{color:#f76b62}
+  .pt-nb-nav .pt-nb-more-item.danger:hover{background:rgba(247,107,98,.1)}
 }
 @media (max-width: 480px){
   .pt-nb-wordmark{display:none}
