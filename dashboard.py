@@ -6091,6 +6091,7 @@ def _get_index_base_html():
             html = html.replace('__CONFIRM_MODAL__', f.read())
         with open(alert_path, 'r', encoding='utf-8') as f:
             html = html.replace('__ALERT_MODAL__', f.read())
+        html = html.replace('__NAVBAR__', _navbar_html('feed'))
         html = html.replace('__API_SHARED_SECRET__', API_SHARED_SECRET)
         html = html.replace('__ASSET_VER__', _APP_VERSION)
         _INDEX_BASE_CACHE['key']  = key

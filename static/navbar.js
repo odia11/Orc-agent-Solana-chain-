@@ -66,6 +66,10 @@ document.addEventListener('DOMContentLoaded', function(){
 
   var disconnectBtn = document.getElementById('pt-nb-disconnect');
   if(disconnectBtn) disconnectBtn.addEventListener('click', function(){
+    // dashboard.html defines a richer disconnectWallet() (disconnects the
+    // wallet-adapter provider too, clears per-user caches) -- prefer it when
+    // present; every other page just does the plain logout.
+    if(typeof window.disconnectWallet === 'function'){ window.disconnectWallet(); return; }
     fetch('/api/logout', {method:'POST', credentials:'include'})
       .catch(function(){})
       .finally(function(){ window.location.href = '/'; });

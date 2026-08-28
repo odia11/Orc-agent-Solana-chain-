@@ -542,7 +542,6 @@ function doLogout(){
   phantomKey=null; walletType=null; _isAdmin=false;
   updateAuthBtns();
   fetch('/api/wallet/set',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({address:''})}).catch(()=>{});
-  document.getElementById('wallet-pill').style.display='none';
   document.getElementById('deposit-sol-btn').style.display='none';
   document.getElementById('withdraw-sol-btn').style.display='none';
   document.getElementById('perf-share-btns').style.display='none';
@@ -856,8 +855,6 @@ async function launchApp(){
   document.getElementById('app').style.display='block';
   const _spos=document.getElementById('s-pos'); if(_spos) _spos.textContent='0/5';
   if(phantomKey){
-    const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
-    document.getElementById('wallet-pill').style.display='flex';
     const _dsb=document.getElementById('deposit-sol-btn'); if(_dsb) _dsb.style.display='';
     const _wsb=document.getElementById('withdraw-sol-btn'); if(_wsb) _wsb.style.display='';
     const _psb=document.getElementById('perf-share-btns'); if(_psb) _psb.style.display='flex';
@@ -1128,8 +1125,9 @@ async function fetchBalance(){
 }
 
 function updateAuthBtns(){
-  const authed=!!phantomKey;
-  document.getElementById('connect-btn').style.display=authed?'none':'';
+  // no-op: the header's standalone "Connect Wallet" button is gone now that
+  // #readonly-banner has its own (that one isn't viewport-gated, so guests
+  // already have a working connect entry point without it).
 }
 
 // ── STATE ──
@@ -2868,16 +2866,9 @@ function _getInitials(){
 }
 
 function _updateNavPill(){
-  if(!phantomKey) return;
-  const short=phantomKey.slice(0,4)+'...'+phantomKey.slice(-4);
-  document.getElementById('wallet-short').textContent=_displayName||short;
-  const img=document.getElementById('nav-avatar-img');
-  const ini=document.getElementById('nav-avatar-ini');
-  if(_avatarUrl){
-    img.src=_avatarUrl; img.style.display='block'; ini.style.display='none';
-  } else {
-    img.style.display='none'; ini.style.display='block'; ini.textContent=_getInitials();
-  }
+  // no-op: the header's own avatar pill is gone -- the shared top navbar
+  // (static/navbar.js) renders and refreshes the avatar independently via
+  // its own /api/me fetch.
 }
 
 
