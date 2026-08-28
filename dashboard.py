@@ -5500,6 +5500,26 @@ def bsc_discover_tokens() -> list:
 
     return addrs[:100]
 
+# ── MOMENTUM-DETERIORATION EXIT ──
+# The fixed stop_loss/crash_exit % thresholds only react once a position has
+# already fallen that far -- on a wide user-configured stop_loss (or a token
+# whose realized slippage runs well past the last polled price), that can
+# mean riding a clearly-dying chart all the way down before anything reacts.
+# This adds a second, earlier signal: a *confirmed* downtrend across several
+# independent price polls, not just a big single-step drop. Requires the last
+# 3 consecutive samples to be strictly lower each time (no bounce) AND a
+# cumulative decline of at least MOMENTUM_EXIT_MIN_DROP -- either condition
+# alone is too noisy on a thinly-traded memecoin's naturally jittery quotes.
+MOMENTUM_EXIT_MIN_DROP = 0.04  # 4% cumulative decline across the confirming window
+
+def _confirmed_downtrend(price_hist: list) -> bool:
+    if len(price_hist) < 4:
+        return False
+    recent = price_hist[-4:]
+    if not all(recent[i] > recent[i + 1] for i in range(3)):
+        return False
+    return (recent[0] - recent[-1]) / recent[0] >= MOMENTUM_EXIT_MIN_DROP
+
 # ── PER-USER TRADER ──
 def user_trader_loop(stop_event, config, wallet: str):
     us    = get_user_state(wallet)
@@ -5722,6 +5742,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
 
+                    # Rolling window for the momentum-deterioration exit below --
+                    # last 5 polled prices is plenty for a 3-sample confirming trend.
+                    _hist = pos.setdefault('price_hist', [])
+                    _hist.append(price)
+                    if len(_hist) > 5:
+                        del _hist[:-5]
+
                     # ── Near-trigger alerting — within 5% of this user's own SL/crash-exit
                     # value (relative to the threshold, e.g. -2.85%..-3.00% for a 3% SL).
                     # Tracked per-position via pos['_near_trigger'] rather than off the
@@ -5815,6 +5842,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
                     elif chg >= take_profit:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
+                    elif chg < 0 and _confirmed_downtrend(_hist):
+                        # Confirmed downtrend caught this earlier than the user's own
+                        # (possibly much wider) stop_loss would have -- 3 straight lower
+                        # polls is a stronger "this isn't bouncing back" signal than
+                        # waiting for one big threshold to be crossed.
+                        exit_reason = 'MOMENTUM EXIT ' + str(round(chg*100,1)) + '%'
+                        print(f'[momentum-exit] {short} {label} {round(chg*100,1)}% — '
+                              f'confirmed downtrend ({[round(p, 8) for p in _hist]}), cutting loss early', flush=True)
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
