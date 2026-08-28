@@ -6410,32 +6410,20 @@ def _recent_trades_for_profile(conn, user_id: int, limit: int = 3):
         'logo_url': None,
     } for r in rows]
 
-def _recent_token_calls(conn, user_id: int, limit: int = 10):
-    # Fetch a wider pool than `limit` since the per-day cap below drops rows
-    # (a spammy day of calls would otherwise crowd out older, calmer days).
+def _recent_token_calls(conn, user_id: int, limit: int = 3):
     rows = conn.execute('''
         SELECT mint, symbol, token_name, price_at_call, mcap_at_call, peak_price, timestamp
         FROM token_calls
         WHERE user_id=? AND price_at_call > 0
         ORDER BY timestamp DESC
         LIMIT ?
-    ''', (user_id, limit * 5)).fetchall()
-    calls = []
-    per_day = {}
-    for r in rows:
-        day = (r[6] or '')[:10]
-        if per_day.get(day, 0) >= 3:
-            continue
-        per_day[day] = per_day.get(day, 0) + 1
-        calls.append({
-            'mint': r[0], 'symbol': r[1], 'name': r[2],
-            'price_at_call': r[3], 'mcap_at_call': r[4], 'peak_price': r[5],
-            'multiplier': round(r[5] / r[3], 4) if r[3] > 0 else 0,
-            'timestamp': r[6],
-        })
-        if len(calls) >= limit:
-            break
-    return calls
+    ''', (user_id, limit)).fetchall()
+    return [{
+        'mint': r[0], 'symbol': r[1], 'name': r[2],
+        'price_at_call': r[3], 'mcap_at_call': r[4], 'peak_price': r[5],
+        'multiplier': round(r[5] / r[3], 4) if r[3] > 0 else 0,
+        'timestamp': r[6],
+    } for r in rows]
 
 @app.route('/profile')
 def profile():
