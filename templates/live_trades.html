@@ -16,11 +16,9 @@
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'JetBrains Mono',monospace;font-size:13px;line-height:1.4;-webkit-font-smoothing:antialiased}
 
-.lt-header{position:sticky;top:0;z-index:10;background:var(--bg);padding:0 16px;height:56px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--bg3)}
-.lt-back{text-decoration:none;color:var(--muted);font-size:11px;white-space:nowrap;transition:color .15s}
-.lt-back:hover{color:var(--text)}
-.lt-title{font-size:15px;font-weight:700;color:var(--text)}
-.lt-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);margin-left:auto;animation:ltPulse 1.8s ease-in-out infinite}
+.lt-live-strip{display:flex;align-items:center;gap:8px;max-width:640px;margin:16px auto 0;padding:0 16px}
+.lt-live-strip .lt-title{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
+.lt-live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:ltPulse 1.8s ease-in-out infinite}
 @keyframes ltPulse{0%,100%{opacity:.35;transform:scale(.85)}50%{opacity:1;transform:scale(1)}}
 
 .lt-wrap{max-width:640px;margin:0 auto;padding:16px}
@@ -40,11 +38,12 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 </head>
 <body>
 
-<header class="lt-header">
-  <a class="lt-back" href="/bot">← Back</a>
+{{ navbar_html('live-trades') }}
+
+<div class="lt-live-strip">
   <span class="lt-title">Live Trades</span>
   <span class="lt-live-dot"></span>
-</header>
+</div>
 
 <div class="lt-wrap">
   <div id="lt-list">
