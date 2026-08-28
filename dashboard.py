@@ -11581,7 +11581,7 @@ def social_feed():
         # of a correlated subquery per row (which forced SQLite to compute counts
         # for every historical post/trade before the outer ORDER BY/LIMIT applied).
         post_ids = [row[4] + str(row[0]) for row in rows if row[4] != 'r']
-        like_counts, reply_counts, repost_counts = {}, {}, {}
+        like_counts, reply_counts, repost_counts, last_reply_ats = {}, {}, {}, {}
         if post_ids:
             ph = ','.join('?' * len(post_ids))
             like_counts = dict(conn.execute(
@@ -11589,6 +11589,13 @@ def social_feed():
                 post_ids))
             reply_counts = dict(conn.execute(
                 f'SELECT post_id, COUNT(*) FROM feed_replies WHERE post_id IN ({ph}) GROUP BY post_id',
+                post_ids))
+            # Timestamp of each post's newest reply -- lets the frontend flag
+            # "someone replied since you last looked" on your own posts
+            # without a separate per-post fetch (see fc-reply-count.new in
+            # dashboard.js/renderHomeFeed()).
+            last_reply_ats = dict(conn.execute(
+                f'SELECT post_id, MAX(created_at) FROM feed_replies WHERE post_id IN ({ph}) GROUP BY post_id',
                 post_ids))
             repost_counts = dict(conn.execute(
                 f'SELECT post_id, COUNT(*) FROM feed_reposts WHERE post_id IN ({ph}) GROUP BY post_id',
@@ -11674,6 +11681,7 @@ def social_feed():
             'created_at':  created_at or '',
             'like_count':  like_counts.get(target_id, 0),
             'reply_count': reply_counts.get(target_id, 0),
+            'last_reply_at': last_reply_ats.get(target_id) or '',
             'view_count':  view_counts.get(target_id, 0),
             'repost_count': repost_counts.get(target_id, 0),
             'reposted_by_me': target_id in reposted_by_me,

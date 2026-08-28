@@ -530,25 +530,48 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reply-palette button:hover{background:rgba(255,255,255,.09)}
 .fc-reply-send{padding:8px 16px;background:var(--accent);color:#0a0b0e;border:none;border-radius:20px;font-size:12px;font-weight:700;cursor:pointer;flex-shrink:0;transition:opacity .15s}
 .fc-reply-send:hover{opacity:.88}
-.fc-replies-list{margin-top:8px;display:flex;flex-direction:column;gap:0}
-.fc-reply-item{padding:8px 0;position:relative}
-.fc-ri-header{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
-.fc-ri-avatar{width:24px;height:24px;min-width:24px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:9px;font-weight:700;color:#eef1f5;flex-shrink:0}
-.fc-ri-name{font-size:13px;font-weight:700;color:var(--text)}
-.fc-ri-you{font-size:10px;font-weight:700;background:rgba(247,185,85,.15);color:var(--accent);border:1px solid rgba(247,185,85,.3);border-radius:5px;padding:1px 6px;line-height:1.4}
-.fc-ri-handle{font-size:12px;color:var(--muted)}
-.fc-ri-sep{font-size:12px;color:var(--muted)}
-.fc-ri-time{font-size:12px;color:var(--muted)}
-.fc-ri-text{font-size:13px;color:#c7ccd4;line-height:1.5;margin:4px 0 4px 31px}
-.fc-ri-actions{display:flex;align-items:center;gap:16px;margin-left:31px;margin-top:2px}
-.fc-ri-like{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;padding:0;display:flex;align-items:center;gap:4px;transition:color .15s;font-family:inherit}
-.fc-ri-like:hover{color:#eef1f5}
-.fc-ri-like.liked{color:var(--accent)}
-.fc-ri-reply-btn{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:2px 5px;margin:-2px -5px;border-radius:6px;transition:color .15s,background-color .15s;font-family:inherit}
-.fc-ri-reply-btn:hover,.fc-ri-reply-btn:active{color:#f7b955;background:rgba(247,185,85,.12)}
-.fc-ri-delete{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;padding:0;opacity:0;pointer-events:none;transition:color .15s,opacity .15s;font-family:inherit;margin-left:auto}
+/* ── Instagram/Facebook-style comment rows: avatar left, bold username
+   flowing directly into the message text (one paragraph, not a separate
+   header row), a quiet meta line (time · Reply) underneath, and the like
+   heart docked to the far right of the row instead of buried in an actions
+   row below the text. Replaces the earlier Twitter-style layout (name,
+   verified badge, "You" chip, handle, separator and time all crammed onto
+   one header row, with text and actions indented below) that read as
+   cluttered and gave a new reply on your own post no visual weight at all. */
+.fc-replies-list{margin-top:10px;display:flex;flex-direction:column;gap:0}
+.fc-reply-item{padding:9px 0;position:relative}
+.fc-reply-item + .fc-reply-item{border-top:1px solid rgba(255,255,255,.04)}
+.fc-ri-row{display:flex;align-items:flex-start;gap:10px}
+.fc-ri-avatar{width:30px;height:30px;min-width:30px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-family:'JetBrains Mono',monospace;font-size:10px;font-weight:700;color:#eef1f5;flex-shrink:0}
+.fc-ri-body{flex:1;min-width:0}
+.fc-ri-line{font-size:13.5px;line-height:1.45;color:#c7ccd4;word-wrap:break-word}
+.fc-ri-name{font-weight:700;color:var(--text)}
+.fc-ri-you{font-size:10px;font-weight:600;color:var(--muted);margin-left:1px}
+.fc-ri-text-inline{color:#c7ccd4}
+.fc-ri-meta{display:flex;align-items:center;gap:14px;margin-top:3px}
+.fc-ri-time{font-size:11.5px;color:var(--muted)}
+.fc-ri-reply-btn{background:none;border:none;font-size:11.5px;font-weight:600;color:var(--muted);cursor:pointer;padding:0;font-family:inherit;transition:color .15s}
+.fc-ri-reply-btn:hover,.fc-ri-reply-btn:active{color:#eef1f5}
+.fc-ri-delete{background:none;border:none;font-size:12px;color:var(--muted);cursor:pointer;padding:0;opacity:0;pointer-events:none;transition:color .15s,opacity .15s;font-family:inherit}
 .fc-reply-item:hover .fc-ri-delete{opacity:1;pointer-events:auto}
 .fc-ri-delete:hover{color:#f76b62}
+.fc-ri-like{background:none;border:none;cursor:pointer;padding:2px 0 0;display:flex;flex-direction:column;align-items:center;gap:2px;flex-shrink:0;font-family:inherit}
+.fc-ri-heart{font-size:13px;line-height:1;filter:grayscale(1) opacity(.6);transition:filter .15s,transform .1s}
+.fc-ri-like:hover .fc-ri-heart{filter:grayscale(.4) opacity(.85)}
+.fc-ri-like.liked .fc-ri-heart{filter:none;opacity:1}
+.fc-ri-like:active .fc-ri-heart{transform:scale(1.25)}
+.fc-ri-lc{font-size:10.5px;color:var(--muted);font-family:'JetBrains Mono',monospace}
+.fc-ri-like.liked .fc-ri-lc{color:#f76b62}
+
+/* New-reply badge on the Reply action of your own post -- lets a reply
+   someone left on your post actually stand out while scrolling the feed,
+   instead of blending into a plain, identical-looking count like every
+   other post. Cleared the moment the thread is opened (see
+   _feedToggleReply()'s has-new handling in dashboard.js). */
+.fc-reply-btn.has-new{color:var(--accent)}
+.fc-reply-btn.has-new .fc-reply-count{background:var(--accent);color:#0a0b0e;border-radius:9px;padding:1px 7px;font-weight:800}
+.fc-reply-new-dot{width:6px;height:6px;border-radius:50%;background:var(--accent);margin-left:3px;display:inline-block;animation:fcNewReplyPulse 1.6s ease-in-out infinite;vertical-align:middle}
+@keyframes fcNewReplyPulse{0%,100%{opacity:1}50%{opacity:.35}}
 @media(max-width:600px){.fc-trade-row{padding:10px 12px;gap:8px}}
 /* ── PULSING LIVE DOT ── */
 .pulse-dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:#00e676;animation:pulse-dot 2s ease-in-out infinite;margin-right:5px;vertical-align:middle;flex-shrink:0}

@@ -8234,6 +8234,10 @@ function _renderFeedCard(e){
   var canDelete = !!(e.id && (isOwn || e.is_own || _isAdmin || isAdminWallet));
   var canEdit   = !!(e.id && e.type !== 'trade' && !e.trade_id && (isOwn || e.is_own));
   var showMenu  = canDelete || canEdit;
+  // "Someone replied to your post" -- see _fcHasNewReply()'s comment for how
+  // the seen/unseen baseline works. Only meaningful on your own posts.
+  var hasNewReply = (isOwn || e.is_own) && (e.reply_count||0) > 0
+    && _fcHasNewReply(safePostId, e.last_reply_at||'');
 
   /* ── trade card ── */
   var tradeHtml = '';
@@ -8401,7 +8405,7 @@ function _renderFeedCard(e){
       : '')
     +editHtml
     +'<div class="fc-actions" onclick="event.stopPropagation()">'
-    +'<button class="fc-action fc-reply-btn" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">'+_REPLY_ICON_SVG+'<span class="fc-reply-label">Reply</span><span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span></button>'
+    +'<button class="fc-action fc-reply-btn'+(hasNewReply?' has-new':'')+'" data-last-reply="'+esc(e.last_reply_at||'')+'" onclick="_feedToggleReply(this,\''+esc(safePostId)+'\')">'+_REPLY_ICON_SVG+'<span class="fc-reply-label">Reply</span><span class="fc-reply-count">'+esc(String(e.reply_count||0))+'</span>'+(hasNewReply?'<span class="fc-reply-new-dot"></span>':'')+'</button>'
     +'<button class="fc-action fc-repost-btn'+(e.reposted_by_me ? ' reposted' : '')+'" onclick="event.stopPropagation();_feedToggleRepost(this,\''+esc(safePostId)+'\')" title="'+(e.reposted_by_me?'Undo repost':'Repost')+'">'+_REPOST_ICON_SVG+'<span class="fc-repost-count">'+esc(String(e.repost_count||0))+'</span></button>'
     +'<button class="fc-action fc-like-btn'+(e.liked_by_me ? ' liked' : '')+'" id="lkbtn-'+esc(safePostId)+'" '
       +'onclick="_feedToggleLike(this,\''+esc(safePostId)+'\')" '
@@ -8698,6 +8702,15 @@ function _feedToggleReply(btn, postId){
       rbox.dataset.repliesLoaded = '1';
       _feedLoadReplies(postId);
     }
+    // Opening the thread counts as having seen it -- clear the new-reply
+    // badge immediately instead of waiting for the next feed refresh to
+    // notice the localStorage write below (see _fcHasNewReply()).
+    if(btn && btn.classList.contains('has-new')){
+      btn.classList.remove('has-new');
+      var dot = btn.querySelector('.fc-reply-new-dot');
+      if(dot) dot.remove();
+      _fcMarkRepliesSeen(postId, btn.getAttribute('data-last-reply'));
+    }
     var inp = document.getElementById('rinp-'+postId);
     if(inp) setTimeout(function(){ inp.focus(); }, 220);
   }
@@ -8779,6 +8792,44 @@ async function _jumpToPost(postId, notifType){
     if(rbox) rbox.dataset.repliesLoaded = '1';
     _feedLoadReplies(postId);
   }
+  // Landing here from a "someone replied" notification is also "having seen
+  // it" -- same has-new clearing _feedToggleReply() does on a manual open.
+  var replyBtn = card.querySelector('.fc-reply-btn');
+  if(replyBtn && replyBtn.classList.contains('has-new')){
+    replyBtn.classList.remove('has-new');
+    var dot = replyBtn.querySelector('.fc-reply-new-dot');
+    if(dot) dot.remove();
+    _fcMarkRepliesSeen(postId, replyBtn.getAttribute('data-last-reply'));
+  }
+}
+
+// ── "new reply on your post" tracking (localStorage, per post) ──
+// The backend has no per-user "read" state for replies, so this is tracked
+// client-side: each post's newest reply timestamp (server-formatted, e.g.
+// '2024-01-01 12:00:00' -- see /api/social/feed's last_reply_at) is compared
+// against the last one this browser has actually opened the thread for.
+// Both sides use the exact same server-formatted string (never a
+// browser-local Date/ISO string), so a plain string comparison is safe --
+// mixing formats (e.g. 'T'-separated ISO vs space-separated SQL) would sort
+// wrong here since '2024-01-01T...' and '2024-01-01 ...' diverge right at
+// the character that matters.
+function _fcSeenReplyKey(postId){ return 'fc_seen_reply_'+postId; }
+function _fcGetSeenReplyAt(postId){
+  try{ return localStorage.getItem(_fcSeenReplyKey(postId)) || ''; }catch(e){ return ''; }
+}
+function _fcMarkRepliesSeen(postId, lastReplyAt){
+  if(!lastReplyAt) return;
+  try{ localStorage.setItem(_fcSeenReplyKey(postId), lastReplyAt); }catch(e){}
+}
+// True only once a real newer reply has landed since a previously-established
+// baseline. The first time a given post is ever rendered client-side there is
+// no baseline yet -- silently adopt last_reply_at as the baseline instead of
+// flagging every reply that already existed before this feature shipped.
+function _fcHasNewReply(postId, lastReplyAt){
+  if(!lastReplyAt) return false;
+  var seenAt = _fcGetSeenReplyAt(postId);
+  if(!seenAt){ _fcMarkRepliesSeen(postId, lastReplyAt); return false; }
+  return lastReplyAt > seenAt;
 }
 
 function _replyRelTime(created_at){
@@ -8794,13 +8845,12 @@ function _replyRelTime(created_at){
 
 function _renderReplyRow(r, postId, depth){
   depth = depth || 0;
-  var name    = esc(r.username || r.wallet || '?');
-  var handle  = r.username ? '@'+esc(r.username) : (r.wallet ? '@'+esc(r.wallet.slice(0,6)+'…') : '');
+  var name    = esc(r.username || (r.wallet ? r.wallet.slice(0,6)+'…' : '?'));
   var initKey = r.username || r.wallet || '?';
   var bg      = typeof _lbAvatarColor === 'function' ? _lbAvatarColor(initKey) : '#1b4332';
   var ini     = initKey[0].toUpperCase();
-  var youChip = r.is_mine ? '<span class="fc-ri-you">You</span>' : '';
-  var verifiedBadge = r.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
+  var youChip = r.is_mine ? ' <span class="fc-ri-you">· You</span>' : '';
+  var verifiedBadge = r.verified ? ' <svg width="13" height="13" viewBox="0 0 24 24" style="vertical-align:-2px;flex-shrink:0"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '';
   var likedCls= r.liked_by_me ? ' liked' : '';
   var likeCnt = Number(r.like_count)||0;
   var delBtn  = r.is_mine
@@ -8809,21 +8859,27 @@ function _renderReplyRow(r, postId, depth){
   var avatarImg = r.avatar_url
     ? '<img src="'+esc(r.avatar_url)+'" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.style.display=\'none\'">'
     : '';
-  var indentStyle = depth>0 ? ' style="margin-left:'+Math.min(depth,3)*28+'px;border-left:2px solid #21252c;padding-left:10px"' : '';
+  var avatarClick = r.avatar_url
+    ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')'
+    : (r.wallet ? 'event.stopPropagation();location.href=\'/profile/'+encodeURIComponent(r.wallet)+'\'' : '');
+  var msgHtml = esc(r.message).replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
+  var indentStyle = depth>0 ? ' style="margin-left:'+Math.min(depth,3)*24+'px;border-left:2px solid #21252c;padding-left:10px"' : '';
+  // Instagram/Facebook-style row: avatar, then username flowing directly
+  // into the message as one paragraph (not a separate header line), a quiet
+  // time/Reply meta line underneath, and the like heart docked to the right
+  // of the row instead of in an actions row below the text.
   return '<div class="fc-reply-item'+(depth>0?' fc-reply-nested':'')+'" data-reply-id="'+r.id+'" data-parent-id="'+(r.parent_reply_id||'')+'"'+indentStyle+'>'
-    +'<div class="fc-ri-header">'
-    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+(r.avatar_url ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')' : (r.wallet ? 'event.stopPropagation();location.href=\'/profile/'+encodeURIComponent(r.wallet)+'\'' : ''))+'">'+ini+avatarImg+'</div>'
-    +'<span class="fc-ri-name">'+name+verifiedBadge+'</span>'
-    +youChip
-    +'<span class="fc-ri-handle">'+handle+'</span>'
-    +'<span class="fc-ri-sep">·</span>'
+    +'<div class="fc-ri-row">'
+    +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+avatarClick+'">'+ini+avatarImg+'</div>'
+    +'<div class="fc-ri-body">'
+    +'<div class="fc-ri-line"><span class="fc-ri-name">'+name+'</span>'+verifiedBadge+youChip+' <span class="fc-ri-text-inline">'+msgHtml+'</span></div>'
+    +'<div class="fc-ri-meta">'
     +'<span class="fc-ri-time">'+_replyRelTime(r.created_at)+'</span>'
-    +'</div>'
-    +'<div class="fc-ri-text">'+esc(r.message).replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>')+'</div>'
-    +'<div class="fc-ri-actions">'
-    +'<button class="fc-ri-like'+likedCls+'" data-rid="'+r.id+'" onclick="_feedLikeReply('+r.id+',this)">&#9825; <span class="fc-ri-lc">'+likeCnt+'</span></button>'
-    +'<button class="fc-ri-reply-btn" onclick="_feedToggleNestedReply('+r.id+',\''+postId.replace(/'/g,"\\'")+'\',this)">'+_REPLY_ICON_SVG+'<span>Reply</span></button>'
+    +'<button class="fc-ri-reply-btn" onclick="_feedToggleNestedReply('+r.id+',\''+postId.replace(/'/g,"\\'")+'\',this)">Reply</button>'
     +delBtn
+    +'</div>'
+    +'</div>'
+    +'<button class="fc-ri-like'+likedCls+'" data-rid="'+r.id+'" onclick="_feedLikeReply('+r.id+',this)"><span class="fc-ri-heart">'+(r.liked_by_me?'❤️':'♡')+'</span>'+(likeCnt>0?'<span class="fc-ri-lc">'+likeCnt+'</span>':'')+'</button>'
     +'</div>'
     +'<div class="fc-ri-nested-box" id="rnbox-'+r.id+'" style="display:none"></div>'
     +'</div>';
