@@ -81,6 +81,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:7px;font-size:10px;font-weight:700;letter-spacing:.06em;font-family:var(--ui)}
 .badge-win{background:rgba(58,210,155,.1);border:1px solid rgba(58,210,155,.3);color:var(--green)}
 .badge-loss{background:rgba(247,107,98,.09);border:1px solid rgba(247,107,98,.3);color:var(--red)}
+.badge-copy{background:rgba(120,140,255,.1);border:1px solid rgba(120,140,255,.3);color:#8c9bff;margin-left:6px}
 .row-hidden{display:none}
 
 /* ── EMPTY STATE ── */
@@ -253,6 +254,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
             {% if t.mint_address %}
             <a href="/token/{{ t.mint_address }}" style="color:inherit;text-decoration:none;border-bottom:1px solid var(--border);transition:all .15s" onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'" onmouseout="this.style.borderColor='var(--border)';this.style.color='inherit'">{{ t.token }}</a>
             {% else %}{{ t.token }}{% endif %}
+            {% if t.is_copy %}<span class="badge badge-copy" title="Bought automatically because you're copy-trading another wallet">COPY</span>{% endif %}
           </td>
           <td style="font-family:var(--mono)">${{ '%.6f' | format(t.entry_price) }}</td>
           <td style="font-family:var(--mono)">${{ '%.6f' | format(t.exit_price) }}</td>

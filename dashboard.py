@@ -1378,6 +1378,16 @@ def init_db():
         trade_size_unit_migrated INTEGER DEFAULT 1,
         created_at               TEXT DEFAULT CURRENT_TIMESTAMP
     )''')
+    # Defensive backstop: CREATE TABLE IF NOT EXISTS above is a no-op against a
+    # users table that already exists on disk from an older schema version, so
+    # the inline UNIQUE constraint on wallet_address is not guaranteed to have
+    # ever actually been applied to a production DB that predates it. Without
+    # this, a check-then-insert race (see save_settings()) can silently create
+    # two rows for the same wallet_address, and every SELECT id FROM users
+    # WHERE wallet_address=? in the app would then resolve to whichever
+    # duplicate happens to match first -- splitting one account's trade
+    # history across two user_id values.
+    c.execute('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_wallet_address ON users(wallet_address)')
     c.execute('''CREATE TABLE IF NOT EXISTS trades (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id      INTEGER NOT NULL,
@@ -3045,19 +3055,23 @@ def _hydrate_positions_from_db(wallet: str, us: dict):
                 return
             rows = conn.execute(
                 '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain,
-                          entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active
+                          entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active, source
                    FROM open_positions WHERE user_id=?''', (row[0],)
             ).fetchall()
         finally:
             conn.close()
         for (mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain,
-             entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active) in rows:
+             entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active, source) in rows:
             # chain must be carried into the restored dict, not just the DB row --
             # every place that iterates us['positions'] and calls the Solana-only
             # _execute_user_swap() relies on pos['chain'] to skip BSC entries.
+            # source likewise -- otherwise a copy-traded position that survives
+            # a restart loses its 'copy' tag and the SL/TP monitor records its
+            # eventual close as a regular 'bot' trade (see _upsert_open_position).
             us['positions'][mint] = {
                 'amount': amount, 'buy_price': buy_price, 'spend': spend,
                 'symbol': symbol, 'opened_at': opened_at, 'entry_liquidity': entry_liquidity,
+                'source': source or 'bot',
                 'chain': chain or 'solana',
                 'entry_lp_locked_pct': entry_lp_locked_pct,
                 'entry_mint_authority_active': bool(entry_mint_authority_active) if entry_mint_authority_active is not None else None,
@@ -3840,6 +3854,14 @@ def check_daily_reset_user(us: dict):
 def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, source: str = 'bot', copy_of_wallet: str = None, chain: str = 'solana'):
     pos = dict(pos)
     pos['chain'] = chain
+    # Carry the open-time source ('bot'/'copy'/'manual') onto the in-memory
+    # position dict too, not just the open_positions DB row -- the SL/TP/
+    # crash-exit monitor in user_trader_loop() iterates us['positions'] for
+    # every held mint regardless of how it was opened and, without this,
+    # would have no way to know a given position came from copy-trading by
+    # the time it closes, always recording the closing trade as source='bot'
+    # (see the _record_user_trade() call sites that now read pos['source']).
+    pos['source'] = source
     get_user_state(wallet)['positions'][mint] = pos
     # Every open position is fast-polled from the moment it exists (see the
     # Pass-1 loop in user_trader_loop) -- registering here means every call
@@ -5569,7 +5591,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
-                                       pref_notifications=pref_notifications,
+                                       pref_notifications=pref_notifications, source=_pos.get('source', 'bot'),
                                        entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
                                        entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
                                        entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
@@ -5587,7 +5609,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
                                        _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
-                                       pref_notifications=pref_notifications,
+                                       pref_notifications=pref_notifications, source=_pos.get('source', 'bot'),
                                        entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
                                        entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
                                        entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
@@ -5758,7 +5780,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications,
+                                                   pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
                                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
                                                    entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
@@ -5779,7 +5801,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications,
+                                                   pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
                                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
                                                    entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
@@ -5803,7 +5825,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications,
+                                                   pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
                                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
                                                    entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
@@ -7823,11 +7845,11 @@ def history():
                     'mint_address':  mint_addr or '',
                 })
             c.execute(
-                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address
-                   FROM trades WHERE user_id=? AND COALESCE(source,'bot')='bot' ORDER BY timestamp DESC''',
+                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address, source
+                   FROM trades WHERE user_id=? AND COALESCE(source,'bot') IN ('bot','copy') ORDER BY timestamp DESC''',
                 (user_id,)
             )
-            for ts, token, entry, exit_p, amount, pnl, opened_at, mint_addr in c.fetchall():
+            for ts, token, entry, exit_p, amount, pnl, opened_at, mint_addr, trade_source in c.fetchall():
                 pnl     = round(pnl   or 0.0, 6)
                 entry   = entry  or 0.0
                 exit_p  = exit_p or 0.0
@@ -7861,6 +7883,7 @@ def history():
                     'duration':     duration,
                     'result':       'win' if pnl >= 0 else 'loss',
                     'mint_address': mint_addr or '',
+                    'is_copy':      trade_source == 'copy',
                 })
         conn.close()
     except Exception as e:
@@ -10841,24 +10864,27 @@ def save_settings():
 
     conn = sqlite3.connect(DB_FILE)
     try:
-        c   = conn.cursor()
-        c.execute('SELECT id, encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
+        c = conn.cursor()
+        # Atomic get-or-create (relies on the unique index on wallet_address) --
+        # a check-then-branch SELECT followed by a bare INSERT would race: two
+        # near-simultaneous first-time saves for the same not-yet-registered
+        # wallet could both see no row and both try to INSERT, producing two
+        # rows for one wallet_address and splitting that account's trade
+        # history across two user_id values. INSERT OR IGNORE is a no-op if
+        # the row already exists, so this is safe under concurrency.
+        c.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        c.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
         row = c.fetchone()
-        if row:
-            if private_key_raw:
-                # New key provided — update key columns + settings
-                c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, min_trade_size=?, daily_loss_limit=?, trade_pct=? WHERE wallet_address=?',
-                          (encrypted, new_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_pct, wallet))
-                final_enc = encrypted
-            else:
-                # No new key — only update settings, leave encrypted_private_key untouched
-                c.execute('UPDATE users SET max_trade_size=?, min_trade_size=?, daily_loss_limit=?, trade_pct=? WHERE wallet_address=?',
-                          (max_trade_size, min_trade_size, daily_loss_limit, trade_pct, wallet))
-                final_enc = row[1]
+        if private_key_raw:
+            # New key provided — update key columns + settings
+            c.execute('UPDATE users SET encrypted_private_key=?, key_hash=?, max_trade_size=?, min_trade_size=?, daily_loss_limit=?, trade_pct=? WHERE wallet_address=?',
+                      (encrypted, new_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_pct, wallet))
+            final_enc = encrypted
         else:
-            c.execute('INSERT INTO users (wallet_address, encrypted_private_key, key_hash, max_trade_size, min_trade_size, daily_loss_limit, trade_pct, trade_size_unit_migrated) VALUES (?,?,?,?,?,?,?,1)',
-                      (wallet, encrypted or '', new_hash or '', max_trade_size, min_trade_size, daily_loss_limit, trade_pct))
-            final_enc = encrypted or ''
+            # No new key — only update settings, leave encrypted_private_key untouched
+            c.execute('UPDATE users SET max_trade_size=?, min_trade_size=?, daily_loss_limit=?, trade_pct=? WHERE wallet_address=?',
+                      (max_trade_size, min_trade_size, daily_loss_limit, trade_pct, wallet))
+            final_enc = row[0] if row else ''
         conn.commit()
     finally:
         conn.close()
@@ -13653,7 +13679,11 @@ def api_me():
         'username': username or '',
         'avatar':   avatar_url or '',
         'balance':  balance,
-        'is_admin': _is_owner(wallet),
+        # Same gate /admin itself uses (get_user_role(wallet) == 'user' → redirect) --
+        # _is_owner(wallet) alone would hide the nav link from anyone holding an
+        # assigned admin/executive/moderator/analyst role (admin_roles table),
+        # even though they can already reach /admin directly by URL.
+        'is_admin': get_user_role(wallet) != 'user',
     })
 
 
