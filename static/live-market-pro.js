@@ -83,6 +83,17 @@ function showMsg(el, text, ok){
   el.style.display = 'block';
 }
 
+/* ── mobile drawer/menu overlays (no-ops on desktop, where the classes
+   toggled here have no matching CSS) ── */
+function closeMobileOverlays(){
+  var nav = document.getElementById('pt-nav');
+  var left = document.getElementById('pt-left');
+  var scrim = document.getElementById('pt-scrim');
+  if(nav) nav.classList.remove('mobile-open');
+  if(left) left.classList.remove('mobile-open');
+  if(scrim) scrim.classList.remove('show');
+}
+
 /* ── state ── */
 var ST = {
   sort: 'trending', minLiquidity: 25000, age: 'any',
@@ -397,7 +408,7 @@ function renderSortList(){
       + '<span>'+s.label+'</span><span class="pt-sort-count">'+c+'</span></div>';
   }).join('');
 }
-function setSort(s){ ST.sort = s; renderSortList(); loadFeed(); }
+function setSort(s){ ST.sort = s; renderSortList(); loadFeed(); closeMobileOverlays(); }
 function setAge(a){
   ST.age = a;
   document.querySelectorAll('.pt-age-chip').forEach(function(c){ c.classList.toggle('active', c.dataset.age===a); });
@@ -796,6 +807,35 @@ document.addEventListener('DOMContentLoaded', function(){
     clearTimeout(_searchTimer);
     if(q.length<2){ searchResults.classList.remove('open'); return; }
     _searchTimer = setTimeout(function(){ runSearch(q, searchResults); }, 300);
+  });
+
+  /* mobile: hamburger nav drawer + left-rail filters drawer, sharing one scrim */
+  var menuBtn    = document.getElementById('pt-menu-btn');
+  var filtersBtn = document.getElementById('pt-mobile-filters-btn');
+  var navEl      = document.getElementById('pt-nav');
+  var leftEl     = document.getElementById('pt-left');
+  var scrimEl    = document.getElementById('pt-scrim');
+  if(menuBtn) menuBtn.addEventListener('click', function(){
+    var opening = !navEl.classList.contains('mobile-open');
+    closeMobileOverlays();
+    if(opening){ navEl.classList.add('mobile-open'); scrimEl.classList.add('show'); }
+  });
+  if(filtersBtn) filtersBtn.addEventListener('click', function(){
+    var opening = !leftEl.classList.contains('mobile-open');
+    closeMobileOverlays();
+    if(opening){ leftEl.classList.add('mobile-open'); scrimEl.classList.add('show'); }
+  });
+  if(scrimEl) scrimEl.addEventListener('click', closeMobileOverlays);
+
+  /* re-measure & redraw mounted charts on resize/rotation (e.g. desktop<->mobile
+     breakpoint change) -- renderChartSvg() re-reads clientWidth each call, it
+     just isn't re-triggered by a resize on its own between 5s poll ticks */
+  var _resizeTimer = null;
+  window.addEventListener('resize', function(){
+    clearTimeout(_resizeTimer);
+    _resizeTimer = setTimeout(function(){
+      Object.keys(_chartTimers).forEach(function(idx){ chartTick(idx); });
+    }, 200);
   });
 
   renderSortList();

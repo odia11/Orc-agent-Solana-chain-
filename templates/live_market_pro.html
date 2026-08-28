@@ -229,6 +229,51 @@ input{font-family:inherit}
 
 .pt-toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);background:var(--card2);border:1px solid var(--line2);border-radius:11px;padding:10px 18px;font-size:12.5px;z-index:100;opacity:0;pointer-events:none;transition:opacity .2s}
 .pt-toast.show{opacity:1}
+
+/* ── mobile chrome (hidden on desktop) ── */
+.pt-menu-btn{display:none;align-items:center;justify-content:center;width:34px;height:34px;border-radius:9px;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-size:15px;flex-shrink:0}
+.pt-mobile-filters-btn{display:none;align-items:center;gap:5px;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-size:11px;font-weight:700;border-radius:9px;padding:7px 11px;flex-shrink:0;white-space:nowrap}
+.pt-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:80}
+.pt-scrim.show{display:block}
+
+/* ── responsive: single-column layout, drawer nav + filters ── */
+@media (max-width: 900px){
+  .pt-shell{min-width:0;padding:10px 10px 28px;overflow-x:hidden}
+  html,body{overflow-x:hidden}
+
+  .pt-topbar{flex-wrap:wrap;gap:10px;padding:8px 4px;position:relative}
+  .pt-menu-btn{display:flex}
+  .pt-nav{display:none;flex-direction:column;align-items:stretch;gap:2px;position:absolute;top:48px;left:0;right:0;background:var(--card2);border:1px solid var(--line2);border-radius:12px;padding:8px;z-index:90;box-shadow:0 16px 40px rgba(0,0,0,.55)}
+  .pt-nav.mobile-open{display:flex}
+  .pt-nav a{padding:12px 14px;text-align:left}
+  .pt-search-wrap{order:5;flex-basis:100%;max-width:none;margin-left:0}
+  .pt-right-chips{margin-left:auto}
+
+  .pt-panel{grid-template-columns:1fr;border-radius:16px}
+  .pt-left{display:none;max-height:none}
+  .pt-left.mobile-open{
+    display:flex;position:fixed;top:0;bottom:0;left:0;width:84%;max-width:320px;z-index:95;
+    background:var(--panel);border-right:1px solid var(--panel-border);box-shadow:0 0 50px rgba(0,0,0,.6);
+    max-height:none;padding:18px 16px;
+  }
+  .pt-mobile-filters-btn{display:flex}
+  .pt-feed-hd{flex-wrap:wrap;row-gap:8px}
+
+  .pt-center{max-height:none;overflow:visible;order:1}
+  .pt-right{border-left:none;border-top:1px solid var(--line);max-height:none;overflow:visible;order:2}
+
+  .pt-card-body{grid-template-columns:1fr}
+  .pt-card-stats{border-right:none;border-bottom:1px solid var(--line)}
+  .pt-card-ft{grid-column:1/2}
+  .pt-chart-wrap{height:210px}
+  .pt-chart-svg{height:188px}
+}
+@media (max-width: 480px){
+  .pt-wordmark{display:none}
+  .pt-sol-unit{display:none}
+  .pt-story{width:58px}
+  .pt-story-ring{width:54px;height:54px}
+}
 </style>
 </head>
 <body>
@@ -239,7 +284,8 @@ input{font-family:inherit}
       <div class="pt-logo-mark"></div>
       <div class="pt-wordmark">OrcAgent</div>
     </a>
-    <nav class="pt-nav">
+    <button class="pt-menu-btn" id="pt-menu-btn" aria-label="Menu">☰</button>
+    <nav class="pt-nav" id="pt-nav">
       <a href="/live-market" class="active">Live Market</a>
       <a href="/">Feed</a>
       <a href="/calls">Calls</a>
@@ -252,7 +298,7 @@ input{font-family:inherit}
       <div class="pt-search-results" id="pt-search-results"></div>
     </div>
     <div class="pt-right-chips">
-      <div class="pt-sol-chip"><span class="dot"></span><span class="mono" id="pt-sol-balance">0.00</span> SOL</div>
+      <div class="pt-sol-chip"><span class="dot"></span><span class="mono" id="pt-sol-balance">0.00</span> <span class="pt-sol-unit">SOL</span></div>
       <img class="pt-avatar" id="pt-avatar" style="display:none">
       <div class="pt-avatar" id="pt-avatar-ph">{{ (wallet_short or '?')[0]|upper }}</div>
     </div>
@@ -260,7 +306,7 @@ input{font-family:inherit}
 
   <div class="pt-panel">
     <!-- LEFT RAIL -->
-    <aside class="pt-left">
+    <aside class="pt-left" id="pt-left">
       <div>
         <div class="pt-sec-title">Sort feed</div>
         <div id="pt-sort-list"></div>
@@ -304,6 +350,7 @@ input{font-family:inherit}
           <div class="pt-feed-title">Live Market</div>
           <div class="pt-feed-sub"><span id="pt-tok-count">0</span> tokens tracked · refreshes every 15s</div>
         </div>
+        <button class="pt-mobile-filters-btn" id="pt-mobile-filters-btn">⚙ Filters</button>
         <div class="pt-scanning-pill"><span class="pt-scan-dot"></span>SCANNING</div>
       </div>
 
@@ -345,6 +392,7 @@ input{font-family:inherit}
   </div>
 </div>
 
+<div class="pt-scrim" id="pt-scrim"></div>
 <div class="pt-toast" id="pt-toast"></div>
 
 <script src="/static/live-market-pro.js?v={{ app_version }}" defer></script>
