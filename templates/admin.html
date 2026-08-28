@@ -31,7 +31,7 @@ html,body{min-height:100vh;min-height:100dvh;background:#0a0b0e;color:#eef1f5;fo
 .shell{display:flex;min-height:100vh;min-height:100dvh}
 
 /* ── SIDEBAR ── */
-aside{width:240px;min-width:240px;height:100vh;position:sticky;top:0;background:var(--bg);border-right:1px solid var(--bg3);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto;flex-shrink:0}
+aside{width:240px;min-width:240px;height:calc(100vh - 64px);position:sticky;top:64px;background:var(--bg);border-right:1px solid var(--bg3);display:flex;flex-direction:column;padding:16px 12px;overflow-y:auto;flex-shrink:0}
 .sb-brand{display:flex;align-items:center;gap:10px;padding:4px 8px 18px}
 .sb-fin{width:34px;height:34px;border-radius:10px;background:var(--accent);display:flex;align-items:center;justify-content:center;flex-shrink:0}
 .sb-fin::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:12px solid var(--bg)}
@@ -332,6 +332,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 </style>
 </head>
 <body>
+{{ navbar_html('') }}
 <div class="shell">
 
 <!-- ════════════════ SIDEBAR ════════════════ -->
