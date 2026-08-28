@@ -94,7 +94,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 /* ── WALLET ROW ── */
 .pf-wallet-row{display:flex;align-items:center;gap:10px;background:#101216;border:1px solid #16191f;border-radius:12px;padding:10px 14px;margin-bottom:20px}
 .pf-wallet-addr{font-family:'JetBrains Mono',monospace;font-size:12px;color:#565d68;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.pf-copy-btn{background:none;border:none;color:#565d68;cursor:pointer;font-size:16px;padding:0;transition:color .15s;flex-shrink:0;line-height:1}
+.pf-copy-btn{background:none;border:none;color:#565d68;cursor:pointer;font-size:16px;padding:0;transition:color .15s;flex-shrink:0;line-height:1;display:inline-flex;align-items:center}
 .pf-copy-btn:hover{color:#f7b955}
 
 /* ── STAT TILES (4 tiles) ── */
@@ -112,13 +112,15 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .pf-achievements{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;margin-bottom:20px;scrollbar-width:none}
 .pf-achievements::-webkit-scrollbar{display:none}
 .pf-badge{display:inline-flex;align-items:center;gap:7px;background:#101216;border:1px solid #16191f;border-radius:999px;padding:7px 14px;white-space:nowrap;flex-shrink:0}
-.pf-badge-icon{font-size:15px;line-height:1}
+.pf-badge-icon{display:inline-flex;color:#8a919c;line-height:1}
 .pf-badge-label{font-size:12px;font-weight:600;color:#eef1f5}
 .pf-badge-sub{font-size:10px;color:#565d68;margin-left:2px}
 .pf-badge.gold{border-color:rgba(247,185,85,.35);background:rgba(247,185,85,.07)}
 .pf-badge.gold .pf-badge-label{color:#f7b955}
+.pf-badge.gold .pf-badge-icon{color:#f7b955}
 .pf-badge.green{border-color:rgba(58,210,155,.3);background:rgba(58,210,155,.06)}
 .pf-badge.green .pf-badge-label{color:#3ad29b}
+.pf-badge.green .pf-badge-icon{color:#3ad29b}
 
 /* ── RECENT TRADES ── */
 .pf-trades{display:flex;flex-direction:column;gap:2px;margin-bottom:20px}
@@ -214,7 +216,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .flm-box{background:#101216;border:1px solid #21252c;border-radius:16px;width:100%;max-width:400px;overflow:hidden;flex-shrink:0}
 .flm-hdr{display:flex;align-items:center;justify-content:space-between;padding:16px 18px 14px;border-bottom:1px solid #16191f}
 .flm-title{font-size:15px;font-weight:700;color:#eef1f5}
-.flm-close{background:none;border:none;color:#565d68;font-size:18px;cursor:pointer;line-height:1;padding:2px;transition:color .15s}
+.flm-close{background:none;border:none;color:#565d68;font-size:18px;cursor:pointer;line-height:1;padding:2px;transition:color .15s;display:inline-flex;align-items:center}
 .flm-close:hover{color:#eef1f5}
 .flm-body{max-height:60vh;overflow-y:auto}
 .flm-row{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid #0d0f12;cursor:pointer;transition:background .12s}
@@ -381,11 +383,12 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
       {% if can_view_sensitive %}
       <div class="pf-wallet-row">
         <span class="pf-wallet-addr" id="pf-addr">{{ wallet }}</span>
-        <button class="pf-copy-btn" onclick="copyWallet()" title="Copy address">⧉</button>
+        <button class="pf-copy-btn" onclick="copyWallet()" title="Copy address"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
       </div>
       {% else %}
-      <div class="pf-wallet-row" style="color:#565d68;font-size:13px">
-        🔒 Trading stats and wallet details are private
+      <div class="pf-wallet-row" style="color:#565d68;font-size:13px;gap:7px">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Trading stats and wallet details are private
       </div>
       {% endif %}
 
@@ -425,7 +428,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         {% if achiev %}
           {% for a in achiev %}
           <div class="pf-badge {{ a.tier|default('') }}">
-            <span class="pf-badge-icon">{{ a.icon|default('🏅') }}</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
             <span class="pf-badge-label">{{ a.label }}</span>
             {% if a.sub %}<span class="pf-badge-sub">{{ a.sub }}</span>{% endif %}
           </div>
@@ -434,46 +437,46 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
           <!-- placeholder badges always shown so layout is never empty -->
           {% if total_trades >= 1 %}
           <div class="pf-badge green">
-            <span class="pf-badge-icon">🚀</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg></span>
             <span class="pf-badge-label">First Trade</span>
           </div>
           {% endif %}
           {% if total_trades >= 10 %}
           <div class="pf-badge">
-            <span class="pf-badge-icon">⚡</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg></span>
             <span class="pf-badge-label">Active Trader</span>
             <span class="pf-badge-sub">10+ trades</span>
           </div>
           {% endif %}
           {% if win_rate >= 60 %}
           <div class="pf-badge gold">
-            <span class="pf-badge-icon">🏆</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="7"/><polyline points="8.21 13.89 7 23 12 20 17 23 15.79 13.88"/></svg></span>
             <span class="pf-badge-label">High Win Rate</span>
             <span class="pf-badge-sub">{{ win_rate }}%</span>
           </div>
           {% endif %}
           {% if pnl_positive %}
           <div class="pf-badge green">
-            <span class="pf-badge-icon">💰</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
             <span class="pf-badge-label">In Profit</span>
           </div>
           {% endif %}
           {% if followers >= 10 %}
           <div class="pf-badge">
-            <span class="pf-badge-icon">👥</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
             <span class="pf-badge-label">Rising Star</span>
             <span class="pf-badge-sub">{{ followers }} followers</span>
           </div>
           {% endif %}
           {% if copiers|default(0) >= 1 %}
           <div class="pf-badge gold">
-            <span class="pf-badge-icon">📡</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M16.24 7.76a6 6 0 0 1 0 8.49m-8.48-.01a6 6 0 0 1 0-8.49m11.31-2.82a10 10 0 0 1 0 14.14m-14.14 0a10 10 0 0 1 0-14.14"/></svg></span>
             <span class="pf-badge-label">Being Copied</span>
             <span class="pf-badge-sub">{{ copiers }} copiers</span>
           </div>
           {% endif %}
           <div class="pf-badge" style="opacity:.35">
-            <span class="pf-badge-icon">🔒</span>
+            <span class="pf-badge-icon"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
             <span class="pf-badge-label">More badges coming</span>
           </div>
         {% endif %}
@@ -511,7 +514,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
       <!-- CALLS -->
       {% set calls = recent_calls|default([]) %}
-      <div class="pf-section-hdr">🔥 Calls</div>
+      <div class="pf-section-hdr" style="display:flex;align-items:center;gap:5px"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg>Calls</div>
       <div class="pf-calls">
         {% if calls %}
           {% for c in calls %}
@@ -544,7 +547,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
             <div class="pf-post-content">{{ _t }}</div>
             <div class="pf-post-meta">
               <span class="pf-post-time">{{ (post.created_at or '')[:16] }}</span>
-              <span class="pf-post-likes">♥ {{ post.likes or 0 }}</span>
+              <span class="pf-post-likes"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> {{ post.likes or 0 }}</span>
             </div>
           </div>
           {% endif %}
@@ -563,7 +566,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   <div class="spm-box">
     <div class="spm-hdr">
       <span class="spm-title">Share Profile</span>
-      <button class="flm-close" onclick="closeShareModal()">✕</button>
+      <button class="flm-close" onclick="closeShareModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="spm-body">
       <div class="spm-row">
@@ -583,7 +586,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   <div class="flm-box">
     <div class="flm-hdr">
       <span class="flm-title" id="flm-title">Following</span>
-      <button class="flm-close" onclick="closeFollowListModal()">✕</button>
+      <button class="flm-close" onclick="closeFollowListModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="flm-body" id="flm-body"></div>
   </div>
@@ -594,7 +597,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   <div class="flm-box">
     <div class="flm-hdr">
       <span class="flm-title">Edit Profile</span>
-      <button class="flm-close" onclick="_closeEditProfileModal()">✕</button>
+      <button class="flm-close" onclick="_closeEditProfileModal()"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>
     </div>
     <div class="flm-body" style="padding:18px">
       <div style="display:flex;justify-content:center;margin-bottom:18px">
@@ -607,7 +610,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         <div class="pf-avatar-fallback" id="epm-avatar-fallback" style="cursor:pointer" onclick="_onAvatarClick()">{{ (username or wallet_short)[:2]|upper }}</div>
         {% endif %}
       </div>
-      <div class="st-card-hdr">👥 Profile Info</div>
+      <div class="st-card-hdr" style="display:flex;align-items:center;gap:7px"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>Profile Info</div>
       <div class="epm-field">
         <label class="epm-label" for="epm-username">Username</label>
         <input id="epm-username" class="spm-input" type="text" style="width:100%" value="{{ username or '' }}" maxlength="20" placeholder="@username" autocomplete="off" spellcheck="false">
@@ -631,13 +634,16 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 var _csrf = {{ csrf_token|tojson }};
 var _walletShort = {{ wallet_short|tojson }};
 
+var _pfCopyIconHtml = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>';
+var _pfCheckIconHtml = '<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>';
+
 function copyWallet() {
   var addr = document.getElementById('pf-addr').textContent.trim();
   navigator.clipboard.writeText(addr).then(function() {
     var btn = document.querySelector('.pf-copy-btn');
-    btn.textContent = '✓';
+    btn.innerHTML = _pfCheckIconHtml;
     btn.style.color = '#f7b955';
-    setTimeout(function(){ btn.textContent = '⧉'; btn.style.color = ''; }, 1800);
+    setTimeout(function(){ btn.innerHTML = _pfCopyIconHtml; btn.style.color = ''; }, 1800);
   }).catch(function(){});
 }
 
