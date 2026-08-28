@@ -7359,14 +7359,29 @@ function _postTextKeydown(e){
 // input, the trade dropdown, the emoji picker's own search/tabs/grid
 // buttons are all real focusable elements nested inside #feed-composer,
 // so a click on any of them keeps this from collapsing mid-interaction),
-// or while there's text or a staged chart/trade/image attachment -- so the
-// POST button can never vanish out from under an in-progress post.
+// or while there's text, a staged chart/trade/image attachment, or the
+// emoji panel is open -- so the POST button (and the emoji panel itself)
+// can never vanish out from under an in-progress post.
+//
+// The emoji-panel-open check specifically matters because tapping a
+// <button> does not reliably move document.activeElement on mobile
+// Safari the way a desktop click does -- textarea blur can fire (queuing
+// the setTimeout below) essentially concurrently with the emoji button's
+// own click handler opening the panel, and if activeElement never lands
+// back inside #feed-composer, the focus-based check alone would collapse
+// .feed-composer-actions (display:none) right as the panel opens inside
+// it -- collapsing display:none on an ancestor hides the panel too,
+// regardless of its own 'open' class, making the button look broken.
+// Checking the panel's own state directly makes this deterministic
+// instead of depending on that focus-timing race.
 document.addEventListener('DOMContentLoaded', function(){
   var composer = document.getElementById('feed-composer');
   if(!composer) return;
   function hasStagedContent(){
     var ta = document.getElementById('postText');
     if(ta && ta.value.trim()) return true;
+    var emojiPanel = document.getElementById('feed-emoji-panel');
+    if(emojiPanel && emojiPanel.classList.contains('open')) return true;
     var ids = ['composer-chart-preview','composer-trade-preview','composer-image-preview'];
     return ids.some(function(id){
       var el = document.getElementById(id);
