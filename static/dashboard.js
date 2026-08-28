@@ -7111,16 +7111,32 @@ function _renderTradeTerminalCard(t){
     +'</div>';
 }
 
+// mint -> header image URL (or null once confirmed there isn't one), so
+// re-fetching the same mint's banner is a one-time cost per page session --
+// see _initTradeBanners()'s comment for why that matters: renderHomeFeed()
+// rebuilds every card's DOM from scratch on each infinite-scroll page (and
+// on the 60s auto-refresh), which used to mean a fresh, un-cached
+// bannerEl.style.backgroundImage check re-fired this fetch for every post
+// ever loaded into the feed, every single time, growing without bound.
+var _tradeBannerCache = {};
 async function _hydrateTradeBanner(cardEl){
   var mint = cardEl.dataset.mint;
   if(!mint) return;
+  var bannerEl = cardEl.querySelector('[data-cc="banner"]');
+  if(!bannerEl) return;
+  if(Object.prototype.hasOwnProperty.call(_tradeBannerCache, mint)){
+    var cached = _tradeBannerCache[mint];
+    if(cached && !bannerEl.style.backgroundImage) bannerEl.style.backgroundImage = 'url('+cached+')';
+    return;
+  }
   try{
     var r = await fetch('https://api.dexscreener.com/latest/dex/tokens/'+encodeURIComponent(mint));
     var d = await r.json();
     var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
-    var bannerEl = cardEl.querySelector('[data-cc="banner"]');
-    if(bannerEl && p && p.info && p.info.header && !bannerEl.style.backgroundImage){
-      bannerEl.style.backgroundImage = 'url('+p.info.header+')';
+    var header = (p && p.info && p.info.header) || null;
+    _tradeBannerCache[mint] = header;
+    if(bannerEl && header && !bannerEl.style.backgroundImage){
+      bannerEl.style.backgroundImage = 'url('+header+')';
     }
   }catch(e){}
 }
@@ -7851,6 +7867,32 @@ function startLiveChart(cardEl, pairAddress, symbol){
   _liveChartTimers[key] = {timer: timer, cardEl: cardEl};
 }
 
+function stopLiveChart(cardEl){
+  /* Stops polling for a card that scrolled out of view -- the entry's
+     history is kept (not deleted) so scrolling back re-enters showing the
+     last-known sparkline instantly instead of blank while the next poll
+     lands. Node-identity checked, same reasoning as _initLiveCharts(). */
+  var key = cardEl.id;
+  var entry = _liveChartTimers[key];
+  if(entry && entry.cardEl === cardEl){
+    clearInterval(entry.timer);
+    delete _liveChartTimers[key];
+  }
+}
+
+// Visibility-gated start/stop -- every trade-card in the feed used to get an
+// unconditional setInterval(10s) the moment it was rendered, including every
+// post the user has already scrolled past. Those never stopped: each one
+// keeps fetching DexScreener and touching the DOM every 10s for as long as
+// the tab stays open, and a full feed re-render (60s auto-refresh, or every
+// loadMoreHomeFeed() page during infinite scroll) re-mounts the *entire*
+// history of loaded posts, so the count of live-polling cards only ever grew
+// the longer a session went on -- the "stutter" got worse with feed use.
+// Gating start/stop on actual on-screen visibility (rootMargin gives a
+// screen-or-two of read-ahead so scrolling into a card shows live data
+// immediately, not after the first 10s tick) keeps the number of active
+// pollers bounded to what's actually on screen.
+var _liveChartObserver = null;
 function _initLiveCharts(){
   /* clean up stale intervals -- node-identity check (not id lookup): an id
      match alone doesn't prove the ORIGINAL node this timer was created for
@@ -7864,9 +7906,21 @@ function _initLiveCharts(){
       delete _liveChartHistory[key];
     }
   });
-  /* wire up each chart card found in DOM */
+  if(!_liveChartObserver){
+    _liveChartObserver = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if(entry.isIntersecting){
+          startLiveChart(entry.target, entry.target.getAttribute('data-chart-pair'), entry.target.getAttribute('data-chart-sym'));
+        } else {
+          stopLiveChart(entry.target);
+        }
+      });
+    }, {rootMargin: '600px 0px', threshold: 0.01});
+  }
+  /* observe each chart card found in DOM -- start/stop now driven by
+     _liveChartObserver above rather than starting every card unconditionally */
   document.querySelectorAll('[data-chart-sym]').forEach(function(el){
-    startLiveChart(el, el.getAttribute('data-chart-pair'), el.getAttribute('data-chart-sym'));
+    _liveChartObserver.observe(el);
   });
 }
 
