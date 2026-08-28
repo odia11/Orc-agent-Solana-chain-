@@ -7338,8 +7338,9 @@ function _ptcdMove(delta){
   _ptcdRenderActive();
 }
 
-// Handles ArrowUp/Down + Enter/Tab for the dropdown; falls back to the
-// composer's normal Enter-to-submit / Escape behavior when it's closed.
+// Handles ArrowUp/Down + Enter/Tab for the $ticker autocomplete dropdown;
+// otherwise Enter is left alone (plain newline, like any textarea) --
+// submitting only ever happens via the POST button now, see submitPost().
 function _postTextKeydown(e){
   if(_ptcdPairs && _ptcdPairs.length){
     if(e.key === 'ArrowDown'){ e.preventDefault(); _ptcdMove(1); return; }
@@ -7348,9 +7349,45 @@ function _postTextKeydown(e){
       e.preventDefault(); _selectCashtagResult(_ptcdActiveIdx); return;
     }
   }
-  if(e.key === 'Enter' && !e.shiftKey){ e.preventDefault(); submitPost(); }
-  else if(e.key === 'Escape'){ _ptcdClose(); }
+  if(e.key === 'Escape'){ _ptcdClose(); }
 }
+
+// ── Composer toolbar (Chart/Share Trade/Image/Emoji/Post) is hidden until
+// the composer is actually in use -- keeps the feed's top-of-page compact by
+// default, expanding only once someone starts writing a post. Stays
+// expanded while focus is anywhere inside the composer (the chart search
+// input, the trade dropdown, the emoji picker's own search/tabs/grid
+// buttons are all real focusable elements nested inside #feed-composer,
+// so a click on any of them keeps this from collapsing mid-interaction),
+// or while there's text or a staged chart/trade/image attachment -- so the
+// POST button can never vanish out from under an in-progress post.
+document.addEventListener('DOMContentLoaded', function(){
+  var composer = document.getElementById('feed-composer');
+  if(!composer) return;
+  function hasStagedContent(){
+    var ta = document.getElementById('postText');
+    if(ta && ta.value.trim()) return true;
+    var ids = ['composer-chart-preview','composer-trade-preview','composer-image-preview'];
+    return ids.some(function(id){
+      var el = document.getElementById(id);
+      return el && el.style.display !== 'none';
+    });
+  }
+  composer.addEventListener('focusin', function(){
+    composer.classList.add('expanded');
+  });
+  composer.addEventListener('focusout', function(){
+    setTimeout(function(){
+      if(composer.contains(document.activeElement)) return;
+      if(hasStagedContent()) return;
+      composer.classList.remove('expanded');
+    }, 0);
+  });
+  var postText = document.getElementById('postText');
+  if(postText) postText.addEventListener('input', function(){
+    if(postText.value.trim()) composer.classList.add('expanded');
+  });
+});
 
 function _ptcdSearch(q){
   clearTimeout(_ptcdTimer);
