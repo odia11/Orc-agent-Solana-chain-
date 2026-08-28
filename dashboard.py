@@ -3299,6 +3299,94 @@ def get_ai_signal(token_data: dict, mint: str) -> tuple:
         _ai_cache[mint] = {'score': 0.0, 'reasoning': '', 'ts': now}
         return 0.0, ''
 
+_AI_TRADE_GATE_CACHE: dict = {}
+_AI_TRADE_GATE_CACHE_TTL = 30  # seconds — a candidate can re-qualify across several
+                                # 15s scans before spend/liquidity actually change enough
+                                # to warrant asking again
+
+def get_ai_trade_decision(token_data: dict, mint: str, symbol: str, spend_sol: float) -> dict:
+    """Final BUY/HOLD sanity check on a candidate that has already passed every
+    local rule-based filter (score threshold, LP-lock, mint/freeze authority,
+    learned-bias veto) and is about to be bought -- an extra layer on top of
+    the fast local scanner, not a replacement for it. Only ever narrows a buy
+    to a HOLD; it is never asked about, and can never trigger, a sell.
+
+    Fails OPEN (returns action='BUY') whenever the AI can't be reached or
+    ANTHROPIC_API_KEY isn't configured, same convention as get_ai_signal()
+    and the narrative agent's other optional AI layers in this file -- this
+    stays a pure safety-net addition, not a new hard dependency the whole
+    bot would otherwise need just to keep trading. Shares _ai_disabled_until
+    with get_ai_signal() so one bad/revoked key backs off every AI feature
+    at once instead of each one discovering it independently.
+    """
+    global _ai_disabled_until
+    if not ANTHROPIC_API_KEY:
+        return {'action': 'BUY', 'reasoning': 'AI check skipped — ANTHROPIC_API_KEY not configured'}
+    now = time.time()
+    if now < _ai_disabled_until:
+        return {'action': 'BUY', 'reasoning': 'AI check skipped — backing off after a prior auth failure'}
+    cached = _AI_TRADE_GATE_CACHE.get(mint)
+    if cached and now - cached['ts'] < _AI_TRADE_GATE_CACHE_TTL:
+        return cached['decision']
+
+    system_prompt = (
+        'Je bent een hyper-efficiënte, data-gedreven AI Trading Agent op de Solana blockchain. '
+        'Je doel is het maximaliseren van portfolio-waarde via spot trading in micro-cap tokens '
+        '(memecoins), met een strikte focus op risicobeheer. Geef altijd prioriteit aan '
+        'kapitaalbehoud boven winst. Dit token heeft de lokale anti-rugpull- en liquiditeitsfilters '
+        'al doorstaan (gelockte liquiditeit, holder-concentratie, mint/freeze authority) — jouw taak '
+        'is uitsluitend een laatste sanity-check op de onderstaande cijfers, geen herhaling van die '
+        'checks. Reageer UITSLUITEND met JSON, geen andere tekst, in exact dit formaat: '
+        '{"action": "BUY"|"HOLD", "token_address": "...", "amount_sol": 0.0, '
+        '"slippage_bps": 50, "reasoning": "korte motivatie voor de logboeken"}'
+    )
+    user_prompt = (
+        f'token_address: {mint}\n'
+        f'symbol: {symbol}\n'
+        f'price_usd: {token_data.get("price", 0)}\n'
+        f'change_5m_pct: {token_data.get("change5m", 0):.1f}\n'
+        f'change_1h_pct: {token_data.get("change1h", 0):.1f}\n'
+        f'liquidity_usd: {token_data.get("liquidity", 0):,.0f}\n'
+        f'volume_24h_usd: {token_data.get("volume24h", 0):,.0f}\n'
+        f'buys_24h: {token_data.get("txns24h_buys", 0)}\n'
+        f'sells_24h: {token_data.get("txns24h_sells", 0)}\n'
+        f'proposed_spend_sol: {spend_sol}\n'
+        'Beoordeel of dit een verantwoorde entry is gegeven deze cijfers. Antwoord met action '
+        '"BUY" of "HOLD" — nooit "SELL", dit is een koop-beslissing.'
+    )
+    decision = {'action': 'BUY', 'reasoning': 'AI check failed — failing open'}
+    try:
+        resp = requests.post(
+            _ANTHROPIC_URL,
+            headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
+            json={'model': 'claude-haiku-4-5-20251001', 'max_tokens': 200,
+                  'system': system_prompt,
+                  'messages': [{'role': 'user', 'content': user_prompt}]},
+            timeout=8,
+        )
+        if resp.status_code == 401:
+            _ai_disabled_until = now + 3600
+            add_log('AI signals disabled - check ANTHROPIC_API_KEY')
+            return decision
+        if resp.status_code != 200:
+            print(f'[ai-trade-gate] HTTP {resp.status_code} for {mint[:8]}: {resp.text[:300]}', flush=True)
+            return decision
+        text = ((resp.json().get('content') or [{}])[0].get('text') or '').strip()
+        if text.startswith('```'):
+            text = text.strip('`')
+            if text.lower().startswith('json'):
+                text = text[4:]
+            text = text.strip()
+        parsed = json.loads(text)
+        action = str(parsed.get('action', 'BUY')).upper()
+        if action not in ('BUY', 'HOLD'):
+            action = 'BUY'  # SELL/anything else isn't a valid answer to a buy-gate question
+        decision = {'action': action, 'reasoning': str(parsed.get('reasoning', ''))[:200]}
+        _AI_TRADE_GATE_CACHE[mint] = {'decision': decision, 'ts': now}
+    except Exception as e:
+        print(f'[ai-trade-gate] error for {mint[:8]}: {e}', flush=True)
+    return decision
+
 def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
     """Research-driven narrative signal via Claude + web search -- heavier
     and separate from get_ai_signal() (which just scores a stats blob):
@@ -6056,6 +6144,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                         min_spend_sol = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
                         spend = round(min_spend_sol * factor, 4)
                         if spend >= 0.001 and spend <= us_sol:
+                            # Last-look AI sanity check on top of every local filter above --
+                            # see get_ai_trade_decision()'s own docstring for why this can only
+                            # ever turn a BUY into a HOLD (skip), never place a trade itself.
+                            _ai_decision = get_ai_trade_decision(best, bmint, label, spend)
+                            if _ai_decision['action'] != 'BUY':
+                                add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                             ' — AI check: ' + (_ai_decision.get('reasoning') or 'HOLD'))
+                                continue
                             if bmint not in positions:
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
