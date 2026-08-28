@@ -235,10 +235,11 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 /* ── DASHBOARD UTILITY ROW ── (nav itself is the shared top navbar now; this
    is just the handful of controls unique to the dashboard -- see the HTML
    comment above .dash-util-row for what lives here and why) */
-.dash-util-row{display:flex;align-items:center;gap:8px;padding:8px 16px;flex-shrink:0}
-.dash-util-spacer{flex:1}
-.dash-util-link{background:none;border:none;color:var(--muted);font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;padding:6px 4px;white-space:nowrap}
-.dash-util-link:hover{color:var(--text)}
+/* No padding on the row itself -- margin lives on the buttons instead, so a
+   display:none button contributes zero size and a regular (non-owner)
+   visitor sees a true zero-height row, not just an empty-looking gap. */
+.dash-util-row{display:flex;align-items:center;flex-shrink:0}
+.dash-util-row>.hdr-btn{margin:8px 4px}
 .logo-row{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .brand{font-family:'Inter',system-ui,sans-serif;font-size:16px;font-weight:700;color:#ffffff;letter-spacing:-0.02em}
 .hdr-online-badge{display:flex;align-items:center;gap:4px;font-size:10px;color:#8b93a1;font-weight:700;margin-left:6px}
@@ -3795,21 +3796,16 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
        see the __NAVBAR__ replace() there. -->
   __NAVBAR__
 
-  <!-- DASHBOARD UTILITY ROW — the handful of controls that don't belong in the
-       shared navbar (it's used by every page, but these are dashboard-only):
-       an owner's admin/health toggles for the in-page panels below, and two
-       personal-preference actions (blacklist, tips). All but Blacklist/Tips
-       are hidden by default and only ever shown to an owner wallet via JS
-       (checkOwnerPanel() / _syncAdminNavLink()) -- most visitors see just the
-       two small text buttons on the right. -->
+  <!-- DASHBOARD UTILITY ROW — owner-only admin/health toggles for the in-page
+       panels below. Hidden by default and only ever shown to an owner
+       wallet via JS (checkOwnerPanel() / _syncAdminNavLink()); a regular
+       visitor never sees this row at all (no padding of its own, so it
+       takes up zero space with both buttons hidden). -->
   <div class="dash-util-row">
     <button class="hdr-btn health-btn" id="health-btn" onclick="toggleHealthPanel()" title="System health audit" style="display:none">
       <span class="health-dot" id="health-dot"></span>HEALTH
     </button>
     <button class="hdr-btn" id="admin-btn" onclick="toggleAdminView()" style="display:none;border-color:#2e2e2e;color:#767676" title="Owner admin dashboard">👑 Admin</button>
-    <div class="dash-util-spacer"></div>
-    <button class="dash-util-link" onclick="openBlacklistModal()">🚫 Blacklist</button>
-    <button class="dash-util-link" onclick="localStorage.removeItem('orcagent_tips_seen');openTipsModal()">? Help &amp; Tips</button>
   </div>
   <div class="app-body">
     <!-- SIDEBAR -->
