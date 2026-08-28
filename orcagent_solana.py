@@ -270,20 +270,30 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
             sig = execute_swap(SOL_MINT, mint, lamports)
             print(f'BUY {mint[:16]} {round(amount,4)} SOL TX:{sig}', flush=True)
         elif action == 'sell':
-            decimals       = get_token_decimals(mint)
-            actual_balance = get_token_balance(mint)
-            if actual_balance <= 0:
+            decimals              = get_token_decimals(mint)
+            actual_balance, raw_balance = get_token_balance_raw(mint)
+            if actual_balance <= 0 or raw_balance <= 0:
                 print(f'SELL {mint[:16]} — on-chain balance is 0, nothing to sell', flush=True)
                 sys.exit(0)
             # amount<=0 means "sell everything held" (e.g. Live Market's "Sell
-            # All" button, which always sends 0) -- a positive amount means
-            # sell exactly that much, clamped to the actual on-chain balance
-            # so a stale/optimistic caller can never oversell. Previously this
-            # branch ignored `amount` entirely and always sold 100%, so a
-            # partial sell request (e.g. the wallet Swap modal) silently
-            # liquidated the whole balance instead.
-            sell_amount = actual_balance if amount <= 0 else min(amount, actual_balance)
-            lamports = int(sell_amount * (10 ** decimals))
+            # All" button, and every bot-driven full close: stop loss, take
+            # profit, crash exit, rugpull exit, manual sell, stop-trading
+            # liquidation) -- use the exact raw integer balance from the RPC
+            # directly rather than reconstructing it from the decimal-divided
+            # uiAmount float, which can undershoot by a unit or more to float
+            # precision loss and leave a sliver of dust in the wallet even
+            # though the intent was to close the position 100%.
+            # A positive amount means sell exactly that much, clamped to the
+            # actual on-chain balance so a stale/optimistic caller can never
+            # oversell -- previously this branch ignored `amount` entirely and
+            # always sold 100%, so a partial sell request (e.g. the wallet
+            # Swap modal) silently liquidated the whole balance instead.
+            if amount <= 0:
+                lamports    = raw_balance
+                sell_amount = actual_balance
+            else:
+                sell_amount = min(amount, actual_balance)
+                lamports    = int(sell_amount * (10 ** decimals))
             if lamports <= 0:
                 print(f'SELL {mint[:16]} — computed sell amount is 0, nothing to sell', flush=True)
                 sys.exit(0)
@@ -331,6 +341,17 @@ def get_token_balance(mint: str) -> float:
     NOT on WALLET_ADDRESS (the Phantom session wallet). We must query the address
     derived from the private key, or sells will always see balance=0 and fail.
     """
+    return get_token_balance_raw(mint)[0]
+
+def get_token_balance_raw(mint: str) -> tuple:
+    """Same lookup as get_token_balance(), but also returns the exact raw
+    integer amount (as reported by the RPC, no float involved) alongside the
+    decimal-divided uiAmount float. A full-balance sell must use the raw
+    integer directly -- reconstructing it by multiplying uiAmount back up by
+    10**decimals can undershoot the true on-chain amount by a unit or more
+    (float precision loss), leaving a sliver of dust behind even when the
+    caller asked to sell everything. Returns (ui_amount: float, raw_amount:
+    int) -- (0.0, 0) if there's no token account or the lookup fails."""
     try:
         owner = str(Keypair.from_base58_string(PRIVATE_KEY).pubkey()) if PRIVATE_KEY else WALLET_ADDRESS
     except Exception:
@@ -344,14 +365,15 @@ def get_token_balance(mint: str) -> float:
         }, timeout=10)
         accounts = r.json().get('result', {}).get('value', [])
         if accounts:
-            ui = accounts[0]['account']['data']['parsed']['info']['tokenAmount'].get('uiAmount', 0)
-            bal = float(ui or 0)
-            print(f'[get_token_balance] balance={bal}', flush=True)
-            return bal
+            amt_info = accounts[0]['account']['data']['parsed']['info']['tokenAmount']
+            ui  = float(amt_info.get('uiAmount', 0) or 0)
+            raw = int(amt_info.get('amount', 0) or 0)
+            print(f'[get_token_balance] balance={ui} raw={raw}', flush=True)
+            return ui, raw
         print(f'[get_token_balance] no ATA found for {mint[:8]}... on {owner[:8]}...', flush=True)
     except Exception as e:
         print(f'[get_token_balance] ERROR {mint[:16]}: {e}', flush=True)
-    return 0.0
+    return 0.0, 0
 
 
 # ── TOKEN DISCOVERY ──────────────────────────────────────────────────────────

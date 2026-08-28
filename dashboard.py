@@ -5399,7 +5399,9 @@ def user_trader_loop(stop_event, config, wallet: str):
             add_user_log(wallet, f'[{short}] 🚨 [crash-exit] {_label} {_cpct} — price crashed >{int(crash_exit*100)}% from entry, emergency sell on startup')
             print(f'[crash-exit] {short} STARTUP {_label} {_cpct} price={_price} entry={_pos["buy_price"]}', flush=True)
             with _use_key(_enc_blob, wallet) as _pk:
-                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
+                # '0' = sell the actual on-chain balance, not the tracked _pos['amount']
+                # -- they can drift, and this is a full close so no dust should remain.
+                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, '0')
             if _sell_ok:
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
@@ -5416,7 +5418,8 @@ def user_trader_loop(stop_event, config, wallet: str):
         if _chg <= -stop_loss:
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             with _use_key(_enc_blob, wallet) as _pk:
-                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, str(_pos['amount']))
+                # '0' = sell the actual on-chain balance -- see crash-exit branch above.
+                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, '0')
             if _sell_ok:
                 with _use_key(_enc_blob, wallet) as _pk:
                     _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
@@ -5584,7 +5587,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         print(f'[rugpull-detected] {short} {label} — {_rug_reason}', flush=True)
                         cooldown_tokens[label] = time.time() + 7200  # 2-hour cooldown
                         with _use_key(_enc_blob, wallet) as _pk:
-                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
+                            # '0' = sell the actual on-chain balance, not the tracked
+                            # pos['amount'] -- they can drift (fee-on-transfer tokens,
+                            # rounding), and this is a full close, so no dust left behind.
+                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
@@ -5604,7 +5610,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] 🚨 [crash-exit] ' + label + ' ' + crash_pct + ' — price crashed >' + str(int(crash_exit*100)) + '% from entry, emergency exit')
                         print(f'[crash-exit] {short} {label} {crash_pct} price={price} entry={pos["buy_price"]}', flush=True)
                         with _use_key(_enc_blob, wallet) as _pk:
-                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
+                            # '0' = sell the actual on-chain balance -- see rugpull branch above.
+                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
@@ -5627,7 +5634,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
-                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(pos['amount']))
+                            # '0' = sell the actual on-chain balance -- see rugpull branch above.
+                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
@@ -14660,7 +14668,9 @@ def api_trade_sell():
         symbol = pos.get('symbol') or (td.get('symbol', mint[:8]) if td else mint[:8])
     sell_ok = False
     with _use_key(enc_blob, wallet) as pk:
-        sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, str(pos['amount']))
+        # '0' = sell the actual on-chain balance, not the tracked pos['amount']
+        # -- they can drift, and this is a full close so no dust should remain.
+        sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, '0')
     entry     = pos.get('buy_price', 0.0)
     pnl       = round(pos['amount'] * (exit_price - entry), 4) if entry > 0 else 0.0
     opened_at = pos.get('opened_at', 0.0)
@@ -16660,7 +16670,9 @@ def api_manual_sell():
     short  = wallet[:6] + '...' + wallet[-4:]
     try:
         with _use_key(enc_blob, wallet) as _pk:
-            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(amount))
+            # '0' = sell the actual on-chain balance, not the tracked pos['amount']
+            # -- they can drift, and this is a full close so no dust should remain.
+            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
     except InvalidToken:
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
     except Exception as e:
@@ -16844,7 +16856,9 @@ def _liquidate_all_positions(wallet: str):
                 exit_price = float(td['price']) if td and td.get('price') else 0.0
                 symbol = pos.get('symbol') or (td.get('symbol', mint[:8]) if td else mint[:8])
                 with _use_key(enc_blob, wallet) as pk:
-                    sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, str(pos['amount']))
+                    # '0' = sell the actual on-chain balance, not the tracked pos['amount']
+                    # -- they can drift, and this is a full close so no dust should remain.
+                    sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, '0')
                 if sell_ok:
                     entry = pos.get('buy_price', 0.0)
                     opened_at = pos.get('opened_at', 0.0)
@@ -17094,7 +17108,9 @@ def manual_sell():
     short  = wallet[:6] + '...' + wallet[-4:]
     try:
         with _use_key(enc_blob, wallet) as _pk:
-            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(amount))
+            # '0' = sell the actual on-chain balance, not the tracked pos['amount']
+            # -- they can drift, and this is a full close so no dust should remain.
+            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
     except InvalidToken:
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
     except Exception as e:
@@ -19060,7 +19076,9 @@ def admin_force_close_all():
     for mint, pos in list(positions.items()):
         try:
             with _use_key(enc_blob, target) as _pk:
-                sell_ok = _execute_user_swap(target, _pk, 'sell', mint, str(pos.get('amount', 0)))
+                # '0' = sell the actual on-chain balance, not the tracked pos['amount']
+                # -- they can drift, and this is a full close so no dust should remain.
+                sell_ok = _execute_user_swap(target, _pk, 'sell', mint, '0')
             if sell_ok:
                 _close_open_position(user_id, target, mint)
                 closed += 1
