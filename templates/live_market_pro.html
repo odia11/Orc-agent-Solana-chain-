@@ -301,9 +301,9 @@ input{font-family:inherit}
       <div class="pt-search-results" id="pt-search-results"></div>
     </div>
     <div class="pt-right-chips">
-      <div class="pt-sol-chip"><span class="dot"></span><span class="mono" id="pt-sol-balance">0.00</span> <span class="pt-sol-unit">SOL</span></div>
-      <img class="pt-avatar" id="pt-avatar" style="display:none">
-      <div class="pt-avatar" id="pt-avatar-ph">{{ (wallet_short or '?')[0]|upper }}</div>
+      <a class="pt-sol-chip" href="/wallet"><span class="dot"></span><span class="mono" id="pt-sol-balance">0.00</span> <span class="pt-sol-unit">SOL</span></a>
+      <a href="/profile"><img class="pt-avatar" id="pt-avatar" style="display:none"></a>
+      <a href="/profile"><div class="pt-avatar" id="pt-avatar-ph">{{ (wallet_short or '?')[0]|upper }}</div></a>
     </div>
   </header>
 

@@ -742,7 +742,7 @@ function runSearch(q, searchResults){
     }
     if(users.length){
       html += '<div class="pt-sr-hd">Traders</div>' + users.slice(0,5).map(function(u){
-        return '<div class="pt-sr-row" data-action="search-trader" data-wallet="'+esc(u.wallet_address)+'">'
+        return '<div class="pt-sr-row" data-action="search-trader" data-wallet="'+esc(u.wallet)+'">'
           + logoTile(u.avatar_url, u.username, 'pt-sr-logo', 'pt-sr-logo-ph')
           + '<div class="pt-sr-name">'+esc(u.username||'')+'</div></div>';
       }).join('');
