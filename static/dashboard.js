@@ -7619,7 +7619,7 @@ async function loadMoreHomeFeed(){
     if(data && Array.isArray(data.items)){
       _homeFeedData = _homeFeedData.concat(data.items);
       _homeFeedNextCursor = data.next_cursor || null;
-      renderHomeFeed();
+      renderHomeFeed(data.items); // append only the new page, not a full rebuild
     }
   }catch(e){
     console.error('[feed] load-more error:', e);
@@ -7946,14 +7946,21 @@ setInterval(function(){
   fetch('/api/feed/views', {method:'POST', headers:{'Content-Type':'application/json','X-CSRF-Token':_csrfToken}, body:JSON.stringify({ids:ids})}).catch(function(){});
 }, 4000);
 
-function renderHomeFeed(){
+// Pass appendItems (a page of just-fetched items) to add them to the
+// bottom of the already-rendered feed instead of throwing the whole thing
+// away and rebuilding it -- loadMoreHomeFeed() uses this for infinite
+// scroll. Without it, every "load more" near the bottom re-rendered the
+// ENTIRE feed (everything already loaded, not just the new page), which
+// is exactly the stutter you'd feel scrolling down: the deeper you'd
+// scrolled and the more pages you'd loaded, the bigger that rebuild got.
+function renderHomeFeed(appendItems){
   const el = document.getElementById('center-feed');
   if(!el) return;
   if(!_homeFeedData||!_homeFeedData.length){
     el.innerHTML='<p style="color:#565d68;padding:20px">No posts yet</p>';
     return;
   }
-  var items = _homeFeedData;
+  var items = appendItems || _homeFeedData;
   if(_homeFeedFilter === 'live' || _homeFeedFilter === 'livetrades'){
     items = items.filter(function(i){ return i.type==='trade'||i.type==='open'; });
   } else {
@@ -7962,8 +7969,13 @@ function renderHomeFeed(){
     // a real post if the user chose to share one via the notifications page.
     items = items.filter(function(i){ return i.type!=='trade'; });
   }
-  if(!items.length){ el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>'; return; }
-  el.innerHTML = items.map(_renderFeedCard).join('');
+  if(!items.length){
+    if(!appendItems) el.innerHTML = '<div class="fc-empty">No activity yet — start trading to appear in the feed.</div>';
+    return;
+  }
+  var html = items.map(_renderFeedCard).join('');
+  if(appendItems) el.insertAdjacentHTML('beforeend', html);
+  else el.innerHTML = html;
   _initLiveCharts();
   _initTradeBanners();
   el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
