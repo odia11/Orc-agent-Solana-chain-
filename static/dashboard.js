@@ -7981,6 +7981,7 @@ function renderHomeFeed(appendItems){
   el.querySelectorAll('.fc-card[id^="fc-card-"]').forEach(function(card){
     _feedViewObserver.observe(card);
     _onScreenCardObserver.observe(card);
+    _virtObserver.observe(card);
   });
 }
 
@@ -7996,6 +7997,73 @@ var _onScreenCardObserver = new IntersectionObserver(function(entries){
     else _onScreenCardIds.delete(id);
   });
 }, {rootMargin: '400px 0px'});
+
+// ── VIRTUALIZATION — Twitter-style windowing ──────────────────────────────
+// content-visibility:auto (see .fc-card in dashboard.html) already tells the
+// browser to skip layout/paint for off-screen cards, which is most of the
+// per-frame scroll cost. What it *doesn't* do is shrink the DOM itself: a
+// long session's worth of loaded posts still all sit in the tree, so any
+// full-document querySelectorAll, style recalc, or browser bookkeeping that
+// scans the whole tree keeps scaling with total feed size, not what's
+// on screen -- the same "grows with a session" shape as the other two feed
+// bugs fixed today. This is what actually makes it feel "the same" as
+// Twitter/X: a post many screens away has its DOM subtree torn down to a
+// single height-matched placeholder div, and gets its real content rebuilt
+// on demand from _feedPostById the moment it's scrolled back within range.
+// content-visibility keeps this correct at the render level (each card's
+// paint/layout is skipped once its wide enough anyway); this keeps it
+// correct at the DOM-size level.
+var _feedPostById = {}; // postId -> the post object _renderFeedCard(e) last used, for re-rendering
+function _virtCardInnerHtml(post){
+  var tmp = document.createElement('div');
+  tmp.innerHTML = _renderFeedCard(post);
+  var built = tmp.firstElementChild;
+  return built ? built.innerHTML : '';
+}
+function _devirtualizeCard(card){
+  if(card.dataset.virtualized === '1') return;
+  // Never blow away a card mid-interaction (an open reply box, a focused
+  // input) -- same reasoning _checkBottomHold uses for the same guard.
+  if(card.contains(document.activeElement)) return;
+  var h = card.offsetHeight;
+  if(!h) return; // never measured (e.g. still content-visibility-skipped) -- leave it alone
+  // Stop this card's own live-chart poller before tearing its DOM out --
+  // don't rely on _initLiveCharts()'s document.contains() sweep, which only
+  // runs on the next full/append render and would otherwise keep fetching
+  // and touching a detached node every 10s until then.
+  card.querySelectorAll('[data-chart-sym]').forEach(function(el){ stopLiveChart(el); });
+  card.dataset.virtualized = '1';
+  card.style.height = h + 'px';
+  card.style.overflow = 'hidden';
+  card.innerHTML = '';
+}
+function _revirtualizeCard(card){
+  if(card.dataset.virtualized !== '1') return;
+  var postId = card.id.slice('fc-card-'.length);
+  var post = _feedPostById[postId];
+  if(!post) return; // shouldn't happen, but leave the placeholder rather than show a blank card
+  card.innerHTML = _virtCardInnerHtml(post);
+  card.style.height = '';
+  card.style.overflow = '';
+  delete card.dataset.virtualized;
+  // Restore chart polling / trade-banner images for the content just rebuilt
+  // -- scoped to this one card, not the whole-document versions those
+  // helpers normally do at full-feed-render time.
+  card.querySelectorAll('[data-chart-sym]').forEach(function(el){ _liveChartObserver.observe(el); });
+  card.querySelectorAll('[data-mint]').forEach(function(el){
+    if(!el.dataset.mint) return;
+    var bannerEl = el.querySelector('[data-cc="banner"]');
+    if(bannerEl && !bannerEl.style.backgroundImage) _hydrateTradeBanner(el);
+  });
+}
+// Much wider margin than the reactions/chart observers above -- this should
+// only kick in for content many screens away, not the next screen down.
+var _virtObserver = new IntersectionObserver(function(entries){
+  entries.forEach(function(entry){
+    if(entry.isIntersecting) _revirtualizeCard(entry.target);
+    else _devirtualizeCard(entry.target);
+  });
+}, {rootMargin: '5000px 0px'});
 
 var _bottomHoldTimer = null;
 var _bottomHoldLastCheck = 0;
@@ -8246,6 +8314,7 @@ function _renderFeedCard(e){
     : 'm'+uid+'_'+(e.timestamp||'').replace(/\D/g,'').slice(0,12))));
   var safePostId = postId.replace(/['"\\]/g,'');
   var cardId = 'fc-card-'+postId;
+  _feedPostById[postId] = e; // lets a de-virtualized card (see below) re-render itself later
   var isOwn = !!(e.user_id && _myProfileId && e.user_id === _myProfileId);
   var isAdminWallet = !!(phantomKey && phantomKey === 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5');
   var canDelete = !!(e.id && (isOwn || e.is_own || _isAdmin || isAdminWallet));
