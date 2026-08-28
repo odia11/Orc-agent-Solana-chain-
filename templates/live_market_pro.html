@@ -25,7 +25,7 @@
   --mono:'JetBrains Mono',monospace;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow-x:auto}
+html,body{background:var(--bg);color:var(--text);font-family:var(--ui);-webkit-font-smoothing:antialiased;overflow-x:auto;touch-action:manipulation}
 a{color:inherit;text-decoration:none}
 button{font-family:inherit;cursor:pointer}
 input{font-family:inherit}
@@ -248,6 +248,9 @@ input{font-family:inherit}
   .pt-nav a{padding:12px 14px;text-align:left}
   .pt-search-wrap{order:5;flex-basis:100%;max-width:none;margin-left:0}
   .pt-right-chips{margin-left:auto}
+  /* iOS Safari force-zooms on focusing any input under 16px, regardless of
+     the viewport meta or touch-action -- this is the actual fix for that */
+  .pt-search,.pt-buy-input{font-size:16px}
 
   .pt-panel{grid-template-columns:1fr;border-radius:16px}
   .pt-left{display:none;max-height:none}
