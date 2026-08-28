@@ -482,6 +482,21 @@ CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
 MIN_MARKETCAP_USD = 15_000  # fallback only — see _min_marketcap_for_stake() below, which is
                              # what actually gates entries per-user based on their stake size
 
+# ── LOSS-STREAK THROTTLE ── the bot's own risk-management response to a run of
+# losing trades: not a fixed daily $ circuit breaker (that's daily_loss_limit,
+# a user-configured cap checked further down the loop) but an automatic,
+# self-adjusting reaction to consecutive losses, tracked per user in
+# us['loss_streak'] and updated in _record_user_trade(). This only ever
+# affects Pass 2 (looking for a new entry) -- Pass 1 (monitoring/exiting
+# already-open positions: stop loss, take profit, crash exit, rugpull) always
+# keeps running regardless of streak state, since pausing exits while under
+# stress would be exactly backwards.
+LOSS_STREAK_TIGHTEN_AT  = 3     # this many losses in a row -> raise the entry bar (see qualifying loop)
+LOSS_STREAK_PAUSE_AT    = 5     # this many losses in a row -> stop opening new positions for a while
+LOSS_STREAK_PAUSE_SEC   = 3600  # how long that pause lasts
+LOSS_STREAK_SCORE_BONUS = 1.5   # added to the score-≥5.0 qualifying floor while tightened
+LOSS_STREAK_MCAP_MULT   = 2.0   # multiplier on the marketcap floor while tightened
+
 def _min_marketcap_for_stake(stake_usd: float) -> int:
     """Tiered entry-marketcap floor: the smaller the stake, the smaller (riskier) a
     market cap is acceptable to enter, since the absolute dollar risk is small. Larger
@@ -3903,6 +3918,33 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         cooldown_tokens[symbol] = time.time() + 1800
         print(f'[cooldown] {symbol} enters 30-min cooldown (pnl={pnl:.6f} SOL, exit_reason={exit_reason})', flush=True)
 
+    # ── Loss-streak throttle: the bot's own reaction to a run of losses on
+    # this specific wallet, independent of the per-symbol cooldown above.
+    # See the LOSS_STREAK_* constants for what "tightened"/"paused" do to
+    # Pass 2's qualifying criteria -- this block only tracks the streak and
+    # announces the transition once, rather than re-logging every scan.
+    # Scoped to source=='bot' (the default for every autonomous exit --
+    # stop loss, take profit, crash exit, rugpull, startup force-sell): a
+    # manual sell or admin force-close is a human intervening, not the bot
+    # making its own mistake, and shouldn't feed or reset this signal.
+    if source == 'bot' and entry > 0 and pnl < 0:
+        us['loss_streak'] = us.get('loss_streak', 0) + 1
+        _streak = us['loss_streak']
+        if _streak == LOSS_STREAK_PAUSE_AT:
+            us['loss_streak_pause_until'] = time.time() + LOSS_STREAK_PAUSE_SEC
+            if wallet:
+                add_user_log(wallet, f'🛑 {_streak} losses in a row — pausing new entries for '
+                                      f'{LOSS_STREAK_PAUSE_SEC // 60} min to reassess (open positions still monitored)')
+        elif _streak == LOSS_STREAK_TIGHTEN_AT:
+            if wallet:
+                add_user_log(wallet, f'⚠ {_streak} losses in a row — raising the entry bar '
+                                      f'(score +{LOSS_STREAK_SCORE_BONUS}, marketcap floor x{LOSS_STREAK_MCAP_MULT:g}) until a win')
+    elif source == 'bot' and entry > 0 and pnl > 0:
+        if wallet and us.get('loss_streak', 0) >= LOSS_STREAK_TIGHTEN_AT:
+            add_user_log(wallet, '✓ Win — entry bar back to normal')
+        us['loss_streak'] = 0
+        us['loss_streak_pause_until'] = 0
+
     # 0.75% transaction fee on the sell leg, charged on the SOL amount of the sell
     # swap itself (amount * exit_price) -- not on profit -- so it applies whether the
     # trade won or lost. The matching 0.75% buy-leg fee was already charged when this
@@ -4350,6 +4392,12 @@ def _can_narrative_buy(user_id: int, amount: float, wallet: str = '') -> tuple:
          Applies to every wallet unconditionally, including uncapped ones --
          this is a safety backstop, not a spend limit, so it's not part of
          the uncapped exemption."""
+    # Same loss-streak pause the main scan loop's Pass 2 respects (see the
+    # LOSS_STREAK_* constants) -- this is a separate autonomous buy path but
+    # spends the same wallet's capital, so a run of losses pauses both.
+    if wallet and time.time() < get_user_state(wallet).get('loss_streak_pause_until', 0):
+        return False, 'loss-streak pause active — bot hit too many losses in a row, entries paused'
+
     uncapped = wallet in NARRATIVE_UNCAPPED_WALLETS
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -5674,8 +5722,19 @@ def user_trader_loop(stop_event, config, wallet: str):
                             add_user_log(wallet, '[' + short + '] 🔒 Profit target reached (+60%) — '
                                          'bot paused for 1 hour to protect gains')
 
+                # ── Loss-streak throttle (see LOSS_STREAK_* constants + the
+                # tracking in _record_user_trade): a run of losses makes the
+                # bot raise its own entry bar, then stop opening new
+                # positions altogether if the losses keep coming. Only gates
+                # Pass 2 below -- Pass 1 above (stop loss/take profit/crash
+                # exit/rugpull) already ran this cycle regardless.
+                _loss_streak    = us.get('loss_streak', 0)
+                _streak_paused  = time.time() < us.get('loss_streak_pause_until', 0)
+                _streak_tighten = (not _streak_paused) and _loss_streak >= LOSS_STREAK_TIGHTEN_AT
+
                 # ── Pass 2: pick the single best entry ──
-                if not stop_event.is_set() and open_pos < max_positions and us_sol >= _GAS_MIN and not _pc_locked:
+                if (not stop_event.is_set() and open_pos < max_positions and us_sol >= _GAS_MIN
+                        and not _pc_locked and not _streak_paused):
                     # Re-fetch blacklist each scan so additions take effect immediately
                     try:
                         _bl_conn = sqlite3.connect(DB_FILE)
@@ -5697,6 +5756,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                             continue
                         _mcap = _t.get('market_cap', 0) or 0
                         _min_mcap = _min_marketcap_for_stake(min_trade_usdc)
+                        if _streak_tighten:
+                            _min_mcap *= LOSS_STREAK_MCAP_MULT
                         if _mcap < _min_mcap:
                             _skip_log.append(f'[skip] {_tsym}: Skipped: marketcap ${int(_mcap):,} below ${int(_min_mcap):,} minimum (for ${min_trade_usdc:.2f} stake)')
                             continue
@@ -5729,8 +5790,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _cd_exp  = cooldown_tokens.get(_tsym)
                         _cooling = bool(_cd_exp and _now_cd < _cd_exp)
 
-                        if _sc < 5.0:
-                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < 5.0)')
+                        _score_floor = 5.0 + (LOSS_STREAK_SCORE_BONUS if _streak_tighten else 0.0)
+                        if _sc < _score_floor:
+                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < {_score_floor:g}'
+                                              + (' — loss-streak tightened' if _streak_tighten else '') + ')')
                             continue
                         if not _m5_ok:
                             _skip_log.append(f'[skip] {_tsym}: trend too low (5m:{round(_m5,1)}% 1h:{round(_h1,1)}% — need {_m5_desc} on either)')
@@ -5750,7 +5813,8 @@ def user_trader_loop(stop_event, config, wallet: str):
                         qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
-                                 str(total_live) + ' qualify (' + _m5_desc + ' 5m OR 1h + vol rising + not reversing)')
+                                 str(total_live) + ' qualify (' + _m5_desc + ' 5m OR 1h + vol rising + not reversing)'
+                                 + (f' — loss-streak tightened ({_loss_streak} in a row)' if _streak_tighten else ''))
                     print(f'[scan] threshold={m5_min}% — {len(qualifying)}/{len(not_held)} qualify — top skips:', flush=True)
                     for _sl in _skip_log[:5]:
                         print(f'  {_sl}', flush=True)
