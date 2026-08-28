@@ -21,28 +21,11 @@
 }
 html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
 
-/* ── STICKY HEADER STACK ── */
-.navbar{
-  position:sticky;top:0;z-index:51;
-  background:rgba(10,11,14,.86);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
-  border-bottom:1px solid #16191f;
-  display:flex;align-items:center;justify-content:space-between;
-  padding:0 28px;height:56px;gap:16px;
-}
-.nav-left{display:flex;align-items:center;gap:14px;text-decoration:none;flex-shrink:0}
-.nav-logo-tile{width:34px;height:34px;min-width:34px;background:var(--accent);border-radius:10px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-.nav-logo-tile::after{content:'';width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:11px solid #0a0b0e}
-.nav-brand{font-family:var(--ui);font-size:18px;font-weight:700;color:var(--text);letter-spacing:.04em;line-height:1}
-.nav-tag{font-size:10px;color:var(--muted);letter-spacing:.06em;margin-top:2px}
-.nav-right{display:flex;align-items:center;gap:8px;flex-shrink:0}
-.nav-btn{display:inline-flex;align-items:center;padding:8px 14px;border-radius:10px;font-family:var(--ui);font-size:12px;font-weight:600;text-decoration:none;border:1px solid #21252c;color:var(--sub);background:transparent;cursor:pointer;transition:all .15s;white-space:nowrap}
-.nav-btn:hover{border-color:#35353d;color:var(--text)}
+/* Top nav is now the shared navbar component (static/navbar.css). */
 
 .section-nav{
-  position:sticky;top:56px;z-index:50;
-  background:rgba(16,18,22,.92);
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);
+  position:sticky;top:0;z-index:50;
+  background:#101216;
   border-bottom:1px solid #16191f;
   overflow-x:auto;-webkit-overflow-scrolling:touch;
   scrollbar-width:none;
@@ -77,7 +60,7 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
   padding-top:28px;
   margin-top:28px;
   border-top:1px solid #16191f;
-  scroll-margin-top:116px; /* clears navbar (56) + section-nav (~52) + a little air */
+  scroll-margin-top:64px; /* clears the sticky section-nav (~52px) + a little air */
 }
 .info-section:first-of-type{border-top:none;padding-top:0;margin-top:0}
 .section-title{font-family:var(--title-font);font-size:18px;font-weight:700;color:var(--text);margin-bottom:18px;display:flex;align-items:center;gap:10px}
@@ -115,7 +98,6 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
      confirmed via a real hash-anchor page load, not just a click). Scope the
      horizontal clip to .page instead, which doesn't sit in the sticky chain. */
   .page{overflow-x:hidden;padding:28px 16px 70px}
-  .navbar{padding:0 16px}
   .section-nav-inner{padding:0 16px}
   .page-title{font-size:19px}
   .section-title{font-size:16px}
@@ -125,18 +107,7 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
 </head>
 <body>
 
-<nav class="navbar">
-  <a class="nav-left" href="/">
-    <div class="nav-logo-tile"></div>
-    <div>
-      <div class="nav-brand">OrcAgent</div>
-      <div class="nav-tag">SOCIAL TRADING</div>
-    </div>
-  </a>
-  <div class="nav-right">
-    <a class="nav-btn" href="/">Dashboard</a>
-  </div>
-</nav>
+{{ navbar_html('') }}
 
 <div class="section-nav">
   <div class="section-nav-inner" id="section-nav-inner">
