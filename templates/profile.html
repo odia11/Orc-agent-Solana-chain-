@@ -28,7 +28,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 
 /* ── APP SHELL (nav is now the shared navbar component, static/navbar.css) ── */
 #app{display:flex}
-.pf-main{flex:1;background:#0a0b0e;min-width:0}
+.pf-main{width:100%;max-width:720px;margin:0 auto;background:#0a0b0e;min-width:0}
 
 /* ── COVER ── */
 .pf-cover{height:200px;background:linear-gradient(180deg,#101216 0%,#0a0b0e 100%);position:relative;flex-shrink:0}
@@ -169,6 +169,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 /* ── MOBILE (<768px) ── */
 @media(max-width:767px){
   #app{display:block}
+  .pf-main{max-width:none;margin:0}
 
   /* cover: shorter, avatar centered */
   .pf-cover{height:140px}
