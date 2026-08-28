@@ -58,6 +58,8 @@
 .pt-nb-more-sep{height:1px;background:#16191f;margin:6px 4px}
 .pt-nb-more-item.danger{color:#f76b62}
 .pt-nb-more-item.danger:hover{background:rgba(247,107,98,.1)}
+.pt-nb-admin-link{color:#f7b955;font-weight:700}
+.pt-nb-admin-link:hover{background:rgba(247,185,85,.1);color:#f7b955}
 
 .pt-nb-scrim{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:190}
 .pt-nb-scrim.show{display:block}
@@ -88,6 +90,8 @@
   .pt-nb-nav .pt-nb-more-item:hover{background:#16191f;color:#eef1f5}
   .pt-nb-nav .pt-nb-more-item.danger{color:#f76b62}
   .pt-nb-nav .pt-nb-more-item.danger:hover{background:rgba(247,107,98,.1)}
+  .pt-nb-nav .pt-nb-more-item.pt-nb-admin-link{color:#f7b955;font-weight:700}
+  .pt-nb-nav .pt-nb-more-item.pt-nb-admin-link:hover{background:rgba(247,185,85,.1);color:#f7b955}
 }
 @media (max-width: 480px){
   .pt-nb-wordmark{display:none}
