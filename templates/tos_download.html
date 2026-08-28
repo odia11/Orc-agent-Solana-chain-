@@ -21,19 +21,6 @@
   --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
 }
 html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
-.bar{
-  position:sticky;top:0;z-index:10;display:flex;align-items:center;gap:12px;
-  padding:0 16px;padding-top:env(safe-area-inset-top);height:calc(56px + env(safe-area-inset-top));
-  background:rgba(10,11,14,.92);backdrop-filter:blur(12px);border-bottom:1px solid var(--border);
-}
-.back-btn{
-  display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--border2);
-  color:var(--text);border-radius:9px;padding:9px 14px;font-family:var(--ui);font-size:13px;
-  font-weight:600;cursor:pointer;text-decoration:none;transition:border-color .15s,background .15s;
-  flex-shrink:0;
-}
-.back-btn:hover,.back-btn:active{border-color:#35353d;background:var(--bg3)}
-.bar-title{font-size:14px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .content{max-width:520px;margin:0 auto;padding:48px 20px;text-align:center}
 .icon{font-size:40px;margin-bottom:16px}
 h1{font-size:17px;font-weight:700;margin-bottom:8px}
@@ -48,16 +35,13 @@ p{color:var(--sub);font-size:13px;line-height:1.6;margin-bottom:24px}
 </style>
 </head>
 <body>
-<div class="bar">
-  <a class="back-btn" href="/">&larr; Back</a>
-  <span class="bar-title">Your Accepted Terms</span>
-</div>
+{{ navbar_html('') }}
 <div class="content">
   <div class="icon">📄</div>
   <h1>Your PDF is downloading&hellip;</h1>
   <p>If it didn't start automatically, tap the button below.</p>
   <a id="manual-dl" class="dl-link" href="/api/tos/my-acceptance/pdf" download>&#11015; Download PDF</a>
-  <div class="note">Tap "&larr; Back" above at any time to return home.</div>
+  <div class="note">Tap the OrcAgent logo above at any time to return home.</div>
 </div>
 <script>
 async function _autoDownloadTos(){
