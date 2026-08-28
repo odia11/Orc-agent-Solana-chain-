@@ -509,6 +509,69 @@ def _min_marketcap_for_stake(stake_usd: float) -> int:
     else:
         return 100_000
 
+# ── LEARNED LIQUIDITY-TIER BIAS ── the bot's other self-training signal,
+# proactive rather than reactive: instead of only responding to a run of
+# losses (LOSS_STREAK_* above), this continuously nudges Pass 2's qualifying
+# score for every candidate up or down based on how well THIS wallet's own
+# past trades have actually done in that token's liquidity bracket -- the
+# entry bar is trained from its own realized trade history instead of being
+# the same fixed number for every token forever.
+_LIQUIDITY_TIER_BOUNDS   = (10_000, 50_000, 200_000)  # upper bound of tiers 0..2; tier 3 is "and above"
+LEARNED_BIAS_MIN_SAMPLES = 5    # a tier needs at least this many of the wallet's own closed trades before it's trusted
+LEARNED_BIAS_MAX         = 2.0  # clamp -- this can never move the score gate by more than +-2.0
+LEARNED_BIAS_SCALE       = 4.0  # (tier win-rate - overall win-rate), which is in [-1, 1], times this = raw bias
+LEARNED_BIAS_TTL_SEC     = 300  # how long a computed bias is trusted before being recomputed from fresh trades
+
+def _liquidity_tier(liquidity: float) -> int:
+    for i, bound in enumerate(_LIQUIDITY_TIER_BOUNDS):
+        if liquidity < bound:
+            return i
+    return len(_LIQUIDITY_TIER_BOUNDS)
+
+def _learned_liquidity_bias(user_id: int) -> dict:
+    """{tier_index: score_bias}, learned from this user's own closed trades
+    (trades.entry_liquidity + trades.pnl -- already recorded on every close,
+    no new data collection needed). A tier this wallet has actually won more
+    often than its overall average gets a positive bias (helps a marginal
+    candidate in that bracket clear the qualifying floor); a tier that's lost
+    more than average gets a negative one. A tier without
+    LEARNED_BIAS_MIN_SAMPLES closed trades yet gets no entry at all -- not
+    enough evidence to trust either way, so it's left neutral. Cached per
+    user for LEARNED_BIAS_TTL_SEC since this runs on every Pass 2 scan
+    (every few seconds while the bot is active) but the trade history behind
+    it only changes when a position actually closes."""
+    _cached = _learned_bias_cache.get(user_id)
+    if _cached and time.time() - _cached[0] < LEARNED_BIAS_TTL_SEC:
+        return _cached[1]
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            'SELECT entry_liquidity, pnl FROM trades '
+            'WHERE user_id=? AND entry_liquidity IS NOT NULL AND entry_liquidity > 0 AND pnl IS NOT NULL',
+            (user_id,)
+        ).fetchall()
+    finally:
+        conn.close()
+    tiers: dict = {}
+    total_wins = total_n = 0
+    for liq, pnl in rows:
+        d = tiers.setdefault(_liquidity_tier(liq), {'wins': 0, 'n': 0})
+        d['n'] += 1
+        total_n += 1
+        if pnl > 0:
+            d['wins'] += 1
+            total_wins += 1
+    bias = {}
+    if total_n >= LEARNED_BIAS_MIN_SAMPLES:
+        overall_wr = total_wins / total_n
+        for tier, d in tiers.items():
+            if d['n'] < LEARNED_BIAS_MIN_SAMPLES:
+                continue
+            wr = d['wins'] / d['n']
+            bias[tier] = max(-LEARNED_BIAS_MAX, min(LEARNED_BIAS_MAX, (wr - overall_wr) * LEARNED_BIAS_SCALE))
+    _learned_bias_cache[user_id] = (time.time(), bias)
+    return bias
+
 WALLET_ADDRESS   = os.environ.get('WALLET_ADDRESS', '')
 USDC_MINT        = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT         = 'So11111111111111111111111111111111111111112'
@@ -2558,6 +2621,7 @@ _trade_size_units_migrated: bool = False  # one-time SOL→USDC migration guard,
 _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previous-cycle prices for reversal detection
 cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
 profit_cooldown:  dict = {}  # user_id -> expiry_timestamp — 1-hour pause after 60% profit in 2h
+_learned_bias_cache: dict = {}  # user_id -> (computed_at, {tier: bias}) — see _learned_liquidity_bias()
 
 # ── FAST-PUMP DETECTION (6%+ within 15s) ──────────────────────────────────
 # token_loop() only refreshes the full candidate list every 120s, which is far
@@ -5745,6 +5809,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _bl_conn.close()
                     except Exception:
                         _blacklisted = frozenset()
+                    # Trained from this wallet's own trade history -- see
+                    # _learned_liquidity_bias() -- {} until there's enough
+                    # closed-trade evidence to say anything.
+                    _learned_bias = _learned_liquidity_bias(user_id)
                     not_held = [t for t in live if positions.get(t['mint'], {}).get('amount', 0) == 0]
                     qualifying = []
                     _skip_log  = []
@@ -5790,9 +5858,13 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _cd_exp  = cooldown_tokens.get(_tsym)
                         _cooling = bool(_cd_exp and _now_cd < _cd_exp)
 
+                        _bias        = _learned_bias.get(_liquidity_tier(_t.get('liquidity', 0) or 0), 0.0)
+                        _sc_effective = _sc + _bias
                         _score_floor = 5.0 + (LOSS_STREAK_SCORE_BONUS if _streak_tighten else 0.0)
-                        if _sc < _score_floor:
-                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)} < {_score_floor:g}'
+                        if _sc_effective < _score_floor:
+                            _skip_log.append(f'[skip] {_tsym}: score too low ({round(_sc,1)}'
+                                              + (f'{_bias:+.1f} learned = {_sc_effective:.1f}' if _bias else '')
+                                              + f' < {_score_floor:g}'
                                               + (' — loss-streak tightened' if _streak_tighten else '') + ')')
                             continue
                         if not _m5_ok:
@@ -5812,9 +5884,16 @@ def user_trader_loop(stop_event, config, wallet: str):
                             continue
                         qualifying.append(_t)
                     qualifying.sort(key=lambda t: t.get('change5m', 0), reverse=True)
+                    _bias_note = ''
+                    if _learned_bias:
+                        _bias_note = ' — learned: ' + ', '.join(
+                            f'tier{t}{b:+.1f}' for t, b in sorted(_learned_bias.items()) if abs(b) >= 0.1)
+                        if _bias_note == ' — learned: ':
+                            _bias_note = ''
                     add_user_log(wallet, '[' + short + '] ' + str(len(qualifying)) + '/' +
                                  str(total_live) + ' qualify (' + _m5_desc + ' 5m OR 1h + vol rising + not reversing)'
-                                 + (f' — loss-streak tightened ({_loss_streak} in a row)' if _streak_tighten else ''))
+                                 + (f' — loss-streak tightened ({_loss_streak} in a row)' if _streak_tighten else '')
+                                 + _bias_note)
                     print(f'[scan] threshold={m5_min}% — {len(qualifying)}/{len(not_held)} qualify — top skips:', flush=True)
                     for _sl in _skip_log[:5]:
                         print(f'  {_sl}', flush=True)
