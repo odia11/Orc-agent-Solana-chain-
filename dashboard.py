@@ -9960,7 +9960,74 @@ _APP_VERSION: str = _app_version()
 
 @app.context_processor
 def _inject_app_version():
-    return {'app_version': _APP_VERSION}
+    return {'app_version': _APP_VERSION, 'navbar_html': _navbar_html}
+
+# ── Shared top navbar (same visual language as /live-market's topbar) ──
+# One Python function instead of a Jinja {% include %} so the exact same
+# markup can be used both by render_template()-based pages (via the
+# 'navbar_html' Jinja global registered above) and by dashboard.html, which
+# is NOT rendered through Jinja at all (_get_index_base_html() below reads
+# it as a raw string and splices modal HTML into __PLACEHOLDER__ tokens) --
+# see the __NAVBAR__ splice further down for that side of it.
+_NAVBAR_PRIMARY = [
+    ('live-market', 'Live Market', '/live-market'),
+    ('feed',        'Feed',        '/'),
+    ('calls',       'Calls',       '/calls'),
+    ('leaderboard', 'Leaderboard', '/leaderboard'),
+    ('wallet',      'Wallet',      '/wallet'),
+]
+
+def _navbar_html(active_nav: str = '') -> str:
+    nav_links = ''.join(
+        '<a href="%s"%s>%s</a>' % (href, ' class="active"' if key == active_nav else '', label)
+        for key, label, href in _NAVBAR_PRIMARY
+    )
+    return '''
+<link rel="stylesheet" href="/static/navbar.css?v=%(v)s">
+<header class="pt-nb-topbar">
+  <a class="pt-nb-logo" href="/"><div class="pt-nb-logo-mark"></div><div class="pt-nb-wordmark">OrcAgent</div></a>
+  <button class="pt-nb-menu-btn" id="pt-nb-menu-btn" aria-label="Menu">&#9776;</button>
+  <nav class="pt-nb-nav" id="pt-nb-nav">%(nav_links)s</nav>
+  <div class="pt-nb-search-wrap">
+    <span class="pt-nb-search-icon">&#8981;</span>
+    <input class="pt-nb-search" id="pt-nb-search-input" placeholder="Search token, address, trader&#8230;" autocomplete="off">
+    <div class="pt-nb-search-results" id="pt-nb-search-results"></div>
+  </div>
+  <div class="pt-nb-right">
+    <a class="pt-nb-icon-btn" href="/messages" title="Messages">&#9993;<span class="pt-nb-badge" id="pt-nb-msg-badge"></span></a>
+    <a class="pt-nb-icon-btn" href="/notifications" title="Notifications">&#128276;<span class="pt-nb-badge" id="pt-nb-notif-badge"></span></a>
+    <div class="pt-nb-more-wrap">
+      <button class="pt-nb-icon-btn" id="pt-nb-more-btn" title="More">&#8942;</button>
+      <div class="pt-nb-more-dd" id="pt-nb-more-dd">
+        <a class="pt-nb-more-item" href="/traders">Traders</a>
+        <a class="pt-nb-more-item" href="/groups">Groups</a>
+        <a class="pt-nb-more-item" href="/promote">Promote</a>
+        <a class="pt-nb-more-item" href="/referrals">Referrals</a>
+        <a class="pt-nb-more-item" href="/history">History</a>
+        <a class="pt-nb-more-item" href="/bot">Bot</a>
+        <a class="pt-nb-more-item" href="/live-trades">Live Trades</a>
+        <div class="pt-nb-more-sep"></div>
+        <a class="pt-nb-more-item" href="/profile">Profile</a>
+        <a class="pt-nb-more-item" href="/settings">Settings</a>
+        <a class="pt-nb-more-item" href="/admin" id="pt-nb-more-admin" style="display:none">Admin Console</a>
+        <div class="pt-nb-more-sep"></div>
+        <a class="pt-nb-more-item" href="/info#about">About</a>
+        <a class="pt-nb-more-item" href="/info#docs">Docs</a>
+        <a class="pt-nb-more-item" href="/info#fees">Fees</a>
+        <a class="pt-nb-more-item" href="/info#security">Security</a>
+        <a class="pt-nb-more-item" href="/info#terms">Terms</a>
+        <div class="pt-nb-more-sep"></div>
+        <button class="pt-nb-more-item danger" id="pt-nb-disconnect">Disconnect Wallet</button>
+      </div>
+    </div>
+    <div class="pt-nb-sol-chip"><span class="dot"></span><span class="pt-nb-sol-num" id="pt-nb-sol-balance">0.00</span> <span class="pt-nb-sol-unit">SOL</span></div>
+    <a href="/profile"><img class="pt-nb-avatar" id="pt-nb-avatar" style="display:none"></a>
+    <a href="/profile"><div class="pt-nb-avatar" id="pt-nb-avatar-ph">?</div></a>
+  </div>
+</header>
+<div class="pt-nb-scrim" id="pt-nb-scrim"></div>
+<script src="/static/navbar.js?v=%(v)s" defer></script>
+''' % {'v': _APP_VERSION, 'nav_links': nav_links}
 
 @app.route('/api/version')
 @rate_limit(120, 60)
@@ -13279,6 +13346,7 @@ def api_me():
         'username': username or '',
         'avatar':   avatar_url or '',
         'balance':  balance,
+        'is_admin': _is_owner(wallet),
     })
 
 
