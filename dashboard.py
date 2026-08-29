@@ -4728,6 +4728,42 @@ def _recalculate_badges(wallet: str) -> None:
         print(f'[badges] save error for {wallet}: {e}', flush=True)
 
 # ── SWAP EXECUTION ──
+def _parse_swap_realized_amounts(action: str, amount_str: str, stdout: str) -> tuple:
+    """Parse orcagent_solana.py's own stdout for the *actual* executed
+    amounts of a swap -- 'BUY ... got:<token_qty> TX:...' for buys,
+    'SELL ... amt:<token_qty> sol:<sol_received> ...' for sells -- same
+    parsing /api/instant-trade already does. Returns (token_amount,
+    sol_amount); token_amount is 0.0 if it couldn't be parsed (caller
+    should then fall back to a quoted/estimated price instead of trusting
+    a realized price built from a zero). For a buy, sol_amount is simply
+    the requested amount_str (that side isn't subject to slippage -- only
+    the tokens received are), overridden if orcagent_solana.py itself
+    reports a different 'sol:' figure."""
+    token_amount = 0.0
+    try:
+        sol_amount = float(amount_str) if action == 'buy' else 0.0
+    except (TypeError, ValueError):
+        sol_amount = 0.0
+    for line in (stdout or '').split('\n'):
+        if action == 'buy' and line.startswith('BUY') and 'got:' in line:
+            try:
+                token_amount = float(line.split('got:')[1].split()[0])
+            except (ValueError, IndexError):
+                pass
+            break
+        if action == 'sell' and line.startswith('SELL') and 'amt:' in line:
+            try:
+                token_amount = float(line.split('amt:')[1].split()[0])
+            except (ValueError, IndexError):
+                pass
+            if 'sol:' in line:
+                try:
+                    sol_amount = float(line.split('sol:')[1].split()[0])
+                except (ValueError, IndexError):
+                    pass
+            break
+    return token_amount, sol_amount
+
 def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> tuple:
     """Same subprocess call as _execute_user_swap(), but also returns the
     transaction signature -- parsed from orcagent_solana.py's own stdout
@@ -4735,9 +4771,11 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
     _execute_user_swap() is a thin backward-compatible wrapper around this
     for its ~15 existing call sites that only need success/fail; new
     callers that need the actual signature (e.g. _narrative_agent_cycle())
-    should call this instead. Returns (success, tx_hash, err_msg) -- tx_hash
-    is '' on failure or if no 'TX:' token was found; err_msg is '' on
-    success.
+    should call this instead. Returns (success, tx_hash, err_msg,
+    token_amount, sol_amount) -- tx_hash is '' on failure or if no 'TX:'
+    token was found; err_msg is '' on success; token_amount/sol_amount are
+    the swap's *realized* fill (see _parse_swap_realized_amounts()), 0.0 on
+    failure or if parsing found nothing.
 
     err_msg is the last non-empty line of the subprocess's STDOUT, not
     stderr -- orcagent_solana.py's [TRADE] diagnostics and its caught-
@@ -4780,20 +4818,50 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
                 err_msg = _redact_keys(stderr_lines[-1].strip()) if stderr_lines else ''
             if not err_msg:
                 err_msg = 'swap failed with no output'
-        return ok, tx_hash, err_msg
+        token_amount, sol_amount = _parse_swap_realized_amounts(action, amount_str, result.stdout) if ok else (0.0, 0.0)
+        return ok, tx_hash, err_msg, token_amount, sol_amount
     except subprocess.TimeoutExpired:
         add_user_log(wallet, 'Swap error: timed out after 120s')
-        return False, '', 'timed out after 120s'
+        return False, '', 'timed out after 120s', 0.0, 0.0
     except Exception as e:
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
-        return False, '', str(e)[:200]
+        return False, '', str(e)[:200], 0.0, 0.0
 
 def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
     """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output.
     Key is passed via env var to the subprocess and the env dict is discarded after launch.
     Thin wrapper over _execute_user_swap_ex() -- see that function if you also need the tx hash."""
-    ok, _tx_hash, _err_msg = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str)
+    ok, _tx_hash, _err_msg, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str)
     return ok
+
+def _buy_and_get_realized(wallet: str, private_key: str, mint: str, spend_sol: float, quoted_price: float) -> tuple:
+    """Execute a buy swap and return (ok, entry_price, token_amount) using the
+    swap's own realized fill (actual tokens received for the SOL spent, from
+    orcagent_solana.py's stdout) instead of the last polled quoted_price --
+    a quoted spot price ignores slippage, so a position's tracked entry_price
+    (and every PNL computed from it later) looks better than what the wallet
+    actually paid. Falls back to (quoted_price, spend/quoted_price) if the
+    realized amount can't be parsed, so a parsing miss never blocks a buy
+    that already succeeded on-chain."""
+    ok, _tx, _err, token_amount, _sol_amt = _execute_user_swap_ex(wallet, private_key, 'buy', mint, str(spend_sol))
+    if ok and token_amount > 0:
+        return True, spend_sol / token_amount, token_amount
+    fallback_amount = (spend_sol / quoted_price) if quoted_price > 0 else 0.0
+    return ok, quoted_price, fallback_amount
+
+def _sell_and_get_realized(wallet: str, private_key: str, mint: str, amount_str: str,
+                            quoted_price: float, quoted_amount: float) -> tuple:
+    """Execute a sell swap and return (ok, exit_price, sold_amount) using the
+    swap's own realized fill (actual SOL received for the actual tokens sold,
+    from orcagent_solana.py's stdout) instead of the last polled quoted_price
+    -- same rationale as _buy_and_get_realized() for the sell side. Falls
+    back to (quoted_price, quoted_amount) if the realized amounts can't be
+    parsed, so a parsing miss never blocks a sell that already succeeded
+    on-chain."""
+    ok, _tx, _err, token_amount, sol_amount = _execute_user_swap_ex(wallet, private_key, 'sell', mint, amount_str)
+    if ok and token_amount > 0 and sol_amount > 0:
+        return True, sol_amount / token_amount, token_amount
+    return ok, quoted_price, quoted_amount
 
 def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chain: str,
                           token_in: str, token_out: str, amount: float) -> tuple:
@@ -5128,7 +5196,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
             # every other USD->SOL site in this file (e.g. min_trade_usdc /
             # _sol_price_usd in the BSC-cap-mirroring bot-buy paths).
             amount_sol = amount / _sol_price_usd if _sol_price_usd else 0
-            ok, tx_hash, err = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
+            ok, tx_hash, err, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
         else:
             ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
 
@@ -5139,9 +5207,15 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
         # api_trade_buy() (Solana, lines 13996-14004) / api_bsc_trade_buy()
         # (BSC, lines 7477-7484).
         if chain == 'solana':
+            # Use the swap's own realized fill (actual tokens received for
+            # amount_sol, from orcagent_solana.py's stdout) for entry_price
+            # instead of the quoted spot price above -- falls back to the
+            # quote if parsing found nothing.
+            if _tok_amt > 0:
+                entry_price = amount_sol / _tok_amt
             us  = get_user_state(wallet)
             pos = us['positions'].get(mint, {})
-            pos['amount']    = pos.get('amount', 0.0) + (amount_sol / entry_price if entry_price > 0 else 0.0)
+            pos['amount']    = pos.get('amount', 0.0) + (_tok_amt if _tok_amt > 0 else (amount_sol / entry_price if entry_price > 0 else 0.0))
             pos['buy_price'] = entry_price
             pos['spend']     = pos.get('spend', 0.0) + amount_sol
             pos['symbol']    = symbol
@@ -6030,11 +6104,11 @@ def user_trader_loop(stop_event, config, wallet: str):
             with _use_key(_enc_blob, wallet) as _pk:
                 # '0' = sell the actual on-chain balance, not the tracked _pos['amount']
                 # -- they can drift, and this is a full close so no dust should remain.
-                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, '0')
+                _sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, _mint, '0', _price, _pos['amount'])
             if _sell_ok:
                 with _use_key(_enc_blob, wallet) as _pk:
-                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                       _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
+                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _exit_price,
+                                       _sold_amt, _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
                                        pref_notifications=pref_notifications, source=_pos.get('source', 'bot'),
                                        entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
@@ -6048,11 +6122,11 @@ def user_trader_loop(stop_event, config, wallet: str):
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             with _use_key(_enc_blob, wallet) as _pk:
                 # '0' = sell the actual on-chain balance -- see crash-exit branch above.
-                _sell_ok = _execute_user_swap(wallet, _pk, 'sell', _mint, '0')
+                _sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, _mint, '0', _price, _pos['amount'])
             if _sell_ok:
                 with _use_key(_enc_blob, wallet) as _pk:
-                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _price,
-                                       _pos['amount'], _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
+                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _exit_price,
+                                       _sold_amt, _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
                                        exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
                                        pref_notifications=pref_notifications, source=_pos.get('source', 'bot'),
                                        entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
@@ -6226,10 +6300,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                             # '0' = sell the actual on-chain balance, not the tracked
                             # pos['amount'] -- they can drift (fee-on-transfer tokens,
                             # rounding), and this is a full close, so no dust left behind.
-                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
+                            sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
@@ -6247,10 +6321,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         print(f'[crash-exit] {short} {label} {crash_pct} price={price} entry={pos["buy_price"]}', flush=True)
                         with _use_key(_enc_blob, wallet) as _pk:
                             # '0' = sell the actual on-chain balance -- see rugpull branch above.
-                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
+                            sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
@@ -6276,10 +6350,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                                          '%) — selling ' + str(int(TP1_SELL_FRACTION*100)) + '% of ' + label +
                                          ', trailing the rest')
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _tp1_ok = _execute_user_swap(wallet, _pk, 'sell', mint, str(_tp1_amount))
+                                _tp1_ok, _tp1_exit_price, _tp1_sold_amt = _sell_and_get_realized(
+                                    wallet, _pk, mint, str(_tp1_amount), price, _tp1_amount)
                             if _tp1_ok:
                                 with _use_key(_enc_blob, wallet) as _pk:
-                                    _record_user_trade(user_id, us, label, pos['buy_price'], price, _tp1_amount, _tp1_spend,
+                                    _record_user_trade(user_id, us, label, pos['buy_price'], _tp1_exit_price, _tp1_sold_amt, _tp1_spend,
                                                        wallet=wallet, private_key=_pk, mint=mint,
                                                        exit_reason='TAKE PROFIT 1 (' + str(TP1_MULTIPLE) + 'x)',
                                                        opened_at=pos.get('opened_at', 0.0),
@@ -6323,10 +6398,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
                         with _use_key(_enc_blob, wallet) as _pk:
                             # '0' = sell the actual on-chain balance -- see rugpull branch above.
-                            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
+                            sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
                         if sell_ok:
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], price, pos['amount'], pos['spend'],
+                                _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
                                                    exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
                                                    pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
@@ -6591,10 +6666,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _buy_ok = _execute_user_swap(wallet, _pk, 'buy', bmint, str(spend))
+                                _buy_ok, _entry_price, _tok_amt = _buy_and_get_realized(wallet, _pk, bmint, spend, best['price'])
                             if _buy_ok:
-                                pos['amount']          = spend / best['price']
-                                pos['buy_price']       = best['price']
+                                pos['amount']          = _tok_amt
+                                pos['buy_price']       = _entry_price
                                 pos['spend']           = spend
                                 pos['symbol']          = label
                                 pos['opened_at']       = time.time()
@@ -6695,14 +6770,14 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                     continue
 
                 with _use_key(c_enc, c_wallet) as _pk:
-                    ok = _execute_user_swap(c_wallet, _pk, 'buy', mint, str(spend))
+                    ok, _entry_price, _tok_amt = _buy_and_get_realized(c_wallet, _pk, mint, spend, price)
                 if not ok:
                     add_user_log(c_wallet, f'[copy] {symbol} buy tx failed')
                     continue
 
                 pos = c_us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
-                pos['amount']          = pos.get('amount', 0.0) + spend / price
-                pos['buy_price']       = price
+                pos['amount']          = pos.get('amount', 0.0) + _tok_amt
+                pos['buy_price']       = _entry_price
                 pos['spend']           = pos.get('spend', 0.0) + spend
                 pos['symbol']          = symbol
                 pos['opened_at']       = time.time()
@@ -15777,13 +15852,19 @@ def api_trade_buy():
         symbol = td.get('symbol', mint[:8])
     buy_ok = False
     with _use_key(enc_blob, wallet) as pk:
-        buy_ok, _tx_hash, buy_err = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
+        buy_ok, _tx_hash, buy_err, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
     if not buy_ok:
         return jsonify({'ok': False, 'msg': buy_err or 'Swap failed — check logs'}), 502
+    # Use the swap's own realized fill (actual tokens received for
+    # amount_sol) for entry_price instead of the quoted spot price above --
+    # falls back to the quote if parsing found nothing.
+    token_amount = _tok_amt if _tok_amt > 0 else (amount_sol / entry_price if entry_price > 0 else 0.0)
+    if _tok_amt > 0:
+        entry_price = amount_sol / _tok_amt
     us        = get_user_state(wallet)
     positions = us['positions']
     pos = positions.get(mint, {})
-    pos['amount']    = pos.get('amount', 0.0) + (amount_sol / entry_price if entry_price > 0 else 0.0)
+    pos['amount']    = pos.get('amount', 0.0) + token_amount
     pos['buy_price'] = entry_price
     pos['spend']     = pos.get('spend', 0.0) + amount_sol
     pos['symbol']    = symbol
@@ -15823,17 +15904,18 @@ def api_trade_sell():
     if not symbol:
         symbol = pos.get('symbol') or (td.get('symbol', mint[:8]) if td else mint[:8])
     sell_ok = False
+    sold_amount = pos['amount']
     with _use_key(enc_blob, wallet) as pk:
         # '0' = sell the actual on-chain balance, not the tracked pos['amount']
         # -- they can drift, and this is a full close so no dust should remain.
-        sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, '0')
+        sell_ok, exit_price, sold_amount = _sell_and_get_realized(wallet, pk, mint, '0', exit_price, pos['amount'])
     entry     = pos.get('buy_price', 0.0)
-    pnl       = round(pos['amount'] * (exit_price - entry), 4) if entry > 0 else 0.0
+    pnl       = round(sold_amount * (exit_price - entry), 4) if entry > 0 else 0.0
     opened_at = pos.get('opened_at', 0.0)
     if sell_ok:
         with _use_key(enc_blob, wallet) as pk:
             _record_user_trade(user_id, us, symbol, entry, exit_price,
-                               pos['amount'], pos.get('spend', 0.0),
+                               sold_amount, pos.get('spend', 0.0),
                                wallet=wallet, private_key=pk, mint=mint,
                                exit_reason='MANUAL SELL', opened_at=opened_at, source='manual',
                                entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
@@ -17462,12 +17544,12 @@ def copy_trade_from_message():
     if spend < 0.001:
         return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to copy this trade'}), 400
     with _use_key(enc_blob, wallet) as _pk:
-        ok = _execute_user_swap(wallet, _pk, 'buy', token_address, str(spend))
+        ok, _entry_price, _tok_amt = _buy_and_get_realized(wallet, _pk, token_address, spend, token_data['price'])
     if not ok:
         return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
     pos = us['positions'].get(token_address, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
-    pos['amount']          = pos.get('amount', 0.0) + spend / token_data['price']
-    pos['buy_price']       = token_data['price']
+    pos['amount']          = pos.get('amount', 0.0) + _tok_amt
+    pos['buy_price']       = _entry_price
     pos['spend']           = pos.get('spend', 0.0) + spend
     pos['symbol']          = token_data['symbol'] or token_address[:8]
     pos['opened_at']       = time.time()
@@ -17734,14 +17816,14 @@ def api_pump_scanner_buy():
         return jsonify({'ok': False, 'msg': 'Insufficient SOL balance to buy'}), 400
 
     with _use_key(enc_blob, wallet) as _pk:
-        ok = _execute_user_swap(wallet, _pk, 'buy', mint, str(spend))
+        ok, _entry_price, _tok_amt = _buy_and_get_realized(wallet, _pk, mint, spend, token_data['price'])
     if not ok:
         return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
 
     us = get_user_state(wallet)
     pos = us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
-    pos['amount']          = pos.get('amount', 0.0) + spend / token_data['price']
-    pos['buy_price']       = token_data['price']
+    pos['amount']          = pos.get('amount', 0.0) + _tok_amt
+    pos['buy_price']       = _entry_price
     pos['spend']           = pos.get('spend', 0.0) + spend
     pos['symbol']          = token_data['symbol'] or mint[:8]
     pos['opened_at']       = time.time()
@@ -17815,13 +17897,13 @@ def api_manual_buy():
         return jsonify({'ok': False, 'msg': 'Insufficient SOL balance'}), 400
 
     with _use_key(enc_blob, wallet) as _pk:
-        ok = _execute_user_swap(wallet, _pk, 'buy', mint, str(spend))
+        ok, _entry_price, _tok_amt = _buy_and_get_realized(wallet, _pk, mint, spend, token_data['price'])
     if not ok:
         return jsonify({'ok': False, 'msg': 'Buy transaction failed — check logs for details'}), 500
 
     pos = us['positions'].get(mint, {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0})
-    pos['amount']          = pos.get('amount', 0.0) + spend / token_data['price']
-    pos['buy_price']       = token_data['price']
+    pos['amount']          = pos.get('amount', 0.0) + _tok_amt
+    pos['buy_price']       = _entry_price
     pos['spend']           = pos.get('spend', 0.0) + spend
     pos['symbol']          = token_data['symbol'] or mint[:8]
     pos['opened_at']       = time.time()
@@ -17868,18 +17950,18 @@ def api_manual_sell():
     entry  = pos.get('buy_price', 0.0)
     spend  = pos.get('spend', 0.0)
     short  = wallet[:6] + '...' + wallet[-4:]
+    live_map  = {t['mint']: t for t in state.get('tokens', [])}
+    cur_price = live_map.get(mint, {}).get('price', entry)
     try:
         with _use_key(enc_blob, wallet) as _pk:
             # '0' = sell the actual on-chain balance, not the tracked pos['amount']
             # -- they can drift, and this is a full close so no dust should remain.
-            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
+            sell_ok, cur_price, amount = _sell_and_get_realized(wallet, _pk, mint, '0', cur_price, amount)
     except InvalidToken:
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
     except Exception as e:
         print(f'[manual-sell] key error for {short}: {type(e).__name__}: {e}', flush=True)
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
-    live_map  = {t['mint']: t for t in state.get('tokens', [])}
-    cur_price = live_map.get(mint, {}).get('price', entry)
     if sell_ok:
         with _use_key(enc_blob, wallet) as _pk:
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
@@ -18058,13 +18140,13 @@ def _liquidate_all_positions(wallet: str):
                 with _use_key(enc_blob, wallet) as pk:
                     # '0' = sell the actual on-chain balance, not the tracked pos['amount']
                     # -- they can drift, and this is a full close so no dust should remain.
-                    sell_ok = _execute_user_swap(wallet, pk, 'sell', mint, '0')
+                    sell_ok, exit_price, sold_amount = _sell_and_get_realized(wallet, pk, mint, '0', exit_price, pos['amount'])
                 if sell_ok:
                     entry = pos.get('buy_price', 0.0)
                     opened_at = pos.get('opened_at', 0.0)
                     with _use_key(enc_blob, wallet) as pk:
                         _record_user_trade(user_id, us, symbol, entry, exit_price,
-                                           pos['amount'], pos.get('spend', 0.0),
+                                           sold_amount, pos.get('spend', 0.0),
                                            wallet=wallet, private_key=pk, mint=mint,
                                            exit_reason='STOP TRADING', opened_at=opened_at, source='manual',
                                            entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
@@ -18310,18 +18392,18 @@ def manual_sell():
     entry  = pos.get('buy_price', 0.0)
     spend  = pos.get('spend', 0.0)
     short  = wallet[:6] + '...' + wallet[-4:]
+    live_map  = {t['mint']: t for t in state.get('tokens', [])}
+    cur_price = live_map.get(mint, {}).get('price', entry)
     try:
         with _use_key(enc_blob, wallet) as _pk:
             # '0' = sell the actual on-chain balance, not the tracked pos['amount']
             # -- they can drift, and this is a full close so no dust should remain.
-            sell_ok = _execute_user_swap(wallet, _pk, 'sell', mint, '0')
+            sell_ok, cur_price, amount = _sell_and_get_realized(wallet, _pk, mint, '0', cur_price, amount)
     except InvalidToken:
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
     except Exception as e:
         print(f'[manual-sell] key error for {short}: {type(e).__name__}: {e}', flush=True)
         return jsonify({'ok': False, 'msg': 'Cannot decrypt trading key — please re-save it in Settings'}), 400
-    live_map  = {t['mint']: t for t in state.get('tokens', [])}
-    cur_price = live_map.get(mint, {}).get('price', entry)
     if sell_ok:
         with _use_key(enc_blob, wallet) as _pk:
             _record_user_trade(user_id, us, symbol, entry, cur_price, amount, spend,
