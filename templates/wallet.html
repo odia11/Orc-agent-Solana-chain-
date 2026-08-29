@@ -1463,17 +1463,30 @@ function _renderHoldings(spl){
 }
 
 // ── balance ───────────────────────────────────────────────
+var _balanceLoadedOnce=false
 function loadBalance(){
   fetch('/api/wallet/balance').then(function(r){return r.json()}).then(function(d){
     if(d.sol!=null) document.getElementById('sol').textContent=parseFloat(d.sol).toFixed(4)
     if(d.usd!=null) document.getElementById('usd').textContent=parseFloat(d.usd).toFixed(2)
     if(d.sol!=null) document.getElementById('avail').textContent=parseFloat(d.sol).toFixed(4)+' SOL'
+    _balanceLoadedOnce=true
   }).catch(function(){
-    document.getElementById('sol').textContent='—'
-    document.getElementById('usd').textContent='—'
+    // Only show '—' on the very first load ever failing -- once a real
+    // balance is showing, a single transient network hiccup on a later poll
+    // shouldn't blank it out; just keep the last known value on screen and
+    // let the next poll retry.
+    if(!_balanceLoadedOnce){
+      document.getElementById('sol').textContent='—'
+      document.getElementById('usd').textContent='—'
+    }
   })
 }
 loadBalance()
+// Live refresh -- /api/wallet/balance is an uncached, real RPC call each
+// time, so this keeps the on-screen balance current (a bot trade, a Live
+// Market trade, or a deposit from elsewhere) instead of only updating on
+// page load or right after an action taken on this specific page.
+setInterval(function(){ if(!document.hidden) loadBalance() }, 8000)
 
 // ── hide small balances toggle ────────────────────────────
 var _hideSmall=false

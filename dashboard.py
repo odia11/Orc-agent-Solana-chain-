@@ -18112,11 +18112,16 @@ def api_balance():
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'sol': 0.0, 'usdc': 0.0})
-    us  = get_user_state(wallet)
-    age = time.time() - us.get('balance_fetched_at', 0)
-    if age > 25:
-        # Return cached value immediately; refresh in background so this never blocks
-        threading.Thread(target=fetch_user_balances, args=(wallet,), daemon=True).start()
+    us = get_user_state(wallet)
+    # Always fetch fresh, synchronously -- a single getBalance RPC call is
+    # cheap and fast (well under the 10s interval this is polled at from
+    # dashboard.js's fetchState()). The old version returned the cached value
+    # immediately and only refreshed it in the background once the cache
+    # passed 25s old, which meant a real balance change (a trade, a deposit)
+    # could take up to ~35s to ever show up here -- users read that as the
+    # balance being stuck/delayed. Falls back to the last known cached value
+    # only if the RPC call itself fails, instead of blocking the response.
+    fetch_user_balances(wallet)
     return jsonify({'ok': True, 'sol': us.get('sol', 0.0), 'usdc': us.get('usdc', 0.0)})
 
 # ── TOKEN ACCOUNT HELPERS ──
