@@ -4224,6 +4224,17 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
         print(f'[open_positions] upsert failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
 
 def _close_open_position(user_id: int, wallet: str, mint: str, chain: str = 'solana'):
+    """Closes ONE position -- clears it from the in-memory positions dict and
+    deletes its open_positions row. Nothing more: this used to also stop the
+    trader loop and flip bot_enabled=0 whenever it emptied a user's LAST open
+    position, which sounds right only for the explicit Stop Trading flow
+    (which already does that itself, in bot_stop() -- this was pure
+    redundancy there). Everywhere else this function is called from -- a
+    normal stop-loss/take-profit/crash-exit/rugpull close, or a user
+    manually selling one token -- having zero open positions for a moment is
+    completely normal while Auto Trading stays on, and silently disabling
+    the bot every time a user's only position closed made auto-trading look
+    like it stopped after a single trade even though the toggle was still on."""
     get_user_state(wallet)['positions'][mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -4231,30 +4242,10 @@ def _close_open_position(user_id: int, wallet: str, mint: str, chain: str = 'sol
             conn.execute('PRAGMA busy_timeout=3000')
             conn.execute('DELETE FROM open_positions WHERE user_id=? AND mint_address=?', (user_id, mint))
             conn.commit()
-            # Scoped to this chain only -- closing a user's last BSC position must not
-            # touch bot_enabled/trader_running for a still-open Solana bot, and vice versa.
-            remaining = conn.execute(
-                'SELECT COUNT(*) FROM open_positions WHERE user_id=? AND chain=?', (user_id, chain)
-            ).fetchone()[0]
         finally:
             conn.close()
     except Exception as e:
         print(f'[open_positions] close failed for user_id={user_id} mint={mint[:8]}: {e}', flush=True)
-        return
-
-    if remaining == 0 and chain == 'solana':
-        us = get_user_state(wallet)
-        if us.get('trader_stop'):
-            us['trader_stop'].set()
-        us['trader_running'] = False
-        try:
-            _dc = sqlite3.connect(DB_FILE)
-            _dc.execute('UPDATE users SET bot_enabled=0 WHERE wallet_address=?', (wallet,))
-            _dc.commit()
-            _dc.close()
-        except Exception:
-            pass
-        print(f'[bot] {wallet[:6]}... auto-stopped — all positions closed', flush=True)
 
 def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
                      sol_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0,
