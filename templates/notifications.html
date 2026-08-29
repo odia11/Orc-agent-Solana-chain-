@@ -488,7 +488,14 @@ function _updateUnreadUI(){
   if(badge){ if(unread){ badge.textContent = unread; badge.style.display = ''; } else { badge.style.display = 'none'; } }
 }
 async function _loadPersonal(){
-  var r = await fetch('/api/notifications/mine?category=' + encodeURIComponent(_activeTab)).then(function(x){return x.json();}).catch(function(){return null;});
+  // Always fetch 'all' regardless of _activeTab -- _render() already does its
+  // own client-side trades/social split below. Fetching just the active tab's
+  // category here meant _personal only ever held one category's rows, so
+  // switching tabs (which only calls _render(), not this) re-filtered the
+  // same stale, single-category list forever -- e.g. a page load that starts
+  // on "Trades" would show an empty "Social" tab even with real likes/reposts
+  // sitting in the database, since they were never fetched in the first place.
+  var r = await fetch('/api/notifications/mine?category=all').then(function(x){return x.json();}).catch(function(){return null;});
   _personal = (r && r.ok && r.notifications) ? r.notifications : [];
   _updateUnreadUI();
   _render();
