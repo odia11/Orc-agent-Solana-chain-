@@ -154,12 +154,17 @@ def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_so
     side_col    = (0, 208, 132) if is_buy else (255, 71, 87)     # #00d084 / #ff4757
     pct_col     = (0, 208, 132) if pnl_pct >= 0 else (255, 71, 87)
 
-    # 1. Flat dark scrim over the whole card so the overlay text stays
-    # legible no matter how bright/busy the token's own banner image is --
-    # the old top-to-bottom gradient was transparent at the top and dark at
-    # the bottom, but every piece of text here sits in the top half, so a
-    # loud banner (bold colors, high contrast) drowned it out completely.
-    overlay = Image.new('RGBA', (W, H), (13, 17, 23, 150))
+    # Same gradient as the in-app trade card's own CSS -- this image is
+    # meant to be the same design as _renderTradeTerminalCard() in
+    # dashboard.js (the card already shown inside the app), not a separate
+    # invented one: linear-gradient(to bottom, rgba(13,17,23,.55),
+    # rgba(13,17,23,.92)), i.e. alpha 140 at the top fading to 235 at the
+    # bottom -- no boxed badge, no solid panels behind the text.
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    for y in range(H):
+        alpha = int(140 + (235 - 140) * (y / H))
+        odraw.line([(0, y), (W, y)], fill=(13, 17, 23, alpha))
     img.paste(overlay, (0, 0), overlay)
 
     draw = ImageDraw.Draw(img)
@@ -170,58 +175,47 @@ def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_so
         return f'${p:.8f}'.rstrip('0').rstrip('.') if p < 0.001 else f'${p:.6f}'
 
     badge_font = _tc_font(True, 28)
-    sym_font   = _tc_font(True, 64)
+    sym_font   = _tc_font(True, 46)
     price_font = _tc_font(False, 30)
     sol_font   = _tc_font(True, 32)
     pct_font   = _tc_font(True, 90)
 
+    # SELL/BUY and $SYMBOL sit on one line, like the in-app card's <span>s --
+    # the badge is plain colored text (the CSS border on it is 20% opacity,
+    # practically invisible), not a filled/outlined box.
+    bx, by = 40, 40
     badge_text = 'BUY' if is_buy else 'SELL'
-    bx, by, pad_x, pad_y = 40, 40, 14, 8
     tb = draw.textbbox((0, 0), badge_text, font=badge_font)
-    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+    badge_w, badge_h = tb[2] - tb[0], tb[3] - tb[1]
+    sym_text = '$' + symbol
+    tbs = draw.textbbox((0, 0), sym_text, font=sym_font)
+    sym_h = tbs[3] - tbs[1]
+    line_y = by + max(badge_h, sym_h)
+    draw.text((bx, line_y - badge_h), badge_text, font=badge_font, fill=side_col)
+    sym_x = bx + badge_w + 20
+    draw.text((sym_x, line_y - sym_h), sym_text, font=sym_font, fill=(238, 241, 245))
 
-    sym_y   = by + th + pad_y * 2 + 24
-    price_y = sym_y + 80
-    sol_y   = price_y + 44
+    price_y = by + max(badge_h, sym_h) + 22
     # '->' not '→' -- the vendored JetBrainsMono subset (and PIL's own default
     # font) has no glyph for the arrow, which rendered as a tofu box.
     price_str = f'{_fmt_price(entry_price)} -> {_fmt_price(exit_price)}'
-    sol_sign  = '+' if pnl_sol >= 0 else ''
-    sol_str   = f'{sol_sign}{pnl_sol:.4f} SOL'
-    block_w = max(
-        draw.textbbox((0, 0), '$' + symbol, font=sym_font)[2],
-        draw.textbbox((0, 0), price_str, font=price_font)[2],
-        draw.textbbox((0, 0), sol_str, font=sol_font)[2],
-    )
+    draw.text((bx, price_y), price_str, font=price_font, fill=(138, 145, 156))
 
+    sol_y = price_y + 42
+    sol_sign = '+' if pnl_sol >= 0 else ''
+    sol_str  = f'{sol_sign}{pnl_sol:.4f} SOL'
+    draw.text((bx, sol_y), sol_str, font=sol_font, fill=(247, 185, 85))
+
+    # PNL percentage, right-aligned, vertically centered against the text
+    # block above it -- same as the in-app card's align-self:center on that
+    # row, rather than centered on the whole 1200x630 canvas.
     pct_sign = '+' if pnl_pct >= 0 else ''
     pct_text = f'{pct_sign}{pnl_pct:.2f}%'
     tb2 = draw.textbbox((0, 0), pct_text, font=pct_font)
     ptw, pth = tb2[2] - tb2[0], tb2[3] - tb2[1]
-    pct_x, pct_y = W - 60 - ptw, H // 2 - 45
-
-    # 2. Solid dark backing panels behind each text block, independent of the
-    # flat scrim above -- guarantees the text reads cleanly even against the
-    # busiest, highest-contrast banner art instead of relying on a single
-    # uniform darkening pass to be "dark enough" everywhere.
-    draw.rounded_rectangle([bx - 16, by - 12, bx + block_w + 24, sol_y + 44],
-                            radius=14, fill=(13, 17, 23, 190))
-    draw.rounded_rectangle([pct_x - 20, pct_y - 14, pct_x + ptw + 20, pct_y + pth + 28],
-                            radius=14, fill=(13, 17, 23, 190))
-
-    # 3. BUY/SELL badge, top-left -- filled (not just outlined) so it reads
-    # against any background on its own.
-    draw.rounded_rectangle([bx, by, bx + tw + pad_x * 2, by + th + pad_y * 2],
-                            radius=6, fill=(13, 17, 23, 235), outline=side_col, width=2)
-    draw.text((bx + pad_x, by + pad_y), badge_text, font=badge_font, fill=side_col)
-
-    # 4. $SYMBOL large, entry->exit prices, PNL SOL in amber
-    draw.text((bx, sym_y), '$' + symbol, font=sym_font, fill=(238, 241, 245))
-    draw.text((bx, price_y), price_str, font=price_font, fill=(138, 145, 156))
-    draw.text((bx, sol_y), sol_str, font=sol_font, fill=(247, 185, 85))
-
-    # 5. PNL percentage, large, right-aligned
-    draw.text((pct_x, pct_y), pct_text, font=pct_font, fill=pct_col)
+    block_bottom = sol_y + 36
+    pct_y = (by + block_bottom) // 2 - pth // 2
+    draw.text((W - 60 - ptw, pct_y), pct_text, font=pct_font, fill=pct_col)
 
 def _tc_draw_chart_content(img, symbol, price, chg24h):
     """Draw the chart-card overlay for a __CHART__ embed snapshot -- same canvas as
@@ -232,10 +226,14 @@ def _tc_draw_chart_content(img, symbol, price, chg24h):
     chg24h  = float(chg24h or 0)
     chg_col = (0, 208, 132) if chg24h >= 0 else (255, 71, 87)
 
-    # Flat dark scrim (see _tc_draw_content's comment for why this replaced
-    # the old top-transparent/bottom-opaque gradient -- it left the text,
-    # which sits in the top half, with almost no contrast boost at all).
-    overlay = Image.new('RGBA', (W, H), (13, 17, 23, 150))
+    # Same gradient formula as _tc_draw_content() -- see its comment. No
+    # boxed badge, no solid panels; this should look like one consistent
+    # design with the trade card, not a separately-invented style.
+    overlay = Image.new('RGBA', (W, H), (0, 0, 0, 0))
+    odraw = ImageDraw.Draw(overlay)
+    for y in range(H):
+        alpha = int(140 + (235 - 140) * (y / H))
+        odraw.line([(0, y), (W, y)], fill=(13, 17, 23, alpha))
     img.paste(overlay, (0, 0), overlay)
 
     draw = ImageDraw.Draw(img)
@@ -246,44 +244,33 @@ def _tc_draw_chart_content(img, symbol, price, chg24h):
         return f'${p:.8f}'.rstrip('0').rstrip('.') if p < 0.001 else f'${p:.6f}'
 
     badge_font = _tc_font(True, 28)
-    sym_font   = _tc_font(True, 64)
+    sym_font   = _tc_font(True, 46)
     price_font = _tc_font(False, 32)
     pct_font   = _tc_font(True, 90)
 
+    bx, by = 40, 40
     badge_text = 'CHART'
-    bx, by, pad_x, pad_y = 40, 40, 14, 8
     tb = draw.textbbox((0, 0), badge_text, font=badge_font)
-    tw, th = tb[2] - tb[0], tb[3] - tb[1]
+    badge_w, badge_h = tb[2] - tb[0], tb[3] - tb[1]
+    sym_text = '$' + symbol
+    tbs = draw.textbbox((0, 0), sym_text, font=sym_font)
+    sym_h = tbs[3] - tbs[1]
+    line_y = by + max(badge_h, sym_h)
+    draw.text((bx, line_y - badge_h), badge_text, font=badge_font, fill=(247, 185, 85))
+    sym_x = bx + badge_w + 20
+    draw.text((sym_x, line_y - sym_h), sym_text, font=sym_font, fill=(238, 241, 245))
 
-    sym_y   = by + th + pad_y * 2 + 24
-    price_y = sym_y + 80
+    price_y = by + max(badge_h, sym_h) + 22
     price_str = _fmt_price(price)
-    block_w = max(
-        draw.textbbox((0, 0), '$' + symbol, font=sym_font)[2],
-        draw.textbbox((0, 0), price_str, font=price_font)[2],
-    )
+    draw.text((bx, price_y), price_str, font=price_font, fill=(138, 145, 156))
 
     pct_sign = '+' if chg24h >= 0 else ''
     pct_text = f'{pct_sign}{chg24h:.2f}%'
     tb2 = draw.textbbox((0, 0), pct_text, font=pct_font)
     ptw, pth = tb2[2] - tb2[0], tb2[3] - tb2[1]
-    pct_x, pct_y = W - 60 - ptw, H // 2 - 45
-
-    # Solid dark backing panels behind each text block -- see
-    # _tc_draw_content's comment for why the flat scrim alone isn't enough
-    # against the busiest banner art.
-    draw.rounded_rectangle([bx - 16, by - 12, bx + block_w + 24, price_y + 44],
-                            radius=14, fill=(13, 17, 23, 190))
-    draw.rounded_rectangle([pct_x - 20, pct_y - 14, pct_x + ptw + 20, pct_y + pth + 28],
-                            radius=14, fill=(13, 17, 23, 190))
-
-    draw.rounded_rectangle([bx, by, bx + tw + pad_x * 2, by + th + pad_y * 2],
-                            radius=6, fill=(13, 17, 23, 235), outline=(247, 185, 85), width=2)
-    draw.text((bx + pad_x, by + pad_y), badge_text, font=badge_font, fill=(247, 185, 85))
-
-    draw.text((bx, sym_y), '$' + symbol, font=sym_font, fill=(238, 241, 245))
-    draw.text((bx, price_y), price_str, font=price_font, fill=(138, 145, 156))
-    draw.text((pct_x, pct_y), pct_text, font=pct_font, fill=chg_col)
+    block_bottom = price_y + 32
+    pct_y = (by + block_bottom) // 2 - pth // 2
+    draw.text((W - 60 - ptw, pct_y), pct_text, font=pct_font, fill=chg_col)
 
 def _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url=None):
     img = _tc_build_canvas(banner_url)
