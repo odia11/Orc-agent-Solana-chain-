@@ -13921,6 +13921,14 @@ def share_feed_to_x(post_id):
                 sign = '+' if embed['pnl_pct'] >= 0 else ''
                 text = (f"Just closed ${embed['symbol']} {sign}{embed['pnl_pct']:.1f}% "
                         f"({sign}{embed['pnl_sol']:.4f} SOL) on @OrcAgent") if embed['symbol'] else ''
+        elif embed['kind'] == 'photo':
+            # Image-only post, no caption to draw from -- _post_to_x() only
+            # posts text (X's media-upload API isn't wired up), so the actual
+            # photo can't ride along in the tweet either way. Falling all the
+            # way through to an empty tweet ("Nothing to share") blocked
+            # sharing an image post entirely; link back to the post itself
+            # instead, since that's the only place the photo is visible.
+            text = 'Check out my post on @OrcAgent ' + request.host_url.rstrip('/') + '/post/' + post_id
         else:
             text = embed['text_part']
         text = text[:250]
