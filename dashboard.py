@@ -2687,6 +2687,30 @@ def _use_key(enc_blob: str, wallet: str):
                 pass
         _k = None
 
+def _get_trading_wallet_address(session_wallet: str) -> str:
+    """Derives the dedicated trading-wallet address (from the user's stored
+    encrypted_private_key) for a given SESSION wallet -- these are two
+    different keypairs by design (see wallet_page()'s deposit_address
+    comment), and on-chain balance/holdings must be read from the trading
+    wallet, not the session wallet that merely signed the user in. Returns
+    '' if there's no trading key saved (falls back to the session wallet
+    at the call site in that case, matching pre-existing behavior for
+    users who haven't configured one yet)."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute(
+            'SELECT encrypted_private_key FROM users WHERE wallet_address=?', (session_wallet,)
+        ).fetchone()
+        conn.close()
+        if not row or not row[0]:
+            return ''
+        with _use_key(row[0], session_wallet) as _pk:
+            from solders.keypair import Keypair as _KP_tw
+            return str(_KP_tw.from_base58_string(_pk).pubkey())
+    except Exception as e:
+        print(f'[trading-wallet] derive failed for {session_wallet[:8]}...: {e}', flush=True)
+        return ''
+
 _REFERRAL_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'  # no 0/O/1/I -- avoids visual ambiguity
 
 def _generate_referral_code(cursor) -> str:
@@ -15644,8 +15668,18 @@ _WALLET_CACHE_TTL = 30            # seconds
 TOKEN_PROGRAM_ID      = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 TOKEN_2022_PROGRAM_ID = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
 
-def _fetch_wallet_tokens(wallet: str) -> dict:
-    """Fetch all SPL tokens + SOL for wallet, price each via DexScreener. Cached 30 s."""
+def _fetch_wallet_tokens(wallet: str, onchain_wallet: str = None) -> dict:
+    """Fetch all SPL tokens + SOL for wallet, price each via DexScreener. Cached 30 s.
+
+    `wallet` is the SESSION wallet -- used only to look up this user's row
+    (DB fallback tokens, avg_price for PnL) and as the cache key. All actual
+    on-chain reads (SOL balance, SPL token accounts) go against
+    `onchain_wallet` -- the dedicated trading wallet, a different keypair by
+    design (see wallet_page()'s deposit_address comment) -- since that's
+    what actually holds trading funds. Defaults to `wallet` itself when not
+    given, for any caller that genuinely wants a session wallet's own
+    on-chain balance."""
+    onchain_wallet = onchain_wallet or wallet
     cached = _wallet_tokens_cache.get(wallet)
     if cached and time.time() - cached['ts'] < _WALLET_CACHE_TTL:
         return cached
@@ -15658,7 +15692,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
     sol_balance = 0.0
     try:
         r = requests.post(SOLANA_RPC, json={
-            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [onchain_wallet]
         }, timeout=8)
         sol_balance = round(r.json()['result']['value'] / 1e9, 6)
     except Exception:
@@ -15695,7 +15729,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
     })
 
     # ── SPL token accounts (legacy Token Program + Token-2022) ──
-    print(f'[wallet-tokens] wallet={wallet!r} len={len(wallet)}', flush=True)
+    print(f'[wallet-tokens] onchain_wallet={onchain_wallet!r} len={len(onchain_wallet)}', flush=True)
     mints_needed: list = []
     raw_accounts: list = []
     _seen_mints: set = set()
@@ -15707,7 +15741,7 @@ def _fetch_wallet_tokens(wallet: str) -> dict:
                 _rpc_r = requests.post(_rpc_url, json={
                     'jsonrpc': '2.0', 'id': 1,
                     'method': 'getTokenAccountsByOwner',
-                    'params': [wallet, {'programId': _prog_id}, {'encoding': 'jsonParsed'}],
+                    'params': [onchain_wallet, {'programId': _prog_id}, {'encoding': 'jsonParsed'}],
                 }, timeout=12)
                 _rpc_raw = _rpc_r.json()
                 _prog_accounts = _rpc_raw.get('result', {}).get('value') or []
@@ -15841,7 +15875,8 @@ def api_wallet_tokens():
     if request.args.get('bust'):
         _wallet_tokens_cache.pop(wallet, None)
     try:
-        data = _fetch_wallet_tokens(wallet)
+        onchain_wallet = _get_trading_wallet_address(wallet) or wallet
+        data = _fetch_wallet_tokens(wallet, onchain_wallet)
         tokens = [{**t, 'usd_value': t['value_usd']} for t in data['tokens']]
         print(f'[wallet-tokens] tokens found: {len(tokens)}', flush=True)
         return jsonify({'ok': True, 'tokens': tokens, 'cached': False})
@@ -15856,7 +15891,8 @@ def api_wallet_total():
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
     try:
-        data = _fetch_wallet_tokens(wallet)
+        onchain_wallet = _get_trading_wallet_address(wallet) or wallet
+        data = _fetch_wallet_tokens(wallet, onchain_wallet)
         return jsonify({
             'ok':        True,
             'total_usd': data['total_usd'],
@@ -15873,16 +15909,48 @@ def api_wallet_balance():
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    # The dedicated trading wallet is what actually holds trading funds and
+    # pays for every swap -- not the session wallet used to sign in, a
+    # different keypair by design. This used to query the session wallet
+    # here, so the "Available" balance on the Wallet page (and the buy-modal
+    # balance check in token-card.js) could show a completely different
+    # number than what a deposit to the shown Deposit Address actually
+    # funds. Falls back to the session wallet only if no trading key is
+    # saved yet, matching the previous behavior for that case.
+    balance_wallet = _get_trading_wallet_address(wallet) or wallet
     try:
         r = requests.post(SOLANA_RPC, json={
-            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [wallet]
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [balance_wallet]
         }, timeout=8)
         lamports = r.json()['result']['value']
         sol = round(lamports / 1e9, 6)
         usd = round(sol * _sol_price_usd, 4) if _sol_price_usd else None
-        return jsonify({'ok': True, 'sol': sol, 'usd': usd, 'sol_price_usd': _sol_price_usd})
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
+
+    # SOL currently committed to open positions -- the Wallet page's "In Open
+    # Positions" stat used to just be a static "0 SOL" placeholder with
+    # nothing ever writing to it. Summed straight from open_positions (spend
+    # = SOL spent opening each position), not the in-memory positions dict,
+    # so it's correct even for a wallet whose trader loop isn't currently
+    # running in this server process.
+    in_positions_sol = 0.0
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if row:
+            total_row = conn.execute(
+                "SELECT COALESCE(SUM(spend), 0) FROM open_positions "
+                "WHERE user_id=? AND COALESCE(chain, 'solana') = 'solana'",
+                (row[0],)
+            ).fetchone()
+            in_positions_sol = round(float(total_row[0] or 0), 6)
+        conn.close()
+    except Exception:
+        pass
+
+    return jsonify({'ok': True, 'sol': sol, 'usd': usd, 'sol_price_usd': _sol_price_usd,
+                     'in_positions_sol': in_positions_sol})
 
 
 @app.route('/api/portfolio-summary', methods=['GET'])
