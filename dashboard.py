@@ -98,6 +98,28 @@ def _safe_external_image_url(url: str) -> bool:
             return False
     return True
 
+_TC_FONT_CACHE = {}
+def _tc_font(bold, size):
+    """Loads the same JetBrains Mono the app's own UI uses (vendored at
+    static/fonts/ -- see that dir's font files) so the shareable trade/chart
+    card image actually looks like the in-app trade card
+    (_renderTradeTerminalCard() in dashboard.js) instead of PIL's generic
+    bitmap default font. Falls back to that default only if the TTF is ever
+    missing, so a card still renders (just visually mismatched) rather than
+    erroring out. Cached per (bold, size) -- this runs on every share/unfurl
+    request, not once at startup."""
+    key = (bold, size)
+    cached = _TC_FONT_CACHE.get(key)
+    if cached:
+        return cached
+    path = os.path.join(BASE, 'static', 'fonts', 'JetBrainsMono-Bold.ttf' if bold else 'JetBrainsMono-Regular.ttf')
+    try:
+        font = ImageFont.truetype(path, size)
+    except Exception:
+        font = ImageFont.load_default(size=size)
+    _TC_FONT_CACHE[key] = font
+    return font
+
 def _tc_build_canvas(banner_url=None):
     """Build the base 1200x630 canvas for a server-rendered trade card image.
     Falls back to a flat background if banner_url is missing, fails the
@@ -147,11 +169,11 @@ def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_so
             return '—'
         return f'${p:.8f}'.rstrip('0').rstrip('.') if p < 0.001 else f'${p:.6f}'
 
-    badge_font = ImageFont.load_default(size=28)
-    sym_font   = ImageFont.load_default(size=64)
-    price_font = ImageFont.load_default(size=30)
-    sol_font   = ImageFont.load_default(size=32)
-    pct_font   = ImageFont.load_default(size=90)
+    badge_font = _tc_font(True, 28)
+    sym_font   = _tc_font(True, 64)
+    price_font = _tc_font(False, 30)
+    sol_font   = _tc_font(True, 32)
+    pct_font   = _tc_font(True, 90)
 
     badge_text = 'BUY' if is_buy else 'SELL'
     bx, by, pad_x, pad_y = 40, 40, 14, 8
@@ -161,7 +183,9 @@ def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_so
     sym_y   = by + th + pad_y * 2 + 24
     price_y = sym_y + 80
     sol_y   = price_y + 44
-    price_str = f'{_fmt_price(entry_price)} → {_fmt_price(exit_price)}'
+    # '->' not '→' -- the vendored JetBrainsMono subset (and PIL's own default
+    # font) has no glyph for the arrow, which rendered as a tofu box.
+    price_str = f'{_fmt_price(entry_price)} -> {_fmt_price(exit_price)}'
     sol_sign  = '+' if pnl_sol >= 0 else ''
     sol_str   = f'{sol_sign}{pnl_sol:.4f} SOL'
     block_w = max(
@@ -221,10 +245,10 @@ def _tc_draw_chart_content(img, symbol, price, chg24h):
             return '—'
         return f'${p:.8f}'.rstrip('0').rstrip('.') if p < 0.001 else f'${p:.6f}'
 
-    badge_font = ImageFont.load_default(size=28)
-    sym_font   = ImageFont.load_default(size=64)
-    price_font = ImageFont.load_default(size=32)
-    pct_font   = ImageFont.load_default(size=90)
+    badge_font = _tc_font(True, 28)
+    sym_font   = _tc_font(True, 64)
+    price_font = _tc_font(False, 32)
+    pct_font   = _tc_font(True, 90)
 
     badge_text = 'CHART'
     bx, by, pad_x, pad_y = 40, 40, 14, 8
