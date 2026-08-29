@@ -67,5 +67,7 @@ document.addEventListener('DOMContentLoaded', function(){
   showTokenCard({{ mint_address | tojson }}, {{ mint_address | tojson }});
 });
 </script>
+<script src="/static/pull-to-refresh.js?v={{ app_version }}"></script>
+<script>initPullToRefresh();</script>
 </body>
 </html>

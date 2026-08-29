@@ -344,5 +344,16 @@ input{font-family:inherit}
 <div class="pt-toast" id="pt-toast"></div>
 
 <script src="/static/live-market-pro.js?v={{ app_version }}" defer></script>
+<script src="/static/pull-to-refresh.js?v={{ app_version }}"></script>
+<script>
+// live-market-pro.js is deferred, so loadFeed()/etc. aren't defined yet at
+// this point in the parse -- DOMContentLoaded fires only after every
+// deferred script has already run, which is what guarantees they exist here.
+document.addEventListener('DOMContentLoaded', function(){
+  initPullToRefresh({ onRefresh: function(){
+    loadFeed(); loadTape(); loadTraders(); loadWatchlist(); loadPulse();
+  }});
+});
+</script>
 </body>
 </html>

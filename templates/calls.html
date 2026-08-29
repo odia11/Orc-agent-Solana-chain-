@@ -437,6 +437,8 @@ window.addEventListener('pageshow', function(e){
   }, REFRESH_INTERVAL_MS);
 })();
 </script>
+<script src="/static/pull-to-refresh.js?v={{ app_version }}"></script>
+<script>initPullToRefresh({ onRefresh: _loadCallsList });</script>
 
 </body>
 </html>

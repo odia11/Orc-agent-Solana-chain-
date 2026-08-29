@@ -201,6 +201,10 @@ async function _ltPollBotStatus(){
 setInterval(_ltPoll, 12000);
 setInterval(_ltPollBotStatus, 12000);
 </script>
+<script src="/static/pull-to-refresh.js?v={{ app_version }}"></script>
+<script>
+initPullToRefresh({ onRefresh: function(){ return Promise.all([_ltPoll(), _ltPollBotStatus()]); } });
+</script>
 
 </body>
 </html>
