@@ -8552,10 +8552,8 @@ def wallet_page():
         return _render_no_cache(
             'wallet.html',
             wallet_address=wallet_address,
-            wallet_short=wallet_short,
             deposit_address=deposit_address,
             bsc_deposit_address=bsc_deposit_address,
-            is_admin=_is_owner(wallet_address),
             csrf_token=_get_csrf_token(),
             client_secret=API_SHARED_SECRET,
         )
