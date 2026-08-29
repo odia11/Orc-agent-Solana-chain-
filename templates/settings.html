@@ -514,13 +514,28 @@ async function _saveStrategy(){
   }
 }
 
-/* ── bot toggle ── */
+/* ── bot toggle ──
+   Flipping this ON/OFF calls the exact same /api/bot/start //stop the Bot
+   page's own Start/Stop button uses, so there's no separate manual click
+   needed -- turning it on here already arms the live scan loop, which then
+   only actually buys once it finds a token matching your saved strategy
+   settings. Turning it off stops that loop; turning it on again re-arms it
+   the same way (no extra confirmation step). The one real gap this used to
+   have: a failed start (no key saved, insufficient SOL, security pause,
+   etc.) silently flipped the checkbox back off with no explanation, making
+   it look like the toggle just didn't do anything. */
 async function _onBotToggle(el){
   var running=el.checked;
   try{
     var d=await _post(running?'/api/bot/start':'/api/bot/stop',{});
-    if(!d.ok && d.running==null){ el.checked=!running; }
-  }catch(e){ el.checked=!running; }
+    if(!d.ok && d.running==null){
+      el.checked=!running;
+      openAlertModal({text:(running?'Could not start trading: ':'Could not stop trading: ')+(d.msg||'unknown error')});
+    }
+  }catch(e){
+    el.checked=!running;
+    openAlertModal({text:'Network error — please try again.'});
+  }
 }
 
 /* ── preference toggles — auto-save to server ── */
