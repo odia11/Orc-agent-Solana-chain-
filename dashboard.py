@@ -2127,6 +2127,16 @@ def run_migrations():
         # and anyone who cared to enumerate ids. This unguessable per-group token
         # is the real secret the invite link now carries instead.
         "ALTER TABLE groups ADD COLUMN invite_token TEXT DEFAULT NULL",
+        # Manual Live Market instant-trades (source='manual') used to record a
+        # real amount only on the buy leg (amount=amount_sol) and hardcoded 0
+        # for sells, and never captured the actual token quantity for either
+        # side -- Wallet's "Recent activity" list showed "-0.0000 SOL" for
+        # every sell and no token amount at all. `side` lets that list tell
+        # buy/sell apart without relying on the sign of `amount` (which bot
+        # rows use for token quantity, always positive); `token_amount` is the
+        # real quantity of the token bought/sold.
+        "ALTER TABLE trades ADD COLUMN side TEXT DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN token_amount REAL DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -12044,7 +12054,7 @@ def wallet_activity():
             return jsonify({'ok': True, 'activity': []})
         uid = user_row[0]
         rows = conn.execute(
-            'SELECT token, entry_price, exit_price, amount, pnl, timestamp '
+            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount '
             'FROM trades WHERE user_id=? ORDER BY timestamp DESC LIMIT 10',
             (uid,)
         ).fetchall()
@@ -12053,12 +12063,24 @@ def wallet_activity():
 
     now = datetime.datetime.utcnow()
     activity = []
-    for token, entry_price, exit_price, amount, pnl, timestamp in rows:
+    for token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount in rows:
         sym = (token or '?').lstrip('$').upper()
-        is_buy = float(amount or 0) > 0
+        if side in ('buy', 'sell'):
+            # Manual instant-trades (Live Market) since the side/token_amount
+            # columns were added: amount is the real SOL magnitude for both
+            # legs, so no more fallback onto pnl (which was always 0 here).
+            is_buy = side == 'buy'
+            amt_sol = abs(float(amount or 0))
+        else:
+            # Legacy rows (recorded before `side` existed) and bot-closed
+            # trades: amount is token quantity (always positive) for the bot,
+            # so fall back to the old sign-based heuristic to keep their
+            # display unchanged.
+            is_buy = float(amount or 0) > 0
+            amt_sol = float(amount if is_buy else (pnl or 0))
         trade_type = 'Buy' if is_buy else 'Sell'
         color = '#3ad29b' if is_buy else '#f76b62'
-        amt_sol = float(amount if is_buy else (pnl or 0))
+        qty = round(float(token_amount or 0), 6)
         sub = ('Bought' if is_buy else 'Sold') + ' $' + sym
         try:
             ts = datetime.datetime.fromisoformat((timestamp or '').replace('Z', ''))
@@ -12077,6 +12099,8 @@ def wallet_activity():
         activity.append({
             'type':       trade_type,
             'sub':        sub,
+            'symbol':     sym,
+            'qty':        qty,
             'amount_sol': round(amt_sol, 4),
             'color':      color,
             'time':       rel,
@@ -12103,7 +12127,7 @@ def wallet_manual_trades():
         c.execute("SELECT COUNT(*), COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND source='manual'", (uid,))
         total_trades, total_pnl = c.fetchone()
         rows = conn.execute(
-            "SELECT token, amount, pnl, timestamp, mint_address FROM trades "
+            "SELECT token, amount, pnl, timestamp, mint_address, side, token_amount FROM trades "
             "WHERE user_id=? AND source='manual' ORDER BY timestamp DESC LIMIT 50",
             (uid,)
         ).fetchall()
@@ -12111,12 +12135,13 @@ def wallet_manual_trades():
         conn.close()
 
     items = []
-    for token, amount, pnl, ts, mint_addr in rows:
-        is_buy = float(amount or 0) > 0
+    for token, amount, pnl, ts, mint_addr, side, token_amount in rows:
+        is_buy = (side == 'buy') if side in ('buy', 'sell') else float(amount or 0) > 0
         items.append({
             'token':        token or '—',
             'type':         'buy' if is_buy else 'sell',
             'amount_sol':   round(float(amount or 0), 4),
+            'token_amount': round(float(token_amount or 0), 6),
             'pnl':          round(float(pnl or 0), 6),
             'timestamp':    ts,
             'mint_address': mint_addr or '',
@@ -12755,6 +12780,33 @@ def api_instant_trade():
         if not sig:
             return jsonify({'error': 'Swap ran but no signature returned', 'stdout': stdout[-300:]}), 500
 
+        # Parse the real amounts orcagent_solana.py reports for this swap --
+        # "BUY ... got:<token_qty> TX:..." for buys, "SELL ... amt:<token_qty>
+        # sol:<sol_received> ..." for sells. Previously this endpoint just
+        # hardcoded entry_price/exit_price=0 and amount=0 for sells, so the
+        # Wallet page's Recent Activity list had no token quantity at all and
+        # showed "-0.0000 SOL" for every sell.
+        token_amount  = 0.0
+        sol_recorded  = amount_sol if side == 'buy' else 0.0
+        for line in stdout.split('\n'):
+            if side == 'buy' and line.startswith('BUY') and 'got:' in line:
+                try:
+                    token_amount = float(line.split('got:')[1].split()[0])
+                except (ValueError, IndexError):
+                    pass
+                break
+            if side == 'sell' and line.startswith('SELL') and 'amt:' in line:
+                try:
+                    token_amount = float(line.split('amt:')[1].split()[0])
+                except (ValueError, IndexError):
+                    pass
+                if 'sol:' in line:
+                    try:
+                        sol_recorded = float(line.split('sol:')[1].split()[0])
+                    except (ValueError, IndexError):
+                        pass
+                break
+
         # Update DB: trades log + user_tokens portfolio
         new_balance = None
         try:
@@ -12767,10 +12819,10 @@ def api_instant_trade():
                 now = datetime.datetime.utcnow().isoformat()
                 conn.execute(
                     'INSERT INTO trades '
-                    '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address, source) '
-                    'VALUES (?,?,?,?,?,?,?,?,?,?)',
-                    (uid, symbol, 0, 0, amount_sol if side == 'buy' else 0,
-                     0, 0, now, token_address, 'manual')
+                    '(user_id, token, entry_price, exit_price, amount, pnl, fee_amount, timestamp, mint_address, source, side, token_amount) '
+                    'VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+                    (uid, symbol, 0, 0, round(sol_recorded, 6),
+                     0, 0, now, token_address, 'manual', side, round(token_amount, 6))
                 )
                 if side == 'buy':
                     # Fetch current token price for avg_price tracking

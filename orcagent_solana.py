@@ -99,8 +99,11 @@ def get_token_decimals(mint: str) -> int:
 # ── SWAP EXECUTION ──────────────────────────────────────────────────────────
 
 def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
-                 wallet_address: str = '', private_key: str = '') -> str:
-    """Execute a Jupiter v6 swap. Returns the transaction signature string.
+                 wallet_address: str = '', private_key: str = '') -> tuple:
+    """Execute a Jupiter v6 swap. Returns (signature, out_amount) where
+    out_amount is the raw (undivided by decimals) quoted output amount as a
+    string, so callers can report exactly how much of the output asset the
+    swap actually produced.
     Logs every step so failures are immediately visible in Railway logs."""
     wallet_address = wallet_address or WALLET_ADDRESS
     private_key    = private_key    or PRIVATE_KEY
@@ -255,7 +258,7 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     sig = rpc_resp.get('result')
     if sig:
         print(f'[TRADE] SUCCESS: https://solscan.io/tx/{sig}', flush=True)
-        return sig
+        return sig, out_amount
     raise Exception(f'No signature in RPC response: {rpc_resp}')
 
 
@@ -267,8 +270,13 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
     try:
         if action == 'buy':
             lamports = int(amount * 1_000_000_000)  # SOL has 9 decimals
-            sig = execute_swap(SOL_MINT, mint, lamports)
-            print(f'BUY {mint[:16]} {round(amount,4)} SOL TX:{sig}', flush=True)
+            sig, out_amount_raw = execute_swap(SOL_MINT, mint, lamports)
+            try:
+                decimals    = get_token_decimals(mint)
+                got_amount  = int(out_amount_raw) / (10 ** decimals)
+            except Exception:
+                got_amount = 0
+            print(f'BUY {mint[:16]} {round(amount,4)} SOL got:{round(got_amount,6)} TX:{sig}', flush=True)
         elif action == 'sell':
             decimals              = get_token_decimals(mint)
             actual_balance, raw_balance = get_token_balance_raw(mint)
@@ -297,9 +305,14 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
             if lamports <= 0:
                 print(f'SELL {mint[:16]} — computed sell amount is 0, nothing to sell', flush=True)
                 sys.exit(0)
-            sig = execute_swap(mint, SOL_MINT, lamports)
+            sig, out_amount_raw = execute_swap(mint, SOL_MINT, lamports)
+            try:
+                sol_received = int(out_amount_raw) / 1_000_000_000  # SOL has 9 decimals
+            except Exception:
+                sol_received = 0
             requested = 'ALL' if amount <= 0 else round(amount, 6)
-            print(f'SELL {mint[:16]} amt:{round(sell_amount,6)} (requested:{requested}, on-chain:{round(actual_balance,6)}) TX:{sig}', flush=True)
+            print(f'SELL {mint[:16]} amt:{round(sell_amount,6)} sol:{round(sol_received,6)} '
+                  f'(requested:{requested}, on-chain:{round(actual_balance,6)}) TX:{sig}', flush=True)
         else:
             print(f'Unknown action: {action}', flush=True)
             sys.exit(1)
@@ -530,11 +543,11 @@ def run():
                         _dec = pos.get('decimals', 6)
                         _raw = int(pos['amount'] * (10 ** _dec))
                         if chg <= -STOP_LOSS:
-                            sig = execute_swap(mint, SOL_MINT, _raw)
+                            sig, _ = execute_swap(mint, SOL_MINT, _raw)
                             print(f'STOP LOSS {label} {round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = 0.0
                         elif chg >= TAKE_PROFIT:
-                            sig = execute_swap(mint, SOL_MINT, _raw)
+                            sig, _ = execute_swap(mint, SOL_MINT, _raw)
                             print(f'TAKE PROFIT {label} +{round(chg*100,1)}% TX:{sig}', flush=True)
                             pos['amount'] = pos['buy_price'] = 0.0
                         continue
@@ -545,7 +558,7 @@ def run():
                         spend = min(sol * trade_pct, MAX_SOL)
                         if spend < MIN_SOL:
                             continue
-                        sig   = execute_swap(SOL_MINT, mint, int(spend * 1e9))
+                        sig, _ = execute_swap(SOL_MINT, mint, int(spend * 1e9))
                         print(f'BUY {label} {round(spend,4)} SOL score:{sc} pct:{int(trade_pct*100)}% m5:+{round(m5,1)}% TX:{sig}', flush=True)
                         _dec              = get_token_decimals(mint)
                         pos['amount']    = spend

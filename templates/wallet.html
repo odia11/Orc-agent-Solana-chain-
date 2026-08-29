@@ -1525,6 +1525,14 @@ function loadTokens(bust){
 loadTokens()
 
 // ── recent activity ──────────────────────────────────────
+function _qtyFmt(n){
+  n=parseFloat(n||0)
+  if(n<=0) return ''
+  if(n>=1e9) return (n/1e9).toFixed(2)+'B'
+  if(n>=1e6) return (n/1e6).toFixed(2)+'M'
+  if(n>=1e3) return (n/1e3).toFixed(1)+'K'
+  return n<1 ? n.toFixed(6) : n.toFixed(2)
+}
 async function _loadActivity(){
   var list=document.getElementById('activity-list')
   try{
@@ -1541,11 +1549,13 @@ async function _loadActivity(){
       var arrow=isBuy?'↑':'↓'
       var sign=isBuy?'+':'-'
       var amt=Math.abs(parseFloat(a.amount_sol||0)).toFixed(4)
+      var qtyStr=_qtyFmt(a.qty)
+      var sub=qtyStr?(a.sub.split(' ')[0]+' '+qtyStr+' $'+(a.symbol||a.sub.split('$')[1]||'')):a.sub
       html+='<div class="act-row">'
         +'<div class="act-tile" style="background:'+iconBg+';color:'+a.color+'">'+arrow+'</div>'
         +'<div class="act-main">'
         +'<div class="act-type">'+a.type+'</div>'
-        +'<div class="act-sub">'+a.sub+'</div>'
+        +'<div class="act-sub">'+sub+'</div>'
         +'</div>'
         +'<div class="act-right">'
         +'<div class="act-amt" style="color:'+a.color+'">'+sign+amt+' SOL</div>'
@@ -1589,8 +1599,9 @@ async function _loadManualTrades(){
       var color=isBuy?'#3ad29b':'#f76b62'
       var arrow=isBuy?'↑':'↓'
       var sym=(t.token||'?').replace(/^\$/,'').toUpperCase()
-      var sub=(isBuy?'Bought':'Sold')+' $'+sym
-      var amtStr=isBuy?(t.amount_sol.toFixed(4)+' SOL'):'—'
+      var qtyStr=_qtyFmt(t.token_amount)
+      var sub=(isBuy?'Bought':'Sold')+(qtyStr?' '+qtyStr:'')+' $'+sym
+      var amtStr=(t.amount_sol?t.amount_sol.toFixed(4):'0.0000')+' SOL'
       var ts=(t.timestamp||'').replace('T',' ').slice(0,16)
       html+='<div class="act-row">'
         +'<div class="act-tile" style="background:'+iconBg+';color:'+color+'">'+arrow+'</div>'
