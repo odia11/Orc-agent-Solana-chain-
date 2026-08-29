@@ -39,6 +39,7 @@ aside{width:240px;min-width:240px;height:calc(100vh - 64px);position:sticky;top:
 .sb-brand-name{font-size:16px;font-weight:700;letter-spacing:-.02em}
 .sb-brand-tag{font-size:9px;font-weight:700;letter-spacing:.14em;color:var(--accent);text-transform:uppercase}
 .sb-nav{display:flex;flex-direction:column;gap:2px;flex:1}
+.sb-nav-chevron{display:none}
 .sb-sep{height:1px;background:var(--bg3);margin:8px 0}
 .nav-btn{display:flex;align-items:center;gap:10px;padding:10px 11px;border-radius:10px;font-size:13.5px;font-weight:500;color:var(--muted);cursor:pointer;border:none;background:transparent;width:100%;text-align:left;transition:background .14s,color .14s;text-decoration:none}
 .nav-btn:hover{background:#14171c;color:var(--text)}
@@ -276,7 +277,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
   aside{width:100%;height:auto;min-width:0;position:sticky;top:0;z-index:40;border-right:none;border-bottom:1px solid var(--bg3);padding:10px 12px;flex-direction:row;flex-wrap:wrap;gap:6px;overflow-y:visible;overflow-x:auto}
   .sb-brand{padding:0 4px 0 0;flex-shrink:0}
   .sb-brand-tag{display:none}
-  .sb-nav{flex-direction:row;flex-wrap:nowrap;gap:4px;overflow-x:auto;flex:1;padding-bottom:2px}
+  /* Fading right edge hints there are more tabs to scroll to -- AI Filters,
+     Settings, etc. are cut off past the viewport on mobile with nothing
+     otherwise indicating that (iOS auto-hides scrollbars, and the row has no
+     other visual break), so tabs past the fold were effectively invisible. */
+  .sb-nav{flex-direction:row;flex-wrap:nowrap;gap:4px;overflow-x:auto;flex:1;padding-bottom:2px;-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent 100%);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent 100%)}
+  .sb-nav-chevron{display:flex;align-items:center;justify-content:center;position:absolute;right:6px;top:14px;width:26px;height:26px;border-radius:50%;background:var(--bg2);border:1px solid var(--bg4);color:var(--accent);font-size:15px;line-height:1;cursor:pointer;z-index:41;box-shadow:0 2px 8px rgba(0,0,0,.4)}
   .sb-sep{width:1px;height:24px;background:var(--bg3);margin:0 4px}
   .nav-btn{padding:8px 10px;font-size:12px;white-space:nowrap;min-height:36px}
   .nav-dot{display:none}
@@ -382,6 +388,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <span class="nav-icon">⌂</span>Dashboard
     </a>
   </div>
+  <!-- Mobile-only: the fading edge on .sb-nav hints there's more to scroll to,
+       but isn't a reliable enough signal on its own (iOS hides scrollbars,
+       and a subtle gradient over dark backgrounds is easy to miss) -- this is
+       what actually got AI Filters and Settings found. -->
+  <button class="sb-nav-chevron" onclick="_scrollNavBar(1)" aria-label="Scroll tabs right">›</button>
 
   <div class="sb-status">
     <div class="sb-sys-card">
@@ -1108,9 +1119,19 @@ function showView(name) {
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById('view-' + name).classList.add('active');
   var nb = document.getElementById('nav-' + name);
-  if (nb) nb.classList.add('active');
+  if (nb) {
+    nb.classList.add('active');
+    // On the mobile horizontal tab row, the just-selected tab can itself be
+    // scrolled out of view (e.g. arriving here via a direct link) -- bring it
+    // into view so the active state is actually visible, not just set.
+    nb.scrollIntoView({behavior: 'smooth', inline: 'nearest', block: 'nearest'});
+  }
   document.getElementById('topbar-title').textContent = _titles[name] || name;
   if (!_loaded[name]) { _loaded[name] = true; loadView(name); }
+}
+function _scrollNavBar(dir) {
+  var nav = document.querySelector('.sb-nav');
+  if (nav) nav.scrollBy({left: dir * 160, behavior: 'smooth'});
 }
 function refreshView() {
   var active = document.querySelector('.view.active');
