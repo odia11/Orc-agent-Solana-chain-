@@ -371,6 +371,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
     <button class="nav-btn" id="nav-security" onclick="showView('security')">
       <span class="nav-icon">🔒</span>Security<span class="nav-dot"></span>
     </button>
+    <button class="nav-btn" id="nav-aifilters" onclick="showView('aifilters')">
+      <span class="nav-icon">✦</span>AI Filters<span class="nav-dot"></span>
+    </button>
     <div class="sb-sep"></div>
     <button class="nav-btn" id="nav-settings" onclick="showView('settings')">
       <span class="nav-icon">⚙</span>Settings<span class="nav-dot"></span>
@@ -841,6 +844,37 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       </div>
     </div>
 
+    <!-- ══════════ VIEW: AI FILTERS ══════════ -->
+    <div class="view" id="view-aifilters">
+      <div class="sec-hdr">
+        <div class="sec-title">Entry Filters — Daily AI Self-Analysis</div>
+        <div class="sec-actions" style="align-items:center">
+          <button class="btn btn-primary" id="aif-run-btn" onclick="runAiFilters()">Run Analysis Now</button>
+        </div>
+      </div>
+
+      <div class="stat-grid" id="aif-active-grid">
+        <div class="card">
+          <div class="card-title">Min Liquidity</div>
+          <div style="font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace" id="aif-liq">—</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Min Pair Age</div>
+          <div style="font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace" id="aif-age">—</div>
+        </div>
+        <div class="card">
+          <div class="card-title">Min LP Locked</div>
+          <div style="font-size:24px;font-weight:700;font-family:'JetBrains Mono',monospace" id="aif-lp">—</div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <div class="sec-title">Proposals</div>
+        <div class="sec-count" id="aif-proposals-count">—</div>
+      </div>
+      <div id="aif-proposals-wrap"></div>
+    </div>
+
     <!-- ══════════ VIEW: SETTINGS ══════════ -->
     <div class="view" id="view-settings">
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;align-items:start">
@@ -1022,9 +1056,9 @@ var _userRole = 'user';
 
 // ── ROLE ACCESS ──
 var _ROLE_TABS = {
-  admin:     ['overview','users','trades','revenue','system','moderation','support','security','settings'],
+  admin:     ['overview','users','trades','revenue','system','moderation','support','security','aifilters','settings'],
   moderator: ['users','trades','moderation','support','security'],
-  analyst:   ['overview','trades','revenue','system'],
+  analyst:   ['overview','trades','revenue','system','aifilters'],
   user:      []
 };
 var _ROLE_BADGE = {
@@ -1035,13 +1069,15 @@ var _ROLE_BADGE = {
 
 function _applyRoleUI(role) {
   var allowed = _ROLE_TABS[role] || [];
-  ['overview','users','trades','revenue','system','moderation','support','security','settings'].forEach(function(name) {
+  ['overview','users','trades','revenue','system','moderation','support','security','aifilters','settings'].forEach(function(name) {
     var btn = document.getElementById('nav-' + name);
     if (btn) btn.style.display = allowed.indexOf(name) >= 0 ? '' : 'none';
   });
   document.querySelectorAll('.sb-sep').forEach(function(sep) {
     sep.style.display = role === 'admin' ? '' : 'none';
   });
+  var runBtn = document.getElementById('aif-run-btn');
+  if (runBtn) runBtn.style.display = role === 'admin' ? '' : 'none';
   var badge = document.getElementById('sb-role-badge');
   if (badge) {
     var b = _ROLE_BADGE[role] || _ROLE_BADGE.analyst;
@@ -1063,7 +1099,7 @@ async function _initRoleBasedUI() {
 }
 
 // ── VIEW SWITCHING ──
-var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',support:'Support',security:'Security',settings:'Settings'};
+var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',support:'Support',security:'Security',aifilters:'AI Filters',settings:'Settings'};
 function showView(name) {
   var allowed = _ROLE_TABS[_userRole] || Object.keys(_titles);
   if (allowed.indexOf(name) < 0) return;
@@ -1091,6 +1127,7 @@ function loadView(name) {
   else if (name === 'system') loadSystem();
   else if (name === 'moderation') loadModeration();
   else if (name === 'support') loadSupport();
+  else if (name === 'aifilters') loadAiFilters();
   else if (name === 'settings') loadSettings();
 }
 
@@ -1670,6 +1707,83 @@ async function runSecurityAudit() {
           '</div>';
       }).join('')
     : '<div class="tbl-empty">No read-only session hit a privileged route in the window</div>';
+}
+
+// ══════════════════ AI FILTERS ══════════════════
+// Daily self-analysis loop (run_ai_self_analysis() server-side): sends the
+// last 24h's best/worst closed trades to Claude, which proposes new values
+// for the three entry filters below. A proposal never takes effect on its
+// own -- only admin/executive can approve or reject one here, which is why
+// those two buttons are hidden entirely for any other role that can still
+// view this tab (analyst) rather than rendered-but-403ing on click.
+async function loadAiFilters() {
+  var r = await _a('/api/admin/ai-filters');
+  if (!r || !r.ok) {
+    document.getElementById('aif-proposals-wrap').innerHTML = '<div class="tbl-empty">Failed to load</div>';
+    return;
+  }
+  var f = r.active_filters || {};
+  document.getElementById('aif-liq').textContent = '$' + Number(f.min_liquidity_usd || 0).toLocaleString();
+  document.getElementById('aif-age').textContent = (f.min_pair_age_minutes || 0) + 'm';
+  document.getElementById('aif-lp').textContent  = (f.min_lp_locked_pct || 0) + '%';
+
+  var canReview = (_userRole === 'admin');
+  var props = r.proposals || [];
+  document.getElementById('aif-proposals-count').textContent = props.length + ' proposal(s)';
+  var wrap = document.getElementById('aif-proposals-wrap');
+  if (!props.length) {
+    wrap.innerHTML = '<div class="tbl-empty">No proposals yet — runs daily at 04:00 UTC, or click "Run Analysis Now".</div>';
+    return;
+  }
+  wrap.innerHTML = props.map(function(p) {
+    var pj = p.proposed || {};
+    var tagCls = p.status === 'pending' ? 'tag-amber' : (p.status === 'approved' ? 'tag-green' : 'tag-muted');
+    var actions = (p.status === 'pending' && canReview)
+      ? '<div style="display:flex;gap:8px;margin-top:10px">' +
+          '<button class="btn btn-primary" style="padding:6px 14px;font-size:12px" onclick="reviewAiFilterProposal(' + p.id + ',\'approve\')">Approve</button>' +
+          '<button class="btn" style="padding:6px 14px;font-size:12px;background:rgba(255,77,106,.1);color:var(--red);border:1px solid rgba(255,77,106,.3)" onclick="reviewAiFilterProposal(' + p.id + ',\'reject\')">Reject</button>' +
+        '</div>'
+      : (p.status !== 'pending'
+          ? '<div style="font-size:11px;color:var(--muted);margin-top:8px">' + _escHtml(p.status) + ' by ' + _escHtml((p.reviewed_by || '').slice(0, 8)) + '… on ' + _escHtml(p.reviewed_at || '') + '</div>'
+          : '');
+    return '<div class="card" style="margin-bottom:12px">' +
+      '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">' +
+        '<span class="mono-sm">#' + p.id + ' · ' + _escHtml(p.created_at || '') + ' · ' + p.trades_analyzed + ' trades analyzed</span>' +
+        '<span class="tag ' + tagCls + '">' + _escHtml(p.status) + '</span>' +
+      '</div>' +
+      '<div class="mono-sm" style="margin-bottom:6px">liquidity ≥ $' + Number(pj.min_liquidity_usd || 0).toLocaleString() +
+        ' · age ≥ ' + (pj.min_pair_age_minutes || 0) + 'm · LP locked ≥ ' + (pj.min_lp_locked_pct || 0) + '%</div>' +
+      '<div style="font-size:12px;color:var(--muted)">' + _escHtml(p.reasoning || '') + '</div>' +
+      actions +
+      '</div>';
+  }).join('');
+}
+
+async function runAiFilters() {
+  var btn = document.getElementById('aif-run-btn');
+  btn.disabled = true;
+  btn.textContent = 'Running…';
+  var r = await fetch('/api/admin/ai-filters/run-now', {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window._csrfToken},
+    body: '{}'
+  }).then(r => r.json()).catch(() => null);
+  btn.disabled = false;
+  btn.textContent = 'Run Analysis Now';
+  if (!r || !r.ok) { toast((r && r.msg) || 'Analysis failed', false); return; }
+  toast('✓ New proposal ready for review', true);
+  loadAiFilters();
+}
+
+async function reviewAiFilterProposal(id, action) {
+  var r = await fetch('/api/admin/ai-filters/' + action, {
+    method: 'POST', credentials: 'include',
+    headers: {'Content-Type': 'application/json', 'X-CSRF-Token': window._csrfToken},
+    body: JSON.stringify({proposal_id: id})
+  }).then(r => r.json()).catch(() => null);
+  if (!r || !r.ok) { toast((r && r.msg) || 'Action failed', false); return; }
+  toast(action === 'approve' ? '✓ Filters updated' : 'Proposal rejected', true);
+  loadAiFilters();
 }
 
 // ══════════════════ SETTINGS ══════════════════
