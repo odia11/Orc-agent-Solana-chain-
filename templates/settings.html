@@ -290,6 +290,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
             <span class="st-track"></span>
           </label>
         </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Show Trades Publicly</div>
+            <div class="st-tog-sub">Recent Trades on your profile, visible to others</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-trades-public" checked onchange="_savePref('trades_public',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
       </div>
 
       <!-- ── CARD 3: Account & Wallet ── -->
@@ -458,9 +469,11 @@ async function _initPage(){
     var notifs=document.getElementById('pref-notifs');
     var scam=document.getElementById('pref-scam');
     var sound=document.getElementById('pref-sound');
+    var tradesPublic=document.getElementById('pref-trades-public');
     if(notifs) notifs.checked=!!d.pref_notifications;
     if(scam)   scam.checked  =!!d.pref_scam_filter;
     if(sound)  sound.checked =!!d.pref_sound_alerts;
+    if(tradesPublic) tradesPublic.checked = d.pref_trades_public!=null ? !!d.pref_trades_public : true;
     if(d.is_verified){
       var sbName=document.querySelector('.sb-user-name');
       if(sbName) sbName.innerHTML='You <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';
