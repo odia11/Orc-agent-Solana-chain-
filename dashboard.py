@@ -484,6 +484,12 @@ CRASH_EXIT      = 0.15   # 15% — emergency exit on extreme drop
 # stop_loss = worst-case loss if SL fires cleanly). Only ever shrinks the
 # existing score-based stake in user_trader_loop(), never grows it.
 MAX_RISK_PCT_PER_TRADE = 0.02  # 2% of capital at risk per trade
+# How many of the top qualifying (score/momentum/safety-filtered) candidates
+# a scan considers for its weighted-random buy pick -- see the "Pass 2" entry
+# selection in user_trader_loop(). Was 5; widened so the bot evaluates a much
+# larger slice of the live market each cycle instead of only ever choosing
+# among the single highest-momentum handful.
+BUY_POOL_SIZE = 25
 # Opt-in tiered take-profit (users.tiered_tp_enabled) -- sell TP1_SELL_FRACTION
 # of the position once price reaches TP1_MULTIPLE x entry, then trail the
 # remainder with TRAILING_STOP_PCT off its peak instead of the flat
@@ -6394,11 +6400,16 @@ def user_trader_loop(stop_event, config, wallet: str):
                         # `live` list and applies near-identical default filters, so always
                         # taking qualifying[0] (the single highest-momentum pick) made every
                         # user's bot buy the exact same token at the exact same time -- there
-                        # was zero diversification. Weighted-random pick among the top few
-                        # qualifying candidates (still score-weighted, so stronger setups stay
-                        # more likely) spreads different users -- and the same user over time
-                        # -- across multiple tokens instead of one shared favorite.
-                        _pool = qualifying[:5]
+                        # was zero diversification. Weighted-random pick among the top
+                        # BUY_POOL_SIZE qualifying candidates (still score-weighted, so
+                        # stronger setups stay more likely) spreads different users -- and the
+                        # same user over time -- across a much wider set of tokens instead of
+                        # one shared favorite. The existing learned-bias/AI self-analysis
+                        # systems (_learned_liquidity_bias(), _learned_lp_bias(),
+                        # run_ai_self_analysis()) already train off the full trades table
+                        # regardless of pool size, so widening this pool automatically feeds
+                        # them a more diverse trade history too -- no separate wiring needed.
+                        _pool = qualifying[:BUY_POOL_SIZE]
                         if len(_pool) > 1:
                             _weights = [max(0.1, _p.get('score', 0)) for _p in _pool]
                             best = random.choices(_pool, weights=_weights, k=1)[0]
