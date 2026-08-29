@@ -1,4 +1,4 @@
-import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib, traceback
+import threading, time, json, os, sys, subprocess, requests, logging, datetime, sqlite3, re, functools, struct, base64, math, hashlib, hmac, secrets, binascii, shutil, uuid, html as _html_lib, traceback, random
 import io
 import socket
 import ipaddress
@@ -6390,7 +6390,20 @@ def user_trader_loop(stop_event, config, wallet: str):
                             print(f'  [qualify] {_qt.get("symbol","")} score={_qt.get("score",0)} '
                                   f'5m={round(_qt.get("change5m",0),1)}% 1h={round(_qt.get("change1h",0),1)}%', flush=True)
                     if qualifying:
-                        best  = qualifying[0]
+                        # Every user's bot reads the exact same shared, globally-scanned
+                        # `live` list and applies near-identical default filters, so always
+                        # taking qualifying[0] (the single highest-momentum pick) made every
+                        # user's bot buy the exact same token at the exact same time -- there
+                        # was zero diversification. Weighted-random pick among the top few
+                        # qualifying candidates (still score-weighted, so stronger setups stay
+                        # more likely) spreads different users -- and the same user over time
+                        # -- across multiple tokens instead of one shared favorite.
+                        _pool = qualifying[:5]
+                        if len(_pool) > 1:
+                            _weights = [max(0.1, _p.get('score', 0)) for _p in _pool]
+                            best = random.choices(_pool, weights=_weights, k=1)[0]
+                        else:
+                            best = _pool[0]
                         bmint = best['mint']
                         label = best['symbol'] or bmint[:8]
                         sc    = best['score']
