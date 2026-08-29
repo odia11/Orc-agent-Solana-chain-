@@ -1668,7 +1668,15 @@ async function _lmConfirmBuy(idx, sym, addr, chain){
       // is a real (non-read-only) wallet connection.
       _lmBuyMsg(idx, 'Verbind een echte wallet (geen read-only) om te kunnen handelen', false);
     } else {
-      _lmBuyMsg(idx, d.msg || 'Buy failed', false);
+      // d.msg covers /api/trade/buy's own failure paths, but a request that
+      // never reaches that handler at all (CSRF check, shared-secret check,
+      // Origin check -- all @app.before_request, all ahead of any route)
+      // reports its reason under 'error', not 'msg'. Checking only d.msg
+      // meant the actual reason (e.g. "CSRF validation failed" from a stale
+      // page/session) silently collapsed into a generic, unfixable-looking
+      // "Buy failed" instead of the specific, actionable message the
+      // backend already sent.
+      _lmBuyMsg(idx, d.msg || d.error || 'Buy failed', false);
     }
   }catch(e){
     if(_lmOpenBuyPanelIdx === idx) _lmBuyMsg(idx, 'Network error — buy not sent', false);

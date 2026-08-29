@@ -499,7 +499,11 @@ function confirmBuy(idx){
     method:'POST', credentials:'include', headers: authHeaders(),
     body: JSON.stringify({symbol:t.symbol, token_address:t.mint, pair_address:t.pair_address, side:'buy', amount_sol:amt})
   }).then(function(r){ return r.json(); }).then(function(d){
-    if(d && (d.sig || d.ok)){
+    // /api/instant-trade's real success shape is {success:true, tx:<sig>, ...}
+    // -- this used to check d.sig/d.ok, which that endpoint never actually
+    // sends, so every successful buy fell through to the failure branch and
+    // showed "Buy failed" even though the trade had just executed on-chain.
+    if(d && (d.success || d.tx || d.ok || d.sig)){
       showMsg(msgEl, 'Bought $'+t.symbol+' for '+amt+' SOL', true);
       if(input) input.value = '';
       setTimeout(function(){ var p=document.getElementById('pt-buy-panel-'+idx); if(p){ p.style.display='none'; p.innerHTML=''; } }, 2200);
@@ -526,7 +530,9 @@ function handleSell(idx, btn){
     method:'POST', credentials:'include', headers: authHeaders(),
     body: JSON.stringify({symbol:t.symbol, token_address:t.mint, pair_address:t.pair_address, side:'sell', amount_sol:0})
   }).then(function(r){ return r.json(); }).then(function(d){
-    toast((d && (d.sig||d.ok)) ? ('Sold $'+t.symbol) : ((d && (d.error||d.msg)) || 'Sell failed'));
+    // Same fix as confirmBuy() above -- /api/instant-trade's real success
+    // shape is {success:true, tx:<sig>}, not {ok, sig}.
+    toast((d && (d.success||d.tx||d.ok||d.sig)) ? ('Sold $'+t.symbol) : ((d && (d.error||d.msg)) || 'Sell failed'));
   }).catch(function(){ toast('Network error — sell not sent'); })
     .finally(function(){ btn.disabled=false; btn.textContent='Sell'; });
 }
