@@ -8695,6 +8695,7 @@ function _renderFeedCard(e){
     +'</div>'
     +'</div>'
     +'</div>'
+    +'</div>'
     +(repostBanner ? '</div>' : '');
 }
 
@@ -9143,6 +9144,7 @@ function _feedToggleNestedReply(parentId, postId, btn){
     +'<button class="fc-reply-tool" onclick="_emojiPickerToggle(event,\'nrepal-'+parentId+'\',\''+inpId+'\')" title="Emoji">😊</button>'
     +'<div class="fc-reply-palette ep-palette" id="nrepal-'+parentId+'"></div>'
     +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')" title="Reageren">'+_RC_SEND_ICON_SVG+'</button>'
+    +'</div>'
     +'</div>'
     +'</div>'
     +'</div>';
