@@ -4384,14 +4384,25 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
         finally:
             pk = None
 
-    threading.Thread(
-        target=_do_fee,
-        args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts),
-        daemon=True,
-    ).start()
     if bundled:
+        # No 12s wait and no real transfer to make here -- just a couple of DB
+        # writes (fees row + trades.fee_paid) -- so run it inline instead of on
+        # a background thread. A daemon thread has no guarantee of finishing
+        # before the process exits, and this app redeploys often; if one got
+        # killed mid-flight the trades row was left stuck at fee_paid=0 even
+        # though its fee was already collected inside the swap, and the
+        # startup fee-recovery sweep would then send a SECOND, real, separate
+        # SOL transfer for it on the next deploy -- a visible extra
+        # transaction, and a double charge, for a fee that was never actually
+        # unpaid. Doing it inline closes that race entirely.
         print(f'[fee] {short_w} {symbol} {kind} fee already bundled into the swap — recording it now', flush=True)
+        _do_fee(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts)
     else:
+        threading.Thread(
+            target=_do_fee,
+            args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts),
+            daemon=True,
+        ).start()
         print(f'[fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
 
 
@@ -20221,6 +20232,23 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
               AND datetime(t.timestamp) < datetime('now', '-2 minutes')
               AND u.encrypted_private_key IS NOT NULL
               AND u.encrypted_private_key != ""
+              -- A trade whose fee was already collected inside its own swap
+              -- (bundled=True) but never got to flip trades.fee_paid=1 --
+              -- e.g. the process restarted mid-write, back when that update
+              -- ran on a background thread -- must NOT be recovered here.
+              -- Doing so would send a second, real, separate SOL transfer
+              -- for a fee the user already paid invisibly, which is exactly
+              -- the "extra transaction" users have been reporting. A
+              -- matching bundled `fees` row within 5 minutes of the trade's
+              -- own timestamp is strong evidence it was already collected.
+              AND NOT EXISTS (
+                  SELECT 1 FROM fees f
+                  WHERE f.user_wallet = u.wallet_address
+                    AND f.kind = 'sell'
+                    AND f.status = 'ok'
+                    AND f.fee_tx = 'bundled-in-swap'
+                    AND ABS(strftime('%s', f.timestamp) - strftime('%s', t.timestamp)) < 300
+              )
             GROUP BY u.wallet_address, u.encrypted_private_key
         ''')
         rows = c.fetchall()
