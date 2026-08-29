@@ -1451,6 +1451,10 @@ function _renderHoldings(spl){
       var col=chg>=0?'#3ad29b':'#f76b62'
       pnlHtml='<div class="tok-pct" style="color:'+col+'">'+(chg>=0?'+':'')+chg.toFixed(2)+'%</div>'
     }
+    // cur===0 means no price data at all (e.g. a token DexScreener has no
+    // listing for) -- showing "$0.00" there reads as "this is worthless",
+    // when really we just don't know. "—" is honest about the difference.
+    var usdStr=cur>0?('$'+usd.toFixed(2)):'—'
     return '<div class="tok-row">'
       +logoHtml
       +'<div class="tok-info" data-sym="'+esc(sym)+'" onclick="window.location=\'/live-market?token=\'+encodeURIComponent(this.dataset.sym)">'
@@ -1468,7 +1472,7 @@ function _renderHoldings(spl){
         +'<button id="wbtn-'+realI+'-sell" class="w-sell-btn" onclick="_wTrade('+realI+',\'sell\')">SELL</button>'
       +'</div>'
       +'<div class="tok-val">'
-        +'<div class="tok-usd">$'+usd.toFixed(2)+'</div>'
+        +'<div class="tok-usd">'+usdStr+'</div>'
         +pnlHtml
       +'</div>'
     +'</div>'

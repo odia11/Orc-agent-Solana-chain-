@@ -12156,7 +12156,7 @@ def wallet_activity():
             return jsonify({'ok': True, 'activity': []})
         uid = user_row[0]
         rows = conn.execute(
-            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount '
+            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount, source '
             'FROM trades WHERE user_id=? ORDER BY timestamp DESC LIMIT 10',
             (uid,)
         ).fetchall()
@@ -12165,7 +12165,7 @@ def wallet_activity():
 
     now = datetime.datetime.utcnow()
     activity = []
-    for token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount in rows:
+    for token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount, source in rows:
         sym = (token or '?').lstrip('$').upper()
         if side in ('buy', 'sell'):
             # Manual instant-trades (Live Market) since the side/token_amount
@@ -12173,16 +12173,29 @@ def wallet_activity():
             # legs, so no more fallback onto pnl (which was always 0 here).
             is_buy = side == 'buy'
             amt_sol = abs(float(amount or 0))
+            qty = round(float(token_amount or 0), 6)
+        elif source in ('bot', 'copy'):
+            # Bot/copy-trade rows are written ONCE, at close (_record_user_trade)
+            # -- always an exit, never a buy. `amount` here is the TOKEN
+            # quantity, not SOL (entry_price/exit_price are the per-token SOL
+            # prices set at open/close) -- treating that raw token count as if
+            # it were a SOL amount is exactly what made this feed show things
+            # like "Buy $BREAKING +143.4547 SOL" for a token bought with a
+            # fraction of a SOL. The real SOL this trade returned is
+            # amount * exit_price.
+            is_buy = False
+            amt_sol = float(amount or 0) * float(exit_price or 0)
+            qty = round(float(amount or 0), 6)
         else:
-            # Legacy rows (recorded before `side` existed) and bot-closed
-            # trades: amount is token quantity (always positive) for the bot,
-            # so fall back to the old sign-based heuristic to keep their
-            # display unchanged.
+            # Legacy manual rows from before the side/token_amount columns
+            # existed: amount really was the SOL spent for a buy, 0 for a
+            # sell (the old bug) -- best-effort fallback so old history still
+            # renders something rather than nothing.
             is_buy = float(amount or 0) > 0
             amt_sol = float(amount if is_buy else (pnl or 0))
+            qty = 0.0
         trade_type = 'Buy' if is_buy else 'Sell'
         color = '#3ad29b' if is_buy else '#f76b62'
-        qty = round(float(token_amount or 0), 6)
         sub = ('Bought' if is_buy else 'Sold') + ' $' + sym
         try:
             ts = datetime.datetime.fromisoformat((timestamp or '').replace('Z', ''))
