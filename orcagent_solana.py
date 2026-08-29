@@ -1,4 +1,4 @@
-import sys, time, json, os, requests, base64, traceback
+import sys, time, json, os, requests, base64, traceback, struct
 from dotenv import load_dotenv
 from solders.keypair import Keypair
 from solders.transaction import VersionedTransaction
@@ -21,16 +21,28 @@ SOLANA_RPCS   = [
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT      = 'So11111111111111111111111111111111111111112'
 
-# Platform fee on the sell leg (token -> SOL), folded directly into the swap
-# transaction via Jupiter's platformFeeBps/feeAccount so it's never a second,
-# separately-visible SOL transfer out of the user's wallet. Set by
-# dashboard.py's subprocess env for bot-driven sells only -- absent (empty/0)
-# for buys and for manual Live Market instant-trades, which keep the swap
-# exactly as before.
+# Platform fee, folded directly into the swap transaction itself so it's
+# never a second, separately-visible SOL transfer out of the user's wallet.
+# Sell (token -> SOL): Jupiter's own platformFeeBps/feeAccount handles it,
+# since the swap's output is already SOL. Buy (SOL -> token): Jupiter's fee
+# mechanism would take it out of the purchased TOKEN instead, so a buy
+# splices our own SOL-transfer instruction into the swap's own transaction
+# via /swap-instructions + MessageV0.try_compile() (see
+# _execute_buy_with_bundled_fee()) -- more moving parts, but the fee stays in
+# SOL either way. Set by dashboard.py's subprocess env; absent (empty/0)
+# disables this entirely (e.g. manual Live Market instant-trades never had
+# this fee and don't set these).
 FEE_WALLET    = os.getenv('FEE_WALLET', '')
 FEE_RATE_TXN  = float(os.getenv('FEE_RATE_TXN', '0') or 0)
 TOKEN_PROGRAM       = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
 ASSOC_TOKEN_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+SYSTEM_PROGRAM      = '11111111111111111111111111111111'
+# Deliberately NOT proxied through JUPITER_PROXY_URL (unlike JUPITER_QUOTE/
+# JUPITER_SWAP above) -- there's no evidence the optional proxy has a route
+# for this endpoint, and this path already has a full fallback to the normal
+# (proxied) swap on any failure, so a wrong/missing proxy route here just
+# means that one trade's fee doesn't get bundled, never a broken trade.
+JUPITER_SWAP_INSTRUCTIONS = 'https://api.jup.ag/swap/v1/swap-instructions'
 
 def _clean_rpc_error(err):
     if isinstance(err, dict):
@@ -169,6 +181,156 @@ def _ensure_fee_ata(payer_keypair, fee_wallet: str, mint: str) -> str:
     print(f'[fee] fee token account created  TX:{res.get("result","?")[:20]}...', flush=True)
     time.sleep(8)  # let it land before the swap tx references it
     return ata
+
+
+def _deser_ix(ix_json):
+    """One Jupiter /swap-instructions JSON instruction -> a solders
+    Instruction. Jupiter's instructions come as {programId, accounts:
+    [{pubkey, isSigner, isWritable}], data (base64)} -- the same shape
+    web3.js's own `TransactionInstruction` uses, just JSON instead of a
+    class."""
+    from solders.pubkey import Pubkey
+    from solders.instruction import Instruction, AccountMeta
+    program_id = Pubkey.from_string(ix_json['programId'])
+    accounts = [
+        AccountMeta(Pubkey.from_string(a['pubkey']), bool(a.get('isSigner')), bool(a.get('isWritable')))
+        for a in (ix_json.get('accounts') or [])
+    ]
+    data = base64.b64decode(ix_json['data']) if ix_json.get('data') else b''
+    return Instruction(program_id, data, accounts)
+
+
+def _resolve_alts(addresses):
+    """Fetch the on-chain data for each address-lookup-table address Jupiter's
+    swap-instructions response references, and decode it into the
+    AddressLookupTableAccount objects MessageV0.try_compile() needs to
+    resolve the swap instruction's compressed account references.
+
+    An ALT account's on-chain layout is a fixed 56-byte header (discriminator
+    + deactivation_slot + last_extended_slot + last_extended_slot_start_index
+    + Option<authority> + padding -- unchanged since lookup tables shipped,
+    same LOOKUP_TABLE_META_SIZE constant @solana/web3.js's own
+    AddressLookupTableAccount.deserialize() uses) followed by a flat array of
+    32-byte addresses."""
+    from solders.pubkey import Pubkey
+    from solders.address_lookup_table_account import AddressLookupTableAccount
+    ALT_HEADER_SIZE = 56
+    out = []
+    for addr in addresses:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
+            'params': [addr, {'encoding': 'base64'}],
+        }, timeout=10).json()
+        val = (r.get('result') or {}).get('value')
+        if not val or not val.get('data'):
+            raise Exception(f'lookup table account not found: {addr[:8]}...')
+        raw = base64.b64decode(val['data'][0])
+        body = raw[ALT_HEADER_SIZE:]
+        body = body[:len(body) - (len(body) % 32)]  # drop any trailing partial entry
+        addr_list = [Pubkey(body[i:i + 32]) for i in range(0, len(body), 32)]
+        out.append(AddressLookupTableAccount(key=Pubkey.from_string(addr), addresses=addr_list))
+    return out
+
+
+def _execute_buy_with_bundled_fee(mint: str, spend_lamports: int, fee_lamports: int,
+                                   wallet_address: str, private_key: str, fee_wallet: str) -> tuple:
+    """Buy `mint` with (spend_lamports - fee_lamports) SOL, with the
+    fee_lamports transfer to fee_wallet spliced into the SAME transaction as
+    the swap -- so the wallet still spends exactly spend_lamports total, but
+    there's no second, separately-visible transfer afterward.
+
+    Jupiter's own platformFeeBps/feeAccount (used for the sell leg) takes its
+    cut from the swap's OUTPUT, which for a buy is the token being purchased,
+    not SOL -- not what we want here. Instead this fetches the swap as raw,
+    uncompiled instructions (/swap-instructions, not /swap) via a Jupiter
+    quote for the REDUCED amount, adds one plain SystemProgram transfer
+    instruction for fee_lamports, and compiles everything into one
+    MessageV0/VersionedTransaction ourselves. Returns (signature, out_amount)
+    like _execute_swap_inner(), and raises on any problem -- callers must
+    catch and fall back to a normal (unbundled) swap for spend_lamports."""
+    from solders.pubkey import Pubkey
+    from solders.instruction import Instruction, AccountMeta
+    from solders.message import MessageV0
+    from solders.transaction import VersionedTransaction as _VTx
+    from solders.hash import Hash as SolHash
+
+    net_lamports = spend_lamports - fee_lamports
+    if net_lamports <= 0:
+        raise Exception('nothing left to swap after fee')
+
+    keypair = Keypair.from_base58_string(private_key)
+    payer   = keypair.pubkey()
+
+    print(f'[fee] buy: requesting quote for {net_lamports} lamports '
+          f'({fee_lamports} lamports fee bundled into this tx)', flush=True)
+    r = requests.get(
+        JUPITER_QUOTE,
+        params={'inputMint': SOL_MINT, 'outputMint': mint, 'amount': net_lamports, 'slippageBps': 300},
+        headers=_JUP_HEADERS, timeout=15,
+    )
+    if r.status_code != 200:
+        raise Exception(f'quote HTTP {r.status_code}: {r.text[:200]}')
+    quote = r.json()
+    if 'error' in quote or 'outAmount' not in quote:
+        raise Exception(f'quote error: {quote.get("error", quote)}')
+    out_amount = quote.get('outAmount', '0')
+
+    r2 = requests.post(
+        JUPITER_SWAP_INSTRUCTIONS,
+        json={'quoteResponse': quote, 'userPublicKey': str(payer),
+              'wrapAndUnwrapSol': True, 'dynamicComputeUnitLimit': True,
+              'prioritizationFeeLamports': 'auto'},
+        headers=_JUP_HEADERS, timeout=20,
+    )
+    if r2.status_code != 200:
+        raise Exception(f'swap-instructions HTTP {r2.status_code}: {r2.text[:200]}')
+    swi = r2.json()
+    if 'error' in swi:
+        raise Exception(f'swap-instructions error: {swi["error"]}')
+
+    instructions = []
+    for key in ('computeBudgetInstructions', 'setupInstructions'):
+        for ix in (swi.get(key) or []):
+            instructions.append(_deser_ix(ix))
+    if swi.get('swapInstruction'):
+        instructions.append(_deser_ix(swi['swapInstruction']))
+    if swi.get('cleanupInstruction'):
+        instructions.append(_deser_ix(swi['cleanupInstruction']))
+    if not instructions:
+        raise Exception('swap-instructions returned no instructions')
+
+    # Our fee transfer -- plain System Program transfer, appended after the
+    # swap itself so it doesn't interfere with the swap's own account setup.
+    instructions.append(Instruction(
+        program_id=Pubkey.from_string(SYSTEM_PROGRAM),
+        accounts=[
+            AccountMeta(payer, is_signer=True, is_writable=True),
+            AccountMeta(Pubkey.from_string(fee_wallet), is_signer=False, is_writable=True),
+        ],
+        data=struct.pack('<IQ', 2, fee_lamports),
+    ))
+
+    alt_accounts = _resolve_alts(swi.get('addressLookupTableAddresses') or [])
+
+    bh = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+    }, timeout=10).json()['result']['value']['blockhash']
+
+    message   = MessageV0.try_compile(payer, instructions, alt_accounts, SolHash.from_string(bh))
+    signed_tx = _VTx(message, [keypair])
+    encoded   = base64.b64encode(bytes(signed_tx)).decode()
+
+    rpc_resp = _rpc_post({
+        'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+        'params': [encoded, {'encoding': 'base64', 'skipPreflight': False, 'maxRetries': 3}],
+    }, timeout=30)
+    if 'error' in rpc_resp:
+        raise Exception(f'sendTransaction error: {_clean_rpc_error(rpc_resp["error"])}')
+    sig = rpc_resp.get('result')
+    if not sig:
+        raise Exception(f'no signature in RPC response: {rpc_resp}')
+    print(f'[fee] buy with bundled fee SUCCESS: https://solscan.io/tx/{sig}', flush=True)
+    return sig, out_amount
 
 
 # ── SWAP EXECUTION ──────────────────────────────────────────────────────────
@@ -363,11 +525,26 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
                   wallet_address: str = '', private_key: str = '',
                   fee_wallet: str = '', fee_bps: int = 0) -> tuple:
     """Public entry point for a swap -- see _execute_swap_inner() for the real
-    step-by-step logic. This just adds one safety net on top: if a platform
+    sell-side step-by-step logic, and _execute_buy_with_bundled_fee() for the
+    buy-side one. Either way this adds one safety net on top: if a platform
     fee was requested and ANYTHING about the swap fails (quote rejection, a
     bad/missing fee account, on-chain simulation, whatever), retry the exact
     same swap once with no fee attached at all, rather than letting a
     fee-related problem fail a real user's trade."""
+    if fee_wallet and fee_bps > 0 and input_mint == SOL_MINT:
+        # Buy (SOL -> token): fee is spliced into the swap's own transaction
+        # as a plain SOL transfer -- see _execute_buy_with_bundled_fee()'s
+        # docstring for why this can't use Jupiter's platformFeeBps like the
+        # sell leg does.
+        wallet_address = wallet_address or WALLET_ADDRESS
+        private_key    = private_key    or PRIVATE_KEY
+        fee_lamports   = int(amount_lamports * fee_bps / 10000)
+        try:
+            return _execute_buy_with_bundled_fee(output_mint, amount_lamports, fee_lamports,
+                                                  wallet_address, private_key, fee_wallet)
+        except Exception as e:
+            print(f'[fee] bundled buy fee failed ({e}) — retrying as a normal buy, no fee this time', flush=True)
+            return _execute_swap_inner(input_mint, output_mint, amount_lamports, wallet_address, private_key)
     try:
         return _execute_swap_inner(input_mint, output_mint, amount_lamports,
                                     wallet_address, private_key, fee_wallet, fee_bps)
@@ -387,7 +564,9 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
     try:
         if action == 'buy':
             lamports = int(amount * 1_000_000_000)  # SOL has 9 decimals
-            sig, out_amount_raw = execute_swap(SOL_MINT, mint, lamports)
+            sig, out_amount_raw = execute_swap(
+                SOL_MINT, mint, lamports,
+                fee_wallet=FEE_WALLET, fee_bps=int(round(FEE_RATE_TXN * 10000)))
             try:
                 decimals    = get_token_decimals(mint)
                 got_amount  = int(out_amount_raw) / (10 ** decimals)

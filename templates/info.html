@@ -242,9 +242,8 @@ html,body{min-height:100vh;min-height:100dvh;background:var(--bg);font-family:va
       every buy and every sell, each calculated on the SOL amount of that
       individual swap — not on the trade's profit. So a full round-trip
       (buy + sell) pays {{ fee_pct }}% twice, {{ (fee_pct * 2) | round(2) }}%
-      total. Each fee is sent as a small, separate SOL transaction from your
-      trading wallet right after that swap confirms; it is not deducted from
-      the swap proceeds themselves.</p>
+      total. The fee is deducted as part of that same swap transaction —
+      there's no separate transfer out of your wallet afterward.</p>
       <p>The sell-side fee applies whether that trade closes at a profit, a
       loss, or break-even. Open (not-yet-closed) positions only pay the
       buy-side fee until they're closed.</p>

@@ -6509,7 +6509,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['entry_mint_authority_active'] = _safety.get('mint_authority_active') if _safety.get('ok') else None
                                 pos['entry_freeze_authority_active'] = _safety.get('freeze_authority_active') if _safety.get('ok') else None
                                 _upsert_open_position(user_id, wallet, bmint, pos, source='bot')
-                                _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy')
+                                _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy', bundled=True)
                                 open_pos += 1
                                 _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
                             else:
@@ -6614,7 +6614,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                 pos['opened_at']       = time.time()
                 pos['entry_liquidity'] = liquidity
                 _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy', copy_of_wallet=buyer_wallet)
-                _charge_txn_fee(_pk, c_wallet, c_uid, symbol, spend, 'buy')
+                _charge_txn_fee(_pk, c_wallet, c_uid, symbol, spend, 'buy', bundled=True)
                 add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
             except Exception as e:
                 print(f'[copy-trade] error for {c_wallet[:6]}: {e}', flush=True)
@@ -12836,10 +12836,11 @@ def api_instant_trade():
             env                       = os.environ.copy()
             env['WALLET_ADDRESS']     = wallet
             env['WALLET_PRIVATE_KEY'] = private_key
-            # Same 0.75% platform fee as the bot's own trades -- for a sell,
-            # orcagent_solana.py folds it into this swap's own transaction
-            # (Jupiter platformFee) so it's never a separate visible transfer;
-            # the buy leg's fee is charged just below via _charge_txn_fee().
+            # Same 0.75% platform fee as the bot's own trades -- orcagent_solana.py
+            # folds it into this swap's own transaction either way (Jupiter's
+            # platformFee for a sell, our own spliced-in transfer instruction
+            # for a buy), so it's never a separate visible transfer. Bookkeeping
+            # (fees table, referral payout) happens just below via _charge_txn_fee().
             env['FEE_WALLET']         = FEE_WALLET
             env['FEE_RATE_TXN']       = str(FEE_RATE_TXN)
             _ext_hit('jupiter')
@@ -12965,13 +12966,14 @@ def api_instant_trade():
                         (uid, token_address, symbol, now)
                     )
                 conn.commit()
-                # Same 0.75% platform fee as the bot's own trades. Sell already
-                # had it folded into the swap tx itself (bundled=True, see the
-                # FEE_WALLET/FEE_RATE_TXN env vars set above); the buy leg has
-                # no such mechanism (the fee would be token-denominated, not
-                # SOL), so it uses the same deferred SOL transfer bot buys use.
+                # Same 0.75% platform fee as the bot's own trades, folded into
+                # the swap's own transaction either way (see the
+                # FEE_WALLET/FEE_RATE_TXN env vars set above) -- sell via
+                # Jupiter's platformFee, buy via our own spliced-in transfer
+                # instruction (orcagent_solana.py's execute_swap()). No
+                # separate transfer for users to notice leaving their wallet.
                 if side == 'buy':
-                    _charge_txn_fee(_fee_pk, wallet, uid, symbol, amount_sol, 'buy')
+                    _charge_txn_fee(_fee_pk, wallet, uid, symbol, amount_sol, 'buy', bundled=True)
                 else:
                     _charge_txn_fee(_fee_pk, wallet, uid, symbol, sol_recorded, 'sell', bundled=True)
             conn.close()
@@ -15529,7 +15531,7 @@ def api_trade_buy():
     pos['symbol']    = symbol
     pos['opened_at'] = time.time()
     _upsert_open_position(user_id, wallet, mint, pos, source='manual')
-    _charge_txn_fee(pk, wallet, user_id, symbol, amount_sol, 'buy')
+    _charge_txn_fee(pk, wallet, user_id, symbol, amount_sol, 'buy', bundled=True)
     return jsonify({'ok': True, 'amount_sol': amount_sol, 'entry_price': entry_price, 'symbol': symbol})
 
 
@@ -17169,7 +17171,7 @@ def copy_trade_from_message():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, token_address, pos, source='manual')
-    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
+    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy', bundled=True)
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] COPY TRADE: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -17443,7 +17445,7 @@ def api_pump_scanner_buy():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
-    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
+    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy', bundled=True)
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] PUMP SCANNER buy: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
@@ -17523,7 +17525,7 @@ def api_manual_buy():
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
-    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy')
+    _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy', bundled=True)
     short = wallet[:6] + '...' + wallet[-4:]
     add_user_log(wallet, '[' + short + '] MANUAL BUY: ' + pos['symbol'] +
                  ' for ' + str(spend) + ' SOL @ $' + str(token_data['price']))
