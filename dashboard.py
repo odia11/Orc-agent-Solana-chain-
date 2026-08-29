@@ -8429,10 +8429,20 @@ def _fetch_open_bot_positions(wallet):
     try:
         conn = sqlite3.connect(DB_FILE)
         c = conn.cursor()
-        c.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,))
+        c.execute('SELECT id, take_profit, stop_loss, tiered_tp_enabled FROM users WHERE wallet_address=?', (wallet,))
         row = c.fetchone()
         if row:
-            user_id = row[0]
+            user_id, tp_row, sl_row, tiered_tp_enabled = row
+            # Same per-user-override-with-global-default pattern the trading
+            # loop itself uses (see user_trader_loop()) -- so the exit targets
+            # shown here are the actual thresholds the bot will act on for
+            # this user, not just the platform default. Tiered take-profit
+            # (opt-in) targets a first partial exit at TP1_MULTIPLE (2x
+            # entry), a completely different number from the flat take_profit
+            # % used otherwise -- showing the flat target to a tiered-mode
+            # user would just be wrong.
+            take_profit_mult = TP1_MULTIPLE if tiered_tp_enabled else (1 + ((float(tp_row) / 100) if tp_row is not None else TAKE_PROFIT))
+            stop_loss   = (float(sl_row) / 100) if sl_row is not None else STOP_LOSS
             c.execute(
                 '''SELECT mint_address, symbol, amount, buy_price, opened_at
                    FROM open_positions WHERE user_id=? AND source='bot' ORDER BY opened_at DESC''',
@@ -8453,6 +8463,9 @@ def _fetch_open_bot_positions(wallet):
                     'token':         symbol or (mint_addr[:8] if mint_addr else '—'),
                     'entry_price':   round(buy_price, 6),
                     'current_price': round(cur_price, 6),
+                    'tp_price':      round(buy_price * take_profit_mult, 6),
+                    'sl_price':      round(buy_price * (1 - stop_loss), 6),
+                    'tiered_tp':     bool(tiered_tp_enabled),
                     'amount':        round(amount, 4),
                     'stake_sol':     round(buy_price * amount, 4),
                     'pnl_pct':       pnl_pct,

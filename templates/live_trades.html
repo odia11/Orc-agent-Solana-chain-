@@ -39,7 +39,7 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lt-empty a{color:var(--accent);text-decoration:none;font-weight:700}
 .lt-empty a:hover{text-decoration:underline}
 
-.lt-row{display:flex;align-items:center;gap:12px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:12px 14px;margin-bottom:10px}
+.lt-row{display:flex;align-items:flex-start;gap:12px;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;padding:12px 14px;margin-bottom:10px}
 .lt-row-main{flex:1;min-width:0}
 .lt-row-sym{font-size:14px;font-weight:700;color:var(--text)}
 .lt-row-sub{font-size:10.5px;color:var(--muted);margin-top:2px}
@@ -89,7 +89,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
       <div class="lt-row">
         <div class="lt-row-main">
           <div class="lt-row-sym">${{ p.token }}</div>
-          <div class="lt-row-sub">Inzet {{ '%.4f' | format(p.stake_sol) }} SOL &middot; Open sinds {{ p.opened_at if p.opened_at else '—' }}</div>
+          <div class="lt-row-sub">Inzet {{ '%.4f' | format(p.stake_sol) }} SOL &middot; Instap ${{ '%.6f' | format(p.entry_price) }}</div>
+          <div class="lt-row-sub">Exit&nbsp;&nbsp;TP ${{ '%.6f' | format(p.tp_price) }}{{ ' (1e deel)' if p.tiered_tp else '' }} &middot; SL ${{ '%.6f' | format(p.sl_price) }}</div>
+          <div class="lt-row-sub">Open sinds {{ p.opened_at if p.opened_at else '—' }}</div>
         </div>
         <div class="lt-row-right">
           <div class="lt-row-price">${{ '%.6f' | format(p.current_price) }}</div>
@@ -113,10 +115,13 @@ function _ltEsc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').
 function _ltRowHtml(p){
   var chgCls = p.pnl_pct == null ? 'chg-fl' : (p.pnl_pct >= 0 ? 'chg-up' : 'chg-dn');
   var chgStr = p.pnl_pct == null ? '—' : (p.pnl_pct >= 0 ? '+' : '') + p.pnl_pct.toFixed(2) + '%';
+  var tp1Note = p.tiered_tp ? ' (1e deel)' : '';
   return '<div class="lt-row">'
     +'<div class="lt-row-main">'
       +'<div class="lt-row-sym">$'+_ltEsc(p.token)+'</div>'
-      +'<div class="lt-row-sub">Inzet '+p.stake_sol.toFixed(4)+' SOL &middot; Open sinds '+_ltEsc(p.opened_at || '—')+'</div>'
+      +'<div class="lt-row-sub">Inzet '+p.stake_sol.toFixed(4)+' SOL &middot; Instap $'+Number(p.entry_price).toFixed(6)+'</div>'
+      +'<div class="lt-row-sub">Exit&nbsp;&nbsp;TP $'+Number(p.tp_price).toFixed(6)+tp1Note+' &middot; SL $'+Number(p.sl_price).toFixed(6)+'</div>'
+      +'<div class="lt-row-sub">Open sinds '+_ltEsc(p.opened_at || '—')+'</div>'
     +'</div>'
     +'<div class="lt-row-right">'
       +'<div class="lt-row-price">$'+Number(p.current_price).toFixed(6)+'</div>'
