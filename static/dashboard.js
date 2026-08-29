@@ -6930,10 +6930,8 @@ document.addEventListener('click',function(ev){
 
 /* ── Feed post reply icon ── */
 var _REPLY_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><polyline points="9 14 4 9 9 4"></polyline><path d="M20 20v-7a4 4 0 0 0-4-4H4"></path></svg>';
-/* ── Reply composer toolbar icons (same paths as the main post composer's
-   chart/image chips, dashboard.html ~4071-4080) ── */
-var _RC_CHART_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>';
-var _RC_IMAGE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>';
+/* ── Reply composer send icon ── */
+var _RC_SEND_ICON_SVG='<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>';
 
 /* ── Feed post share menu ── */
 var _SHARE_ICON_SVG='<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px"><path d="M4 12v6a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-6"></path><polyline points="16 6 12 2 8 6"></polyline><line x1="12" y1="2" x2="12" y2="15"></line></svg>';
@@ -8681,21 +8679,15 @@ function _renderFeedCard(e){
     +'<div class="fc-reply-box" id="rbox-'+esc(safePostId)+'" onclick="event.stopPropagation()">'
     +'<div class="fc-reply-inner">'
     +'<div class="fc-reply-card" id="rcard-'+esc(safePostId)+'">'
-    +'<div class="fc-reply-heading">Reageren op <strong>'+esc(e.username||'Trader')+'</strong>\'s post</div>'
     +'<div class="fc-reply-row1">'
     +'<div class="fc-reply-avatar">'+_fcReplyAvatarHtml()+'</div>'
-    +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Write a reply…" maxlength="500" '
+    +'<div class="fc-reply-pill">'
+    +'<input class="fc-reply-inp" id="rinp-'+esc(safePostId)+'" type="text" placeholder="Reageer op '+esc(e.username||'deze post')+'…" maxlength="500" '
       +'oninput="_fcReplyCardSync(\'rcard-'+esc(safePostId)+'\')" onfocus="_fcReplyCardSync(\'rcard-'+esc(safePostId)+'\')" onblur="_fcReplyCardSync(\'rcard-'+esc(safePostId)+'\')" '
       +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitReply(this,\''+esc(safePostId)+'\')}">'
-    +'</div>'
-    +'<div class="fc-reply-row2">'
-    +'<div class="fc-reply-tools">'
     +'<button class="fc-reply-tool" onclick="_emojiPickerToggle(event,\'repal-'+esc(safePostId)+'\',\'rinp-'+esc(safePostId)+'\')" title="Emoji">😊</button>'
-    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Image\')" title="Image">'+_RC_IMAGE_ICON_SVG+'</button>'
-    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Chart\')" title="Chart">'+_RC_CHART_ICON_SVG+'</button>'
     +'<div class="fc-reply-palette ep-palette" id="repal-'+esc(safePostId)+'"></div>'
-    +'</div>'
-    +'<button class="fc-reply-send" onclick="_feedSubmitReply(document.getElementById(\'rinp-'+esc(safePostId)+'\'),\''+esc(safePostId)+'\')">Reply</button>'
+    +'<button class="fc-reply-send" onclick="_feedSubmitReply(document.getElementById(\'rinp-'+esc(safePostId)+'\'),\''+esc(safePostId)+'\')" title="Reageren">'+_RC_SEND_ICON_SVG+'</button>'
     +'</div>'
     +'</div>'
     +'</div>'
@@ -8924,13 +8916,6 @@ function _fcReplyCardSync(cardId){
   card.classList.toggle('active', focused || !!(inp && inp.value));
 }
 
-// Image/chart reply attachments aren't wired to a backend yet (only the
-// top-level post composer supports them) -- surfaces that plainly instead
-// of a dead button that looks broken.
-function _fcReplyToolSoon(kind){
-  if(typeof showLfToast==='function') showLfToast('🛠️', kind+' replies — coming soon', 'warn');
-}
-
 // Reads the already-rendered sidebar avatar (same source #feed-composer-avatar
 // mirrors on DOMContentLoaded) at the moment each reply card's HTML is built,
 // since reply cards are created dynamically per-post -- a single page-load
@@ -9149,21 +9134,15 @@ function _feedToggleNestedReply(parentId, postId, btn){
   var authorName = (row && row.querySelector('.fc-ri-name') && row.querySelector('.fc-ri-name').textContent) || 'Trader';
   box.innerHTML = '<div class="fc-reply-inner" style="margin-top:8px" onclick="event.stopPropagation()">'
     +'<div class="fc-reply-card" id="'+cardId+'">'
-    +'<div class="fc-reply-heading">Reageren op <strong>'+esc(authorName)+'</strong>\'s reply</div>'
     +'<div class="fc-reply-row1">'
     +'<div class="fc-reply-avatar">'+_fcReplyAvatarHtml()+'</div>'
-    +'<input class="fc-reply-inp" id="'+inpId+'" type="text" placeholder="Write a reply…" maxlength="500" '
+    +'<div class="fc-reply-pill">'
+    +'<input class="fc-reply-inp" id="'+inpId+'" type="text" placeholder="Reageer op '+esc(authorName)+'…" maxlength="500" '
       +'oninput="_fcReplyCardSync(\''+cardId+'\')" onfocus="_fcReplyCardSync(\''+cardId+'\')" onblur="_fcReplyCardSync(\''+cardId+'\')" '
       +'onkeydown="if(event.key===\'Enter\'){event.preventDefault();_feedSubmitNestedReply(this,\''+postId.replace(/'/g,"\\'")+'\','+parentId+')}">'
-    +'</div>'
-    +'<div class="fc-reply-row2">'
-    +'<div class="fc-reply-tools">'
     +'<button class="fc-reply-tool" onclick="_emojiPickerToggle(event,\'nrepal-'+parentId+'\',\''+inpId+'\')" title="Emoji">😊</button>'
-    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Image\')" title="Image">'+_RC_IMAGE_ICON_SVG+'</button>'
-    +'<button class="fc-reply-tool" onclick="_fcReplyToolSoon(\'Chart\')" title="Chart">'+_RC_CHART_ICON_SVG+'</button>'
     +'<div class="fc-reply-palette ep-palette" id="nrepal-'+parentId+'"></div>'
-    +'</div>'
-    +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')">Reply</button>'
+    +'<button class="fc-reply-send" onclick="_feedSubmitNestedReply(document.getElementById(\''+inpId+'\'),\''+postId.replace(/'/g,"\\'")+'\','+parentId+')" title="Reageren">'+_RC_SEND_ICON_SVG+'</button>'
     +'</div>'
     +'</div>'
     +'</div>';
