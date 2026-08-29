@@ -2632,6 +2632,36 @@ function _lfCheckNewTrades(recent){
 let _prevPosMap = null; // null = not yet seeded; Map<mint, posObj> after first poll
 let _prefSoundAlerts = false;
 
+// Trade-sound alerts fire from a background poll (_checkClosedPositions), not
+// from a click -- but browsers' autoplay policy only lets audio actually play
+// out of a context that's been unlocked by a real user gesture. Chrome treats
+// ANY earlier click on the page as enough to unlock a freshly-created
+// AudioContext later, but Safari/iOS (the platform this was reported broken
+// on) is stricter: it requires resume() to be called on the SAME
+// AudioContext instance synchronously inside a gesture handler -- a new
+// AudioContext created later from a poll callback stays 'suspended' forever
+// even if the user clicked plenty of other things earlier. That's exactly
+// what _playTradeSound() used to do: `new AudioContext()` from inside the
+// poll, no resume(), so it silently produced no sound on Safari despite the
+// toggle being on and no error ever being thrown. Fix: keep ONE persistent
+// context for the page's lifetime, and resume() that exact instance inside
+// real gesture listeners so it's already unlocked by the time a trade closes.
+let _tradeSoundCtx = null;
+function _getTradeSoundCtx(){
+  if(!_tradeSoundCtx){
+    var AC = window.AudioContext || window.webkitAudioContext;
+    if(!AC) return null;
+    _tradeSoundCtx = new AC();
+  }
+  return _tradeSoundCtx;
+}
+['click','touchend','keydown'].forEach(function(evt){
+  document.addEventListener(evt, function(){
+    var ctx = _getTradeSoundCtx();
+    if(ctx && ctx.state === 'suspended') ctx.resume().catch(function(){});
+  }, {passive: true});
+});
+
 function _checkClosedPositions(currentPositions){
   if(_prevPosMap === null){
     // First poll after load: seed the map without firing notifications
@@ -2658,7 +2688,13 @@ function _checkClosedPositions(currentPositions){
 
 function _playTradeSound(win){
   try{
-    var ctx=new (window.AudioContext||window.webkitAudioContext)();
+    var ctx=_getTradeSoundCtx();
+    if(!ctx) return;
+    // Best-effort: if no gesture has unlocked it yet (e.g. the very first
+    // trade closes before the user has clicked anything), this resume() call
+    // itself won't satisfy Safari's gesture requirement, but it's harmless
+    // and does work on Chrome, which unlocks from any earlier page gesture.
+    if(ctx.state === 'suspended') ctx.resume().catch(function(){});
     var osc=ctx.createOscillator();
     var gain=ctx.createGain();
     osc.connect(gain);
@@ -2675,7 +2711,8 @@ function _playTradeSound(win){
     gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.35);
     osc.start(ctx.currentTime);
     osc.stop(ctx.currentTime+0.35);
-    osc.onended=function(){ ctx.close(); };
+    // No ctx.close() here anymore -- the context is now persistent/reused
+    // across every trade-sound play for the life of the page, not a one-shot.
   }catch(e){}
 }
 
