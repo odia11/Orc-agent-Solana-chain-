@@ -66,6 +66,7 @@ var _lmtdVolSeries  = null;
 var _lmtdChartStyle = 'candles'; // 'candles' or 'fomo' (live area chart)
 var _lmtdFomoTimer  = null;      // live-refresh interval while the 'fomo' style is active
 var _lmtdPriceLine  = null;      // the dashed current-price line + floating label on the fomo chart
+var _lmtdFomoDataRef = null;     // {current: points[]} for the modal's fomo chart -- see _lmtdCreateFomoChart()
 var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fetch (pending or resolved) for
                              // the currently-open token, so the skeleton render, the post-metadata re-render,
                              // and layout switches all reuse the same request instead of re-fetching
@@ -791,8 +792,17 @@ function _lmtdCreateFomoChart(containerId){
   if(stale){
     try{ stale.resizeObserver.disconnect(); }catch(e){}
     try{ stale.chart.remove(); }catch(e){}
+    if(stale.tip && stale.tip.parentNode) stale.tip.parentNode.removeChild(stale.tip);
+    if(stale.teardownScrub) stale.teardownScrub();
     delete _lmtdFomoChartsByContainer[containerId];
   }
+  // handleScroll/handleScale: off. This is a fixed recent-history sparkline,
+  // never meant to be panned or zoomed -- and on touch devices those two
+  // options are exactly what made a finger-drag scroll the time axis
+  // instead of scrubbing the price, since a touch move is otherwise
+  // interpreted as a pan gesture rather than a crosshair move (confirmed by
+  // dispatching real touch events at this chart: zero crosshair updates
+  // fired, sixteen time-range-change events did instead).
   var chart = LightweightCharts.createChart(container, {
     width: container.clientWidth,
     height: container.clientHeight || 340,
@@ -801,7 +811,7 @@ function _lmtdCreateFomoChart(containerId){
     crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
     rightPriceScale:{visible:false},
     timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
-    handleScroll:true,handleScale:true
+    handleScroll:false,handleScale:false
   });
   var series = chart.addAreaSeries({
     lineColor:'#f2b840', lineWidth:2, lineType: LightweightCharts.LineType.Curved,
@@ -812,8 +822,75 @@ function _lmtdCreateFomoChart(containerId){
     if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
   });
   resizeObserver.observe(container);
-  _lmtdFomoChartsByContainer[containerId] = {chart:chart, resizeObserver:resizeObserver};
-  return {chart:chart, series:series, resizeObserver:resizeObserver};
+
+  // dataRef.current holds whatever points setData() was last called with --
+  // callers (the modal's _lmtdRenderChartData, the poster card's renderOnce)
+  // update it alongside every setData() so the scrub handler below always
+  // has the exact same series it's drawing to look up a touch/hover point
+  // against, without needing its own separate copy of the fetch logic.
+  var dataRef = {current: []};
+  var tip = document.createElement('div');
+  tip.className = 'lmtd-chart-scrub-tip';
+  tip.style.display = 'none';
+  if(getComputedStyle(container).position === 'static') container.style.position = 'relative';
+  container.appendChild(tip);
+
+  function nearestPoint(time){
+    var pts = dataRef.current;
+    if(!pts.length) return null;
+    // pts is time-ascending (chart data always is) -- a linear scan is fine
+    // at the point counts these timeframes return (a few hundred at most).
+    var best = pts[0], bestDiff = Math.abs(pts[0].time - time);
+    for(var i = 1; i < pts.length; i++){
+      var diff = Math.abs(pts[i].time - time);
+      if(diff < bestDiff){ best = pts[i]; bestDiff = diff; }
+      else if(pts[i].time > time) break; // ascending + already past time -- best won't improve further
+    }
+    return best;
+  }
+
+  function scrubToX(clientX){
+    var pts = dataRef.current;
+    if(!pts.length) return;
+    var rect = container.getBoundingClientRect();
+    var localX = Math.max(0, Math.min(rect.width, clientX - rect.left));
+    var time = chart.timeScale().coordinateToTime(localX);
+    var pt = time == null ? pts[pts.length - 1] : nearestPoint(time);
+    if(!pt) return;
+    chart.setCrosshairPosition(pt.value, pt.time, series);
+    var d = new Date(pt.time * 1000);
+    var hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+    tip.textContent = _fmtPrice(pt.value) + '  ·  ' + hh + ':' + mm;
+    tip.style.display = 'block';
+    var tipX = Math.max(6, Math.min(rect.width - tip.offsetWidth - 6, localX - tip.offsetWidth / 2));
+    tip.style.left = tipX + 'px';
+  }
+
+  function clearScrub(){
+    chart.clearCrosshairPosition();
+    tip.style.display = 'none';
+  }
+
+  function onTouchStart(e){ if(e.touches[0]) scrubToX(e.touches[0].clientX); }
+  function onTouchMove(e){ if(e.touches[0]){ e.preventDefault(); scrubToX(e.touches[0].clientX); } }
+  function onMouseMove(e){ scrubToX(e.clientX); }
+  container.addEventListener('touchstart', onTouchStart, {passive: true});
+  container.addEventListener('touchmove', onTouchMove, {passive: false});
+  container.addEventListener('touchend', clearScrub, {passive: true});
+  container.addEventListener('touchcancel', clearScrub, {passive: true});
+  container.addEventListener('mousemove', onMouseMove);
+  container.addEventListener('mouseleave', clearScrub);
+  function teardownScrub(){
+    container.removeEventListener('touchstart', onTouchStart);
+    container.removeEventListener('touchmove', onTouchMove);
+    container.removeEventListener('touchend', clearScrub);
+    container.removeEventListener('touchcancel', clearScrub);
+    container.removeEventListener('mousemove', onMouseMove);
+    container.removeEventListener('mouseleave', clearScrub);
+  }
+
+  _lmtdFomoChartsByContainer[containerId] = {chart:chart, resizeObserver:resizeObserver, tip:tip, teardownScrub:teardownScrub};
+  return {chart:chart, series:series, resizeObserver:resizeObserver, dataRef:dataRef};
 }
 
 /* "Live" area chart — same visual pattern popularized by apps like
@@ -828,8 +905,9 @@ function _lmtdInitFomoChart(){
   if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; _lmtdPriceLine=null; }
   var created = _lmtdCreateFomoChart('lmtd-chart-container');
   if(!created) return;
-  _lmtdChart  = created.chart;
-  _lmtdSeries = created.series;
+  _lmtdChart      = created.chart;
+  _lmtdSeries     = created.series;
+  _lmtdFomoDataRef = created.dataRef;
   // created.resizeObserver intentionally not kept -- same reasoning as
   // _lmtdInitCandleChart() above, unchanged from before this refactor.
 }
@@ -885,6 +963,7 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain, onResult){
       try{
         var linePoints = r.candles.map(function(c){ return {time:c.t, value:c.c}; });
         created.series.setData(linePoints);
+        created.dataRef.current = linePoints;
         var lastPoint = linePoints[linePoints.length-1];
         if(priceLine){ try{ created.series.removePriceLine(priceLine); }catch(e){} }
         priceLine = created.series.createPriceLine({
@@ -957,6 +1036,7 @@ async function _lmtdRenderChartData(dataPromise, forMint){
       if(_lmtdChartStyle === 'fomo'){
         var linePoints = r.candles.map(function(c){ return {time:c.t, value:c.c}; });
         _lmtdSeries.setData(linePoints);
+        if(_lmtdFomoDataRef) _lmtdFomoDataRef.current = linePoints;
         var lastPoint = linePoints[linePoints.length-1];
         _lmtdLastClose = lastPoint.value;
         if(_lmtdPriceLine){ try{ _lmtdSeries.removePriceLine(_lmtdPriceLine); }catch(e){} }
