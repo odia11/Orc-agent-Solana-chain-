@@ -132,12 +132,17 @@ def _tc_build_canvas(banner_url=None):
             resp.raise_for_status()
             banner = Image.open(io.BytesIO(resp.content)).convert('RGB')
             src_w, src_h = banner.size
-            scale = max(W / src_w, H / src_h)
+            # "Contain", not "cover": scale to fit entirely inside the canvas
+            # and letterbox with the dark background rather than cropping to
+            # fill it. Token banners are often much wider than 1200x630 (a
+            # mascot on one side, a logo/title on the other) -- covering
+            # cropped whichever side landed outside the frame, cutting off
+            # part of the banner's own text/logo entirely.
+            scale = min(W / src_w, H / src_h)
             new_w, new_h = round(src_w * scale), round(src_h * scale)
             banner = banner.resize((new_w, new_h), Image.LANCZOS)
-            left, top = (new_w - W) // 2, (new_h - H) // 2
-            banner = banner.crop((left, top, left + W, top + H))
-            canvas.paste(banner, (0, 0))
+            left, top = (W - new_w) // 2, (H - new_h) // 2
+            canvas.paste(banner, (left, top))
         except Exception:
             pass
     return canvas
