@@ -12178,24 +12178,52 @@ def wallet_activity():
             return jsonify({'ok': True, 'activity': []})
         uid = user_row[0]
         rows = conn.execute(
-            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount, source '
-            'FROM trades WHERE user_id=? ORDER BY timestamp DESC LIMIT 10',
+            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount, source, opened_at '
+            'FROM trades WHERE user_id=? ORDER BY timestamp DESC LIMIT 20',
             (uid,)
         ).fetchall()
     finally:
         conn.close()
 
     now = datetime.datetime.utcnow()
-    activity = []
-    for token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount, source in rows:
+
+    def _rel_time(dt):
+        secs = int((now - dt).total_seconds())
+        if secs < 0:
+            secs = 0
+        if secs < 60:
+            return f'{secs}s ago'
+        if secs < 3600:
+            return f'{secs // 60}m ago'
+        if secs < 86400:
+            return f'{secs // 3600}h ago'
+        return f'{secs // 86400}d ago'
+
+    def _mk_entry(is_buy, sym, qty, amt_sol, dt):
+        return {
+            'type':       'Buy' if is_buy else 'Sell',
+            'sub':        ('Bought' if is_buy else 'Sold') + ' $' + sym,
+            'symbol':     sym,
+            'qty':        qty,
+            'amount_sol': round(amt_sol, 4),
+            'color':      '#3ad29b' if is_buy else '#f76b62',
+            'time':       _rel_time(dt),
+            '_ts':        dt,
+        }
+
+    events = []
+    for token, entry_price, exit_price, amount, pnl, timestamp, side, token_amount, source, opened_at in rows:
         sym = (token or '?').lstrip('$').upper()
+        try:
+            close_dt = datetime.datetime.fromisoformat((timestamp or '').replace('Z', ''))
+        except Exception:
+            close_dt = now
         if side in ('buy', 'sell'):
             # Manual instant-trades (Live Market) since the side/token_amount
             # columns were added: amount is the real SOL magnitude for both
             # legs, so no more fallback onto pnl (which was always 0 here).
-            is_buy = side == 'buy'
-            amt_sol = abs(float(amount or 0))
-            qty = round(float(token_amount or 0), 6)
+            events.append(_mk_entry(side == 'buy', sym, round(float(token_amount or 0), 6),
+                                     abs(float(amount or 0)), close_dt))
         elif source in ('bot', 'copy'):
             # Bot/copy-trade rows are written ONCE, at close (_record_user_trade)
             # -- always an exit, never a buy. `amount` here is the TOKEN
@@ -12205,43 +12233,31 @@ def wallet_activity():
             # like "Buy $BREAKING +143.4547 SOL" for a token bought with a
             # fraction of a SOL. The real SOL this trade returned is
             # amount * exit_price.
-            is_buy = False
-            amt_sol = float(amount or 0) * float(exit_price or 0)
             qty = round(float(amount or 0), 6)
+            events.append(_mk_entry(False, sym, qty, float(amount or 0) * float(exit_price or 0), close_dt))
+            # The row only gets written at close, so without this the feed
+            # shows an unbroken run of sells with no matching buy in sight --
+            # confusing ("is it even buying anything?"). opened_at (epoch
+            # seconds, set when the position was opened) plus entry_price let
+            # us reconstruct that buy leg here instead of losing it entirely.
+            if opened_at:
+                try:
+                    open_dt = datetime.datetime.utcfromtimestamp(float(opened_at))
+                    events.append(_mk_entry(True, sym, qty, float(amount or 0) * float(entry_price or 0), open_dt))
+                except Exception:
+                    pass
         else:
             # Legacy manual rows from before the side/token_amount columns
             # existed: amount really was the SOL spent for a buy, 0 for a
             # sell (the old bug) -- best-effort fallback so old history still
             # renders something rather than nothing.
             is_buy = float(amount or 0) > 0
-            amt_sol = float(amount if is_buy else (pnl or 0))
-            qty = 0.0
-        trade_type = 'Buy' if is_buy else 'Sell'
-        color = '#3ad29b' if is_buy else '#f76b62'
-        sub = ('Bought' if is_buy else 'Sold') + ' $' + sym
-        try:
-            ts = datetime.datetime.fromisoformat((timestamp or '').replace('Z', ''))
-            delta = now - ts
-            secs = int(delta.total_seconds())
-            if secs < 60:
-                rel = f'{secs}s ago'
-            elif secs < 3600:
-                rel = f'{secs // 60}m ago'
-            elif secs < 86400:
-                rel = f'{secs // 3600}h ago'
-            else:
-                rel = f'{secs // 86400}d ago'
-        except Exception:
-            rel = (timestamp or '')[:10]
-        activity.append({
-            'type':       trade_type,
-            'sub':        sub,
-            'symbol':     sym,
-            'qty':        qty,
-            'amount_sol': round(amt_sol, 4),
-            'color':      color,
-            'time':       rel,
-        })
+            events.append(_mk_entry(is_buy, sym, 0.0, float(amount if is_buy else (pnl or 0)), close_dt))
+
+    events.sort(key=lambda e: e['_ts'], reverse=True)
+    activity = events[:12]
+    for e in activity:
+        del e['_ts']
     return jsonify({'ok': True, 'activity': activity})
 
 
