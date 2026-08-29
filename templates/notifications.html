@@ -134,7 +134,6 @@
 <script>
 var _csrfToken = {{ csrf_token|tojson }};
 var _personal = [];
-var _trades = [];
 var _activeTab = 'trades';
 function _esc(s){
   return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -191,12 +190,10 @@ function _parseTradeContent(content){
     positive: positive
   };
 }
-// Shared actions for any REAL personal notification (has a DB id + is_read
-// state). The synthetic kind==='trade' rows (pulled live from the trades
-// table, no id at all) never get these -- there's no notification row to
-// mark read or delete. Mark-as-read icon: always visible on mobile,
-// hover-reveal on desktop. Delete icon: desktop-only (see CSS), never
-// shown on touch/mobile at all.
+// Shared actions for any personal notification (has a DB id + is_read
+// state). Mark-as-read icon: always visible on mobile, hover-reveal on
+// desktop. Delete icon: desktop-only (see CSS), never shown on touch/mobile
+// at all.
 // Real actor avatar (with initials fallback) for actor-driven notifications
 // (mention/reply/reaction/follow/etc). Returns null for system events
 // (trade closed, auto-verify, claim expiry) where actor_username/actor_avatar
@@ -257,21 +254,9 @@ function _buildPersonalRow(n, isUnread, iconCls, bodyHtml, href, extraButtonHtml
     + '</div>'
     + '</div>';
 }
-function _rowHtml(n, kind){
-  var isUnread = kind === 'personal' && !n.is_read;
+function _rowHtml(n){
+  var isUnread = !n.is_read;
   var iconCls, bodyHtml, timeStr;
-  if(kind === 'trade'){
-    var raw = 'Trade closed: $' + n.symbol + ' ' + (n.pnl_pct>=0?'+':'') + (n.pnl_pct||0).toFixed(1) + '% (' + (n.pnl>=0?'+':'') + (n.pnl||0).toFixed(4) + ' SOL)';
-    var parsed = _parseTradeContent(raw);
-    iconCls = parsed.positive ? 'trade-up' : 'trade-down';
-    bodyHtml = '<div class="ntf-text">' + _esc(parsed.headline) + '</div>'
-      + (parsed.chip ? '<div class="ntf-chip ' + (parsed.positive?'pos':'neg') + '">' + _esc(parsed.chip) + '</div>' : '');
-    timeStr = _relTime(n.created_at);
-    return '<div class="ntf-row" style="cursor:default">'
-      + '<div class="ntf-icon ' + iconCls + '">' + _ICON_SVG[iconCls] + '</div>'
-      + '<div class="ntf-info">' + bodyHtml + '<div class="ntf-meta">' + _esc(timeStr) + '</div></div>'
-      + '</div>';
-  }
   var type = n.type || 'system';
   if(type === 'trade'){
     var p = _parseTradeContent(n.content);
@@ -363,12 +348,9 @@ function _render(){
   _personal.forEach(function(n){
     var isTradeType = !!NOTIF_TRADE_TYPES[n.type];
     if((_activeTab === 'social' && !isTradeType) || (_activeTab === 'trades' && isTradeType)){
-      rows.push({n:n, kind:'personal', ts:n.created_at});
+      rows.push({n:n, ts:n.created_at});
     }
   });
-  if(_activeTab === 'trades'){
-    _trades.forEach(function(n){ rows.push({n:n, kind:'trade', ts:n.created_at}); });
-  }
   rows.sort(function(a,b){ return new Date(b.ts) - new Date(a.ts); });
   if(!rows.length){
     list.innerHTML = '<div class="ntf-empty"><div class="ntf-empty-icon">🔔</div>No notifications yet</div>';
@@ -382,7 +364,7 @@ function _render(){
       if(bucket) html += '<div class="ntf-day-header">' + bucket + '</div>';
       lastBucket = bucket;
     }
-    html += _rowHtml(r.n, r.kind);
+    html += _rowHtml(r.n);
   });
   list.innerHTML = html;
   list.querySelectorAll('.ntf-row-wrap').forEach(function(wrap){
@@ -498,11 +480,6 @@ async function _loadPersonal(){
   var r = await fetch('/api/notifications/mine?category=all').then(function(x){return x.json();}).catch(function(){return null;});
   _personal = (r && r.ok && r.notifications) ? r.notifications : [];
   _updateUnreadUI();
-  _render();
-}
-async function _loadTrades(){
-  var d = await fetch('/api/notifications').then(function(r){return r.json();}).catch(function(){return [];});
-  _trades = Array.isArray(d) ? d : [];
   _render();
 }
 async function _markAllRead(){
@@ -650,7 +627,6 @@ async function _doBulkDelete(ids){
 }
 
 _loadPersonal();
-_loadTrades();
 </script>
 <script src="/static/delete-convo-modal.js?v={{ app_version }}"></script>
 <script src="/static/alert-modal.js?v={{ app_version }}"></script>
