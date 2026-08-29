@@ -10718,11 +10718,7 @@ _NAVBAR_MORE_LINKS = [
     ('/settings', 'Settings'),
     ('/admin', 'Admin Console', 'pt-nb-admin-link', 'display:none'),
     None,
-    ('/info#about', 'About'),
-    ('/info#docs', 'Docs'),
-    ('/info#fees', 'Fees'),
-    ('/info#security', 'Security'),
-    ('/info#terms', 'Terms'),
+    ('/info', 'About'),
 ]
 
 def _navbar_more_items_html(extra_class: str = '') -> str:
