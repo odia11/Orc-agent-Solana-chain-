@@ -2270,6 +2270,38 @@ def get_user_role(wallet: str) -> str:
     return 'user'
 
 
+def _team_roles_for_wallets(wallets) -> dict:
+    """Batched get_user_role() for display purposes (feed/reply author badges,
+    where issuing one query per author would mean one sqlite3 connection per
+    post on a busy feed page). Same precedence as get_user_role(): admin_roles
+    wins over users.role, and ADMIN_WALLET always resolves to 'admin'. Returns
+    only wallets with a non-'user' role -- callers should treat a missing key
+    as 'user' (no badge)."""
+    wallets = [w for w in set(wallets) if w]
+    if not wallets:
+        return {}
+    roles = {}
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        ph = ','.join('?' * len(wallets))
+        for w, r in conn.execute(
+                f'SELECT wallet_address, role FROM admin_roles WHERE wallet_address IN ({ph})', wallets):
+            if r:
+                roles[w] = r.lower()
+        remaining = [w for w in wallets if w not in roles]
+        if remaining:
+            ph2 = ','.join('?' * len(remaining))
+            for w, r in conn.execute(
+                    f'SELECT wallet_address, role FROM users WHERE wallet_address IN ({ph2})', remaining):
+                if r and r.lower() != 'user':
+                    roles[w] = r.lower()
+        conn.close()
+    except Exception:
+        pass
+    if ADMIN_WALLET in wallets:
+        roles[ADMIN_WALLET] = 'admin'
+    return roles
+
 def _log_readonly_attempt() -> None:
     if session.get('readonly') and session.get('wallet'):
         _log_security_event('readonly_privileged_attempt', session.get('wallet', ''),
@@ -7132,6 +7164,7 @@ def profile():
             is_own_profile=True,
             notify_enabled=False,
             x_handle=x_row['x_handle'] if x_row else None,
+            team_role=get_user_role(wallet),
             csrf_token=_get_csrf_token(),
         )
     finally:
@@ -7248,6 +7281,7 @@ def profile_view(wallet_address: str):
             follows_me=follows_me,
             notify_enabled=notify_enabled,
             x_handle=x_row['x_handle'] if x_row else None,
+            team_role=get_user_role(wallet_address),
             csrf_token=_get_csrf_token(),
         )
     finally:
@@ -12463,6 +12497,15 @@ def social_feed():
     finally:
         conn.close()
 
+    # Team badges (Admin/Executive/Moderator/Analyst) on the author's name --
+    # one batched lookup covering both the page's own authors and, for
+    # reposts, the original post's author.
+    team_roles = _team_roles_for_wallets(
+        [row[1] for row in rows] + [o.get('wallet') for o in originals.values()]
+    )
+    for o in originals.values():
+        o['team_role'] = team_roles.get(o.get('wallet'), 'user')
+
     feed = []
     for row in rows:
         rid, wallet, content, created_at, kind, username, symbol, mint_address, pnl_pct, is_own, entry_price, exit_price, avatar_url, is_verified, repost_of, image_url = row
@@ -12504,6 +12547,7 @@ def social_feed():
             'is_own':      bool(is_own),
             'avatar_url':  avatar_url or '',
             'verified':    bool(is_verified),
+            'team_role':   team_roles.get(wallet, 'user'),
             'image_url':   image_url or '',
             'liked_by_me': target_id in liked_by_me,
             'repost_of':   repost_of,
@@ -13456,6 +13500,7 @@ def get_feed_replies(post_id):
             liked = {lr[0] for lr in liked_rows}
     finally:
         conn.close()
+    team_roles = _team_roles_for_wallets([r[2] for r in rows])
     return jsonify({'ok': True, 'replies': [
         {
             'id':           r[0],
@@ -13470,6 +13515,7 @@ def get_feed_replies(post_id):
             'is_mine':      me is not None and r[6] == me,
             'parent_reply_id': r[8],
             'verified':     bool(r[9]),
+            'team_role':    team_roles.get(r[2], 'user'),
         }
         for r in rows
     ]})

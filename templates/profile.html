@@ -66,6 +66,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
 .pf-x-badge{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;border-radius:50%;background:#000;border:1px solid #21252c;flex-shrink:0;text-decoration:none;transition:opacity .15s}
 .pf-x-badge:hover{opacity:.8}
 .pf-x-badge svg{display:block}
+.pf-team-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px 3px 7px;border-radius:999px;border:1px solid;font-size:11px;font-weight:700;letter-spacing:.02em;flex-shrink:0}
 .pf-meta-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}
 .pf-handle-tag{font-size:13px;color:#565d68;font-family:'JetBrains Mono',monospace}
 .pf-meta-sep{color:#21252c;font-size:12px}
@@ -305,6 +306,19 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         {% if is_verified|default(false) %}
         <span class="pf-verified" title="Verified">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#0a0b0e" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        {% endif %}
+        {% set _tr = team_role|default('user') %}
+        {% if _tr != 'user' %}
+        {% set _tr_style = {
+          'admin':     ('#f7b955', 'rgba(247,185,85,.12)', 'Admin'),
+          'executive': ('#3ad29b', 'rgba(58,210,155,.12)', 'Executive'),
+          'moderator': ('#7c8cff', 'rgba(124,140,255,.12)', 'Moderator'),
+          'analyst':   ('#8a919c', 'rgba(138,145,156,.12)', 'Analyst'),
+        }.get(_tr, ('#8a919c', 'rgba(138,145,156,.12)', _tr|capitalize)) %}
+        <span class="pf-team-badge" style="color:{{ _tr_style[0] }};background:{{ _tr_style[1] }};border-color:{{ _tr_style[0] }}4d" title="OrcAgent team — {{ _tr_style[2] }}">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor" stroke="none"><path d="M12 2 3 6v6c0 5.25 3.75 9.75 9 11 5.25-1.25 9-5.75 9-11V6l-9-4z"/></svg>
+          {{ _tr_style[2] }}
         </span>
         {% endif %}
         {% if x_handle %}

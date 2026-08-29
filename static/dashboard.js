@@ -8425,6 +8425,19 @@ function _fmtPrice(p){
   return '$'+(p < 0.001 ? p.toExponential(2) : p < 1 ? p.toFixed(6) : p.toFixed(4));
 }
 
+var _TEAM_ROLE_STYLE = {
+  admin:     ['#f7b955', 'rgba(247,185,85,.12)',  'ADMIN'],
+  executive: ['#3ad29b', 'rgba(58,210,155,.12)',  'EXEC'],
+  moderator: ['#7c8cff', 'rgba(124,140,255,.12)', 'MOD'],
+  analyst:   ['#8a919c', 'rgba(138,145,156,.12)', 'ANALYST'],
+};
+function _teamBadgeHtml(role){
+  if(!role || role === 'user') return '';
+  var s = _TEAM_ROLE_STYLE[role] || ['#8a919c', 'rgba(138,145,156,.12)', role.toUpperCase()];
+  return ' <span style="display:inline-flex;align-items:center;gap:2px;padding:1px 6px;border-radius:999px;'
+    +'background:'+s[1]+';color:'+s[0]+';border:1px solid '+s[0]+'4d;font-size:9.5px;font-weight:700;'
+    +'letter-spacing:.02em;vertical-align:1px" title="OrcAgent team — '+esc(role)+'">'+s[2]+'</span>';
+}
 function _renderFeedCard(e){
   var repostBanner = '';
   if(e.type === 'repost'){
@@ -8628,7 +8641,7 @@ function _renderFeedCard(e){
       : _aProf+'<div class="fc-avatar" style="background:'+bg+';width:44px;height:44px;position:relative;flex-shrink:0"><span class="fc-avatar-ini">'+ini+'</span></div></a>')
     +'<div class="fc-body">'
     +'<div class="fc-header">'
-    +_aProf+'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+(e.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+'</span></a>'
+    +_aProf+'<span class="fc-name" style="font-weight:700">'+esc(e.username||'Trader')+(e.verified ? ' <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>' : '')+_teamBadgeHtml(e.team_role)+'</span></a>'
     +_aProf+'<span class="fc-handle">'+esc(handle)+'</span></a>'
     +(timeStr ? '<span class="fc-sep">·</span><span class="fc-time">'+esc(timeStr)+'</span>' : '')
     +'</div>'
@@ -9110,7 +9123,7 @@ function _renderReplyRow(r, postId, depth){
     +'<div class="fc-ri-row">'
     +'<div class="fc-ri-avatar" style="background:'+bg+';position:relative;overflow:hidden;cursor:pointer" onclick="'+avatarClick+'">'+ini+avatarImg+'</div>'
     +'<div class="fc-ri-body">'
-    +'<div class="fc-ri-line"><span class="fc-ri-name">'+name+'</span>'+verifiedBadge+youChip+' <span class="fc-ri-text-inline">'+msgHtml+'</span></div>'
+    +'<div class="fc-ri-line"><span class="fc-ri-name">'+name+'</span>'+verifiedBadge+_teamBadgeHtml(r.team_role)+youChip+' <span class="fc-ri-text-inline">'+msgHtml+'</span></div>'
     +'<div class="fc-ri-meta">'
     +'<span class="fc-ri-time">'+_replyRelTime(r.created_at)+'</span>'
     +'<button class="fc-ri-reply-btn" onclick="_feedToggleNestedReply('+r.id+',\''+postId.replace(/'/g,"\\'")+'\',this)">Reply</button>'
