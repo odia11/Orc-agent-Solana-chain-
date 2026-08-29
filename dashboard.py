@@ -2048,11 +2048,6 @@ def run_migrations():
         # what most positions realize a small, quick win on today; this is an
         # explicit strategy swap a user opts into, not a silent replacement.
         "ALTER TABLE users ADD COLUMN tiered_tp_enabled INTEGER DEFAULT 0",
-        # Public by default (1) -- preserves today's behavior (Recent Trades has
-        # always been visible on every profile) for existing users; opt-out via
-        # Settings, not opt-in, so this is a privacy control, not a new default
-        # that would suddenly hide everyone's trade history.
-        "ALTER TABLE users ADD COLUMN pref_trades_public INTEGER DEFAULT 1",
         "ALTER TABLE agent_journal ADD COLUMN user_id INTEGER",
         "ALTER TABLE users ADD COLUMN breakout_trigger REAL DEFAULT 3.0",
         "ALTER TABLE users ADD COLUMN take_profit REAL DEFAULT 15.0",
@@ -7152,16 +7147,13 @@ def profile_view(wallet_address: str):
     try:
         col = 'wallet_address' if is_wallet else 'username'
         user = conn.execute(
-            f'SELECT id, username, avatar_url, banner_url, bio, created_at, wallet_address, is_verified, '
-            f'pref_trades_public FROM users WHERE {col}=?',
+            f'SELECT id, username, avatar_url, banner_url, bio, created_at, wallet_address, is_verified FROM users WHERE {col}=?',
             (wallet_address,)
         ).fetchone()
         if not user:
             return redirect('/traders')
         wallet_address = user['wallet_address']
         user_id = user['id']
-        trades_public = bool(user['pref_trades_public']) if user['pref_trades_public'] is not None else True
-        _is_own_early = bool(session_wallet and session_wallet == wallet_address)
         stats = conn.execute(
             'SELECT COUNT(*) AS total, '
             'SUM(CASE WHEN pnl >= 0 THEN 1 ELSE 0 END) AS wins, '
@@ -7176,9 +7168,7 @@ def profile_view(wallet_address: str):
             (wallet_address,)
         ).fetchall()
         recent_calls = _recent_token_calls(conn, user_id)
-        # Own profile always sees its own trades regardless of the privacy pref --
-        # this only ever hides the list from OTHER viewers, not from the owner.
-        recent_trades = _recent_trades_for_profile(conn, user_id) if (trades_public or _is_own_early) else []
+        recent_trades = _recent_trades_for_profile(conn, user_id)
         followers = conn.execute(
             'SELECT COUNT(*) FROM follows WHERE following_id=?', (user_id,)
         ).fetchone()[0]
@@ -7251,7 +7241,6 @@ def profile_view(wallet_address: str):
             posts=[dict(p) for p in posts],
             recent_calls=recent_calls,
             recent_trades=recent_trades,
-            trades_hidden=(not trades_public and not is_own),
             sol_balance=sol_balance,
             is_verified=bool(user["is_verified"]),
             is_own_profile=is_own,
@@ -11346,7 +11335,7 @@ def settings_get():
                       stop_loss, max_positions, pref_notifications,
                       pref_scam_filter, pref_sound_alerts, bot_enabled,
                       avatar_url, username, is_verified, bio, min_trade_size,
-                      tiered_tp_enabled, pref_trades_public
+                      tiered_tp_enabled
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
@@ -11358,8 +11347,7 @@ def settings_get():
                         'stop_loss': 8.0, 'max_positions': 3,
                         'pref_notifications': True, 'pref_scam_filter': True,
                         'pref_sound_alerts': False, 'bot_running': bot_running,
-                        'min_trade_size': 1.0, 'tiered_tp_enabled': False,
-                        'pref_trades_public': True})
+                        'min_trade_size': 1.0, 'tiered_tp_enabled': False})
     return jsonify({
         'ok': True,
         'has_trading_key': bool(row[0]),
@@ -11377,7 +11365,6 @@ def settings_get():
         'bio': row[12] or '',
         'min_trade_size': row[13] if row[13] is not None else 1.0,
         'tiered_tp_enabled': bool(row[14] if row[14] is not None else 0),
-        'pref_trades_public': bool(row[15] if row[15] is not None else 1),
     })
 
 @app.route('/api/settings/save', methods=['POST'])
@@ -11419,9 +11406,6 @@ def settings_save():
     if 'pref_sound_alerts' in data:
         updates.append('pref_sound_alerts=?')
         params.append(1 if data['pref_sound_alerts'] else 0)
-    if 'pref_trades_public' in data:
-        updates.append('pref_trades_public=?')
-        params.append(1 if data['pref_trades_public'] else 0)
     if 'min_trade_size' in data:
         try:
             v = float(data['min_trade_size'])

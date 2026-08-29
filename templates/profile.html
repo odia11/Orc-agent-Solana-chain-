@@ -507,8 +507,6 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
             <span class="pf-trade-time">{{ t.time_ago or '' }}</span>
           </div>
           {% endfor %}
-        {% elif trades_hidden %}
-          <div class="pf-empty">This trader has made their trades private</div>
         {% else %}
           <div class="pf-empty">No recent trades</div>
         {% endif %}
