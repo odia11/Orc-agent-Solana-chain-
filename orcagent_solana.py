@@ -21,6 +21,17 @@ SOLANA_RPCS   = [
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT      = 'So11111111111111111111111111111111111111112'
 
+# Platform fee on the sell leg (token -> SOL), folded directly into the swap
+# transaction via Jupiter's platformFeeBps/feeAccount so it's never a second,
+# separately-visible SOL transfer out of the user's wallet. Set by
+# dashboard.py's subprocess env for bot-driven sells only -- absent (empty/0)
+# for buys and for manual Live Market instant-trades, which keep the swap
+# exactly as before.
+FEE_WALLET    = os.getenv('FEE_WALLET', '')
+FEE_RATE_TXN  = float(os.getenv('FEE_RATE_TXN', '0') or 0)
+TOKEN_PROGRAM       = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+ASSOC_TOKEN_PROGRAM = 'ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL'
+
 def _clean_rpc_error(err):
     if isinstance(err, dict):
         # Solana's real failure reason (e.g. 'AccountNotFound' -- a 0-SOL
@@ -96,15 +107,82 @@ def get_token_decimals(mint: str) -> int:
         return 6
 
 
+# ── PLATFORM FEE (sell leg, bundled into the swap tx) ────────────────────────
+
+def _get_ata(owner: str, mint: str) -> str:
+    """Standard Associated Token Account address derivation (a PDA) -- no
+    on-chain lookup, just the deterministic address for (owner, mint)."""
+    from solders.pubkey import Pubkey
+    owner_pk = Pubkey.from_string(owner)
+    mint_pk  = Pubkey.from_string(mint)
+    ata, _bump = Pubkey.find_program_address(
+        [bytes(owner_pk), bytes(Pubkey.from_string(TOKEN_PROGRAM)), bytes(mint_pk)],
+        Pubkey.from_string(ASSOC_TOKEN_PROGRAM),
+    )
+    return str(ata)
+
+
+def _ensure_fee_ata(payer_keypair, fee_wallet: str, mint: str) -> str:
+    """Return the SPL token account FEE_WALLET uses to receive Jupiter's
+    platform-fee cut of a sell's SOL output, creating it (funded by
+    payer_keypair -- whichever wallet happens to run the first sell after
+    this ships, a one-time ~0.002 SOL rent deposit) if it doesn't exist yet.
+    Every sell after that reuses the same shared account, no further setup."""
+    from solders.pubkey import Pubkey
+    from solders.instruction import Instruction, AccountMeta
+    from solders.transaction import Transaction
+    from solders.hash import Hash as SolHash
+
+    ata = _get_ata(fee_wallet, mint)
+    info = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
+        'params': [ata, {'encoding': 'base64'}],
+    }, timeout=10).json()
+    if (info.get('result') or {}).get('value') is not None:
+        return ata  # already set up
+
+    print(f'[fee] one-time setup: creating shared fee token account {ata[:8]}... '
+          f'for mint {mint[:8]}...', flush=True)
+    payer_pk = payer_keypair.pubkey()
+    ix = Instruction(
+        program_id=Pubkey.from_string(ASSOC_TOKEN_PROGRAM),
+        accounts=[
+            AccountMeta(payer_pk,                          is_signer=True,  is_writable=True),
+            AccountMeta(Pubkey.from_string(ata),            is_signer=False, is_writable=True),
+            AccountMeta(Pubkey.from_string(fee_wallet),     is_signer=False, is_writable=False),
+            AccountMeta(Pubkey.from_string(mint),           is_signer=False, is_writable=False),
+            AccountMeta(Pubkey.from_string('11111111111111111111111111111111'), is_signer=False, is_writable=False),
+            AccountMeta(Pubkey.from_string(TOKEN_PROGRAM),  is_signer=False, is_writable=False),
+        ],
+        data=bytes(),
+    )
+    bh = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
+    }, timeout=10).json()['result']['value']['blockhash']
+    tx = Transaction.new_signed_with_payer([ix], payer_pk, [payer_keypair], SolHash.from_string(bh))
+    res = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+        'params': [base64.b64encode(bytes(tx)).decode(), {'encoding': 'base64', 'skipPreflight': False}],
+    }, timeout=30).json()
+    if 'error' in res:
+        raise Exception('fee ATA creation failed: ' + str(res['error']))
+    print(f'[fee] fee token account created  TX:{res.get("result","?")[:20]}...', flush=True)
+    time.sleep(8)  # let it land before the swap tx references it
+    return ata
+
+
 # ── SWAP EXECUTION ──────────────────────────────────────────────────────────
 
-def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
-                 wallet_address: str = '', private_key: str = '') -> tuple:
+def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
+                 wallet_address: str = '', private_key: str = '',
+                 fee_wallet: str = '', fee_bps: int = 0) -> tuple:
     """Execute a Jupiter v6 swap. Returns (signature, out_amount) where
     out_amount is the raw (undivided by decimals) quoted output amount as a
     string, so callers can report exactly how much of the output asset the
     swap actually produced.
-    Logs every step so failures are immediately visible in Railway logs."""
+    Logs every step so failures are immediately visible in Railway logs.
+    Called through execute_swap() below, which adds a fee-specific safety net
+    on top of this -- call that one, not this one, from outside this file."""
     wallet_address = wallet_address or WALLET_ADDRESS
     private_key    = private_key    or PRIVATE_KEY
     if not wallet_address or not private_key:
@@ -123,18 +201,34 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
         print('[TRADE] FAIL — invalid private key (exception details withheld for security)', flush=True)
         raise
 
+    # Fold the platform fee into this swap's own transaction (Jupiter's
+    # platformFeeBps/feeAccount) instead of a separate, later, visible SOL
+    # transfer -- best-effort: any failure here just proceeds without the fee
+    # rather than blocking the trade, since a missed fee is a far smaller
+    # problem than a real user's sell failing outright.
+    fee_account = ''
+    if fee_wallet and fee_bps > 0:
+        try:
+            fee_account = _ensure_fee_ata(keypair, fee_wallet, output_mint)
+        except Exception as e:
+            print(f'[fee] could not prepare platform-fee account, swap proceeds without it: {e}', flush=True)
+
     # ── Step 1: Jupiter quote ────────────────────────────────────────────────
-    print(f'[TRADE] Step 1/6 — Requesting {direction} quote for {label} ({amount_lamports} lamports)', flush=True)
+    print(f'[TRADE] Step 1/6 — Requesting {direction} quote for {label} ({amount_lamports} lamports)'
+          + (f'  (+{fee_bps}bps platform fee)' if fee_account else ''), flush=True)
     for _attempt in range(3):
         try:
+            quote_params = {
+                'inputMint':   input_mint,
+                'outputMint':  output_mint,
+                'amount':      int(amount_lamports),
+                'slippageBps': 300,
+            }
+            if fee_account:
+                quote_params['platformFeeBps'] = fee_bps
             r = requests.get(
                 JUPITER_QUOTE,
-                params={
-                    'inputMint':   input_mint,
-                    'outputMint':  output_mint,
-                    'amount':      int(amount_lamports),
-                    'slippageBps': 300,
-                },
+                params=quote_params,
                 headers=_JUP_HEADERS,
                 timeout=15,
             )
@@ -175,15 +269,18 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     print('[TRADE] Step 3/6 — Getting swap transaction from Jupiter', flush=True)
     for _attempt in range(3):
         try:
+            swap_body = {
+                'quoteResponse':             quote,
+                'userPublicKey':             pubkey,
+                'wrapAndUnwrapSol':          True,
+                'dynamicComputeUnitLimit':   True,
+                'prioritizationFeeLamports': 'auto',
+            }
+            if fee_account:
+                swap_body['feeAccount'] = fee_account
             r2 = requests.post(
                 JUPITER_SWAP,
-                json={
-                    'quoteResponse':             quote,
-                    'userPublicKey':             pubkey,
-                    'wrapAndUnwrapSol':          True,
-                    'dynamicComputeUnitLimit':   True,
-                    'prioritizationFeeLamports': 'auto',
-                },
+                json=swap_body,
                 headers=_JUP_HEADERS,
                 timeout=20,
             )
@@ -262,6 +359,26 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
     raise Exception(f'No signature in RPC response: {rpc_resp}')
 
 
+def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
+                  wallet_address: str = '', private_key: str = '',
+                  fee_wallet: str = '', fee_bps: int = 0) -> tuple:
+    """Public entry point for a swap -- see _execute_swap_inner() for the real
+    step-by-step logic. This just adds one safety net on top: if a platform
+    fee was requested and ANYTHING about the swap fails (quote rejection, a
+    bad/missing fee account, on-chain simulation, whatever), retry the exact
+    same swap once with no fee attached at all, rather than letting a
+    fee-related problem fail a real user's trade."""
+    try:
+        return _execute_swap_inner(input_mint, output_mint, amount_lamports,
+                                    wallet_address, private_key, fee_wallet, fee_bps)
+    except Exception as e:
+        if fee_wallet and fee_bps > 0:
+            print(f'[fee] swap with platform fee failed ({e}) — retrying once without it', flush=True)
+            return _execute_swap_inner(input_mint, output_mint, amount_lamports,
+                                        wallet_address, private_key, fee_wallet='', fee_bps=0)
+        raise
+
+
 # ── SINGLE SWAP ENTRY POINT (called from dashboard subprocess) ───────────────
 
 def execute_single_swap(action: str, mint: str, amount_str: str):
@@ -305,7 +422,9 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
             if lamports <= 0:
                 print(f'SELL {mint[:16]} — computed sell amount is 0, nothing to sell', flush=True)
                 sys.exit(0)
-            sig, out_amount_raw = execute_swap(mint, SOL_MINT, lamports)
+            sig, out_amount_raw = execute_swap(
+                mint, SOL_MINT, lamports,
+                fee_wallet=FEE_WALLET, fee_bps=int(round(FEE_RATE_TXN * 10000)))
             try:
                 sol_received = int(out_amount_raw) / 1_000_000_000  # SOL has 9 decimals
             except Exception:

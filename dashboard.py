@@ -4257,7 +4257,8 @@ def _close_open_position(user_id: int, wallet: str, mint: str, chain: str = 'sol
         print(f'[bot] {wallet[:6]}... auto-stopped — all positions closed', flush=True)
 
 def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
-                     sol_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0):
+                     sol_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0,
+                     bundled: bool = False):
     """Charge FEE_RATE_TXN (0.75%) on a swap's SOL amount and transfer it to FEE_WALLET
     in the background. `kind` is 'buy' or 'sell' -- a full round-trip trade calls this
     twice (once per leg), so it pays 1.5% total split across two separate transfers,
@@ -4265,6 +4266,13 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
     trade's timestamp) so the matching `trades` row gets marked fee_paid=1 once the
     transfer confirms; buys have no trades row yet at this point, so trade_ts is
     omitted and that step is skipped. Referral payout (20% of the fee) applies to both.
+
+    bundled=True (sell leg only) means the fee was already collected atomically
+    inside the sell's own swap transaction (Jupiter's platformFeeBps -- see
+    orcagent_solana.py's execute_swap()), so users never see a separate SOL
+    transfer leaving their wallet. There's nothing left to send here -- this
+    just records it in `fees` and pays the referral cut, without the 12s wait
+    or a real transfer signature.
     """
     fee_amount = round(sol_amount * FEE_RATE_TXN, 6)
     short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
@@ -4276,27 +4284,32 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
 
     def _do_fee(pk, sym, gross, fee, wlt, uid, kind_, t_ts):
         sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
-        # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
-        time.sleep(12)
-        print(f'[fee] → attempting {fee:.6f} SOL {kind_} fee transfer from trading wallet to FEE_WALLET '
-              f'for {sw} {sym}', flush=True)
         tx_sig  = None
         err_msg = None
-        try:
-            from solders.keypair import Keypair as _KP_fee
-            signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
-            signer_sol = _get_user_sol(signer_pub)
-            NET_FEE    = 0.000005  # ~5000 lamports for a simple SOL transfer tx
-            if signer_sol < fee + NET_FEE:
-                err_msg = (f'insufficient balance: {signer_sol:.6f} SOL '
-                           f'(need {fee:.6f} + {NET_FEE} network fee)')
-                print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
-            else:
-                tx_sig = send_sol_fee(pk, FEE_WALLET, fee)
-                print(f'[fee] ✓ {sw} {sym} {kind_} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
-        except Exception as e:
-            err_msg = _redact_keys(str(e))
-            print(f'[fee] ✗ {sw} {sym} {kind_} transfer FAILED: {err_msg}', flush=True)
+        if bundled:
+            tx_sig = 'bundled-in-swap'
+            print(f'[fee] ✓ {sw} {sym} {kind_} {fee:.6f} SOL already collected via the swap\'s own '
+                  f'platform fee — no separate transfer needed', flush=True)
+        else:
+            # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
+            time.sleep(12)
+            print(f'[fee] → attempting {fee:.6f} SOL {kind_} fee transfer from trading wallet to FEE_WALLET '
+                  f'for {sw} {sym}', flush=True)
+            try:
+                from solders.keypair import Keypair as _KP_fee
+                signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
+                signer_sol = _get_user_sol(signer_pub)
+                NET_FEE    = 0.000005  # ~5000 lamports for a simple SOL transfer tx
+                if signer_sol < fee + NET_FEE:
+                    err_msg = (f'insufficient balance: {signer_sol:.6f} SOL '
+                               f'(need {fee:.6f} + {NET_FEE} network fee)')
+                    print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
+                else:
+                    tx_sig = send_sol_fee(pk, FEE_WALLET, fee)
+                    print(f'[fee] ✓ {sw} {sym} {kind_} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
+            except Exception as e:
+                err_msg = _redact_keys(str(e))
+                print(f'[fee] ✗ {sw} {sym} {kind_} transfer FAILED: {err_msg}', flush=True)
 
         # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
         try:
@@ -4355,7 +4368,10 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
         args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts),
         daemon=True,
     ).start()
-    print(f'[fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
+    if bundled:
+        print(f'[fee] {short_w} {symbol} {kind} fee already bundled into the swap — recording it now', flush=True)
+    else:
+        print(f'[fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
 
 
 def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_price: float,
@@ -4415,9 +4431,12 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     # already charged at position-open time). Applies regardless of who the session
     # wallet belongs to, and regardless of pnl (win, loss, or break-even all pay it,
     # since it's charged on the swap amount, not the profit).
+    # bundled=True: the sell swap already folded this fee into its own transaction via
+    # Jupiter's platform fee (see orcagent_solana.py), so there's no separate transfer
+    # left for users to notice leaving their wallet — just record it.
     if wallet and private_key:
         _charge_txn_fee(private_key, wallet, user_id, symbol, swap_sol_amount, 'sell',
-                         trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl)
+                         trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl, bundled=True)
         fee_amount = round(swap_sol_amount * FEE_RATE_TXN, 6)
     else:
         print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
@@ -4653,6 +4672,8 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
         env['WALLET_PRIVATE_KEY'] = private_key
+        env['FEE_WALLET']         = FEE_WALLET
+        env['FEE_RATE_TXN']       = str(FEE_RATE_TXN)
         _ext_hit('jupiter')
         result = subprocess.run(
             [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), action, mint, amount_str],
@@ -12814,6 +12835,11 @@ def api_instant_trade():
             env                       = os.environ.copy()
             env['WALLET_ADDRESS']     = wallet
             env['WALLET_PRIVATE_KEY'] = private_key
+            # No FEE_WALLET/FEE_RATE_TXN here on purpose -- manual Live Market
+            # instant-trades have never been charged a platform fee (only the
+            # bot's own automatic buy/sell, via _record_user_trade(), is).
+            # Setting them would make orcagent_solana.py start deducting a fee
+            # from manual sells that never had one.
             _ext_hit('jupiter')
             amount_str = str(amount_sol) if side == 'buy' else (str(amount_token) if amount_token > 0 else '0')
             result = subprocess.run(
