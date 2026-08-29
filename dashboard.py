@@ -7415,13 +7415,20 @@ def api_token_co_traders(mint):
             conn.close()
             return jsonify({'ok': True, 'users': []})
         me_id = me_row[0]
-        # Users the session wallet follows
+        # Followed accounts who currently hold this mint -- read straight from
+        # open_positions (the durable DB record), not the in-memory
+        # user_states dict. That dict only exists for wallets this particular
+        # server process has touched since it last started, so a followed
+        # user whose session/bot loop hasn't run here yet looked like they
+        # held nothing even with a real open position in the DB.
         c.execute('''
-            SELECT u.id, u.username, u.avatar_url, u.wallet_address
-            FROM follows f JOIN users u ON u.id = f.following_id
-            WHERE f.follower_id = ?
-        ''', (me_id,))
-        followed = c.fetchall()
+            SELECT u.id, u.username, u.avatar_url, u.wallet_address, op.amount, op.buy_price
+            FROM follows f
+            JOIN users u ON u.id = f.following_id
+            JOIN open_positions op ON op.user_id = u.id AND op.mint_address = ?
+            WHERE f.follower_id = ? AND op.amount > 0
+        ''', (mint, me_id))
+        rows = c.fetchall()
         conn.close()
     except Exception as e:
         print(f'[co-traders] DB error: {e}', flush=True)
@@ -7435,17 +7442,11 @@ def api_token_co_traders(mint):
     )
 
     result = []
-    for uid, username, avatar_url, w_addr in followed:
+    for uid, username, avatar_url, w_addr, amount, buy_price in rows:
         if not w_addr:
             continue
-        us = user_states.get(w_addr)
-        if not us:
-            continue
-        pos = us.get('positions', {}).get(mint)
-        if not pos or not pos.get('amount'):
-            continue
-        entry = float(pos.get('buy_price') or 0)
-        amount = float(pos.get('amount') or 0)
+        entry  = float(buy_price or 0)
+        amount = float(amount or 0)
         pnl = None
         if cur_price is not None and entry > 0 and amount > 0:
             pnl = round(amount * (cur_price - entry), 6)
