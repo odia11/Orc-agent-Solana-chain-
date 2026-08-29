@@ -21840,6 +21840,55 @@ def backup_database() -> bool:
 
     return True
 
+def _run_daily_db_maintenance():
+    """Daily housekeeping so the app stays fast as the database grows: prunes
+    rows that have zero retention value once stale, then VACUUMs the database
+    file to reclaim space and defragment it.
+
+    Deliberately conservative about what gets pruned -- only tables with no
+    user-facing or financial meaning once old:
+      - group_typing: a live "is typing…" indicator, meaningless the moment
+        it's stale, safe to clear entirely every time.
+      - security_log: an audit trail read only as "last 20 rows" (admin
+        panel) or "count in the last hour" (rate checks) -- a 180-day
+        retention window is generous for either and never touched by those
+        queries.
+    Everything else (trades, fees, notifications, feed posts/replies,
+    post_views, portfolio_snapshots) is left alone because it's either a
+    financial record or something a user can actually see. agent_journal is
+    also left alone even though it's an internal log -- _check_daily_spend
+    -style risk checks read recent rows from it directly, so pruning it needs
+    a deliberate retention decision, not a guess made here.
+    """
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        conn.execute('DELETE FROM group_typing')
+        sec_cutoff_days = 180
+        cur = conn.execute(
+            "DELETE FROM security_log WHERE timestamp < datetime('now', ?)",
+            (f'-{sec_cutoff_days} days',)
+        )
+        sec_pruned = cur.rowcount
+        conn.commit()
+        conn.close()
+        print(f'[db-maintenance] cleared group_typing, pruned {sec_pruned} '
+              f'security_log rows older than {sec_cutoff_days}d', flush=True)
+    except Exception as e:
+        print(f'[db-maintenance] prune error: {e}', flush=True)
+
+    try:
+        # A fresh connection in autocommit mode -- VACUUM can't run inside a
+        # transaction, and needs exclusive access to rebuild the file.
+        vconn = sqlite3.connect(DB_FILE, isolation_level=None)
+        size_before = os.path.getsize(DB_FILE)
+        vconn.execute('VACUUM')
+        vconn.close()
+        size_after = os.path.getsize(DB_FILE)
+        print(f'[db-maintenance] VACUUM done — {size_before // 1024}KB -> {size_after // 1024}KB', flush=True)
+    except Exception as e:
+        print(f'[db-maintenance] VACUUM error: {e}', flush=True)
+
+
 def _start_backup_scheduler():
     if not _APSCHEDULER_OK:
         print('[backup] APScheduler not available — install apscheduler for scheduled backups', flush=True)
@@ -21847,12 +21896,16 @@ def _start_backup_scheduler():
         def _once():
             time.sleep(60)
             backup_database()
+            _run_daily_db_maintenance()
         threading.Thread(target=_once, daemon=True).start()
         return
     try:
         _sched = _BgScheduler(timezone='UTC')
         # Daily at 03:00 UTC
         _sched.add_job(backup_database, _CronTrigger(hour=3, minute=0), id='daily_backup', replace_existing=True)
+        # Daily at 03:30 UTC -- after that day's backup, before the 04:00 AI
+        # self-analysis job reads the database.
+        _sched.add_job(_run_daily_db_maintenance, _CronTrigger(hour=3, minute=30), id='daily_db_maintenance', replace_existing=True)
         # Hourly, on the hour
         _sched.add_job(_recover_uncollected_fees, _CronTrigger(minute=0), id='hourly_fee_recovery', replace_existing=True, kwargs={'triggered_by': 'scheduled'})
         # Hourly, on the hour
@@ -21867,8 +21920,8 @@ def _start_backup_scheduler():
         run_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=60)
         _sched.add_job(backup_database, 'date', run_date=run_at, id='startup_backup')
         _sched.start()
-        print('[backup] scheduler started — daily 03:00 UTC, hourly fee recovery, hourly portfolio snapshot, '
-              'daily AI self-analysis 04:00 UTC, startup in 60 s', flush=True)
+        print('[backup] scheduler started — daily backup 03:00 UTC, daily DB maintenance 03:30 UTC, '
+              'hourly fee recovery, hourly portfolio snapshot, daily AI self-analysis 04:00 UTC, startup in 60 s', flush=True)
     except Exception as e:
         print(f'[backup] scheduler error: {e}', flush=True)
 
