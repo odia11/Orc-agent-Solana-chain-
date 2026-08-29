@@ -12835,11 +12835,12 @@ def api_instant_trade():
             env                       = os.environ.copy()
             env['WALLET_ADDRESS']     = wallet
             env['WALLET_PRIVATE_KEY'] = private_key
-            # No FEE_WALLET/FEE_RATE_TXN here on purpose -- manual Live Market
-            # instant-trades have never been charged a platform fee (only the
-            # bot's own automatic buy/sell, via _record_user_trade(), is).
-            # Setting them would make orcagent_solana.py start deducting a fee
-            # from manual sells that never had one.
+            # Same 0.75% platform fee as the bot's own trades -- for a sell,
+            # orcagent_solana.py folds it into this swap's own transaction
+            # (Jupiter platformFee) so it's never a separate visible transfer;
+            # the buy leg's fee is charged just below via _charge_txn_fee().
+            env['FEE_WALLET']         = FEE_WALLET
+            env['FEE_RATE_TXN']       = str(FEE_RATE_TXN)
             _ext_hit('jupiter')
             amount_str = str(amount_sol) if side == 'buy' else (str(amount_token) if amount_token > 0 else '0')
             result = subprocess.run(
@@ -12848,6 +12849,7 @@ def api_instant_trade():
                 env=env, capture_output=True, text=True, timeout=120
             )
             env['WALLET_PRIVATE_KEY'] = ''
+            _fee_pk                   = private_key  # kept only for the buy-leg fee transfer below
             private_key               = ''
         except subprocess.TimeoutExpired:
             return jsonify({'error': 'Trade timed out (>120s)'}), 504
@@ -12962,6 +12964,15 @@ def api_instant_trade():
                         (uid, token_address, symbol, now)
                     )
                 conn.commit()
+                # Same 0.75% platform fee as the bot's own trades. Sell already
+                # had it folded into the swap tx itself (bundled=True, see the
+                # FEE_WALLET/FEE_RATE_TXN env vars set above); the buy leg has
+                # no such mechanism (the fee would be token-denominated, not
+                # SOL), so it uses the same deferred SOL transfer bot buys use.
+                if side == 'buy':
+                    _charge_txn_fee(_fee_pk, wallet, uid, symbol, amount_sol, 'buy')
+                else:
+                    _charge_txn_fee(_fee_pk, wallet, uid, symbol, sol_recorded, 'sell', bundled=True)
             conn.close()
         except Exception as e:
             traceback.print_exc()
