@@ -103,6 +103,20 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .call-multi-sub{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
 .calls-empty{text-align:center;padding:50px 20px;color:var(--muted);font-size:13px}
 
+/* ── LIKE BUTTON ── */
+.call-like-btn{display:flex;align-items:center;gap:4px;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;cursor:pointer;padding:4px 2px;flex-shrink:0}
+.call-like-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;transition:transform .12s}
+.call-like-btn.liked{color:var(--red)}
+.call-like-btn.liked svg{fill:var(--red);stroke:var(--red)}
+.call-like-btn:active svg{transform:scale(1.2)}
+.call-row{cursor:pointer}
+.call-row-top{display:flex;align-items:center;gap:14px}
+.podium-card{cursor:pointer;position:relative}
+.podium-like{display:flex;align-items:center;justify-content:center;gap:4px;margin-top:8px}
+@media(max-width:767px){
+  .podium-card .podium-like{margin-top:0;margin-left:6px}
+}
+
 @media(max-width:767px){
   html,body{overflow-x:hidden}
   .page{padding:16px 14px 120px}
@@ -196,6 +210,18 @@ function _setCallsWindow(w){
   _loadCallsList();
 }
 
+var _HEART_SVG = '<svg viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>';
+function _likeBtnHtml(c, extraCls){
+  var liked = !!c.liked_by_me;
+  return '<button class="call-like-btn'+(extraCls?' '+extraCls:'')+(liked?' liked':'')+'" data-call-id="'+c.id+'" '
+    +'onclick="event.stopPropagation();_toggleCallLike(this)" aria-label="Like this call">'
+    +_HEART_SVG+'<span>'+(c.like_count||0)+'</span></button>';
+}
+function _goToToken(mint){
+  if(!mint) return;
+  window.location = '/live-market?mint=' + encodeURIComponent(mint);
+}
+
 function _renderPodium(top3){
   var el = document.getElementById('calls-podium');
   if(!top3.length){ el.style.display='none'; el.innerHTML=''; return; }
@@ -203,7 +229,7 @@ function _renderPodium(top3){
   el.innerHTML = top3.map(function(c, i){
     var rank = i+1;
     var neg = c.multiplier < 1 ? ' neg' : '';
-    return '<div class="podium-card p'+rank+'">'
+    return '<div class="podium-card p'+rank+'" onclick="_goToToken(\''+esc(c.mint)+'\')">'
       +'<div class="podium-rank">#'+rank+'</div>'
       +'<div class="podium-tile">'+esc((c.symbol||'?').slice(0,3).toUpperCase())+'</div>'
       +'<div class="podium-info">'
@@ -211,8 +237,35 @@ function _renderPodium(top3){
         +'<div class="podium-caller">'+esc(c.caller_username||'')+(c.caller_verified?' ✓':'')+'</div>'
       +'</div>'
       +'<div class="podium-multi'+neg+'">'+_fmtMultiplier(c.multiplier)+'</div>'
+      +_likeBtnHtml(c, 'podium-like')
     +'</div>';
   }).join('');
+}
+
+function _toggleCallLike(btn){
+  var callId = btn.getAttribute('data-call-id');
+  var wasLiked = btn.classList.contains('liked');
+  var countEl = btn.querySelector('span');
+  var count = parseInt(countEl.textContent, 10) || 0;
+  // Optimistic update -- flip immediately, reconcile with the server's real
+  // count when the response lands, and roll back on failure.
+  btn.classList.toggle('liked', !wasLiked);
+  countEl.textContent = wasLiked ? Math.max(0, count-1) : count+1;
+  fetch('/api/calls/'+callId+'/like', {
+    method: 'POST',
+    headers: {'X-CSRF-Token': _callsCsrfToken}
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if(!d.ok){
+      btn.classList.toggle('liked', wasLiked);
+      countEl.textContent = count;
+      return;
+    }
+    btn.classList.toggle('liked', d.liked);
+    countEl.textContent = d.count;
+  }).catch(function(){
+    btn.classList.toggle('liked', wasLiked);
+    countEl.textContent = count;
+  });
 }
 
 async function _loadCallsList(){
@@ -237,7 +290,7 @@ async function _loadCallsList(){
       var avatarHtml = c.caller_avatar
         ? '<img src="'+esc(c.caller_avatar)+'" alt="">'
         : esc((c.caller_username||'?').slice(0,2).toUpperCase());
-      return '<div class="call-row">'
+      return '<div class="call-row" onclick="_goToToken(\''+esc(c.mint)+'\')">'
         +'<div class="call-rank">#'+rank+'</div>'
         +'<div class="call-avatar">'+avatarHtml+'</div>'
         +'<div class="call-info">'
@@ -245,6 +298,7 @@ async function _loadCallsList(){
           +'<div class="call-token">$'+esc(c.symbol||'?')+'</div>'
           +'<div class="call-mcap">Called at '+_fmtMcap(c.mcap_at_call||0)+' mcap</div>'
         +'</div>'
+        +_likeBtnHtml(c)
         +'<div class="call-multi">'
           +'<div class="call-multi-val'+neg+'">'+_fmtMultiplier(c.multiplier)+'</div>'
           +'<div class="call-multi-sub">'+_fmtCallPrice(c.price_at_call)+' → '+_fmtCallPrice(c.peak_price)+'</div>'

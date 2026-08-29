@@ -1428,6 +1428,16 @@ def init_db():
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_token_calls_mint ON token_calls(mint)')
     c.execute('CREATE INDEX IF NOT EXISTS idx_token_calls_user_ts ON token_calls(user_id, timestamp)')
+    c.execute('''CREATE TABLE IF NOT EXISTS call_likes (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id    INTEGER NOT NULL,
+        call_id    INTEGER NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(user_id, call_id),
+        FOREIGN KEY (user_id) REFERENCES users(id),
+        FOREIGN KEY (call_id) REFERENCES token_calls(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_call_likes_call ON call_likes(call_id)')
     c.execute('''CREATE TABLE IF NOT EXISTS fees (
         id           INTEGER PRIMARY KEY AUTOINCREMENT,
         user_wallet  TEXT NOT NULL,
@@ -11811,6 +11821,7 @@ def api_calls_top():
         'all': '1=1',
     }.get(window, "timestamp >= datetime('now','-7 days')")
 
+    my_wallet = _current_wallet()
     conn = sqlite3.connect(DB_FILE)
     try:
         rows = conn.execute(f'''
@@ -11823,6 +11834,22 @@ def api_calls_top():
             ORDER BY (tc.peak_price * 1.0 / tc.price_at_call) DESC
             LIMIT 50
         ''').fetchall()
+        call_ids = [r[0] for r in rows]
+        like_counts = {}
+        my_likes = set()
+        if call_ids:
+            ph = ','.join('?' * len(call_ids))
+            for cid, cnt in conn.execute(
+                f'SELECT call_id, COUNT(*) FROM call_likes WHERE call_id IN ({ph}) GROUP BY call_id',
+                call_ids
+            ).fetchall():
+                like_counts[cid] = cnt
+            my_uid = _get_uid(conn, my_wallet) if my_wallet else None
+            if my_uid:
+                my_likes = {row[0] for row in conn.execute(
+                    f'SELECT call_id FROM call_likes WHERE user_id=? AND call_id IN ({ph})',
+                    [my_uid] + call_ids
+                ).fetchall()}
         result = []
         for r in rows:
             (cid, mint, symbol, name, price_at_call, mcap_at_call, peak_price,
@@ -11837,10 +11864,52 @@ def api_calls_top():
                 'caller_username': caller_username or (caller_wallet[:4]+'...'+caller_wallet[-4:]),
                 'caller_avatar': caller_avatar or '',
                 'caller_verified': bool(caller_verified),
+                'like_count': like_counts.get(cid, 0),
+                'liked_by_me': cid in my_likes,
             })
         return jsonify({'ok': True, 'calls': result})
     finally:
         conn.close()
+
+@app.route('/api/calls/<int:call_id>/like', methods=['POST'])
+@rate_limit(60, 60)
+def toggle_call_like(call_id):
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not logged in'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        me = _get_uid(conn, wallet)
+        if not me:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        call_row = conn.execute(
+            'SELECT user_id, mint, symbol FROM token_calls WHERE id=?', (call_id,)
+        ).fetchone()
+        if not call_row:
+            return jsonify({'ok': False, 'msg': 'Call not found'}), 404
+        owner_uid, mint, symbol = call_row
+        existing = conn.execute(
+            'SELECT id FROM call_likes WHERE user_id=? AND call_id=?', (me, call_id)
+        ).fetchone()
+        if existing:
+            conn.execute('DELETE FROM call_likes WHERE user_id=? AND call_id=?', (me, call_id))
+            liked = False
+        else:
+            conn.execute('INSERT INTO call_likes (user_id, call_id) VALUES (?,?)', (me, call_id))
+            liked = True
+            if owner_uid and owner_uid != me:
+                liker_row = conn.execute('SELECT COALESCE(username,"") FROM users WHERE id=?', (me,)).fetchone()
+                liker_name = (liker_row[0] if liker_row and liker_row[0] else wallet[:8]+'…')
+                link = '/live-market?mint=' + mint
+                conn.execute(
+                    'INSERT INTO notifications (user_id, type, content, link, actor_wallet) VALUES (?,?,?,?,?)',
+                    (owner_uid, 'like', liker_name+' liked your call on $'+(symbol or '?'), link, wallet))
+                _send_push_notification(owner_uid, 'New like', liker_name+' liked your call on $'+(symbol or '?'), link)
+        count = conn.execute('SELECT COUNT(*) FROM call_likes WHERE call_id=?', (call_id,)).fetchone()[0]
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'liked': liked, 'count': int(count)})
 
 @app.route('/api/calls/mine', methods=['GET'])
 @rate_limit(30, 60)
