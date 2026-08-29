@@ -542,12 +542,12 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-reply-pill{flex:1;min-width:0;display:flex;align-items:center;gap:2px;background:#16191f;border:1px solid #21252c;border-radius:999px;padding:4px 4px 4px 14px;transition:border-color .15s}
 .fc-reply-card.active .fc-reply-pill{border-color:#f7b955}
 .fc-reply-inp{flex:1;min-width:0;background:none;border:none;padding:4px 0;font-size:13px;color:var(--text);outline:none;font-family:'Geist',system-ui,sans-serif}
-.fc-reply-tool{background:none;border:none;cursor:pointer;padding:6px;border-radius:50%;line-height:1;color:#8a919c;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
+.fc-reply-tool{background:none;border:none;cursor:pointer;padding:6px;min-height:0;border-radius:50%;line-height:1;color:#8a919c;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:background .15s,color .15s}
 .fc-reply-tool:hover{background:#21252c;color:#f7b955}
 .fc-reply-palette{position:absolute;bottom:calc(100% + 8px);left:0;background:#1c1f26;border:1px solid #2e2e2e;border-radius:12px;padding:8px;display:none;flex-direction:column;gap:6px;z-index:300;box-shadow:0 4px 20px rgba(0,0,0,.55);width:220px;box-sizing:border-box;max-width:calc(100vw - 24px)}
 .fc-reply-palette button{background:none;border:none;cursor:pointer;font-size:18px;padding:6px;border-radius:6px;transition:background .1s;line-height:1.4;text-align:center}
 .fc-reply-palette button:hover{background:rgba(255,255,255,.09)}
-.fc-reply-send{width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#21252c;color:#565d68;border:none;border-radius:50%;cursor:pointer;transition:background .15s,color .15s}
+.fc-reply-send{width:28px;height:28px;min-height:0;flex-shrink:0;display:flex;align-items:center;justify-content:center;background:#21252c;color:#565d68;border:none;border-radius:50%;cursor:pointer;transition:background .15s,color .15s}
 .fc-reply-card.active .fc-reply-send{background:var(--accent);color:#0a0b0e}
 /* ── Instagram/Facebook-style comment rows: avatar left, bold username
    flowing directly into the message text (one paragraph, not a separate
