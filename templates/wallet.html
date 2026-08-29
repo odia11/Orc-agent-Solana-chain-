@@ -216,6 +216,9 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 .act-time{font-size:11px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
 
 /* ── manual trade history (Live Market instant-trades) ── */
+.mt-hdr-toggle{cursor:pointer;user-select:none}
+.mt-chev{color:var(--muted);font-size:11px;transition:color .15s}
+.mt-hdr-toggle:hover .mt-chev{color:var(--text)}
 .mt-summary{display:flex;padding:14px 18px;border-bottom:1px solid #16191f}
 .mt-summary-item{flex:1;min-width:0}
 .mt-summary-item + .mt-summary-item{padding-left:18px;margin-left:18px;border-left:1px solid #16191f}
@@ -613,20 +616,23 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
     <!-- manual trade history — Live Market instant-trades only (source='manual');
          bot-executed trades live on /bot and /history instead -->
     <div class="act-card" style="margin-top:16px">
-      <div class="act-hdr">
+      <div class="act-hdr mt-hdr-toggle" onclick="_toggleTradeHistory()">
         <span class="act-title">Trade History</span>
+        <span class="mt-chev" id="mt-chevron">▸</span>
       </div>
-      <div class="mt-summary">
-        <div class="mt-summary-item">
-          <div class="mt-summary-lbl">Total Trades</div>
-          <div class="mt-summary-val" id="mt-total">—</div>
+      <div id="mt-body" style="display:none">
+        <div class="mt-summary">
+          <div class="mt-summary-item">
+            <div class="mt-summary-lbl">Total Trades</div>
+            <div class="mt-summary-val" id="mt-total">—</div>
+          </div>
+          <div class="mt-summary-item">
+            <div class="mt-summary-lbl">Total PnL</div>
+            <div class="mt-summary-val" id="mt-pnl">—</div>
+          </div>
         </div>
-        <div class="mt-summary-item">
-          <div class="mt-summary-lbl">Total PnL</div>
-          <div class="mt-summary-val" id="mt-pnl">—</div>
-        </div>
+        <div id="manual-trades-list"><div class="state-msg">Loading…</div></div>
       </div>
-      <div id="manual-trades-list"><div class="state-msg">Loading…</div></div>
     </div>
 
   </div><!-- .wlt-content -->
@@ -1643,6 +1649,15 @@ function _mtTimeAgo(ts){
   if(s<604800) return Math.floor(s/86400)+'d ago'
   return d.toLocaleDateString('en-US',{day:'numeric',month:'short'})
 }
+function _toggleTradeHistory(){
+  var body=document.getElementById('mt-body')
+  var chev=document.getElementById('mt-chevron')
+  if(!body) return
+  var willOpen=body.style.display==='none'
+  body.style.display=willOpen?'':'none'
+  if(chev) chev.textContent=willOpen?'▾':'▸'
+}
+
 async function _loadManualTrades(){
   var list=document.getElementById('manual-trades-list')
   var totalEl=document.getElementById('mt-total')

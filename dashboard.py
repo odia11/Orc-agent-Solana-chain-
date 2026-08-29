@@ -12266,7 +12266,7 @@ def wallet_manual_trades():
         c.execute("SELECT COUNT(*), COALESCE(SUM(pnl),0) FROM trades WHERE user_id=? AND source='manual'", (uid,))
         total_trades, total_pnl = c.fetchone()
         rows = conn.execute(
-            "SELECT token, amount, pnl, timestamp, mint_address, side, token_amount FROM trades "
+            "SELECT token, amount, pnl, timestamp, mint_address, side, token_amount, exit_price FROM trades "
             "WHERE user_id=? AND source='manual' ORDER BY timestamp DESC LIMIT 50",
             (uid,)
         ).fetchall()
@@ -12274,13 +12274,27 @@ def wallet_manual_trades():
         conn.close()
 
     items = []
-    for token, amount, pnl, ts, mint_addr, side, token_amount in rows:
-        is_buy = (side == 'buy') if side in ('buy', 'sell') else float(amount or 0) > 0
+    for token, amount, pnl, ts, mint_addr, side, token_amount, exit_price in rows:
+        if side in ('buy', 'sell'):
+            # Recorded by the Live Market instant-trade endpoint -- amount is
+            # already the SOL side of the swap, token_amount the token side.
+            is_buy = side == 'buy'
+            amt_sol = float(amount or 0)
+            qty = float(token_amount or 0)
+        else:
+            # Older rows written by the generic close-position bookkeeping
+            # (used for manually-closed bot/copy positions too) -- these
+            # never carry a side, and `amount` here is the TOKEN quantity
+            # sold, not SOL, so the real SOL value is amount * exit_price.
+            # Always a sell/close; there's no "manual buy" without a side.
+            is_buy = False
+            amt_sol = float(amount or 0) * float(exit_price or 0)
+            qty = float(amount or 0)
         items.append({
             'token':        token or '—',
             'type':         'buy' if is_buy else 'sell',
-            'amount_sol':   round(float(amount or 0), 4),
-            'token_amount': round(float(token_amount or 0), 6),
+            'amount_sol':   round(amt_sol, 4),
+            'token_amount': round(qty, 6),
             'pnl':          round(float(pnl or 0), 6),
             'timestamp':    ts,
             'mint_address': mint_addr or '',
