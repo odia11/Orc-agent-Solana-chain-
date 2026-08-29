@@ -157,12 +157,14 @@ input{font-family:inherit}
 .pt-chart-axis{height:22px;border-top:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 10px;font-family:var(--mono);font-size:9px;color:var(--muted2)}
 .pt-chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:10.5px;font-family:var(--mono)}
 
-.pt-card-ft{display:flex;align-items:center;justify-content:space-between;padding:10px 15px;border-top:1px solid var(--line);grid-column:1/3}
+.pt-card-ft{display:flex;flex-direction:column;gap:7px;padding:10px 15px;border-top:1px solid var(--line);grid-column:1/3}
 .pt-friends{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
+.pt-friends-empty{color:var(--muted2)}
 .pt-friend-avs{display:flex}
 .pt-friend-avs img,.pt-friend-avs .ph{width:20px;height:20px;border-radius:50%;object-fit:cover;border:2px solid var(--card);margin-left:-7px;background:var(--line2);display:flex;align-items:center;justify-content:center;font-size:8px;font-weight:700;color:var(--muted)}
 .pt-friend-avs img:first-child,.pt-friend-avs .ph:first-child{margin-left:0}
-.pt-card-ft-right{font-family:var(--mono);font-size:10.5px;color:var(--muted2);margin-left:auto}
+.pt-card-ft-right{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.pt-ft-chip{font-family:var(--mono);font-size:10px;color:var(--muted2);background:var(--card2);border:1px solid var(--line2);border-radius:6px;padding:3px 8px;white-space:nowrap}
 
 /* ── right rail cards ── */
 .pt-rcard{background:var(--card);border-radius:15px;padding:13px 14px;flex-shrink:0}

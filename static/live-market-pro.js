@@ -277,7 +277,7 @@ function fetchFriends(idx, mint){
       if(!friendsEl) return;
       var users = (d && d.ok && d.users) || [];
       if(!users.length){
-        friendsEl.innerHTML = '<span class="pt-friends-empty">👥 0 friends hold this</span>';
+        friendsEl.innerHTML = '<span class="pt-friends-empty">👥 0 friends</span>';
         return;
       }
       var avs = users.slice(0,3).map(function(u){
@@ -285,9 +285,9 @@ function fetchFriends(idx, mint){
           ? '<img src="'+esc(u.avatar_url)+'">'
           : '<div class="ph">'+esc((u.username||'?').slice(0,1).toUpperCase())+'</div>';
       }).join('');
-      friendsEl.innerHTML = '<div class="pt-friend-avs">'+avs+'</div><span>'+users.length+' friend'+(users.length===1?'':'s')+' hold'+(users.length===1?'s':'')+' this</span>';
+      friendsEl.innerHTML = '<div class="pt-friend-avs">'+avs+'</div><span>'+users.length+' friend'+(users.length===1?'':'s')+'</span>';
     }).catch(function(){
-      if(friendsEl) friendsEl.innerHTML = '<span class="pt-friends-empty">👥 0 friends hold this</span>';
+      if(friendsEl) friendsEl.innerHTML = '<span class="pt-friends-empty">👥 0 friends</span>';
     });
 
   fetch('/api/token/'+encodeURIComponent(mint)+'/holders', {credentials:'include'})
@@ -297,12 +297,16 @@ function fetchFriends(idx, mint){
       if(!ftEl || !d || !d.ok) return;
       var t = ST.tokens[Number(idx)];
       var txns = t ? (t.buys_24h+t.sells_24h) : 0;
+      var txnsStr = txns >= 1000 ? (txns/1000).toFixed(1)+'K' : String(txns);
       var ratio = t ? ratioStr(t.buys_24h, t.sells_24h) : '—';
       // 'holders' here is a count of OrcAgent users with a position in this
-      // token, NOT the real on-chain holder count -- "N holders" reads as
-      // "this token only has N holders total" (alarming, and wrong), so
-      // it's labeled "on OrcAgent" to make that scope explicit.
-      ftEl.textContent = (d.platform_holders||0)+' on OrcAgent · '+txns+' txns · '+ratio;
+      // token, NOT the real on-chain holder count (DexScreener's API, which
+      // powers every other stat on this card, doesn't expose that) -- kept
+      // as its own small chip, clearly scoped to "on OrcAgent" rather than
+      // implying it's the token's total holder count.
+      ftEl.innerHTML = '<span class="pt-ft-chip">👤 '+(d.platform_holders||0)+' on OrcAgent</span>'
+        + '<span class="pt-ft-chip">'+txnsStr+' txns</span>'
+        + '<span class="pt-ft-chip">'+ratio+'</span>';
     }).catch(function(){});
 }
 
