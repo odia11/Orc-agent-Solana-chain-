@@ -13908,12 +13908,16 @@ def share_feed_to_x(post_id):
     if not xrow:
         conn.close()
         return jsonify({'ok': False, 'msg': 'Connect X in Settings first'}), 400
+    image_data_uri = None  # set only for a photo post -- the actual bytes to attach
+    wants_media    = False  # True wherever there's a real picture to try attaching
+    link_fallback  = request.host_url.rstrip('/') + '/post/' + post_id
     if post_id.startswith('p'):
-        row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (post_id[1:],)).fetchone()
+        row = conn.execute('SELECT content, image_url FROM feed_posts WHERE id=?', (post_id[1:],)).fetchone()
         embed = _parse_feed_embed(row[0] if row else '')
         if embed['kind'] == 'chart':
             text = embed['text_part'] if embed['text_part'] else \
                    ('Check out $'+embed['symbol']+' on OrcAgent' if embed['symbol'] else '')
+            wants_media = True
         elif embed['kind'] == 'trade':
             if embed['text_part']:
                 text = embed['text_part']
@@ -13921,26 +13925,60 @@ def share_feed_to_x(post_id):
                 sign = '+' if embed['pnl_pct'] >= 0 else ''
                 text = (f"Just closed ${embed['symbol']} {sign}{embed['pnl_pct']:.1f}% "
                         f"({sign}{embed['pnl_sol']:.4f} SOL) on @OrcAgent") if embed['symbol'] else ''
+            wants_media = True
         elif embed['kind'] == 'photo':
-            # Image-only post, no caption to draw from -- _post_to_x() only
-            # posts text (X's media-upload API isn't wired up), so the actual
-            # photo can't ride along in the tweet either way. Falling all the
-            # way through to an empty tweet ("Nothing to share") blocked
-            # sharing an image post entirely; link back to the post itself
-            # instead, since that's the only place the photo is visible.
-            text = 'Check out my post on @OrcAgent ' + request.host_url.rstrip('/') + '/post/' + post_id
+            # Image-only post, no caption to draw from. The actual photo (as
+            # a base64 data URI) lives right in row[1] -- attach it as real
+            # media below instead of only linking back to it.
+            text = 'Check out my post on @OrcAgent'
+            image_data_uri = row[1] if row else None
+            wants_media = True
         else:
             text = embed['text_part']
         text = text[:250]
     elif post_id.startswith('t'):
         row = conn.execute('SELECT token FROM trades WHERE id=?', (post_id[1:],)).fetchone()
         text = ('Check out my trade on $'+row[0]+' via @OrcAgent') if row else ''
+        wants_media = True
     else:
         text = ''
     conn.close()
     if not text:
         return jsonify({'ok': False, 'msg': 'Nothing to share'}), 400
-    ok = _post_to_x(wallet, text)
+
+    # Attach a real image where one is available: the actual uploaded photo
+    # for a photo post, or the same 1200x630 trade/chart card image used for
+    # the /share/<id> link-unfurl preview, for anything __TRADE__/__CHART__-
+    # embedded or a native trade share. Any failure here (no X media scope,
+    # network hiccup, unexpected response shape) falls back to a plain text
+    # tweet with a link back to the post -- attaching a picture is a nice-to-
+    # have, it must never be the reason sharing fails outright.
+    media_ids = None
+    if wants_media:
+        try:
+            image_bytes, mime_type = None, None
+            if image_data_uri and image_data_uri.startswith('data:'):
+                header, _, b64_part = image_data_uri.partition(',')
+                mime_type = header.split(';')[0].replace('data:', '') or 'image/jpeg'
+                image_bytes = base64.b64decode(b64_part)
+            else:
+                image_bytes = _render_trade_card_png(post_id)
+                mime_type = 'image/png' if image_bytes else None
+            if image_bytes:
+                access_token = _get_x_access_token(wallet)
+                if access_token:
+                    media_id = _upload_media_to_x(access_token, image_bytes, mime_type)
+                    media_ids = [media_id]
+        except Exception as e:
+            print(f'[x] media attach skipped for {wallet[:8]}: {e}', flush=True)
+            media_ids = None
+        if not media_ids:
+            # No picture ended up attached (upload failed, or there simply
+            # wasn't a card image to render) -- add the link back so there's
+            # still something to look at beyond the caption.
+            text = (text + ' ' + link_fallback)[:250]
+
+    ok = _post_to_x(wallet, text, media_ids=media_ids)
     return jsonify({'ok': ok, 'msg': 'Shared to X!' if ok else 'Failed to share to X'})
 
 def _tc_lookup(id):
@@ -14020,17 +14058,17 @@ def _tc_lookup(id):
     finally:
         conn.close()
 
-@app.route('/api/trade-card/<id>.png')
-@rate_limit(60, 60)
-def trade_card_image(id):
-    """Render a shareable 1200x630 PNG for a trade — see _tc_lookup for the id scheme.
-    Deliberately no auth check -- this is meant to be publicly fetchable so X/Discord/etc.
-    link-unfurl bots can render it (see share_feed_to_x's og:image comment) -- but it does
-    trigger a server-side outbound fetch (_tc_build_canvas's banner_url), so it's rate-limited
-    per IP same as everything else that does that, which it wasn't before."""
+def _render_trade_card_png(id):
+    """Builds the same shareable 1200x630 PNG as /api/trade-card/<id>.png for
+    a t<id>/p<id> share id -- shared by that route and by share_feed_to_x()
+    so a trade/chart post attaches the exact same picture to its tweet that
+    the link-unfurl preview already shows. Returns None if id doesn't
+    resolve to a trade/chart embed (e.g. a plain text or photo post) --
+    triggers a server-side outbound fetch (banner_url), so callers that
+    aren't already behind their own rate limit should apply one."""
     tc = _tc_lookup(id)
     if not tc:
-        return jsonify({'ok': False, 'msg': 'Not found'}), 404
+        return None
 
     banner_url = None
     if tc.get('mint'):
@@ -14049,11 +14087,21 @@ def trade_card_image(id):
         _tc_draw_chart_content(img, tc['symbol'], tc['price'], tc['chg24h'])
         buf = io.BytesIO()
         img.save(buf, format='PNG')
-        png_bytes = buf.getvalue()
-    else:
-        png_bytes = _generate_trade_card_image(
-            tc['symbol'], tc['side'], tc['entry_price'], tc['exit_price'],
-            tc['pnl_pct'], tc['pnl_sol'], banner_url)
+        return buf.getvalue()
+    return _generate_trade_card_image(
+        tc['symbol'], tc['side'], tc['entry_price'], tc['exit_price'],
+        tc['pnl_pct'], tc['pnl_sol'], banner_url)
+
+
+@app.route('/api/trade-card/<id>.png')
+@rate_limit(60, 60)
+def trade_card_image(id):
+    """Deliberately no auth check -- this is meant to be publicly fetchable so
+    X/Discord/etc. link-unfurl bots can render it (see share_feed_to_x's
+    og:image comment)."""
+    png_bytes = _render_trade_card_png(id)
+    if not png_bytes:
+        return jsonify({'ok': False, 'msg': 'Not found'}), 404
     resp = make_response(png_bytes)
     resp.headers['Content-Type']  = 'image/png'
     resp.headers['Cache-Control'] = 'public, max-age=86400'
@@ -14943,63 +14991,114 @@ def get_following_by_wallet(wallet: str):
     return jsonify({'ok': True, 'users': _follow_list_rows(rows, today, viewer_wallet)})
 
 # ── X (TWITTER) HELPERS ──
-def _post_to_x(wallet: str, text: str) -> bool:
-    """Post a tweet on behalf of wallet. Returns True on success, False otherwise."""
+def _get_x_access_token(wallet: str) -> str:
+    """Returns a valid OAuth2 access token for wallet's X connection,
+    refreshing it first if it's expired or about to expire. Returns '' if
+    there's no connection or the refresh fails. Split out of _post_to_x() so
+    the media-upload step (which needs the token BEFORE the tweet is
+    created) and the tweet-creation step share one refresh path instead of
+    each doing their own and possibly racing to refresh the same token."""
+    conn = sqlite3.connect(DB_FILE)
     try:
-        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute(
+            'SELECT access_token, refresh_token, token_expires_at FROM x_connections WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return ''
+    access_token, refresh_token, token_expires_at_str = row
+    access_token  = decrypt_x_token(access_token, wallet) if access_token else access_token
+    refresh_token = decrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token
+    # refresh if expired or expiring within 60 seconds
+    if token_expires_at_str:
         try:
-            row = conn.execute(
-                'SELECT access_token, refresh_token, token_expires_at FROM x_connections WHERE wallet_address=?',
-                (wallet,)
-            ).fetchone()
-        finally:
-            conn.close()
-        if not row:
-            return False
-        access_token, refresh_token, token_expires_at_str = row
-        access_token  = decrypt_x_token(access_token, wallet) if access_token else access_token
-        refresh_token = decrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token
-        # refresh if expired or expiring within 60 seconds
-        if token_expires_at_str:
-            try:
-                exp = datetime.datetime.fromisoformat(token_expires_at_str)
-                if datetime.datetime.utcnow() >= exp - datetime.timedelta(seconds=60):
-                    token_expires_at_str = None  # force refresh
-            except ValueError:
-                token_expires_at_str = None
-        if not token_expires_at_str:
-            client_id     = os.getenv('X_CLIENT_ID', '')
-            client_secret = os.getenv('X_CLIENT_SECRET', '')
-            resp = requests.post(
-                'https://api.x.com/2/oauth2/token',
-                data={'grant_type': 'refresh_token', 'refresh_token': refresh_token,
-                      'client_id': client_id},
-                auth=(client_id, client_secret),
-                timeout=15,
+            exp = datetime.datetime.fromisoformat(token_expires_at_str)
+            if datetime.datetime.utcnow() >= exp - datetime.timedelta(seconds=60):
+                token_expires_at_str = None  # force refresh
+        except ValueError:
+            token_expires_at_str = None
+    if not token_expires_at_str:
+        client_id     = os.getenv('X_CLIENT_ID', '')
+        client_secret = os.getenv('X_CLIENT_SECRET', '')
+        resp = requests.post(
+            'https://api.x.com/2/oauth2/token',
+            data={'grant_type': 'refresh_token', 'refresh_token': refresh_token,
+                  'client_id': client_id},
+            auth=(client_id, client_secret),
+            timeout=15,
+        )
+        if resp.status_code != 200:
+            print(f'[x] token refresh failed for {wallet[:8]}: {resp.status_code} {resp.text[:120]}', flush=True)
+            return ''
+        td = resp.json()
+        access_token  = td.get('access_token', access_token)
+        refresh_token = td.get('refresh_token', refresh_token)
+        expires_in    = int(td.get('expires_in', 7200))
+        new_exp       = (datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)).isoformat()
+        conn2 = sqlite3.connect(DB_FILE)
+        try:
+            conn2.execute(
+                'UPDATE x_connections SET access_token=?, refresh_token=?, token_expires_at=? WHERE wallet_address=?',
+                (encrypt_x_token(access_token, wallet),
+                 encrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token,
+                 new_exp, wallet)
             )
-            if resp.status_code != 200:
-                print(f'[x] token refresh failed for {wallet[:8]}: {resp.status_code} {resp.text[:120]}', flush=True)
-                return False
-            td = resp.json()
-            access_token  = td.get('access_token', access_token)
-            refresh_token = td.get('refresh_token', refresh_token)
-            expires_in    = int(td.get('expires_in', 7200))
-            new_exp       = (datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)).isoformat()
-            conn2 = sqlite3.connect(DB_FILE)
-            try:
-                conn2.execute(
-                    'UPDATE x_connections SET access_token=?, refresh_token=?, token_expires_at=? WHERE wallet_address=?',
-                    (encrypt_x_token(access_token, wallet),
-                     encrypt_x_token(refresh_token, wallet) if refresh_token else refresh_token,
-                     new_exp, wallet)
-                )
-                conn2.commit()
-            finally:
-                conn2.close()
-        # post the tweet
+            conn2.commit()
+        finally:
+            conn2.close()
+    return access_token or ''
+
+
+def _upload_media_to_x(access_token: str, image_bytes: bytes, mime_type: str) -> str:
+    """Uploads an image to X via the v2 media-upload endpoint (INIT -> APPEND
+    -> FINALIZE) and returns the resulting media_id, for attaching to a tweet
+    via _post_to_x(..., media_ids=[...]). Raises on any failure -- every
+    caller wraps this and falls back to a text-only tweet, since a picture
+    not making it into the tweet should never be the reason sharing fails
+    outright. Uses the same OAuth2 user-context bearer token as posting the
+    tweet itself (X's v2 media endpoints accept it -- unlike the legacy
+    v1.1 media/upload.json endpoint, which is OAuth1.0a-only)."""
+    headers = {'Authorization': 'Bearer ' + access_token}
+    media_category = 'tweet_gif' if mime_type == 'image/gif' else 'tweet_image'
+    init_resp = requests.post(
+        'https://api.x.com/2/media/upload/initialize',
+        json={'media_type': mime_type, 'total_bytes': len(image_bytes), 'media_category': media_category},
+        headers=headers, timeout=15,
+    )
+    init_resp.raise_for_status()
+    media_id = init_resp.json()['data']['id']
+    append_resp = requests.post(
+        f'https://api.x.com/2/media/upload/{media_id}/append',
+        headers=headers,
+        data={'segment_index': '0'},
+        files={'media': ('image', image_bytes, mime_type)},
+        timeout=30,
+    )
+    append_resp.raise_for_status()
+    fin_resp = requests.post(
+        f'https://api.x.com/2/media/upload/{media_id}/finalize',
+        headers=headers, timeout=15,
+    )
+    fin_resp.raise_for_status()
+    return media_id
+
+
+def _post_to_x(wallet: str, text: str, media_ids: list = None) -> bool:
+    """Post a tweet on behalf of wallet, optionally with attached media
+    (media_ids from _upload_media_to_x()). Returns True on success, False
+    otherwise."""
+    try:
+        access_token = _get_x_access_token(wallet)
+        if not access_token:
+            return False
+        payload = {'text': text}
+        if media_ids:
+            payload['media'] = {'media_ids': media_ids}
         tweet_resp = requests.post(
             'https://api.x.com/2/tweets',
-            json={'text': text},
+            json=payload,
             headers={'Authorization': 'Bearer ' + access_token},
             timeout=15,
         )
@@ -15033,7 +15132,10 @@ def x_connect():
         'response_type':         'code',
         'client_id':             client_id,
         'redirect_uri':          callback_url,
-        'scope':                 'tweet.read tweet.write users.read offline.access',
+        # media.write is required to attach an image to a tweet (share_feed_to_x's
+        # _upload_media_to_x() call) -- without it X's v2 media-upload endpoint
+        # 403s and sharing silently falls back to a text-only tweet.
+        'scope':                 'tweet.read tweet.write users.read offline.access media.write',
         'state':                 state,
         'code_challenge':        code_challenge,
         'code_challenge_method': 'S256',
