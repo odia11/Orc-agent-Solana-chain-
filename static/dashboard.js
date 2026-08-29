@@ -9197,7 +9197,8 @@ function _feedSubmitNestedReply(inp, postId, parentReplyId){
           message: d.message, created_at: d.created_at,
           like_count: 0, liked_by_me: false, is_mine: true,
           parent_reply_id: parentReplyId,
-          verified: !!(_myProfileData && _myProfileData.verified)
+          verified: !!(_myProfileData && _myProfileData.verified),
+          avatar_url: (_myProfileData && _myProfileData.avatar_url) || ''
         };
         parentRow.insertAdjacentHTML('afterend', _renderReplyRow(fakeReply, postId, parentDepth));
       }
@@ -9298,7 +9299,8 @@ function _feedSubmitReply(inp, postId){
           username: d.username, wallet: '',
           message: d.message, created_at: d.created_at,
           like_count: 0, liked_by_me: false, is_mine: true,
-          verified: !!(_myProfileData && _myProfileData.verified)
+          verified: !!(_myProfileData && _myProfileData.verified),
+          avatar_url: (_myProfileData && _myProfileData.avatar_url) || ''
         };
         list.insertAdjacentHTML('beforeend', _renderReplyRow(fakeReply, postId));
       }
