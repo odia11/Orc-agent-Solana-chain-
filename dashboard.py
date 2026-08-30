@@ -12289,6 +12289,39 @@ def get_leaderboard_full():
         })
     return jsonify(result)
 
+@app.route('/api/trades/recent', methods=['GET'])
+@rate_limit(60, 60)
+def api_trades_recent():
+    """Latest completed trades platform-wide (any source), newest first --
+    powers the "Recent Trades" sidebar ticker on /live-market. Distinct from
+    /api/trades (own-wallet history) and /api/leaderboard (per-user daily
+    aggregate): this is a flat, un-aggregated recency feed across all users."""
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        c = conn.cursor()
+        c.execute('''
+            SELECT u.username, u.wallet_address, t.token, t.pnl, t.amount, t.exit_price, t.timestamp
+            FROM trades t
+            JOIN users u ON u.id = t.user_id
+            WHERE t.pnl IS NOT NULL AND u.wallet_address IS NOT NULL AND u.wallet_address != ''
+            ORDER BY t.timestamp DESC
+            LIMIT 8
+        ''')
+        rows = c.fetchall()
+    finally:
+        conn.close()
+    result = []
+    for username, wallet, token, pnl, amount, exit_price, ts in rows:
+        name = username or ((wallet[:4] + '…' + wallet[-4:]) if wallet and len(wallet) >= 8 else 'unknown')
+        result.append({
+            'username':   name,
+            'symbol':     (token or '?').lstrip('$').upper(),
+            'pnl':        round(float(pnl or 0), 4),
+            'value_sol':  round(float(amount or 0) * float(exit_price or 0), 4),
+            'timestamp':  ts,
+        })
+    return jsonify(result)
+
 @app.route('/api/stats', methods=['GET'])
 @rate_limit(60, 60)
 def api_stats():

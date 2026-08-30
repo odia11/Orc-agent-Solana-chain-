@@ -108,6 +108,18 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
 .lm-sidebar-item-price{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);flex-shrink:0}
 .lm-sidebar-item-chg{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;flex-shrink:0;width:56px;text-align:right}
 
+/* platform stats block (3 stat tiles) + recent-trades ticker -- same
+   var(--bg2) panel / var(--accent) title language as the blocks above */
+.lm-sidebar-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.lm-sidebar-stat-k{font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.lm-sidebar-stat-v{font-family:'JetBrains Mono',monospace;font-size:13px;font-weight:700}
+.lm-sidebar-tick-row{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--bg3);cursor:pointer;transition:opacity .15s}
+.lm-sidebar-tick-row:last-child{border-bottom:none}
+.lm-sidebar-tick-row:hover{opacity:.8}
+.lm-sidebar-tick-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.lm-sidebar-tick-txt{flex:1;min-width:0;font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.lm-sidebar-tick-amt{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;flex-shrink:0}
+
 /* table wrapper */
 .lm-table-wrap{background:var(--bg2);border:1px solid var(--bg3);border-radius:16px;overflow:visible;margin:16px}
 .lm-table-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;width:100%}
@@ -577,7 +589,9 @@ html,body{min-height:100vh;background:var(--bg);color:var(--text);font-family:'J
   </div>
 
   <aside id="lm-sidebar" class="lm-sidebar">
+    <div class="lm-sidebar-block" id="lm-sidebar-stats"></div>
     <div class="lm-sidebar-block" id="lm-sidebar-leaderboard"></div>
+    <div class="lm-sidebar-block" id="lm-sidebar-recent-trades"></div>
     <div class="lm-sidebar-block" id="lm-sidebar-positions"></div>
   </aside>
 </div>
@@ -1051,6 +1065,51 @@ async function _lmLoadSidebarLeaderboard(){
     }).join('');
   }catch(e){
     console.error('[live-market] sidebar leaderboard load failed', e);
+    host.innerHTML = '';
+    host.style.display = 'none';
+  }
+}
+
+async function _lmLoadSidebarStats(){
+  var host = document.getElementById('lm-sidebar-stats');
+  if(!host) return;
+  try{
+    var d = await fetch('/api/stats').then(function(r){ return r.json(); });
+    var netCls = (d.net_sol_24h || 0) >= 0 ? 'chg-up' : 'chg-dn';
+    var netStr = (d.net_sol_24h >= 0 ? '+' : '') + d.net_sol_24h.toFixed(1);
+    host.style.display = '';
+    host.innerHTML = '<div class="lm-sidebar-title">Platform · 24h</div>'
+      + '<div class="lm-sidebar-stats">'
+      +   '<div><div class="lm-sidebar-stat-k">Trades</div><div class="lm-sidebar-stat-v">'+(d.trades_24h||0).toLocaleString('en-US')+'</div></div>'
+      +   '<div><div class="lm-sidebar-stat-k">Net SOL</div><div class="lm-sidebar-stat-v '+netCls+'">'+netStr+'</div></div>'
+      +   '<div><div class="lm-sidebar-stat-k">Online</div><div class="lm-sidebar-stat-v">'+(d.online||0)+'</div></div>'
+      + '</div>';
+  }catch(e){
+    console.error('[live-market] sidebar stats load failed', e);
+    host.innerHTML = '';
+    host.style.display = 'none';
+  }
+}
+
+async function _lmLoadSidebarRecentTrades(){
+  var host = document.getElementById('lm-sidebar-recent-trades');
+  if(!host) return;
+  try{
+    var rows = await fetch('/api/trades/recent').then(function(r){ return r.json(); });
+    var top = (Array.isArray(rows) ? rows : []).slice(0, 6);
+    if(!top.length){ host.innerHTML = ''; host.style.display = 'none'; return; }
+    host.style.display = '';
+    host.innerHTML = '<div class="lm-sidebar-title">Recent Trades</div>' + top.map(function(t){
+      var win = (t.pnl || 0) >= 0;
+      var amtStr = (win ? '+' : '') + t.pnl.toFixed(3) + ' SOL';
+      return '<div class="lm-sidebar-tick-row">'
+        +'<span class="lm-sidebar-tick-dot" style="background:'+(win?'var(--green)':'var(--red)')+'"></span>'
+        +'<span class="lm-sidebar-tick-txt">'+_esc(t.username)+' closed $'+_esc(t.symbol)+'</span>'
+        +'<span class="lm-sidebar-tick-amt" style="color:'+(win?'var(--green)':'var(--red)')+'">'+amtStr+'</span>'
+        +'</div>';
+    }).join('');
+  }catch(e){
+    console.error('[live-market] sidebar recent-trades load failed', e);
     host.innerHTML = '';
     host.style.display = 'none';
   }
@@ -2025,7 +2084,9 @@ _loadTab('trending');
 _lmInitFeatured();
 _lmInitLeaders();
 _lmBindSidebarEvents();
+_lmLoadSidebarStats();
 _lmLoadSidebarLeaderboard();
+_lmLoadSidebarRecentTrades();
 _lmLoadSidebarPositions();
 
 (function(){
@@ -2123,6 +2184,8 @@ setInterval(function(){
     _silentRefreshTab(_activeTab);
     _lmRefreshLeaders();
   }
+  _lmLoadSidebarStats();
+  _lmLoadSidebarRecentTrades();
 }, 15000);
 </script>
 <script src="/static/notif-poll.js?v={{ app_version }}"></script>
