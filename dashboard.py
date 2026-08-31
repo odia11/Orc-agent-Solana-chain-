@@ -548,6 +548,38 @@ TRAILING_STOP_PCT  = 0.15  # trail the remainder 15% below its post-TP1 peak
 MIN_MARKETCAP_USD = 15_000  # fallback only — see _min_marketcap_for_stake() below, which is
                              # what actually gates entries per-user based on their stake size
 
+# ── TRADING ENGINE V2: user-controlled SL/TP presets + staged exits ──
+# Server-side-validated bounds for a user's own stop_loss/take_profit % --
+# enforced in _validate_sl_tp() regardless of preset or custom entry, since
+# the frontend's own bounds (e.g. a slider's min/max) are never trusted here.
+SL_PCT_MIN, SL_PCT_MAX = 1.0, 30.0    # stop loss: 1%–30%
+TP_PCT_MIN, TP_PCT_MAX = 2.0, 500.0   # take profit: 2%–500%
+# Named presets a user picks from Settings (see api_trading_profile()) --
+# 'custom' means the user typed their own SL/TP, still clamped to the bounds
+# above. trailing maps onto the existing users.tiered_tp_enabled column (see
+# that column's own comment) rather than adding a second, redundant toggle.
+TRADE_PROFILE_PRESETS = {
+    'conservative': {'stop_loss': 3.0,  'take_profit': 10.0, 'trailing': True},
+    'balanced':     {'stop_loss': 5.0,  'take_profit': 20.0, 'trailing': True},
+    'aggressive':   {'stop_loss': 8.0,  'take_profit': 30.0, 'trailing': True},
+}
+# Staged partial take-profit (opt in via the same trailing/tiered toggle as
+# TP1_MULTIPLE above, but keyed off the user's OWN take_profit % instead of a
+# flat 2x-entry target): first stage sells a slice at half the user's TP
+# target, second stage sells another slice at the full target, and whatever
+# remains becomes a trailing runner (see TP2_TRAIL_PCT_MIN/MAX below) instead
+# of being closed outright. Mirrors TP1_MULTIPLE/TP1_SELL_FRACTION's shape so
+# a position missing the newer per-position snapshot (opened before this
+# migration) still degrades to the old single-tier behavior.
+TP_STAGE1_FRACTION_OF_TARGET = 0.5   # stage 1 fires at 0.5x the user's TP%
+TP_STAGE1_SELL_FRACTION      = 0.20  # sell 20% of the position at stage 1
+TP_STAGE2_FRACTION_OF_TARGET = 1.0   # stage 2 fires at 1.0x the user's TP%
+TP_STAGE2_SELL_FRACTION      = 0.30  # sell another 30% of what's left after stage 1 at stage 2
+# Trailing runner on whatever remains after stage 2: the trail % is derived
+# from the position's own recent volatility (see _volatility_trailing_pct())
+# instead of one fixed number for every token, clamped to this range.
+TP2_TRAIL_PCT_MIN, TP2_TRAIL_PCT_MAX = 0.08, 0.25
+
 # ── LOSS-STREAK THROTTLE ── the bot's own risk-management response to a run of
 # losing trades: not a fixed daily $ circuit breaker (that's daily_loss_limit,
 # a user-configured cap checked further down the loop) but an automatic,
@@ -2201,6 +2233,40 @@ def run_migrations():
         # real quantity of the token bought/sold.
         "ALTER TABLE trades ADD COLUMN side TEXT DEFAULT NULL",
         "ALTER TABLE trades ADD COLUMN token_amount REAL DEFAULT NULL",
+        # ── Trading Engine V2: per-position SL/TP snapshot ──
+        # A position now carries the SL/TP % (and derived prices) that were in
+        # effect on the user's account at the moment it was opened, instead of
+        # the exit-check loop re-reading users.take_profit/stop_loss live on
+        # every scan. Without this, editing Settings while a position is open
+        # silently retargets it too -- a user who tightens their stop-loss
+        # mid-trade could trigger an immediate exit on a position they opened
+        # under a wider one, and vice versa. New columns are nullable so a
+        # position opened before this migration (no snapshot) just falls back
+        # to the old live-settings behavior -- see user_trader_loop().
+        "ALTER TABLE open_positions ADD COLUMN sl_pct REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN tp_pct REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN sl_price REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN tp_price REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN trailing_enabled INTEGER DEFAULT 0",
+        "ALTER TABLE open_positions ADD COLUMN entry_score REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN highest_price REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN lowest_price REAL DEFAULT NULL",
+        # Same snapshot, copied onto the closed trade row so PNL/exit outcomes
+        # can be analyzed against what the trade's own SL/TP/entry-score
+        # actually were, not today's settings -- see /api/stats/performance.
+        "ALTER TABLE trades ADD COLUMN sl_pct REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN tp_pct REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN sl_price REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN tp_price REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_score REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN highest_price REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN lowest_price REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN hold_seconds REAL DEFAULT NULL",
+        # Label only (never read by trading logic) -- which preset the user's
+        # current take_profit/stop_loss/tiered_tp_enabled came from, so the
+        # Settings UI can show "Custom" vs a named preset without having to
+        # reverse-guess it from the raw numbers.
+        "ALTER TABLE users ADD COLUMN sl_tp_preset TEXT DEFAULT 'custom'",
     ]:
         try:
             con.execute(sql)
@@ -4242,6 +4308,108 @@ def check_daily_reset_user(us: dict):
     if us.get('daily_stats', {}).get('date') != today:
         us['daily_stats'] = _fresh_daily()
 
+def _validate_sl_tp(stop_loss_pct, take_profit_pct):
+    """Server-side range check for a user-submitted SL/TP pair -- called from
+    every path that can set users.stop_loss/take_profit (preset or custom),
+    never trusting whatever bound a frontend slider happened to enforce.
+    Returns (ok, error_msg_or_None). Rejects non-numeric, NaN/inf, negative,
+    zero, and out-of-range values; SL/TP being sane individually is also not
+    enough on its own -- a TP at or below the SL % would guarantee a losing
+    exit gets hit before a winning one ever could."""
+    try:
+        sl = float(stop_loss_pct)
+        tp = float(take_profit_pct)
+    except (TypeError, ValueError):
+        return False, 'Stop loss and take profit must be numbers'
+    if not (math.isfinite(sl) and math.isfinite(tp)):
+        return False, 'Stop loss and take profit must be finite numbers'
+    if not (SL_PCT_MIN <= sl <= SL_PCT_MAX):
+        return False, f'Stop loss must be between {SL_PCT_MIN:g}% and {SL_PCT_MAX:g}%'
+    if not (TP_PCT_MIN <= tp <= TP_PCT_MAX):
+        return False, f'Take profit must be between {TP_PCT_MIN:g}% and {TP_PCT_MAX:g}%'
+    return True, None
+
+def _volatility_trailing_pct(price_hist: list) -> float:
+    """Derive a trailing-stop % from a position's own recent polled prices
+    instead of one fixed TRAILING_STOP_PCT for every token (see TP_STAGE2_*
+    above) -- a low-volatility large-cap-ish token gets a tighter trail so
+    gains aren't given back unnecessarily, while a token that's already
+    whipsawing 20%+ between polls gets a wider one so normal noise doesn't
+    stop the runner out immediately. Falls back to TRAILING_STOP_PCT when
+    there isn't enough history yet (needs >=3 points) or the data is
+    degenerate (mean price <= 0)."""
+    if not price_hist or len(price_hist) < 3:
+        return TRAILING_STOP_PCT
+    mean = sum(price_hist) / len(price_hist)
+    if mean <= 0:
+        return TRAILING_STOP_PCT
+    variance = sum((p - mean) ** 2 for p in price_hist) / len(price_hist)
+    coeff_of_variation = (variance ** 0.5) / mean
+    # A CoV of ~2% between consecutive fast-poll samples is already fairly
+    # volatile for this asset class -- scale that up to the configured range
+    # rather than picking arbitrary breakpoints.
+    scaled = TP2_TRAIL_PCT_MIN + min(1.0, coeff_of_variation / 0.02) * (TP2_TRAIL_PCT_MAX - TP2_TRAIL_PCT_MIN)
+    return round(max(TP2_TRAIL_PCT_MIN, min(TP2_TRAIL_PCT_MAX, scaled)), 4)
+
+def _snapshot_entry_risk(wallet: str, entry_price: float, entry_score: float = None) -> dict:
+    """Reads this user's CURRENT stop_loss/take_profit/tiered_tp_enabled
+    settings and freezes them into a per-position snapshot at the moment a
+    position is opened -- see the ALTER TABLE comment on open_positions.sl_pct
+    for why this must not be recomputed live later. Every buy call site
+    should call this once and merge the result into the position dict before
+    the first _upsert_open_position(). entry_score is optional (not every
+    buy path has a 0-10 score available, e.g. copy-trading) and is only used
+    for trade-analytics logging (see /api/stats/performance), never for risk
+    decisions."""
+    sl_pct, tp_pct, trailing_enabled = STOP_LOSS * 100, TAKE_PROFIT * 100, False
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT stop_loss, take_profit, tiered_tp_enabled FROM users WHERE wallet_address=?',
+                (wallet,)
+            ).fetchone()
+        finally:
+            conn.close()
+        if row:
+            if row[0] is not None: sl_pct = float(row[0])
+            if row[1] is not None: tp_pct = float(row[1])
+            trailing_enabled = bool(row[2])
+    except Exception as e:
+        print(f'[risk-snapshot] settings lookup failed for {wallet[:8]}…: {e}', flush=True)
+    ok, _err = _validate_sl_tp(sl_pct, tp_pct)
+    if not ok:
+        # A row that predates validation, or a bad manual DB edit -- fall back
+        # to the global defaults rather than snapshotting a nonsensical target
+        # (e.g. TP <= SL) onto a live position.
+        sl_pct, tp_pct = STOP_LOSS * 100, TAKE_PROFIT * 100
+    return {
+        'sl_pct':           sl_pct,
+        'tp_pct':           tp_pct,
+        'sl_price':         round(entry_price * (1 - sl_pct / 100), 10) if entry_price > 0 else 0.0,
+        'tp_price':         round(entry_price * (1 + tp_pct / 100), 10) if entry_price > 0 else 0.0,
+        'trailing_enabled': trailing_enabled,
+        'entry_score':      entry_score,
+        'highest_price':    entry_price,
+        'lowest_price':     entry_price,
+    }
+
+def _pos_sl_frac(pos: dict, fallback: float) -> float:
+    """The stop-loss fraction (e.g. 0.05 for 5%) this SPECIFIC position should
+    exit on -- its own open-time snapshot (pos['sl_pct']) if it has one,
+    otherwise `fallback` (the loop's live-settings value) for a position
+    opened before the per-position snapshot existed. Never the other way
+    around: once a position has a snapshot, a Settings change made while
+    it's still open must NOT retarget it -- see the ALTER TABLE comment on
+    open_positions.sl_pct."""
+    sl_pct = pos.get('sl_pct')
+    return (sl_pct / 100) if sl_pct is not None else fallback
+
+def _pos_tp_frac(pos: dict, fallback: float) -> float:
+    """Take-profit counterpart to _pos_sl_frac() -- see that docstring."""
+    tp_pct = pos.get('tp_pct')
+    return (tp_pct / 100) if tp_pct is not None else fallback
+
 # ── OPEN POSITION PERSISTENCE ──
 # Write-through helpers: every call site that used to mutate
 # user_states[wallet]['positions'] directly now goes through one of these two,
@@ -4280,8 +4448,10 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                 '''INSERT INTO open_positions
                    (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity,
                     entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active,
-                    opened_at, source, copy_of_wallet, chain, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                    opened_at, source, copy_of_wallet, chain,
+                    sl_pct, tp_pct, sl_price, tp_price, trailing_enabled, entry_score,
+                    highest_price, lowest_price, updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                    ON CONFLICT(user_id, mint_address) DO UPDATE SET
                        symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
                        spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
@@ -4289,12 +4459,20 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                        entry_mint_authority_active=excluded.entry_mint_authority_active,
                        entry_freeze_authority_active=excluded.entry_freeze_authority_active,
                        opened_at=excluded.opened_at, source=excluded.source,
-                       copy_of_wallet=excluded.copy_of_wallet, chain=excluded.chain, updated_at=CURRENT_TIMESTAMP''',
+                       copy_of_wallet=excluded.copy_of_wallet, chain=excluded.chain,
+                       sl_pct=excluded.sl_pct, tp_pct=excluded.tp_pct,
+                       sl_price=excluded.sl_price, tp_price=excluded.tp_price,
+                       trailing_enabled=excluded.trailing_enabled, entry_score=excluded.entry_score,
+                       highest_price=excluded.highest_price, lowest_price=excluded.lowest_price,
+                       updated_at=CURRENT_TIMESTAMP''',
                 (user_id, mint, pos.get('symbol', ''), pos.get('amount', 0.0), pos.get('buy_price', 0.0),
                  pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0),
                  pos.get('entry_lp_locked_pct'), pos.get('entry_mint_authority_active'),
                  pos.get('entry_freeze_authority_active'),
-                 pos.get('opened_at', 0.0), source, copy_of_wallet, chain))
+                 pos.get('opened_at', 0.0), source, copy_of_wallet, chain,
+                 pos.get('sl_pct'), pos.get('tp_pct'), pos.get('sl_price'), pos.get('tp_price'),
+                 int(bool(pos.get('trailing_enabled'))), pos.get('entry_score'),
+                 pos.get('highest_price'), pos.get('lowest_price')))
             conn.commit()
         finally:
             conn.close()
@@ -4458,12 +4636,20 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                        amount: float, spend: float, wallet: str = '', private_key: str = '', mint: str = '',
                        exit_reason: str = '', opened_at: float = 0.0, pref_notifications: bool = True,
                        source: str = 'bot', entry_liquidity: float = None, entry_lp_locked_pct: float = None,
-                       entry_mint_authority_active: bool = None, entry_freeze_authority_active: bool = None):
+                       entry_mint_authority_active: bool = None, entry_freeze_authority_active: bool = None,
+                       sl_pct: float = None, tp_pct: float = None, sl_price: float = None, tp_price: float = None,
+                       entry_score: float = None, highest_price: float = None, lowest_price: float = None):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
     pnl     = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
     pnl_pct = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
+    # Trading Engine V2 trade-analytics snapshot -- see the ALTER TABLE
+    # comments on trades.sl_pct etc. All optional/nullable: a caller that
+    # doesn't have these (e.g. an older manual-sell path, or a position
+    # opened before this migration) just leaves them NULL rather than this
+    # function guessing at values it was never given.
+    hold_seconds = round(now.timestamp() - opened_at, 1) if opened_at else None
 
     if pnl < 0 and symbol:
         cooldown_tokens[symbol] = time.time() + 1800
@@ -4550,13 +4736,15 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
             _cur = conn.execute(
                 '''INSERT INTO trades
                    (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source,
-                    exit_reason, entry_liquidity, entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    exit_reason, entry_liquidity, entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active,
+                    sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
                  mint or None, source,
                  exit_reason or None, entry_liquidity, entry_lp_locked_pct,
-                 entry_mint_authority_active, entry_freeze_authority_active))
+                 entry_mint_authority_active, entry_freeze_authority_active,
+                 sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds))
             conn.commit()
             _trade_id = _cur.lastrowid
         finally:
@@ -5220,6 +5408,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
             pos['spend']     = pos.get('spend', 0.0) + amount_sol
             pos['symbol']    = symbol
             pos['opened_at'] = time.time()
+            pos.update(_snapshot_entry_risk(wallet, entry_price))
             _upsert_open_position(user_id, wallet, mint, pos, source='narrative')
         else:
             pos = {
@@ -6118,7 +6307,7 @@ def user_trader_loop(stop_event, config, wallet: str):
             else:
                 add_user_log(wallet, f'[{short}] ✗ [crash-exit] {_label} sell failed — position kept open, will retry next scan')
             continue  # skip normal stop-loss check — crash exit already handled (or will retry)
-        if _chg <= -stop_loss:
+        if _chg <= -_pos_sl_frac(_pos, stop_loss):
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
             with _use_key(_enc_blob, wallet) as _pk:
                 # '0' = sell the actual on-chain balance -- see crash-exit branch above.
@@ -6241,6 +6430,21 @@ def user_trader_loop(stop_event, config, wallet: str):
                         continue
                     chg = (price - pos['buy_price']) / pos['buy_price']
 
+                    # This position's own SL/TP -- its open-time snapshot
+                    # (pos['sl_pct']/['tp_pct']) if it has one, else the loop's
+                    # live-settings value for a position opened before that
+                    # snapshot existed. See _pos_sl_frac()/_pos_tp_frac(): once
+                    # a position IS snapshotted, a later Settings change must
+                    # never retarget it while it's still open.
+                    _eff_sl = _pos_sl_frac(pos, stop_loss)
+                    _eff_tp = _pos_tp_frac(pos, take_profit)
+
+                    # High/low water mark for trade-analytics logging (see
+                    # /api/stats/performance) and the volatility-based trailing
+                    # stop below -- independent of price_hist's short window.
+                    pos['highest_price'] = max(pos.get('highest_price') or price, price)
+                    pos['lowest_price']  = min(pos.get('lowest_price') or price, price)
+
                     # Rolling window for the momentum-deterioration exit below --
                     # last 5 polled prices is plenty for a 3-sample confirming trend.
                     _hist = pos.setdefault('price_hist', [])
@@ -6255,7 +6459,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                     # held position), so these ENTER/EXIT log lines only fire on a genuine
                     # proximity transition instead of every single cycle.
                     _was_near_trigger    = bool(pos.get('_near_trigger'))
-                    _now_hot             = (chg <= -0.95 * stop_loss) or (chg <= -0.95 * crash_exit)
+                    _now_hot             = (chg <= -0.95 * _eff_sl) or (chg <= -0.95 * crash_exit)
                     pos['_near_trigger'] = _now_hot
                     if _now_hot:
                         _mark_hot_mint(mint, priority=True)
@@ -6268,7 +6472,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                             # timestamp, not just the truncated symbol shown in the UI.
                             print(f"[hot-mint] {datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ')} "
                                   f"ENTER mint={mint} user={short} chg={round(chg*100,1)}% "
-                                  f"sl=-{round(stop_loss*100,1)}% crash=-{round(crash_exit*100,1)}% "
+                                  f"sl=-{round(_eff_sl*100,1)}% crash=-{round(crash_exit*100,1)}% "
                                   f"interval=15s->2s", flush=True)
                     elif _was_near_trigger:
                         add_user_log(wallet, '[' + short + '] ' + label + ' ' + str(round(chg*100,1)) +
@@ -6309,7 +6513,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
                                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
+                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                                   sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                                   sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                                   entry_score=pos.get('entry_score'),
+                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
@@ -6330,61 +6538,128 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
                                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
+                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                                   sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                                   sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                                   entry_score=pos.get('entry_score'),
+                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position kept open, will retry next scan')
                         continue  # skip normal TP/SL — crash exit already handled (or will retry)
 
-                    # ── Tiered take-profit (opt-in, users.tiered_tp_enabled) ──
-                    # Sell TP1_SELL_FRACTION once price reaches TP1_MULTIPLE x entry, then
-                    # switch the remainder to a trailing stop below instead of the flat
-                    # take_profit % -- a deliberate strategy swap the user opts into, not
-                    # a change to the default flat-TP behavior everyone else keeps.
-                    if tiered_tp_enabled and not pos.get('tp1_hit') and price >= pos['buy_price'] * TP1_MULTIPLE:
-                        _tp1_amount = round(pos['amount'] * TP1_SELL_FRACTION, 6)
-                        _tp1_spend  = round(pos['spend']  * TP1_SELL_FRACTION, 6)
-                        if _tp1_amount > 0:
-                            add_user_log(wallet, '[' + short + '] TAKE PROFIT 1 (' + str(round(chg*100,1)) +
-                                         '%) — selling ' + str(int(TP1_SELL_FRACTION*100)) + '% of ' + label +
-                                         ', trailing the rest')
-                            with _use_key(_enc_blob, wallet) as _pk:
-                                _tp1_ok, _tp1_exit_price, _tp1_sold_amt = _sell_and_get_realized(
-                                    wallet, _pk, mint, str(_tp1_amount), price, _tp1_amount)
-                            if _tp1_ok:
+                    # ── Staged take-profit (opt-in, users.tiered_tp_enabled -- shown to
+                    # users as "Trailing Stop"; pos['trailing_enabled'] is this specific
+                    # position's own open-time snapshot of that toggle, see
+                    # _snapshot_entry_risk()). Stage 1 sells a slice at half the user's
+                    # OWN take_profit % above entry, stage 2 sells another slice at the
+                    # full target, and whatever remains becomes a trailing runner with a
+                    # volatility-derived trail % (see _volatility_trailing_pct()) instead
+                    # of a flat one-shot close -- a deliberate strategy swap the user
+                    # opts into, not a change to the default flat-TP behavior everyone
+                    # else keeps. A position without an entry-time snapshot (opened
+                    # before this migration) falls back to the older single-tier
+                    # TP1_MULTIPLE/TP1_SELL_FRACTION behavior instead.
+                    _trailing_on  = pos.get('trailing_enabled', tiered_tp_enabled)
+                    _has_snapshot = pos.get('tp_pct') is not None
+                    if _trailing_on and not pos.get('tp1_hit'):
+                        _tp1_target = (pos['buy_price'] * (1 + _eff_tp * TP_STAGE1_FRACTION_OF_TARGET)
+                                       if _has_snapshot else pos['buy_price'] * TP1_MULTIPLE)
+                        if price >= _tp1_target:
+                            _tp1_fraction = TP_STAGE1_SELL_FRACTION if _has_snapshot else TP1_SELL_FRACTION
+                            _tp1_amount = round(pos['amount'] * _tp1_fraction, 6)
+                            _tp1_spend  = round(pos['spend']  * _tp1_fraction, 6)
+                            if _tp1_amount > 0:
+                                add_user_log(wallet, '[' + short + '] TAKE PROFIT 1 (' + str(round(chg*100,1)) +
+                                             '%) — selling ' + str(int(_tp1_fraction*100)) + '% of ' + label +
+                                             ', trailing the rest')
                                 with _use_key(_enc_blob, wallet) as _pk:
-                                    _record_user_trade(user_id, us, label, pos['buy_price'], _tp1_exit_price, _tp1_sold_amt, _tp1_spend,
-                                                       wallet=wallet, private_key=_pk, mint=mint,
-                                                       exit_reason='TAKE PROFIT 1 (' + str(TP1_MULTIPLE) + 'x)',
-                                                       opened_at=pos.get('opened_at', 0.0),
-                                                       pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
-                                                       entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
-                                                       entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                       entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
-                                pos['amount']     = round(pos['amount'] - _tp1_amount, 6)
-                                pos['spend']      = round(pos['spend']  - _tp1_spend, 6)
-                                pos['tp1_hit']    = True
-                                pos['trail_peak'] = price
-                                _upsert_open_position(user_id, wallet, mint, pos, source=pos.get('source', 'bot'),
-                                                       copy_of_wallet=pos.get('copy_of_wallet'), chain=pos.get('chain', 'solana'))
-                            else:
-                                add_user_log(wallet, '[' + short + '] ✗ TAKE PROFIT 1 sell failed — will retry next scan')
-                        continue  # re-enter fresh next scan either way
+                                    _tp1_ok, _tp1_exit_price, _tp1_sold_amt = _sell_and_get_realized(
+                                        wallet, _pk, mint, str(_tp1_amount), price, _tp1_amount)
+                                if _tp1_ok:
+                                    with _use_key(_enc_blob, wallet) as _pk:
+                                        _record_user_trade(user_id, us, label, pos['buy_price'], _tp1_exit_price, _tp1_sold_amt, _tp1_spend,
+                                                           wallet=wallet, private_key=_pk, mint=mint,
+                                                           exit_reason=('TAKE PROFIT 1 (' + str(TP1_MULTIPLE) + 'x)' if not _has_snapshot
+                                                                        else 'TAKE PROFIT 1 (' + str(round(_eff_tp*TP_STAGE1_FRACTION_OF_TARGET*100,1)) + '%)'),
+                                                           opened_at=pos.get('opened_at', 0.0),
+                                                           pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
+                                                           entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                                           entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                                           sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                                           sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                                           entry_score=pos.get('entry_score'),
+                                                           highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
+                                    pos['amount']     = round(pos['amount'] - _tp1_amount, 6)
+                                    pos['spend']      = round(pos['spend']  - _tp1_spend, 6)
+                                    pos['tp1_hit']    = True
+                                    pos['trail_peak'] = price
+                                    _upsert_open_position(user_id, wallet, mint, pos, source=pos.get('source', 'bot'),
+                                                           copy_of_wallet=pos.get('copy_of_wallet'), chain=pos.get('chain', 'solana'))
+                                else:
+                                    add_user_log(wallet, '[' + short + '] ✗ TAKE PROFIT 1 sell failed — will retry next scan')
+                            continue  # re-enter fresh next scan either way
+
+                    # Stage 2 only exists for a position with its own SL/TP snapshot --
+                    # a pre-migration position keeps the older single-tier-then-trail
+                    # shape (tp1_hit alone gates the trailing branch below for it).
+                    if _trailing_on and _has_snapshot and pos.get('tp1_hit') and not pos.get('tp2_hit'):
+                        _tp2_target = pos['buy_price'] * (1 + _eff_tp * TP_STAGE2_FRACTION_OF_TARGET)
+                        if price >= _tp2_target:
+                            _tp2_amount = round(pos['amount'] * TP_STAGE2_SELL_FRACTION, 6)
+                            _tp2_spend  = round(pos['spend']  * TP_STAGE2_SELL_FRACTION, 6)
+                            if _tp2_amount > 0:
+                                add_user_log(wallet, '[' + short + '] TAKE PROFIT 2 (' + str(round(chg*100,1)) +
+                                             '%) — selling another ' + str(int(TP_STAGE2_SELL_FRACTION*100)) + '% of ' + label +
+                                             ', remainder runs')
+                                with _use_key(_enc_blob, wallet) as _pk:
+                                    _tp2_ok, _tp2_exit_price, _tp2_sold_amt = _sell_and_get_realized(
+                                        wallet, _pk, mint, str(_tp2_amount), price, _tp2_amount)
+                                if _tp2_ok:
+                                    with _use_key(_enc_blob, wallet) as _pk:
+                                        _record_user_trade(user_id, us, label, pos['buy_price'], _tp2_exit_price, _tp2_sold_amt, _tp2_spend,
+                                                           wallet=wallet, private_key=_pk, mint=mint,
+                                                           exit_reason='TAKE PROFIT 2 (' + str(round(_eff_tp*100,1)) + '%)',
+                                                           opened_at=pos.get('opened_at', 0.0),
+                                                           pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
+                                                           entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                                           entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                                           sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                                           sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                                           entry_score=pos.get('entry_score'),
+                                                           highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
+                                    pos['amount']     = round(pos['amount'] - _tp2_amount, 6)
+                                    pos['spend']      = round(pos['spend']  - _tp2_spend, 6)
+                                    pos['tp2_hit']    = True
+                                    pos['trail_peak'] = price
+                                    _upsert_open_position(user_id, wallet, mint, pos, source=pos.get('source', 'bot'),
+                                                           copy_of_wallet=pos.get('copy_of_wallet'), chain=pos.get('chain', 'solana'))
+                                else:
+                                    add_user_log(wallet, '[' + short + '] ✗ TAKE PROFIT 2 sell failed — will retry next scan')
+                            continue  # re-enter fresh next scan either way
 
                     exit_reason = None
-                    if tiered_tp_enabled and pos.get('tp1_hit'):
+                    if _trailing_on and pos.get('tp1_hit'):
                         # First target already banked -- only the trailing stop governs
                         # the rest from here. The flat stop_loss/take_profit and the
                         # momentum-exit below no longer apply: "let the rest run" is the
                         # whole point once profit on this position is already locked in.
+                        # Trail % is derived from this position's own recent volatility
+                        # rather than one fixed number for every token (see
+                        # _volatility_trailing_pct()) -- falls back to the flat
+                        # TRAILING_STOP_PCT for a pre-migration position (no price_hist
+                        # depth requirement difference, just the same function).
                         pos['trail_peak'] = max(pos.get('trail_peak', price), price)
+                        _trail_pct = _volatility_trailing_pct(_hist)
                         _trail_dd = ((pos['trail_peak'] - price) / pos['trail_peak']) if pos['trail_peak'] > 0 else 0.0
-                        if _trail_dd >= TRAILING_STOP_PCT:
-                            exit_reason = 'TRAILING STOP -' + str(round(_trail_dd*100,1)) + '% from peak'
-                    elif chg <= -stop_loss:
+                        if _trail_dd >= _trail_pct:
+                            exit_reason = 'TRAILING STOP -' + str(round(_trail_dd*100,1)) + '% from peak (' + str(round(_trail_pct*100,1)) + '% trail)'
+                    elif chg <= -_eff_sl:
                         exit_reason = 'STOP LOSS ' + str(round(chg*100,1)) + '%'
-                    elif chg >= take_profit:
+                    elif chg >= _eff_tp:
                         exit_reason = 'TAKE PROFIT +' + str(round(chg*100,1)) + '%'
                     elif chg < 0 and _confirmed_downtrend(_hist):
                         # Confirmed downtrend caught this earlier than the user's own
@@ -6407,7 +6682,11 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
                                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
+                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                                   sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                                   sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                                   entry_score=pos.get('entry_score'),
+                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
@@ -6674,6 +6953,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['symbol']          = label
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
+                                pos.update(_snapshot_entry_risk(wallet, _entry_price, entry_score=sc))
                                 pos['entry_lp_locked_pct'] = _lp.get('lp_locked_pct') if _lp.get('ok') else None
                                 pos['entry_mint_authority_active'] = _safety.get('mint_authority_active') if _safety.get('ok') else None
                                 pos['entry_freeze_authority_active'] = _safety.get('freeze_authority_active') if _safety.get('ok') else None
@@ -6782,6 +7062,7 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                 pos['symbol']          = symbol
                 pos['opened_at']       = time.time()
                 pos['entry_liquidity'] = liquidity
+                pos.update(_snapshot_entry_risk(c_wallet, _entry_price))
                 _upsert_open_position(c_uid, c_wallet, mint, pos, source='copy', copy_of_wallet=buyer_wallet)
                 _charge_txn_fee(_pk, c_wallet, c_uid, symbol, spend, 'buy', bundled=True)
                 add_user_log(c_wallet, f'[copy] {c_short} COPY BUY {symbol} {spend} SOL (copying {buyer_wallet[:6]}…{buyer_wallet[-4:]})')
@@ -8567,12 +8848,13 @@ def _fetch_open_bot_positions(wallet):
             take_profit_mult = TP1_MULTIPLE if tiered_tp_enabled else (1 + ((float(tp_row) / 100) if tp_row is not None else TAKE_PROFIT))
             stop_loss   = (float(sl_row) / 100) if sl_row is not None else STOP_LOSS
             c.execute(
-                '''SELECT mint_address, symbol, amount, buy_price, opened_at
+                '''SELECT mint_address, symbol, amount, buy_price, opened_at,
+                          sl_price, tp_price, trailing_enabled
                    FROM open_positions WHERE user_id=? AND source='bot' ORDER BY opened_at DESC''',
                 (user_id,)
             )
             live_map = {t['mint']: t for t in state.get('tokens', [])}
-            for mint_addr, symbol, amount, buy_price, opened_at in c.fetchall():
+            for mint_addr, symbol, amount, buy_price, opened_at, snap_sl_price, snap_tp_price, snap_trailing in c.fetchall():
                 live       = live_map.get(mint_addr, {})
                 cur_price  = live.get('price', buy_price)
                 pnl_pct    = round((cur_price - buy_price) / buy_price * 100, 2) if buy_price > 0 else 0.0
@@ -8582,13 +8864,19 @@ def _fetch_open_bot_positions(wallet):
                         opened_str = datetime.datetime.utcfromtimestamp(float(opened_at)).strftime('%Y-%m-%d %H:%M')
                     except Exception:
                         pass
+                # Prefer this position's own open-time SL/TP snapshot (see
+                # ALTER TABLE comment on open_positions.sl_price) so what's
+                # shown here always matches what the bot will actually act
+                # on -- falls back to today's live settings only for a
+                # position opened before that snapshot existed (NULL row).
+                _has_snap = snap_sl_price is not None and snap_tp_price is not None
                 open_positions.append({
                     'token':         symbol or (mint_addr[:8] if mint_addr else '—'),
                     'entry_price':   round(buy_price, 6),
                     'current_price': round(cur_price, 6),
-                    'tp_price':      round(buy_price * take_profit_mult, 6),
-                    'sl_price':      round(buy_price * (1 - stop_loss), 6),
-                    'tiered_tp':     bool(tiered_tp_enabled),
+                    'tp_price':      round(snap_tp_price, 6) if _has_snap else round(buy_price * take_profit_mult, 6),
+                    'sl_price':      round(snap_sl_price, 6) if _has_snap else round(buy_price * (1 - stop_loss), 6),
+                    'tiered_tp':     bool(snap_trailing) if _has_snap else bool(tiered_tp_enabled),
                     'amount':        round(amount, 4),
                     'stake_sol':     round(buy_price * amount, 4),
                     'pnl_pct':       pnl_pct,
@@ -11638,16 +11926,44 @@ def settings_save():
             v = float(data['breakout_trigger'])
             updates.append('breakout_trigger=?'); params.append(max(0.1, min(v, 100.0)))
         except (ValueError, TypeError): pass
-    if 'take_profit' in data:
+    # Stop loss / take profit are validated together (not clamped
+    # independently) -- see _validate_sl_tp() and Trading Engine V2's
+    # SL_PCT_MIN/MAX, TP_PCT_MIN/MAX. Whichever of the two isn't part of
+    # this request falls back to the wallet's current saved value so a
+    # single-field update ("just change my TP") still gets checked against
+    # the pairing that will actually be in effect afterward, not evaluated
+    # in isolation. An invalid pair rejects the WHOLE request with a clear
+    # message instead of silently clamping to some other number the user
+    # didn't ask for.
+    if 'take_profit' in data or 'stop_loss' in data:
+        conn_row = None
         try:
-            v = float(data['take_profit'])
-            updates.append('take_profit=?'); params.append(max(0.1, min(v, 1000.0)))
-        except (ValueError, TypeError): pass
-    if 'stop_loss' in data:
+            _sc = sqlite3.connect(DB_FILE)
+            try:
+                conn_row = _sc.execute(
+                    'SELECT stop_loss, take_profit FROM users WHERE wallet_address=?', (wallet,)
+                ).fetchone()
+            finally:
+                _sc.close()
+        except Exception:
+            pass
+        _cur_sl = float(conn_row[0]) if conn_row and conn_row[0] is not None else STOP_LOSS * 100
+        _cur_tp = float(conn_row[1]) if conn_row and conn_row[1] is not None else TAKE_PROFIT * 100
         try:
-            v = float(data['stop_loss'])
-            updates.append('stop_loss=?'); params.append(max(0.1, min(v, 100.0)))
-        except (ValueError, TypeError): pass
+            _new_sl = float(data['stop_loss'])   if 'stop_loss'   in data else _cur_sl
+            _new_tp = float(data['take_profit']) if 'take_profit' in data else _cur_tp
+        except (ValueError, TypeError):
+            return jsonify({'ok': False, 'msg': 'Stop loss and take profit must be numbers'}), 400
+        _ok, _err = _validate_sl_tp(_new_sl, _new_tp)
+        if not _ok:
+            return jsonify({'ok': False, 'msg': _err}), 400
+        if 'stop_loss' in data:
+            updates.append('stop_loss=?');   params.append(_new_sl)
+        if 'take_profit' in data:
+            updates.append('take_profit=?'); params.append(_new_tp)
+        # Any direct SL/TP edit is by definition a custom configuration now,
+        # not whatever named preset it may have started from.
+        updates.append('sl_tp_preset=?'); params.append('custom')
     if 'max_positions' in data:
         try:
             v = int(data['max_positions'])
@@ -11684,6 +12000,50 @@ def settings_save():
     finally:
         conn.close()
     return jsonify({'ok': True})
+
+@app.route('/api/settings/trading-profile', methods=['POST'])
+@csrf_exempt
+@rate_limit(20, 60)
+def api_trading_profile():
+    """Sets stop_loss/take_profit/trailing (tiered_tp_enabled) from one of the
+    named presets (Conservative/Balanced/Aggressive), or a user-typed custom
+    SL/TP pair -- either way going through the exact same _validate_sl_tp()
+    bounds settings_save() enforces, since a preset name is just a shortcut
+    for picking numbers, not a way around validating them. Existing OPEN
+    positions are never touched here -- see _snapshot_entry_risk(): a
+    position already carries its own SL/TP snapshot from the moment it was
+    opened, so this only changes what NEW positions will use going forward."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    data   = request.get_json(silent=True) or {}
+    preset = str(data.get('preset', '')).strip().lower()
+    if preset and preset != 'custom':
+        profile = TRADE_PROFILE_PRESETS.get(preset)
+        if not profile:
+            return jsonify({'ok': False, 'msg': 'Unknown preset — choose conservative, balanced, aggressive, or custom'}), 400
+        sl, tp, trailing = profile['stop_loss'], profile['take_profit'], profile['trailing']
+    else:
+        preset = 'custom'
+        try:
+            sl = float(data.get('stop_loss'))
+            tp = float(data.get('take_profit'))
+        except (TypeError, ValueError):
+            return jsonify({'ok': False, 'msg': 'Stop loss and take profit must be numbers'}), 400
+        trailing = bool(data.get('trailing_stop_enabled', False))
+    ok, err = _validate_sl_tp(sl, tp)
+    if not ok:
+        return jsonify({'ok': False, 'msg': err}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        conn.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        conn.execute(
+            'UPDATE users SET stop_loss=?, take_profit=?, tiered_tp_enabled=?, sl_tp_preset=? WHERE wallet_address=?',
+            (sl, tp, int(trailing), preset, wallet))
+        conn.commit()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'preset': preset, 'stop_loss': sl, 'take_profit': tp, 'trailing_stop_enabled': trailing})
 
 # ── WALLET KEY MANAGEMENT ──
 @app.route('/api/wallet/set-key', methods=['POST'])
@@ -12308,6 +12668,119 @@ def api_stats():
         'trades_24h':  int(trades_24h or 0),
         'net_sol_24h': round(float(net_sol_24h or 0), 4),
         'online':      int(online or 0),
+    })
+
+@app.route('/api/stats/performance', methods=['GET'])
+@rate_limit(30, 60)
+def api_stats_performance():
+    """Per-user trading-engine performance breakdown (Trading Engine V2,
+    section 10) -- headline stats plus PnL bucketed by entry-score band and
+    by SL/TP profile, so it's possible to tell whether higher-score entries
+    or a particular SL/TP combo are actually the ones carrying the account's
+    PnL, instead of eyeballing the raw trade list. entry_score/sl_pct/tp_pct
+    are NULL on any trade recorded before this migration (or from a path
+    that doesn't have a score, e.g. copy-trading) -- those rows still count
+    toward the headline totals but are excluded from the two breakdowns,
+    which only group rows that actually carry the field being grouped by."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        user_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if not user_row:
+            return jsonify({'ok': True, 'has_trades': False})
+        uid = user_row[0]
+        rows = conn.execute(
+            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds
+               FROM trades WHERE user_id=? AND pnl IS NOT NULL''', (uid,)
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        return jsonify({'ok': True, 'has_trades': False})
+
+    total     = len(rows)
+    wins      = [r for r in rows if (r[0] or 0) > 0]
+    losses    = [r for r in rows if (r[0] or 0) < 0]
+    gross_pnl = sum(r[0] or 0 for r in rows)
+    net_pnl   = sum((r[0] or 0) - (r[1] or 0) for r in rows)
+    gross_win  = sum(r[0] for r in wins)
+    gross_loss = abs(sum(r[0] for r in losses))
+    avg_win   = round(gross_win / len(wins), 4) if wins else 0.0
+    avg_loss  = round(-gross_loss / len(losses), 4) if losses else 0.0
+    hold_vals = [r[5] for r in rows if r[5] is not None]
+
+    # Max drawdown off the cumulative-PnL equity curve, in trade order (id
+    # order == chronological since trades.id is an autoincrement PK) --
+    # the largest peak-to-trough drop the account actually experienced,
+    # not just its worst single trade.
+    running, peak, max_dd = 0.0, 0.0, 0.0
+    for r in rows:
+        running += (r[0] or 0)
+        peak = max(peak, running)
+        max_dd = max(max_dd, peak - running)
+
+    def _score_bucket(score):
+        if score is None: return None
+        if score < 4.5:  return 'below 4.5/10 (would not qualify today)'
+        if score < 6.5:  return '4.5-6.5/10 (normal)'
+        if score < 8.5:  return '6.5-8.5/10 (strong)'
+        return '8.5-10/10 (very strong)'
+
+    score_buckets = {}
+    for r in rows:
+        b = _score_bucket(r[2])
+        if b is None:
+            continue
+        bucket = score_buckets.setdefault(b, {'trades': 0, 'wins': 0, 'pnl': 0.0})
+        bucket['trades'] += 1
+        bucket['pnl']    += (r[0] or 0)
+        if (r[0] or 0) > 0:
+            bucket['wins'] += 1
+
+    profile_buckets = {}
+    for r in rows:
+        sl_pct, tp_pct = r[3], r[4]
+        if sl_pct is None or tp_pct is None:
+            continue
+        key = f'SL {sl_pct:g}% / TP {tp_pct:g}%'
+        bucket = profile_buckets.setdefault(key, {'trades': 0, 'wins': 0, 'pnl': 0.0})
+        bucket['trades'] += 1
+        bucket['pnl']    += (r[0] or 0)
+        if (r[0] or 0) > 0:
+            bucket['wins'] += 1
+
+    def _finalize(buckets):
+        out = []
+        for label, b in buckets.items():
+            out.append({
+                'label':    label,
+                'trades':   b['trades'],
+                'win_rate': round(b['wins'] / b['trades'] * 100, 1) if b['trades'] else 0.0,
+                'pnl':      round(b['pnl'], 4),
+            })
+        return out
+
+    return jsonify({
+        'ok':                True,
+        'has_trades':        True,
+        'total_trades':      total,
+        'winning_trades':    len(wins),
+        'losing_trades':     len(losses),
+        'win_rate':          round(len(wins) / total * 100, 1) if total else 0.0,
+        'gross_pnl':         round(gross_pnl, 4),
+        'net_pnl':           round(net_pnl, 4),
+        'profit_factor':     round(gross_win / gross_loss, 2) if gross_loss > 0 else None,
+        'avg_winning_trade': avg_win,
+        'avg_losing_trade':  avg_loss,
+        'avg_hold_seconds':  round(sum(hold_vals) / len(hold_vals), 1) if hold_vals else None,
+        'max_drawdown':      round(max_dd, 4),
+        'best_trade':        round(max(r[0] or 0 for r in rows), 4),
+        'worst_trade':       round(min(r[0] or 0 for r in rows), 4),
+        'by_entry_score':    _finalize(score_buckets),
+        'by_sl_tp_profile':  _finalize(profile_buckets),
     })
 
 @app.route('/api/wallet/activity', methods=['GET'])
@@ -15869,6 +16342,7 @@ def api_trade_buy():
     pos['spend']     = pos.get('spend', 0.0) + amount_sol
     pos['symbol']    = symbol
     pos['opened_at'] = time.time()
+    pos.update(_snapshot_entry_risk(wallet, entry_price))
     _upsert_open_position(user_id, wallet, mint, pos, source='manual')
     _charge_txn_fee(pk, wallet, user_id, symbol, amount_sol, 'buy', bundled=True)
     return jsonify({'ok': True, 'amount_sol': amount_sol, 'entry_price': entry_price, 'symbol': symbol})
@@ -17554,6 +18028,7 @@ def copy_trade_from_message():
     pos['symbol']          = token_data['symbol'] or token_address[:8]
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
+    pos.update(_snapshot_entry_risk(wallet, _entry_price))
     _upsert_open_position(row[0], wallet, token_address, pos, source='manual')
     _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy', bundled=True)
     short = wallet[:6] + '...' + wallet[-4:]
@@ -17828,6 +18303,7 @@ def api_pump_scanner_buy():
     pos['symbol']          = token_data['symbol'] or mint[:8]
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
+    pos.update(_snapshot_entry_risk(wallet, _entry_price))
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
     _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy', bundled=True)
     short = wallet[:6] + '...' + wallet[-4:]
@@ -17908,6 +18384,7 @@ def api_manual_buy():
     pos['symbol']          = token_data['symbol'] or mint[:8]
     pos['opened_at']       = time.time()
     pos['entry_liquidity'] = float(token_data.get('liquidity', 0) or 0)
+    pos.update(_snapshot_entry_risk(wallet, _entry_price))
     _upsert_open_position(row[0], wallet, mint, pos, source='manual')
     _charge_txn_fee(_pk, wallet, row[0], pos['symbol'], spend, 'buy', bundled=True)
     short = wallet[:6] + '...' + wallet[-4:]
