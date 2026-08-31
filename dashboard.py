@@ -6353,20 +6353,28 @@ def user_trader_loop(stop_event, config, wallet: str):
                             _narrative_agent_cycle(user_id, wallet)
                         except Exception as _nae:
                             print(f'[bot] {short} narrative-agent cycle error: {_nae}', flush=True)
-                # Re-read stop-loss/take-profit from the DB every cycle so a change
-                # made in Settings while the bot is already running takes effect on
-                # the next scan -- previously these were only ever read once at
-                # trader-loop startup (above), so an in-flight SL/TP edit silently
+                # Re-read stop-loss/take-profit/trailing from the DB every cycle so a
+                # change made in Settings while the bot is already running takes
+                # effect on the next scan -- previously these were only ever read
+                # once at trader-loop startup (above), so an in-flight edit silently
                 # had no effect until the user stopped and restarted the bot.
+                # tiered_tp_enabled (shown to users as "Trailing Stop") used to be
+                # missing from this refresh even after take_profit/stop_loss were
+                # added to it -- a user who toggled it off mid-session kept seeing
+                # TAKE PROFIT 1/TRAILING STOP exits on any position that predates
+                # this snapshot feature (no pos['trailing_enabled'] of its own to
+                # fall back on instead, see _pos_sl_frac()'s sibling logic above)
+                # until they stopped and restarted the bot.
                 try:
                     _sconn = sqlite3.connect(DB_FILE)
                     _srow = _sconn.execute(
-                        'SELECT take_profit, stop_loss FROM users WHERE wallet_address=?', (wallet,)
+                        'SELECT take_profit, stop_loss, tiered_tp_enabled FROM users WHERE wallet_address=?', (wallet,)
                     ).fetchone()
                     _sconn.close()
                     if _srow:
                         if _srow[0] is not None: take_profit = float(_srow[0]) / 100
                         if _srow[1] is not None: stop_loss   = float(_srow[1]) / 100
+                        if _srow[2] is not None: tiered_tp_enabled = bool(_srow[2])
                 except Exception as _se:
                     print(f'[bot] {short} settings refresh failed: {_se}', flush=True)
                 daily_loss = us['daily_stats'].get('total_pnl', 0)
