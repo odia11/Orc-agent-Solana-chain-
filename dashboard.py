@@ -580,6 +580,21 @@ TP_STAGE2_SELL_FRACTION      = 0.30  # sell another 30% of what's left after sta
 # instead of one fixed number for every token, clamped to this range.
 TP2_TRAIL_PCT_MIN, TP2_TRAIL_PCT_MAX = 0.08, 0.25
 
+# ── DYNAMIC RISK MANAGEMENT (Trading Engine V2, section 5) ── hard,
+# non-negotiable pre-trade gates that apply on top of whatever SL/TP the
+# user picked -- the user controls the exit strategy, not whether a clearly
+# bad entry gets taken at all. Only ever REJECTS a candidate the score/
+# momentum filters above already liked; never used to size or sweeten a
+# trade. Scoped to the bot's own autonomous entries (main loop, copy-trade
+# auto-buy, narrative agent) -- a user's own manual buy click is a
+# deliberate action, not an autonomous decision this section is protecting
+# them from, same reasoning get_ai_trade_decision()'s AI gate already
+# follows (bot-only, never applied to manual buys).
+MAX_ENTRY_PRICE_IMPACT_PCT = 0.05  # 5% -- Jupiter's own priceImpactPct already
+                                    # folds route-level slippage into this one
+                                    # number, so a single quote covers both
+                                    # "estimated price impact" and "slippage"
+
 # ── LOSS-STREAK THROTTLE ── the bot's own risk-management response to a run of
 # losing trades: not a fixed daily $ circuit breaker (that's daily_loss_limit,
 # a user-configured cap checked further down the loop) but an automatic,
@@ -5374,16 +5389,28 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
 
     entry_price = float(token_data.get('price', 0) or 0)
 
+    if chain == 'solana':
+        # amount is USD (NARRATIVE_MAX_PER_TX). orcagent_solana.py's buy
+        # path interprets its amount argument as SOL directly
+        # (lamports = int(amount * 1_000_000_000)) -- passing the raw USD
+        # figure through bought ~150-200x more than intended ($10 became
+        # ~10 SOL, not $10 of SOL). Convert here first, same pattern as
+        # every other USD->SOL site in this file (e.g. min_trade_usdc /
+        # _sol_price_usd in the BSC-cap-mirroring bot-buy paths).
+        amount_sol = amount / _sol_price_usd if _sol_price_usd else 0
+        # Dynamic risk management (section 5): same hard price-impact/
+        # slippage gate the main bot loop and copy-trade auto-buy use --
+        # an AI-approved thesis doesn't override an unbuyable-without-
+        # severe-slippage pool.
+        _impact = _check_price_impact(mint, amount_sol)
+        if not _impact['ok'] or _impact['price_impact_pct'] > MAX_ENTRY_PRICE_IMPACT_PCT:
+            _agent_journal_log(user_id, mint, chain, symbol, phase='buy', decision='buy',
+                                size_usd=amount, filter_result=_log_prefix +
+                                'price impact too high or no route for ' + str(round(amount_sol, 4)) + ' SOL')
+            return
+
     with _use_key(row[0], wallet) as pk:
         if chain == 'solana':
-            # amount is USD (NARRATIVE_MAX_PER_TX). orcagent_solana.py's buy
-            # path interprets its amount argument as SOL directly
-            # (lamports = int(amount * 1_000_000_000)) -- passing the raw USD
-            # figure through bought ~150-200x more than intended ($10 became
-            # ~10 SOL, not $10 of SOL). Convert here first, same pattern as
-            # every other USD->SOL site in this file (e.g. min_trade_usdc /
-            # _sol_price_usd in the BSC-cap-mirroring bot-buy paths).
-            amount_sol = amount / _sol_price_usd if _sol_price_usd else 0
             ok, tx_hash, err, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
         else:
             ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
@@ -5910,11 +5937,67 @@ def _check_lp_locked(mint_address: str) -> dict:
         lp_pct = data.get('lpLockedPct')
         if lp_pct is None and isinstance(data.get('markets'), list) and data['markets']:
             lp_pct = data['markets'][0].get('lp', {}).get('lpLockedPct', 0)
-        print(f'[rugcheck] {mint_address[:8]} lpLockedPct={lp_pct} raw_keys={list(data.keys())}', flush=True)
-        return {'lp_locked_pct': float(lp_pct or 0), 'ok': True}
+        # Holder-concentration signal (Trading Engine V2, section 5) -- reuses
+        # this SAME already-fetched RugCheck response instead of a second API
+        # call. RugCheck's /report/summary doesn't reliably expose a raw
+        # top-holder-% field (that's on the heavier /report endpoint), but it
+        # DOES include a `risks` array where RugCheck itself already flags
+        # concentrated ownership by name (e.g. "Top 10 holders high
+        # ownership") -- matching on that name is more robust than guessing
+        # at a specific numeric field's shape, which can change between API
+        # versions. Best-effort: an unexpected response shape just means this
+        # one extra signal stays unknown, same fail-open behavior lp_pct
+        # already has on a RugCheck outage.
+        holder_risk = False
+        try:
+            for _risk in (data.get('risks') or []):
+                _name = str(_risk.get('name', '')).lower()
+                if ('holder' in _name or 'concentration' in _name or 'ownership' in _name) \
+                        and str(_risk.get('level', '')).lower() in ('danger', 'high', 'error'):
+                    holder_risk = True
+                    break
+        except Exception:
+            pass
+        print(f'[rugcheck] {mint_address[:8]} lpLockedPct={lp_pct} holder_risk={holder_risk} raw_keys={list(data.keys())}', flush=True)
+        return {'lp_locked_pct': float(lp_pct or 0), 'holder_concentration_risk': holder_risk, 'ok': True}
     except Exception as e:
         print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
-        return {'lp_locked_pct': 0, 'ok': False}
+        return {'lp_locked_pct': 0, 'holder_concentration_risk': False, 'ok': False}
+
+def _check_price_impact(mint_address: str, spend_sol: float) -> dict:
+    """Pre-trade price-impact/slippage estimate (Trading Engine V2, section
+    5) -- a real Jupiter quote sized to THIS trade's actual spend, not a
+    fixed probe amount, since impact scales with position size against a
+    pool's real depth. A token can already clear the liquidity-$ and
+    LP-locked gates and still be too thin to buy this specific stake into
+    without severe slippage. Jupiter's priceImpactPct already folds
+    route-level slippage into one number, so this single check covers both
+    "estimated price impact" and "slippage" from the spec. Returns
+    {'ok': bool, 'price_impact_pct': float|None} -- ok=False (fails CLOSED,
+    unlike the optional rug-risk signals above) on any quote failure: an
+    unpriceable trade is itself a reason not to trade blind, and the actual
+    swap needs this same Jupiter route to exist anyway."""
+    try:
+        amount_raw = int(round(spend_sol * 1_000_000_000))  # SOL = 9 decimals
+        if amount_raw <= 0:
+            return {'ok': False, 'price_impact_pct': None}
+        jup_url = (JUPITER_PROXY + '/quote') if JUPITER_PROXY else 'https://api.jup.ag/swap/v1/quote'
+        headers = {'Accept': 'application/json', 'User-Agent': 'Mozilla/5.0 OrcAgent/1.0'}
+        if PROXY_SECRET:
+            headers['X-Proxy-Secret'] = PROXY_SECRET
+        r = requests.get(jup_url, params={
+            'inputMint': SOL_MINT, 'outputMint': mint_address,
+            'amount': amount_raw, 'slippageBps': 300,
+        }, headers=headers, timeout=6)
+        if r.status_code != 200:
+            return {'ok': False, 'price_impact_pct': None}
+        q = r.json()
+        if int(q.get('outAmount', 0) or 0) <= 0:
+            return {'ok': False, 'price_impact_pct': None}
+        return {'ok': True, 'price_impact_pct': float(q.get('priceImpactPct', 0) or 0)}
+    except Exception as e:
+        print(f'[price-impact] check failed for {mint_address[:8]}: {e}', flush=True)
+        return {'ok': False, 'price_impact_pct': None}
 
 def _bucket_lp_pct(pct: float) -> str:
     """Groups an entry-time LP-locked % into a 10-wide bucket. The buy filter
@@ -6894,6 +6977,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                                          ' — only ' + str(round(_lp['lp_locked_pct'])) + '% of LP locked (AI filter needs >=' +
                                          str(int(_ai_filters['min_lp_locked_pct'])) + '%)')
                             continue
+                        # Dynamic risk management (section 5): holder concentration --
+                        # reuses the SAME RugCheck response as the LP-lock check above,
+                        # so this costs no extra request. Fails open (like lp_locked_pct)
+                        # if RugCheck didn't flag anything or the check itself errored.
+                        if _lp['ok'] and _lp.get('holder_concentration_risk'):
+                            add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                         ' — RugCheck flags concentrated holder ownership (rug risk)')
+                            continue
                         # Learned LP-locked-% bracket check: unlike the liquidity
                         # bias above (known for every candidate up front), the
                         # actual lp_locked_pct is only known now, for the one
@@ -6941,6 +7032,23 @@ def user_trader_loop(stop_event, config, wallet: str):
                         _risk_cap_spend = max(min_spend_sol, round(us_sol * MAX_RISK_PCT_PER_TRADE, 4))
                         spend = min(spend, _risk_cap_spend)
                         if spend >= 0.001 and spend <= us_sol:
+                            # Dynamic risk management (section 5): estimated price impact
+                            # / slippage for THIS spend size, via a real Jupiter quote --
+                            # a hard DO-NOT-TRADE gate, not just an AI/score veto. Fails
+                            # CLOSED (unlike the rug-risk signals above): an unpriceable
+                            # trade is itself a reason not to trade blind, and the real
+                            # swap needs this same route to exist anyway.
+                            _impact = _check_price_impact(bmint, spend)
+                            if not _impact['ok']:
+                                add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                             ' — could not get a price quote (no route / illiquid)')
+                                continue
+                            if _impact['price_impact_pct'] > MAX_ENTRY_PRICE_IMPACT_PCT:
+                                add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                             ' — estimated price impact ' + str(round(_impact['price_impact_pct']*100, 1)) +
+                                             '% exceeds ' + str(round(MAX_ENTRY_PRICE_IMPACT_PCT*100)) + '% max for a ' +
+                                             str(spend) + ' SOL buy')
+                                continue
                             # Last-look AI sanity check on top of every local filter above --
                             # see get_ai_trade_decision()'s own docstring for why this can only
                             # ever turn a BUY into a HOLD (skip), never place a trade itself.
@@ -7055,6 +7163,15 @@ def _trigger_copy_buy(buyer_wallet: str, mint: str, price: float, symbol: str, l
                     min_spend_sol = (float(c_min_usdc or 1.0) / _sol_price_usd) if _sol_price_usd > 0 else 0.02
                     spend = round(min(min_spend_sol, c_sol * 0.5), 4)
                 if spend < 0.001:
+                    continue
+
+                # Dynamic risk management (section 5): a copier didn't pick this
+                # token themselves -- they're following whoever they copy -- so
+                # this is as much an autonomous entry as the main bot loop's own
+                # picks, and gets the same hard price-impact/slippage gate.
+                _impact = _check_price_impact(mint, spend)
+                if not _impact['ok'] or _impact['price_impact_pct'] > MAX_ENTRY_PRICE_IMPACT_PCT:
+                    add_user_log(c_wallet, f'[copy] Skip {symbol}: price impact too high or no route for {spend} SOL')
                     continue
 
                 with _use_key(c_enc, c_wallet) as _pk:
