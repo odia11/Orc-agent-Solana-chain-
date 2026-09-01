@@ -127,7 +127,14 @@ html,body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-se
 .msgs-more-menu a:hover,.msgs-more-menu button:hover{background:#16191f}
 
 /* messages area */
-.msgs-area{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch}
+/* overscroll-behavior:contain stops a fast scroll that reaches the top (or
+   bottom) of the thread from chaining out to the document behind it. Without
+   it, overscrolling here rubber-bands the whole page and can trigger iOS
+   Safari's pull-to-refresh -- which RELOADS the page, and since an open
+   thread lives only in JS state (never in the URL), the reload drops you back
+   on the conversation list. That's what "the DM closes itself while scrolling
+   up" actually was. */
+.msgs-area{flex:1;overflow-y:auto;padding:16px 20px;display:flex;flex-direction:column;gap:10px;min-height:0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .msgs-day-divider{text-align:center;color:#565d68;font-size:11px;font-weight:600;letter-spacing:.04em;margin:6px 0 2px}
 .msg-wrap{display:flex;flex-direction:column}
 .msg-wrap.mine{align-items:flex-end}
@@ -210,7 +217,16 @@ html,body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-se
      taps swallowed. */
   .msgs-main.thread-open .msgs-right{display:flex;flex-direction:column;position:fixed;top:0;left:0;right:0;height:100vh;height:100dvh;z-index:600;background:#0a0b0e;overflow:hidden}
   .msgs-thread{flex:1;min-height:0;display:flex;flex-direction:column}
-  .msgs-area{flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch}
+  .msgs-area{flex:1;overflow-y:auto;min-height:0;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+  /* While the fullscreen thread overlay is open, freeze the document behind
+     it. On mobile #app is height:auto/overflow:visible, so the conversation
+     list IS the document scroller and stays live underneath the fixed
+     overlay -- it kept scrolling and rubber-banding behind the thread, which
+     is both the visible flicker and the second way pull-to-refresh could
+     fire. Plain overflow:hidden (not a position:fixed body lock) is used on
+     purpose: it preserves the list's scroll position for when you go back.
+     Toggled from _openThread()/_backToList(). */
+  body.msgs-thread-open{overflow:hidden;overscroll-behavior:none}
   .msgs-back{display:flex}
   .msgs-input-bar{flex-shrink:0;position:sticky;bottom:0;padding-bottom:calc(12px + env(safe-area-inset-bottom,0px))}
 
@@ -702,6 +718,10 @@ async function _deleteConversationConfirmed(peerId, wrapEl) {
         if (placeholder) placeholder.style.display = '';
         var main = document.getElementById('msgs-main');
         if (main) main.classList.remove('thread-open');
+        // Must unlock too -- otherwise deleting the conversation you're
+        // currently viewing leaves body.msgs-thread-open set and the list
+        // behind it permanently unscrollable.
+        document.body.classList.remove('msgs-thread-open');
       }
       if (!_conversations.length) _renderConvList();
     } else {
@@ -731,6 +751,9 @@ async function _openThread(peerId, peerUsername, peerWallet) {
 
   if (window.innerWidth <= 767) {
     document.getElementById('msgs-main').classList.add('thread-open');
+    // Freeze the conversation list (the document scroller on mobile) behind
+    // the fullscreen overlay -- see body.msgs-thread-open's own CSS comment.
+    document.body.classList.add('msgs-thread-open');
   }
 
   var displayName = _activePeer.username || _short(_activePeer.wallet) || ('User #' + peerId);
@@ -1132,6 +1155,7 @@ function _toast(msg) {
 /* ── BACK (mobile) ── */
 function _backToList() {
   document.getElementById('msgs-main').classList.remove('thread-open');
+  document.body.classList.remove('msgs-thread-open');
 }
 
 /* ── USER SEARCH ── */
