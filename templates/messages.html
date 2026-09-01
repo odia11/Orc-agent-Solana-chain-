@@ -711,17 +711,12 @@ async function _deleteConversationConfirmed(peerId, wrapEl) {
       _updateMsgBadge();
       wrapEl.remove();
       if (_activePeerId === peerId) {
-        _activePeerId = null;
-        var thread = document.getElementById('msgs-thread');
-        if (thread) thread.style.display = 'none';
-        var placeholder = document.getElementById('msgs-placeholder');
-        if (placeholder) placeholder.style.display = '';
-        var main = document.getElementById('msgs-main');
-        if (main) main.classList.remove('thread-open');
-        // Must unlock too -- otherwise deleting the conversation you're
-        // currently viewing leaves body.msgs-thread-open set and the list
-        // behind it permanently unscrollable.
-        document.body.classList.remove('msgs-thread-open');
+        // Same teardown as the Back button (which also unlocks the body
+        // scroll -- leaving it locked would make the list behind
+        // permanently unscrollable) plus a URL reset, so the address bar
+        // stops pointing at a thread that no longer exists.
+        _closeThreadView();
+        _syncUrlToList();
       }
       if (!_conversations.length) _renderConvList();
     } else {
@@ -731,6 +726,56 @@ async function _deleteConversationConfirmed(peerId, wrapEl) {
     openAlertModal({text:'Network error — please try again.'});
   }
 }
+
+/* ── URL <-> open thread ──
+   An open thread used to live only in JS state, so ANY reload (including one
+   the browser does by itself, e.g. an accidental iOS pull-to-refresh or
+   coming back to a backgrounded tab) dropped you back on the conversation
+   list. /messages/<wallet> is already a real server route -- message_thread()
+   resolves the wallet to a peer id and re-opens the thread on load -- so
+   keeping the address bar in step with the open thread is all that's needed
+   to make a reload, a shared link, and the phone's own back button all land
+   where the user actually is.
+
+   Both helpers only touch history when the URL isn't already what it should
+   be. That single guard is also what makes the popstate handler below safe:
+   after a back/forward the URL already matches the state being restored, so
+   restoring it can't push a duplicate entry and loop. */
+function _threadPath(wallet) {
+  return wallet ? '/messages/' + encodeURIComponent(wallet) : null;
+}
+function _syncUrlToThread(wallet) {
+  var path = _threadPath(wallet);
+  if (path && location.pathname !== path) history.pushState({peerWallet: wallet}, '', path);
+}
+function _syncUrlToList() {
+  if (location.pathname !== '/messages') history.pushState({}, '', '/messages');
+}
+
+/* Tears the thread view down without touching history -- shared by the Back
+   button and by popstate (where the URL has already changed for us). Also
+   stops the 5s thread poll: it used to keep running against a thread you'd
+   closed. */
+function _closeThreadView() {
+  document.getElementById('msgs-main').classList.remove('thread-open');
+  document.body.classList.remove('msgs-thread-open');
+  var thread = document.getElementById('msgs-thread');
+  if (thread) thread.style.display = 'none';
+  var placeholder = document.getElementById('msgs-placeholder');
+  if (placeholder) placeholder.style.display = '';
+  _activePeerId = null;
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  _renderConvList();
+}
+
+window.addEventListener('popstate', function() {
+  var m = location.pathname.match(/^\/messages\/(.+)$/);
+  if (!m) { _closeThreadView(); return; }
+  var w = decodeURIComponent(m[1]);
+  var conv = _conversations.find(function(c){ return c.peer_wallet === w; });
+  if (conv) _openThread(conv.peer_id, conv.peer_username, conv.peer_wallet);
+  else _closeThreadView();
+});
 
 /* ── THREAD ── */
 async function _openThread(peerId, peerUsername, peerWallet) {
@@ -744,6 +789,7 @@ async function _openThread(peerId, peerUsername, peerWallet) {
     online:   !!(conv && conv.peer_online),
     verified: !!(conv && conv.peer_verified)
   };
+  _syncUrlToThread(_activePeer.wallet);
   _renderConvList();
 
   document.getElementById('msgs-placeholder').style.display = 'none';
@@ -1154,8 +1200,8 @@ function _toast(msg) {
 
 /* ── BACK (mobile) ── */
 function _backToList() {
-  document.getElementById('msgs-main').classList.remove('thread-open');
-  document.body.classList.remove('msgs-thread-open');
+  _closeThreadView();
+  _syncUrlToList();
 }
 
 /* ── USER SEARCH ── */
