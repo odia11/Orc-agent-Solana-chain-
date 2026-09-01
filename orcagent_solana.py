@@ -91,7 +91,13 @@ if _PROXY_SECRET:
 
 
 def _rpc_post(payload: dict, timeout: int = 30) -> dict:
-    """Try each RPC endpoint in order; return first success or raise."""
+    """Try each RPC endpoint in order; return first success or raise. This is
+    now the ONLY way this file talks to a Solana RPC (every getBalance/
+    getAccountInfo/getLatestBlockhash/getTokenAccountsByOwner/getTokenSupply
+    call below routes through here) -- previously only sendTransaction used
+    this failover and everything else hit the single hardcoded SOLANA_RPC
+    with no fallback, so a blip on the public mainnet-beta endpoint could
+    fail an otherwise-healthy trade for no on-chain reason at all."""
     last_err: object = None
     for rpc in SOLANA_RPCS:
         try:
@@ -105,14 +111,78 @@ def _rpc_post(payload: dict, timeout: int = 30) -> dict:
     raise Exception(f'All RPC endpoints failed. Last: {last_err}')
 
 
+# Solana's recent-blockhash validity window is ~150 blocks (~60-90s under
+# normal conditions, longer under congestion). This MUST be at least that
+# long: it's not just a "how long do we wait to feel good about it" number --
+# it's the safety margin that makes a post-timeout retry safe. If we gave up
+# and retried before the original transaction's blockhash could possibly have
+# expired, the original could still land on-chain AFTER our retry's fresh
+# transaction also lands, executing the same buy or sell twice. Waiting out
+# the full window first guarantees that by the time we ever consider a retry,
+# the original is either already confirmed (and reconciliation below will see
+# it) or permanently dead (blockhash expired, can never confirm) -- there is
+# no ambiguous middle state left for a second transaction to collide with.
+CONFIRM_TIMEOUT_S = 90.0
+CONFIRM_POLL_INTERVAL_S = 1.5
+
+
+def _confirm_transaction(sig: str, timeout_s: float = CONFIRM_TIMEOUT_S) -> dict:
+    """Poll getSignatureStatuses until the transaction is confirmed, fails
+    on-chain, or the blockhash-validity window (see CONFIRM_TIMEOUT_S above)
+    elapses with no answer. A signature coming back from sendTransaction only
+    means an RPC node accepted and broadcast it -- it does NOT mean it landed.
+    Returns {'confirmed': bool, 'err': str|None, 'status': str,
+    'confirmation_time_s': float}. 'status' is one of: 'finalized',
+    'confirmed', 'failed' (landed but reverted on-chain), or 'timeout'
+    (genuinely unknown -- caller MUST fall back to balance reconciliation,
+    never treat this as success on its own)."""
+    start = time.time()
+    while time.time() - start < timeout_s:
+        try:
+            r = _rpc_post({
+                'jsonrpc': '2.0', 'id': 1, 'method': 'getSignatureStatuses',
+                'params': [[sig], {'searchTransactionHistory': True}],
+            }, timeout=10)
+            statuses = (r.get('result') or {}).get('value') or [None]
+            status = statuses[0]
+            if status:
+                if status.get('err'):
+                    return {'confirmed': False, 'err': str(status['err']),
+                            'status': 'failed', 'confirmation_time_s': round(time.time() - start, 2)}
+                conf = status.get('confirmationStatus')
+                if conf in ('confirmed', 'finalized'):
+                    return {'confirmed': True, 'err': None,
+                            'status': conf, 'confirmation_time_s': round(time.time() - start, 2)}
+        except Exception as e:
+            print(f'[confirm] status poll error for {sig[:12]}...: {e}', flush=True)
+        time.sleep(CONFIRM_POLL_INTERVAL_S)
+    return {'confirmed': False, 'err': 'confirmation timeout (blockhash validity window elapsed)',
+            'status': 'timeout', 'confirmation_time_s': round(time.time() - start, 2)}
+
+
+def _log_exec_meta(meta: dict) -> None:
+    """Single structured line summarizing exactly one swap attempt --
+    quote/tx latency, price impact, requested slippage, confirmation time,
+    actual result, and failure reason when there is one. Printed on EVERY
+    exit path of _execute_swap_inner() (success or any failure), so Railway
+    logs always carry a grep-able 'EXEC_META:' line per attempt regardless
+    of where it failed. dashboard.py can also parse this line (it's the last
+    thing printed before a raise/return) if it ever needs these figures
+    beyond what BUY/SELL's own summary line already carries."""
+    try:
+        print('EXEC_META:' + json.dumps(meta, default=str), flush=True)
+    except Exception:
+        pass
+
+
 def get_token_decimals(mint: str) -> int:
     """Fetch actual on-chain decimals via getTokenSupply; default 6 on error."""
     try:
-        r = requests.post(SOLANA_RPC, json={
+        r = _rpc_post({
             'jsonrpc': '2.0', 'id': 1,
             'method': 'getTokenSupply',
             'params': [mint],
-        }, timeout=8).json()
+        }, timeout=8)
         return int(r['result']['value']['decimals'])
     except Exception:
         print(f'get_token_decimals failed for {mint[:8]}, defaulting to 6', flush=True)
@@ -146,10 +216,10 @@ def _ensure_fee_ata(payer_keypair, fee_wallet: str, mint: str) -> str:
     from solders.hash import Hash as SolHash
 
     ata = _get_ata(fee_wallet, mint)
-    info = requests.post(SOLANA_RPC, json={
+    info = _rpc_post({
         'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
         'params': [ata, {'encoding': 'base64'}],
-    }, timeout=10).json()
+    }, timeout=10)
     if (info.get('result') or {}).get('value') is not None:
         return ata  # already set up
 
@@ -168,18 +238,23 @@ def _ensure_fee_ata(payer_keypair, fee_wallet: str, mint: str) -> str:
         ],
         data=bytes(),
     )
-    bh = requests.post(SOLANA_RPC, json={
+    bh = _rpc_post({
         'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
-    }, timeout=10).json()['result']['value']['blockhash']
+    }, timeout=10)['result']['value']['blockhash']
     tx = Transaction.new_signed_with_payer([ix], payer_pk, [payer_keypair], SolHash.from_string(bh))
-    res = requests.post(SOLANA_RPC, json={
+    res = _rpc_post({
         'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
         'params': [base64.b64encode(bytes(tx)).decode(), {'encoding': 'base64', 'skipPreflight': False}],
-    }, timeout=30).json()
+    }, timeout=30)
     if 'error' in res:
         raise Exception('fee ATA creation failed: ' + str(res['error']))
-    print(f'[fee] fee token account created  TX:{res.get("result","?")[:20]}...', flush=True)
-    time.sleep(8)  # let it land before the swap tx references it
+    _ata_sig = res.get('result', '?')
+    print(f'[fee] fee token account tx sent  TX:{_ata_sig[:20]}... — confirming', flush=True)
+    _ata_conf = _confirm_transaction(_ata_sig, timeout_s=CONFIRM_TIMEOUT_S)
+    if not _ata_conf['confirmed']:
+        raise Exception(f'fee ATA creation did not confirm ({_ata_conf["status"]}): {_ata_conf["err"]}')
+    print(f'[fee] fee token account created and confirmed ({_ata_conf["status"]}, '
+          f'{_ata_conf["confirmation_time_s"]}s)', flush=True)
     return ata
 
 
@@ -217,10 +292,10 @@ def _resolve_alts(addresses):
     ALT_HEADER_SIZE = 56
     out = []
     for addr in addresses:
-        r = requests.post(SOLANA_RPC, json={
+        r = _rpc_post({
             'jsonrpc': '2.0', 'id': 1, 'method': 'getAccountInfo',
             'params': [addr, {'encoding': 'base64'}],
-        }, timeout=10).json()
+        }, timeout=10)
         val = (r.get('result') or {}).get('value')
         if not val or not val.get('data'):
             raise Exception(f'lookup table account not found: {addr[:8]}...')
@@ -260,19 +335,40 @@ def _execute_buy_with_bundled_fee(mint: str, spend_lamports: int, fee_lamports: 
 
     keypair = Keypair.from_base58_string(private_key)
     payer   = keypair.pubkey()
+    meta    = {
+        'direction': 'BUY', 'mint': mint, 'amount_lamports': net_lamports,
+        'requested_slippage_bps': 300, 'quote_latency_ms': None, 'price_impact_pct': None,
+        'send_latency_ms': None, 'confirmation_time_s': None, 'confirmation_status': None,
+        'reconciled': None, 'result': 'FAILED', 'failure_reason': None, 'signature': None,
+        'bundled_fee': True,
+    }
+    try:
+        _, baseline_raw = get_token_balance_raw(mint)
+    except Exception:
+        baseline_raw = 0
 
     print(f'[fee] buy: requesting quote for {net_lamports} lamports '
           f'({fee_lamports} lamports fee bundled into this tx)', flush=True)
+    _quote_t0 = time.time()
     r = requests.get(
         JUPITER_QUOTE,
         params={'inputMint': SOL_MINT, 'outputMint': mint, 'amount': net_lamports, 'slippageBps': 300},
         headers=_JUP_HEADERS, timeout=15,
     )
     if r.status_code != 200:
+        meta['failure_reason'] = f'quote HTTP {r.status_code}'
+        _log_exec_meta(meta)
         raise Exception(f'quote HTTP {r.status_code}: {r.text[:200]}')
     quote = r.json()
     if 'error' in quote or 'outAmount' not in quote:
+        meta['failure_reason'] = f'quote error: {quote.get("error", quote)}'
+        _log_exec_meta(meta)
         raise Exception(f'quote error: {quote.get("error", quote)}')
+    meta['quote_latency_ms'] = round((time.time() - _quote_t0) * 1000, 1)
+    try:
+        meta['price_impact_pct'] = float(quote.get('priceImpactPct', 0) or 0)
+    except (TypeError, ValueError):
+        pass
     out_amount = quote.get('outAmount', '0')
 
     r2 = requests.post(
@@ -283,9 +379,13 @@ def _execute_buy_with_bundled_fee(mint: str, spend_lamports: int, fee_lamports: 
         headers=_JUP_HEADERS, timeout=20,
     )
     if r2.status_code != 200:
+        meta['failure_reason'] = f'swap-instructions HTTP {r2.status_code}'
+        _log_exec_meta(meta)
         raise Exception(f'swap-instructions HTTP {r2.status_code}: {r2.text[:200]}')
     swi = r2.json()
     if 'error' in swi:
+        meta['failure_reason'] = f'swap-instructions error: {swi["error"]}'
+        _log_exec_meta(meta)
         raise Exception(f'swap-instructions error: {swi["error"]}')
 
     instructions = []
@@ -312,37 +412,109 @@ def _execute_buy_with_bundled_fee(mint: str, spend_lamports: int, fee_lamports: 
 
     alt_accounts = _resolve_alts(swi.get('addressLookupTableAddresses') or [])
 
-    bh = requests.post(SOLANA_RPC, json={
+    bh = _rpc_post({
         'jsonrpc': '2.0', 'id': 1, 'method': 'getLatestBlockhash', 'params': [],
-    }, timeout=10).json()['result']['value']['blockhash']
+    }, timeout=10)['result']['value']['blockhash']
 
     message   = MessageV0.try_compile(payer, instructions, alt_accounts, SolHash.from_string(bh))
     signed_tx = _VTx(message, [keypair])
     encoded   = base64.b64encode(bytes(signed_tx)).decode()
 
+    _send_t0 = time.time()
     rpc_resp = _rpc_post({
         'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
         'params': [encoded, {'encoding': 'base64', 'skipPreflight': False, 'maxRetries': 3}],
     }, timeout=30)
+    meta['send_latency_ms'] = round((time.time() - _send_t0) * 1000, 1)
     if 'error' in rpc_resp:
+        meta['failure_reason'] = f'sendTransaction error: {_clean_rpc_error(rpc_resp["error"])}'
+        _log_exec_meta(meta)
         raise Exception(f'sendTransaction error: {_clean_rpc_error(rpc_resp["error"])}')
     sig = rpc_resp.get('result')
     if not sig:
+        meta['failure_reason'] = 'no signature in sendTransaction response'
+        _log_exec_meta(meta)
         raise Exception(f'no signature in RPC response: {rpc_resp}')
-    print(f'[fee] buy with bundled fee SUCCESS: https://solscan.io/tx/{sig}', flush=True)
-    return sig, out_amount
+    meta['signature'] = sig
+    print(f'[fee] buy with bundled fee submitted, confirming: https://solscan.io/tx/{sig}', flush=True)
+
+    # Same confirm-then-reconcile discipline as _execute_swap_inner() -- a
+    # signature is not success on its own here either.
+    conf = _confirm_transaction(sig)
+    meta['confirmation_time_s'] = conf['confirmation_time_s']
+    meta['confirmation_status'] = conf['status']
+    if conf['status'] == 'failed':
+        meta['failure_reason'] = f'on-chain failure: {conf["err"]}'
+        _log_exec_meta(meta)
+        raise Exception(f'Bundled-fee buy failed on-chain: {conf["err"]}')
+
+    post_raw, changed = _reconciled_token_balance(mint, 'increase', baseline_raw)
+    meta['reconciled'] = changed
+    if not changed:
+        meta['failure_reason'] = f'balance did not increase (confirmation={conf["status"]})'
+        _log_exec_meta(meta)
+        raise Exception(f'Bundled-fee buy balance reconciliation failed '
+                         f'({mint[:8]}... baseline={baseline_raw} now={post_raw})')
+
+    actual_delta = abs(post_raw - baseline_raw)
+    meta['result'] = 'SUCCESS'
+    _log_exec_meta(meta)
+    print(f'[fee] buy with bundled fee SUCCESS (confirmation={conf["status"]}, '
+          f'confirm_time={conf["confirmation_time_s"]}s): https://solscan.io/tx/{sig}  '
+          f'actual_delta={actual_delta} (quoted outAmount={out_amount})', flush=True)
+    return sig, str(actual_delta)
 
 
 # ── SWAP EXECUTION ──────────────────────────────────────────────────────────
 
+def _get_sol_balance_raw(owner: str) -> int:
+    """Raw lamports (not the UI-divided float get_balance() returns) for
+    `owner` -- used only to report the actual SOL a SELL received (see
+    _execute_swap_inner()'s Step 8), where a UI-float divide/remultiply
+    round-trip would lose precision get_token_balance_raw() already avoids
+    on the token side. Returns 0 on any failure -- callers must treat that
+    as 'unmeasurable', not 'zero received'."""
+    try:
+        r = _rpc_post({'jsonrpc': '2.0', 'id': 1, 'method': 'getBalance', 'params': [owner]}, timeout=10)
+        return int(r['result']['value'])
+    except Exception:
+        return 0
+
+
+def _reconciled_token_balance(mint: str, expect_change: str, baseline_raw: int,
+                               attempts: int = 4, delay_s: float = 1.5) -> tuple:
+    """Poll get_token_balance_raw(mint) until it reflects a change from
+    baseline_raw in the expected direction ('increase' or 'decrease'), or
+    give up after `attempts` reads. RPC reads can lag a couple seconds behind
+    a just-confirmed transaction even on the node that confirmed it (and a
+    failover read may hit a different, further-behind node entirely) -- a
+    single immediate read risks a false "balance didn't change" verdict on a
+    swap that actually succeeded. Returns (raw_balance, changed_as_expected)."""
+    raw = baseline_raw
+    for _i in range(attempts):
+        _ui, raw = get_token_balance_raw(mint)
+        if expect_change == 'increase' and raw > baseline_raw:
+            return raw, True
+        if expect_change == 'decrease' and raw < baseline_raw:
+            return raw, True
+        if _i < attempts - 1:
+            time.sleep(delay_s)
+    return raw, False
+
+
 def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
                  wallet_address: str = '', private_key: str = '',
                  fee_wallet: str = '', fee_bps: int = 0) -> tuple:
-    """Execute a Jupiter v6 swap. Returns (signature, out_amount) where
-    out_amount is the raw (undivided by decimals) quoted output amount as a
-    string, so callers can report exactly how much of the output asset the
-    swap actually produced.
-    Logs every step so failures are immediately visible in Railway logs.
+    """Execute a Jupiter v6 swap: quote -> validate -> build -> sign -> send
+    -> CONFIRM -> RECONCILE on-chain balance -> only then return success.
+    Returns (signature, out_amount_raw) where out_amount_raw is the actual
+    measured on-chain balance delta of the output asset (not just Jupiter's
+    pre-execution quote) as a string of raw base units. Raises on ANY
+    failure, including "sent but never confirmed" and "confirmed but the
+    balance didn't move as expected" -- a signature coming back from
+    sendTransaction is never, on its own, treated as a successful trade.
+    Logs every step (including a final EXEC_META line -- see its own
+    comment) so failures and timings are visible in Railway logs.
     Called through execute_swap() below, which adds a fee-specific safety net
     on top of this -- call that one, not this one, from outside this file."""
     wallet_address = wallet_address or WALLET_ADDRESS
@@ -352,6 +524,14 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
 
     label     = output_mint[:8] if input_mint == USDC_MINT else input_mint[:8]
     direction = 'BUY' if input_mint == USDC_MINT else 'SELL'
+    t0        = time.time()
+    meta      = {  # accumulated for the final EXEC_META log line -- see bottom
+        'direction': direction, 'mint': (output_mint if direction == 'BUY' else input_mint),
+        'amount_lamports': amount_lamports, 'requested_slippage_bps': 300,
+        'quote_latency_ms': None, 'price_impact_pct': None, 'send_latency_ms': None,
+        'confirmation_time_s': None, 'confirmation_status': None, 'reconciled': None,
+        'result': 'FAILED', 'failure_reason': None, 'signature': None,
+    }
 
     # Keypair created here so pubkey is derived from the actual signing key
     # and can be passed to the swap body before signing in Step 4.
@@ -361,7 +541,29 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
     except Exception:
         # Do NOT log traceback here — solders may embed the raw key in its error message.
         print('[TRADE] FAIL — invalid private key (exception details withheld for security)', flush=True)
+        meta['failure_reason'] = 'invalid private key'
+        _log_exec_meta(meta)
         raise
+
+    # Baseline for the SUCCESS/FAILURE reconciliation check (Step 7 below).
+    # BUY: reconcile the token we're receiving (clean, unambiguous signal).
+    # SELL: reconcile the token we're GIVING UP decreasing, not the SOL we
+    # receive -- SOL balance always drops a little on every transaction
+    # regardless of outcome (network/priority fees), so it's a poor pass/
+    # fail signal, but the token side is exact. The actual SOL received is
+    # still measured and returned below (Step 8), just not used to decide
+    # success. Reading this is best-effort: a lookup failure here just means
+    # reconciliation later can't run (treated as its own failure there, not
+    # swallowed silently).
+    _recon_mint = output_mint if direction == 'BUY' else input_mint
+    _recon_dir  = 'increase'  if direction == 'BUY' else 'decrease'
+    try:
+        _, baseline_raw = get_token_balance_raw(_recon_mint)
+    except Exception:
+        baseline_raw = 0
+    # SELL only: SOL lamport baseline for reporting the actual amount
+    # received (Step 8) -- not used for the confirm/reconcile decision above.
+    sol_baseline_lamports = _get_sol_balance_raw(pubkey) if direction == 'SELL' else None
 
     # Fold the platform fee into this swap's own transaction (Jupiter's
     # platformFeeBps/feeAccount) instead of a separate, later, visible SOL
@@ -376,8 +578,9 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
             print(f'[fee] could not prepare platform-fee account, swap proceeds without it: {e}', flush=True)
 
     # ── Step 1: Jupiter quote ────────────────────────────────────────────────
-    print(f'[TRADE] Step 1/6 — Requesting {direction} quote for {label} ({amount_lamports} lamports)'
+    print(f'[TRADE] Step 1/8 — Requesting {direction} quote for {label} ({amount_lamports} lamports)'
           + (f'  (+{fee_bps}bps platform fee)' if fee_account else ''), flush=True)
+    _quote_t0 = time.time()
     for _attempt in range(3):
         try:
             quote_params = {
@@ -412,23 +615,48 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
         except Exception:
             if _attempt == 2:
                 print('[TRADE] FAIL Step 1 (quote GET):\n' + traceback.format_exc(), flush=True)
+                meta['failure_reason'] = 'quote failed after retries'
+                _log_exec_meta(meta)
                 raise
             time.sleep(2 ** _attempt)
     else:
+        meta['failure_reason'] = 'quote failed after retries'
+        _log_exec_meta(meta)
         raise Exception('Jupiter quote failed after 3 attempts')
+    meta['quote_latency_ms'] = round((time.time() - _quote_t0) * 1000, 1)
 
-    # ── Step 2: Validate quote ───────────────────────────────────────────────
+    # ── Step 2: Validate quote freshness + shape ────────────────────────────
     out_amount = quote.get('outAmount', '?')
-    impact     = quote.get('priceImpactPct', '?')
-    print(f'[TRADE] Step 2/6 — Quote OK: outAmount={out_amount}  priceImpact={impact}%', flush=True)
+    impact_raw = quote.get('priceImpactPct', 0)
+    try:
+        impact = float(impact_raw or 0)
+    except (TypeError, ValueError):
+        impact = None
+    meta['price_impact_pct'] = impact
+    print(f'[TRADE] Step 2/8 — Quote OK: outAmount={out_amount}  priceImpact={impact_raw}  '
+          f'quote_latency={meta["quote_latency_ms"]}ms', flush=True)
     if 'error' in quote:
         print(f'[TRADE] Jupiter quote error: {quote["error"]}', flush=True)
+        meta['failure_reason'] = f'quote error: {quote["error"]}'
+        _log_exec_meta(meta)
         raise Exception(f'Jupiter quote error: {quote["error"]}')
-    if 'outAmount' not in quote:
+    if 'outAmount' not in quote or int(quote.get('outAmount', 0) or 0) <= 0:
+        meta['failure_reason'] = 'quote returned no usable route'
+        _log_exec_meta(meta)
         raise Exception(f'Unexpected quote response: {str(quote)[:300]}')
+    # A quote used more than ~10s after being fetched is stale enough that
+    # on-chain prices may have moved meaningfully since -- everything from
+    # here to Step 5 (send) should be fast local work (no further network
+    # round-trips except the immediately-following /swap build), so this is
+    # a freshness floor, not a real-world bottleneck.
+    _quote_age_s = time.time() - _quote_t0
+    if _quote_age_s > 10.0:
+        meta['failure_reason'] = f'quote stale ({round(_quote_age_s,1)}s old)'
+        _log_exec_meta(meta)
+        raise Exception(f'Quote too stale to execute safely ({round(_quote_age_s,1)}s old)')
 
     # ── Step 3: Get swap transaction ─────────────────────────────────────────
-    print('[TRADE] Step 3/6 — Getting swap transaction from Jupiter', flush=True)
+    print('[TRADE] Step 3/8 — Getting swap transaction from Jupiter', flush=True)
     for _attempt in range(3):
         try:
             swap_body = {
@@ -464,17 +692,25 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
         except Exception:
             if _attempt == 2:
                 print('[TRADE] FAIL Step 3 (swap POST):\n' + traceback.format_exc(), flush=True)
+                meta['failure_reason'] = 'swap build failed after retries'
+                _log_exec_meta(meta)
                 raise
             time.sleep(2 ** _attempt)
     else:
+        meta['failure_reason'] = 'swap build failed after retries'
+        _log_exec_meta(meta)
         raise Exception('Jupiter swap failed after 3 attempts')
 
     swap_tx_b64 = swap_resp.get('swapTransaction')
-    print(f'[TRADE] Step 4/6 — Signing transaction (tx present={bool(swap_tx_b64)})', flush=True)
+    print(f'[TRADE] Step 4/8 — Signing transaction (tx present={bool(swap_tx_b64)})', flush=True)
     if 'error' in swap_resp:
         print(f'[TRADE] Jupiter swap error: {swap_resp["error"]}', flush=True)
+        meta['failure_reason'] = f'swap build error: {_clean_rpc_error(swap_resp["error"])}'
+        _log_exec_meta(meta)
         raise Exception(f'Jupiter swap error: {_clean_rpc_error(swap_resp["error"])}')
     if not swap_tx_b64:
+        meta['failure_reason'] = 'no swapTransaction in response'
+        _log_exec_meta(meta)
         raise Exception(f'No swapTransaction in response: {str(swap_resp)[:300]}')
 
     # ── Step 4: Decode + sign ────────────────────────────────────────────────
@@ -487,10 +723,13 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
         encoded   = base64.b64encode(bytes(signed_tx)).decode()
     except Exception:
         print('[TRADE] FAIL Step 4 (sign):\n' + traceback.format_exc(), flush=True)
+        meta['failure_reason'] = 'signing failed'
+        _log_exec_meta(meta)
         raise
 
     # ── Step 5: Send to RPC (with multi-RPC failover) ───────────────────────
-    print('[TRADE] Step 5/6 — Sending transaction to Solana RPC', flush=True)
+    print('[TRADE] Step 5/8 — Sending transaction to Solana RPC', flush=True)
+    _send_t0 = time.time()
     try:
         rpc_resp = _rpc_post({
             'jsonrpc': '2.0',
@@ -507,18 +746,100 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
         }, timeout=30)
     except Exception:
         print('[TRADE] FAIL Step 5 (sendTransaction):\n' + traceback.format_exc(), flush=True)
+        meta['failure_reason'] = 'sendTransaction request failed'
+        _log_exec_meta(meta)
         raise
+    meta['send_latency_ms'] = round((time.time() - _send_t0) * 1000, 1)
 
-    # ── Step 6: Result ───────────────────────────────────────────────────────
-    print(f'[TRADE] Step 6/6 — RPC response: {rpc_resp}', flush=True)
+    print(f'[TRADE] Step 5 — RPC response: {rpc_resp}  (send_latency={meta["send_latency_ms"]}ms)', flush=True)
     if 'error' in rpc_resp:
         print(f'[TRADE] RPC ERROR: {rpc_resp["error"]}', flush=True)
+        meta['failure_reason'] = f'sendTransaction error: {_clean_rpc_error(rpc_resp["error"])}'
+        _log_exec_meta(meta)
         raise Exception(f'RPC sendTransaction error: {_clean_rpc_error(rpc_resp["error"])}')
     sig = rpc_resp.get('result')
-    if sig:
-        print(f'[TRADE] SUCCESS: https://solscan.io/tx/{sig}', flush=True)
-        return sig, out_amount
-    raise Exception(f'No signature in RPC response: {rpc_resp}')
+    if not sig:
+        meta['failure_reason'] = 'no signature in sendTransaction response'
+        _log_exec_meta(meta)
+        raise Exception(f'No signature in RPC response: {rpc_resp}')
+    meta['signature'] = sig
+    print(f'[TRADE] Step 5 — submitted, NOT yet confirmed: https://solscan.io/tx/{sig}', flush=True)
+
+    # ── Step 6: Confirm on-chain ─────────────────────────────────────────────
+    # A signature only proves an RPC node accepted and broadcast the
+    # transaction -- it does NOT prove it landed. Everything below this line
+    # is what actually decides success or failure; nothing above it does.
+    print(f'[TRADE] Step 6/8 — Confirming transaction (up to {CONFIRM_TIMEOUT_S:.0f}s)...', flush=True)
+    conf = _confirm_transaction(sig)
+    meta['confirmation_time_s'] = conf['confirmation_time_s']
+    meta['confirmation_status'] = conf['status']
+    if conf['status'] == 'failed':
+        # Landed on-chain but reverted (e.g. slippage tolerance exceeded) --
+        # unambiguous failure. Only the network fee was spent; no swap
+        # happened, so there is nothing to reconcile and no reason a caller
+        # shouldn't retry with a fresh quote.
+        print(f'[TRADE] Step 6 — transaction FAILED on-chain: {conf["err"]}', flush=True)
+        meta['failure_reason'] = f'on-chain failure: {conf["err"]}'
+        _log_exec_meta(meta)
+        raise Exception(f'Transaction failed on-chain: {conf["err"]}')
+
+    # ── Step 7/8: Reconcile the resulting balance ───────────────────────────
+    # Required in BOTH the confirmed and the timeout ('status' == 'timeout',
+    # genuinely unknown) cases: confirmation alone is not treated as proof
+    # either -- the balance delta is the actual ground truth this function
+    # reports success or failure on. A 'timeout' with a balance that DID move
+    # as expected is treated as success (the transaction evidently landed,
+    # we just couldn't observe status in time); a 'timeout' with no balance
+    # movement is a genuine, safe-to-retry failure -- CONFIRM_TIMEOUT_S is
+    # long enough that the original's blockhash is now guaranteed dead.
+    print(f'[TRADE] Step 7/8 — Reconciling {_recon_mint[:8]}... balance '
+          f'(expect {_recon_dir}, baseline_raw={baseline_raw})', flush=True)
+    post_raw, changed = _reconciled_token_balance(_recon_mint, _recon_dir, baseline_raw)
+    meta['reconciled'] = changed
+    if not changed:
+        _status_note = 'confirmed but' if conf['confirmed'] else 'never confirmed and'
+        print(f'[TRADE] Step 7 — balance did NOT {_recon_dir} as expected '
+              f'(baseline={baseline_raw}, now={post_raw}) — transaction {_status_note} did not deliver funds', flush=True)
+        meta['failure_reason'] = f'balance did not {_recon_dir} (confirmation={conf["status"]})'
+        _log_exec_meta(meta)
+        raise Exception(f'Swap {_status_note} balance reconciliation failed '
+                         f'({_recon_mint[:8]}... baseline={baseline_raw} now={post_raw})')
+
+    # ── Step 8/8: Report the actual amount ──────────────────────────────────
+    # BUY: the token delta just reconciled above IS the amount received --
+    # report it directly. SELL: the reconciled side was the token decrease
+    # (used only to confirm the swap happened); the amount to report is SOL
+    # received, measured separately since SOL balance wasn't the confirm
+    # signal. Falls back to Jupiter's pre-execution quote only if the SOL-side
+    # read itself is unusable (e.g. RPC failure) -- a real sell nets far more
+    # than network/priority fees, so a implausibly small or negative reading
+    # means the read raced ahead of/behind reality, not that nothing was
+    # received.
+    if direction == 'BUY':
+        actual_delta = abs(post_raw - baseline_raw)
+    else:
+        actual_delta = None
+        try:
+            sol_now   = _get_sol_balance_raw(pubkey)
+            sol_delta = sol_now - sol_baseline_lamports
+            if sol_delta > 1000:  # lamports -- floor well above any plausible fee-only noise
+                actual_delta = sol_delta
+        except Exception:
+            pass
+        if actual_delta is None:
+            try:
+                actual_delta = int(out_amount)
+            except (TypeError, ValueError):
+                actual_delta = 0
+            print(f'[TRADE] Step 8 — could not measure actual SOL received; '
+                  f'reporting Jupiter\'s pre-execution quote instead ({actual_delta})', flush=True)
+
+    print(f'[TRADE] Step 8/8 — SUCCESS (confirmation={conf["status"]}, '
+          f'confirm_time={conf["confirmation_time_s"]}s): https://solscan.io/tx/{sig}  '
+          f'reported_amount={actual_delta} (quoted outAmount={out_amount})', flush=True)
+    meta['result'] = 'SUCCESS'
+    _log_exec_meta(meta)
+    return sig, str(actual_delta)
 
 
 def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
@@ -626,20 +947,20 @@ def get_balance() -> float:
         owner = str(Keypair.from_base58_string(PRIVATE_KEY).pubkey()) if PRIVATE_KEY else WALLET_ADDRESS
     except Exception:
         owner = WALLET_ADDRESS
-    r = requests.post(SOLANA_RPC, json={
+    r = _rpc_post({
         'jsonrpc': '2.0', 'id': 1,
         'method': 'getBalance',
         'params': [owner],
     }, timeout=10)
-    return r.json()['result']['value'] / 1e9
+    return r['result']['value'] / 1e9
 
 def get_usdc_balance() -> float:
-    r = requests.post(SOLANA_RPC, json={
+    r = _rpc_post({
         'jsonrpc': '2.0', 'id': 1,
         'method': 'getTokenAccountsByOwner',
         'params': [WALLET_ADDRESS, {'mint': USDC_MINT}, {'encoding': 'jsonParsed'}],
     }, timeout=10)
-    accounts = r.json().get('result', {}).get('value', [])
+    accounts = r.get('result', {}).get('value', [])
     if accounts:
         return float(accounts[0]['account']['data']['parsed']['info']['tokenAmount']['uiAmount'] or 0)
     return 0.0
@@ -669,12 +990,12 @@ def get_token_balance_raw(mint: str) -> tuple:
         owner = WALLET_ADDRESS
     print(f'[get_token_balance] owner={owner[:8]}... mint={mint[:8]}...', flush=True)
     try:
-        r = requests.post(SOLANA_RPC, json={
+        r = _rpc_post({
             'jsonrpc': '2.0', 'id': 1,
             'method': 'getTokenAccountsByOwner',
             'params': [owner, {'mint': mint}, {'encoding': 'jsonParsed'}],
         }, timeout=10)
-        accounts = r.json().get('result', {}).get('value', [])
+        accounts = r.get('result', {}).get('value', [])
         if accounts:
             amt_info = accounts[0]['account']['data']['parsed']['info']['tokenAmount']
             ui  = float(amt_info.get('uiAmount', 0) or 0)

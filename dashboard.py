@@ -595,6 +595,26 @@ MAX_ENTRY_PRICE_IMPACT_PCT = 0.05  # 5% -- Jupiter's own priceImpactPct already
                                     # number, so a single quote covers both
                                     # "estimated price impact" and "slippage"
 
+# ── NET EXPECTED EDGE FILTER ── a trade's "expected gross move" here is
+# deliberately NOT a market prediction -- there is no calibrated model for
+# that anywhere in this codebase. It uses the trade's OWN configured
+# take-profit % as the transparent stand-in for "the move this trade is
+# targeting if its own thesis plays out" -- never a claim that the move
+# WILL happen, and never used to size or sweeten a trade, only to reject
+# ones where even hitting their own target wouldn't clear round-trip costs.
+PRIORITY_FEE_PCT_ASSUMPTION = 0.001  # ~0.1% of trade size -- Jupiter's own
+    # 'auto' priority fee varies with live network congestion and isn't
+    # knowable ahead of the real swap quote; this is a conservative,
+    # clearly-labeled placeholder, logged alongside every decision so it's
+    # never mistaken for a measured figure.
+MIN_EDGE_TO_COST_RATIO = 1.0  # expected_net_edge must be >= this multiple of
+    # estimated_total_cost (i.e. the trade's own target must clear at least
+    # 2x round-trip costs) before a candidate is allowed through. This is a
+    # cost/edge sanity floor, NOT a profitability guarantee -- it says
+    # nothing about the probability the target is ever reached. See the
+    # trading-engine audit's finding I: no backtest exists yet to calibrate
+    # this ratio against real outcomes.
+
 # ── LOSS-STREAK THROTTLE ── the bot's own risk-management response to a run of
 # losing trades: not a fixed daily $ circuit breaker (that's daily_loss_limit,
 # a user-configured cap checked further down the loop) but an automatic,
@@ -2282,6 +2302,40 @@ def run_migrations():
         # Settings UI can show "Custom" vs a named preset without having to
         # reverse-guess it from the raw numbers.
         "ALTER TABLE users ADD COLUMN sl_tp_preset TEXT DEFAULT 'custom'",
+        # ── Trade Analytics V2 ── entry-time market context, captured only
+        # where the buy path actually has this data (the main bot loop's own
+        # scan/score pipeline -- see _snapshot_entry_risk()'s token_candidate
+        # param). NULL on every row from a path that doesn't have it (manual
+        # buys, copy-trading, pre-migration trades) -- never fabricated, and
+        # /api/stats/performance's breakdowns skip rows missing the field
+        # being grouped by rather than guessing.
+        "ALTER TABLE open_positions ADD COLUMN entry_volume_5m REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN entry_volume_1h REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN entry_volume_accel INTEGER DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN entry_buy_sell_ratio REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN entry_unique_traders INTEGER DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN entry_market_cap REAL DEFAULT NULL",
+        "ALTER TABLE open_positions ADD COLUMN entry_pair_age_minutes REAL DEFAULT NULL",
+        # 0-100, higher = safer -- a single summary of the SAME rug-risk
+        # signals already gathered at buy time (LP-locked %, holder
+        # concentration, mint/freeze authority), see
+        # _compute_entry_risk_score(). Not a new signal and not a
+        # prediction of outcome, just one number to group/sort trades by.
+        "ALTER TABLE open_positions ADD COLUMN risk_score REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_volume_5m REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_volume_1h REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_volume_accel INTEGER DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_buy_sell_ratio REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_unique_traders INTEGER DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_market_cap REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN entry_pair_age_minutes REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN risk_score REAL DEFAULT NULL",
+        # Realized fill vs. the price quoted just before execution -- see
+        # _buy_and_get_realized()/_sell_and_get_realized()'s new slippage_pct
+        # return value. NULL wherever the realized price couldn't be parsed
+        # (falls back to the quote itself, so there's nothing to measure).
+        "ALTER TABLE trades ADD COLUMN entry_slippage_pct REAL DEFAULT NULL",
+        "ALTER TABLE trades ADD COLUMN exit_slippage_pct REAL DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -4366,7 +4420,28 @@ def _volatility_trailing_pct(price_hist: list) -> float:
     scaled = TP2_TRAIL_PCT_MIN + min(1.0, coeff_of_variation / 0.02) * (TP2_TRAIL_PCT_MAX - TP2_TRAIL_PCT_MIN)
     return round(max(TP2_TRAIL_PCT_MIN, min(TP2_TRAIL_PCT_MAX, scaled)), 4)
 
-def _snapshot_entry_risk(wallet: str, entry_price: float, entry_score: float = None) -> dict:
+def _compute_entry_risk_score(lp_locked_pct=None, holder_concentration_risk=False,
+                               mint_authority_active=False, freeze_authority_active=False) -> float:
+    """0-100, higher = safer -- a single summary of the SAME rug-risk signals
+    already gathered during the buy gate (LP-locked %, holder concentration
+    flag, mint/freeze authority), for Trade Analytics V2 grouping (see
+    /api/stats/performance's breakdowns). Not a new signal and not a
+    prediction of outcome -- purely a recap of checks that already ran."""
+    score = 100.0
+    if lp_locked_pct is not None:
+        score -= max(0.0, 100.0 - lp_locked_pct) * 0.5  # up to -50 at 0% locked
+    else:
+        score -= 25.0  # unknown LP status -- moderate penalty, not zero
+    if holder_concentration_risk:
+        score -= 25.0
+    if mint_authority_active:
+        score -= 15.0
+    if freeze_authority_active:
+        score -= 10.0
+    return round(max(0.0, min(100.0, score)), 1)
+
+def _snapshot_entry_risk(wallet: str, entry_price: float, entry_score: float = None,
+                         token_candidate: dict = None, risk_score: float = None) -> dict:
     """Reads this user's CURRENT stop_loss/take_profit/tiered_tp_enabled
     settings and freezes them into a per-position snapshot at the moment a
     position is opened -- see the ALTER TABLE comment on open_positions.sl_pct
@@ -4375,7 +4450,15 @@ def _snapshot_entry_risk(wallet: str, entry_price: float, entry_score: float = N
     the first _upsert_open_position(). entry_score is optional (not every
     buy path has a 0-10 score available, e.g. copy-trading) and is only used
     for trade-analytics logging (see /api/stats/performance), never for risk
-    decisions."""
+    decisions.
+
+    token_candidate (Trade Analytics V2) is the SAME token dict the main bot
+    loop's Pass 2 already scored (see score_token()'s input shape) -- only
+    that path has this rich market context at buy time, so every other
+    caller (manual buys, copy-trading) leaves it None and the corresponding
+    analytics columns stay NULL/unavailable rather than fabricated. risk_score
+    is likewise only computed where the LP-lock/mint-safety checks already
+    ran (see _compute_entry_risk_score())."""
     sl_pct, tp_pct, trailing_enabled = STOP_LOSS * 100, TAKE_PROFIT * 100, False
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -4398,7 +4481,7 @@ def _snapshot_entry_risk(wallet: str, entry_price: float, entry_score: float = N
         # to the global defaults rather than snapshotting a nonsensical target
         # (e.g. TP <= SL) onto a live position.
         sl_pct, tp_pct = STOP_LOSS * 100, TAKE_PROFIT * 100
-    return {
+    result = {
         'sl_pct':           sl_pct,
         'tp_pct':           tp_pct,
         'sl_price':         round(entry_price * (1 - sl_pct / 100), 10) if entry_price > 0 else 0.0,
@@ -4407,7 +4490,34 @@ def _snapshot_entry_risk(wallet: str, entry_price: float, entry_score: float = N
         'entry_score':      entry_score,
         'highest_price':    entry_price,
         'lowest_price':     entry_price,
+        'risk_score':               risk_score,
+        'entry_volume_5m':          None,
+        'entry_volume_1h':          None,
+        'entry_volume_accel':       None,
+        'entry_buy_sell_ratio':     None,
+        'entry_unique_traders':     None,
+        'entry_market_cap':        None,
+        'entry_pair_age_minutes':   None,
     }
+    if token_candidate:
+        try:
+            v5m = float(token_candidate.get('volume5m', 0) or 0)
+            v1h = float(token_candidate.get('volume1h', 0) or 0)
+            buys  = float(token_candidate.get('txns_buys', 0) or 0)
+            sells = float(token_candidate.get('txns_sells', 0) or 0)
+            created_ms = token_candidate.get('pairCreatedAt', 0) or 0
+            result.update({
+                'entry_volume_5m':        v5m,
+                'entry_volume_1h':        v1h,
+                'entry_volume_accel':     bool(v5m > 0 and v1h > 0 and v5m > v1h / 12),
+                'entry_buy_sell_ratio':   round(buys / sells, 3) if sells > 0 else None,
+                'entry_unique_traders':   int(token_candidate.get('makers24h', 0) or 0) or None,
+                'entry_market_cap':      float(token_candidate.get('market_cap', 0) or token_candidate.get('fdv', 0) or 0) or None,
+                'entry_pair_age_minutes': round((time.time() - created_ms / 1000) / 60, 1) if created_ms > 0 else None,
+            })
+        except Exception as e:
+            print(f'[risk-snapshot] token_candidate parsing failed: {e}', flush=True)
+    return result
 
 def _pos_sl_frac(pos: dict, fallback: float) -> float:
     """The stop-loss fraction (e.g. 0.05 for 5%) this SPECIFIC position should
@@ -4465,8 +4575,11 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                     entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active,
                     opened_at, source, copy_of_wallet, chain,
                     sl_pct, tp_pct, sl_price, tp_price, trailing_enabled, entry_score,
-                    highest_price, lowest_price, updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                    highest_price, lowest_price,
+                    entry_volume_5m, entry_volume_1h, entry_volume_accel, entry_buy_sell_ratio,
+                    entry_unique_traders, entry_market_cap, entry_pair_age_minutes, risk_score,
+                    updated_at)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                    ON CONFLICT(user_id, mint_address) DO UPDATE SET
                        symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
                        spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
@@ -4479,6 +4592,10 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                        sl_price=excluded.sl_price, tp_price=excluded.tp_price,
                        trailing_enabled=excluded.trailing_enabled, entry_score=excluded.entry_score,
                        highest_price=excluded.highest_price, lowest_price=excluded.lowest_price,
+                       entry_volume_5m=excluded.entry_volume_5m, entry_volume_1h=excluded.entry_volume_1h,
+                       entry_volume_accel=excluded.entry_volume_accel, entry_buy_sell_ratio=excluded.entry_buy_sell_ratio,
+                       entry_unique_traders=excluded.entry_unique_traders, entry_market_cap=excluded.entry_market_cap,
+                       entry_pair_age_minutes=excluded.entry_pair_age_minutes, risk_score=excluded.risk_score,
                        updated_at=CURRENT_TIMESTAMP''',
                 (user_id, mint, pos.get('symbol', ''), pos.get('amount', 0.0), pos.get('buy_price', 0.0),
                  pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0),
@@ -4487,7 +4604,11 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                  pos.get('opened_at', 0.0), source, copy_of_wallet, chain,
                  pos.get('sl_pct'), pos.get('tp_pct'), pos.get('sl_price'), pos.get('tp_price'),
                  int(bool(pos.get('trailing_enabled'))), pos.get('entry_score'),
-                 pos.get('highest_price'), pos.get('lowest_price')))
+                 pos.get('highest_price'), pos.get('lowest_price'),
+                 pos.get('entry_volume_5m'), pos.get('entry_volume_1h'),
+                 (int(bool(pos.get('entry_volume_accel'))) if pos.get('entry_volume_accel') is not None else None),
+                 pos.get('entry_buy_sell_ratio'), pos.get('entry_unique_traders'),
+                 pos.get('entry_market_cap'), pos.get('entry_pair_age_minutes'), pos.get('risk_score')))
             conn.commit()
         finally:
             conn.close()
@@ -4653,7 +4774,12 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                        source: str = 'bot', entry_liquidity: float = None, entry_lp_locked_pct: float = None,
                        entry_mint_authority_active: bool = None, entry_freeze_authority_active: bool = None,
                        sl_pct: float = None, tp_pct: float = None, sl_price: float = None, tp_price: float = None,
-                       entry_score: float = None, highest_price: float = None, lowest_price: float = None):
+                       entry_score: float = None, highest_price: float = None, lowest_price: float = None,
+                       entry_volume_5m: float = None, entry_volume_1h: float = None,
+                       entry_volume_accel: bool = None, entry_buy_sell_ratio: float = None,
+                       entry_unique_traders: int = None, entry_market_cap: float = None,
+                       entry_pair_age_minutes: float = None, risk_score: float = None,
+                       entry_slippage_pct: float = None, exit_slippage_pct: float = None):
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -4752,14 +4878,21 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                 '''INSERT INTO trades
                    (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source,
                     exit_reason, entry_liquidity, entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active,
-                    sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds,
+                    entry_volume_5m, entry_volume_1h, entry_volume_accel, entry_buy_sell_ratio,
+                    entry_unique_traders, entry_market_cap, entry_pair_age_minutes, risk_score,
+                    entry_slippage_pct, exit_slippage_pct)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
                  mint or None, source,
                  exit_reason or None, entry_liquidity, entry_lp_locked_pct,
                  entry_mint_authority_active, entry_freeze_authority_active,
-                 sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds))
+                 sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds,
+                 entry_volume_5m, entry_volume_1h,
+                 (int(bool(entry_volume_accel)) if entry_volume_accel is not None else None),
+                 entry_buy_sell_ratio, entry_unique_traders, entry_market_cap, entry_pair_age_minutes,
+                 risk_score, entry_slippage_pct, exit_slippage_pct))
             conn.commit()
             _trade_id = _cur.lastrowid
         finally:
@@ -5007,13 +5140,27 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
             add_user_log(wallet, 'Swap err: ' + _redact_keys(result.stderr.strip()[-400:]))
         ok = result.returncode == 0 and bool(result.stdout.strip())
         tx_hash = ''
-        err_msg = ''
         if ok:
             for line in result.stdout.split('\n'):
                 if 'TX:' in line:
                     tx_hash = line.split('TX:')[-1].strip().split()[0]
                     break
-        else:
+            if not tx_hash:
+                # Exit 0 with no TX:<signature> means no transaction was ever
+                # submitted -- e.g. execute_single_swap()'s clean no-op exits
+                # ("on-chain balance is 0, nothing to sell", "computed sell
+                # amount is 0, nothing to sell"). This is NOT a successful
+                # trade and must never be recorded as one: previously ok=True
+                # here let _buy_and_get_realized()/_sell_and_get_realized()'s
+                # zero-token_amount fallback silently report the STALE quoted
+                # price/amount as if a real close/open had just happened,
+                # which is exactly how a concurrent duplicate-sell race (bot
+                # loop vs. a manual sell on the same position) turned into a
+                # second, phantom trade record for a swap that never actually
+                # executed a second time.
+                ok = False
+        err_msg = ''
+        if not ok:
             stdout_lines = [l for l in (result.stdout or '').strip().split('\n') if l.strip()]
             err_msg = _redact_keys(stdout_lines[-1].strip()) if stdout_lines else ''
             if not err_msg and result.stderr:
@@ -5999,6 +6146,56 @@ def _check_price_impact(mint_address: str, spend_sol: float) -> dict:
         print(f'[price-impact] check failed for {mint_address[:8]}: {e}', flush=True)
         return {'ok': False, 'price_impact_pct': None}
 
+def _estimate_net_edge(entry_price_impact_pct, take_profit_pct: float) -> dict:
+    """Net Expected Edge Filter -- see the constants block above for why
+    expected_gross_move is the trade's OWN take-profit target, not a market
+    prediction. Every intermediate figure is returned for logging/analytics,
+    not just the final decision, so a SKIP or PROCEED is always auditable
+    after the fact. Defaults to SKIP whenever a required input (the
+    already-measured entry price impact, or a valid take-profit target) is
+    missing -- this function never assumes a trade is profitable in the
+    absence of data. entry_price_impact_pct is a FRACTION (e.g. 0.02 = 2%,
+    matching _check_price_impact()'s own units); take_profit_pct is a
+    PERCENTAGE (e.g. 20.0 = 20%, matching users.take_profit's own units)."""
+    result = {
+        'expected_gross_move_pct':  None, 'estimated_entry_cost_pct': None,
+        'estimated_exit_cost_pct':  None, 'estimated_fees_pct':       None,
+        'estimated_total_cost_pct': None, 'expected_net_edge_pct':    None,
+        'decision': 'SKIP', 'reason': None,
+    }
+    if entry_price_impact_pct is None:
+        result['reason'] = 'entry price impact unavailable'
+        return result
+    if take_profit_pct is None or take_profit_pct <= 0:
+        result['reason'] = 'take-profit target unavailable or invalid'
+        return result
+
+    expected_gross_move = take_profit_pct / 100.0
+    entry_cost = entry_price_impact_pct + FEE_RATE_TXN
+    # Exit-side price impact isn't knowable at entry time -- no exit quote
+    # exists yet -- so it's assumed equal to the measured entry-side impact:
+    # a transparent, symmetric estimate, not a fabricated number.
+    exit_cost  = entry_price_impact_pct + FEE_RATE_TXN
+    fees_other = PRIORITY_FEE_PCT_ASSUMPTION
+    total_cost = entry_cost + exit_cost + fees_other
+    net_edge   = expected_gross_move - total_cost
+
+    result.update({
+        'expected_gross_move_pct':  round(expected_gross_move * 100, 3),
+        'estimated_entry_cost_pct': round(entry_cost * 100, 3),
+        'estimated_exit_cost_pct':  round(exit_cost * 100, 3),
+        'estimated_fees_pct':       round(fees_other * 100, 3),
+        'estimated_total_cost_pct': round(total_cost * 100, 3),
+        'expected_net_edge_pct':    round(net_edge * 100, 3),
+    })
+    if net_edge < total_cost * MIN_EDGE_TO_COST_RATIO:
+        result['decision'] = 'SKIP'
+        result['reason'] = (f'net edge {result["expected_net_edge_pct"]}% below '
+                             f'{MIN_EDGE_TO_COST_RATIO:g}x cost floor ({result["estimated_total_cost_pct"]}%)')
+    else:
+        result['decision'] = 'PROCEED'
+    return result
+
 def _bucket_lp_pct(pct: float) -> str:
     """Groups an entry-time LP-locked % into a 10-wide bucket. The buy filter
     already requires >=50 (see the qualifying-token check in the bot loop), so
@@ -6766,6 +6963,9 @@ def user_trader_loop(stop_event, config, wallet: str):
                             # '0' = sell the actual on-chain balance -- see rugpull branch above.
                             sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
                         if sell_ok:
+                            # Exit slippage (Trade Analytics V2): deviation between the last
+                            # polled price used to decide this exit and the realized fill.
+                            _exit_slip = round(abs(_exit_price - price) / price * 100, 4) if price else None
                             with _use_key(_enc_blob, wallet) as _pk:
                                 _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
                                                    wallet=wallet, private_key=_pk, mint=mint,
@@ -6777,7 +6977,15 @@ def user_trader_loop(stop_event, config, wallet: str):
                                                    sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
                                                    sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
                                                    entry_score=pos.get('entry_score'),
-                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
+                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'),
+                                                   entry_volume_5m=pos.get('entry_volume_5m'), entry_volume_1h=pos.get('entry_volume_1h'),
+                                                   entry_volume_accel=pos.get('entry_volume_accel'),
+                                                   entry_buy_sell_ratio=pos.get('entry_buy_sell_ratio'),
+                                                   entry_unique_traders=pos.get('entry_unique_traders'),
+                                                   entry_market_cap=pos.get('entry_market_cap'),
+                                                   entry_pair_age_minutes=pos.get('entry_pair_age_minutes'),
+                                                   risk_score=pos.get('risk_score'),
+                                                   entry_slippage_pct=pos.get('entry_slippage_pct'), exit_slippage_pct=_exit_slip)
                             _close_open_position(user_id, wallet, mint)
                             open_pos -= 1
                         else:
@@ -7049,6 +7257,23 @@ def user_trader_loop(stop_event, config, wallet: str):
                                              '% exceeds ' + str(round(MAX_ENTRY_PRICE_IMPACT_PCT*100)) + '% max for a ' +
                                              str(spend) + ' SOL buy')
                                 continue
+                            # Net Expected Edge Filter: does this trade's OWN take-profit
+                            # target even clear estimated round-trip costs (entry+exit price
+                            # impact, platform fees, an assumed priority-fee %)? Reuses the
+                            # SAME quote's price impact just measured above -- no extra call.
+                            # Never claims to predict profitability (see MIN_EDGE_TO_COST_
+                            # RATIO's own comment) -- this only rejects setups where hitting
+                            # their own stated target still wouldn't cover costs.
+                            _edge = _estimate_net_edge(_impact['price_impact_pct'], take_profit * 100)
+                            print(f'[edge-filter] {short} {label} gross_move={_edge["expected_gross_move_pct"]}% '
+                                  f'entry_cost={_edge["estimated_entry_cost_pct"]}% exit_cost={_edge["estimated_exit_cost_pct"]}% '
+                                  f'fees={_edge["estimated_fees_pct"]}% net_edge={_edge["expected_net_edge_pct"]}% '
+                                  f'decision={_edge["decision"]}' + (f' reason={_edge["reason"]}' if _edge['reason'] else ''),
+                                  flush=True)
+                            if _edge['decision'] != 'PROCEED':
+                                add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
+                                             ' — net expected edge insufficient (' + str(_edge['reason']) + ')')
+                                continue
                             # Last-look AI sanity check on top of every local filter above --
                             # see get_ai_trade_decision()'s own docstring for why this can only
                             # ever turn a BUY into a HOLD (skip), never place a trade itself.
@@ -7069,7 +7294,20 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['symbol']          = label
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
-                                pos.update(_snapshot_entry_risk(wallet, _entry_price, entry_score=sc))
+                                _risk_score = _compute_entry_risk_score(
+                                    lp_locked_pct=_lp.get('lp_locked_pct') if _lp.get('ok') else None,
+                                    holder_concentration_risk=bool(_lp.get('holder_concentration_risk')),
+                                    mint_authority_active=bool(_safety.get('mint_authority_active')),
+                                    freeze_authority_active=bool(_safety.get('freeze_authority_active')))
+                                pos.update(_snapshot_entry_risk(wallet, _entry_price, entry_score=sc,
+                                                                 token_candidate=best, risk_score=_risk_score))
+                                # Entry slippage (Trade Analytics V2): deviation between the
+                                # price used to size/score this candidate and the realized
+                                # fill above -- stored on the position so the eventual close's
+                                # trades row can carry both entry and exit slippage together.
+                                pos['entry_slippage_pct'] = (
+                                    round(abs(_entry_price - best['price']) / best['price'] * 100, 4)
+                                    if best.get('price', 0) else None)
                                 pos['entry_lp_locked_pct'] = _lp.get('lp_locked_pct') if _lp.get('ok') else None
                                 pos['entry_mint_authority_active'] = _safety.get('mint_authority_active') if _safety.get('ok') else None
                                 pos['entry_freeze_authority_active'] = _safety.get('freeze_authority_active') if _safety.get('ok') else None
@@ -12811,13 +13049,36 @@ def _score_bucket_label(score_0_10):
     if score_100 < 95: return '85-94'
     return '95+'
 
+def _liquidity_range_label(liq):
+    if liq is None: return None
+    if liq < 10_000:    return '<$10k'
+    if liq < 50_000:    return '$10k-$50k'
+    if liq < 200_000:   return '$50k-$200k'
+    if liq < 1_000_000: return '$200k-$1M'
+    return '>$1M'
+
+def _token_age_label(age_minutes):
+    if age_minutes is None: return None
+    if age_minutes < 60:        return '<1h'
+    if age_minutes < 60 * 24:   return '1h-24h'
+    if age_minutes < 60 * 24*7: return '1d-7d'
+    return '>7d'
+
 def _compute_trade_performance_stats(rows: list) -> dict:
     """Shared aggregation behind /api/stats/performance (per-user) and
     /api/admin/performance (platform-wide) -- both just pass a different
     `rows` query (filtered by user_id, or not) into the exact same
-    headline-stats + score-bucket + SL/TP-profile-bucket computation, so the
-    two views can never define "win rate" or "profit factor" differently.
-    Each row is (pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds)."""
+    headline-stats + bucket computation, so the two views can never define
+    "win rate" or "profit factor" differently. Each row is (pnl, fee_amount,
+    entry_score, sl_pct, tp_pct, hold_seconds, entry_liquidity,
+    entry_pair_age_minutes, exit_reason).
+
+    market_regime (Trade Analytics V2's requested breakdown) is deliberately
+    NOT included below: there is no such signal anywhere in this codebase
+    (no overall-market/SOL-trend classification exists), and fabricating one
+    here would violate "do not fabricate missing data" -- the endpoints
+    return an explicit 'market_regime': 'unavailable' note instead of a
+    guessed breakdown."""
     if not rows:
         return {'ok': True, 'has_trades': False}
 
@@ -12865,9 +13126,54 @@ def _compute_trade_performance_stats(rows: list) -> dict:
         if (r[0] or 0) > 0:
             bucket['wins'] += 1
 
+    liquidity_buckets = {}
+    for r in rows:
+        b = _liquidity_range_label(r[6] if len(r) > 6 else None)
+        if b is None:
+            continue
+        bucket = liquidity_buckets.setdefault(b, {'trades': 0, 'wins': 0, 'pnl': 0.0})
+        bucket['trades'] += 1
+        bucket['pnl']    += (r[0] or 0)
+        if (r[0] or 0) > 0:
+            bucket['wins'] += 1
+
+    age_buckets = {}
+    for r in rows:
+        b = _token_age_label(r[7] if len(r) > 7 else None)
+        if b is None:
+            continue
+        bucket = age_buckets.setdefault(b, {'trades': 0, 'wins': 0, 'pnl': 0.0})
+        bucket['trades'] += 1
+        bucket['pnl']    += (r[0] or 0)
+        if (r[0] or 0) > 0:
+            bucket['wins'] += 1
+
+    exit_reason_buckets = {}
+    for r in rows:
+        raw = r[8] if len(r) > 8 else None
+        if not raw:
+            continue
+        # Group by the leading label word(s), not the full string -- e.g.
+        # "STOP LOSS -3.2%" and "STOP LOSS -4.1%" are the same exit TYPE with
+        # a different realized %, and should bucket together.
+        key = raw.split('(')[0].strip()
+        for _prefix in ('TAKE PROFIT 1', 'TAKE PROFIT 2', 'TAKE PROFIT', 'STOP LOSS',
+                        'TRAILING STOP', 'CRASH EXIT', 'RUGPULL', 'MOMENTUM EXIT',
+                        'MANUAL SELL', 'STOP TRADING'):
+            if key.startswith(_prefix):
+                key = _prefix
+                break
+        bucket = exit_reason_buckets.setdefault(key, {'trades': 0, 'wins': 0, 'pnl': 0.0})
+        bucket['trades'] += 1
+        bucket['pnl']    += (r[0] or 0)
+        if (r[0] or 0) > 0:
+            bucket['wins'] += 1
+
     # Fixed band order (rather than dict-insertion order) so the UI's rows
     # don't jump around as new bands appear over time.
     _score_order = {'below 75 (would not qualify today)': 0, '75-84': 1, '85-94': 2, '95+': 3}
+    _liq_order   = {'<$10k': 0, '$10k-$50k': 1, '$50k-$200k': 2, '$200k-$1M': 3, '>$1M': 4}
+    _age_order   = {'<1h': 0, '1h-24h': 1, '1d-7d': 2, '>7d': 3}
 
     def _finalize(buckets, order=None):
         out = []
@@ -12902,6 +13208,10 @@ def _compute_trade_performance_stats(rows: list) -> dict:
         'worst_trade':       round(min(r[0] or 0 for r in rows), 4),
         'by_entry_score':    _finalize(score_buckets, _score_order),
         'by_sl_tp_profile':  _finalize(profile_buckets),
+        'by_liquidity_range': _finalize(liquidity_buckets, _liq_order),
+        'by_token_age':       _finalize(age_buckets, _age_order),
+        'by_exit_reason':     _finalize(exit_reason_buckets),
+        'market_regime':      'unavailable',  # no such signal exists anywhere in this codebase -- see docstring
     }
 
 @app.route('/api/stats/performance', methods=['GET'])
@@ -12924,7 +13234,8 @@ def api_stats_performance():
             return jsonify({'ok': True, 'has_trades': False})
         uid = user_row[0]
         rows = conn.execute(
-            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds
+            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds,
+                      entry_liquidity, entry_pair_age_minutes, exit_reason
                FROM trades WHERE user_id=? AND pnl IS NOT NULL''', (uid,)
         ).fetchall()
     finally:
@@ -12946,7 +13257,8 @@ def api_admin_performance():
     conn = sqlite3.connect(DB_FILE)
     try:
         rows = conn.execute(
-            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds
+            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds,
+                      entry_liquidity, entry_pair_age_minutes, exit_reason
                FROM trades WHERE pnl IS NOT NULL'''
         ).fetchall()
     finally:
