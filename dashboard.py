@@ -12678,68 +12678,56 @@ def api_stats():
         'online':      int(online or 0),
     })
 
-@app.route('/api/stats/performance', methods=['GET'])
-@rate_limit(30, 60)
-def api_stats_performance():
-    """Per-user trading-engine performance breakdown (Trading Engine V2,
-    section 10) -- headline stats plus PnL bucketed by entry-score band and
-    by SL/TP profile, so it's possible to tell whether higher-score entries
-    or a particular SL/TP combo are actually the ones carrying the account's
-    PnL, instead of eyeballing the raw trade list. entry_score/sl_pct/tp_pct
-    are NULL on any trade recorded before this migration (or from a path
-    that doesn't have a score, e.g. copy-trading) -- those rows still count
-    toward the headline totals but are excluded from the two breakdowns,
-    which only group rows that actually carry the field being grouped by."""
-    wallet = _authenticated_wallet()
-    if not wallet:
-        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
-    conn = sqlite3.connect(DB_FILE)
-    try:
-        user_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
-        if not user_row:
-            return jsonify({'ok': True, 'has_trades': False})
-        uid = user_row[0]
-        rows = conn.execute(
-            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds
-               FROM trades WHERE user_id=? AND pnl IS NOT NULL''', (uid,)
-        ).fetchall()
-    finally:
-        conn.close()
+def _score_bucket_label(score_0_10):
+    """Buckets a trade's entry_score (stored 0-10, see score_token()) onto
+    the 0-100 bands Trading Engine V2's spec asks for (75-84/85-94/95+),
+    normalizing by *10 first -- lets /api/stats/performance and
+    /api/admin/performance answer "are higher-score entries actually more
+    profitable?" directly, instead of just showing raw scores. None for a
+    trade with no recorded score (pre-migration, or a scoreless path like
+    copy-trading) -- caller should skip those rows from this breakdown."""
+    if score_0_10 is None:
+        return None
+    score_100 = score_0_10 * 10
+    if score_100 < 75: return 'below 75 (would not qualify today)'
+    if score_100 < 85: return '75-84'
+    if score_100 < 95: return '85-94'
+    return '95+'
 
+def _compute_trade_performance_stats(rows: list) -> dict:
+    """Shared aggregation behind /api/stats/performance (per-user) and
+    /api/admin/performance (platform-wide) -- both just pass a different
+    `rows` query (filtered by user_id, or not) into the exact same
+    headline-stats + score-bucket + SL/TP-profile-bucket computation, so the
+    two views can never define "win rate" or "profit factor" differently.
+    Each row is (pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds)."""
     if not rows:
-        return jsonify({'ok': True, 'has_trades': False})
+        return {'ok': True, 'has_trades': False}
 
-    total     = len(rows)
-    wins      = [r for r in rows if (r[0] or 0) > 0]
-    losses    = [r for r in rows if (r[0] or 0) < 0]
-    gross_pnl = sum(r[0] or 0 for r in rows)
-    net_pnl   = sum((r[0] or 0) - (r[1] or 0) for r in rows)
+    total      = len(rows)
+    wins       = [r for r in rows if (r[0] or 0) > 0]
+    losses     = [r for r in rows if (r[0] or 0) < 0]
+    gross_pnl  = sum(r[0] or 0 for r in rows)
+    net_pnl    = sum((r[0] or 0) - (r[1] or 0) for r in rows)
     gross_win  = sum(r[0] for r in wins)
     gross_loss = abs(sum(r[0] for r in losses))
-    avg_win   = round(gross_win / len(wins), 4) if wins else 0.0
-    avg_loss  = round(-gross_loss / len(losses), 4) if losses else 0.0
-    hold_vals = [r[5] for r in rows if r[5] is not None]
+    avg_win    = round(gross_win / len(wins), 4) if wins else 0.0
+    avg_loss   = round(-gross_loss / len(losses), 4) if losses else 0.0
+    hold_vals  = [r[5] for r in rows if r[5] is not None]
 
     # Max drawdown off the cumulative-PnL equity curve, in trade order (id
     # order == chronological since trades.id is an autoincrement PK) --
-    # the largest peak-to-trough drop the account actually experienced,
-    # not just its worst single trade.
+    # the largest peak-to-trough drop actually experienced, not just the
+    # single worst trade.
     running, peak, max_dd = 0.0, 0.0, 0.0
     for r in rows:
         running += (r[0] or 0)
         peak = max(peak, running)
         max_dd = max(max_dd, peak - running)
 
-    def _score_bucket(score):
-        if score is None: return None
-        if score < 4.5:  return 'below 4.5/10 (would not qualify today)'
-        if score < 6.5:  return '4.5-6.5/10 (normal)'
-        if score < 8.5:  return '6.5-8.5/10 (strong)'
-        return '8.5-10/10 (very strong)'
-
     score_buckets = {}
     for r in rows:
-        b = _score_bucket(r[2])
+        b = _score_bucket_label(r[2])
         if b is None:
             continue
         bucket = score_buckets.setdefault(b, {'trades': 0, 'wins': 0, 'pnl': 0.0})
@@ -12760,7 +12748,11 @@ def api_stats_performance():
         if (r[0] or 0) > 0:
             bucket['wins'] += 1
 
-    def _finalize(buckets):
+    # Fixed band order (rather than dict-insertion order) so the UI's rows
+    # don't jump around as new bands appear over time.
+    _score_order = {'below 75 (would not qualify today)': 0, '75-84': 1, '85-94': 2, '95+': 3}
+
+    def _finalize(buckets, order=None):
         out = []
         for label, b in buckets.items():
             out.append({
@@ -12769,9 +12761,13 @@ def api_stats_performance():
                 'win_rate': round(b['wins'] / b['trades'] * 100, 1) if b['trades'] else 0.0,
                 'pnl':      round(b['pnl'], 4),
             })
+        if order:
+            out.sort(key=lambda x: order.get(x['label'], 99))
+        else:
+            out.sort(key=lambda x: x['label'])
         return out
 
-    return jsonify({
+    return {
         'ok':                True,
         'has_trades':        True,
         'total_trades':      total,
@@ -12787,9 +12783,58 @@ def api_stats_performance():
         'max_drawdown':      round(max_dd, 4),
         'best_trade':        round(max(r[0] or 0 for r in rows), 4),
         'worst_trade':       round(min(r[0] or 0 for r in rows), 4),
-        'by_entry_score':    _finalize(score_buckets),
+        'by_entry_score':    _finalize(score_buckets, _score_order),
         'by_sl_tp_profile':  _finalize(profile_buckets),
-    })
+    }
+
+@app.route('/api/stats/performance', methods=['GET'])
+@rate_limit(30, 60)
+def api_stats_performance():
+    """Per-user trading-engine performance breakdown (Trading Engine V2,
+    section 10) -- see _compute_trade_performance_stats(). entry_score/
+    sl_pct/tp_pct are NULL on any trade recorded before this migration (or
+    from a path that doesn't have a score, e.g. copy-trading) -- those rows
+    still count toward the headline totals but are excluded from the two
+    breakdowns, which only group rows that actually carry the field being
+    grouped by."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not connected'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        user_row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+        if not user_row:
+            return jsonify({'ok': True, 'has_trades': False})
+        uid = user_row[0]
+        rows = conn.execute(
+            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds
+               FROM trades WHERE user_id=? AND pnl IS NOT NULL''', (uid,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify(_compute_trade_performance_stats(rows))
+
+@app.route('/api/admin/performance', methods=['GET'])
+@rate_limit(30, 60)
+def api_admin_performance():
+    """Platform-wide version of /api/stats/performance (Trading Engine V2,
+    section 10) -- every closed trade across every user, not just one
+    wallet's, so the admin panel can answer "which strategy actually
+    works" in aggregate: is the bot net profitable overall, are higher
+    entry-score trades actually carrying that PnL, and which SL/TP profile
+    (preset or custom) is performing best. See _compute_trade_performance_
+    stats() for the shared math this and the per-user endpoint both use."""
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
+    if err: return err
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        rows = conn.execute(
+            '''SELECT pnl, fee_amount, entry_score, sl_pct, tp_pct, hold_seconds
+               FROM trades WHERE pnl IS NOT NULL'''
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify(_compute_trade_performance_stats(rows))
 
 @app.route('/api/wallet/activity', methods=['GET'])
 @rate_limit(30, 60)

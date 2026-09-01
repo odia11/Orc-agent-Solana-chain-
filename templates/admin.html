@@ -125,6 +125,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .col-keyevents{grid-template-columns:120px 110px minmax(0,.9fr) minmax(0,1.3fr) 100px minmax(0,1.2fr)}
 .col-staleroles{grid-template-columns:minmax(0,1fr) 90px 100px 140px 130px}
 .col-readonly{grid-template-columns:130px minmax(0,.9fr) 110px minmax(0,1.3fr)}
+.col-perf{grid-template-columns:minmax(0,1.4fr) 90px 90px 100px}
 
 /* cell types */
 .cell-user{display:flex;align-items:center;gap:9px;min-width:0}
@@ -364,6 +365,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
     <button class="nav-btn" id="nav-revenue"   onclick="showView('revenue')">
       <span class="nav-icon">◈</span>Revenue<span class="nav-dot"></span>
     </button>
+    <button class="nav-btn" id="nav-performance" onclick="showView('performance')">
+      <span class="nav-icon">📊</span>Performance<span class="nav-dot"></span>
+    </button>
     <div class="sb-sep"></div>
     <button class="nav-btn" id="nav-system"    onclick="showView('system')">
       <span class="nav-icon">⌬</span>System<span class="nav-dot"></span>
@@ -575,6 +579,79 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
             <div>Wallet</div><div>Token</div><div>Gross</div><div>Fee</div><div>Status</div><div>Time</div><div>TX</div>
           </div>
           <div id="rev-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════ VIEW: PERFORMANCE ══════════ -->
+    <div class="view" id="view-performance">
+      <div id="perf-empty" class="tbl-empty" style="display:none;background:var(--bg2);border:1px solid var(--bg3);border-radius:14px;margin-bottom:24px">No closed trades yet</div>
+      <div id="perf-body-wrap">
+        <div class="kpi-grid" style="grid-template-columns:repeat(5,1fr)">
+          <div class="kpi-card">
+            <div class="kpi-val" id="perf-total">—</div>
+            <div class="kpi-lbl">Total trades</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-val" id="perf-winrate">—</div>
+            <div class="kpi-lbl" id="perf-winloss-sub">Win rate</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-val" id="perf-gross">—</div>
+            <div class="kpi-lbl">Gross PnL (SOL)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-val" id="perf-net">—</div>
+            <div class="kpi-lbl">Net PnL (SOL)</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-val" id="perf-pf">—</div>
+            <div class="kpi-lbl">Profit factor</div>
+          </div>
+        </div>
+        <div class="stat-grid" style="grid-template-columns:repeat(5,1fr)">
+          <div class="stat-card">
+            <div class="stat-lbl">AVG WINNING TRADE</div>
+            <div class="stat-val pos" id="perf-avgwin">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">AVG LOSING TRADE</div>
+            <div class="stat-val neg" id="perf-avgloss">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">AVG HOLD TIME</div>
+            <div class="stat-val" id="perf-hold">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">MAX DRAWDOWN</div>
+            <div class="stat-val neg" id="perf-dd">—</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">BEST / WORST TRADE</div>
+            <div class="stat-val" id="perf-bestworst">—</div>
+          </div>
+        </div>
+
+        <div class="sec-hdr">
+          <div class="sec-title">PnL by entry-score band</div>
+          <div class="sec-count">Do higher-score entries actually pay off?</div>
+        </div>
+        <div class="tbl-wrap">
+          <div class="tbl">
+            <div class="tbl-hdr col-perf"><div>Band</div><div>Trades</div><div>Win rate</div><div>PnL (SOL)</div></div>
+            <div id="perf-score-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          </div>
+        </div>
+
+        <div class="sec-hdr">
+          <div class="sec-title">PnL by SL/TP profile</div>
+          <div class="sec-count">Which stop-loss/take-profit combo actually works</div>
+        </div>
+        <div class="tbl-wrap">
+          <div class="tbl">
+            <div class="tbl-hdr col-perf"><div>Profile</div><div>Trades</div><div>Win rate</div><div>PnL (SOL)</div></div>
+            <div id="perf-profile-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          </div>
         </div>
       </div>
     </div>
@@ -1067,9 +1144,9 @@ var _userRole = 'user';
 
 // ── ROLE ACCESS ──
 var _ROLE_TABS = {
-  admin:     ['overview','users','trades','revenue','system','moderation','support','security','aifilters','settings'],
+  admin:     ['overview','users','trades','revenue','performance','system','moderation','support','security','aifilters','settings'],
   moderator: ['users','trades','moderation','support','security'],
-  analyst:   ['overview','trades','revenue','system','aifilters'],
+  analyst:   ['overview','trades','revenue','performance','system','aifilters'],
   user:      []
 };
 var _ROLE_BADGE = {
@@ -1080,7 +1157,7 @@ var _ROLE_BADGE = {
 
 function _applyRoleUI(role) {
   var allowed = _ROLE_TABS[role] || [];
-  ['overview','users','trades','revenue','system','moderation','support','security','aifilters','settings'].forEach(function(name) {
+  ['overview','users','trades','revenue','performance','system','moderation','support','security','aifilters','settings'].forEach(function(name) {
     var btn = document.getElementById('nav-' + name);
     if (btn) btn.style.display = allowed.indexOf(name) >= 0 ? '' : 'none';
   });
@@ -1110,7 +1187,7 @@ async function _initRoleBasedUI() {
 }
 
 // ── VIEW SWITCHING ──
-var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',system:'System',moderation:'Moderation',support:'Support',security:'Security',aifilters:'AI Filters',settings:'Settings'};
+var _titles = {overview:'Overview',users:'Users',trades:'Trades',revenue:'Revenue',performance:'Performance',system:'System',moderation:'Moderation',support:'Support',security:'Security',aifilters:'AI Filters',settings:'Settings'};
 function showView(name) {
   var allowed = _ROLE_TABS[_userRole] || Object.keys(_titles);
   if (allowed.indexOf(name) < 0) return;
@@ -1145,6 +1222,7 @@ function loadView(name) {
   else if (name === 'users') loadUsers();
   else if (name === 'trades') loadTrades();
   else if (name === 'revenue') loadRevenue();
+  else if (name === 'performance') loadPerformance();
   else if (name === 'system') loadSystem();
   else if (name === 'moderation') loadModeration();
   else if (name === 'support') loadSupport();
@@ -1357,6 +1435,58 @@ async function collectFees() {
   btn.disabled = false; btn.textContent = '💰 Collect Fees';
   if (r?.ok) { toast('✓ ' + (r.msg || 'Collected'), true); _loaded.revenue = false; loadRevenue(); }
   else toast('Error: ' + (r?.error || 'Failed'), false);
+}
+
+// ══════════════════ PERFORMANCE ══════════════════
+// Platform-wide (all users) trading-engine performance -- see
+// /api/admin/performance in dashboard.py. Same shape as the per-user
+// /api/stats/performance the wallet-facing pages use, so "which strategy
+// actually works" can be judged in aggregate here.
+function _perfBucketRows(buckets) {
+  if (!buckets || !buckets.length) return '<div class="tbl-empty">Not enough data yet</div>';
+  return buckets.map(function(b) {
+    var pnlCls = b.pnl >= 0 ? 'pos' : 'neg';
+    return '<div class="tbl-row col-perf">' +
+      '<div class="mono-sm">' + _escHtml(b.label) + '</div>' +
+      '<div class="mono">' + b.trades + '</div>' +
+      '<div class="mono">' + b.win_rate.toFixed(1) + '%</div>' +
+      '<div class="mono ' + pnlCls + '">' + (b.pnl >= 0 ? '+' : '') + _fmt(b.pnl) + '</div>' +
+      '</div>';
+  }).join('');
+}
+function _fmtHold(seconds) {
+  if (seconds == null) return '—';
+  if (seconds < 60) return Math.round(seconds) + 's';
+  if (seconds < 3600) return Math.round(seconds / 60) + 'm';
+  if (seconds < 86400) return (seconds / 3600).toFixed(1) + 'h';
+  return (seconds / 86400).toFixed(1) + 'd';
+}
+async function loadPerformance() {
+  document.getElementById('perf-score-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  document.getElementById('perf-profile-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  var r = await _a('/api/admin/performance');
+  var empty = document.getElementById('perf-empty'), wrap = document.getElementById('perf-body-wrap');
+  if (!r || !r.ok || !r.has_trades) {
+    empty.style.display = 'block';
+    wrap.style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none';
+  wrap.style.display = 'block';
+  document.getElementById('perf-total').textContent    = r.total_trades;
+  document.getElementById('perf-winrate').textContent  = r.win_rate.toFixed(1) + '%';
+  document.getElementById('perf-winloss-sub').textContent = 'Win rate — ' + r.winning_trades + 'W / ' + r.losing_trades + 'L';
+  var grossEl = document.getElementById('perf-gross'); grossEl.textContent = (r.gross_pnl >= 0 ? '+' : '') + _fmt(r.gross_pnl); grossEl.className = 'kpi-val ' + (r.gross_pnl >= 0 ? 'pos' : 'neg');
+  var netEl = document.getElementById('perf-net'); netEl.textContent = (r.net_pnl >= 0 ? '+' : '') + _fmt(r.net_pnl); netEl.className = 'kpi-val ' + (r.net_pnl >= 0 ? 'pos' : 'neg');
+  document.getElementById('perf-pf').textContent = r.profit_factor == null ? '∞' : r.profit_factor.toFixed(2);
+  document.getElementById('perf-avgwin').textContent  = '+' + _fmt(r.avg_winning_trade);
+  document.getElementById('perf-avgloss').textContent = _fmt(r.avg_losing_trade);
+  document.getElementById('perf-hold').textContent    = _fmtHold(r.avg_hold_seconds);
+  document.getElementById('perf-dd').textContent      = '-' + _fmt(r.max_drawdown);
+  document.getElementById('perf-bestworst').textContent =
+    '+' + _fmt(r.best_trade) + ' / ' + _fmt(r.worst_trade);
+  document.getElementById('perf-score-body').innerHTML   = _perfBucketRows(r.by_entry_score);
+  document.getElementById('perf-profile-body').innerHTML = _perfBucketRows(r.by_sl_tp_profile);
 }
 
 // ══════════════════ SYSTEM ══════════════════
