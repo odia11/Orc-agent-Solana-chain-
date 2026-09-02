@@ -20718,6 +20718,13 @@ def api_market_scanner():
     gainers_set = [t for t in filtered if t.get('price_change_24h', 0) > 0]
     new_set     = [t for t in filtered
                    if t.get('pair_created_at') and (now - t['pair_created_at'] / 1000.0) <= 86400]
+    # A stricter "actually worth a look" version of gainers -- +5% or more
+    # over 24h AND past a $30K market cap floor, so this excludes both flat
+    # tokens and the sub-$30K micro-caps that dominate raw "any positive %"
+    # results with noise (a $2K market cap token swinging 40% on one trade
+    # isn't the same signal as a $30K+ one holding a steady uptrend).
+    uptrend_set = [t for t in filtered
+                   if t.get('price_change_24h', 0) >= 5 and t.get('market_cap', 0) >= 30000]
 
     my_wallet   = _current_wallet()
     friends_set = []
@@ -20739,6 +20746,7 @@ def api_market_scanner():
     counts = {
         'trending': len(filtered),
         'gainers':  len(gainers_set),
+        'uptrend':  len(uptrend_set),
         'new':      len(new_set),
         'volume':   len(filtered),
         'friends':  len(friends_set),
@@ -20746,6 +20754,8 @@ def api_market_scanner():
 
     if sort_mode == 'gainers':
         tokens = sorted(gainers_set, key=lambda t: t.get('price_change_24h', 0), reverse=True)
+    elif sort_mode == 'uptrend':
+        tokens = sorted(uptrend_set, key=lambda t: t.get('price_change_24h', 0), reverse=True)
     elif sort_mode == 'new':
         tokens = sorted(new_set, key=lambda t: t.get('pair_created_at') or 0, reverse=True)
     elif sort_mode == 'volume':

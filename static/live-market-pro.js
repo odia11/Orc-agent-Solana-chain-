@@ -109,6 +109,9 @@ var _feedInFlight = false;
 var SORT_DEFS = [
   {key:'trending', label:'Trending'},
   {key:'gainers',  label:'Top gainers'},
+  // +5% or more over 24h AND a $30K+ market cap -- server-computed in
+  // api_market_scanner()'s uptrend_set, not just "gainers" re-labeled.
+  {key:'uptrend',  label:'Uptrend (+5%, $30K+ MC)'},
   {key:'new',      label:'New pairs'},
   {key:'volume',   label:'Volume leaders'},
   {key:'friends',  label:'Friends buying'}
