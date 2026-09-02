@@ -20302,6 +20302,38 @@ _market_live_cache: dict = {'ts': 0.0, 'data': []}
 _MARKET_LIVE_CHAINS = {'solana', 'bsc'}
 _market_live_lock         = threading.Lock()
 
+# Both discovery pipelines below fall back to DexScreener's pair SEARCH
+# endpoint (?q=solana / ?q=bnb) as a top-up source once boosted/profile
+# tokens run out. That's a plain keyword search, not a "give me trending
+# meme coins" filter -- "solana" and "bnb" also match the chain's own major
+# asset (SOL, BNB) and, worse, any freshly-minted SPL/BEP20 token whose
+# ticker or name simply COPIES a major's ("SOL", "USDC", ...) to ride that
+# search relevance, which is a real, common impersonation tactic. Left
+# unfiltered, that surfaced literal fake "$SOL" tokens (several different
+# mint addresses, all ticker "SOL", no real project behind them) right next
+# to genuine new tokens in Live Market's story rail and the home feed's
+# market rail -- indistinguishable from the real thing in that compact UI.
+# Address-based exclusion alone doesn't catch this (the fake tokens mint
+# their OWN address), so this also blocks on the ticker/name text itself.
+_MARKET_MAJOR_ADDRESSES = {
+    'So11111111111111111111111111111111111111112',   # wrapped SOL
+    'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v',   # USDC (Solana)
+    'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB',   # USDT (Solana)
+    '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',      # WBNB
+    '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',      # USDC (BSC)
+    '0x55d398326f99059fF775485246999027B3197955',      # USDT (BSC)
+}
+_MARKET_MAJOR_SYMBOLS = {'sol', 'wsol', 'usdc', 'usdt', 'bnb', 'wbnb', 'busd', 'eth', 'weth', 'btc', 'wbtc'}
+
+def _is_market_major_or_impersonator(symbol: str, address: str) -> bool:
+    """True for a real major asset OR anything impersonating one by ticker --
+    see the block comment above. Both are excluded from "trending/new token"
+    discovery: the real major isn't a discoverable find, and a lookalike is
+    actively misleading to show next to genuine tokens."""
+    if address in _MARKET_MAJOR_ADDRESSES:
+        return True
+    return (symbol or '').strip().lower() in _MARKET_MAJOR_SYMBOLS
+
 def _get_narrative_candidates() -> list:
     """Boosted + trending DexScreener pairs (Solana + BSC per
     _MARKET_LIVE_CHAINS), extracted from api_market_live() -- same four
@@ -20409,6 +20441,13 @@ def _get_narrative_candidates() -> list:
             pass
 
     # ── Step 4: assemble result — boosted first, then trending ───────────────
+    # Trending is sorted by volume_24h before capping (real, already-fetched
+    # signal) rather than kept in the search response's own order, so when
+    # there's more than 30 candidates the ones that actually top up boosted
+    # results are the highest-volume ones, not whatever DexScreener's search
+    # ranking happened to return first.
+    trending_pairs.sort(key=lambda p: _f((p.get('volume') or {}).get('h24')), reverse=True)
+
     added = set()
     for addr in boost_addrs:
         if len(result) >= 30:
@@ -20416,7 +20455,7 @@ def _get_narrative_candidates() -> list:
         p = best_pair.get(addr)
         if p:
             tok = _extract(p)
-            if tok and tok['address'] not in added:
+            if tok and tok['address'] not in added and not _is_market_major_or_impersonator(tok['symbol'], tok['address']):
                 result.append(tok)
                 added.add(tok['address'])
 
@@ -20424,7 +20463,7 @@ def _get_narrative_candidates() -> list:
         if len(result) >= 30:
             break
         tok = _extract(p)
-        if tok and tok['address'] not in added:
+        if tok and tok['address'] not in added and not _is_market_major_or_impersonator(tok['symbol'], tok['address']):
             result.append(tok)
             added.add(tok['address'])
 
@@ -20562,8 +20601,15 @@ def _get_scanner_candidates() -> list:
     out = []
     for addr in best_pair:
         tok = _extract(best_pair[addr])
-        if tok:
+        if tok and not _is_market_major_or_impersonator(tok['symbol'], tok['mint']):
             out.append(tok)
+    # Sorted by volume_24h (real, already-fetched signal) rather than left in
+    # best_pair's dict-insertion order, so the scanner's default 'trending'
+    # sort_mode -- which api_market_scanner() otherwise applies no sort of
+    # its own to -- and the story rail's first-14 slice actually surface the
+    # highest-volume tokens instead of whatever order the upstream calls
+    # happened to return.
+    out.sort(key=lambda t: t.get('volume_24h', 0), reverse=True)
     return out[:80]
 
 
