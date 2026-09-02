@@ -20,6 +20,19 @@ function fmtUsd(n){
   if(n>=1e3) return sign+'$'+(n/1e3).toFixed(1)+'K';
   return sign+'$'+n.toFixed(0);
 }
+/* Trader PnL, in USD at the live SOL price -- t.total_pnl_usd is computed
+   server-side from _sol_price_usd (null there means the price feed hasn't
+   populated yet, not that PnL is zero), so this falls back to the raw SOL
+   figure rather than ever showing a misleading "$0.00". */
+function fmtTraderPnl(t){
+  var usd = t.total_pnl_usd;
+  if(usd != null){
+    var sign = usd >= 0 ? '+' : '-';
+    return sign + '$' + Math.abs(usd).toFixed(2);
+  }
+  var sol = Number(t.total_pnl||0);
+  return (sol >= 0 ? '+' : '') + sol.toFixed(3) + ' SOL';
+}
 function fmtShort(n){
   n = Number(n)||0;
   if(n>=1000) return (n/1000)+'K';
@@ -663,7 +676,7 @@ function loadTraders(){
         +   '<div class="pt-trader-mid"><div class="pt-trader-name">'+esc(t.username)+'</div>'
         +     '<div class="pt-trader-sub">'+(t.win_rate||0)+'% win · '+(t.trade_count||0)+' trades</div></div>'
         + '</span>'
-        + '<div class="pt-trader-right"><div class="pt-trader-pnl mono '+(pnl>=0?'up':'down')+'">'+(pnl>=0?'+':'')+pnl.toFixed(3)+'</div>'
+        + '<div class="pt-trader-right"><div class="pt-trader-pnl mono '+(pnl>=0?'up':'down')+'">'+fmtTraderPnl(t)+'</div>'
         +   '<button class="pt-copy-link'+(isCopying?' active':'')+'" data-action="copy" data-wallet="'+esc(t.wallet_address)+'">'+(isCopying?'Copying':'Copy')+'</button></div>'
         + '</div>';
     }).join('');
@@ -674,8 +687,8 @@ function loadTraders(){
    rail directly above it (ring + circle avatar + name + a stat underneath)
    but for people instead of tokens -- sits inside the always-visible center
    feed so it doesn't need the desktop-only right rail to be seen, and
-   answers exactly what was asked: which traders are actually up real SOL
-   today, one tap to their profile. */
+   answers exactly what was asked: which traders are actually up real money
+   (shown in USD, see fmtTraderPnl()) today, one tap to their profile. */
 function renderTraderRail(rows){
   var wrap = document.getElementById('pt-trader-rail-wrap');
   var el = document.getElementById('pt-trader-rail');
@@ -684,7 +697,6 @@ function renderTraderRail(rows){
   if(!top.length){ wrap.style.display = 'none'; return; }
   wrap.style.display = '';
   el.innerHTML = top.map(function(t){
-    var pnl = Number(t.total_pnl||0);
     var verified = t.badges && t.badges.indexOf('verified') !== -1;
     return '<div class="pt-story pt-trader-story" data-action="trader-profile" data-wallet="'+esc(t.wallet_address)+'">'
       + '<div class="pt-trader-rank-badge'+(t.rank===1?' gold':'')+'">'+esc(String(t.rank))+'</div>'
@@ -694,7 +706,7 @@ function renderTraderRail(rows){
       +   '</div>'
       + '</div>'
       + '<div class="pt-story-name">'+esc(t.username||'')+(verified?' ✓':'')+'</div>'
-      + '<div class="pt-story-chg up">+'+pnl.toFixed(2)+' SOL</div>'
+      + '<div class="pt-story-chg up">'+fmtTraderPnl(t)+'</div>'
       + '</div>';
   }).join('');
 }

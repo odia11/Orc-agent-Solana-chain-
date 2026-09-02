@@ -13091,6 +13091,11 @@ def get_leaderboard():
             'wallet_address': wallet or '',
             'avatar_url':     avatar_url or '',
             'total_pnl':      round(float(total_pnl or 0), 6),
+            # USD at the live SOL price (_sol_price_usd, refreshed every
+            # token_loop cycle) -- None rather than 0 when the price feed
+            # hasn't populated yet, so callers can fall back to the raw SOL
+            # figure instead of showing a misleading "$0.00".
+            'total_pnl_usd':  round(float(total_pnl or 0) * _sol_price_usd, 2) if _sol_price_usd else None,
             'win_rate':       round(float(win_rate or 0), 1),
             'trade_count':    int(trade_count or 0),
             'best_trade':     round(float(best_trade or 0), 6),
