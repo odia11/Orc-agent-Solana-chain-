@@ -20,6 +20,14 @@ SOLANA_RPCS   = [
 ]
 USDC_MINT     = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
 SOL_MINT      = 'So11111111111111111111111111111111111111112'
+# Every swap in this file is BASE<->memecoin: one side is always one of these
+# ("the base currency being spent/received"), the other the token being
+# traded. Hardcoded rather than fetched on-chain -- both are fixed, well-known
+# mints that never change decimals. Used to infer BUY/SELL generically (any
+# base mint, not just SOL) and to convert a UI amount to raw base units for
+# execute_single_swap()'s optional USDC leg.
+BASE_MINT_DECIMALS = {SOL_MINT: 9, USDC_MINT: 6}
+_BASE_MINTS = frozenset(BASE_MINT_DECIMALS)
 
 # Platform fee, folded directly into the swap transaction itself so it's
 # never a second, separately-visible SOL transfer out of the user's wallet.
@@ -522,8 +530,17 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
     if not wallet_address or not private_key:
         raise ValueError('WALLET_ADDRESS and WALLET_PRIVATE_KEY must be set')
 
-    label     = output_mint[:8] if input_mint == USDC_MINT else input_mint[:8]
-    direction = 'BUY' if input_mint == USDC_MINT else 'SELL'
+    # Generic across every base currency this file supports (SOL, USDC, any
+    # future addition to _BASE_MINTS) -- whichever side is the base currency
+    # tells you the direction, regardless of which one it is. (Previously
+    # this only recognized USDC-as-input as a BUY, which meant a real
+    # SOL-input buy fell into the 'else' branch and got mislabeled 'SELL'
+    # whenever it reached this function -- harmless while direction was only
+    # used for logging/EXEC_META, but Step 7/8's reconcile-and-report logic
+    # below also branches on it, so a mislabeled swap silently reconciled and
+    # reported the wrong side.)
+    direction = 'BUY' if input_mint in _BASE_MINTS else 'SELL'
+    label     = output_mint[:8] if direction == 'BUY' else input_mint[:8]
     t0        = time.time()
     meta      = {  # accumulated for the final EXEC_META log line -- see bottom
         'direction': direction, 'mint': (output_mint if direction == 'BUY' else input_mint),
@@ -561,9 +578,23 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
         _, baseline_raw = get_token_balance_raw(_recon_mint)
     except Exception:
         baseline_raw = 0
-    # SELL only: SOL lamport baseline for reporting the actual amount
-    # received (Step 8) -- not used for the confirm/reconcile decision above.
-    sol_baseline_lamports = _get_sol_balance_raw(pubkey) if direction == 'SELL' else None
+    # SELL only: baseline of the OUTPUT asset (whichever base currency this
+    # swap converts into -- SOL or USDC) for reporting the actual amount
+    # received in Step 8. Not used for the confirm/reconcile decision above
+    # (that always reconciles the INPUT, the token being sold, decreasing).
+    # Native SOL isn't an SPL token account, so it needs the separate
+    # lamport-balance RPC call; any other output mint (USDC included) reuses
+    # the same get_token_balance_raw() the BUY side already relies on.
+    output_is_native_sol = (output_mint == SOL_MINT)
+    out_baseline = None
+    if direction == 'SELL':
+        try:
+            if output_is_native_sol:
+                out_baseline = _get_sol_balance_raw(pubkey)
+            else:
+                _, out_baseline = get_token_balance_raw(output_mint)
+        except Exception:
+            out_baseline = None
 
     # Fold the platform fee into this swap's own transaction (Jupiter's
     # platformFeeBps/feeAccount) instead of a separate, later, visible SOL
@@ -571,7 +602,15 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
     # rather than blocking the trade, since a missed fee is a far smaller
     # problem than a real user's sell failing outright.
     fee_account = ''
-    if fee_wallet and fee_bps > 0:
+    if fee_wallet and fee_bps > 0 and direction == 'SELL':
+        # Only ever correct for a SELL, where the output is a base currency
+        # (SOL or USDC) -- Jupiter's platformFeeBps/feeAccount takes its cut
+        # from the swap's OUTPUT, so for a BUY that output is the memecoin
+        # being purchased, not a currency the fee should be taken in. A
+        # SOL-input buy never reaches this branch anyway (execute_swap()
+        # below routes it to _execute_buy_with_bundled_fee() instead); this
+        # guard is what makes a USDC-input buy correctly skip platform-fee
+        # collection here too, rather than incorrectly taxing the token.
         try:
             fee_account = _ensure_fee_ata(keypair, fee_wallet, output_mint)
         except Exception as e:
@@ -819,19 +858,26 @@ def _execute_swap_inner(input_mint: str, output_mint: str, amount_lamports: int,
         actual_delta = abs(post_raw - baseline_raw)
     else:
         actual_delta = None
-        try:
-            sol_now   = _get_sol_balance_raw(pubkey)
-            sol_delta = sol_now - sol_baseline_lamports
-            if sol_delta > 1000:  # lamports -- floor well above any plausible fee-only noise
-                actual_delta = sol_delta
-        except Exception:
-            pass
+        if out_baseline is not None:
+            try:
+                if output_is_native_sol:
+                    out_now   = _get_sol_balance_raw(pubkey)
+                    out_delta = out_now - out_baseline
+                    if out_delta > 1000:  # lamports -- floor well above any plausible fee-only noise (network/priority fees are always paid in SOL, even for a non-SOL output)
+                        actual_delta = out_delta
+                else:
+                    _, out_now = get_token_balance_raw(output_mint)
+                    out_delta  = out_now - out_baseline
+                    if out_delta > 0:  # an SPL token balance (unlike native SOL) never drops from fees, so any positive delta is real
+                        actual_delta = out_delta
+            except Exception:
+                pass
         if actual_delta is None:
             try:
                 actual_delta = int(out_amount)
             except (TypeError, ValueError):
                 actual_delta = 0
-            print(f'[TRADE] Step 8 — could not measure actual SOL received; '
+            print(f'[TRADE] Step 8 — could not measure actual amount received; '
                   f'reporting Jupiter\'s pre-execution quote instead ({actual_delta})', flush=True)
 
     print(f'[TRADE] Step 8/8 — SUCCESS (confirmation={conf["status"]}, '
@@ -879,21 +925,32 @@ def execute_swap(input_mint: str, output_mint: str, amount_lamports: int,
 
 # ── SINGLE SWAP ENTRY POINT (called from dashboard subprocess) ───────────────
 
-def execute_single_swap(action: str, mint: str, amount_str: str):
-    """Called as: python orcagent_solana.py buy|sell MINT AMOUNT"""
+def execute_single_swap(action: str, mint: str, amount_str: str, base: str = 'SOL'):
+    """Called as: python orcagent_solana.py buy|sell MINT AMOUNT [BASE]
+    BASE selects which currency AMOUNT is denominated in, and which currency
+    is actually spent (buy) or received (sell): 'SOL' (default -- identical
+    behavior to every existing caller, which omits this argument entirely)
+    or 'USDC'. Both go through the same execute_swap() engine; a USDC buy
+    carries no platform fee yet (see _execute_swap_inner's fee guard) -- a
+    disclosed v1 limitation, not a bug, since bundling a fee into a USDC buy
+    would need a new raw SPL-token-transfer instruction this file doesn't
+    build yet."""
     amount = float(amount_str)
+    base_mint     = USDC_MINT if base.upper() == 'USDC' else SOL_MINT
+    base_decimals = BASE_MINT_DECIMALS[base_mint]
+    base_label    = 'USDC' if base_mint == USDC_MINT else 'SOL'
     try:
         if action == 'buy':
-            lamports = int(amount * 1_000_000_000)  # SOL has 9 decimals
+            lamports = int(amount * (10 ** base_decimals))
             sig, out_amount_raw = execute_swap(
-                SOL_MINT, mint, lamports,
+                base_mint, mint, lamports,
                 fee_wallet=FEE_WALLET, fee_bps=int(round(FEE_RATE_TXN * 10000)))
             try:
                 decimals    = get_token_decimals(mint)
                 got_amount  = int(out_amount_raw) / (10 ** decimals)
             except Exception:
                 got_amount = 0
-            print(f'BUY {mint[:16]} {round(amount,4)} SOL got:{round(got_amount,6)} TX:{sig}', flush=True)
+            print(f'BUY {mint[:16]} {round(amount,4)} {base_label} got:{round(got_amount,6)} TX:{sig}', flush=True)
         elif action == 'sell':
             decimals              = get_token_decimals(mint)
             actual_balance, raw_balance = get_token_balance_raw(mint)
@@ -923,15 +980,22 @@ def execute_single_swap(action: str, mint: str, amount_str: str):
                 print(f'SELL {mint[:16]} — computed sell amount is 0, nothing to sell', flush=True)
                 sys.exit(0)
             sig, out_amount_raw = execute_swap(
-                mint, SOL_MINT, lamports,
+                mint, base_mint, lamports,
                 fee_wallet=FEE_WALLET, fee_bps=int(round(FEE_RATE_TXN * 10000)))
             try:
-                sol_received = int(out_amount_raw) / 1_000_000_000  # SOL has 9 decimals
+                base_received = int(out_amount_raw) / (10 ** base_decimals)
             except Exception:
-                sol_received = 0
+                base_received = 0
             requested = 'ALL' if amount <= 0 else round(amount, 6)
-            print(f'SELL {mint[:16]} amt:{round(sell_amount,6)} sol:{round(sol_received,6)} '
-                  f'(requested:{requested}, on-chain:{round(actual_balance,6)}) TX:{sig}', flush=True)
+            # 'sol:' key kept literal even for a USDC sell -- dashboard.py's
+            # stdout parser (_parse_swap_realized_amounts) matches on that
+            # exact substring; a ' base:USDC' suffix (only added when it's
+            # not the default) is additive and doesn't change what the
+            # parser reads, so every existing SOL-default caller's output is
+            # byte-for-byte unchanged.
+            base_note = '' if base_label == 'SOL' else f' base:{base_label}'
+            print(f'SELL {mint[:16]} amt:{round(sell_amount,6)} sol:{round(base_received,6)} '
+                  f'(requested:{requested}, on-chain:{round(actual_balance,6)}){base_note} TX:{sig}', flush=True)
         else:
             print(f'Unknown action: {action}', flush=True)
             sys.exit(1)
@@ -1193,6 +1257,7 @@ def run():
 
 if __name__ == '__main__':
     if len(sys.argv) >= 4:
-        execute_single_swap(sys.argv[1], sys.argv[2], sys.argv[3])
+        execute_single_swap(sys.argv[1], sys.argv[2], sys.argv[3],
+                             sys.argv[4] if len(sys.argv) >= 5 else 'SOL')
     else:
         run()
