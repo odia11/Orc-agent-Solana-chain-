@@ -1143,14 +1143,25 @@ var _allUsers = [], _allTrades = [], _allRevTx = [];
 var _userRole = 'user';
 
 // ── ROLE ACCESS ──
+// Every tab listed here must actually be backed by endpoints that role can
+// call -- cross-checked against every _require_role(...) in dashboard.py's
+// admin routes, not just guessed. 'executive' was missing from this map
+// entirely (a wallet with that role fell through `_ROLE_TABS[role] || []` to
+// an empty tab list, even though the backend already grants it read/write
+// access on almost every admin route -- same footing as 'admin' except the
+// handful of things gated to the literal owner wallet directly, like
+// managing OTHER admins' roles/invites or restoring a DB backup, which their
+// own routes already enforce independently of this tab list).
 var _ROLE_TABS = {
   admin:     ['overview','users','trades','revenue','performance','system','moderation','support','security','aifilters','settings'],
+  executive: ['overview','users','trades','revenue','performance','system','moderation','support','security','aifilters','settings'],
   moderator: ['users','trades','moderation','support','security'],
   analyst:   ['overview','trades','revenue','performance','system','aifilters'],
   user:      []
 };
 var _ROLE_BADGE = {
   admin:     {text:'Super-admin', bg:'rgba(247,185,85,.15)',  color:'var(--accent)'},
+  executive: {text:'Executive',   bg:'rgba(58,210,155,.15)',  color:'var(--green)'},
   moderator: {text:'Moderator',   bg:'rgba(124,140,255,.15)', color:'var(--blue)'},
   analyst:   {text:'Analyst',     bg:'rgba(86,93,104,.2)',    color:'var(--muted)'},
 };
@@ -1162,10 +1173,11 @@ function _applyRoleUI(role) {
     if (btn) btn.style.display = allowed.indexOf(name) >= 0 ? '' : 'none';
   });
   document.querySelectorAll('.sb-sep').forEach(function(sep) {
-    sep.style.display = role === 'admin' ? '' : 'none';
+    sep.style.display = (role === 'admin' || role === 'executive') ? '' : 'none';
   });
+  // Matches /api/admin/ai-filters/run-now's own _require_role('admin', 'executive').
   var runBtn = document.getElementById('aif-run-btn');
-  if (runBtn) runBtn.style.display = role === 'admin' ? '' : 'none';
+  if (runBtn) runBtn.style.display = (role === 'admin' || role === 'executive') ? '' : 'none';
   var badge = document.getElementById('sb-role-badge');
   if (badge) {
     var b = _ROLE_BADGE[role] || _ROLE_BADGE.analyst;
@@ -1364,7 +1376,11 @@ function renderUsers() {
           ? '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'pause\')">Pause</button>'
           : '<button class="btn btn-ghost" onclick="forceAction(\'' + wf + '\',\'resume\')">Resume</button>') +
         '<button class="btn btn-danger" onclick="forceAction(\'' + wf + '\',\'close-all\')">Close All</button>' +
-        ((_userRole === 'admin' || (_userRole === 'moderator' && !u.is_verified))
+        // Matches /api/admin/user/verify's own split requirement: verifying
+        // (is_verified currently false) allows admin/executive/moderator,
+        // but UNverifying allows only admin/executive -- a moderator can
+        // grant verification but not revoke it.
+        ((_userRole === 'admin' || _userRole === 'executive' || (_userRole === 'moderator' && !u.is_verified))
           ? '<button class="btn btn-ghost" onclick="toggleVerify(\'' + wf + '\',\'usr-row-' + i + '\',' + (u.is_verified ? 'true' : 'false') + ')">' + (u.is_verified ? 'Unverify' : 'Verify') + '</button>'
           : '') +
       '</div>' +
@@ -1883,7 +1899,9 @@ async function loadAiFilters() {
   document.getElementById('aif-age').textContent = (f.min_pair_age_minutes || 0) + 'm';
   document.getElementById('aif-lp').textContent  = (f.min_lp_locked_pct || 0) + '%';
 
-  var canReview = (_userRole === 'admin');
+  // Matches /api/admin/ai-filters/approve and /reject's own
+  // _require_role('admin', 'executive').
+  var canReview = (_userRole === 'admin' || _userRole === 'executive');
   var props = r.proposals || [];
   document.getElementById('aif-proposals-count').textContent = props.length + ' proposal(s)';
   var wrap = document.getElementById('aif-proposals-wrap');

@@ -21871,7 +21871,10 @@ def admin_tokens():
 @app.route('/api/admin/health')
 @rate_limit(20, 60)
 def admin_health():
-    err = _require_role('admin', 'moderator', 'analyst')
+    # 'executive' was missing here even though every other endpoint the admin
+    # dashboard's System tab calls (rate-stats, bans, the base /api/admin
+    # summary) already allows it -- left this tab partly broken for that role.
+    err = _require_role('admin', 'executive', 'moderator', 'analyst')
     if err: return err
     try:
         db_size_kb = 0
