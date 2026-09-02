@@ -2336,6 +2336,11 @@ def run_migrations():
         # (falls back to the quote itself, so there's nothing to measure).
         "ALTER TABLE trades ADD COLUMN entry_slippage_pct REAL DEFAULT NULL",
         "ALTER TABLE trades ADD COLUMN exit_slippage_pct REAL DEFAULT NULL",
+        # Claude's read on HOW these trades were managed (SL/TP width, entry
+        # score, execution slippage) alongside the existing filter-tuning
+        # reasoning, which only ever covered WHICH tokens got in the door --
+        # see run_ai_self_analysis()'s own comment.
+        "ALTER TABLE ai_filter_proposals ADD COLUMN how_analysis TEXT DEFAULT ''",
     ]:
         try:
             con.execute(sql)
@@ -3696,6 +3701,15 @@ def get_ai_trade_decision(token_data: dict, mint: str, symbol: str, spend_sol: f
 # OrcAgent's own users, not actual on-chain holders), so it's left out rather
 # than faked.
 #
+# It also looks at HOW each trade was managed, not just what got bought: the
+# SL/TP width and entry/risk score actually used, execution slippage, and a
+# per-trade "what if the exit trigger had been elsewhere" counterfactual --
+# see _trade_excursion_counterfactual() below for exactly what that is and,
+# more importantly, what it deliberately does NOT claim. That reasoning
+# goes into a separate how_analysis field; it's informational only and never
+# feeds into an auto-appliable numeric proposal the way the three filters
+# above do.
+#
 # A proposal is stored in ai_filter_proposals and never takes effect on its
 # own -- see get_ai_active_filters()/apply below. An admin has to approve it
 # from the admin dashboard first, so a single bad or overfit day of analysis
@@ -3731,13 +3745,70 @@ def get_ai_active_filters() -> dict:
         print(f'[ai-filters] failed to load active filters, using defaults: {e}', flush=True)
     return filters
 
+def _trade_excursion_counterfactual(exit_reason: str, entry: float, actual_pnl_pct: float,
+                                     sl_pct: float, tp_pct: float,
+                                     highest_price: float, lowest_price: float) -> dict:
+    """A single, deliberately narrow counterfactual per closed trade, computed
+    from data that's already recorded (highest_price/lowest_price are the true
+    intra-trade peak/trough -- updated on every price tick the position was
+    open for, see the max()/min() in the trading loop) rather than asked of
+    the AI to invent:
+
+    - A trade that did NOT exit via take-profit ran through its full price
+      range before something else (stop-loss, trailing, manual) closed it.
+      Its highest_price is real, already-realized data: a lower take-profit
+      set at or below that peak WOULD have exited there for that gain,
+      instead of the eventual outcome. ("a tighter TP would have banked the
+      peak instead of giving it back")
+    - A trade that DID exit via take-profit ran through its full drawdown
+      before recovering to hit that target. Its lowest_price is likewise
+      already-realized: a stop-loss tighter than that drawdown WOULD have
+      triggered before the recovery, turning this win into a loss.
+      ("a tighter SL would have stopped this winner out before it recovered")
+
+    Deliberately NOT computed: what a WIDER take-profit would have done on a
+    take-profit exit, or what a WIDER stop-loss would have done on a
+    stop-loss exit -- in both cases price tracking stops the moment the
+    position closes, so there is no recorded data for what happened
+    afterward. Inventing one would be exactly the kind of fabricated number
+    the rest of this pipeline refuses to produce; returns None for those.
+    Also None whenever entry price or the relevant excursion field is
+    missing, rather than guessing.
+    """
+    if not entry or entry <= 0:
+        return {'kind': None}
+    is_tp_exit = (exit_reason or '').lower() in ('take_profit', 'tp', 'take-profit')
+    if not is_tp_exit and highest_price:
+        peak_pct = round((highest_price - entry) / entry * 100, 1)
+        # the peak itself must have been a genuine gain (not just "less bad"
+        # than the eventual exit) AND non-trivially above what was realized --
+        # otherwise a trade that only ever got as far as, say, -0.1% before
+        # closing at -9.8% would misleadingly read as "gave back a peak"
+        # when it was never actually in profit at all.
+        if peak_pct > 0.5 and peak_pct > actual_pnl_pct + 0.5:
+            return {'kind': 'gave_back_peak', 'peak_pct': peak_pct,
+                     'actual_pct': actual_pnl_pct, 'exit_reason': exit_reason}
+    if is_tp_exit and lowest_price:
+        trough_pct = round((entry - lowest_price) / entry * 100, 1)
+        if trough_pct > 0.5 and (sl_pct is None or trough_pct < sl_pct):
+            # survived a drawdown that WAS shallower than its own SL -- but
+            # would a tighter SL (e.g. a stricter preset) have cut it first?
+            return {'kind': 'survived_drawdown', 'trough_pct': trough_pct,
+                     'actual_sl_pct': sl_pct, 'actual_pct': actual_pnl_pct}
+    return {'kind': None}
+
 def run_ai_self_analysis() -> dict:
     """Pulls the 10 best and 10 worst trades (by pnl_pct) closed across ALL
-    users in the last 24h, asks Claude to spot the pattern behind the losses,
-    and stores a pending ai_filter_proposals row with its suggested new
-    values for the three filters above -- constrained to strict JSON and
-    clamped into AI_FILTER_BOUNDS so a bad response can only ever produce a
-    reviewable proposal, never something out of range or unparseable.
+    users in the last 24h, asks Claude to spot the pattern behind the losses
+    AND how those trades were actually managed (SL/TP width, entry/risk
+    score, execution slippage, and the price-excursion counterfactual from
+    _trade_excursion_counterfactual() above), and stores a pending
+    ai_filter_proposals row with its suggested new values for the three
+    filters above -- constrained to strict JSON and clamped into
+    AI_FILTER_BOUNDS so a bad response can only ever produce a reviewable
+    proposal, never something out of range or unparseable. The HOW-analysis
+    is separate free text (how_analysis) with no numeric effect of its own --
+    still just informational for whoever reviews the proposal.
     Returns {'ok': bool, 'msg'/'proposal_id': ...}. Safe to call manually
     (the admin 'Run now' button) or from the daily scheduler."""
     if not ANTHROPIC_API_KEY:
@@ -3746,7 +3817,9 @@ def run_ai_self_analysis() -> dict:
         conn = sqlite3.connect(DB_FILE)
         rows = conn.execute('''
             SELECT token, pnl, entry_price, exit_price, exit_reason,
-                   entry_liquidity, entry_lp_locked_pct, opened_at, timestamp
+                   entry_liquidity, entry_lp_locked_pct, opened_at, timestamp,
+                   sl_pct, tp_pct, entry_score, risk_score, highest_price,
+                   lowest_price, hold_seconds, entry_slippage_pct, exit_slippage_pct
             FROM trades
             WHERE timestamp >= datetime('now', '-1 day') AND entry_price > 0
         ''').fetchall()
@@ -3757,31 +3830,88 @@ def run_ai_self_analysis() -> dict:
     if len(rows) < 4:
         return {'ok': False, 'msg': f'not enough closed trades in the last 24h to analyze ({len(rows)})'}
 
+    def _pnl_pct(r):
+        entry, exit_p = r[2], r[3]
+        return round((exit_p - entry) / entry * 100, 1) if entry > 0 else 0.0
+
     def _fmt(r):
-        token, pnl, entry, exit_p, exit_reason, liq, lp_pct, opened_at, ts = r
-        pnl_pct = round((exit_p - entry) / entry * 100, 1) if entry > 0 else 0.0
-        age_min = round((datetime.datetime.strptime(ts[:19], '%Y-%m-%dT%H:%M:%S')
-                          - datetime.datetime.utcfromtimestamp(opened_at)).total_seconds() / 60, 1) \
-                  if opened_at else None
-        return (f'{token}: {pnl_pct:+.1f}% (reden: {exit_reason or "onbekend"}, '
+        (token, pnl, entry, exit_p, exit_reason, liq, lp_pct, opened_at, ts,
+         sl_pct, tp_pct, entry_score, risk_score, highest_price, lowest_price,
+         hold_seconds, entry_slip, exit_slip) = r
+        pnl_pct = _pnl_pct(r)
+        age_min = round(hold_seconds / 60, 1) if hold_seconds else (
+            round((datetime.datetime.strptime(ts[:19], '%Y-%m-%dT%H:%M:%S')
+                   - datetime.datetime.utcfromtimestamp(opened_at)).total_seconds() / 60, 1)
+            if opened_at else None)
+        what = (f'{token}: {pnl_pct:+.1f}% (reden: {exit_reason or "onbekend"}, '
                 f'liquidity bij instap: ${liq or 0:,.0f}, LP locked: {lp_pct if lp_pct is not None else "?"}%, '
                 f'gehouden: {age_min if age_min is not None else "?"}min)')
+        how_bits = []
+        if sl_pct is not None:    how_bits.append(f'SL={sl_pct:.1f}%')
+        if tp_pct is not None:    how_bits.append(f'TP={tp_pct:.1f}%')
+        if entry_score is not None: how_bits.append(f'entry_score={entry_score:.0f}')
+        if risk_score is not None:  how_bits.append(f'risk_score={risk_score:.0f}')
+        if entry_slip is not None:  how_bits.append(f'instap-slippage={entry_slip:.2f}%')
+        if exit_slip is not None:   how_bits.append(f'uitstap-slippage={exit_slip:.2f}%')
+        cf = _trade_excursion_counterfactual(exit_reason, entry, pnl_pct, sl_pct, tp_pct,
+                                              highest_price, lowest_price)
+        if cf['kind'] == 'gave_back_peak':
+            how_bits.append(f'piek tijdens hold was +{cf["peak_pct"]}% (een lagere TP had dat kunnen vastzetten)')
+        elif cf['kind'] == 'survived_drawdown':
+            how_bits.append(f'zakte -{cf["trough_pct"]}% weg voor herstel (een strakkere SL had dit een verlies gemaakt)')
+        how = ', '.join(how_bits) if how_bits else 'uitvoeringsdata onbeschikbaar'
+        return what + f' | HOE: {how}'
 
-    scored = sorted(rows, key=lambda r: ((r[3] - r[2]) / r[2]) if r[2] > 0 else 0.0)
+    scored = sorted(rows, key=_pnl_pct)
     worst  = scored[:10]
     best   = list(reversed(scored[-10:]))
 
+    # Deterministic counterfactual aggregates over EVERY closed trade in the
+    # window (not just the sampled best/worst 20), so Claude reasons from
+    # real counts instead of extrapolating off a handful of examples.
+    gave_back = []
+    fragile_wins = []
+    for r in rows:
+        (token, pnl, entry, exit_p, exit_reason, liq, lp_pct, opened_at, ts,
+         sl_pct, tp_pct, entry_score, risk_score, highest_price, lowest_price,
+         hold_seconds, entry_slip, exit_slip) = r
+        cf = _trade_excursion_counterfactual(exit_reason, entry, _pnl_pct(r), sl_pct, tp_pct,
+                                              highest_price, lowest_price)
+        if cf['kind'] == 'gave_back_peak':
+            gave_back.append(cf['peak_pct'] - cf['actual_pct'])
+        elif cf['kind'] == 'survived_drawdown':
+            fragile_wins.append(cf)
+    counterfactual_summary = (
+        f'{len(gave_back)}/{len(rows)} trades bereikten een piek die ze weer teruggaven voor iets anders '
+        f'sloot (gem. gemiste winst als TP daar had gelegen: '
+        f'{(sum(gave_back)/len(gave_back)):+.1f}%). ' if gave_back else
+        f'0/{len(rows)} trades gaven een piek terug. '
+    ) + (
+        f'{len(fragile_wins)}/{len(rows)} winnende trades zakten eerst dieper weg dan hun eigen SL voordat ze '
+        f'herstelden naar TP (een strakkere SL-instelling had die winst een verlies gemaakt).'
+        if fragile_wins else
+        f'0/{len(rows)} winnende trades waren op deze manier fragiel.'
+    )
+
     system_prompt = (
-        'Je bent de hoofd-strateeg van onze Solana AI trading bot. Analyseer welke patronen of '
-        'indicatoren hebben geleid tot verliezen (bijvoorbeeld: te snel gekocht na lancering, te lage '
-        'liquiditeit, te weinig LP locked). Op basis daarvan stel je NIEUWE waarden voor voor precies '
+        'Je bent de hoofd-strateeg van onze Solana AI trading bot. Analyseer twee dingen apart: '
+        '(1) WAT er getraded is -- welke patronen of indicatoren (te snel na lancering, te lage liquiditeit, '
+        'te weinig LP locked) leidden tot verliezen. Op basis daarvan stel je NIEUWE waarden voor voor precies '
         'deze drie instap-filters: min_liquidity_usd, min_pair_age_minutes, min_lp_locked_pct. '
+        '(2) HOE er getraded is -- kijk naar de SL/TP-breedte, entry_score/risk_score en uitvoerings-slippage per '
+        'trade, en naar de meegegeven counterfactual-samenvatting (trades die een piek weer teruggaven, of '
+        'winnende trades die eigenlijk fragiel waren). Beschrijf wat dat zegt over de huidige SL/TP-instellingen '
+        '-- dit is GEEN backtest en claimt geen toekomstige winstgevendheid, alleen wat er met DEZE al afgesloten '
+        'trades zou zijn gebeurd als de exit-trigger elders had gelegen. Als de data voor een van beide analyses '
+        'ontoereikend is, zeg dat expliciet in plaats van iets te verzinnen. '
         'Reageer UITSLUITEND met JSON, geen andere tekst, in exact dit formaat: '
         '{"min_liquidity_usd": 0, "min_pair_age_minutes": 0, "min_lp_locked_pct": 0, '
-        '"reasoning": "korte motivatie voor de logboeken"}'
+        '"reasoning": "korte motivatie voor de instap-filters", '
+        '"how_analysis": "analyse van HOE er getraded werd, inclusief de counterfactuals"}'
     )
     user_prompt = (
         'HUIDIGE FILTERS: ' + json.dumps(get_ai_active_filters()) + '\n\n'
+        'COUNTERFACTUAL-SAMENVATTING (berekend, niet geschat): ' + counterfactual_summary + '\n\n'
         'SUCCESVOLLE TRADES (afgelopen 24u):\n' + '\n'.join('- ' + _fmt(r) for r in best) + '\n\n'
         'VERLIESGEVENDE TRADES (afgelopen 24u):\n' + '\n'.join('- ' + _fmt(r) for r in worst)
     )
@@ -3789,7 +3919,7 @@ def run_ai_self_analysis() -> dict:
         resp = requests.post(
             _ANTHROPIC_URL,
             headers={**_ANTHROPIC_HEADERS, 'x-api-key': ANTHROPIC_API_KEY},
-            json={'model': 'claude-sonnet-5', 'max_tokens': 500,
+            json={'model': 'claude-sonnet-5', 'max_tokens': 900,
                   'system': system_prompt,
                   'messages': [{'role': 'user', 'content': user_prompt}]},
             timeout=30,
@@ -3814,20 +3944,23 @@ def run_ai_self_analysis() -> dict:
             v = AI_FILTER_DEFAULTS[key]
         proposed[key] = max(lo, min(v, hi))
     reasoning = str(parsed.get('reasoning', ''))[:500]
+    how_analysis = str(parsed.get('how_analysis', ''))[:1500]
 
     try:
         conn = sqlite3.connect(DB_FILE)
         cur = conn.execute(
-            'INSERT INTO ai_filter_proposals (proposed_json, reasoning, trades_analyzed) VALUES (?,?,?)',
-            (json.dumps(proposed), reasoning, len(rows)))
+            'INSERT INTO ai_filter_proposals (proposed_json, reasoning, how_analysis, trades_analyzed) VALUES (?,?,?,?)',
+            (json.dumps(proposed), reasoning, how_analysis, len(rows)))
         conn.commit()
         proposal_id = cur.lastrowid
         conn.close()
     except Exception as e:
         return {'ok': False, 'msg': f'failed to store proposal: {e}'}
 
-    print(f'[ai-self-analysis] proposal #{proposal_id} from {len(rows)} trades: {proposed} — {reasoning}', flush=True)
-    return {'ok': True, 'proposal_id': proposal_id, 'proposed': proposed, 'reasoning': reasoning}
+    print(f'[ai-self-analysis] proposal #{proposal_id} from {len(rows)} trades: {proposed} — {reasoning} '
+          f'| HOE: {how_analysis}', flush=True)
+    return {'ok': True, 'proposal_id': proposal_id, 'proposed': proposed, 'reasoning': reasoning,
+            'how_analysis': how_analysis}
 
 def get_narrative_signal(token_data: dict, mint: str, symbol: str) -> dict:
     """Research-driven narrative signal via Claude + web search -- heavier
@@ -22838,7 +22971,7 @@ def admin_ai_filters():
     try:
         rows = conn.execute(
             '''SELECT id, proposed_json, reasoning, trades_analyzed, status,
-                      reviewed_by, reviewed_at, created_at
+                      reviewed_by, reviewed_at, created_at, how_analysis
                FROM ai_filter_proposals ORDER BY id DESC LIMIT 20'''
         ).fetchall()
     finally:
@@ -22846,7 +22979,7 @@ def admin_ai_filters():
     proposals = [{
         'id': r[0], 'proposed': json.loads(r[1]), 'reasoning': r[2],
         'trades_analyzed': r[3], 'status': r[4], 'reviewed_by': r[5],
-        'reviewed_at': r[6], 'created_at': r[7],
+        'reviewed_at': r[6], 'created_at': r[7], 'how_analysis': r[8] or '',
     } for r in rows]
     return jsonify({'ok': True, 'active_filters': get_ai_active_filters(), 'proposals': proposals})
 

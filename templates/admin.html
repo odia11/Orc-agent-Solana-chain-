@@ -1863,7 +1863,12 @@ async function runSecurityAudit() {
 // ══════════════════ AI FILTERS ══════════════════
 // Daily self-analysis loop (run_ai_self_analysis() server-side): sends the
 // last 24h's best/worst closed trades to Claude, which proposes new values
-// for the three entry filters below. A proposal never takes effect on its
+// for the three entry filters below (the WHAT) and writes a separate
+// how_analysis note on HOW those trades were managed -- SL/TP width,
+// entry/risk score, execution slippage, and a computed "would a different
+// exit trigger have changed this specific already-closed trade" signal. Only
+// the three filters ever apply anywhere; how_analysis is read-only context
+// for whoever reviews the proposal. A proposal never takes effect on its
 // own -- only admin/executive can approve or reject one here, which is why
 // those two buttons are hidden entirely for any other role that can still
 // view this tab (analyst) rather than rendered-but-403ing on click.
@@ -1904,7 +1909,12 @@ async function loadAiFilters() {
       '</div>' +
       '<div class="mono-sm" style="margin-bottom:6px">liquidity ≥ $' + Number(pj.min_liquidity_usd || 0).toLocaleString() +
         ' · age ≥ ' + (pj.min_pair_age_minutes || 0) + 'm · LP locked ≥ ' + (pj.min_lp_locked_pct || 0) + '%</div>' +
-      '<div style="font-size:12px;color:var(--muted)">' + _escHtml(p.reasoning || '') + '</div>' +
+      '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px">Wat (instap-filters)</div>' +
+      '<div style="font-size:12px;color:var(--muted);margin-bottom:10px">' + _escHtml(p.reasoning || '') + '</div>' +
+      (p.how_analysis
+        ? '<div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;margin-bottom:2px">Hoe (SL/TP, execution, counterfactuals)</div>' +
+          '<div style="font-size:12px;color:var(--muted);white-space:pre-wrap">' + _escHtml(p.how_analysis) + '</div>'
+        : '') +
       actions +
       '</div>';
   }).join('');
