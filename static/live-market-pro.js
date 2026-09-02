@@ -377,6 +377,17 @@ function starsHtml(score){
 function tfPill(tf, label, active){
   return '<button class="pt-tf-pill'+(active?' active':'')+'" data-tf="'+tf+'">'+label+'</button>';
 }
+/* Which chain a token/trade lives on -- feeds a token's Buy/Sell routing
+   (confirmBuy/handleSell below) as well as this badge, so a Solana token
+   always spends SOL via /api/instant-trade and a BSC token always spends
+   USDC via /api/bsc/trade/*. Defaults to 'solana' for any candidate that
+   omits it (every pre-BSC scanner response), so old cached responses never
+   render as blank/unlabeled. */
+function chainLabel(chain){ return chain==='bsc' ? 'BSC' : 'SOL'; }
+function chainBadgeHtml(chain){
+  var c = chain==='bsc' ? 'bsc' : 'solana';
+  return '<span class="pt-chain-badge chain-'+c+'"><span class="pt-chain-dot"></span>'+chainLabel(c)+'</span>';
+}
 
 function storyHtml(t, idx){
   var down = (t.price_change_24h||0) < 0;
@@ -395,7 +406,7 @@ function cardHtml(t, idx){
   return '<div class="pt-card'+(t.score>=4?' hi':'')+'" id="pt-card-'+idx+'" data-mint="'+esc(t.mint)+'" data-idx="'+idx+'" data-pair="'+esc(t.pair_address||'')+'">'
     + '<div class="pt-card-hd">'
     +   logoTile(t.image_url, t.symbol, 'pt-tok-logo', 'pt-tok-logo-ph')
-    +   '<div class="pt-tok-id"><div class="pt-tok-sym">$'+esc(t.symbol)+' '+starsHtml(t.score)+'</div>'
+    +   '<div class="pt-tok-id"><div class="pt-tok-sym">$'+esc(t.symbol)+' '+starsHtml(t.score)+chainBadgeHtml(t.chain)+'</div>'
     +   '<div class="pt-tok-meta">'+esc(t.name||t.symbol)+' · '+fmtAge(t.pair_created_at)+' old</div></div>'
     +   '<div class="pt-card-hd-right">'
     +     '<span id="pt-safety-'+idx+'"></span>'
@@ -513,8 +524,10 @@ function openBuyPanel(idx){
   var panel = document.getElementById('pt-buy-panel-'+idx);
   if(!panel) return;
   if(panel.style.display === 'flex'){ panel.style.display = 'none'; panel.innerHTML=''; return; }
+  var t = ST.tokens[Number(idx)];
+  var isBsc = t && t.chain === 'bsc';
   panel.style.display = 'flex';
-  panel.innerHTML = '<input class="pt-buy-input" id="pt-buy-amt-'+idx+'" type="number" min="0" step="any" placeholder="Amount in SOL">'
+  panel.innerHTML = '<input class="pt-buy-input" id="pt-buy-amt-'+idx+'" type="number" min="0" step="any" placeholder="'+(isBsc?'Amount in USDC':'Amount in SOL')+'">'
     + '<button class="pt-buy-confirm" data-action="confirm-buy" data-idx="'+idx+'">Confirm Buy</button>'
     + '<div class="pt-buy-msg" id="pt-buy-msg-'+idx+'" style="display:none"></div>';
 }
@@ -528,16 +541,26 @@ function confirmBuy(idx){
   if(!amt || amt<=0){ showMsg(msgEl, 'Enter a valid amount', false); return; }
   var btn = document.querySelector('#pt-buy-panel-'+idx+' .pt-buy-confirm');
   if(btn){ btn.disabled = true; btn.textContent = '…'; }
-  fetch('/api/instant-trade', {
+  // Which chain this token lives on decides both the endpoint and the
+  // currency the entered amount is denominated in -- a BSC token is always
+  // bought with USDC from that chain's own wallet (see /api/bsc/trade/buy),
+  // never SOL, so the two engines can never be crossed here.
+  var isBsc = t.chain === 'bsc';
+  var url  = isBsc ? '/api/bsc/trade/buy' : '/api/instant-trade';
+  var body = isBsc
+    ? {token_address:t.mint, amount_usdc:amt}
+    : {symbol:t.symbol, token_address:t.mint, pair_address:t.pair_address, side:'buy', amount_sol:amt};
+  fetch(url, {
     method:'POST', credentials:'include', headers: authHeaders(),
-    body: JSON.stringify({symbol:t.symbol, token_address:t.mint, pair_address:t.pair_address, side:'buy', amount_sol:amt})
+    body: JSON.stringify(body)
   }).then(function(r){ return r.json(); }).then(function(d){
-    // /api/instant-trade's real success shape is {success:true, tx:<sig>, ...}
-    // -- this used to check d.sig/d.ok, which that endpoint never actually
-    // sends, so every successful buy fell through to the failure branch and
-    // showed "Buy failed" even though the trade had just executed on-chain.
-    if(d && (d.success || d.tx || d.ok || d.sig)){
-      showMsg(msgEl, 'Bought $'+t.symbol+' for '+amt+' SOL', true);
+    // /api/instant-trade's real success shape is {success:true, tx:<sig>, ...};
+    // /api/bsc/trade/buy's is {ok:true, tx_hash:<sig>, ...} -- checking every
+    // one of success/tx/ok/sig/tx_hash covers both instead of assuming either
+    // endpoint's exact shape (a prior version of this only checked the
+    // Solana shape, so every successful BSC buy showed "Buy failed" anyway).
+    if(d && (d.success || d.tx || d.ok || d.sig || d.tx_hash)){
+      showMsg(msgEl, 'Bought $'+t.symbol+' for '+amt+' '+(isBsc?'USDC':'SOL'), true);
       if(input) input.value = '';
       setTimeout(function(){ var p=document.getElementById('pt-buy-panel-'+idx); if(p){ p.style.display='none'; p.innerHTML=''; } }, 2200);
     } else {
@@ -559,13 +582,24 @@ function handleSell(idx, btn){
   }
   _sellArmed[idx] = false;
   btn.disabled = true; btn.textContent = '…';
-  fetch('/api/instant-trade', {
+  // Same chain-based routing as confirmBuy() -- a BSC position can only ever
+  // be closed through /api/bsc/trade/sell (it sells the exact tracked
+  // position server-side, same as the Solana endpoint does for amount_sol:0).
+  var isBsc = t.chain === 'bsc';
+  var url  = isBsc ? '/api/bsc/trade/sell' : '/api/instant-trade';
+  var body = isBsc
+    ? {token_address:t.mint}
+    : {symbol:t.symbol, token_address:t.mint, pair_address:t.pair_address, side:'sell', amount_sol:0};
+  fetch(url, {
     method:'POST', credentials:'include', headers: authHeaders(),
-    body: JSON.stringify({symbol:t.symbol, token_address:t.mint, pair_address:t.pair_address, side:'sell', amount_sol:0})
+    body: JSON.stringify(body)
   }).then(function(r){ return r.json(); }).then(function(d){
-    // Same fix as confirmBuy() above -- /api/instant-trade's real success
-    // shape is {success:true, tx:<sig>}, not {ok, sig}.
-    toast((d && (d.success||d.tx||d.ok||d.sig)) ? ('Sold $'+t.symbol) : ((d && (d.error||d.msg)) || 'Sell failed'));
+    // /api/bsc/trade/sell always answers HTTP 200 with ok:true (it means "the
+    // position was found and the sell was attempted"), so its REAL success
+    // signal is sell_executed, not ok -- checking d.ok here like the Solana
+    // path does would show "Sold" even on a swap that actually failed.
+    var sold = isBsc ? !!(d && d.sell_executed) : !!(d && (d.success||d.tx||d.ok||d.sig));
+    toast(sold ? ('Sold $'+t.symbol) : ((d && (d.error||d.msg)) || 'Sell failed'));
   }).catch(function(){ toast('Network error — sell not sent'); })
     .finally(function(){ btn.disabled=false; btn.textContent='Sell'; });
 }

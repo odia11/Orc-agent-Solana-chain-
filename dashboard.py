@@ -20575,9 +20575,9 @@ _AGE_BUCKET_SECONDS = {'1h': 3600, '6h': 21600, '24h': 86400}
 
 
 def _get_scanner_candidates() -> list:
-    """Boosted + trending Solana pairs, richer than _get_narrative_candidates()
-    (keeps the buys/sells split, pair address and socials presence the
-    scanner's filters/badges need)."""
+    """Boosted + trending Solana + BSC pairs (_MARKET_LIVE_CHAINS), richer
+    than _get_narrative_candidates() (keeps the buys/sells split, pair
+    address and socials presence the scanner's filters/badges need)."""
     def _f(v):
         try:
             return float(v) if v not in (None, '', 'null') else 0.0
@@ -20615,12 +20615,20 @@ def _get_scanner_candidates() -> list:
             'verified_socials': bool(socials or websites),
         }
 
+    # Solana + BSC, same _MARKET_LIVE_CHAINS set _get_narrative_candidates()
+    # already uses for the home feed's market rail -- this scanner just adds
+    # the same second chain, via the exact same boosted/trending DexScreener
+    # sourcing, rather than inventing a separate BSC discovery path. Safety
+    # filters below (LP-lock, mint-revoked) stay Solana-specific and fail
+    # closed for a BSC address (see _check_mint_safety/_check_lp_locked),
+    # which just means a BSC token never passes those two opt-in filters
+    # yet -- not a crash, and not silently treated as "safe".
     seen, boost_addrs = set(), []
     r = _dex_get('https://api.dexscreener.com/token-boosts/top/v1')
     if r and r.status_code == 200:
         try:
             for item in (r.json() if isinstance(r.json(), list) else []):
-                if item.get('chainId') == 'solana':
+                if item.get('chainId') in _MARKET_LIVE_CHAINS:
                     a = item.get('tokenAddress', '')
                     if a and a not in seen:
                         seen.add(a)
@@ -20632,7 +20640,7 @@ def _get_scanner_candidates() -> list:
     if r2 and r2.status_code == 200:
         try:
             for item in (r2.json() if isinstance(r2.json(), list) else []):
-                if item.get('chainId') == 'solana':
+                if item.get('chainId') in _MARKET_LIVE_CHAINS:
                     a = item.get('tokenAddress', '')
                     if a and a not in seen:
                         seen.add(a)
@@ -20647,7 +20655,7 @@ def _get_scanner_candidates() -> list:
         if rb and rb.status_code == 200:
             try:
                 for p in (rb.json().get('pairs') or []):
-                    if p.get('chainId') != 'solana':
+                    if p.get('chainId') not in _MARKET_LIVE_CHAINS:
                         continue
                     a = (p.get('baseToken') or {}).get('address', '')
                     if not a:
@@ -20666,6 +20674,19 @@ def _get_scanner_candidates() -> list:
             d = rt.json()
             for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
                 if p.get('chainId') == 'solana':
+                    a = (p.get('baseToken') or {}).get('address', '')
+                    if a and a not in best_pair:
+                        best_pair[a] = p
+        except Exception:
+            pass
+
+    time.sleep(0.3)  # stagger -- same pattern _get_narrative_candidates()/discover_tokens() use
+    rt_bsc = _dex_get('https://api.dexscreener.com/latest/dex/search?q=bnb&rankBy=trendingScoreH6')
+    if rt_bsc and rt_bsc.status_code == 200:
+        try:
+            d = rt_bsc.json()
+            for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
+                if p.get('chainId') == 'bsc':
                     a = (p.get('baseToken') or {}).get('address', '')
                     if a and a not in best_pair:
                         best_pair[a] = p

@@ -133,6 +133,15 @@ input{font-family:inherit}
 .pt-stars.s-mid{color:var(--muted)}
 .pt-stars.s-lo{color:var(--red)}
 .pt-tok-meta{font-size:11px;color:var(--muted2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* chain badge -- which network a token/trade lives on. No image asset (nothing
+   to hotlink reliably), just a colored dot + short label per chain, matching
+   each chain's own brand color so it reads at a glance across a long feed. */
+.pt-chain-badge{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:700;
+  letter-spacing:.03em;padding:2px 6px 2px 5px;border-radius:999px;vertical-align:middle;margin-left:6px;
+  background:var(--line);color:var(--muted2)}
+.pt-chain-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.pt-chain-badge.chain-solana .pt-chain-dot{background:#9945FF}
+.pt-chain-badge.chain-bsc .pt-chain-dot{background:#F0B90B}
 .pt-card-hd-right{margin-left:auto;display:flex;align-items:center;gap:8px;flex-shrink:0}
 .pt-badge{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:700;color:var(--muted2);white-space:nowrap}
 .pt-badge .ico{font-size:10px}
