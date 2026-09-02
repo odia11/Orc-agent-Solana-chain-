@@ -6,6 +6,69 @@
 (function(){
 'use strict';
 
+// ── DEFAULT FETCH TIMEOUT ──
+// After a phone sleeps or the app sits backgrounded for a while, network
+// connections resumed on wake are often stale: the socket still looks open
+// to the browser, but the other end is long gone, so a fetch() over it can
+// hang far past any user's patience instead of failing fast so the page's
+// own polling can retry. Almost none of this codebase's many fetch() call
+// sites set a timeout themselves (a small handful already use their own
+// AbortController), so a stuck fetch here read as exactly the reported bug:
+// return to the app after being away, and it just sits there, frozen.
+//
+// This patches window.fetch ONCE, globally -- loaded on every page via the
+// shared navbar -- so every call gets a bounded timeout unless it already
+// supplies its own AbortSignal (never overrides a caller's own abort/timeout
+// logic; several pages already wrap window.fetch this same way for CSRF
+// headers etc., and compose fine since each wrapper just delegates to
+// whatever window.fetch already was when it installed itself). FormData
+// bodies (image/file uploads) get a much longer allowance -- a real upload
+// on a slow connection legitimately needs more than a few seconds, and
+// that's a different failure mode than a silently-dead polling request.
+(function(){
+  var DEFAULT_FETCH_TIMEOUT_MS = 15000;
+  var UPLOAD_FETCH_TIMEOUT_MS  = 60000;
+  var _origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    if(init && init.signal) return _origFetch(input, init);
+    var isUpload = !!(init && typeof FormData !== 'undefined' && init.body instanceof FormData);
+    var ctl = new AbortController();
+    var timer = setTimeout(function(){ ctl.abort(); }, isUpload ? UPLOAD_FETCH_TIMEOUT_MS : DEFAULT_FETCH_TIMEOUT_MS);
+    var opts = Object.assign({}, init || {}, {signal: ctl.signal});
+    return _origFetch(input, opts).finally(function(){ clearTimeout(timer); });
+  };
+})();
+
+// ── RESUME REPAINT ──
+// Standalone (home-screen) PWAs on iOS have a long-documented WebKit bug:
+// after the app sits backgrounded for a while, coming back can show a black,
+// unresponsive screen -- the page is alive underneath, WebKit just fails to
+// recomposite its GPU layers on resume. Nudging document.documentElement's
+// opacity by a hair and back forces a fresh composite pass -- one of the
+// standard, low-risk workarounds for this bug class: it doesn't touch
+// layout/scroll (unlike toggling display), so nothing about the page's
+// state changes, and the change is imperceptibly small and reverted before
+// the browser's next paint. Skipped for a brief tab-switch glance (under
+// 3s hidden) so it only fires for a real "was away for a while" return,
+// matching what was actually reported.
+(function(){
+  var _hiddenAt = null;
+  function _forceRepaint(){
+    var el = document.documentElement;
+    var prev = el.style.opacity;
+    el.style.opacity = '0.99999';
+    requestAnimationFrame(function(){ el.style.opacity = prev; });
+  }
+  document.addEventListener('visibilitychange', function(){
+    if(document.hidden){ _hiddenAt = Date.now(); return; }
+    if(_hiddenAt && Date.now() - _hiddenAt > 3000) _forceRepaint();
+    _hiddenAt = null;
+  });
+  window.addEventListener('pageshow', function(e){
+    if(e.persisted) _forceRepaint();
+  });
+})();
+
 function esc(s){
   return String(s==null?'':s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];

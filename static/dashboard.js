@@ -456,6 +456,31 @@ let _csrfToken = '';
 // dashboard.py). Empty string when API_SHARED_SECRET isn't configured on the server.
 const _CLIENT_SECRET = window.__API_SHARED_SECRET||'';
 
+// Default fetch timeout -- same fix and same reasoning as the copy in
+// navbar.js (search that file for "DEFAULT FETCH TIMEOUT" for the full
+// comment), duplicated here rather than shared because it matters WHEN it
+// installs: this <script> tag has no `defer`, so it runs synchronously the
+// moment the parser reaches it -- including this page's own very first
+// session-check fetch() a few hundred lines down, before launchApp() ever
+// shows the dashboard. navbar.js's copy is deferred and doesn't install
+// until after the whole page has parsed, which is too late to protect that
+// first call. Installed before the CSRF wrapper below so it wraps the
+// outermost layer once both are in place; order between the two doesn't
+// otherwise matter, each just delegates to whatever window.fetch already is.
+(function(){
+  const DEFAULT_FETCH_TIMEOUT_MS = 15000;
+  const UPLOAD_FETCH_TIMEOUT_MS  = 60000;
+  const _origFetch = window.fetch.bind(window);
+  window.fetch = function(input, init){
+    if(init && init.signal) return _origFetch(input, init);
+    const isUpload = !!(init && typeof FormData !== 'undefined' && init.body instanceof FormData);
+    const ctl = new AbortController();
+    const timer = setTimeout(function(){ ctl.abort(); }, isUpload ? UPLOAD_FETCH_TIMEOUT_MS : DEFAULT_FETCH_TIMEOUT_MS);
+    const opts = Object.assign({}, init || {}, {signal: ctl.signal});
+    return _origFetch(input, opts).finally(function(){ clearTimeout(timer); });
+  };
+})();
+
 // Override fetch globally: inject X-CSRF-Token and X-API-Shared-Secret into all mutating
 // requests. The override is installed synchronously so it covers every fetch call below.
 // _csrfToken is populated asynchronously by _initCsrf(); it's empty until then
