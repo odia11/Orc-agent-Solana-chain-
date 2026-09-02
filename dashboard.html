@@ -503,7 +503,14 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .fc-like-btn.liked{color:var(--red)!important}
 .fc-like-btn.liked:hover{color:var(--red)!important;background:rgba(247,107,98,.12)}
 .fc-repost-wrap{margin-bottom:0}
-.fc-repost-banner{display:flex;align-items:center;gap:6px;padding:10px 16px 0;color:#565d68;font-size:12px;font-weight:600}
+/* Left padding lines the icon+text up with the NAME column of the post card
+   below (22px card padding + 44px avatar + 14px gap), the same convention
+   X/Twitter uses -- it visually attaches this line to that specific card
+   instead of reading as its own separate, unrelated post above it. Accent
+   green (matching the repost button's own active color) instead of the flat
+   metadata gray makes it something you notice is worth reading, not
+   something that blends into timestamps. */
+.fc-repost-banner{display:flex;align-items:center;gap:6px;padding:12px 22px 6px 80px;color:#3ad29b;font-size:12.5px;font-weight:700}
 .fc-repost-banner svg{flex-shrink:0}
 .fc-heart-ico{display:inline-block}
 @keyframes fc-heart-pop{0%{transform:scale(1)}30%{transform:scale(1.35)}55%{transform:scale(.92)}100%{transform:scale(1)}}
@@ -3327,6 +3334,9 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
   /* ── Feed post cards ── */
   .fc-card{padding:14px!important;gap:10px!important}
   .fc-avatar{width:36px!important;height:36px!important;font-size:13px!important}
+  /* matches the mobile .fc-card padding+avatar+gap (14+36+10) so the repost
+     line still lines up with the name column at this narrower layout */
+  .fc-repost-banner{padding-left:60px!important}
   .fc-name{font-size:13px!important}
   .fc-handle,.fc-time,.fc-sep{font-size:12px!important}
   .fc-text{font-size:13px!important;line-height:1.5!important}
