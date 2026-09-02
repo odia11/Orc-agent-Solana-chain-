@@ -346,6 +346,7 @@ var _activePeerId  = null;
 var _activePeer    = {};      /* {id, wallet, username} */
 var _pollTimer     = null;
 var _conversations = [];
+var _listScrollY   = 0;       /* where the conversation list was when a thread opened */
 
 /* ── HELPERS ── */
 function _avatarColor(s) {
@@ -757,6 +758,7 @@ function _syncUrlToList() {
    stops the 5s thread poll: it used to keep running against a thread you'd
    closed. */
 function _closeThreadView() {
+  var wasLocked = document.body.classList.contains('msgs-thread-open');
   document.getElementById('msgs-main').classList.remove('thread-open');
   document.body.classList.remove('msgs-thread-open');
   var thread = document.getElementById('msgs-thread');
@@ -766,6 +768,14 @@ function _closeThreadView() {
   _activePeerId = null;
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
   _renderConvList();
+  // Put the list back where it was before the thread covered it. Has to wait
+  // a frame: the document only regains its full height once the lock above is
+  // lifted and the list has been laid out again.
+  if (wasLocked && _listScrollY) {
+    var y = _listScrollY;
+    _listScrollY = 0;
+    requestAnimationFrame(function(){ window.scrollTo(0, y); });
+  }
 }
 
 window.addEventListener('popstate', function() {
@@ -796,9 +806,15 @@ async function _openThread(peerId, peerUsername, peerWallet) {
   document.getElementById('msgs-thread').style.display = 'flex';
 
   if (window.innerWidth <= 767) {
+    // Capture the list's scroll position BEFORE anything that hides it:
+    // .msgs-main.thread-open .msgs-left{display:none} alone collapses the
+    // document to viewport height and clamps window.scrollY to 0, so reading
+    // it any later than this already sees 0 -- opening a conversation from
+    // halfway down a long list and pressing Back dumped you at the very top.
+    _listScrollY = window.scrollY || document.documentElement.scrollTop || 0;
     document.getElementById('msgs-main').classList.add('thread-open');
-    // Freeze the conversation list (the document scroller on mobile) behind
-    // the fullscreen overlay -- see body.msgs-thread-open's own CSS comment.
+    // Also freeze the conversation list behind the fullscreen overlay -- see
+    // body.msgs-thread-open's own CSS comment.
     document.body.classList.add('msgs-thread-open');
   }
 
@@ -1267,7 +1283,43 @@ setInterval(loadConversations, 5000);
 <script src="/static/page-loader.js?v={{ app_version }}"></script>
 <script src="/static/auto-refresh.js?v={{ app_version }}"></script>
 <script src="/static/pull-to-refresh.js?v={{ app_version }}"></script>
-<script>initPullToRefresh();</script>
+<script>
+/* This page has TWO different scrollers, so pull-to-refresh can't be armed
+   with the bare defaults the other pages use.
+
+   On the conversation list the document scrolls. But once a thread is open on
+   mobile it becomes a fullscreen overlay and body.msgs-thread-open freezes the
+   document behind it -- which collapses the document to viewport height, so
+   window.scrollY is pinned at 0 forever. The shared module was still measuring
+   window.scrollY, so its "only arm when you're at the very top" check could
+   never bail out: EVERY downward drag anywhere inside an open thread armed the
+   gesture and got preventDefault()ed. That is what made scrolling a
+   conversation stutter and refuse to move, and once a drag passed the 70px
+   threshold the default onRefresh ran -- location.reload() -- which is what
+   threw you out of the conversation.
+
+   Point it at whichever element is genuinely scrolling, anchor the spinner
+   inside the overlay so it's actually visible there, and refetch in place
+   instead of reloading the whole page. */
+function _msgsThreadOpen() {
+  return document.body.classList.contains('msgs-thread-open');
+}
+initPullToRefresh({
+  scrollEl: function(){ return _msgsThreadOpen() ? document.getElementById('msgs-area') : null; },
+  anchorEl: function(){ return _msgsThreadOpen() ? document.getElementById('msgs-area') : null; },
+  // Dragging on the composer shouldn't refresh the thread -- that area is for
+  // typing, and its own text field scrolls.
+  ignoreTarget: '.msgs-input-bar',
+  onRefresh: function(){
+    if (_msgsThreadOpen() && _activePeerId) {
+      _lastMsgsSig = null;   // force a redraw so the pull visibly did something
+      return loadThread(_activePeerId);
+    }
+    _lastConvSig = null;
+    return loadConversations();
+  }
+});
+</script>
 
 </body>
 </html>
