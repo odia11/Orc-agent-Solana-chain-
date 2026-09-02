@@ -997,6 +997,17 @@ body::before{content:'';position:fixed;top:0;left:0;right:0;height:1px;backgroun
 .pos-chart-tf-bar .chart-tf-btn.active{background:rgba(0,0,0,.1);border-color:rgba(0,0,0,.55);color:#ffffff}
 #pos-chart-container{flex:1;min-height:0;position:relative}
 .pos-chart-loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:11px;letter-spacing:.08em;background:#1c1c1c;z-index:2}
+/* Floating price readout that follows a finger/cursor while scrubbing the
+   position-detail or PNL charts -- see attachChartScrub() in
+   static/chart-scrub.js, same tooltip token-card.js's own charts use.
+   Positioned by JS (left/top), never by CSS. */
+.lmtd-chart-scrub-tip{
+  position:absolute;top:10px;z-index:4;pointer-events:none;
+  background:#f2b840;color:#1a1206;
+  font-family:'JetBrains Mono',monospace;font-size:12px;font-weight:700;
+  padding:5px 10px;border-radius:8px;white-space:nowrap;
+  box-shadow:0 4px 12px rgba(0,0,0,.4);
+}
 .pos-chart-btn{background:transparent;border:1px solid rgba(0,0,0,.18);color:rgba(0,0,0,.55);font-size:10px;padding:2px 7px;border-radius:4px;cursor:pointer;transition:all .15s;font-family:'Share Tech Mono',monospace;white-space:nowrap}
 .pos-chart-btn:hover{border-color:rgba(0,0,0,.5);color:#ffffff;background:rgba(0,0,0,.05)}
 .pos-act-wrap{display:flex;gap:4px;align-items:center;flex-wrap:nowrap}
@@ -4689,6 +4700,7 @@ if (window.__SESSION_WALLET) {
 <script src="/static/confirm-modal.js?v=__ASSET_VER__"></script>
 <script src="/static/alert-modal.js?v=__ASSET_VER__"></script>
 <script src="/static/push-subscribe.js?v=__ASSET_VER__"></script>
+<script src="/static/chart-scrub.js?v=__ASSET_VER__"></script>
 <script src="/static/dashboard.js?v=__ASSET_VER__"></script>
 
 <!-- ── TOKEN DETAIL PANEL ── -->

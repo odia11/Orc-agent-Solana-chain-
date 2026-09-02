@@ -2481,6 +2481,7 @@ async function _posConfirmSell(mint, symbol) {
 
 // ── POSITION CHART MODAL ──
 let _posChart=null,_posSeries=null,_posVolSeries=null,_posPriceLine=null;
+let _posDataRef={current:[]}; // feeds attachChartScrub() -- see static/chart-scrub.js
 let _posCurrentMint='',_posCurrentTf='5m';
 
 async function openPosChart(mint,symbol,currentPrice){
@@ -2525,7 +2526,11 @@ function _initPosChart(currentPrice){
     crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
     rightPriceScale:{borderColor:'#2a2e39'},
     timeScale:{borderColor:'#2a2e39',timeVisible:true,secondsVisible:false},
-    handleScroll:true,handleScale:true,
+    // Off, same reasoning as token-card.js's charts: this chart's time
+    // window is picked via the TF bar, not free pan/zoom, and on touch
+    // those two options are exactly what made a finger-drag pan the chart
+    // instead of scrubbing the price (see attachChartScrub() below).
+    handleScroll:false,handleScale:false,
   });
   _posSeries=_posChart.addCandlestickSeries({
     upColor:'#26a69a',downColor:'#ef5350',
@@ -2540,6 +2545,8 @@ function _initPosChart(currentPrice){
   new ResizeObserver(()=>{
     if(container.clientWidth>0) _posChart.applyOptions({width:container.clientWidth,height:container.clientHeight});
   }).observe(container);
+  attachChartScrub('pos-chart-container', container, _posChart, _posSeries, _posDataRef,
+    pt=>pt.close, pt=>chartScrubFmtTip(_fmtPrice, pt.close, pt.time));
 }
 
 async function _loadPosChartData(){
@@ -2547,7 +2554,9 @@ async function _loadPosChartData(){
   if(loadEl){loadEl.textContent='Loading chart…';loadEl.style.display='flex';}
   const r=await fetch('/api/chart/'+encodeURIComponent(_posCurrentMint)+'?tf='+_posCurrentTf).then(r=>r.json()).catch(()=>null);
   if(r?.candles?.length){
-    _posSeries.setData(r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c})));
+    const candlePoints=r.candles.map(c=>({time:c.t,open:c.o,high:c.h,low:c.l,close:c.c}));
+    _posSeries.setData(candlePoints);
+    _posDataRef.current=candlePoints;
     _posVolSeries.setData(r.candles.map(c=>({time:c.t,value:c.v,color:c.c>=c.o?'rgba(38,166,154,.45)':'rgba(239,83,80,.45)'})));
     _posChart.timeScale().fitContent();
     if(loadEl) loadEl.style.display='none';
@@ -4406,6 +4415,7 @@ async function _onPushToggle(cb){
 
 // ── PNL PERFORMANCE CHART (LightweightCharts) ──────────────────────────────
 let _pnlcChart=null,_pnlcSeries=null,_pnlcRange='1d';
+let _pnlcDataRef={current:[]}; // feeds attachChartScrub() -- see static/chart-scrub.js
 
 async function fetchPnlChart(){
   if(!appVisible()) return;
@@ -4453,11 +4463,18 @@ function _renderPnlcChart(pts){
     new ResizeObserver(()=>{
       if(container.clientWidth>0) _pnlcChart.applyOptions({width:container.clientWidth});
     }).observe(container);
+    // handleScroll/handleScale were already off here (this chart's range is
+    // picked via the pnlc-btn range buttons, not pan/zoom) but nothing was
+    // ever wired up to make a drag DO anything either -- attachChartScrub()
+    // is what actually turns that into a price/time scrub.
+    attachChartScrub('pnlc-container', container, _pnlcChart, _pnlcSeries, _pnlcDataRef,
+      pt=>pt.value, pt=>chartScrubFmtTip(_fmtPrice, pt.value, pt.time));
   }else{
     _pnlcChart.applyOptions({timeScale:{timeVisible:_pnlcRange==='1d'}});
     _pnlcSeries.applyOptions({lineColor:lineClr,topColor:topClr,bottomColor:botClr});
   }
   _pnlcSeries.setData(pts);
+  _pnlcDataRef.current=pts;
   _pnlcChart.timeScale().fitContent();
 }
 
