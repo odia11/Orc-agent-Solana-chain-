@@ -820,6 +820,50 @@ FEE_WALLET       = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'  # fixed fee r
 # the wrong address.
 BSC_FEE_WALLET   = '0x4f187411023338E717D68c089855372997ef4640'  # fixed BSC fee recipient -- public address only, no key held anywhere
 
+# ── Other EVM chains (Base, Arbitrum, Polygon) ──────────────────────────────
+# A secp256k1 (EVM) keypair is chain-agnostic -- the SAME address/private key
+# already generated for BSC (ensure_bsc_wallet, encrypted_private_key_bsc) is
+# valid on every chain below too, exactly like one MetaMask account works on
+# any EVM network. So there is deliberately no separate wallet/key per chain
+# here, and BSC_FEE_WALLET above is reused as-is for all of them (also just a
+# public EVM address, valid everywhere). Each entry's `usdc` is that chain's
+# NATIVE, Circle-issued USDC (verified against that chain's own official block
+# explorer: basescan.org, arbiscan.io, polygonscan.com -- not a bridged
+# variant like Arbitrum's USDC.e or BSC's Binance-Peg USDC, which is why BSC
+# stays on its own USDC_BSC_ADDR/18-decimals path above rather than joining
+# this dict). rpc_url falls back to a well-known public RPC exactly like
+# BSC_RPC does; an *_RPC_URL env var overrides it the same way BSC_RPC_URL
+# does, for a paid/rate-limit-free provider (Alchemy, Ankr, etc.) in
+# production. dex_chain is the DexScreener chainId slug for that network
+# (used by the scanner's discovery queries), zerox_chain_id is what
+# _get_0x_quote() passes 0x's API to route the swap itself.
+EVM_CHAINS = {
+    'bsc': {
+        'chain_id': BSC_CHAIN_ID, 'native_symbol': 'BNB',
+        'rpc_url': BSC_RPC_URL or BSC_RPC, 'usdc': USDC_BSC_ADDR,
+        'explorer': 'https://bscscan.com', 'dex_chain': 'bsc', 'zerox_chain_id': BSC_CHAIN_ID,
+    },
+    'base': {
+        'chain_id': 8453, 'native_symbol': 'ETH',
+        'rpc_url': os.environ.get('BASE_RPC_URL', '') or 'https://mainnet.base.org',
+        'usdc': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+        'explorer': 'https://basescan.org', 'dex_chain': 'base', 'zerox_chain_id': 8453,
+    },
+    'arbitrum': {
+        'chain_id': 42161, 'native_symbol': 'ETH',
+        'rpc_url': os.environ.get('ARBITRUM_RPC_URL', '') or 'https://arb1.arbitrum.io/rpc',
+        'usdc': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
+        'explorer': 'https://arbiscan.io', 'dex_chain': 'arbitrum', 'zerox_chain_id': 42161,
+    },
+    'polygon': {
+        'chain_id': 137, 'native_symbol': 'POL',
+        'rpc_url': os.environ.get('POLYGON_RPC_URL', '') or 'https://polygon-rpc.com',
+        'usdc': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
+        'explorer': 'https://polygonscan.com', 'dex_chain': 'polygon', 'zerox_chain_id': 137,
+    },
+}
+EVM_CHAIN_FEE_WALLET = BSC_FEE_WALLET  # same EVM address works as the fee recipient on every chain above
+
 PROMOTION_PRICE_USD_DEFAULT = 70.0
 PROMOTION_PRICE_SOL_FALLBACK = 0.42  # used only if the SOL/USD rate isn't available yet
 PROMOTION_DURATION_HOURS_DEFAULT = 14
@@ -959,21 +1003,28 @@ def decrypt_x_token(enc: str, wallet: str) -> str:
     l1 = _wallet_fernet(wallet).decrypt(enc[3:].encode())
     return _fernet.decrypt(l1).decode()
 
-# ── BSC (EVM) TRADING WALLET ──
-# A user's BSC trading wallet is a separate, server-generated secp256k1
+# ── EVM TRADING WALLET (BSC, Base, Arbitrum, Polygon -- see EVM_CHAINS) ──
+# A user's EVM trading wallet is a separate, server-generated secp256k1
 # keypair -- it is NOT derived from their Solana wallet in any way (the two
 # key types are cryptographically unrelated). It's encrypted with the exact
 # same double-Fernet scheme as the Solana key (see encrypt_private_key()
 # above), keyed off the user's Solana wallet_address as their stable
-# identity across both chains.
+# identity across chains. Named/stored as "bsc" (bsc_wallet_address,
+# encrypted_private_key_bsc) from when BSC was the only other chain --
+# unchanged since an EVM address/key is chain-agnostic (the exact same one
+# is valid on Base/Arbitrum/Polygon too, precisely like one MetaMask account
+# already works across every EVM network), so there's nothing chain-specific
+# to actually rename here, just this one shared wallet reused everywhere in
+# EVM_CHAINS.
 def generate_bsc_wallet() -> tuple[str, str]:
     """Returns (address, private_key_hex). Never logs the private key."""
     acct = _EvmAccount.create()
     return acct.address, acct.key.hex()
 
 def ensure_bsc_wallet(conn, user_id: int, wallet_address: str) -> str:
-    """Idempotent: creates and stores a BSC trading wallet for this user if
-    they don't already have one, and returns their BSC address either way."""
+    """Idempotent: creates and stores this user's EVM trading wallet (shared
+    across every chain in EVM_CHAINS) if they don't already have one, and
+    returns the address either way."""
     row = conn.execute(
         'SELECT bsc_wallet_address, encrypted_private_key_bsc FROM users WHERE id=?',
         (user_id,)
@@ -990,15 +1041,18 @@ def ensure_bsc_wallet(conn, user_id: int, wallet_address: str) -> str:
     print(f'[bsc] created trading wallet {bsc_address[:8]}... for user_id={user_id}', flush=True)
     return bsc_address
 
-_w3 = None
-def _get_web3():
-    """Lazily-constructed, module-level Web3 instance -- avoids reconnecting
-    on every call. Falls back to the public BSC_RPC if BSC_RPC_URL isn't set."""
-    global _w3
-    if _w3 is None:
+_w3_by_chain: dict = {}
+def _get_web3(chain: str = 'bsc'):
+    """Lazily-constructed, per-chain Web3 instance (cached by chain so this
+    never reconnects on every call). `chain` is a key into EVM_CHAINS --
+    defaults to 'bsc' so every pre-existing call site (which never passed
+    this argument) keeps talking to the exact same RPC it always did."""
+    global _w3_by_chain
+    if chain not in _w3_by_chain:
         from web3 import Web3
-        _w3 = Web3(Web3.HTTPProvider(BSC_RPC_URL or BSC_RPC, request_kwargs={'timeout': 8}))
-    return _w3
+        cfg = EVM_CHAINS[chain]
+        _w3_by_chain[chain] = Web3(Web3.HTTPProvider(cfg['rpc_url'], request_kwargs={'timeout': 8}))
+    return _w3_by_chain[chain]
 
 # Minimal ERC20/BEP20 ABI -- just the two read-only calls we actually need,
 # not the full standard. Keeps this dependency-free of any ABI-fetching step.
@@ -1010,38 +1064,55 @@ _ERC20_MIN_ABI = [
      'outputs': [{'name': '', 'type': 'uint8'}], 'type': 'function'},
 ]
 
-def get_bnb_balance(address: str) -> float:
-    """Native BNB balance (for gas), in BNB not wei."""
-    w3 = _get_web3()
+def get_evm_native_balance(address: str, chain: str = 'bsc') -> float:
+    """Native gas-token balance (BNB/ETH/POL depending on `chain`), in whole
+    units not wei."""
+    w3 = _get_web3(chain)
     wei = w3.eth.get_balance(w3.to_checksum_address(address))
     return float(w3.from_wei(wei, 'ether'))
 
-def get_bsc_usdc_balance(address: str) -> float:
-    """USDC-on-BSC balance. IMPORTANT: this token uses 18 decimals on BSC,
-    not the 6 decimals USDC uses on Solana/Ethereum -- reading decimals()
-    from the contract itself rather than hardcoding avoids that exact,
-    well-documented BSC integration mistake."""
-    w3 = _get_web3()
-    contract = w3.eth.contract(address=w3.to_checksum_address(USDC_BSC_ADDR), abi=_ERC20_MIN_ABI)
+def get_evm_usdc_balance(address: str, chain: str = 'bsc') -> float:
+    """USDC balance on `chain`. Reads decimals() from the contract itself
+    rather than assuming 6 -- BSC's Binance-Peg USDC is 18 decimals, not 6
+    like the native Circle USDC on every other chain in EVM_CHAINS, and this
+    one read avoids hardcoding that (or any other chain's) decimals wrong."""
+    w3 = _get_web3(chain)
+    contract = w3.eth.contract(address=w3.to_checksum_address(EVM_CHAINS[chain]['usdc']), abi=_ERC20_MIN_ABI)
     raw = contract.functions.balanceOf(w3.to_checksum_address(address)).call()
     decimals = contract.functions.decimals().call()
     return raw / (10 ** decimals)
 
-def get_bsc_balances(address: str) -> dict:
+def get_bnb_balance(address: str) -> float:
+    """Backward-compatible alias -- every pre-existing call site expects this
+    exact name/signature for BSC specifically."""
+    return get_evm_native_balance(address, 'bsc')
+
+def get_bsc_usdc_balance(address: str) -> float:
+    """Backward-compatible alias -- see get_bnb_balance() above."""
+    return get_evm_usdc_balance(address, 'bsc')
+
+def get_evm_balances(address: str, chain: str = 'bsc') -> dict:
     """Both balances in one call, with independent failure handling -- a
     slow/down RPC for one shouldn't blank out the other."""
-    result = {'bnb': 0.0, 'usdc': 0.0, 'error': None}
+    native_key = EVM_CHAINS[chain]['native_symbol'].lower()
+    result = {native_key: 0.0, 'usdc': 0.0, 'error': None}
     try:
-        result['bnb'] = get_bnb_balance(address)
+        result[native_key] = get_evm_native_balance(address, chain)
     except Exception as e:
-        print(f'[bsc] get_bnb_balance failed for {address[:8]}...: {e}', flush=True)
-        result['error'] = 'bnb_fetch_failed'
+        print(f'[{chain}] get_evm_native_balance failed for {address[:8]}...: {e}', flush=True)
+        result['error'] = f'{native_key}_fetch_failed'
     try:
-        result['usdc'] = get_bsc_usdc_balance(address)
+        result['usdc'] = get_evm_usdc_balance(address, chain)
     except Exception as e:
-        print(f'[bsc] get_bsc_usdc_balance failed for {address[:8]}...: {e}', flush=True)
+        print(f'[{chain}] get_evm_usdc_balance failed for {address[:8]}...: {e}', flush=True)
         result['error'] = result['error'] or 'usdc_fetch_failed'
     return result
+
+def get_bsc_balances(address: str) -> dict:
+    """Backward-compatible alias -- same {'bnb', 'usdc', 'error'} shape every
+    pre-existing caller (e.g. /api/bsc/balance) already expects, since
+    EVM_CHAINS['bsc']['native_symbol'].lower() == 'bnb'."""
+    return get_evm_balances(address, 'bsc')
 
 # ── PERFORMANCE FEE COLLECTION ──
 def send_sol_fee(from_privkey: str, to_wallet_str: str, amount_sol: float) -> str:
@@ -5882,15 +5953,21 @@ _ERC20_FULL_ABI = _ERC20_MIN_ABI + [
      'name': 'transfer', 'outputs': [{'name': '', 'type': 'bool'}], 'type': 'function'},
 ]
 
-def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: str) -> dict:
+def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: str, chain: str = 'bsc') -> dict:
     """sell_amount_raw is already in the sell token's smallest unit (respect
-    its own decimals -- see the 18-vs-6-decimal USDC note earlier)."""
+    its own decimals -- see the 18-vs-6-decimal USDC note earlier). 0x's
+    Swap API v2 (this same allowance-holder endpoint) covers every chain in
+    EVM_CHAINS -- Base, Arbitrum and Polygon included -- so adding a chain
+    there is enough for this one function to route a swap on it too; no
+    separate DEX-router integration needed per chain. `chain` defaults to
+    'bsc' so every pre-existing call site (which never passed this argument)
+    keeps quoting on BSC exactly as before."""
     if not ZEROX_API_KEY:
         raise RuntimeError('ZEROX_API_KEY not configured')
     r = requests.get(
         'https://api.0x.org/swap/allowance-holder/quote',
         params={
-            'chainId': BSC_CHAIN_ID,
+            'chainId': EVM_CHAINS[chain]['zerox_chain_id'],
             'sellToken': sell_token,
             'buyToken': buy_token,
             'sellAmount': str(sell_amount_raw),
@@ -5939,14 +6016,14 @@ def get_mayan_bridge_quote(amount: float, from_chain: str, to_chain: str,
     # the UI can offer a real choice instead of silently picking one.
     return {'ok': True, 'quotes': quotes}
 
-def _ensure_bsc_allowance(w3, owner_address: str, private_key: str, token_address: str,
-                           spender: str, needed_amount_raw: int) -> bool:
+def _ensure_evm_allowance(w3, owner_address: str, private_key: str, token_address: str,
+                           spender: str, needed_amount_raw: int, chain: str = 'bsc') -> bool:
     """Approves exactly `needed_amount_raw` (not an unlimited/infinite approval)
     -- caps worst-case exposure to this one trade if the spender contract were
     ever compromised, at the cost of one extra approve() tx per trade that
     needs a bigger allowance than it already has. owner_address must be the
-    BSC (checksummed EVM) address derived from private_key -- NOT the caller's
-    Solana wallet_address (see _execute_bsc_swap's call site)."""
+    EVM address derived from private_key -- NOT the caller's Solana
+    wallet_address (see _execute_evm_swap's call site)."""
     contract = w3.eth.contract(address=w3.to_checksum_address(token_address), abi=_ERC20_FULL_ABI)
     owner = w3.to_checksum_address(owner_address)
     spender_cs = w3.to_checksum_address(spender)
@@ -5957,7 +6034,7 @@ def _ensure_bsc_allowance(w3, owner_address: str, private_key: str, token_addres
     tx = contract.functions.approve(spender_cs, needed_amount_raw).build_transaction({
         'from': owner,
         'nonce': w3.eth.get_transaction_count(owner),
-        'chainId': BSC_CHAIN_ID,
+        'chainId': EVM_CHAINS[chain]['chain_id'],
         'gasPrice': w3.eth.gas_price,
     })
     tx['gas'] = w3.eth.estimate_gas(tx)
@@ -5966,34 +6043,43 @@ def _ensure_bsc_allowance(w3, owner_address: str, private_key: str, token_addres
     receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
     return receipt.status == 1
 
-def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address: str, amount_str: str) -> tuple:
-    """BSC equivalent of _execute_user_swap(). action is 'buy' (USDC -> token)
-    or 'sell' (token -> USDC). amount_str is a human-readable amount of
-    whichever asset is being sold (USDC for buy, the token for sell).
-    Returns (success, message, tx_hash) -- message is a specific, user-facing
-    reason on failure (empty string on success) so callers don't have to
-    send everyone back to the server logs for a generic 'swap failed';
-    tx_hash is '' on every failure path and the real hex hash only once the
-    swap transaction is actually sent (previously discarded even on success --
-    see the KNOWN GAP note on _narrative_agent_cycle())."""
+def _ensure_bsc_allowance(w3, owner_address: str, private_key: str, token_address: str,
+                           spender: str, needed_amount_raw: int) -> bool:
+    """Backward-compatible alias -- see _ensure_evm_allowance() above."""
+    return _ensure_evm_allowance(w3, owner_address, private_key, token_address, spender, needed_amount_raw, 'bsc')
+
+def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address: str,
+                       amount_str: str, chain: str = 'bsc') -> tuple:
+    """EVM equivalent of _execute_user_swap(), generalized across every chain
+    in EVM_CHAINS (originally BSC-only -- see _execute_bsc_swap() below for
+    the exact-same-behavior alias every pre-existing caller still uses).
+    action is 'buy' (USDC -> token) or 'sell' (token -> USDC). amount_str is
+    a human-readable amount of whichever asset is being sold (USDC for buy,
+    the token for sell). Returns (success, message, tx_hash) -- message is a
+    specific, user-facing reason on failure (empty string on success) so
+    callers don't have to send everyone back to the server logs for a
+    generic 'swap failed'; tx_hash is '' on every failure path and the real
+    hex hash only once the swap transaction is actually sent."""
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    usdc_addr = EVM_CHAINS[chain]['usdc']
     try:
-        w3 = _get_web3()
+        w3 = _get_web3(chain)
         # `wallet` is the user's *Solana* wallet_address (their session identity,
-        # and the key used to decrypt private_key) -- NOT a BSC address. The BSC
-        # address must be derived from the BSC private key itself; using `wallet`
-        # here directly crashed to_checksum_address() on every single BSC swap
+        # and the key used to decrypt private_key) -- NOT an EVM address. The EVM
+        # address must be derived from the EVM private key itself; using `wallet`
+        # here directly crashed to_checksum_address() on every single EVM swap
         # (ValueError: not a hex string) until this fix.
         acct = _EvmAccount.from_key(private_key)
         wallet_cs = w3.to_checksum_address(acct.address)
         token_cs = w3.to_checksum_address(token_address)
 
         if action == 'buy':
-            sell_token, buy_token, sell_symbol = USDC_BSC_ADDR, token_cs, 'USDC'
+            sell_token, buy_token, sell_symbol = usdc_addr, token_cs, 'USDC'
         elif action == 'sell':
-            sell_token, buy_token, sell_symbol = token_cs, USDC_BSC_ADDR, 'token'
+            sell_token, buy_token, sell_symbol = token_cs, usdc_addr, 'token'
         else:
             msg = f'Unknown action {action!r}'
-            add_user_log(wallet, f'BSC swap error: {msg}')
+            add_user_log(wallet, f'{chain} swap error: {msg}')
             return False, msg, ''
 
         sell_contract = w3.eth.contract(address=w3.to_checksum_address(sell_token), abi=_ERC20_MIN_ABI)
@@ -6001,40 +6087,40 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
         sell_amount_raw = int(float(amount_str) * (10 ** sell_decimals))
 
         try:
-            quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
+            quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs, chain)
         except RuntimeError as e:
             # _get_0x_quote's own "ZEROX_API_KEY not configured" is already specific
-            add_user_log(wallet, f'BSC swap error: {e}')
+            add_user_log(wallet, f'{chain} swap error: {e}')
             return False, str(e), ''
 
         issues = quote.get('issues') or {}
         balance_issue = issues.get('balance')
         if balance_issue:
             msg = f'Insufficient {sell_symbol} balance'
-            add_user_log(wallet, f'BSC swap error: {msg} ({balance_issue})')
+            add_user_log(wallet, f'{chain} swap error: {msg} ({balance_issue})')
             return False, msg, ''
 
         allowance_issue = issues.get('allowance')
         if allowance_issue:
             spender = allowance_issue.get('spender')
             try:
-                ok = _ensure_bsc_allowance(w3, wallet_cs, private_key, sell_token, spender, sell_amount_raw)
+                ok = _ensure_evm_allowance(w3, wallet_cs, private_key, sell_token, spender, sell_amount_raw, chain)
             except Exception as e:
-                msg = 'Insufficient BNB for gas fees' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
-                add_user_log(wallet, f'BSC swap error: {msg}: {_redact_keys(str(e))[:100]}')
+                msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
+                add_user_log(wallet, f'{chain} swap error: {msg}: {_redact_keys(str(e))[:100]}')
                 return False, msg, ''
             if not ok:
                 msg = 'Token approval transaction reverted on-chain'
-                add_user_log(wallet, f'BSC swap error: {msg}')
+                add_user_log(wallet, f'{chain} swap error: {msg}')
                 return False, msg, ''
             # Re-quote after approving -- the first quote's tx.data assumed the
             # allowance issue was still open; a stale quote can revert on-chain.
-            quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs)
+            quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs, chain)
 
         txn = quote.get('transaction')
         if not txn:
             msg = 'No liquidity route found for this trade' if not issues else f'Trade not possible: {issues}'
-            add_user_log(wallet, f'BSC swap error: {msg}')
+            add_user_log(wallet, f'{chain} swap error: {msg}')
             return False, msg, ''
 
         tx = {
@@ -6045,45 +6131,49 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
             'gas': int(txn['gas']) if txn.get('gas') else 350000,
             'gasPrice': int(txn['gasPrice']) if txn.get('gasPrice') else w3.eth.gas_price,
             'nonce': w3.eth.get_transaction_count(wallet_cs),
-            'chainId': BSC_CHAIN_ID,
+            'chainId': EVM_CHAINS[chain]['chain_id'],
         }
         try:
             signed = acct.sign_transaction(tx)
             tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         except Exception as e:
-            msg = 'Insufficient BNB for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-            add_user_log(wallet, f'BSC swap error: {msg}')
+            msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+            add_user_log(wallet, f'{chain} swap error: {msg}')
             return False, msg, ''
         tx_hash_hex = tx_hash.hex()
-        add_user_log(wallet, f'BSC swap sent: {tx_hash_hex}')
+        add_user_log(wallet, f'{chain} swap sent: {tx_hash_hex}')
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
         success = receipt.status == 1
-        add_user_log(wallet, f'BSC swap {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        add_user_log(wallet, f'{chain} swap {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
         # tx_hash_hex is returned even on-chain-revert -- the transaction did
         # broadcast and has a real hash, it just didn't succeed; only the
         # never-broadcast failure paths above return ''.
         return success, ('' if success else 'Swap transaction reverted on-chain'), tx_hash_hex
     except Exception as e:
         msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-        add_user_log(wallet, 'BSC swap error: ' + msg)
-        print(f'[bsc-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
+        add_user_log(wallet, f'{chain} swap error: ' + msg)
+        print(f'[{chain}-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
-def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) -> str:
-    """BSC equivalent of send_sol_fee() -- sends amount_usdc of USDC (BEP-20
-    ERC20 transfer, not a native-value transfer), using the same
+def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address: str, amount_str: str) -> tuple:
+    """Backward-compatible alias -- see _execute_evm_swap() above."""
+    return _execute_evm_swap(wallet, private_key, action, token_address, amount_str, 'bsc')
+
+def _send_evm_usdc_fee(private_key: str, to_address: str, amount_usdc: float, chain: str = 'bsc') -> str:
+    """EVM equivalent of send_sol_fee() -- sends amount_usdc of USDC (an ERC20
+    transfer, not a native-value transfer) on `chain`, using the same
     build_transaction / sign_transaction / send_raw_transaction flow as
-    _execute_bsc_swap()."""
-    w3 = _get_web3()
+    _execute_evm_swap()."""
+    w3 = _get_web3(chain)
     acct = _EvmAccount.from_key(private_key)
     owner = w3.to_checksum_address(acct.address)
-    contract = w3.eth.contract(address=w3.to_checksum_address(USDC_BSC_ADDR), abi=_ERC20_FULL_ABI)
+    contract = w3.eth.contract(address=w3.to_checksum_address(EVM_CHAINS[chain]['usdc']), abi=_ERC20_FULL_ABI)
     decimals = contract.functions.decimals().call()
     amount_raw = int(round(amount_usdc * (10 ** decimals)))
     tx = contract.functions.transfer(w3.to_checksum_address(to_address), amount_raw).build_transaction({
         'from': owner,
         'nonce': w3.eth.get_transaction_count(owner),
-        'chainId': BSC_CHAIN_ID,
+        'chainId': EVM_CHAINS[chain]['chain_id'],
         'gasPrice': w3.eth.gas_price,
     })
     tx['gas'] = w3.eth.estimate_gas(tx)
@@ -6094,45 +6184,51 @@ def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) ->
         raise RuntimeError(f'fee transfer reverted on-chain: {tx_hash.hex()}')
     return tx_hash.hex()
 
-def _charge_bsc_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
-                         usdc_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0):
-    """BSC equivalent of _charge_txn_fee(): same FEE_RATE_TXN (0.75%), charged on
+def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) -> str:
+    """Backward-compatible alias -- see _send_evm_usdc_fee() above."""
+    return _send_evm_usdc_fee(private_key, to_address, amount_usdc, 'bsc')
+
+def _charge_evm_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
+                         usdc_amount: float, kind: str, chain: str = 'bsc',
+                         trade_ts: str = None, gross_profit: float = 0.0):
+    """EVM equivalent of _charge_txn_fee(): same FEE_RATE_TXN (0.75%), charged on
     BOTH the buy and the sell leg regardless of profit -- but the fee itself is
-    USDC (BEP-20), sent to BSC_FEE_WALLET via _send_bsc_usdc_fee()'s web3
+    USDC, sent to EVM_CHAIN_FEE_WALLET via _send_evm_usdc_fee()'s web3
     build/sign/send_raw_transaction flow instead of a SOL transfer. Shares the
-    fees/referral_earnings tables with the Solana path, tagged chain='bsc' so a
-    USDC amount is never mistaken for a SOL one."""
+    fees/referral_earnings tables with the Solana path, tagged with `chain` so
+    a USDC amount is never mistaken for a SOL one (or one EVM chain's for
+    another's -- each chain's USDC is a fully separate on-chain balance)."""
     fee_amount = round(usdc_amount * FEE_RATE_TXN, 6)
     short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    print(f'[bsc-fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} USDC '
+    print(f'[{chain}-fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} USDC '
           f'({FEE_RATE_TXN * 100:.2f}% of {usdc_amount:.6f} USDC {kind})', flush=True)
     if not (wallet and private_key) or fee_amount <= 0:
-        print(f'[bsc-fee] {short_w} {symbol} {kind} no fee — no private key or nothing to collect', flush=True)
+        print(f'[{chain}-fee] {short_w} {symbol} {kind} no fee — no private key or nothing to collect', flush=True)
         return
-    if not BSC_FEE_WALLET:
-        print(f'[bsc-fee] {short_w} {symbol} {kind} no fee — BSC_FEE_WALLET not configured', flush=True)
+    if not EVM_CHAIN_FEE_WALLET:
+        print(f'[{chain}-fee] {short_w} {symbol} {kind} no fee — EVM_CHAIN_FEE_WALLET not configured', flush=True)
         return
 
-    def _do_fee(pk, sym, gross, fee, wlt, uid, kind_, t_ts):
+    def _do_fee(pk, sym, gross, fee, wlt, uid, kind_, t_ts, chn):
         sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
         # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
         time.sleep(12)
-        print(f'[bsc-fee] → attempting {fee:.6f} USDC {kind_} fee transfer from trading wallet to BSC_FEE_WALLET '
+        print(f'[{chn}-fee] → attempting {fee:.6f} USDC {kind_} fee transfer from trading wallet to EVM_CHAIN_FEE_WALLET '
               f'for {sw} {sym}', flush=True)
         tx_sig  = None
         err_msg = None
         try:
             acct = _EvmAccount.from_key(pk)
-            signer_usdc = get_bsc_usdc_balance(acct.address)
+            signer_usdc = get_evm_usdc_balance(acct.address, chn)
             if signer_usdc < fee:
                 err_msg = f'insufficient balance: {signer_usdc:.6f} USDC (need {fee:.6f})'
-                print(f'[bsc-fee] ✗ {sw} {sym} {err_msg}', flush=True)
+                print(f'[{chn}-fee] ✗ {sw} {sym} {err_msg}', flush=True)
             else:
-                tx_sig = _send_bsc_usdc_fee(pk, BSC_FEE_WALLET, fee)
-                print(f'[bsc-fee] ✓ {sw} {sym} {kind_} {fee:.6f} USDC sent  TX:{tx_sig[:20]}...', flush=True)
+                tx_sig = _send_evm_usdc_fee(pk, EVM_CHAIN_FEE_WALLET, fee, chn)
+                print(f'[{chn}-fee] ✓ {sw} {sym} {kind_} {fee:.6f} USDC sent  TX:{tx_sig[:20]}...', flush=True)
         except Exception as e:
             err_msg = _redact_keys(str(e))
-            print(f'[bsc-fee] ✗ {sw} {sym} {kind_} transfer FAILED: {err_msg}', flush=True)
+            print(f'[{chn}-fee] ✗ {sw} {sym} {kind_} transfer FAILED: {err_msg}', flush=True)
 
         # Always record in fees table: successful → fee_tx=sig, failed → fee_tx='FAILED:...'
         try:
@@ -6142,7 +6238,7 @@ def _charge_bsc_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str
             conn2.execute(
                 'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind, chain) '
                 'VALUES (?,?,?,?,?,?,?,?)',
-                (wlt, sym, gross, fee, fee_tx, status, kind_, 'bsc'))
+                (wlt, sym, gross, fee, fee_tx, status, kind_, chn))
             if tx_sig:
                 if kind_ == 'sell' and t_ts:
                     row = conn2.execute(
@@ -6157,8 +6253,8 @@ def _charge_bsc_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str
 
                 # Referral payout: 20% of the fee just actually collected, same model as
                 # _charge_txn_fee() -- gated on tx_sig so a failed transfer never credits
-                # a referrer. Reuses trade_fee_sol/earned_sol (misnamed for BSC, but the
-                # new chain='bsc' tag disambiguates the currency per row) rather than
+                # a referrer. Reuses trade_fee_sol/earned_sol (misnamed for a USDC fee,
+                # but the chain tag disambiguates the currency per row) rather than
                 # adding parallel USDC-named columns.
                 try:
                     ref_row = conn2.execute(
@@ -6169,28 +6265,33 @@ def _charge_bsc_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str
                         conn2.execute(
                             'INSERT INTO referral_earnings '
                             '(referrer_wallet, referred_wallet, trade_fee_sol, earned_sol, chain) VALUES (?,?,?,?,?)',
-                            (referrer, wlt, fee, earned, 'bsc'))
+                            (referrer, wlt, fee, earned, chn))
                         conn2.execute(
                             'UPDATE users SET referral_balance = referral_balance + ? WHERE wallet_address=?',
                             (earned, referrer))
-                        print(f'[bsc-referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} USDC '
+                        print(f'[{chn}-referral] {sw} → referrer {referrer[:6]}... earns {earned:.6f} USDC '
                               f'(20% of {fee:.6f} USDC {kind_} fee)', flush=True)
                 except Exception as ref_e:
-                    print(f'[bsc-referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
+                    print(f'[{chn}-referral] ✗ credit failed for {sw}: {ref_e}', flush=True)
             conn2.commit()
             conn2.close()
-            print(f'[bsc-fee] recorded in fees table: kind={kind_} status={status} fee_tx={fee_tx[:30]}', flush=True)
+            print(f'[{chn}-fee] recorded in fees table: kind={kind_} status={status} fee_tx={fee_tx[:30]}', flush=True)
         except Exception as db_e:
-            print(f'[bsc-fee] ✗ could not write to fees table: {db_e}', flush=True)
+            print(f'[{chn}-fee] ✗ could not write to fees table: {db_e}', flush=True)
         finally:
             pk = None
 
     threading.Thread(
         target=_do_fee,
-        args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts),
+        args=(private_key, symbol, gross_profit, fee_amount, wallet, user_id, kind, trade_ts, chain),
         daemon=True,
     ).start()
-    print(f'[bsc-fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
+    print(f'[{chain}-fee] {short_w} {symbol} {kind} fee thread started (will execute in ~12s after {kind} confirms)', flush=True)
+
+def _charge_bsc_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
+                         usdc_amount: float, kind: str, trade_ts: str = None, gross_profit: float = 0.0):
+    """Backward-compatible alias -- see _charge_evm_txn_fee() above."""
+    _charge_evm_txn_fee(private_key, wallet, user_id, symbol, usdc_amount, kind, 'bsc', trade_ts, gross_profit)
 
 def _check_mint_safety(mint_address: str) -> dict:
     try:
@@ -6529,22 +6630,23 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
 
     return True, exemption_note
 
-def _check_bsc_honeypot(token_address: str) -> dict:
-    """BSC's equivalent of _check_lp_locked() -- BSC tokens are arbitrary
-    smart contracts (not simple SPL tokens), so 'mint authority' doesn't
+def _check_evm_honeypot(token_address: str, chain: str = 'bsc') -> dict:
+    """EVM equivalent of _check_lp_locked() -- an EVM token is an arbitrary
+    smart contract (not a simple SPL token), so 'mint authority' doesn't
     exist here. The real equivalent risk is a honeypot: a contract that lets
     you buy but blocks or heavily taxes selling. Honeypot.is actually
     SIMULATES a buy+sell against the live contract rather than just reading
     source code, which is why it catches "hidden owner" tricks that a
     static ownership-renounced check would miss (see the 2026 CryptoKoki
-    honeypot-kit research: renounced ownership is trivially fakeable).
+    honeypot-kit research: renounced ownership is trivially fakeable), and
+    covers every chain in EVM_CHAINS via the same chainID parameter.
     Fails closed -- like _check_lp_locked(), a failed/inconclusive check
     returns 'ok': False so callers treat it as NOT cleared, never silently
     treat an unknown result as safe."""
     try:
         r = requests.get(
             'https://api.honeypot.is/v2/IsHoneypot',
-            params={'address': token_address, 'chainID': BSC_CHAIN_ID},
+            params={'address': token_address, 'chainID': EVM_CHAINS[chain]['chain_id']},
             timeout=8
         )
         data = r.json()
@@ -6566,6 +6668,10 @@ def _check_bsc_honeypot(token_address: str) -> dict:
     except Exception as e:
         print(f'[honeypot] error for {token_address[:10]}: {e}', flush=True)
         return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+
+def _check_bsc_honeypot(token_address: str) -> dict:
+    """Backward-compatible alias -- see _check_evm_honeypot() above."""
+    return _check_evm_honeypot(token_address, 'bsc')
 
 def bsc_discover_tokens() -> list:
     """BSC equivalent of discover_tokens() -- deliberately a fully separate
@@ -9596,6 +9702,172 @@ def api_bridge_execute():
         return jsonify({'ok': False, 'msg': result, 'bridge_id': bridge_id, 'status': 'failed'}), 502
 
     return jsonify({'ok': True, 'bridge_id': bridge_id, 'status': 'source_broadcast', 'tx_hash': result})
+
+@app.route('/api/evm/<chain>/balance', methods=['GET'])
+@rate_limit(20, 60)
+def api_evm_balance(chain):
+    """Base/Arbitrum/Polygon sibling of /api/bsc/balance -- same wallet (see
+    ensure_bsc_wallet's comment: one EVM key works on every chain here),
+    just a different chain's own native-gas + USDC balance. `chain` must be
+    one of EVM_CHAINS's keys; BSC itself keeps using its own dedicated
+    /api/bsc/balance route rather than being migrated to this one, so
+    nothing about its already-working behavior changes."""
+    if chain not in EVM_CHAINS:
+        return jsonify({'ok': False, 'msg': f'Unsupported chain {chain!r}'}), 400
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        uid = _get_uid(conn, wallet)
+        if not uid:
+            return jsonify({'ok': False, 'msg': 'User not found'}), 404
+        evm_address = ensure_bsc_wallet(conn, uid, wallet)
+    finally:
+        conn.close()
+    balances = get_evm_balances(evm_address, chain)
+    native_key = EVM_CHAINS[chain]['native_symbol'].lower()
+    return jsonify({
+        'ok': True,
+        'chain': chain,
+        'address': evm_address,
+        'native_symbol': EVM_CHAINS[chain]['native_symbol'],
+        'native_balance': balances[native_key],
+        'usdc': balances['usdc'],
+        'error': balances['error'],
+    })
+
+@app.route('/api/evm/trade/buy', methods=['POST'])
+@rate_limit(10, 60)
+def api_evm_trade_buy():
+    """Base/Arbitrum/Polygon sibling of /api/bsc/trade/buy -- identical logic,
+    just parameterized by `chain` (in the JSON body) instead of being
+    hardcoded to BSC. See that route's comments for the reasoning behind
+    each step; not repeated here to avoid drift between two copies of the
+    same explanation. KNOWN LIMITATION: get_user_state(wallet)['positions']
+    is keyed by token_address alone, with no chain component -- harmless
+    across Solana (base58) vs any EVM chain (0x-hex) since the formats never
+    collide, but two DIFFERENT EVM chains in EVM_CHAINS both use 0x-hex
+    addresses, so a contract address intentionally deployed at the same
+    address on two of them (e.g. via CREATE2) would collide here. Ordinary,
+    independently-deployed tokens on different chains do not share
+    addresses in practice, so this is a narrow, disclosed edge case rather
+    than something fixed today."""
+    chain = str((request.get_json(silent=True) or {}).get('chain', '')).strip().lower()
+    if chain not in EVM_CHAINS:
+        return jsonify({'ok': False, 'msg': f'Unsupported chain {chain!r}'}), 400
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data          = request.get_json(silent=True) or {}
+    token_address = _sanitize(str(data.get('token_address', '')).strip())
+    if not is_valid_evm_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    amount_usdc = data.get('amount_usdc')
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT id, encrypted_private_key_bsc, min_trade_size, max_trade_size FROM users WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No EVM trading wallet configured'}), 400
+    enc_blob = row[1]
+    min_size = float(row[2]) if row[2] is not None else 1.0
+    max_size = float(row[3]) if row[3] is not None else 10.0
+    if amount_usdc is None:
+        amount_usdc = max_size
+    try:
+        amount_usdc = float(amount_usdc)
+    except (TypeError, ValueError):
+        return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
+    amount_usdc = max(min_size, min(max_size, amount_usdc))
+    user_id = row[0]
+    with _use_key(enc_blob, wallet) as pk:
+        buy_ok, buy_err, buy_tx_hash = _execute_evm_swap(wallet, pk, 'buy', token_address, str(amount_usdc), chain)
+    if not buy_ok:
+        return jsonify({'ok': False, 'msg': buy_err or 'Swap failed'}), 502
+    td          = get_token_data(token_address)
+    entry_price = float(td['price']) if td and td.get('price') else 0.0
+    symbol      = (td.get('symbol') or token_address[:8]) if td else token_address[:8]
+    pos = {
+        'amount':    (amount_usdc / entry_price) if entry_price > 0 else 0.0,
+        'buy_price': entry_price,
+        'spend':     amount_usdc,
+        'symbol':    symbol,
+        'opened_at': time.time(),
+    }
+    _upsert_open_position(user_id, wallet, token_address, pos, source='manual', chain=chain)
+    _charge_evm_txn_fee(pk, wallet, user_id, symbol, amount_usdc, 'buy', chain)
+    return jsonify({'ok': True, 'chain': chain, 'amount_usdc': amount_usdc, 'token_address': token_address,
+                     'entry_price': entry_price, 'symbol': symbol, 'tx_hash': buy_tx_hash})
+
+@app.route('/api/evm/trade/sell', methods=['POST'])
+@rate_limit(10, 60)
+def api_evm_trade_sell():
+    """Base/Arbitrum/Polygon sibling of /api/bsc/trade/sell -- see that
+    route's comments and api_evm_trade_buy()'s KNOWN LIMITATION note above."""
+    data  = request.get_json(silent=True) or {}
+    chain = str(data.get('chain', '')).strip().lower()
+    if chain not in EVM_CHAINS:
+        return jsonify({'ok': False, 'msg': f'Unsupported chain {chain!r}'}), 400
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    token_address = _sanitize(str(data.get('token_address', '')).strip())
+    if not is_valid_evm_address(token_address):
+        return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
+    us  = get_user_state(wallet)
+    pos = us['positions'].get(token_address, {})
+    if not pos.get('amount', 0.0) > 0:
+        return jsonify({'ok': False, 'msg': 'No open position for this token'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT id, encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[1]:
+        return jsonify({'ok': False, 'msg': 'No EVM trading wallet configured'}), 400
+    user_id, enc_blob = row[0], row[1]
+    td         = get_token_data(token_address)
+    exit_price = float(td['price']) if td and td.get('price') else 0.0
+    symbol     = pos.get('symbol') or (td.get('symbol', token_address[:8]) if td else token_address[:8])
+    amount     = pos['amount']
+    with _use_key(enc_blob, wallet) as pk:
+        sell_ok, sell_err, sell_tx_hash = _execute_evm_swap(wallet, pk, 'sell', token_address, str(amount), chain)
+    entry     = pos.get('buy_price', 0.0)
+    pnl       = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
+    pnl_pct   = round((exit_price - entry) / entry * 100, 2) if entry > 0 else 0.0
+    opened_at = pos.get('opened_at', 0.0)
+    if sell_ok:
+        now = datetime.datetime.utcnow()
+        swap_usdc_amount = round(amount * exit_price, 6)
+        _charge_evm_txn_fee(pk, wallet, user_id, symbol, swap_usdc_amount, 'sell', chain,
+                             trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl)
+        fee_amount = round(swap_usdc_amount * FEE_RATE_TXN, 6)
+        try:
+            conn2 = sqlite3.connect(DB_FILE)
+            try:
+                conn2.execute(
+                    '''INSERT INTO trades
+                       (user_id, token, entry_price, exit_price, amount, pnl, fee_amount, fee_paid, timestamp, opened_at, mint_address, source, chain)
+                       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
+                     now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
+                     token_address, 'manual', chain))
+                conn2.commit()
+            finally:
+                conn2.close()
+        except Exception as e:
+            print(f'[{chain}-trade_record] DB write failed: {e}', flush=True)
+        _recalculate_badges(wallet)
+        _close_open_position(user_id, wallet, token_address, chain=chain)
+    return jsonify({'ok': True, 'chain': chain, 'pnl': pnl, 'pnl_pct': pnl_pct, 'exit_price': exit_price,
+                     'sell_executed': sell_ok, 'msg': ('' if sell_ok else sell_err), 'tx_hash': sell_tx_hash})
 
 @app.route('/api/bsc/trade/buy', methods=['POST'])
 @rate_limit(10, 60)
@@ -17371,13 +17643,20 @@ def _get_solana_usdc_balance(address: str) -> float:
 def api_wallet_usdc_summary():
     """One combined USDC figure across every chain this app trades on --
     the 'single balance, many chains' view apps like fomo.family show,
-    except here it's an honest SUM of two real, separate on-chain balances
-    (each chain's own dedicated trading wallet), not an actual pooled
-    cross-chain balance: buying on Solana always spends the Solana USDC
-    figure, buying on BSC always spends the BSC one. Nothing here bridges
-    funds between the two on its own -- see /api/bridge/quote+execute for
+    except here it's an honest SUM of real, separate on-chain balances (each
+    chain's own dedicated trading wallet), not an actual pooled cross-chain
+    balance: buying on Solana always spends the Solana USDC figure, buying
+    on any EVM chain always spends that chain's own. Nothing here bridges
+    funds between chains on its own -- see /api/bridge/quote+execute for
     the (separate, manual) bridge if a user wants to move USDC from one
-    chain's balance to the other's."""
+    chain's balance to another's.
+
+    Every EVM chain in EVM_CHAINS shares the SAME wallet/address (see
+    ensure_bsc_wallet's comment), so this only derives that address once and
+    reads each chain's own USDC balance from it -- 'bsc_usdc'/'bsc_address'
+    keep their original key names for the Wallet page's existing JS; the new
+    chains ride along under 'evm_chains' instead of also getting hardcoded
+    top-level keys that would need a frontend change per future chain."""
     wallet = _authenticated_wallet()
     if not wallet:
         return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
@@ -17385,26 +17664,37 @@ def api_wallet_usdc_summary():
     solana_wallet = _get_trading_wallet_address(wallet) or wallet
     solana_usdc   = _get_solana_usdc_balance(solana_wallet)
 
-    bsc_usdc    = 0.0
-    bsc_address = ''
+    evm_address = ''
     try:
         conn = sqlite3.connect(DB_FILE)
         uid  = _get_uid(conn, wallet)
         if uid:
-            bsc_address = ensure_bsc_wallet(conn, uid, wallet)
+            evm_address = ensure_bsc_wallet(conn, uid, wallet)
         conn.close()
-        if bsc_address:
-            bsc_usdc = get_bsc_usdc_balance(bsc_address)
     except Exception as e:
-        print(f'[wallet] usdc-summary BSC balance failed for {wallet[:8]}...: {e}', flush=True)
+        print(f'[wallet] usdc-summary EVM wallet lookup failed for {wallet[:8]}...: {e}', flush=True)
+
+    evm_chains = {}
+    evm_total  = 0.0
+    for chain in EVM_CHAINS:
+        usdc = 0.0
+        if evm_address:
+            try:
+                usdc = get_evm_usdc_balance(evm_address, chain)
+            except Exception as e:
+                print(f'[wallet] usdc-summary {chain} balance failed for {wallet[:8]}...: {e}', flush=True)
+        evm_chains[chain] = round(usdc, 4)
+        evm_total += usdc
 
     return jsonify({
         'ok':             True,
         'solana_usdc':    round(solana_usdc, 4),
-        'bsc_usdc':       round(bsc_usdc, 4),
-        'total_usdc':     round(solana_usdc + bsc_usdc, 4),
+        'bsc_usdc':       evm_chains.get('bsc', 0.0),
+        'total_usdc':     round(solana_usdc + evm_total, 4),
         'solana_address': solana_wallet,
-        'bsc_address':    bsc_address,
+        'bsc_address':    evm_address,
+        'evm_address':    evm_address,
+        'evm_chains':     evm_chains,
     })
 
 
@@ -20373,7 +20663,7 @@ _market_live_cache: dict = {'ts': 0.0, 'data': []}
 # bot's scanning -- so widening this to include BSC only affects what's
 # *displayed*, and can never cause the bot to start scanning/trading BSC on
 # its own. Bot-side BSC scanning is a distinct, not-yet-built feature.
-_MARKET_LIVE_CHAINS = {'solana', 'bsc'}
+_MARKET_LIVE_CHAINS = {'solana', 'bsc', 'base', 'arbitrum', 'polygon'}
 _market_live_lock         = threading.Lock()
 
 # Both discovery pipelines below fall back to DexScreener's pair SEARCH
@@ -20396,8 +20686,15 @@ _MARKET_MAJOR_ADDRESSES = {
     '0xbb4CdB9CBd36B01bD1cBaEBF2De08d9173bc095c',      # WBNB
     '0x8AC76a51cc950d9822D68b83fE1Ad97B32Cd580d',      # USDC (BSC)
     '0x55d398326f99059fF775485246999027B3197955',      # USDT (BSC)
+    '0x4200000000000000000000000000000000000006',      # WETH (Base -- same predeploy address on every OP-stack chain)
+    '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',      # USDC (Base)
+    '0x82aF49447D8a07e3bd95BD0d56f35241523fBab1',      # WETH (Arbitrum)
+    '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',      # USDC (Arbitrum)
+    '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',      # WMATIC/WPOL (Polygon)
+    '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',      # USDC (Polygon)
 }
-_MARKET_MAJOR_SYMBOLS = {'sol', 'wsol', 'usdc', 'usdt', 'bnb', 'wbnb', 'busd', 'eth', 'weth', 'btc', 'wbtc'}
+_MARKET_MAJOR_SYMBOLS = {'sol', 'wsol', 'usdc', 'usdt', 'bnb', 'wbnb', 'busd', 'eth', 'weth',
+                          'btc', 'wbtc', 'matic', 'wmatic', 'pol', 'wpol'}
 
 def _is_market_major_or_impersonator(symbol: str, address: str) -> bool:
     """True for a real major asset OR anything impersonating one by ticker --
@@ -20680,18 +20977,24 @@ def _get_scanner_candidates() -> list:
         except Exception:
             pass
 
-    time.sleep(0.3)  # stagger -- same pattern _get_narrative_candidates()/discover_tokens() use
-    rt_bsc = _dex_get('https://api.dexscreener.com/latest/dex/search?q=bnb&rankBy=trendingScoreH6')
-    if rt_bsc and rt_bsc.status_code == 200:
-        try:
-            d = rt_bsc.json()
-            for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
-                if p.get('chainId') == 'bsc':
-                    a = (p.get('baseToken') or {}).get('address', '')
-                    if a and a not in best_pair:
-                        best_pair[a] = p
-        except Exception:
-            pass
+    # One trending-search top-up per additional chain -- same pattern as the
+    # solana/bsc ones above, just keyed by each chain's own search hint term
+    # (DexScreener's search is a plain keyword match, not a chain filter, so
+    # this needs one query per chain rather than a single combined one).
+    _EXTRA_CHAIN_SEARCH_TERMS = {'bsc': 'bnb', 'base': 'base', 'arbitrum': 'arbitrum', 'polygon': 'polygon'}
+    for _chain, _term in _EXTRA_CHAIN_SEARCH_TERMS.items():
+        time.sleep(0.3)  # stagger -- same pattern _get_narrative_candidates()/discover_tokens() use
+        rt_extra = _dex_get(f'https://api.dexscreener.com/latest/dex/search?q={_term}&rankBy=trendingScoreH6')
+        if rt_extra and rt_extra.status_code == 200:
+            try:
+                d = rt_extra.json()
+                for p in (d.get('pairs') if isinstance(d, dict) else (d if isinstance(d, list) else [])):
+                    if p.get('chainId') == _chain:
+                        a = (p.get('baseToken') or {}).get('address', '')
+                        if a and a not in best_pair:
+                            best_pair[a] = p
+            except Exception:
+                pass
 
     out = []
     for addr in best_pair:
