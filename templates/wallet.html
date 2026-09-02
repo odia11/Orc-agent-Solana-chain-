@@ -543,6 +543,27 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
       </div>
     </div>
 
+    <!-- combined USDC balance across every chain this app trades on -- the
+         "one balance, many chains" view apps like fomo.family show, except
+         here it's an honest sum of two real per-chain wallet balances, not
+         an actual pooled cross-chain balance (see /api/wallet/usdc-summary) -->
+    <div class="dep-card" style="margin-bottom:16px">
+      <div class="dep-header">
+        <span class="dep-title">Total USDC <span style="color:var(--muted);font-weight:500">(all chains)</span></span>
+      </div>
+      <div class="wlt-hero-num" id="usdc-total" style="margin-top:10px">—</div>
+      <div class="wlt-bsc-balances">
+        <div class="wlt-bsc-bal-item">
+          <span class="wlt-bsc-bal-lbl">Solana</span>
+          <span class="wlt-bsc-bal-val" id="usdc-sol-val">—</span>
+        </div>
+        <div class="wlt-bsc-bal-item">
+          <span class="wlt-bsc-bal-lbl">BSC</span>
+          <span class="wlt-bsc-bal-val" id="usdc-bsc-val">—</span>
+        </div>
+      </div>
+    </div>
+
     <!-- unified deposit card — tabs per chain, so adding more chains later
          means one more tab, never another stacked card -->
     <div class="dep-card">
@@ -1555,6 +1576,27 @@ loadBalance()
 // Market trade, or a deposit from elsewhere) instead of only updating on
 // page load or right after an action taken on this specific page.
 setInterval(function(){ if(!document.hidden) loadBalance() }, 8000)
+
+// ── combined USDC balance (Solana + BSC) ────────────────────
+var _usdcLoadedOnce=false
+function loadUsdcSummary(){
+  fetch('/api/wallet/usdc-summary').then(function(r){return r.json()}).then(function(d){
+    if(!d.ok) throw new Error(d.msg||'failed')
+    document.getElementById('usdc-total').textContent='$'+parseFloat(d.total_usdc).toFixed(2)
+    document.getElementById('usdc-sol-val').textContent='$'+parseFloat(d.solana_usdc).toFixed(2)
+    document.getElementById('usdc-bsc-val').textContent='$'+parseFloat(d.bsc_usdc).toFixed(2)
+    _usdcLoadedOnce=true
+  }).catch(function(){
+    // Same "keep the last known value on a transient hiccup" rule as loadBalance() above.
+    if(!_usdcLoadedOnce){
+      document.getElementById('usdc-total').textContent='—'
+      document.getElementById('usdc-sol-val').textContent='—'
+      document.getElementById('usdc-bsc-val').textContent='—'
+    }
+  })
+}
+loadUsdcSummary()
+setInterval(function(){ if(!document.hidden) loadUsdcSummary() }, 8000)
 
 // ── hide small balances toggle ────────────────────────────
 var _hideSmall=false

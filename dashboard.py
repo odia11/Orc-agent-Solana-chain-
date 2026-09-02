@@ -17347,6 +17347,67 @@ def api_wallet_balance():
                      'in_positions_sol': in_positions_sol})
 
 
+def _get_solana_usdc_balance(address: str) -> float:
+    """Direct on-chain USDC-on-Solana balance for `address` -- one
+    getTokenAccountsByOwner call filtered to just the USDC mint, rather than
+    _fetch_wallet_tokens()'s full every-token-plus-DexScreener-pricing fetch,
+    since /api/wallet/usdc-summary below only ever needs this one figure."""
+    try:
+        r = requests.post(SOLANA_RPC, json={
+            'jsonrpc': '2.0', 'id': 1, 'method': 'getTokenAccountsByOwner',
+            'params': [address, {'mint': USDC_MINT}, {'encoding': 'jsonParsed'}],
+        }, timeout=8)
+        accounts = r.json().get('result', {}).get('value', [])
+        if accounts:
+            info = accounts[0]['account']['data']['parsed']['info']['tokenAmount']
+            return float(info.get('uiAmount') or 0)
+    except Exception as e:
+        print(f'[wallet] _get_solana_usdc_balance failed for {address[:8]}...: {e}', flush=True)
+    return 0.0
+
+
+@app.route('/api/wallet/usdc-summary', methods=['GET'])
+@rate_limit(30, 60)
+def api_wallet_usdc_summary():
+    """One combined USDC figure across every chain this app trades on --
+    the 'single balance, many chains' view apps like fomo.family show,
+    except here it's an honest SUM of two real, separate on-chain balances
+    (each chain's own dedicated trading wallet), not an actual pooled
+    cross-chain balance: buying on Solana always spends the Solana USDC
+    figure, buying on BSC always spends the BSC one. Nothing here bridges
+    funds between the two on its own -- see /api/bridge/quote+execute for
+    the (separate, manual) bridge if a user wants to move USDC from one
+    chain's balance to the other's."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+
+    solana_wallet = _get_trading_wallet_address(wallet) or wallet
+    solana_usdc   = _get_solana_usdc_balance(solana_wallet)
+
+    bsc_usdc    = 0.0
+    bsc_address = ''
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        uid  = _get_uid(conn, wallet)
+        if uid:
+            bsc_address = ensure_bsc_wallet(conn, uid, wallet)
+        conn.close()
+        if bsc_address:
+            bsc_usdc = get_bsc_usdc_balance(bsc_address)
+    except Exception as e:
+        print(f'[wallet] usdc-summary BSC balance failed for {wallet[:8]}...: {e}', flush=True)
+
+    return jsonify({
+        'ok':             True,
+        'solana_usdc':    round(solana_usdc, 4),
+        'bsc_usdc':       round(bsc_usdc, 4),
+        'total_usdc':     round(solana_usdc + bsc_usdc, 4),
+        'solana_address': solana_wallet,
+        'bsc_address':    bsc_address,
+    })
+
+
 @app.route('/api/portfolio-summary', methods=['GET'])
 @rate_limit(30, 60)
 def api_portfolio_summary():
