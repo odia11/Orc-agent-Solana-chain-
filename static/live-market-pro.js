@@ -639,24 +639,64 @@ function loadTape(){
   }).catch(function(){});
 }
 
-/* ── top traders / copy trade ── */
+/* ── top traders / copy trade ──
+   /api/leaderboard is the real rolling-24h leaderboard (see its own
+   docstring server-side) -- this used to call /api/leaderboard/full, the
+   ALL-TIME ranking, while both the right-rail card and this rail's own
+   heading say "24h". Fetched once and rendered into both the compact
+   top-of-feed rail (renderTraderRail, mobile+desktop, above the fold) and
+   the fuller right-rail list (desktop only, has the Copy-trade button). */
 function loadTraders(){
-  fetch('/api/leaderboard/full').then(function(r){ return r.json(); }).then(function(rows){
+  fetch('/api/leaderboard').then(function(r){ return r.json(); }).then(function(rows){
+    rows = Array.isArray(rows) ? rows : [];
+    renderTraderRail(rows);
     var el = document.getElementById('pt-traders-list');
-    if(!Array.isArray(rows) || !rows.length){ el.innerHTML = '<div class="pt-tape-empty">No traders yet</div>'; return; }
+    if(!el) return;
+    if(!rows.length){ el.innerHTML = '<div class="pt-tape-empty">No traders yet</div>'; return; }
     el.innerHTML = rows.slice(0,8).map(function(t){
       var isCopying = _copyStatus.copying && _copyStatus.target === t.wallet_address;
       var pnl = Number(t.total_pnl||0);
       return '<div class="pt-trader-row">'
         + '<span class="pt-trader-rank">'+t.rank+'</span>'
-        + logoTile(t.avatar_url, t.username, 'pt-trader-av', 'pt-trader-av-ph')
-        + '<div class="pt-trader-mid"><div class="pt-trader-name">'+esc(t.username)+'</div>'
-        +   '<div class="pt-trader-sub">'+(t.win_rate||0)+'% win · '+(t.trade_count||0)+' trades</div></div>'
+        + '<span class="pt-trader-click" data-action="trader-profile" data-wallet="'+esc(t.wallet_address)+'">'
+        +   logoTile(t.avatar_url, t.username, 'pt-trader-av', 'pt-trader-av-ph')
+        +   '<div class="pt-trader-mid"><div class="pt-trader-name">'+esc(t.username)+'</div>'
+        +     '<div class="pt-trader-sub">'+(t.win_rate||0)+'% win · '+(t.trade_count||0)+' trades</div></div>'
+        + '</span>'
         + '<div class="pt-trader-right"><div class="pt-trader-pnl mono '+(pnl>=0?'up':'down')+'">'+(pnl>=0?'+':'')+pnl.toFixed(3)+'</div>'
         +   '<button class="pt-copy-link'+(isCopying?' active':'')+'" data-action="copy" data-wallet="'+esc(t.wallet_address)+'">'+(isCopying?'Copying':'Copy')+'</button></div>'
         + '</div>';
     }).join('');
   }).catch(function(){});
+}
+
+/* Compact horizontal spotlight, same visual language as the token story
+   rail directly above it (ring + circle avatar + name + a stat underneath)
+   but for people instead of tokens -- sits inside the always-visible center
+   feed so it doesn't need the desktop-only right rail to be seen, and
+   answers exactly what was asked: which traders are actually up real SOL
+   today, one tap to their profile. */
+function renderTraderRail(rows){
+  var wrap = document.getElementById('pt-trader-rail-wrap');
+  var el = document.getElementById('pt-trader-rail');
+  if(!wrap || !el) return;
+  var top = (rows||[]).filter(function(t){ return Number(t.total_pnl||0) > 0; }).slice(0, 10);
+  if(!top.length){ wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  el.innerHTML = top.map(function(t){
+    var pnl = Number(t.total_pnl||0);
+    var verified = t.badges && t.badges.indexOf('verified') !== -1;
+    return '<div class="pt-story pt-trader-story" data-action="trader-profile" data-wallet="'+esc(t.wallet_address)+'">'
+      + '<div class="pt-trader-rank-badge'+(t.rank===1?' gold':'')+'">'+esc(String(t.rank))+'</div>'
+      + '<div class="pt-story-ring">'
+      +   '<div class="pt-story-inner">'
+      +     logoTile(t.avatar_url, t.username, 'pt-story-img', 'pt-story-img-ph')
+      +   '</div>'
+      + '</div>'
+      + '<div class="pt-story-name">'+esc(t.username||'')+(verified?' ✓':'')+'</div>'
+      + '<div class="pt-story-chg up">+'+pnl.toFixed(2)+' SOL</div>'
+      + '</div>';
+  }).join('');
 }
 function toggleCopy(btn){
   var wallet = btn.dataset.wallet;
@@ -742,6 +782,10 @@ document.addEventListener('click', function(e){
   if((el = e.target.closest('[data-action="confirm-buy"]'))){ confirmBuy(el.dataset.idx); return; }
   if((el = e.target.closest('[data-action="sell"]'))){ handleSell(el.dataset.idx, el); return; }
   if((el = e.target.closest('[data-action="copy"]'))){ toggleCopy(el); return; }
+  if((el = e.target.closest('[data-action="trader-profile"]'))){
+    if(el.dataset.wallet) location.href = '/profile/' + encodeURIComponent(el.dataset.wallet);
+    return;
+  }
   if((el = e.target.closest('.pt-tf-pill'))){
     var wrap = el.closest('.pt-chart-tfs');
     var idx = wrap.id.replace('pt-chart-tfs-','');

@@ -13045,6 +13045,11 @@ def _calls_peak_loop():
 @app.route('/api/leaderboard', methods=['GET'])
 @rate_limit(60, 60)
 def get_leaderboard():
+    """Top traders by realized PnL in a genuine rolling 24h window -- was
+    `date(t.timestamp) = date('now')` (calendar-day-since-midnight-UTC),
+    which under-counts by up to ~24h depending what time it is when this is
+    called, despite every caller (Live Market's "Top Traders" spotlight,
+    the home feed's leaderboard widget) labeling it "24h"."""
     conn = sqlite3.connect(DB_FILE)
     try:
         c = conn.cursor()
@@ -13054,13 +13059,15 @@ def get_leaderboard():
                    u.wallet_address,
                    u.avatar_url,
                    SUM(t.pnl)  AS total_pnl,
+                   ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
+                         * 100.0 / COUNT(*), 1)   AS win_rate,
                    COUNT(*)    AS trade_count,
                    MAX(t.pnl)  AS best_trade,
                    u.badges    AS badges,
                    u.is_verified AS is_verified
             FROM trades t
             JOIN users u ON u.id = t.user_id
-            WHERE date(t.timestamp) = date('now')
+            WHERE t.timestamp >= datetime('now', '-24 hours')
               AND (t.source IN ('manual', 'bot', 'copy') OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
             ORDER BY total_pnl DESC
@@ -13071,7 +13078,7 @@ def get_leaderboard():
         conn.close()
     result = []
     for rank, row in enumerate(rows, 1):
-        user_id, username, wallet, avatar_url, total_pnl, trade_count, best_trade, badges_str, is_verified = row
+        user_id, username, wallet, avatar_url, total_pnl, win_rate, trade_count, best_trade, badges_str, is_verified = row
         if not username:
             username = (wallet[:6] + '...' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'unknown')
         badges_list = [b.strip() for b in (badges_str or '').split(',') if b.strip()]
@@ -13084,6 +13091,7 @@ def get_leaderboard():
             'wallet_address': wallet or '',
             'avatar_url':     avatar_url or '',
             'total_pnl':      round(float(total_pnl or 0), 6),
+            'win_rate':       round(float(win_rate or 0), 1),
             'trade_count':    int(trade_count or 0),
             'best_trade':     round(float(best_trade or 0), 6),
             'badges':         badges_list,
