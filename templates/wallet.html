@@ -1581,7 +1581,7 @@ setInterval(function(){ if(!document.hidden) loadBalance() }, 8000)
 
 // ── combined USDC balance (Solana + every EVM chain in EVM_CHAINS) ──
 var _usdcLoadedOnce=false
-var _EVM_CHAIN_LABELS={bsc:'BSC',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon'}
+var _EVM_CHAIN_LABELS={bsc:'BSC',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',robinhood:'Robinhood'}
 function loadUsdcSummary(){
   fetch('/api/wallet/usdc-summary').then(function(r){return r.json()}).then(function(d){
     if(!d.ok) throw new Error(d.msg||'failed')

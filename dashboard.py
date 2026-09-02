@@ -820,46 +820,62 @@ FEE_WALLET       = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'  # fixed fee r
 # the wrong address.
 BSC_FEE_WALLET   = '0x4f187411023338E717D68c089855372997ef4640'  # fixed BSC fee recipient -- public address only, no key held anywhere
 
-# ── Other EVM chains (Base, Arbitrum, Polygon) ──────────────────────────────
+# ── Other EVM chains (Base, Arbitrum, Polygon, Robinhood Chain) ─────────────
 # A secp256k1 (EVM) keypair is chain-agnostic -- the SAME address/private key
 # already generated for BSC (ensure_bsc_wallet, encrypted_private_key_bsc) is
 # valid on every chain below too, exactly like one MetaMask account works on
 # any EVM network. So there is deliberately no separate wallet/key per chain
 # here, and BSC_FEE_WALLET above is reused as-is for all of them (also just a
 # public EVM address, valid everywhere). Each entry's `usdc` is that chain's
-# NATIVE, Circle-issued USDC (verified against that chain's own official block
-# explorer: basescan.org, arbiscan.io, polygonscan.com -- not a bridged
-# variant like Arbitrum's USDC.e or BSC's Binance-Peg USDC, which is why BSC
-# stays on its own USDC_BSC_ADDR/18-decimals path above rather than joining
-# this dict). rpc_url falls back to a well-known public RPC exactly like
-# BSC_RPC does; an *_RPC_URL env var overrides it the same way BSC_RPC_URL
-# does, for a paid/rate-limit-free provider (Alchemy, Ankr, etc.) in
-# production. dex_chain is the DexScreener chainId slug for that network
-# (used by the scanner's discovery queries), zerox_chain_id is what
-# _get_0x_quote() passes 0x's API to route the swap itself.
+# own primary USD stablecoin -- NATIVE Circle-issued USDC for Base/Arbitrum/
+# Polygon (verified against that chain's own official block explorer:
+# basescan.org, arbiscan.io, polygonscan.com -- not a bridged variant like
+# Arbitrum's USDC.e or BSC's Binance-Peg USDC, which is why BSC stays on its
+# own USDC_BSC_ADDR/18-decimals path above rather than joining this dict).
+# Robinhood Chain has no USDC at all -- bridging USDC there converts it to
+# USDG (Global Dollar, issued by Paxos), which is what `usdc` actually holds
+# for that entry; `usdc_symbol` is what every USDC-labeled UI string and log
+# line should say instead, so a Robinhood Chain trade is never mislabeled as
+# spending "USDC" when it's really USDG (address verified against Robinhood
+# Chain's own explorer, robinhoodchain.blockscout.com; router/DEX routing
+# itself still goes through 0x's Swap API below like every other chain here,
+# not a hand-built Uniswap Universal Router integration, since 0x announced
+# day-1 support for Robinhood Chain at its mainnet launch). rpc_url falls
+# back to a well-known public RPC exactly like BSC_RPC does; an *_RPC_URL
+# env var overrides it the same way BSC_RPC_URL does, for a paid/rate-limit-
+# free provider (Alchemy, Ankr, etc.) in production. dex_chain is the
+# DexScreener chainId slug for that network (used by the scanner's discovery
+# queries), zerox_chain_id is what _get_0x_quote() passes 0x's API to route
+# the swap itself.
 EVM_CHAINS = {
     'bsc': {
-        'chain_id': BSC_CHAIN_ID, 'native_symbol': 'BNB',
+        'chain_id': BSC_CHAIN_ID, 'native_symbol': 'BNB', 'usdc_symbol': 'USDC',
         'rpc_url': BSC_RPC_URL or BSC_RPC, 'usdc': USDC_BSC_ADDR,
         'explorer': 'https://bscscan.com', 'dex_chain': 'bsc', 'zerox_chain_id': BSC_CHAIN_ID,
     },
     'base': {
-        'chain_id': 8453, 'native_symbol': 'ETH',
+        'chain_id': 8453, 'native_symbol': 'ETH', 'usdc_symbol': 'USDC',
         'rpc_url': os.environ.get('BASE_RPC_URL', '') or 'https://mainnet.base.org',
         'usdc': '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
         'explorer': 'https://basescan.org', 'dex_chain': 'base', 'zerox_chain_id': 8453,
     },
     'arbitrum': {
-        'chain_id': 42161, 'native_symbol': 'ETH',
+        'chain_id': 42161, 'native_symbol': 'ETH', 'usdc_symbol': 'USDC',
         'rpc_url': os.environ.get('ARBITRUM_RPC_URL', '') or 'https://arb1.arbitrum.io/rpc',
         'usdc': '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',
         'explorer': 'https://arbiscan.io', 'dex_chain': 'arbitrum', 'zerox_chain_id': 42161,
     },
     'polygon': {
-        'chain_id': 137, 'native_symbol': 'POL',
+        'chain_id': 137, 'native_symbol': 'POL', 'usdc_symbol': 'USDC',
         'rpc_url': os.environ.get('POLYGON_RPC_URL', '') or 'https://polygon-rpc.com',
         'usdc': '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',
         'explorer': 'https://polygonscan.com', 'dex_chain': 'polygon', 'zerox_chain_id': 137,
+    },
+    'robinhood': {
+        'chain_id': 4663, 'native_symbol': 'ETH', 'usdc_symbol': 'USDG',
+        'rpc_url': os.environ.get('ROBINHOOD_RPC_URL', '') or 'https://rpc.mainnet.chain.robinhood.com',
+        'usdc': '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168',  # USDG (Global Dollar) -- see usdc_symbol note above
+        'explorer': 'https://robinhoodchain.blockscout.com', 'dex_chain': 'robinhood', 'zerox_chain_id': 4663,
     },
 }
 EVM_CHAIN_FEE_WALLET = BSC_FEE_WALLET  # same EVM address works as the fee recipient on every chain above
@@ -6062,6 +6078,7 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
     hex hash only once the swap transaction is actually sent."""
     native_symbol = EVM_CHAINS[chain]['native_symbol']
     usdc_addr = EVM_CHAINS[chain]['usdc']
+    usdc_symbol = EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
     try:
         w3 = _get_web3(chain)
         # `wallet` is the user's *Solana* wallet_address (their session identity,
@@ -6074,7 +6091,7 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
         token_cs = w3.to_checksum_address(token_address)
 
         if action == 'buy':
-            sell_token, buy_token, sell_symbol = usdc_addr, token_cs, 'USDC'
+            sell_token, buy_token, sell_symbol = usdc_addr, token_cs, usdc_symbol
         elif action == 'sell':
             sell_token, buy_token, sell_symbol = token_cs, usdc_addr, 'token'
         else:
@@ -20663,7 +20680,7 @@ _market_live_cache: dict = {'ts': 0.0, 'data': []}
 # bot's scanning -- so widening this to include BSC only affects what's
 # *displayed*, and can never cause the bot to start scanning/trading BSC on
 # its own. Bot-side BSC scanning is a distinct, not-yet-built feature.
-_MARKET_LIVE_CHAINS = {'solana', 'bsc', 'base', 'arbitrum', 'polygon'}
+_MARKET_LIVE_CHAINS = {'solana', 'bsc', 'base', 'arbitrum', 'polygon', 'robinhood'}
 _market_live_lock         = threading.Lock()
 
 # Both discovery pipelines below fall back to DexScreener's pair SEARCH
@@ -20692,9 +20709,10 @@ _MARKET_MAJOR_ADDRESSES = {
     '0xaf88d065e77c8cC2239327C5EDb3A432268e5831',      # USDC (Arbitrum)
     '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',      # WMATIC/WPOL (Polygon)
     '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',      # USDC (Polygon)
+    '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168',      # USDG (Robinhood Chain)
 }
 _MARKET_MAJOR_SYMBOLS = {'sol', 'wsol', 'usdc', 'usdt', 'bnb', 'wbnb', 'busd', 'eth', 'weth',
-                          'btc', 'wbtc', 'matic', 'wmatic', 'pol', 'wpol'}
+                          'btc', 'wbtc', 'matic', 'wmatic', 'pol', 'wpol', 'usdg'}
 
 def _is_market_major_or_impersonator(symbol: str, address: str) -> bool:
     """True for a real major asset OR anything impersonating one by ticker --
@@ -20981,7 +20999,8 @@ def _get_scanner_candidates() -> list:
     # solana/bsc ones above, just keyed by each chain's own search hint term
     # (DexScreener's search is a plain keyword match, not a chain filter, so
     # this needs one query per chain rather than a single combined one).
-    _EXTRA_CHAIN_SEARCH_TERMS = {'bsc': 'bnb', 'base': 'base', 'arbitrum': 'arbitrum', 'polygon': 'polygon'}
+    _EXTRA_CHAIN_SEARCH_TERMS = {'bsc': 'bnb', 'base': 'base', 'arbitrum': 'arbitrum', 'polygon': 'polygon',
+                                  'robinhood': 'robinhood'}
     for _chain, _term in _EXTRA_CHAIN_SEARCH_TERMS.items():
         time.sleep(0.3)  # stagger -- same pattern _get_narrative_candidates()/discover_tokens() use
         rt_extra = _dex_get(f'https://api.dexscreener.com/latest/dex/search?q={_term}&rankBy=trendingScoreH6')

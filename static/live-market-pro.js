@@ -380,12 +380,20 @@ function tfPill(tf, label, active){
 /* Which chain a token/trade lives on -- feeds a token's Buy/Sell routing
    (confirmBuy/handleSell below) as well as this badge, so a Solana token
    always spends SOL via /api/instant-trade, BSC always spends USDC via
-   /api/bsc/trade/*, and Base/Arbitrum/Polygon always spend USDC via the
-   generic /api/evm/trade/* (see EVM_TRADE_CHAINS below). Defaults to
-   'solana' for any candidate that omits it (every pre-multi-chain scanner
-   response), so old cached responses never render as blank/unlabeled. */
-var EVM_TRADE_CHAINS = {bsc:1, base:1, arbitrum:1, polygon:1};
-var CHAIN_LABELS = {bsc:'BSC', base:'BASE', arbitrum:'ARB', polygon:'POLY'};
+   /api/bsc/trade/*, and Base/Arbitrum/Polygon/Robinhood Chain always spend
+   their own chain's USD stablecoin via the generic /api/evm/trade/* (see
+   EVM_TRADE_CHAINS below). Defaults to 'solana' for any candidate that
+   omits it (every pre-multi-chain scanner response), so old cached
+   responses never render as blank/unlabeled. */
+var EVM_TRADE_CHAINS = {bsc:1, base:1, arbitrum:1, polygon:1, robinhood:1};
+var CHAIN_LABELS = {bsc:'BSC', base:'BASE', arbitrum:'ARB', polygon:'POLY', robinhood:'HOOD'};
+// Every EVM chain here trades against native USDC EXCEPT Robinhood Chain,
+// whose own stablecoin is USDG (Global Dollar) -- USDC bridged there
+// actually becomes USDG, there is no USDC on that chain at all. Getting
+// this label wrong would tell a user they're spending a currency that
+// doesn't exist on that chain.
+var EVM_CURRENCY_LABELS = {robinhood:'USDG'};
+function evmCurrencyLabel(chain){ return EVM_CURRENCY_LABELS[chain] || 'USDC'; }
 function chainLabel(chain){ return CHAIN_LABELS[chain] || 'SOL'; }
 function chainBadgeHtml(chain){
   var c = CHAIN_LABELS[chain] ? chain : 'solana';
@@ -530,7 +538,7 @@ function openBuyPanel(idx){
   var t = ST.tokens[Number(idx)];
   var isEvm = t && !!EVM_TRADE_CHAINS[t.chain];
   panel.style.display = 'flex';
-  panel.innerHTML = '<input class="pt-buy-input" id="pt-buy-amt-'+idx+'" type="number" min="0" step="any" placeholder="'+(isEvm?'Amount in USDC':'Amount in SOL')+'">'
+  panel.innerHTML = '<input class="pt-buy-input" id="pt-buy-amt-'+idx+'" type="number" min="0" step="any" placeholder="'+(isEvm?('Amount in '+evmCurrencyLabel(t.chain)):'Amount in SOL')+'">'
     + '<button class="pt-buy-confirm" data-action="confirm-buy" data-idx="'+idx+'">Confirm Buy</button>'
     + '<div class="pt-buy-msg" id="pt-buy-msg-'+idx+'" style="display:none"></div>';
 }
@@ -567,7 +575,7 @@ function confirmBuy(idx){
     // of this only checked the Solana shape, so every successful BSC buy
     // showed "Buy failed" anyway).
     if(d && (d.success || d.tx || d.ok || d.sig || d.tx_hash)){
-      showMsg(msgEl, 'Bought $'+t.symbol+' for '+amt+' '+(isEvm?'USDC':'SOL'), true);
+      showMsg(msgEl, 'Bought $'+t.symbol+' for '+amt+' '+(isEvm?evmCurrencyLabel(t.chain):'SOL'), true);
       if(input) input.value = '';
       setTimeout(function(){ var p=document.getElementById('pt-buy-panel-'+idx); if(p){ p.style.display='none'; p.innerHTML=''; } }, 2200);
     } else {
