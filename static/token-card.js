@@ -67,6 +67,7 @@ var _lmtdChartStyle = 'candles'; // 'candles' or 'fomo' (live area chart)
 var _lmtdFomoTimer  = null;      // live-refresh interval while the 'fomo' style is active
 var _lmtdPriceLine  = null;      // the dashed current-price line + floating label on the fomo chart
 var _lmtdFomoDataRef = null;     // {current: points[]} for the modal's fomo chart -- see _lmtdCreateFomoChart()
+var _lmtdCandleDataRef = null;   // {current: points[]} for the modal's candle chart -- see _lmtdCreateChart()
 var _lmtdChartFetch = null; // {mint, tf, promise} -- most recent chart-data fetch (pending or resolved) for
                              // the currently-open token, so the skeleton render, the post-metadata re-render,
                              // and layout switches all reuse the same request instead of re-fetching
@@ -722,113 +723,32 @@ function _lmtdInitChart(){
   return _lmtdInitCandleChart();
 }
 
-/* Shared LightweightCharts candlestick+volume chart constructor -- pulled
-   out of _lmtdInitCandleChart() so both the modal below (unchanged
-   behavior) and live_market.html's poster-card mini charts (see
-   _lmtdInitEmbeddedChart() below, many simultaneous instances) build a
-   chart the exact same way instead of two option-object copies drifting
-   apart. Does no data fetching/rendering and keeps no global state of its
-   own, so it's safe to call for any number of different containers at
-   once. Returns null (instead of throwing) if the container doesn't exist
-   or LightweightCharts hasn't loaded yet. */
-function _lmtdCreateChart(containerId){
-  var container = document.getElementById(containerId);
-  if(!container || typeof LightweightCharts === 'undefined') return null;
-  var chart = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: container.clientHeight || 340,
-    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
-    grid:{vertLines:{color:'#21252c'},horzLines:{color:'#21252c'}},
-    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
-    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.1,bottom:0.3}},
-    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
-    handleScroll:true,handleScale:true
-  });
-  var series = chart.addCandlestickSeries({
-    upColor:'#3ad29b',downColor:'#ff4d6a',borderVisible:false,
-    wickUpColor:'#3ad29b',wickDownColor:'#ff4d6a'
-  });
-  var volSeries = chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'lmtd-vol'});
-  chart.priceScale('lmtd-vol').applyOptions({scaleMargins:{top:0.75,bottom:0}});
-  var resizeObserver = new ResizeObserver(function(){
-    if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
-  });
-  resizeObserver.observe(container);
-  return {chart:chart, series:series, volSeries:volSeries, resizeObserver:resizeObserver};
-}
+/* Shared touch/hover price-scrubbing (same "Live Family" style pattern
+   first added for the fomo chart -- see the "Add touch/hover
+   price-scrubbing to the Live chart" commit): dragging or hovering over a
+   chart finds the nearest data point to the pointer's x-position and shows
+   a crosshair + floating "price · time" tooltip there, instead of a
+   touch drag being read as a pan/scroll gesture (the default with
+   handleScroll:true, which is what made this not work at all before).
+   Generalized here so the candlestick chart -- which had the identical bug
+   and was never given the original fix -- can share it instead of a second
+   copy drifting apart from the fomo chart's.
 
-function _lmtdInitCandleChart(){
-  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
-  var created = _lmtdCreateChart('lmtd-chart-container');
-  if(!created) return;
-  _lmtdChart    = created.chart;
-  _lmtdSeries   = created.series;
-  _lmtdVolSeries = created.volSeries;
-  // created.resizeObserver is intentionally not kept -- _lmtdInitCandleChart()
-  // never disconnected its ResizeObserver before this refactor either
-  // (chart.remove() above tears down its DOM; a fresh observer was simply
-  // created every call). Same behavior, unchanged.
-}
+   getPrice(pt) returns the y-value to pass to chart.setCrosshairPosition()
+   for a data point: a plain {time,value} point's value for the area/fomo
+   series, a candle's close for the candlestick series. formatTip(pt)
+   returns the tooltip text for that point.
 
-/* containerId -> {chart, resizeObserver} for whatever fomo-chart instance is
-   currently live in that container. Exists purely as a defensive guard: if
-   _lmtdCreateFomoChart() is ever called again for a container whose previous
-   instance was never properly torn down (caller forgot destroy(), or a race
-   let two init calls through), the stale instance -- canvas AND its own
-   floating price-line label -- gets removed here before the new one is
-   built, instead of the two silently coexisting (visible as two stacked
-   price labels in the same corner). */
-var _lmtdFomoChartsByContainer = {};
+   containerId keys a small registry so re-creating a chart in the same
+   container (switching timeframe/style, reopening the modal for a
+   different token) tears down the previous listeners/tooltip first --
+   without this, they'd stack up on every re-init since the container div
+   itself persists across chart instances. */
+var _lmtdScrubByContainer = {};
+function _lmtdAttachScrub(containerId, container, chart, series, dataRef, getPrice, formatTip){
+  var stale = _lmtdScrubByContainer[containerId];
+  if(stale){ stale.teardown(); delete _lmtdScrubByContainer[containerId]; }
 
-/* Shared FOMO-style area chart constructor — same extraction pattern
-   as _lmtdCreateChart() above, pulled out of _lmtdInitFomoChart() so both
-   the modal (unchanged behavior) and _lmtdInitEmbeddedChart() below build
-   this chart style identically. No volume series (the FOMO style never
-   had one) and no global state. */
-function _lmtdCreateFomoChart(containerId){
-  var container = document.getElementById(containerId);
-  if(!container || typeof LightweightCharts === 'undefined') return null;
-  var stale = _lmtdFomoChartsByContainer[containerId];
-  if(stale){
-    try{ stale.resizeObserver.disconnect(); }catch(e){}
-    try{ stale.chart.remove(); }catch(e){}
-    if(stale.tip && stale.tip.parentNode) stale.tip.parentNode.removeChild(stale.tip);
-    if(stale.teardownScrub) stale.teardownScrub();
-    delete _lmtdFomoChartsByContainer[containerId];
-  }
-  // handleScroll/handleScale: off. This is a fixed recent-history sparkline,
-  // never meant to be panned or zoomed -- and on touch devices those two
-  // options are exactly what made a finger-drag scroll the time axis
-  // instead of scrubbing the price, since a touch move is otherwise
-  // interpreted as a pan gesture rather than a crosshair move (confirmed by
-  // dispatching real touch events at this chart: zero crosshair updates
-  // fired, sixteen time-range-change events did instead).
-  var chart = LightweightCharts.createChart(container, {
-    width: container.clientWidth,
-    height: container.clientHeight || 340,
-    layout:{background:{type:'solid',color:'#0b0906'},textColor:'#e8dcc0'},
-    grid:{vertLines:{color:'transparent'},horzLines:{color:'#1c1409'}},
-    crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
-    rightPriceScale:{visible:false},
-    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
-    handleScroll:false,handleScale:false
-  });
-  var series = chart.addAreaSeries({
-    lineColor:'#f2b840', lineWidth:2, lineType: LightweightCharts.LineType.Curved,
-    topColor:'rgba(242,184,64,.18)', bottomColor:'rgba(255,122,61,0)',
-    priceLineVisible:false, lastValueVisible:false,
-  });
-  var resizeObserver = new ResizeObserver(function(){
-    if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
-  });
-  resizeObserver.observe(container);
-
-  // dataRef.current holds whatever points setData() was last called with --
-  // callers (the modal's _lmtdRenderChartData, the poster card's renderOnce)
-  // update it alongside every setData() so the scrub handler below always
-  // has the exact same series it's drawing to look up a touch/hover point
-  // against, without needing its own separate copy of the fetch logic.
-  var dataRef = {current: []};
   var tip = document.createElement('div');
   tip.className = 'lmtd-chart-scrub-tip';
   tip.style.display = 'none';
@@ -857,10 +777,8 @@ function _lmtdCreateFomoChart(containerId){
     var time = chart.timeScale().coordinateToTime(localX);
     var pt = time == null ? pts[pts.length - 1] : nearestPoint(time);
     if(!pt) return;
-    chart.setCrosshairPosition(pt.value, pt.time, series);
-    var d = new Date(pt.time * 1000);
-    var hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
-    tip.textContent = _fmtPrice(pt.value) + '  ·  ' + hh + ':' + mm;
+    chart.setCrosshairPosition(getPrice(pt), pt.time, series);
+    tip.textContent = formatTip(pt);
     tip.style.display = 'block';
     var tipX = Math.max(6, Math.min(rect.width - tip.offsetWidth - 6, localX - tip.offsetWidth / 2));
     tip.style.left = tipX + 'px';
@@ -880,16 +798,146 @@ function _lmtdCreateFomoChart(containerId){
   container.addEventListener('touchcancel', clearScrub, {passive: true});
   container.addEventListener('mousemove', onMouseMove);
   container.addEventListener('mouseleave', clearScrub);
-  function teardownScrub(){
+  function teardown(){
     container.removeEventListener('touchstart', onTouchStart);
     container.removeEventListener('touchmove', onTouchMove);
     container.removeEventListener('touchend', clearScrub);
     container.removeEventListener('touchcancel', clearScrub);
     container.removeEventListener('mousemove', onMouseMove);
     container.removeEventListener('mouseleave', clearScrub);
+    if(tip.parentNode) tip.parentNode.removeChild(tip);
   }
+  _lmtdScrubByContainer[containerId] = {teardown: teardown};
+  return tip;
+}
 
-  _lmtdFomoChartsByContainer[containerId] = {chart:chart, resizeObserver:resizeObserver, tip:tip, teardownScrub:teardownScrub};
+function _lmtdFmtScrubTip(price, time){
+  var d = new Date(time * 1000);
+  var hh = String(d.getHours()).padStart(2, '0'), mm = String(d.getMinutes()).padStart(2, '0');
+  return _fmtPrice(price) + '  ·  ' + hh + ':' + mm;
+}
+
+/* Shared LightweightCharts candlestick+volume chart constructor -- pulled
+   out of _lmtdInitCandleChart() so both the modal below (unchanged
+   behavior) and live_market.html's poster-card mini charts (see
+   _lmtdInitEmbeddedChart() below, many simultaneous instances) build a
+   chart the exact same way instead of two option-object copies drifting
+   apart. Does no data fetching/rendering and keeps no global state of its
+   own, so it's safe to call for any number of different containers at
+   once. Returns null (instead of throwing) if the container doesn't exist
+   or LightweightCharts hasn't loaded yet.
+
+   handleScroll/handleScale: off, same reasoning as the fomo chart below --
+   this chart's time window is picked via the TF tabs, not free pan/zoom,
+   and on touch those two options are exactly what made a finger-drag pan
+   the chart instead of scrubbing the price (see _lmtdAttachScrub() above). */
+function _lmtdCreateChart(containerId){
+  var container = document.getElementById(containerId);
+  if(!container || typeof LightweightCharts === 'undefined') return null;
+  var chart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 340,
+    layout:{background:{type:'solid',color:'#16191f'},textColor:'#c7ccd4'},
+    grid:{vertLines:{color:'#21252c'},horzLines:{color:'#21252c'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Normal},
+    rightPriceScale:{borderColor:'#21252c',scaleMargins:{top:0.1,bottom:0.3}},
+    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
+    handleScroll:false,handleScale:false
+  });
+  var series = chart.addCandlestickSeries({
+    upColor:'#3ad29b',downColor:'#ff4d6a',borderVisible:false,
+    wickUpColor:'#3ad29b',wickDownColor:'#ff4d6a'
+  });
+  var volSeries = chart.addHistogramSeries({priceFormat:{type:'volume'},priceScaleId:'lmtd-vol'});
+  chart.priceScale('lmtd-vol').applyOptions({scaleMargins:{top:0.75,bottom:0}});
+  var resizeObserver = new ResizeObserver(function(){
+    if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  });
+  resizeObserver.observe(container);
+  var dataRef = {current: []};
+  _lmtdAttachScrub(containerId, container, chart, series, dataRef,
+    function(pt){ return pt.close; },
+    function(pt){ return _lmtdFmtScrubTip(pt.close, pt.time); });
+  return {chart:chart, series:series, volSeries:volSeries, resizeObserver:resizeObserver, dataRef:dataRef};
+}
+
+function _lmtdInitCandleChart(){
+  if(_lmtdChart){ try{ _lmtdChart.remove(); }catch(e){} _lmtdChart=null; _lmtdSeries=null; _lmtdVolSeries=null; }
+  var created = _lmtdCreateChart('lmtd-chart-container');
+  if(!created) return;
+  _lmtdChart    = created.chart;
+  _lmtdSeries   = created.series;
+  _lmtdVolSeries = created.volSeries;
+  _lmtdCandleDataRef = created.dataRef;
+  // created.resizeObserver is intentionally not kept -- _lmtdInitCandleChart()
+  // never disconnected its ResizeObserver before this refactor either
+  // (chart.remove() above tears down its DOM; a fresh observer was simply
+  // created every call). Same behavior, unchanged.
+}
+
+/* containerId -> {chart, resizeObserver} for whatever fomo-chart instance is
+   currently live in that container. Exists purely as a defensive guard: if
+   _lmtdCreateFomoChart() is ever called again for a container whose previous
+   instance was never properly torn down (caller forgot destroy(), or a race
+   let two init calls through), the stale instance -- canvas AND its own
+   floating price-line label -- gets removed here before the new one is
+   built, instead of the two silently coexisting (visible as two stacked
+   price labels in the same corner). */
+var _lmtdFomoChartsByContainer = {};
+
+/* Shared FOMO-style area chart constructor — same extraction pattern
+   as _lmtdCreateChart() above, pulled out of _lmtdInitFomoChart() so both
+   the modal (unchanged behavior) and _lmtdInitEmbeddedChart() below build
+   this chart style identically. No volume series (the FOMO style never
+   had one) and no global state. */
+function _lmtdCreateFomoChart(containerId){
+  var container = document.getElementById(containerId);
+  if(!container || typeof LightweightCharts === 'undefined') return null;
+  var stale = _lmtdFomoChartsByContainer[containerId];
+  if(stale){
+    try{ stale.resizeObserver.disconnect(); }catch(e){}
+    try{ stale.chart.remove(); }catch(e){}
+    delete _lmtdFomoChartsByContainer[containerId];
+  }
+  // handleScroll/handleScale: off. This is a fixed recent-history sparkline,
+  // never meant to be panned or zoomed -- and on touch devices those two
+  // options are exactly what made a finger-drag scroll the time axis
+  // instead of scrubbing the price, since a touch move is otherwise
+  // interpreted as a pan gesture rather than a crosshair move (confirmed by
+  // dispatching real touch events at this chart: zero crosshair updates
+  // fired, sixteen time-range-change events did instead). See
+  // _lmtdAttachScrub() for what drives the crosshair/tooltip instead.
+  var chart = LightweightCharts.createChart(container, {
+    width: container.clientWidth,
+    height: container.clientHeight || 340,
+    layout:{background:{type:'solid',color:'#0b0906'},textColor:'#e8dcc0'},
+    grid:{vertLines:{color:'transparent'},horzLines:{color:'#1c1409'}},
+    crosshair:{mode:LightweightCharts.CrosshairMode.Magnet},
+    rightPriceScale:{visible:false},
+    timeScale:{borderColor:'#21252c',timeVisible:true,secondsVisible:false},
+    handleScroll:false,handleScale:false
+  });
+  var series = chart.addAreaSeries({
+    lineColor:'#f2b840', lineWidth:2, lineType: LightweightCharts.LineType.Curved,
+    topColor:'rgba(242,184,64,.18)', bottomColor:'rgba(255,122,61,0)',
+    priceLineVisible:false, lastValueVisible:false,
+  });
+  var resizeObserver = new ResizeObserver(function(){
+    if(container.clientWidth>0) chart.applyOptions({width:container.clientWidth,height:container.clientHeight});
+  });
+  resizeObserver.observe(container);
+
+  // dataRef.current holds whatever points setData() was last called with --
+  // callers (the modal's _lmtdRenderChartData, the poster card's renderOnce)
+  // update it alongside every setData() so the scrub handler always has the
+  // exact same series it's drawing to look up a touch/hover point against,
+  // without needing its own separate copy of the fetch logic.
+  var dataRef = {current: []};
+  _lmtdAttachScrub(containerId, container, chart, series, dataRef,
+    function(pt){ return pt.value; },
+    function(pt){ return _lmtdFmtScrubTip(pt.value, pt.time); });
+
+  _lmtdFomoChartsByContainer[containerId] = {chart:chart, resizeObserver:resizeObserver};
   return {chart:chart, series:series, resizeObserver:resizeObserver, dataRef:dataRef};
 }
 
@@ -1049,7 +1097,9 @@ async function _lmtdRenderChartData(dataPromise, forMint){
           title: _fmtPrice(lastPoint.value),
         });
       } else {
-        _lmtdSeries.setData(r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; }));
+        var candlePoints = r.candles.map(function(c){ return {time:c.t, open:c.o, high:c.h, low:c.l, close:c.c}; });
+        _lmtdSeries.setData(candlePoints);
+        if(_lmtdCandleDataRef) _lmtdCandleDataRef.current = candlePoints;
         _lmtdVolSeries.setData(r.candles.map(function(c){ return {time:c.t, value:c.v, color: c.c>=c.o ? 'rgba(58,210,155,.45)' : 'rgba(255,77,106,.45)'}; }));
         _lmtdLastClose = r.candles[r.candles.length-1].c;
       }
