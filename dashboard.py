@@ -22025,11 +22025,34 @@ def api_totd():
 def api_carousel():
     return jsonify({'tokens': state['tokens'][:10]})
 
+# GeckoTerminal's own network slugs -- NOT the same strings as DexScreener's
+# chainId (EVM_CHAINS[*]['dex_chain']) in every case, e.g. Polygon is
+# 'polygon_pos' here vs 'polygon' on DexScreener. Robinhood Chain has no
+# known GeckoTerminal network yet -- left unmapped so that leg of api_chart()
+# is skipped and falls straight through to the DexScreener-priceChange
+# fallback below instead of hitting a guaranteed 404 every 5 seconds.
+_GECKOTERMINAL_NETWORK = {
+    'solana': 'solana', 'bsc': 'bsc', 'base': 'base', 'arbitrum': 'arbitrum', 'polygon': 'polygon_pos',
+}
+
 @app.route('/api/chart/<mint>')
 @rate_limit(60, 60)
 def api_chart(mint):
-    if not _SOLANA_ADDR_RE.match(mint or ''):
+    # Solana was the only chain this ever supported -- EVM tokens (Base/
+    # Arbitrum/Polygon/BSC/Robinhood, all 0x-hex addresses) always failed
+    # _SOLANA_ADDR_RE and got an instant 'invalid mint', which is why no
+    # chart ever rendered for a non-Solana token. `chain` (defaulting to
+    # 'solana' so every pre-existing caller that never sent it keeps
+    # behaving exactly as before) now picks the right address format and
+    # the right per-chain API network slug for every step below.
+    chain = request.args.get('chain', 'solana').strip().lower()
+    if chain not in EVM_CHAINS and chain != 'solana':
+        return jsonify({'candles': [], 'error': f'Unsupported chain {chain!r}'})
+    addr_ok = is_valid_evm_address(mint) if chain in EVM_CHAINS else _SOLANA_ADDR_RE.match(mint or '')
+    if not addr_ok:
         return jsonify({'candles': [], 'error': 'invalid mint'})
+    dex_chain_id = EVM_CHAINS[chain]['dex_chain'] if chain in EVM_CHAINS else 'solana'
+    gt_network   = _GECKOTERMINAL_NETWORK.get(chain)
     tf   = request.args.get('tf', '5m')
     _TF  = {
         '1m':  {'gt_tf': 'minute', 'gt_agg': 1,  'limit': 60},
@@ -22052,9 +22075,16 @@ def api_chart(mint):
         # a cold (uncached) chart load. Falls back to resolving it ourselves for
         # callers that don't have it yet (deep links, global search).
         pair_address = request.args.get('pair', '').strip()
-        if not (pair_address and _SOLANA_ADDR_RE.match(pair_address)):
+        pair_addr_ok = is_valid_evm_address(pair_address) if chain in EVM_CHAINS else _SOLANA_ADDR_RE.match(pair_address or '')
+        if not (pair_address and pair_addr_ok):
             r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + mint, timeout=8)
             pairs = r.json().get('pairs', []) if (r and r.status_code == 200) else []
+            # A token address can theoretically resolve to pairs on more than
+            # one chain (DexScreener's token lookup isn't chain-scoped) --
+            # only trust a pair that's actually on the chain this chart was
+            # requested for, same filtering every other multi-chain lookup
+            # in this app already does.
+            pairs = [p for p in pairs if p.get('chainId') == dex_chain_id] or pairs
             if not pairs:
                 return jsonify({'candles': [], 'error': 'no pairs'})
             pair_address = pairs[0].get('pairAddress', '')
@@ -22067,8 +22097,10 @@ def api_chart(mint):
         now = time.time()
 
         def _fetch_candles_for_tf(tf_key):
+            if not gt_network:
+                return []  # e.g. Robinhood Chain -- no known GeckoTerminal network, skip straight to the DexScreener fallback below
             tcfg_local = _TF[tf_key]
-            cache_key_local = (pair_address, tf_key)
+            cache_key_local = (chain, pair_address, tf_key)
             with _chart_cache_lock:
                 cached_local = _chart_cache.get(cache_key_local)
             if cached_local and now - cached_local[0] < _CHART_CACHE_TTL:
@@ -22076,7 +22108,7 @@ def api_chart(mint):
             candles_local = []
             try:
                 gt_url = (
-                    f'https://api.geckoterminal.com/api/v2/networks/solana'
+                    f'https://api.geckoterminal.com/api/v2/networks/{gt_network}'
                     f'/pools/{pair_address}/ohlcv/{tcfg_local["gt_tf"]}'
                     f'?aggregate={tcfg_local["gt_agg"]}&limit={tcfg_local["limit"]}'
                     f'&currency=usd&token=base'
@@ -22120,9 +22152,11 @@ def api_chart(mint):
             """Direct pool-price lookup -- fallback for when there aren't
             enough OHLCV candles yet (brand-new pool) but the frontend still
             wants a live number to plot while it waits for real candles."""
+            if not gt_network:
+                return None
             try:
                 r = requests.get(
-                    f'https://api.geckoterminal.com/api/v2/networks/solana/pools/{pair_address}',
+                    f'https://api.geckoterminal.com/api/v2/networks/{gt_network}/pools/{pair_address}',
                     timeout=8, headers={'Accept': 'application/json;version=20230302'}
                 )
                 if r.status_code == 200:
@@ -22133,17 +22167,20 @@ def api_chart(mint):
                 print(f'[chart] current_price fetch error: {e}', flush=True)
             return None
 
+        # Named distinctly from the `chain` request param (the blockchain,
+        # e.g. 'bsc') above -- this is an unrelated list of timeframe keys to
+        # try in order, and reusing the name `chain` here used to shadow it.
         if tf in _TF_FALLBACK_CHAIN:
-            chain = _TF_FALLBACK_CHAIN[_TF_FALLBACK_CHAIN.index(tf):]
+            tf_fallback_list = _TF_FALLBACK_CHAIN[_TF_FALLBACK_CHAIN.index(tf):]
         else:
-            chain = [tf if tf in _TF else '5m']
+            tf_fallback_list = [tf if tf in _TF else '5m']
 
         candles  = []
-        tf_used  = chain[0]
-        for i, tf_key in enumerate(chain):
+        tf_used  = tf_fallback_list[0]
+        for i, tf_key in enumerate(tf_fallback_list):
             candles = _fetch_candles_for_tf(tf_key)
             tf_used = tf_key
-            if len(candles) >= 5 or i == len(chain) - 1:
+            if len(candles) >= 5 or i == len(tf_fallback_list) - 1:
                 break
 
         # ── Step 3: priceChange fallback — GeckoTerminal had nothing usable at
@@ -22156,7 +22193,7 @@ def api_chart(mint):
         is_fallback = False
         if not candles:
             try:
-                pr = _dex_get('https://api.dexscreener.com/latest/dex/pairs/solana/' + pair_address, timeout=8)
+                pr = _dex_get(f'https://api.dexscreener.com/latest/dex/pairs/{dex_chain_id}/' + pair_address, timeout=8)
                 pdata = pr.json() if (pr and pr.status_code == 200) else {}
                 pair_data = pdata.get('pair') or (pdata.get('pairs') or [None])[0] or {}
                 price_change = pair_data.get('priceChange') or {}

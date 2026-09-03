@@ -96,7 +96,7 @@ function _lmtdFetchBalance(){
    search: a failure here never blocks or breaks the pair-search, and vice
    versa (see _lmtdRenderChartData). Races the fetch against a 12s timeout so
    a hung request can't leave the loading state stuck forever. */
-async function _lmtdFetchChartData(addr, tf, pairAddr){
+async function _lmtdFetchChartData(addr, tf, pairAddr, chain){
   var tfParam = _LMTD_TF_MAP[tf] || '5m';
   var url = '/api/chart/'+encodeURIComponent(addr)+'?tf='+tfParam;
   // pairAddr (already known from the table row that was clicked) lets the
@@ -104,6 +104,10 @@ async function _lmtdFetchChartData(addr, tf, pairAddr){
   // slow part of a cold chart load, so passing it through is what actually
   // makes the chart appear instantly instead of "a few seconds later".
   if(pairAddr) url += '&pair='+encodeURIComponent(pairAddr);
+  // chain is optional -- every existing caller (the modal detail view) omits
+  // it and keeps getting exactly the Solana chart it always did, since the
+  // backend defaults to 'solana' too.
+  if(chain) url += '&chain='+encodeURIComponent(chain);
   var fetchPromise = fetch(url)
     .then(function(x){return x.json();})
     .catch(function(){return null;});
@@ -886,15 +890,13 @@ function _lmtdInitFomoChart(){
    (one per visible poster card). Re-fetches and re-renders every 5s while
    mounted -- same cadence/approach as the modal's _lmtdFomoLiveLoop(), the
    closest a REST-polling setup gets to a true live tick feed -- and stops
-   the moment destroy() is called. chain is accepted for parity with how
-   every other mint-scoped call in this app threads chain through, even
-   though /api/chart/<mint> is Solana-only today: a BSC poster card gets no
-   chart at all (returns null) rather than a broken one. Returns
-   {destroy()} for the caller to tear down (see live_market.html's
-   IntersectionObserver), or null if the container/library/chain isn't
-   available. */
+   the moment destroy() is called. chain is threaded straight through to
+   /api/chart/<mint> (which now supports every chain in EVM_CHAINS as well
+   as Solana), so a BSC/Base/Arbitrum/Polygon poster card gets a real chart
+   too, not just Solana ones. Returns {destroy()} for the caller to tear
+   down (see live_market.html's IntersectionObserver), or null if the
+   container/library isn't available. */
 function _lmtdInitEmbeddedChart(containerId, mint, chain, onResult){
-  if(chain && chain !== 'solana') return null;
   var created = _lmtdCreateFomoChart(containerId);
   if(!created) return null;
   // Transparent background so the poster card's own banner art shows
@@ -921,7 +923,7 @@ function _lmtdInitEmbeddedChart(containerId, mint, chain, onResult){
   }
 
   function renderOnce(isFirst){
-    _lmtdFetchChartData(mint, '5m', '').then(function(r){
+    _lmtdFetchChartData(mint, '5m', '', chain).then(function(r){
       if(destroyed) return;
       if(isFirst) reportFirst(r);
       else if(typeof onResult === 'function') onResult(r, false);

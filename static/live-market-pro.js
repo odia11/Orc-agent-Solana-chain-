@@ -227,24 +227,28 @@ function renderChartSvg(idx, candles, currentPrice){
   updateAxis(idx, candles);
 }
 
-function fetchChart(mint, tf, pairAddr){
+function fetchChart(mint, tf, pairAddr, chain){
   var url = '/api/chart/'+encodeURIComponent(mint)+'?tf='+encodeURIComponent(tf);
   if(pairAddr) url += '&pair='+encodeURIComponent(pairAddr);
+  if(chain) url += '&chain='+encodeURIComponent(chain);
   return fetch(url).then(function(r){ return r.json(); }).catch(function(){ return null; });
 }
 
 function chartTick(idx){
   var st = _chartTimers[idx];
   if(!st || st.destroyed) return;
-  fetchChart(st.mint, st.tf, st.pair).then(function(r){
+  fetchChart(st.mint, st.tf, st.pair, st.chain).then(function(r){
     if(!st || st.destroyed) return;
     if(r && r.candles) renderChartSvg(idx, r.candles, r.current_price);
   });
 }
 
-function mountChart(idx, mint, pairAddr){
+// `chain` defaults to 'solana' -- the API's own default -- so a caller that
+// doesn't know/care about chain (there weren't any before this) still gets
+// the exact prior behavior.
+function mountChart(idx, mint, pairAddr, chain){
   if(_chartTimers[idx]) return;
-  var st = {destroyed:false, mint:mint, pair:pairAddr, tf:'5m', timer:null};
+  var st = {destroyed:false, mint:mint, pair:pairAddr, chain:(chain||'solana'), tf:'5m', timer:null};
   _chartTimers[idx] = st;
   chartTick(idx);
   st.timer = setInterval(function(){ chartTick(idx); }, 5000);
@@ -328,7 +332,8 @@ function fetchFriends(idx, mint){
 
 function activateCard(card){
   var idx = card.dataset.idx, mint = card.dataset.mint, pair = card.dataset.pair;
-  mountChart(idx, mint, pair);
+  var t = ST.tokens[Number(idx)];
+  mountChart(idx, mint, pair, t ? t.chain : 'solana');
   var done = _lazyDone[idx] || (_lazyDone[idx] = {});
   if(!done.safety){ done.safety = true; fetchSafety(idx, mint); }
   if(!done.friends){ done.friends = true; fetchFriends(idx, mint); }
