@@ -5990,6 +5990,23 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
         except Exception as e:
             return False, f'Could not derive origin address: {_redact_keys(str(e))[:150]}', None
 
+        # A Solana origin with no (or near-zero) SOL can't even pay this
+        # transaction's own network fee -- caught here, before ever getting
+        # a quote or writing an audit row, since it can't possibly succeed
+        # regardless of what 0x returns. Previously this surfaced as a raw
+        # "sendTransaction error: {'code': -32002, ... 'AccountNotFound'}"
+        # RPC dump from _bridge_sign_send_solana() once signing was actually
+        # attempted -- technically correct (an empty/never-funded account is
+        # exactly what AccountNotFound means) but meaningless to read.
+        if origin_chain == 'solana':
+            try:
+                _origin_sol = _get_user_sol(origin_address)
+            except Exception:
+                _origin_sol = None
+            if _origin_sol is not None and _origin_sol < 0.002:
+                return False, (f'Insufficient SOL for network fees on your Solana trading wallet '
+                               f'({_origin_sol:.4f} SOL) — deposit a small amount of SOL first'), None
+
         if dest_chain == 'solana':
             dest_address = _get_trading_wallet_address(wallet) or wallet
         else:
@@ -6043,6 +6060,15 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
                 tx_hash = _bridge_sign_send_evm(txn, raw_quote, private_key, origin_chain, origin_address, origin_token)
         except Exception as e:
             err_msg = _redact_keys(str(e))[:300]
+            # AccountNotFound past the SOL pre-check above means the token
+            # ACCOUNT itself (e.g. this wallet's USDC associated token
+            # account) doesn't exist on-chain -- happens when the wallet has
+            # never held that token at all, so there's nothing to bridge
+            # from it regardless of the quoted amount. Translated here
+            # rather than showing the raw RPC error dump (e.g.
+            # "sendTransaction error: {'code': -32002, ... 'AccountNotFound'}").
+            if 'AccountNotFound' in err_msg:
+                err_msg = "Your Solana wallet doesn't appear to hold the token being bridged -- check your balance and try again"
             _bridge_tx_mark_failed(row_id, err_msg)
             return False, err_msg, row_id
 
