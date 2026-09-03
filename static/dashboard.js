@@ -1091,7 +1091,19 @@ document.addEventListener('visibilitychange', async function(){
 });
 
 // ── BALANCE REFRESH ──
+// _solUsdPrice comes straight from Binance's public ticker, called directly
+// from the browser -- Binance geo-blocks a long list of countries/regions
+// at the IP level, and any ad-blocker/privacy extension that blacklists
+// known exchange domains kills it too, so it silently stays 0 forever for
+// a real share of users (caught by the empty catch below). _solPrice
+// (declared further down, populated from OUR OWN backend's /api/state
+// response -- see fetchState()) is the same server-computed rate every
+// other $ conversion in this app already relies on and has none of that
+// fragility. _getSolPrice() prefers it, falling back to the Binance value
+// only if the server hasn't reported one yet (e.g. this exact page has no
+// #state-sol/#sol-balance-display element so fetchState() never runs).
 let _solUsdPrice=0;
+function _getSolPrice(){ return (typeof _solPrice!=='undefined' && _solPrice>0) ? _solPrice : _solUsdPrice; }
 async function _fetchSolPrice(){
   try{
     const r=await fetch('https://api.binance.com/api/v3/ticker/price?symbol=SOLUSDT').then(r=>r.json());
@@ -1103,21 +1115,22 @@ _fetchSolPrice();
 setInterval(_fetchSolPrice,30000);
 
 function _updateSolUsdc(sol){
+  const _p=_getSolPrice();
   const el=document.getElementById('s-sol-usdc');
   if(el){
-    if(_solUsdPrice>0) el.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
+    if(_p>0) el.textContent='≈ $'+(sol*_p).toFixed(2)+' USDC';
     else el.textContent='';
   }
   const sbEl=document.getElementById('sb-sol-usdc');
   if(sbEl){
-    if(_solUsdPrice>0) sbEl.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2);
+    if(_p>0) sbEl.textContent='≈ $'+(sol*_p).toFixed(2);
     else sbEl.textContent='';
   }
   const mnSolEl=document.getElementById('mn-bal-sol');
   if(mnSolEl) mnSolEl.textContent=sol.toFixed(3)+' SOL';
   const mnUsdcEl=document.getElementById('mn-bal-usdc');
   if(mnUsdcEl){
-    if(_solUsdPrice>0) mnUsdcEl.textContent='≈ $'+(sol*_solUsdPrice).toFixed(2)+' USDC';
+    if(_p>0) mnUsdcEl.textContent='≈ $'+(sol*_p).toFixed(2)+' USDC';
     else mnUsdcEl.textContent='';
   }
 }
@@ -3370,9 +3383,16 @@ async function _botFetchStatus(){
       var wr=parseFloat(d.win_rate||0).toFixed(0)
       // Shown as a $ (USDC-equivalent) value, not raw SOL -- the bot still
       // spends actual SOL under the hood to trade/pay gas, this is display
-      // only. Falls back to the SOL amount if the live SOL/USD price hasn't
-      // loaded yet, so the line is never blank.
-      var readyPart = (_solUsdPrice>0) ? ('$'+(solAmt*_solUsdPrice).toFixed(2)+' ready') : (solAmt.toFixed(2)+' SOL ready')
+      // only. Prefers the server's own sol_ready_usd (computed from the
+      // same reliable rate _sol_usd()/_getSolPrice() use everywhere else in
+      // this app) over a client-side calc, since a client-side SOL/USD
+      // price sourced only from Binance's ticker (geo-blocked in plenty of
+      // countries, also killed by ad-blockers) used to leave this stuck
+      // showing raw SOL forever for a real share of users. Falls back to a
+      // client-side calc, then to the raw SOL amount, so the line is never
+      // blank.
+      var _usd = (d.sol_ready_usd!=null) ? d.sol_ready_usd : (_getSolPrice()>0 ? solAmt*_getSolPrice() : null)
+      var readyPart = (_usd!=null) ? ('$'+_usd.toFixed(2)+' ready') : (solAmt.toFixed(2)+' SOL ready')
       statsEl.textContent=readyPart+' · '+open+'/5 open · '+wr+'% win rate'
     }
   }catch(e){}
