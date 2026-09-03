@@ -565,6 +565,8 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
         </div>
         <span id="usdc-evm-tiles" style="display:contents"></span>
       </div>
+      <button onclick="openSwapModalToUsdc()" title="Convert SOL to USDC"
+              style="background:none;border:none;color:#f7b955;font-size:12px;font-weight:700;cursor:pointer;padding:0;margin-top:12px;text-decoration:underline dotted">Convert SOL to USDC →</button>
     </div>
 
     <!-- unified deposit card — tabs per chain, so adding more chains later
@@ -1185,7 +1187,7 @@ function _swUpdatePills(){
   if(toEl) toEl.textContent=_swToMint?_swSym(_swToMint):'Select'
 }
 
-function openSwapModal(){
+function openSwapModal(toMintOverride){
   var spl=window._wTokens||_allSpl||[]
   _swAllTokens=spl
   _swFromMint='__SOL__'
@@ -1193,8 +1195,9 @@ function openSwapModal(){
   // it blank -- spl[0] doesn't exist for an empty wallet, so this used to
   // open the modal with no token selected at all, silently blocking "Review
   // swap" until the person manually opened the picker and knew to look for
-  // the USDC chip themselves.
-  _swToMint=spl.length?spl[0].mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+  // the USDC chip themselves. toMintOverride (see openSwapModalToUsdc()) skips
+  // this guess entirely for an explicit "convert to X" shortcut.
+  _swToMint=toMintOverride||(spl.length?spl[0].mint:'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
   _swUpdatePills()
   _swUpdateFromBal()
   _swUpdateToBal()
@@ -1210,6 +1213,13 @@ function openSwapModal(){
   if(tuEl) tuEl.textContent='≈ $—'
   _swClosePicker()
   document.getElementById('swapModal').style.display='flex'
+}
+// One-tap "convert my SOL to USDC" shortcut -- opens the exact same Swap
+// modal/quote/execute flow as the regular Swap button, just pre-set to
+// SOL->USDC explicitly instead of guessing from whatever tokens the
+// wallet happens to already hold.
+function openSwapModalToUsdc(){
+  openSwapModal('EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v')
 }
 function _closeSwapModal(){
   document.getElementById('swapModal').style.display='none'
