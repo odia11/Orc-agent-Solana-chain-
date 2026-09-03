@@ -115,6 +115,12 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 .wlt-bsc-bal-item{flex:1 1 108px;min-width:108px;background:#0a0b0e;border:1px solid #16191f;border-radius:10px;padding:10px 12px}
 .wlt-bsc-bal-lbl{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#565d68;margin-bottom:4px}
 .wlt-bsc-bal-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#eef1f5}
+/* Total-USDC card's per-chain breakdown: collapsed by default so 6 chains
+   wrapping onto 2 rows doesn't make this the tallest card on the page --
+   most visits only care about the total, expand-on-demand for the split. */
+.wlt-usdc-tiles.collapsed{display:none}
+.wlt-usdc-toggle{background:none;border:none;color:#8a919c;font-size:12px;font-weight:600;cursor:pointer;padding:0;margin-top:10px;display:flex;align-items:center;gap:4px;font-family:var(--ui)}
+.wlt-usdc-toggle:hover{color:#eef1f5}
 .dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
 .dep-chain-tabs{display:flex;gap:2px;padding:2px;background:#0a0b0e;border:1px solid #16191f;border-radius:9px}
 .dep-chain-tab{background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;font-weight:700;letter-spacing:.04em;padding:5px 12px;border-radius:7px;cursor:pointer;transition:all .15s}
@@ -606,7 +612,8 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
         <span class="dep-title">Total USDC <span style="color:var(--muted);font-weight:500">(all chains)</span></span>
       </div>
       <div class="wlt-hero-num" id="usdc-total" style="margin-top:10px">—</div>
-      <div class="wlt-bsc-balances" id="usdc-chain-tiles">
+      <button class="wlt-usdc-toggle" id="usdc-tiles-toggle" onclick="_toggleUsdcTiles()">Per chain bekijken <span id="usdc-tiles-chevron">▾</span></button>
+      <div class="wlt-bsc-balances wlt-usdc-tiles collapsed" id="usdc-chain-tiles">
         <div class="wlt-bsc-bal-item">
           <span class="wlt-bsc-bal-lbl">Solana</span>
           <span class="wlt-bsc-bal-val" id="usdc-sol-val">—</span>
@@ -1862,6 +1869,15 @@ loadBalance()
 setInterval(function(){ if(!document.hidden) loadBalance() }, 8000)
 
 // ── combined USDC balance (Solana + every EVM chain in EVM_CHAINS) ──
+function _toggleUsdcTiles(){
+  var el=document.getElementById('usdc-chain-tiles')
+  var btn=document.getElementById('usdc-tiles-toggle')
+  var chev=document.getElementById('usdc-tiles-chevron')
+  if(!el) return
+  var collapsed=el.classList.toggle('collapsed')
+  if(btn) btn.childNodes[0].textContent = collapsed ? 'Per chain bekijken ' : 'Per chain verbergen '
+  if(chev) chev.textContent = collapsed ? '▾' : '▴'
+}
 var _usdcLoadedOnce=false
 var _EVM_CHAIN_LABELS={bsc:'BSC',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',robinhood:'Robinhood'}
 function loadUsdcSummary(){
