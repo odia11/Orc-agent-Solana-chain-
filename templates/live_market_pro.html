@@ -197,9 +197,17 @@ input{font-family:inherit}
 .pt-chart-empty{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted2);font-size:10.5px;font-family:var(--mono)}
 /* Touch/mouse chart-scrub -- drag or hover anywhere on the chart to see the
    exact price + time at that point, instead of the chart being static. */
-.pt-chart-scrub-line{position:absolute;top:0;width:1px;height:200px;background:var(--muted2);opacity:.55;pointer-events:none;display:none;z-index:2}
-.pt-chart-scrub-dot{position:absolute;width:8px;height:8px;margin:-4px 0 0 -4px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);pointer-events:none;display:none;z-index:3}
-.pt-chart-scrub-tip{position:absolute;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none;display:none;z-index:4}
+/* Positioned entirely via `transform` (never left/top) from JS, and never
+   transitioned -- during an active drag these must track the finger with
+   zero added lag, one-to-one, every animation frame. left:0/top:0 here is
+   just the (0,0) anchor point the transform's translate() offsets are
+   relative to, so a raw pixel delta always lands in the same place
+   regardless of layout. will-change hints the browser to keep each on its
+   own compositor layer, avoiding a full layout+paint per frame of the
+   drag -- the actual fix for the sluggish feel these had at first. */
+.pt-chart-scrub-line{position:absolute;left:0;top:0;width:1px;height:200px;background:var(--muted2);opacity:.55;pointer-events:none;display:none;z-index:2;will-change:transform}
+.pt-chart-scrub-dot{position:absolute;left:0;top:0;width:8px;height:8px;border-radius:50%;background:var(--accent);border:2px solid var(--bg);pointer-events:none;display:none;z-index:3;will-change:transform}
+.pt-chart-scrub-tip{position:absolute;left:0;top:0;background:var(--card2);border:1px solid var(--line2);color:var(--text);font-family:var(--mono);font-size:10px;font-weight:700;padding:3px 7px;border-radius:6px;white-space:nowrap;pointer-events:none;display:none;z-index:4;will-change:transform}
 
 .pt-card-ft{display:flex;flex-direction:column;gap:7px;padding:10px 15px;border-top:1px solid var(--line);grid-column:1/3}
 .pt-friends{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}

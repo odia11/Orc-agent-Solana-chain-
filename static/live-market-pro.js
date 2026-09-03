@@ -262,7 +262,23 @@ function attachChartSvgScrub(idx){
   var tip  = document.createElement('div'); tip.className  = 'pt-chart-scrub-tip';
   wrap.appendChild(line); wrap.appendChild(dot); wrap.appendChild(tip);
 
-  function scrubToX(clientX){
+  // touchmove can fire well over 60 times/second -- doing a full
+  // getBoundingClientRect() + DOM update on every single one of those
+  // (rather than once per actual screen refresh) is what made this feel
+  // laggy/sluggish under a fast real-world swipe. Coalesce into "at most
+  // one update per animation frame": a burst of events between two frames
+  // now overwrites `pendingX` instead of queuing more work, and only the
+  // latest position by the time the frame is due to paint gets applied.
+  var rafId = null, pendingX = null;
+  function scheduleScrub(clientX){
+    pendingX = clientX;
+    if(rafId != null) return;
+    rafId = requestAnimationFrame(function(){
+      rafId = null;
+      doScrub(pendingX);
+    });
+  }
+  function doScrub(clientX){
     var s = _chartTimers[idx];
     var svg = document.getElementById('pt-chart-svg-'+idx);
     if(!s || !svg || !s.pts || !s.pts.length) return;
@@ -284,19 +300,23 @@ function attachChartSvgScrub(idx){
     if(!c || !pt) return;
     var pxX = (pt.x / (s.w||1)) * svgRect.width  + (svgRect.left - wrapRect.left);
     var pxY = (pt.y / (s.h||1)) * svgRect.height + (svgRect.top  - wrapRect.top);
-    line.style.left = pxX+'px'; line.style.height = svgRect.height+'px'; line.style.display = 'block';
-    dot.style.left  = pxX+'px'; dot.style.top = pxY+'px';                dot.style.display  = 'block';
+    // `transform: translate(...)`, never left/top -- keeps every per-frame
+    // update on the compositor (GPU) instead of forcing a full layout+paint
+    // each time, which is the other half of what made this feel sluggish.
+    line.style.height    = svgRect.height+'px';
+    line.style.display   = 'block';
+    line.style.transform = 'translateX('+pxX.toFixed(1)+'px)';
+    dot.style.display    = 'block';
+    dot.style.transform  = 'translate('+(pxX-4).toFixed(1)+'px,'+(pxY-4).toFixed(1)+'px)';
     var d = new Date(c.t*1000);
     var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
-    tip.textContent = fmtPrice(c.c)+'  ·  '+hh+':'+mm;
-    tip.style.display = 'block';
-    // Manually centered + clamped here (both axes) rather than via a CSS
-    // transform: a transform:translate(-50%) on top of this same centering
-    // math double-applies the offset, which is what pushed the tooltip
-    // off-screen whenever a scrub landed near either edge -- .pt-chart-
-    // scrub-tip has no such transform, `left`/`top` are the only inputs.
+    tip.textContent    = fmtPrice(c.c)+'  ·  '+hh+':'+mm;
+    tip.style.display  = 'block';
+    // Manually centered + clamped here (both axes) via the transform's own
+    // offset -- there is no separate CSS transform layered on top (that
+    // double-applied the centering and pushed the tooltip off-screen near
+    // either edge; see the earlier fix for this same tooltip).
     var tipX = Math.max(4, Math.min(wrapRect.width - tip.offsetWidth - 4, pxX - tip.offsetWidth/2));
-    tip.style.left = tipX+'px';
     // Follows the dragged point vertically (just above the dot) instead of
     // sitting fixed at the top of the chart, so it actually feels attached
     // to wherever the finger/cursor is -- clamped to the chart's own band
@@ -304,14 +324,15 @@ function attachChartSvgScrub(idx){
     // above the chart or spills past the bottom into the axis labels.
     var tipH = tip.offsetHeight || 20;
     var tipY = Math.max(4, Math.min(svgRect.height - tipH - 4, pxY - tipH - 10));
-    tip.style.top = tipY+'px';
+    tip.style.transform = 'translate('+tipX.toFixed(1)+'px,'+tipY.toFixed(1)+'px)';
   }
   function clearScrub(){
+    if(rafId != null){ cancelAnimationFrame(rafId); rafId = null; }
     line.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none';
   }
-  function onTouchStart(e){ if(e.touches[0]) scrubToX(e.touches[0].clientX); }
-  function onTouchMove(e){ if(e.touches[0]){ e.preventDefault(); scrubToX(e.touches[0].clientX); } }
-  function onMouseMove(e){ scrubToX(e.clientX); }
+  function onTouchStart(e){ if(e.touches[0]) scheduleScrub(e.touches[0].clientX); }
+  function onTouchMove(e){ if(e.touches[0]){ e.preventDefault(); scheduleScrub(e.touches[0].clientX); } }
+  function onMouseMove(e){ scheduleScrub(e.clientX); }
   wrap.addEventListener('touchstart', onTouchStart, {passive:true});
   wrap.addEventListener('touchmove', onTouchMove, {passive:false});
   wrap.addEventListener('touchend', clearScrub, {passive:true});
@@ -320,6 +341,7 @@ function attachChartSvgScrub(idx){
   wrap.addEventListener('mouseleave', clearScrub);
 
   st.scrubTeardown = function(){
+    if(rafId != null){ cancelAnimationFrame(rafId); rafId = null; }
     wrap.removeEventListener('touchstart', onTouchStart);
     wrap.removeEventListener('touchmove', onTouchMove);
     wrap.removeEventListener('touchend', clearScrub);
