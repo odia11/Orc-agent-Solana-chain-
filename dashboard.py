@@ -21485,9 +21485,10 @@ _MARKET_MAJOR_ADDRESSES = {
     '0x0d500B1d8E8eF31E21C99d1Db9A6444d3ADf1270',      # WMATIC/WPOL (Polygon)
     '0x3c499c542cef5e3811e1192ce70d8cc03d5c3359',      # USDC (Polygon)
     '0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168',      # USDG (Robinhood Chain)
+    '0x912CE59144191C1204E64559FE8253a0e49E6548',      # ARB (Arbitrum DAO governance token)
 }
 _MARKET_MAJOR_SYMBOLS = {'sol', 'wsol', 'usdc', 'usdt', 'bnb', 'wbnb', 'busd', 'eth', 'weth',
-                          'btc', 'wbtc', 'matic', 'wmatic', 'pol', 'wpol', 'usdg'}
+                          'btc', 'wbtc', 'matic', 'wmatic', 'pol', 'wpol', 'usdg', 'arb'}
 
 def _is_market_major_or_impersonator(symbol: str, address: str) -> bool:
     """True for a real major asset OR anything impersonating one by ticker --
