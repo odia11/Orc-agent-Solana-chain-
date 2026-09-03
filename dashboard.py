@@ -5906,10 +5906,24 @@ def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, 
             continue
         if pref_scam_filter:
             _hp = _check_evm_honeypot(mint, chain)
-            if not _hp['ok'] or _hp['is_honeypot']:
+            if _hp.get('no_provider'):
+                # No honeypot/rug-simulation provider covers this chain yet
+                # (see _check_evm_honeypot()'s dispatch) -- rather than
+                # silently blocking every candidate here forever with no
+                # visible reason, require substantially deeper liquidity as
+                # a compensating signal instead of a real simulation.
+                _liq = t.get('liquidity_usd', 0)
+                _no_provider_min_liq = _ai_filters['min_liquidity_usd'] * NO_HONEYPOT_PROVIDER_LIQ_MULT
+                if _liq < _no_provider_min_liq:
+                    add_user_log(wallet, f'[bot-{chain}] SKIPPING {symbol} — no honeypot scanner covers {chain} yet; '
+                                          f'liquidity (${_liq:,.0f}) below the extra-safety bar (${_no_provider_min_liq:,.0f}) required without one')
+                    continue
+                add_user_log(wallet, f'[bot-{chain}] {symbol} — no honeypot scanner covers {chain} yet; '
+                                      f'proceeding on liquidity (${_liq:,.0f}) alone, above the extra-safety bar')
+            elif not _hp['ok'] or _hp['is_honeypot']:
                 add_user_log(wallet, f'[bot-{chain}] SKIPPING {symbol} — honeypot check failed or flagged it as one')
                 continue
-            if _hp['sell_tax'] >= 15:
+            elif _hp['sell_tax'] >= 15:
                 add_user_log(wallet, f'[bot-{chain}] SKIPPING {symbol} — sell tax {_hp["sell_tax"]}% too high')
                 continue
 
@@ -7888,19 +7902,16 @@ def _narrative_safety_gate(mint: str, chain: str) -> tuple:
 
     return True, exemption_note
 
-def _check_evm_honeypot(token_address: str, chain: str = 'bsc') -> dict:
-    """EVM equivalent of _check_lp_locked() -- an EVM token is an arbitrary
-    smart contract (not a simple SPL token), so 'mint authority' doesn't
-    exist here. The real equivalent risk is a honeypot: a contract that lets
-    you buy but blocks or heavily taxes selling. Honeypot.is actually
-    SIMULATES a buy+sell against the live contract rather than just reading
-    source code, which is why it catches "hidden owner" tricks that a
-    static ownership-renounced check would miss (see the 2026 CryptoKoki
-    honeypot-kit research: renounced ownership is trivially fakeable), and
-    covers every chain in EVM_CHAINS via the same chainID parameter.
-    Fails closed -- like _check_lp_locked(), a failed/inconclusive check
-    returns 'ok': False so callers treat it as NOT cleared, never silently
-    treat an unknown result as safe."""
+def _check_honeypot_is(token_address: str, chain: str) -> dict:
+    """Honeypot.is actually SIMULATES a buy+sell against the live contract
+    rather than just reading source code, which is why it catches "hidden
+    owner" tricks that a static ownership-renounced check would miss (see
+    the 2026 CryptoKoki honeypot-kit research: renounced ownership is
+    trivially fakeable). Fails closed -- like _check_lp_locked(), a
+    failed/inconclusive check returns 'ok': False so callers treat it as
+    NOT cleared, never silently treat an unknown result as safe. Only ever
+    called for a chain honeypot.is actually supports -- see
+    _check_evm_honeypot()'s dispatch."""
     try:
         r = requests.get(
             'https://api.honeypot.is/v2/IsHoneypot',
@@ -7926,6 +7937,95 @@ def _check_evm_honeypot(token_address: str, chain: str = 'bsc') -> dict:
     except Exception as e:
         print(f'[honeypot] error for {token_address[:10]}: {e}', flush=True)
         return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+
+# GoPlus Security's own chain_id path segment for its token_security API --
+# NOT the same numeric ID as EVM_CHAINS[chain]['chain_id'] in every case
+# (it happens to match here, but GoPlus uses its own registry), so kept
+# separate rather than reusing that field.
+_GOPLUS_CHAIN_IDS = {'arbitrum': '42161', 'polygon': '137'}
+
+def _check_goplus_security(token_address: str, chain: str) -> dict:
+    """GoPlus Security's token_security API, used as the rug-check provider
+    for the EVM chains honeypot.is itself doesn't cover (see
+    _check_evm_honeypot()'s dispatch) -- same {is_honeypot, risk_level,
+    buy_tax, sell_tax, ok} return shape so callers don't need to care which
+    provider actually ran. GoPlus's own flags are '0'/'1' strings and its
+    tax fields are decimal FRACTIONS (e.g. '0.05' = 5%), unlike honeypot.is's
+    percentage numbers -- converted to a percentage here so both providers'
+    output compares on the same scale (the >=15 sell-tax gate this feeds
+    into is written in percentage terms). cannot_sell_all is folded into
+    is_honeypot: a token whose full balance can never be sold is a honeypot
+    in every way that matters for this app's own full-close convention.
+    Fails closed on any missing/malformed field, exactly like
+    _check_honeypot_is() -- an ambiguous response is never treated as safe."""
+    goplus_chain_id = _GOPLUS_CHAIN_IDS.get(chain)
+    if not goplus_chain_id:
+        return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+    try:
+        r = requests.get(
+            f'https://api.gopluslabs.io/api/v1/token_security/{goplus_chain_id}',
+            params={'contract_addresses': token_address},
+            timeout=8
+        )
+        data = r.json()
+        if data.get('code') != 1:
+            print(f'[goplus] {token_address[:10]} chain={chain} non-OK response code={data.get("code")}', flush=True)
+            return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+        info = (data.get('result') or {}).get(token_address.lower())
+        if not info:
+            print(f'[goplus] {token_address[:10]} chain={chain} no result for this address', flush=True)
+            return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+        is_honeypot = str(info.get('is_honeypot', '1')) == '1' or str(info.get('cannot_sell_all', '0')) == '1'
+        buy_tax  = float(info.get('buy_tax')  or 0) * 100
+        sell_tax = float(info.get('sell_tax') or 0) * 100
+        print(f'[goplus] {token_address[:10]} chain={chain} isHoneypot={is_honeypot} '
+              f'buyTax={buy_tax} sellTax={sell_tax}', flush=True)
+        return {
+            'is_honeypot': is_honeypot,
+            'risk_level':  None,
+            'buy_tax':     buy_tax,
+            'sell_tax':    sell_tax,
+            'ok':          True,
+        }
+    except Exception as e:
+        print(f'[goplus] error for {token_address[:10]} chain={chain}: {e}', flush=True)
+        return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False}
+
+# honeypot.is only actually supports BSC/Base/Ethereum (confirmed against
+# their own docs: adding a chain is "costly in time and effort" and only
+# done "when there is enough demand") -- NOT "every chain in EVM_CHAINS" as
+# this dispatcher used to assume. Silently querying it for an unsupported
+# chain always got back a failed simulation, which the fail-closed design
+# below then (correctly, but with no visible reason) turned into "always
+# skip" -- permanently blocking every single Arbitrum/Polygon auto-buy.
+_HONEYPOT_IS_CHAINS = {'bsc', 'base'}
+
+# How much deeper than the normal min-liquidity floor a candidate must be to
+# qualify on a chain no honeypot/rug-simulation provider covers at all
+# (currently: Robinhood Chain, too new for honeypot.is or GoPlus Security to
+# have added yet) -- see _bot_scan_evm_entry()'s use of this. Liquidity depth
+# is a real, if weaker, proxy signal (a token thin enough to still be a cheap
+# honeypot to fund rarely also has deep, hard-to-fake liquidity), not a
+# replacement for an actual buy+sell simulation, hence the sizable multiplier.
+NO_HONEYPOT_PROVIDER_LIQ_MULT = 5
+
+def _check_evm_honeypot(token_address: str, chain: str = 'bsc') -> dict:
+    """EVM equivalent of _check_lp_locked() -- an EVM token is an arbitrary
+    smart contract (not a simple SPL token), so 'mint authority' doesn't
+    exist here. The real equivalent risk is a honeypot: a contract that lets
+    you buy but blocks or heavily taxes selling. Dispatches to whichever
+    rug-check provider actually covers `chain`: honeypot.is for BSC/Base,
+    GoPlus Security for Arbitrum/Polygon. No provider covers Robinhood Chain
+    yet (it's too new for either to have added support) -- that case
+    returns ok=False with no_provider=True instead of a plain failure, so
+    _bot_scan_evm_entry() can apply its own compensating (higher-liquidity)
+    bar instead of silently blocking that chain forever with no visible
+    reason why."""
+    if chain in _HONEYPOT_IS_CHAINS:
+        return _check_honeypot_is(token_address, chain)
+    if chain in _GOPLUS_CHAIN_IDS:
+        return _check_goplus_security(token_address, chain)
+    return {'is_honeypot': True, 'risk_level': None, 'buy_tax': 0, 'sell_tax': 0, 'ok': False, 'no_provider': True}
 
 def _check_bsc_honeypot(token_address: str) -> dict:
     """Backward-compatible alias -- see _check_evm_honeypot() above."""
