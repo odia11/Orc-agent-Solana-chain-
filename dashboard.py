@@ -5733,7 +5733,7 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
             # silently fail for lack of a few cents of gas -- it's how a
             # losing position actually gets closed.
             _evm_addr = _EvmAccount.from_key(pk).address
-            _gas_ok, _gas_msg = _ensure_evm_gas(wallet, pk, _evm_addr, chain)
+            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
             if not _gas_ok:
                 return False, 0.0, 0.0
             ok, exit_price, sold_amt = _sell_and_get_realized_evm(wallet, pk, mint, amount_str, price, sell_amount, chain)
@@ -5850,7 +5850,7 @@ def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, 
             # of the whole chain for this cycle rather than trying the next
             # qualifying candidate (it would hit the exact same wall).
             _evm_addr = _EvmAccount.from_key(pk).address
-            _gas_ok, _gas_msg = _ensure_evm_gas(wallet, pk, _evm_addr, chain)
+            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
             if not _gas_ok:
                 add_user_log(wallet, f'[bot-{chain}] Cannot buy {symbol} — {_gas_msg}')
                 return False
@@ -7098,7 +7098,77 @@ def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amoun
         print(f'[{chain}-gas-topup] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
-def _ensure_evm_gas(wallet: str, private_key: str, evm_address: str, chain: str) -> tuple:
+GAS_BOOTSTRAP_SOL_USD = 5.0  # small, fixed USD-equivalent amount of the user's OWN SOL bridged to bootstrap a completely empty EVM gas balance -- kept a bit larger than the ongoing USDC top-up amount since a cross-chain bridge's own fees eat a bigger share of a very small transfer
+
+def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, chain: str) -> tuple:
+    """A completely empty (0) native gas balance on `chain` can't be
+    refueled by a same-chain swap -- broadcasting that swap itself needs
+    gas that doesn't exist yet (see _ensure_evm_gas's own top comment). The
+    one way around that WITHOUT the platform fronting any money: bridge a
+    small, fixed amount of the user's OWN SOL (their Solana trading wallet,
+    which every user of this app already needs anyway) straight into
+    `chain`'s native gas token, via the exact same 0x Cross-Chain bridge
+    the app's own Bridge feature already uses (_execute_cross_chain_bridge).
+    The user only ever pays gas on the ORIGIN (Solana) side of that bridge,
+    in SOL they already hold -- the destination-chain arrival is delivered
+    by the bridge network's own relay infrastructure, not the user's EVM
+    wallet, so this is the one operation that can legitimately fund an EVM
+    wallet from absolute zero without anyone -- the platform included --
+    paying for it.
+
+    Bridging takes real time (seconds to a couple of minutes), so this
+    never blocks waiting for it: if a bootstrap bridge to this chain isn't
+    already in flight for this user, it submits exactly one and returns
+    (False, ...) for THIS cycle regardless -- the plain balance check at
+    the top of _ensure_evm_gas() picks up the native balance on its own
+    once the bridge actually lands, no separate "is it done yet" polling
+    needed here."""
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+
+    # Don't submit a second bootstrap bridge while one is still in flight --
+    # _execute_cross_chain_bridge()'s own duplicate-submission guard only
+    # covers a 120-second window, too short for a bridge that can easily
+    # take longer than that to fill.
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            in_flight = conn.execute(
+                "SELECT id FROM bridge_transactions WHERE user_id=? AND dest_chain=? AND token_out=? "
+                "AND status NOT IN ('bridge_filled','bridge_failed','origin_tx_reverted','timed_out') "
+                "ORDER BY id DESC LIMIT 1",
+                (user_id, chain, BNB_NATIVE_ADDR)
+            ).fetchone()
+        finally:
+            conn.close()
+    except Exception as e:
+        return False, f'could not check for an in-flight gas bootstrap bridge: {e}'
+    if in_flight:
+        add_user_log(wallet, f'[bot-{chain}] Waiting for a {native_symbol} gas bootstrap bridge (row {in_flight[0]}) to land')
+        return False, f'gas bootstrap bridge already in flight (row {in_flight[0]})'
+
+    try:
+        trading_wallet = _get_trading_wallet_address(wallet)
+        sol_bal = _get_user_sol(trading_wallet) if trading_wallet else 0.0
+    except Exception as e:
+        return False, f'could not check SOL balance to fund a gas bootstrap: {e}'
+
+    sol_amount = round(GAS_BOOTSTRAP_SOL_USD / _sol_price_usd, 6) if _sol_price_usd > 0 else 0.0
+    _sol_gas_buffer = 0.005  # leaves enough SOL behind to cover the bridge's own Solana-side network fee plus a little headroom
+    if sol_amount <= 0 or sol_bal < sol_amount + _sol_gas_buffer:
+        add_user_log(wallet, f'[bot-{chain}] Out of {native_symbol} for gas and not enough SOL ({round(sol_bal,4)}) to bootstrap it via bridge — deposit a bit more SOL')
+        return False, f'not enough SOL to bootstrap {chain} gas via bridge'
+
+    ok, msg, row_id = _execute_cross_chain_bridge(
+        user_id, wallet, origin_chain='solana', dest_chain=chain,
+        origin_token=SOL_MINT, dest_token=BNB_NATIVE_ADDR, amount=sol_amount,
+        initiated_by='bot_gas_bootstrap')
+    if ok:
+        add_user_log(wallet, f'[bot-{chain}] Bootstrapping {native_symbol} gas from {sol_amount} SOL via bridge (row {row_id}) — this can take a minute, paid entirely from your own SOL')
+        return False, 'gas bootstrap bridge just submitted, not landed yet'
+    add_user_log(wallet, f'[bot-{chain}] Gas bootstrap bridge failed to submit: {msg}')
+    return False, f'gas bootstrap bridge failed: {msg}'
+
+def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: str, chain: str) -> tuple:
     """Tops up `evm_address`'s native gas balance on `chain` from its OWN
     USDC on that chain if it's running low -- see the module comment above
     for why. Returns (ok, msg): ok=True means the caller can go ahead with
@@ -7117,8 +7187,7 @@ def _ensure_evm_gas(wallet: str, private_key: str, evm_address: str, chain: str)
 
     native_symbol = EVM_CHAINS[chain]['native_symbol']
     if native_bal_wei <= 0:
-        add_user_log(wallet, f'[bot-{chain}] Out of {native_symbol} for gas and cannot self-fund a top-up from zero — please deposit a small amount of {native_symbol} once to get started')
-        return False, f'no {native_symbol} left to bootstrap a top-up with'
+        return _bootstrap_evm_gas_via_bridge(user_id, wallet, evm_address, chain)
 
     try:
         usdc_bal = get_evm_usdc_balance(evm_address, chain)
