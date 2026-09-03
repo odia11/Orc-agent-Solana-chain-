@@ -422,13 +422,23 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
         <div class="pf-tile">
           <div class="pf-tile-lbl">Total PnL</div>
           <div class="pf-tile-val {% if pnl_positive %}pos{% else %}neg{% endif %}">
-            {{ '+' if pnl_positive else '' }}{{ total_pnl }} SOL
+            {% if total_pnl_usd is not none %}
+              {{ '+' if pnl_positive else '-' }}${{ '%.2f'|format(total_pnl_usd|abs) }}
+            {% else %}
+              {{ '+' if pnl_positive else '' }}{{ total_pnl }} SOL
+            {% endif %}
           </div>
           <div class="pf-tile-sub">realized</div>
         </div>
         <div class="pf-tile">
-          <div class="pf-tile-lbl">SOL Balance</div>
-          <div class="pf-tile-val">{{ '%.4f'|format(sol_balance) if sol_balance is not none else '—' }} SOL</div>
+          <div class="pf-tile-lbl">Balance</div>
+          <div class="pf-tile-val">
+            {% if sol_balance_usd is not none %}
+              ${{ '%.2f'|format(sol_balance_usd) }}
+            {% else %}
+              {{ '%.4f'|format(sol_balance) if sol_balance is not none else '—' }} SOL
+            {% endif %}
+          </div>
           <div class="pf-tile-sub">on-chain</div>
         </div>
       </div>

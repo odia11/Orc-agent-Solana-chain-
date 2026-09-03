@@ -3121,6 +3121,16 @@ state = {
 }
 
 _sol_price_usd: float = 0.0  # refreshed each token_loop cycle via DexScreener
+
+def _sol_usd(sol_amount):
+    """USD-equivalent of a SOL-denominated amount at the live SOL/USD rate,
+    or None if that rate hasn't loaded yet -- every caller falls back to
+    showing the raw SOL figure in that case rather than a bogus $0.00.
+    Shared by every page that shows a user a dollar amount instead of a raw
+    SOL balance/PnL figure (profile, leaderboard, traders, history, ...)."""
+    if sol_amount is None or _sol_price_usd <= 0:
+        return None
+    return round(float(sol_amount) * _sol_price_usd, 2)
 _trade_size_units_migrated: bool = False  # one-time SOL→USDC migration guard, see _migrate_trade_size_units()
 _price_snapshots: dict = {}  # mint -> {'price': float, 'ts': float} — previous-cycle prices for reversal detection
 cooldown_tokens:  dict = {}  # symbol -> expiry_timestamp — 30-min post-loss cooldown per token
@@ -9519,6 +9529,8 @@ def profile():
             sol_balance = round(r.json()['result']['value'] / 1e9, 4)
         except Exception:
             pass
+        total_pnl_usd = _sol_usd(total_pnl)
+        sol_balance_usd = _sol_usd(sol_balance)
         return _render_no_cache(
             'profile.html',
             wallet=wallet,
@@ -9536,6 +9548,7 @@ def profile():
             wins=wins,
             win_rate=win_rate,
             total_pnl=total_pnl,
+            total_pnl_usd=total_pnl_usd,
             pnl_positive=total_pnl >= 0,
             followers=followers,
             following=following,
@@ -9543,6 +9556,7 @@ def profile():
             recent_calls=recent_calls,
             recent_trades=recent_trades,
             sol_balance=sol_balance,
+            sol_balance_usd=sol_balance_usd,
             is_verified=bool(user["is_verified"]),
             is_own_profile=True,
             notify_enabled=False,
@@ -9610,6 +9624,8 @@ def profile_view(wallet_address: str):
             sol_balance = round(r.json()['result']['value'] / 1e9, 4)
         except Exception:
             pass
+        total_pnl_usd = _sol_usd(total_pnl)
+        sol_balance_usd = _sol_usd(sol_balance)
         is_own = bool(session_wallet and session_wallet == user["wallet_address"])
         is_following = False
         follows_me = False
@@ -9651,6 +9667,7 @@ def profile_view(wallet_address: str):
             wins=wins,
             win_rate=win_rate,
             total_pnl=total_pnl,
+            total_pnl_usd=total_pnl_usd,
             pnl_positive=total_pnl >= 0,
             followers=followers,
             following=following,
@@ -9658,6 +9675,7 @@ def profile_view(wallet_address: str):
             recent_calls=recent_calls,
             recent_trades=recent_trades,
             sol_balance=sol_balance,
+            sol_balance_usd=sol_balance_usd,
             is_verified=bool(user["is_verified"]),
             is_own_profile=is_own,
             is_following=is_following,
