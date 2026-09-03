@@ -3365,11 +3365,15 @@ async function _botFetchStatus(){
     // stats line
     var statsEl=document.getElementById('bot-stats')
     if(statsEl){
-      var sol=parseFloat(d.sol_ready||0).toFixed(2)
+      var solAmt=parseFloat(d.sol_ready||0)
       var open=parseInt(d.open_positions||0)
       var wr=parseFloat(d.win_rate||0).toFixed(0)
-      var usdcPart = (_solUsdPrice>0) ? (' (≈ $'+(parseFloat(d.sol_ready||0)*_solUsdPrice).toFixed(2)+')') : ''
-      statsEl.textContent=sol+' SOL'+usdcPart+' ready · '+open+'/5 open · '+wr+'% win rate'
+      // Shown as a $ (USDC-equivalent) value, not raw SOL -- the bot still
+      // spends actual SOL under the hood to trade/pay gas, this is display
+      // only. Falls back to the SOL amount if the live SOL/USD price hasn't
+      // loaded yet, so the line is never blank.
+      var readyPart = (_solUsdPrice>0) ? ('$'+(solAmt*_solUsdPrice).toFixed(2)+' ready') : (solAmt.toFixed(2)+' SOL ready')
+      statsEl.textContent=readyPart+' · '+open+'/5 open · '+wr+'% win rate'
     }
   }catch(e){}
 }
