@@ -404,6 +404,44 @@ var CHAIN_LABELS = {bsc:'BSC', base:'BASE', arbitrum:'ARB', polygon:'POLY', robi
 var EVM_CURRENCY_LABELS = {robinhood:'USDG'};
 function evmCurrencyLabel(chain){ return EVM_CURRENCY_LABELS[chain] || 'USDC'; }
 function chainLabel(chain){ return CHAIN_LABELS[chain] || 'SOL'; }
+function shortAddr(addr){
+  addr = addr || '';
+  return addr.length > 10 ? addr.slice(0, 4) + '…' + addr.slice(-4) : addr;
+}
+// Falls back to the legacy execCommand path when navigator.clipboard isn't
+// available (older in-app webviews, non-HTTPS) rather than silently doing
+// nothing -- copying the contract address is the entire point of this button.
+function copyToClipboard(text){
+  if(navigator.clipboard && navigator.clipboard.writeText){
+    return navigator.clipboard.writeText(text);
+  }
+  return new Promise(function(resolve, reject){
+    try{
+      var ta = document.createElement('textarea');
+      ta.value = text;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus(); ta.select();
+      var ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      ok ? resolve() : reject(new Error('execCommand copy failed'));
+    }catch(e){ reject(e); }
+  });
+}
+function copyCA(mint, el){
+  copyToClipboard(mint).then(function(){
+    toast('Contract address copied');
+    if(el){
+      var textEl = el.querySelector('.pt-tok-ca-text');
+      if(textEl){
+        var orig = textEl.textContent;
+        textEl.textContent = 'Copied!';
+        setTimeout(function(){ textEl.textContent = orig; }, 1200);
+      }
+    }
+  }).catch(function(){ toast('Could not copy — long-press the address instead'); });
+}
 function chainBadgeHtml(chain){
   var c = CHAIN_LABELS[chain] ? chain : 'solana';
   return '<span class="pt-chain-badge chain-'+c+'"><span class="pt-chain-dot"></span>'+chainLabel(c)+'</span>';
@@ -427,7 +465,11 @@ function cardHtml(t, idx){
     + '<div class="pt-card-hd">'
     +   logoTile(t.image_url, t.symbol, 'pt-tok-logo', 'pt-tok-logo-ph')
     +   '<div class="pt-tok-id"><div class="pt-tok-sym">$'+esc(t.symbol)+' '+starsHtml(t.score)+chainBadgeHtml(t.chain)+'</div>'
-    +   '<div class="pt-tok-meta">'+esc(t.name||t.symbol)+' · '+fmtAge(t.pair_created_at)+' old</div></div>'
+    +   '<div class="pt-tok-meta">'+esc(t.name||t.symbol)+' · '+fmtAge(t.pair_created_at)+' old</div>'
+    +   '<div class="pt-tok-ca" data-action="copy-ca" data-mint="'+esc(t.mint)+'" title="'+esc(t.mint)+'">'
+    +     '<span class="pt-tok-ca-text mono">'+esc(shortAddr(t.mint))+'</span>'
+    +     '<span class="pt-tok-ca-icon">⧉</span>'
+    +   '</div></div>'
     +   '<div class="pt-card-hd-right">'
     +     '<span id="pt-safety-'+idx+'"></span>'
     +     '<button class="pt-watch-btn'+(isWatched?' active':'')+'" data-action="watch" data-mint="'+esc(t.mint)+'" data-sym="'+esc(t.symbol)+'">'+(isWatched?'★':'☆')+'</button>'
@@ -918,6 +960,7 @@ document.addEventListener('click', function(e){
   if((el = e.target.closest('[data-action="confirm-buy"]'))){ confirmBuy(el.dataset.idx); return; }
   if((el = e.target.closest('[data-action="sell"]'))){ handleSell(el.dataset.idx, el); return; }
   if((el = e.target.closest('[data-action="copy"]'))){ toggleCopy(el); return; }
+  if((el = e.target.closest('[data-action="copy-ca"]'))){ copyCA(el.dataset.mint, el); return; }
   if((el = e.target.closest('[data-action="trader-profile"]'))){
     if(el.dataset.wallet) location.href = '/profile/' + encodeURIComponent(el.dataset.wallet);
     return;
