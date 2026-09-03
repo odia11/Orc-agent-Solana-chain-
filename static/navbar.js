@@ -6,6 +6,13 @@
 (function(){
 'use strict';
 
+// Chains OrcAgent actually trades on -- mirrors dashboard.py's
+// _MARKET_LIVE_CHAINS. Used to keep the navbar search from surfacing (or
+// letting a user click into) a token on a chain this app has no trading
+// route for at all.
+var _NB_LIVE_CHAINS = ['solana', 'bsc', 'base', 'arbitrum', 'polygon', 'robinhood'];
+var _NB_CHAIN_LABELS = {solana:'SOL', bsc:'BSC', base:'BASE', arbitrum:'ARB', polygon:'POLY', robinhood:'HOOD'};
+
 // ── DEFAULT FETCH TIMEOUT ──
 // After a phone sleeps or the app sits backgrounded for a while, network
 // connections resumed on wake are often stale: the socket still looks open
@@ -163,15 +170,21 @@ document.addEventListener('DOMContentLoaded', function(){
     ]).then(function(results){
       var tokRes  = results[0].status==='fulfilled' ? results[0].value : null;
       var userRes = results[1].status==='fulfilled' ? results[1].value : null;
-      var pairs = ((tokRes && tokRes.pairs) || []).filter(function(p){ return p.chainId==='solana'; }).slice(0,6);
+      // Was Solana-only ({p.chainId==='solana'}) -- every other chain OrcAgent
+      // trades on (BSC/Base/Arbitrum/Polygon/Robinhood) got silently thrown
+      // away here even though /api/dexscreener/search itself already returns
+      // every chain DexScreener knows about. Now keeps any chain this app
+      // actually supports trading on.
+      var pairs = ((tokRes && tokRes.pairs) || []).filter(function(p){ return _NB_LIVE_CHAINS.indexOf(p.chainId)!==-1; }).slice(0,6);
       var users = (userRes && userRes.ok && userRes.users) || [];
       var html = '';
       if(pairs.length){
         html += '<div class="pt-nb-sr-hd">Tokens</div>' + pairs.map(function(p){
           var sym = p.baseToken.symbol, addr = p.baseToken.address, img = p.info && p.info.imageUrl;
-          return '<div class="pt-nb-sr-row" data-action="tok" data-mint="'+esc(addr)+'">'
+          var chainLbl = _NB_CHAIN_LABELS[p.chainId] || p.chainId;
+          return '<div class="pt-nb-sr-row" data-action="tok" data-mint="'+esc(addr)+'" data-chain="'+esc(p.chainId)+'">'
             + logoTile(img, sym, 'pt-nb-sr-logo', 'pt-nb-sr-logo-ph')
-            + '<div class="pt-nb-sr-name">$'+esc(sym)+'</div><div class="pt-nb-sr-sub">'+fmtPrice(p.priceUsd)+'</div></div>';
+            + '<div class="pt-nb-sr-name">$'+esc(sym)+' <span class="pt-nb-sr-chain">'+esc(chainLbl)+'</span></div><div class="pt-nb-sr-sub">'+fmtPrice(p.priceUsd)+'</div></div>';
         }).join('');
       }
       if(users.length){

@@ -17878,8 +17878,17 @@ def api_dex_search():
 @app.route('/api/token/info/<mint_address>', methods=['GET'])
 @rate_limit(60, 60)
 def api_token_info(mint_address):
+    # Was Solana-only (is_valid_solana_address rejected every EVM address
+    # outright) -- this is the endpoint the navbar's search-result click and
+    # Live Market Pro's ?mint= deep link both go through, so it being
+    # Solana-only was the actual reason searching/opening a BSC/Base/
+    # Arbitrum/Polygon/Robinhood token from search never worked. Solana and
+    # EVM addresses use disjoint formats (base58 vs 0x-hex) so there's no
+    # ambiguity in auto-detecting which one this is -- no explicit chain
+    # param needed on this URL.
     mint = _sanitize(mint_address.strip())
-    if not mint or not is_valid_solana_address(mint):
+    is_evm = is_valid_evm_address(mint)
+    if not mint or not (is_evm or is_valid_solana_address(mint)):
         return jsonify({'ok': False, 'msg': 'Invalid address'}), 400
     try:
         url = 'https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(mint, safe='')
@@ -17889,9 +17898,13 @@ def api_token_info(mint_address):
         pairs = r.json().get('pairs') or []
         if not pairs:
             return jsonify({'ok': False, 'msg': 'Token not found'}), 404
-        # Pick the Solana pair with highest liquidity (most representative)
-        pairs_sol = [p for p in pairs if p.get('chainId') == 'solana'] or pairs
-        p    = max(pairs_sol, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
+        # Only ever pick a pair on a chain this app actually supports trading
+        # on -- an EVM address could theoretically also exist (independently
+        # deployed) on a chain OrcAgent doesn't trade, and a Solana address
+        # only ever has Solana pairs anyway. Highest liquidity among those is
+        # the most representative pair to show.
+        pairs_supported = [p for p in pairs if p.get('chainId') in _MARKET_LIVE_CHAINS] or pairs
+        p    = max(pairs_supported, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
         base = p.get('baseToken') or {}
         info = p.get('info') or {}
         pc   = p.get('priceChange') or {}
@@ -17963,7 +17976,7 @@ def api_token_info(mint_address):
             'banner_url':        info.get('header'),
             # socials / links
             'twitter_url':       twitter,
-            'dexscreener_url':   p.get('url') or f'https://dexscreener.com/solana/{mint}',
+            'dexscreener_url':   p.get('url') or f'https://dexscreener.com/{p.get("chainId","solana")}/{mint}',
         })
     except Exception as e:
         return jsonify({'ok': False, 'msg': str(e)}), 500
