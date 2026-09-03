@@ -536,6 +536,7 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
         <button class="wlt-action primary" onclick="_modalDeposit()"><span class="wlt-action-ic">↓</span>Deposit</button>
         <button class="wlt-action" onclick="_modalSend()"><span class="wlt-action-ic">→</span>Send</button>
         <button class="wlt-action" onclick="openSwapModal()"><span class="wlt-action-ic">⇄</span>Swap</button>
+        <button class="wlt-action" onclick="_modalBridge()"><span class="wlt-action-ic">⇌</span>Bridge</button>
       </div>
       <div class="wlt-hero-inpos">
         <span class="wlt-hero-inpos-lbl">In open positions</span>
@@ -643,6 +644,17 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
         <a href="/history" class="act-viewall">View all →</a>
       </div>
       <div id="activity-list"><div class="state-msg">Loading…</div></div>
+    </div>
+
+    <!-- bridge history -- every cross-chain bridge this wallet has run, so
+         refreshing the page never loses a still-in-progress bridge's status
+         (see /api/bridge/transactions) -->
+    <div class="act-card" style="margin-top:16px">
+      <div class="act-hdr">
+        <span class="act-title">Bridge History</span>
+        <button onclick="_loadBridgeHistory()" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:0" title="Refresh">↻</button>
+      </div>
+      <div id="bridge-history-list"><div class="state-msg">Loading…</div></div>
     </div>
 
     <!-- manual trade history — Live Market instant-trades only (source='manual');
@@ -971,6 +983,180 @@ function _execSend(){
   }).catch(function(){
     if(note) note.style.color='var(--red)',note.textContent='Network error'
   })
+}
+
+// ── bridge modal (cross-chain, via 0x Cross-Chain API -- /api/bridge/*) ──
+var _BRIDGE_CHAINS=[
+  {v:'solana',   label:'Solana'},
+  {v:'bsc',      label:'BSC'},
+  {v:'base',     label:'Base'},
+  {v:'arbitrum', label:'Arbitrum'},
+  {v:'polygon',  label:'Polygon'},
+  {v:'robinhood',label:'Robinhood Chain'},
+]
+var _bridgeQuote=null   // the last quote fetched, kept so Confirm doesn't need to re-derive anything
+var _bridgeStatusTimer=null
+
+function _bridgeChainOptions(selected){
+  return _BRIDGE_CHAINS.map(function(c){
+    return '<option value="'+c.v+'"'+(c.v===selected?' selected':'')+'>'+c.label+'</option>'
+  }).join('')
+}
+
+function _modalBridge(){
+  _bridgeQuote=null
+  if(_bridgeStatusTimer){clearInterval(_bridgeStatusTimer);_bridgeStatusTimer=null}
+  _showModal(
+    '<div class="w-modal-title">Bridge</div>'
+    +'<div class="w-modal-note" style="margin-top:0">Move USDC (USDG on Robinhood Chain) from one chain to another. Funds may leave your origin wallet before the bridge itself finishes -- the status view below tracks that separately.</div>'
+    +'<div class="w-modal-label">FROM</div>'
+    +'<select class="w-modal-inp" id="br-origin-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'+_bridgeChainOptions('solana')+'</select>'
+    +'<input class="w-modal-inp" id="br-amount" type="number" placeholder="Amount" min="0.000001" step="0.01" oninput="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'
+    +'<div class="w-modal-label">TO</div>'
+    +'<select class="w-modal-inp" id="br-dest-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'+_bridgeChainOptions('base')+'</select>'
+    +'<div class="w-modal-btns">'
+      +'<button class="w-modal-btn w-modal-secondary" onclick="_closeModal()">Cancel</button>'
+      +'<button class="w-modal-btn w-modal-primary" id="br-quote-btn" onclick="_bridgeGetQuote()">Get Quote</button>'
+    +'</div>'
+    +'<div id="br-quote"></div>'
+  )
+}
+
+function _bridgeFmtUsd(n){
+  var v=parseFloat(n)
+  return isNaN(v)?'—':'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})
+}
+
+function _bridgeGetQuote(){
+  var origin=document.getElementById('br-origin-chain').value
+  var dest=document.getElementById('br-dest-chain').value
+  var amount=parseFloat(document.getElementById('br-amount').value)
+  var quoteEl=document.getElementById('br-quote')
+  if(origin===dest){quoteEl.innerHTML='<div class="w-modal-note" style="color:var(--red)">Origin and destination chain must be different.</div>';return}
+  if(!(amount>0)){quoteEl.innerHTML='<div class="w-modal-note" style="color:var(--red)">Enter an amount greater than 0.</div>';return}
+  var btn=document.getElementById('br-quote-btn')
+  btn.disabled=true;btn.textContent='Getting quote…'
+  quoteEl.innerHTML='<div class="w-modal-note">Fetching quote…</div>'
+  var qs=new URLSearchParams({origin_chain:origin,dest_chain:dest,amount:amount})
+  fetch('/api/bridge/quote?'+qs.toString(),{credentials:'include'})
+    .then(function(r){return r.json()})
+    .then(function(d){
+      if(!d.ok){
+        quoteEl.innerHTML='<div class="w-modal-note" style="color:var(--red)">'+(d.msg||'Could not get a quote')+'</div>'
+        return
+      }
+      _bridgeQuote={origin_chain:origin,dest_chain:dest,amount:amount}
+      var destLabel=_BRIDGE_CHAINS.find(function(c){return c.v===dest}).label
+      var destSym=dest==='robinhood'?'USDG':'USDC'
+      var originSym=origin==='robinhood'?'USDG':'USDC'
+      var receiveRaw=d.expected_amount_out
+      var receive=receiveRaw!=null?(parseFloat(receiveRaw)/Math.pow(10, dest==='solana'?6:(dest==='bsc'?18:6))).toFixed(4):'—'
+      quoteEl.innerHTML=(
+        '<div class="w-modal-label" style="margin-top:16px">QUOTE</div>'
+        +'<div class="w-modal-note" style="margin-top:4px;color:var(--text)">'
+          +'You send: <b>'+amount+' '+originSym+'</b><br>'
+          +'You receive: <b>≈ '+receive+' '+destSym+'</b> on '+destLabel+'<br>'
+          +(d.route_name?('Route: '+d.route_name+'<br>'):'')
+          +(d.estimated_seconds?('Estimated time: ~'+Math.round(d.estimated_seconds)+'s<br>'):'Estimated time: seconds to minutes<br>')
+          +(d.fee_usd!=null?('Fees: '+_bridgeFmtUsd(d.fee_usd)+'<br>'):'')
+          +'Quote ID: <span style="font-size:10px;color:var(--muted)">'+(d.quote_id||'—')+'</span>'
+        +'</div>'
+        +'<div class="w-modal-btns">'
+          +'<button class="w-modal-btn w-modal-primary" onclick="_bridgeConfirm()">Confirm Bridge</button>'
+        +'</div>'
+      )
+    })
+    .catch(function(){ quoteEl.innerHTML='<div class="w-modal-note" style="color:var(--red)">Network error — try again</div>' })
+    .finally(function(){ btn.disabled=false;btn.textContent='Get Quote' })
+}
+
+function _bridgeConfirm(){
+  if(!_bridgeQuote) return
+  var quoteEl=document.getElementById('br-quote')
+  quoteEl.innerHTML='<div class="w-modal-note">Signing and submitting…</div>'
+  fetch('/api/bridge/execute',{
+    method:'POST',credentials:'include',
+    headers:Object.assign({'Content-Type':'application/json','X-CSRF-Token':_csrf},
+                           _clientSecret ? {'X-API-Shared-Secret':_clientSecret} : {}),
+    body:JSON.stringify({origin_chain:_bridgeQuote.origin_chain,dest_chain:_bridgeQuote.dest_chain,amount:_bridgeQuote.amount})
+  }).then(function(r){return r.json()}).then(function(d){
+    if(!d.ok){
+      quoteEl.innerHTML='<div class="w-modal-note" style="color:var(--red)">'+(d.msg||'Bridge failed to submit')+'</div>'
+      return
+    }
+    _bridgeRenderStatus(d.bridge_id, 'origin_tx_pending', d.tx_hash, null)
+    _bridgeStatusTimer=setInterval(function(){_bridgePollStatus(d.bridge_id)}, 8000)
+  }).catch(function(){
+    quoteEl.innerHTML='<div class="w-modal-note" style="color:var(--red)">Network error — the transaction may or may not have been submitted; check Bridge History below before retrying.</div>'
+  })
+}
+
+// ✓/●/○ step list matching the spec's exact 4-stage view. Terminal failure
+// states (origin_tx_reverted/bridge_failed/timed_out) replace the stepper
+// with an explicit failure panel instead -- see the branch below.
+function _bridgeRenderStatus(bridgeId, status, sourceTxHash, destTxHash){
+  var quoteEl=document.getElementById('br-quote')
+  if(!quoteEl) return
+  var FAILURES={origin_tx_reverted:1,bridge_failed:1,timed_out:1}
+  if(FAILURES[status]){
+    quoteEl.innerHTML=(
+      '<div class="w-modal-label" style="margin-top:16px;color:var(--red)">BRIDGE FAILED</div>'
+      +'<div class="w-modal-note" style="color:var(--text)">'
+        +'Status: <b>'+(status==='origin_tx_reverted'?'Transaction Reverted':status==='bridge_failed'?'Bridge Failed':'Status Unknown (timed out)')+'</b><br>'
+        +'Bridge ID: '+bridgeId+'<br>'
+        +(sourceTxHash?('Origin TX: <span style="font-size:10px">'+sourceTxHash+'</span><br>'):'')
+        +'If funds already left your origin wallet, check Bridge History below for recovery details before retrying — never resubmit blindly.'
+      +'</div>'
+    )
+    if(_bridgeStatusTimer){clearInterval(_bridgeStatusTimer);_bridgeStatusTimer=null}
+    _loadBridgeHistory()
+    return
+  }
+  var steps=[
+    {key:'quote', label:'Quote obtained', done:true},
+    {key:'submit', label:'Transaction submitted', done:!!sourceTxHash},
+    {key:'bridge', label:'Bridge processing', done:status==='bridge_filled', active:sourceTxHash && status!=='bridge_filled'},
+    {key:'complete', label:'Destination completed', done:status==='bridge_filled'},
+  ]
+  var stepsHtml=steps.map(function(s){
+    var mark=s.done?'✓':(s.active?'●':'○')
+    return '<div style="color:'+(s.done?'var(--green)':(s.active?'var(--accent)':'var(--muted)'))+'">'+mark+' '+s.label+'</div>'
+  }).join('')
+  quoteEl.innerHTML=(
+    '<div class="w-modal-label" style="margin-top:16px">TRANSACTION STATUS</div>'
+    +'<div class="w-modal-note" style="color:var(--text);line-height:1.9">'+stepsHtml+'</div>'
+    +'<div class="w-modal-note" style="font-size:10px">'
+      +(sourceTxHash?('Origin TX: '+sourceTxHash+'<br>'):'')
+      +(destTxHash?('Destination TX: '+destTxHash+'<br>'):'')
+      +'Funds may already have left your origin wallet even while this still shows "processing."'
+    +'</div>'
+  )
+  if(status==='bridge_filled'){
+    if(_bridgeStatusTimer){clearInterval(_bridgeStatusTimer);_bridgeStatusTimer=null}
+    _loadBridgeHistory()
+  }
+}
+
+function _bridgePollStatus(bridgeId){
+  fetch('/api/bridge/status/'+bridgeId,{credentials:'include'}).then(function(r){return r.json()}).then(function(d){
+    if(!d.ok) return
+    _bridgeRenderStatus(bridgeId, d.status, d.source_tx_hash, d.dest_tx_hash)
+  }).catch(function(){})
+}
+
+function _loadBridgeHistory(){
+  var el=document.getElementById('bridge-history-list')
+  if(!el) return
+  fetch('/api/bridge/transactions',{credentials:'include'}).then(function(r){return r.json()}).then(function(d){
+    if(!d.ok || !d.transactions || !d.transactions.length){el.innerHTML='<div class="state-msg">No bridges yet.</div>';return}
+    el.innerHTML=d.transactions.map(function(t){
+      var color=t.status==='bridge_filled'?'var(--green)':(['origin_tx_reverted','bridge_failed','timed_out'].indexOf(t.status)>=0?'var(--red)':'var(--accent)')
+      return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #16191f;font-size:12px">'
+        +'<span>'+t.source_chain+' → '+t.dest_chain+' · '+t.amount_in+'</span>'
+        +'<span style="color:'+color+'">'+(t.status_label||t.status)+'</span>'
+        +'</div>'
+    }).join('')
+  }).catch(function(){ el.innerHTML='<div class="state-msg">Failed to load</div>' })
 }
 
 // ── swap modal ───────────────────────────────────────────
@@ -1658,6 +1844,7 @@ function loadTokens(bust){
 }
 
 loadTokens()
+_loadBridgeHistory()
 
 // ── recent activity ──────────────────────────────────────
 function _qtyFmt(n){

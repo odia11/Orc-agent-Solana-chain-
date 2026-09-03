@@ -2428,6 +2428,26 @@ def run_migrations():
         # reasoning, which only ever covered WHICH tokens got in the door --
         # see run_ai_self_analysis()'s own comment.
         "ALTER TABLE ai_filter_proposals ADD COLUMN how_analysis TEXT DEFAULT ''",
+        # ── Cross-chain bridge (0x Cross-Chain API) -- extends the existing
+        # bridge_transactions table (built for Mayan, never verified against
+        # its live API/SDK) rather than adding a second, parallel table. See
+        # _get_0x_bridge_quote()/_execute_cross_chain_bridge()/
+        # _bridge_status_loop() below for how each of these gets used.
+        # `provider` distinguishes old Mayan-attempted rows (if any exist in
+        # a deployed DB) from new 0x-routed ones -- defaults to 'mayan' for
+        # every pre-existing row via the column default, so history isn't
+        # silently reattributed to a provider that never touched it.
+        "ALTER TABLE bridge_transactions ADD COLUMN provider TEXT NOT NULL DEFAULT 'mayan'",
+        "ALTER TABLE bridge_transactions ADD COLUMN quote_id TEXT DEFAULT ''",
+        "ALTER TABLE bridge_transactions ADD COLUMN route_name TEXT DEFAULT ''",
+        "ALTER TABLE bridge_transactions ADD COLUMN expected_amount_out REAL DEFAULT NULL",
+        "ALTER TABLE bridge_transactions ADD COLUMN actual_amount_out REAL DEFAULT NULL",
+        "ALTER TABLE bridge_transactions ADD COLUMN dest_tx_hash TEXT DEFAULT ''",
+        "ALTER TABLE bridge_transactions ADD COLUMN fee_usd REAL DEFAULT NULL",
+        "ALTER TABLE bridge_transactions ADD COLUMN estimated_seconds INTEGER DEFAULT NULL",
+        "ALTER TABLE bridge_transactions ADD COLUMN recovery_info TEXT DEFAULT ''",
+        "ALTER TABLE bridge_transactions ADD COLUMN poll_attempts INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE bridge_transactions ADD COLUMN polling_started_at TIMESTAMP DEFAULT NULL",
     ]:
         try:
             con.execute(sql)
@@ -3161,60 +3181,176 @@ def _fast_poll_loop():
 
 
 _BRIDGE_STATUS_INTERVAL = 15
+# Spec-mandated cutoff -- 0x's own docs describe bridge delivery as "seconds
+# to minutes depending on the bridge", so this is a generous multiple of the
+# slow end, not a realistic expected duration. A row that hits this without
+# reaching a terminal state stops being auto-polled (see 'timed_out' below)
+# rather than polling forever -- it still shows on the user's bridge history
+# with everything known so far (quote id, origin tx hash), so nothing about
+# the transaction itself is lost, just the automatic tracking of it.
+_BRIDGE_MAX_POLL_SECONDS = 1800
+# 0x Cross-Chain API's own status vocabulary (see _get_0x_bridge_status()) --
+# these three are the only ones that stop polling; every other status (incl.
+# 'unknown') is retried next cycle.
+_BRIDGE_TERMINAL_STATUSES = {'bridge_filled', 'bridge_failed', 'origin_tx_reverted'}
+_BRIDGE_STATUS_NOTIFICATIONS = {
+    'bridge_filled':       'Bridge complete — funds have arrived on the destination chain.',
+    'bridge_failed':       'Bridge failed — see your bridge history for recovery details.',
+    'origin_tx_reverted':  'Bridge transaction reverted on the origin chain before any funds left your wallet.',
+}
+
+def _get_0x_bridge_status(quote_id: str, origin_tx_hash: str) -> dict:
+    """Polls 0x's Cross-Chain API status endpoint for one in-flight bridge.
+
+    ── UNVERIFIED ── the exact endpoint path, query parameter names, and
+    response field names below are this project's best inference from 0x's
+    own public "How It Works" documentation (GET /status, keyed by the
+    origin tx hash + quoteId) plus the same-chain Swap API's already-
+    integrated response conventions (0x states the Cross-Chain API mirrors
+    that shape) -- NOT confirmed against a live response, since docs.0x.org
+    itself is unreachable from this environment. Treat this as the one
+    piece of the bridge feature that needs a real, small test transaction
+    run against it before being trusted at scale; every other status this
+    doesn't recognize returns 'unknown' rather than being guessed into a
+    terminal state, so a wrong field name here fails safe (endless "still
+    checking") rather than unsafe (falsely marked complete/failed).
+
+    Returns {'ok': True, 'status': <one of the 7 spec statuses>,
+    'dest_tx_hash': str|None, 'actual_amount_out': float|None,
+    'error_reason': str|None, 'recovery_info': dict|None} on a parseable
+    response, or {'ok': False, 'rate_limited': bool, 'msg': str} on a
+    request/parsing failure (rate_limited=True on HTTP 429, so the caller
+    can back off instead of retrying immediately)."""
+    if not ZEROX_API_KEY:
+        return {'ok': False, 'rate_limited': False, 'msg': 'ZEROX_API_KEY not configured'}
+    try:
+        r = requests.get(
+            'https://api.0x.org/cross-chain/status',
+            params={'quoteId': quote_id, 'originTxHash': origin_tx_hash},
+            headers={'0x-api-key': ZEROX_API_KEY, '0x-version': 'v2'},
+            timeout=10,
+        )
+    except requests.exceptions.RequestException as e:
+        return {'ok': False, 'rate_limited': False, 'msg': f'{type(e).__name__}: {e}'}
+    if r.status_code == 429:
+        return {'ok': False, 'rate_limited': True, 'msg': 'rate limited'}
+    if r.status_code != 200:
+        return {'ok': False, 'rate_limited': False, 'msg': f'HTTP {r.status_code}: {r.text[:200]}'}
+    try:
+        data = r.json()
+        status = str(data.get('status') or 'unknown').lower()
+        if status not in ({'origin_tx_pending', 'origin_tx_confirmed', 'bridge_pending'} | _BRIDGE_TERMINAL_STATUSES):
+            status = 'unknown'
+        return {
+            'ok': True,
+            'status': status,
+            'dest_tx_hash': data.get('destinationTxHash') or data.get('destTxHash') or None,
+            'actual_amount_out': float(data['actualAmountOut']) if data.get('actualAmountOut') is not None else None,
+            'error_reason': data.get('errorReason') or data.get('failureReason') or None,
+            'recovery_info': data.get('recovery') or data.get('refund') or None,
+        }
+    except Exception as e:
+        return {'ok': False, 'rate_limited': False, 'msg': f'unparseable response: {e}'}
 
 def _bridge_status_loop():
-    """Global background loop: polls Mayan's public Explorer API for every
-    bridge_transactions row that hasn't reached a terminal state yet, updates
-    its status once Mayan reports one, and notifies the user. Global (not
-    per-user) since this only tracks already-broadcast transactions rather
-    than deciding whether to act -- same shape as _fast_poll_loop().
+    """Global background loop: polls 0x's Cross-Chain API status endpoint
+    for every bridge_transactions row that hasn't reached a terminal state
+    yet, updates its status once 0x reports one, and notifies the user.
+    Global (not per-user) since this only tracks already-broadcast
+    transactions rather than deciding whether to act -- same shape as
+    _fast_poll_loop(). See _get_0x_bridge_status() for the one part of this
+    still pending live verification.
 
-    NOTE: unverified against Mayan's live Explorer API -- the endpoint and
-    the clientStatus values checked below are written from best available
-    knowledge of Mayan's documented shape, not confirmed against a real
-    response. An unrecognized clientStatus is deliberately left alone
-    (checked again next cycle) rather than guessed at, so a status this
-    doesn't yet understand can't get misclassified as complete/refunded."""
+    Never assumes an origin-chain confirmation means the bridge itself is
+    done -- 'origin_tx_confirmed' and 'bridge_pending' both keep polling;
+    only bridge_filled/bridge_failed/origin_tx_reverted stop it (spec's
+    terminal-state list). A row that exceeds _BRIDGE_MAX_POLL_SECONDS
+    without reaching one of those is marked 'timed_out' (not deleted, not
+    silently abandoned) so the row still tells a full story on refresh."""
     while True:
         try:
             conn = sqlite3.connect(DB_FILE)
             try:
                 rows = conn.execute(
-                    "SELECT id, user_id, wallet, source_tx_hash FROM bridge_transactions "
-                    "WHERE status NOT IN ('completed','failed','refunded') AND source_tx_hash != ''"
+                    "SELECT id, user_id, wallet, source_tx_hash, quote_id, poll_attempts, "
+                    "       polling_started_at FROM bridge_transactions "
+                    "WHERE provider='0x' AND status NOT IN "
+                    "      ('bridge_filled','bridge_failed','origin_tx_reverted','timed_out') "
+                    "      AND source_tx_hash != ''"
                 ).fetchall()
             finally:
                 conn.close()
 
-            for row_id, user_id, wallet, source_tx_hash in rows:
+            _rate_limited_this_cycle = False
+            for row_id, user_id, wallet, source_tx_hash, quote_id, poll_attempts, polling_started_at in rows:
+                if _rate_limited_this_cycle:
+                    break  # back off the whole cycle rather than hammering a 429'ing API
                 try:
-                    r = requests.get(
-                        f'https://explorer-api.mayan.finance/v3/swap/trx/{source_tx_hash}',
-                        timeout=10,
-                    )
-                    if r.status_code != 200:
-                        continue
-                    client_status = (r.json().get('clientStatus') or '').upper()
-
-                    if client_status == 'COMPLETED':
-                        new_status = 'completed'
-                    elif client_status == 'REFUNDED':
-                        new_status = 'refunded'
+                    # Max-duration timeout, measured from when polling actually
+                    # started (backfilled to now on first sight of a row, so an
+                    # old row from before this column existed doesn't instantly
+                    # time out).
+                    if polling_started_at:
+                        started = datetime.datetime.fromisoformat(polling_started_at)
+                        if (datetime.datetime.utcnow() - started).total_seconds() > _BRIDGE_MAX_POLL_SECONDS:
+                            conn_to = sqlite3.connect(DB_FILE)
+                            try:
+                                conn_to.execute(
+                                    "UPDATE bridge_transactions SET status='timed_out', "
+                                    "updated_at=CURRENT_TIMESTAMP WHERE id=?", (row_id,))
+                                conn_to.commit()
+                            finally:
+                                conn_to.close()
+                            print(f'[bridge-status] row {row_id} exceeded {_BRIDGE_MAX_POLL_SECONDS}s poll window, '
+                                  f'marked timed_out (quote_id={quote_id})', flush=True)
+                            continue
                     else:
-                        continue  # still in progress, or a status this doesn't recognize yet
+                        conn_ts = sqlite3.connect(DB_FILE)
+                        try:
+                            conn_ts.execute(
+                                "UPDATE bridge_transactions SET polling_started_at=CURRENT_TIMESTAMP WHERE id=?",
+                                (row_id,))
+                            conn_ts.commit()
+                        finally:
+                            conn_ts.close()
 
+                    result = _get_0x_bridge_status(quote_id, source_tx_hash)
+                    conn_pa = sqlite3.connect(DB_FILE)
+                    try:
+                        conn_pa.execute(
+                            "UPDATE bridge_transactions SET poll_attempts=poll_attempts+1 WHERE id=?", (row_id,))
+                        conn_pa.commit()
+                    finally:
+                        conn_pa.close()
+
+                    if not result['ok']:
+                        if result.get('rate_limited'):
+                            _rate_limited_this_cycle = True
+                        else:
+                            print(f'[bridge-status] check failed for row {row_id} '
+                                  f'(tx={source_tx_hash[:12]}...): {result["msg"]}', flush=True)
+                        continue
+
+                    new_status = result['status']
                     conn2 = sqlite3.connect(DB_FILE)
                     try:
                         conn2.execute(
-                            "UPDATE bridge_transactions SET status=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-                            (new_status, row_id))
+                            "UPDATE bridge_transactions SET status=?, dest_tx_hash=COALESCE(?, dest_tx_hash), "
+                            "actual_amount_out=COALESCE(?, actual_amount_out), "
+                            "error_msg=COALESCE(?, error_msg), "
+                            "recovery_info=COALESCE(?, recovery_info), updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                            (new_status, result.get('dest_tx_hash'), result.get('actual_amount_out'),
+                             result.get('error_reason'),
+                             json.dumps(result['recovery_info']) if result.get('recovery_info') else None,
+                             row_id))
                         conn2.commit()
                     finally:
                         conn2.close()
 
-                    notif_content = ('Bridge complete — funds have arrived on the destination chain.'
-                                      if new_status == 'completed' else
-                                      'Bridge refunded — funds were returned to your source wallet.')
+                    if new_status not in _BRIDGE_TERMINAL_STATUSES:
+                        continue  # e.g. origin_tx_confirmed/bridge_pending -- keep polling, no notification yet
+
+                    notif_content = _BRIDGE_STATUS_NOTIFICATIONS[new_status]
                     try:
                         _nc = sqlite3.connect(DB_FILE)
                         _nc.execute(
@@ -5433,102 +5569,236 @@ def _sell_and_get_realized(wallet: str, private_key: str, mint: str, amount_str:
         return True, sol_amount / token_amount, token_amount
     return ok, quoted_price, quoted_amount
 
-def _execute_bridge_swap(user_id: int, wallet: str, source_chain: str, dest_chain: str,
-                          token_in: str, token_out: str, amount: float) -> tuple:
-    """Bridge equivalent of _execute_user_swap()/_execute_bsc_swap() -- signs
-    and broadcasts a Solana<->BSC bridge swap via bridge/mayan_execute.js
-    (Node -- Mayan's swap-sdk is JS-only, see that file's own header for why
-    this isn't hand-rolled in Python). Returns (success, tx_hash_or_message,
-    bridge_row_id) -- row_id is None only when no bridge_transactions row was
-    ever created (the pre-INSERT "no key configured" check below).
+# Bridging is deliberately scoped to each chain's own native gas asset and
+# its own USDC/USDG -- NOT arbitrary tokens. This is a funding mechanism
+# ("get USDC/USDG onto the chain I want to buy a token on"), not a
+# general-purpose any-token bridge; staying scoped this way means decimals
+# are always known upfront (no extra RPC round-trip per bridge, and no risk
+# of guessing an arbitrary token's decimals wrong). BNB_NATIVE_ADDR is
+# already used elsewhere in this file as 0x's own sentinel for "the chain's
+# native asset" -- reused here on the assumption the Cross-Chain API follows
+# the same convention as the same-chain Swap API (both being 0x products).
+_BRIDGE_SUPPORTED_TOKENS = {'solana': {SOL_MINT: 9, USDC_MINT: 6}}
+for _bc, _bcfg in EVM_CHAINS.items():
+    _BRIDGE_SUPPORTED_TOKENS[_bc] = {BNB_NATIVE_ADDR: 18, _bcfg['usdc']: (18 if _bc == 'bsc' else 6)}
+
+def _bridge_validate_pair(origin_chain: str, origin_token: str, dest_chain: str, dest_token: str) -> str:
+    """Returns '' if this origin/destination combination is supported, else
+    a user-facing reason it isn't. Centralized so the API route and any
+    other future caller (e.g. a bot-driven bridge) can't diverge on what
+    counts as valid."""
+    if origin_chain not in _BRIDGE_SUPPORTED_TOKENS:
+        return f'Unsupported origin chain {origin_chain!r}'
+    if dest_chain not in _BRIDGE_SUPPORTED_TOKENS:
+        return f'Unsupported destination chain {dest_chain!r}'
+    if origin_chain == dest_chain:
+        return 'Origin and destination chain must be different'
+    if origin_token not in _BRIDGE_SUPPORTED_TOKENS[origin_chain]:
+        return f'Unsupported origin token for {origin_chain}'
+    if dest_token not in _BRIDGE_SUPPORTED_TOKENS[dest_chain]:
+        return f'Unsupported destination token for {dest_chain}'
+    return ''
+
+def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, dest_chain: str,
+                                 origin_token: str, dest_token: str, amount: float,
+                                 initiated_by: str = 'user') -> tuple:
+    """Bridge equivalent of _execute_user_swap()/_execute_evm_swap() -- gets
+    a live 0x Cross-Chain quote, then signs and broadcasts the ORIGIN leg
+    only (see _bridge_status_loop() for how the destination leg is tracked
+    to completion; a signature here is never treated as the bridge being
+    done). Returns (success, tx_hash_or_message, bridge_row_id) -- row_id is
+    None only when no bridge_transactions row was ever created (an
+    upfront validation/key/duplicate-submission rejection, none of which
+    touched the network).
 
     Unlike the single-chain swap functions, this one decrypts its own key --
-    source_chain determines which column/format (Solana vs BSC), so that
+    origin_chain determines which column/format (Solana vs EVM), so that
     branch has to live here rather than at each call site."""
-    key_column = 'encrypted_private_key' if source_chain == 'solana' else 'encrypted_private_key_bsc'
+    bad = _bridge_validate_pair(origin_chain, origin_token, dest_chain, dest_token)
+    if bad:
+        return False, bad, None
+    if not (amount > 0):
+        return False, 'Amount must be greater than 0', None
+
+    # Idempotency: a double-click or a client retry on a slow response must
+    # never create a second bridge for the same request -- reject (don't
+    # silently dedupe-and-succeed, since the caller needs to know their
+    # second click didn't do anything) if an identical, still-in-flight
+    # bridge for this exact user+pair+amount was created in the last 2
+    # minutes. Narrow window and exact-amount match deliberately: a user
+    # bridging the same pair again minutes later for a new, separate reason
+    # is not a duplicate submission.
+    conn_dup = sqlite3.connect(DB_FILE)
+    try:
+        dup = conn_dup.execute(
+            "SELECT id FROM bridge_transactions WHERE user_id=? AND source_chain=? AND dest_chain=? "
+            "AND token_in=? AND token_out=? AND amount_in=? AND provider='0x' "
+            "AND status NOT IN ('bridge_filled','bridge_failed','origin_tx_reverted','timed_out') "
+            "AND created_at > datetime('now', '-120 seconds') LIMIT 1",
+            (user_id, origin_chain, dest_chain, origin_token, dest_token, amount)
+        ).fetchone()
+    finally:
+        conn_dup.close()
+    if dup:
+        return False, f'An identical bridge (row {dup[0]}) was just submitted and is still in flight', dup[0]
+
+    key_column = 'encrypted_private_key' if origin_chain == 'solana' else 'encrypted_private_key_bsc'
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(f'SELECT {key_column} FROM users WHERE id=?', (user_id,)).fetchone()
     finally:
         conn.close()
     if not row or not row[0]:
-        return False, f'No {source_chain} trading key configured', None
+        return False, f'No {origin_chain} trading key configured', None
 
     with _use_key(row[0], wallet) as private_key:
-        # Audit-trail row written before anything touches the network -- if
-        # the subprocess call itself throws, there's still a record this was
-        # attempted.
-        conn2 = sqlite3.connect(DB_FILE)
+        # Derive the real signing addresses on BOTH sides up front -- never
+        # reuse the Solana session wallet's own address as a stand-in for
+        # either an EVM address or the user's actual Solana TRADING wallet
+        # (a different keypair from the session wallet by design elsewhere
+        # in this app; see _get_trading_wallet_address's own comment). The
+        # previous Mayan-based version of this function got exactly this
+        # wrong for a Solana destination (dest_address=wallet, the session
+        # wallet, not the trading wallet funds actually live in).
         try:
-            cur = conn2.execute(
-                '''INSERT INTO bridge_transactions
-                   (user_id, wallet, source_chain, dest_chain, token_in, token_out, amount_in, status)
-                   VALUES (?,?,?,?,?,?,?,?)''',
-                (user_id, wallet, source_chain, dest_chain, token_in, token_out, amount, 'initiated'))
-            conn2.commit()
-            row_id = cur.lastrowid
-        finally:
-            conn2.close()
+            if origin_chain == 'solana':
+                from solders.keypair import Keypair as _BridgeSolKP
+                origin_address = str(_BridgeSolKP.from_base58_string(private_key).pubkey())
+            else:
+                origin_address = _EvmAccount.from_key(private_key).address
+        except Exception as e:
+            return False, f'Could not derive origin address: {_redact_keys(str(e))[:150]}', None
 
-        # destAddress: where bridged funds land on dest_chain -- must be a
-        # dest_chain-format address, never the source signer's own address
-        # reused across chains (BSC 0x-addresses and Solana base58 addresses
-        # are different address spaces; mayan_execute.js used to make exactly
-        # this mistake by passing the origin address as the destination too).
-        if dest_chain == 'bsc':
+        if dest_chain == 'solana':
+            dest_address = _get_trading_wallet_address(wallet) or wallet
+        else:
             conn_dest = sqlite3.connect(DB_FILE)
             try:
                 dest_address = ensure_bsc_wallet(conn_dest, user_id, wallet)
             finally:
                 conn_dest.close()
-        else:
-            dest_address = wallet
 
-        env = os.environ.copy()
-        env['WALLET_PRIVATE_KEY'] = private_key
+        decimals = _BRIDGE_SUPPORTED_TOKENS[origin_chain][origin_token]
+        amount_raw = int(round(amount * (10 ** decimals)))
+
+        quote = get_0x_bridge_quote(origin_chain, origin_token, amount_raw, dest_chain, dest_token,
+                                     origin_address, dest_address)
+        if not quote['ok']:
+            return False, quote['msg'], None
+
+        # Audit-trail row written before anything touches the network -- if
+        # anything below throws, there's still a record this was attempted.
+        conn2 = sqlite3.connect(DB_FILE)
         try:
-            result = subprocess.run(
-                ['node', os.path.join(BASE, 'bridge', 'mayan_execute.js'),
-                 'bridge', source_chain, dest_chain, token_in, token_out, str(amount), dest_address],
-                env=env, capture_output=True, text=True, timeout=180
-            )
+            cur = conn2.execute(
+                '''INSERT INTO bridge_transactions
+                   (user_id, wallet, source_chain, dest_chain, token_in, token_out, amount_in,
+                    status, initiated_by, provider, quote_id, route_name, expected_amount_out,
+                    fee_usd, estimated_seconds)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (user_id, wallet, origin_chain, dest_chain, origin_token, dest_token, amount,
+                 'initiated', initiated_by, '0x', quote.get('quote_id'), quote.get('route_name'),
+                 quote.get('expected_amount_out'), quote.get('fee_usd'), quote.get('estimated_seconds')))
+            conn2.commit()
+            row_id = cur.lastrowid
         finally:
-            env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
+            conn2.close()
 
-    stdout = _redact_keys(result.stdout.strip())
-    stderr = _redact_keys(result.stderr.strip())
-    print(f'[bridge] subprocess stdout: {stdout}\n[bridge] subprocess stderr: {stderr}', flush=True)
+        raw_quote = quote['raw_quote']
+        txn = raw_quote.get('transaction')
+        if not txn:
+            _bridge_tx_mark_failed(row_id, 'Quote returned no transaction to sign')
+            return False, 'Quote returned no transaction to sign', row_id
 
-    if result.returncode != 0:
-        err_msg = (stderr[-300:] or stdout[-300:] or 'Bridge script failed (no output)')
-        _bridge_tx_mark_failed(row_id, err_msg)
-        return False, err_msg, row_id
+        try:
+            if origin_chain == 'solana':
+                tx_hash = _bridge_sign_send_solana(txn, private_key)
+            else:
+                tx_hash = _bridge_sign_send_evm(txn, raw_quote, private_key, origin_chain, origin_address)
+        except Exception as e:
+            err_msg = _redact_keys(str(e))[:300]
+            _bridge_tx_mark_failed(row_id, err_msg)
+            return False, err_msg, row_id
 
-    try:
-        parsed = json.loads(result.stdout.strip().splitlines()[-1])
-    except Exception:
-        _bridge_tx_mark_failed(row_id, 'Bridge script returned unparseable output')
-        return False, 'Bridge script returned unparseable output', row_id
-
-    tx_hash = parsed.get('tx_hash')
     if not tx_hash:
-        _bridge_tx_mark_failed(row_id, 'Bridge script returned no tx_hash')
-        return False, 'Bridge script returned no tx_hash', row_id
+        _bridge_tx_mark_failed(row_id, 'Signing/broadcast produced no transaction hash')
+        return False, 'Signing/broadcast produced no transaction hash', row_id
 
-    # ── The instant tx_hash exists, record it -- nothing else runs between
-    # having it and persisting it. ──
     conn3 = sqlite3.connect(DB_FILE)
     try:
         conn3.execute(
-            "UPDATE bridge_transactions SET status='source_broadcast', source_tx_hash=?, "
-            "mayan_order_hash=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
-            (tx_hash, parsed.get('order_hash'), row_id))
+            "UPDATE bridge_transactions SET status='origin_tx_pending', source_tx_hash=?, "
+            "polling_started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+            (tx_hash, row_id))
         conn3.commit()
     finally:
         conn3.close()
 
-    add_user_log(wallet, f'Bridge {source_chain}->{dest_chain} broadcast: {tx_hash}')
+    add_user_log(wallet, f'Bridge {origin_chain}->{dest_chain} origin tx broadcast: {tx_hash}')
     return True, tx_hash, row_id
+
+def _bridge_sign_send_evm(txn: dict, raw_quote: dict, private_key: str, chain: str, origin_address: str) -> str:
+    """Signs and sends the origin-chain transaction 0x's quote returned, for
+    an EVM origin chain -- same build/sign/send flow _execute_evm_swap()
+    already uses for same-chain swaps (this is the same 0x product family;
+    the transaction object's shape is assumed to match). Handles the
+    allowance step first if the quote flagged one needed (issues.allowance),
+    exactly like _execute_evm_swap() does."""
+    w3 = _get_web3(chain)
+    wallet_cs = w3.to_checksum_address(origin_address)
+    allowance_issue = (raw_quote.get('issues') or {}).get('allowance')
+    if allowance_issue:
+        spender = allowance_issue.get('spender')
+        sell_token = raw_quote.get('sellToken') or (raw_quote.get('sell') or {}).get('token')
+        sell_amount_raw = int(raw_quote.get('sellAmount') or 0)
+        if spender and sell_token and sell_amount_raw:
+            _ensure_evm_allowance(w3, wallet_cs, private_key, sell_token, spender, sell_amount_raw, chain)
+    tx = {
+        'from': wallet_cs,
+        'to': w3.to_checksum_address(txn['to']),
+        'data': txn['data'],
+        'value': int(txn.get('value', '0')),
+        'gas': int(txn['gas']) if txn.get('gas') else 400000,
+        'gasPrice': int(txn['gasPrice']) if txn.get('gasPrice') else w3.eth.gas_price,
+        'nonce': w3.eth.get_transaction_count(wallet_cs),
+        'chainId': EVM_CHAINS[chain]['chain_id'],
+    }
+    acct = _EvmAccount.from_key(private_key)
+    signed = acct.sign_transaction(tx)
+    tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+    return tx_hash.hex()
+
+def _bridge_sign_send_solana(txn, private_key: str) -> str:
+    """Signs and sends the origin-chain transaction 0x's quote returned, for
+    a Solana origin chain -- same decode/sign/send flow orcagent_solana.py's
+    _execute_swap_inner() Step 4-5 already uses for same-chain swaps
+    (VersionedTransaction.from_bytes -> re-sign -> base64 -> sendTransaction),
+    reimplemented inline here since dashboard.py doesn't otherwise sign
+    Solana transactions itself (every other Solana swap goes through that
+    file's own subprocess). `txn` is assumed to be a base64-encoded
+    serialized transaction string, matching every other 0x/Jupiter-style
+    swap response already integrated in this codebase -- UNVERIFIED for
+    this specific endpoint, see get_0x_bridge_quote()'s module note."""
+    from solders.keypair import Keypair as _BridgeSolKP2
+    from solders.transaction import VersionedTransaction as _BridgeVTx
+    tx_b64 = txn if isinstance(txn, str) else txn.get('transaction') or txn.get('data')
+    if not tx_b64:
+        raise ValueError('no base64 transaction in quote response')
+    keypair = _BridgeSolKP2.from_base58_string(private_key)
+    vtx = _BridgeVTx.from_bytes(base64.b64decode(tx_b64))
+    signed_tx = _BridgeVTx(vtx.message, [keypair])
+    encoded = base64.b64encode(bytes(signed_tx)).decode()
+    r = requests.post(SOLANA_RPC, json={
+        'jsonrpc': '2.0', 'id': 1, 'method': 'sendTransaction',
+        'params': [encoded, {'encoding': 'base64', 'skipPreflight': False, 'maxRetries': 3}],
+    }, timeout=30)
+    data = r.json()
+    if 'error' in data:
+        raise RuntimeError(f'sendTransaction error: {data["error"]}')
+    sig = data.get('result')
+    if not sig:
+        raise RuntimeError(f'no signature in RPC response: {data}')
+    return sig
 
 def _can_bot_bridge(user_id: int, amount: float) -> tuple:
     """Gate for a future bot-driven bridge call -- not invoked from anywhere
@@ -5539,9 +5809,14 @@ def _can_bot_bridge(user_id: int, amount: float) -> tuple:
       3) today's SUM(amount_in) of bot-initiated, non-failed bridges + amount
          <= BOT_BRIDGE_MAX_PER_DAY
       4) circuit breaker: the last 3 bot-initiated bridge_transactions all
-         status='failed' -- also flips bridging_enabled off for this user in
-         the same call, since a breaker that only reports the problem
-         without stopping it isn't one."""
+         in a failure status -- also flips bridging_enabled off for this
+         user in the same call, since a breaker that only reports the
+         problem without stopping it isn't one.
+    _BRIDGE_TERMINAL_STATUSES minus 'bridge_filled' is "failed" for this
+    gate's purposes (origin_tx_reverted / bridge_failed); 'timed_out' counts
+    as a failure too (0x never reported completion in time) even though
+    it's not in that set (a timeout isn't itself a status 0x can report)."""
+    _bridge_failure_statuses = (_BRIDGE_TERMINAL_STATUSES - {'bridge_filled'}) | {'timed_out', 'failed'}
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT bridging_enabled FROM users WHERE id=?', (user_id,)).fetchone()
@@ -5552,9 +5827,11 @@ def _can_bot_bridge(user_id: int, amount: float) -> tuple:
             return False, f'amount ${amount:.2f} exceeds per-transaction cap (${BOT_BRIDGE_MAX_PER_TX:.2f})'
 
         today_total = conn.execute(
-            "SELECT COALESCE(SUM(amount_in), 0) FROM bridge_transactions "
-            "WHERE user_id=? AND initiated_by='bot' AND status!='failed' AND date(created_at)=date('now')",
-            (user_id,)
+            f"SELECT COALESCE(SUM(amount_in), 0) FROM bridge_transactions "
+            f"WHERE user_id=? AND initiated_by='bot' "
+            f"AND status NOT IN ({','.join('?' * len(_bridge_failure_statuses))}) "
+            f"AND date(created_at)=date('now')",
+            (user_id, *_bridge_failure_statuses)
         ).fetchone()[0] or 0.0
         if today_total + amount > BOT_BRIDGE_MAX_PER_DAY:
             return False, (f"today's bot-bridged total ${today_total:.2f} + ${amount:.2f} would exceed "
@@ -5565,7 +5842,7 @@ def _can_bot_bridge(user_id: int, amount: float) -> tuple:
             "ORDER BY created_at DESC LIMIT 3",
             (user_id,)
         ).fetchall()
-        if len(last3) == 3 and all(s == 'failed' for (s,) in last3):
+        if len(last3) == 3 and all(s in _bridge_failure_statuses for (s,) in last3):
             conn.execute('UPDATE users SET bridging_enabled=0 WHERE id=?', (user_id,))
             conn.commit()
             return False, 'circuit breaker: 3 consecutive bot bridge failures'
@@ -5943,14 +6220,20 @@ def _narrative_uncapped_fast_loop(stop_event, user_id: int, wallet: str):
         stop_event.wait(10)
 
 def _bridge_tx_mark_failed(row_id: int, error_msg: str):
-    """Records a bridge_transactions failure -- separated out since
-    _execute_bridge_swap() has three distinct failure points that all need
-    the same status='failed' + error_msg write."""
+    """Records a bridge_transactions failure that happened before or during
+    the origin-chain broadcast attempt itself (quote failed, signing raised,
+    no transaction hash came back) -- separated out since
+    _execute_cross_chain_bridge() has several distinct failure points that
+    all need the same write. Uses status='origin_tx_reverted', the spec's
+    terminal status for "the origin side didn't go through" -- distinct
+    from 'bridge_failed' (origin succeeded, the cross-chain delivery itself
+    failed later), which only _bridge_status_loop() ever sets, from a real
+    0x status response."""
     try:
         conn = sqlite3.connect(DB_FILE)
         try:
             conn.execute(
-                "UPDATE bridge_transactions SET status='failed', error_msg=?, "
+                "UPDATE bridge_transactions SET status='origin_tx_reverted', error_msg=?, "
                 "updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 (error_msg[:500], row_id))
             conn.commit()
@@ -5995,42 +6278,109 @@ def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: 
     r.raise_for_status()
     return r.json()
 
-# ── CROSS-CHAIN BRIDGE QUOTE (Mayan Finance) ──
-# Quote-only for now, deliberately: this is the safe half (no signing, no
-# funds move) of what would eventually become a Solana<->BSC bridge. The
-# execution half needs Mayan's official swap-sdk (JS/npm, not a plain REST
-# call) to build the cross-chain transaction correctly -- hand-rolling that
-# ourselves in Python without the SDK is exactly the kind of subtle,
-# expensive-to-get-wrong problem this project has avoided all day. See the
-# _MAYAN_NATIVE_SENTINEL note below for why native-asset addressing looks
-# unusual here.
-_MAYAN_NATIVE_SENTINEL = '0x0000000000000000000000000000000000000000'  # Mayan's placeholder for "the chain's native asset", not a real token contract
+# ── CROSS-CHAIN BRIDGE (0x Cross-Chain API) ─────────────────────────────────
+# Superseded a first-draft Solana<->BSC bridge built on Mayan Finance's
+# JS-only swap-sdk (bridge/mayan_execute.js, never run end-to-end -- no
+# package.json/node_modules were ever installed for it). 0x's Cross-Chain
+# API covers the same ground over plain REST, the same way its same-chain
+# Swap API already does for every chain in EVM_CHAINS (_get_0x_quote above)
+# -- same api.0x.org host, same ZEROX_API_KEY, no Node subprocess, no
+# second SDK to trust. Chains: every EVM chain in EVM_CHAINS plus Solana
+# (0x's own announcement: "now available across EVM, Solana, HyperCore, and
+# Tron chains").
+#
+# ── UNVERIFIED, READ BEFORE ENABLING REAL TRADES ──
+# docs.0x.org is unreachable from this development environment (network
+# policy blocks it), so this integration is built from: (a) 0x's public
+# "How It Works" page (quote -> sign & submit -> bridge -> poll /status
+# with the origin tx hash + quoteId; EVM allowance handled the same way as
+# the same-chain Swap API's `issues.allowance`), and (b) one third-party
+# blog's worked example of a same-chain-style quote request (params:
+# originChain, destinationChain, sellToken, buyToken, sellAmount,
+# originAddress). NOT confirmed: the exact base URL path used below, the
+# string 0x expects for Solana as originChain/destinationChain (guessed as
+# the literal 'solana'), and the exact quote/status response field names.
+# Every guessed field is read defensively (falls back to None/'unknown'
+# rather than raising) so a wrong field name surfaces as "quote/status
+# unavailable," never as a misread amount or a falsely-confirmed transfer.
+# Run one small real bridge end-to-end and fix whatever the live API
+# actually returns before this carries real user-scale amounts.
+def _zerox_chain_param(chain: str) -> str:
+    """0x's Cross-Chain API originChain/destinationChain value for `chain`.
+    EVM chains use their numeric chain ID as a string (confirmed by the
+    worked example: originChain='8453' for Base) -- this reuses
+    EVM_CHAINS[chain]['zerox_chain_id'], the exact same value _get_0x_quote()
+    already sends for same-chain swaps on that chain. 'solana' is passed
+    through as the literal string 'solana' -- UNVERIFIED, see the module
+    note above."""
+    if chain == 'solana':
+        return 'solana'
+    return str(EVM_CHAINS[chain]['zerox_chain_id'])
 
-def get_mayan_bridge_quote(amount: float, from_chain: str, to_chain: str,
-                            from_token: str, to_token: str) -> dict:
-    """Public, unauthenticated endpoint -- no API key, no wallet signature,
-    nothing that touches funds. Returns Mayan's own fee/route breakdown
-    so the UI can show 'bridging ~$X will cost ~$Y and take ~Z seconds'
-    before anyone commits to anything."""
-    r = requests.get(
-        'https://price-api.mayan.finance/v3/quote',
-        params={
-            'amountIn':   amount,
-            'fromToken':  from_token,
-            'fromChain':  from_chain,
-            'toToken':    to_token,
-            'toChain':    to_chain,
-            'slippageBps': 'auto',
-        },
-        timeout=12,
-    )
-    r.raise_for_status()
-    quotes = r.json()
-    if not quotes:
-        return {'ok': False, 'msg': 'No bridge route found for this pair/amount'}
-    # Mayan returns up to two quotes: [fastest, best-return]. Surface both so
-    # the UI can offer a real choice instead of silently picking one.
-    return {'ok': True, 'quotes': quotes}
+def get_0x_bridge_quote(origin_chain: str, origin_token: str, origin_amount_raw: int,
+                         dest_chain: str, dest_token: str,
+                         origin_address: str, dest_address: str) -> dict:
+    """Quote-only -- no signing, no funds move. origin_amount_raw is already
+    in origin_token's smallest unit (mirrors _get_0x_quote's sell_amount_raw
+    convention). Returns a normalized dict the API route / frontend can
+    render directly (spec's required quote fields), or {'ok': False, 'msg':
+    ...} on any failure -- never raises, so a caller can always show the
+    user *something* rather than a stack trace."""
+    if not ZEROX_API_KEY:
+        return {'ok': False, 'msg': 'ZEROX_API_KEY not configured'}
+    try:
+        r = requests.get(
+            'https://api.0x.org/cross-chain/quotes',
+            params={
+                'originChain':        _zerox_chain_param(origin_chain),
+                'destinationChain':   _zerox_chain_param(dest_chain),
+                'sellToken':          origin_token,
+                'buyToken':           dest_token,
+                'sellAmount':         str(origin_amount_raw),
+                'originAddress':      origin_address,
+                'destinationAddress': dest_address,
+            },
+            headers={'0x-api-key': ZEROX_API_KEY, '0x-version': 'v2'},
+            timeout=15,
+        )
+    except requests.exceptions.RequestException as e:
+        return {'ok': False, 'msg': f'{type(e).__name__}: {e}'}
+    if r.status_code == 429:
+        return {'ok': False, 'msg': 'Bridge quote service is rate-limited — try again shortly', 'rate_limited': True}
+    if r.status_code != 200:
+        return {'ok': False, 'msg': f'HTTP {r.status_code}: {r.text[:300]}'}
+    try:
+        data = r.json()
+    except Exception as e:
+        return {'ok': False, 'msg': f'unparseable response: {e}'}
+    # Defensive: accept either a single quote object or a {'routes': [...]}
+    # list (the same-chain Swap API returns a single object; 0x's own docs
+    # examples for Cross-Chain describe "the best routes" plural, so this
+    # doesn't assume either shape is the only one that can come back).
+    routes = data.get('routes') if isinstance(data.get('routes'), list) else None
+    quote = routes[0] if routes else data
+    if not quote or (not quote.get('transaction') and not quote.get('issues')):
+        return {'ok': False, 'msg': quote.get('message') if isinstance(quote, dict) else None
+                                     or 'No bridge route found for this pair/amount'}
+    try:
+        return {
+            'ok': True,
+            'quote_id':               quote.get('quoteId') or quote.get('id'),
+            'origin_chain':           origin_chain,
+            'origin_token':           origin_token,
+            'origin_amount_raw':      origin_amount_raw,
+            'dest_chain':             dest_chain,
+            'dest_token':             dest_token,
+            'expected_amount_out':    quote.get('buyAmount') or quote.get('minBuyAmount'),
+            'route_name':             (quote.get('route') or {}).get('name') if isinstance(quote.get('route'), dict) else quote.get('route'),
+            'estimated_seconds':      quote.get('estimatedFillTimeSec') or quote.get('estimatedDurationSeconds'),
+            'fee_usd':                (quote.get('fees') or {}).get('totalUsd') if isinstance(quote.get('fees'), dict) else None,
+            'price_impact_pct':       quote.get('priceImpactPct') or quote.get('estimatedPriceImpact'),
+            'needs_allowance':        bool((quote.get('issues') or {}).get('allowance')),
+            'raw_quote':              quote,  # kept for _execute_cross_chain_bridge() -- it needs the live object, not just the displayed numbers
+        }
+    except Exception as e:
+        return {'ok': False, 'msg': f'malformed quote response: {e}'}
 
 def _ensure_evm_allowance(w3, owner_address: str, private_key: str, token_address: str,
                            spender: str, needed_amount_raw: int, chain: str = 'bsc') -> bool:
@@ -9640,12 +9990,64 @@ def api_bsc_balance():
         'error': balances['error'],
     })
 
+# Spec's exact status-vocabulary -> UI label mapping, reused by both the
+# status/transaction routes below and the bridge frontend (which fetches
+# these same string keys from the API, not a separately-hardcoded copy).
+BRIDGE_STATUS_LABELS = {
+    'initiated':          'Preparing Transaction',
+    'origin_tx_pending':  'Transaction Pending',
+    'origin_tx_confirmed':'Transaction Confirmed',
+    'origin_tx_reverted': 'Transaction Reverted',
+    'bridge_pending':     'Bridge In Progress',
+    'bridge_filled':      'Completed',
+    'bridge_failed':      'Bridge Failed',
+    'timed_out':          'Status Unknown (timed out)',
+    'unknown':            'Status Unknown',
+}
+
+def _bridge_chain_default_token(chain: str) -> str:
+    """The chain's own USDC/USDG address -- the default origin/dest token
+    for a bridge request that doesn't specify one explicitly (the
+    overwhelmingly common case: 'get USDC/USDG onto this chain to fund a
+    purchase')."""
+    return EVM_CHAINS[chain]['usdc'] if chain in EVM_CHAINS else USDC_MINT
+
+def _bridge_row_to_dict(row: sqlite3.Row) -> dict:
+    """Normalizes one bridge_transactions row into the API/frontend-facing
+    shape -- one place for this so /status and /transaction can't drift."""
+    d = dict(row)
+    d['status_label'] = BRIDGE_STATUS_LABELS.get(d['status'], d['status'])
+    d['is_terminal'] = d['status'] in (_BRIDGE_TERMINAL_STATUSES | {'timed_out'})
+    # Funds may already have left the origin wallet well before the bridge
+    # itself is done -- surfaced explicitly (spec #3) rather than left for
+    # the frontend to infer from status strings alone.
+    d['funds_may_have_left_origin'] = d['status'] not in ('initiated', 'origin_tx_reverted')
+    try:
+        d['recovery_info'] = json.loads(d['recovery_info']) if d.get('recovery_info') else None
+    except Exception:
+        pass
+    return d
+
 @app.route('/api/bridge/quote', methods=['GET'])
 @rate_limit(30, 60)
 def api_bridge_quote():
     """Quote-only, read-only -- no auth required since nothing here touches
     a specific user's funds or identity, same as any other public price
-    lookup elsewhere in this app."""
+    lookup elsewhere in this app. Spec's required quote fields (origin/dest
+    chain+token+amount, estimated destination amount, route, ETA, fees,
+    quote id, price impact) all come straight from get_0x_bridge_quote()'s
+    normalized response.
+
+    origin_address/dest_address are optional here (0x's quote needs a taker
+    address, but this route is intentionally usable without a session --
+    same public-quote philosophy as the pre-existing /api/bridge/quote and
+    the same-chain /api/instant-trade-adjacent quote lookups elsewhere).
+    When omitted, a placeholder EVM/Solana address is used purely to get a
+    representative quote; api_bridge_execute() always re-quotes with the
+    real signer's address before anything is signed, so a placeholder here
+    can never mean a stale/wrong-address quote gets executed against."""
+    origin_chain = request.args.get('origin_chain', 'solana').strip().lower()
+    dest_chain   = request.args.get('dest_chain', 'base').strip().lower()
     try:
         amount = float(request.args.get('amount', 0))
     except (TypeError, ValueError):
@@ -9653,31 +10055,35 @@ def api_bridge_quote():
     if amount <= 0:
         return jsonify({'ok': False, 'msg': 'Amount must be greater than 0'}), 400
 
-    direction = request.args.get('direction', 'sol_to_bsc')
-    if direction == 'sol_to_bsc':
-        from_chain, to_chain = 'solana', 'bsc'
-        from_token, to_token = USDC_MINT, USDC_BSC_ADDR
-    elif direction == 'bsc_to_sol':
-        from_chain, to_chain = 'bsc', 'solana'
-        from_token, to_token = USDC_BSC_ADDR, USDC_MINT
-    else:
-        return jsonify({'ok': False, 'msg': 'direction must be sol_to_bsc or bsc_to_sol'}), 400
+    origin_token = request.args.get('origin_token') or _bridge_chain_default_token(origin_chain)
+    dest_token   = request.args.get('dest_token') or _bridge_chain_default_token(dest_chain)
+    bad = _bridge_validate_pair(origin_chain, origin_token, dest_chain, dest_token)
+    if bad:
+        return jsonify({'ok': False, 'msg': bad}), 400
 
-    try:
-        result = get_mayan_bridge_quote(amount, from_chain, to_chain, from_token, to_token)
-        return jsonify(result)
-    except requests.exceptions.RequestException as e:
-        print(f'[bridge-quote] error: {e}', flush=True)
-        return jsonify({'ok': False, 'msg': 'Could not fetch bridge quote — try again'}), 502
+    decimals = _BRIDGE_SUPPORTED_TOKENS[origin_chain][origin_token]
+    amount_raw = int(round(amount * (10 ** decimals)))
+    # Placeholder addresses -- never signed against, see docstring.
+    _placeholder_origin = SOL_MINT if origin_chain == 'solana' else BNB_NATIVE_ADDR
+    _placeholder_dest    = SOL_MINT if dest_chain == 'solana' else BNB_NATIVE_ADDR
+
+    result = get_0x_bridge_quote(origin_chain, origin_token, amount_raw, dest_chain, dest_token,
+                                  request.args.get('origin_address') or _placeholder_origin,
+                                  request.args.get('dest_address') or _placeholder_dest)
+    if not result['ok']:
+        status_code = 429 if result.get('rate_limited') else 502
+        return jsonify(result), status_code
+    return jsonify(result)
 
 @app.route('/api/bridge/execute', methods=['POST'])
 @rate_limit(10, 60)
 def api_bridge_execute():
-    """Signs and broadcasts a real cross-chain bridge swap via
-    _execute_bridge_swap() -> bridge/mayan_execute.js. Not called from any
-    bot loop -- manual-only via this route while the underlying script is
-    still unverified against the live Mayan SDK (see mayan_execute.js's
-    own header)."""
+    """Signs and broadcasts the ORIGIN leg of a real cross-chain bridge via
+    _execute_cross_chain_bridge() -> 0x's Cross-Chain API (see that
+    function's module note for the one part of this still pending live
+    verification). Returns immediately once the origin transaction is
+    broadcast -- _bridge_status_loop() tracks it to actual completion in
+    the background; this response is never itself "the bridge is done."""
     # _authenticated_wallet(), not _current_wallet() -- this signs with the
     # user's real key, so a pasted-address read-only session must not reach
     # it (see the security-audit note on _authenticated_wallet() itself).
@@ -9686,6 +10092,8 @@ def api_bridge_execute():
         return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
 
     data = request.get_json(silent=True) or {}
+    origin_chain = str(data.get('origin_chain', '')).strip().lower()
+    dest_chain   = str(data.get('dest_chain', '')).strip().lower()
     try:
         amount = float(data.get('amount', 0))
     except (TypeError, ValueError):
@@ -9693,15 +10101,11 @@ def api_bridge_execute():
     if amount <= 0:
         return jsonify({'ok': False, 'msg': 'Amount must be greater than 0'}), 400
 
-    direction = str(data.get('direction', '')).strip()
-    if direction == 'sol_to_bsc':
-        source_chain, dest_chain = 'solana', 'bsc'
-        token_in, token_out = USDC_MINT, USDC_BSC_ADDR
-    elif direction == 'bsc_to_sol':
-        source_chain, dest_chain = 'bsc', 'solana'
-        token_in, token_out = USDC_BSC_ADDR, USDC_MINT
-    else:
-        return jsonify({'ok': False, 'msg': 'direction must be sol_to_bsc or bsc_to_sol'}), 400
+    origin_token = str(data.get('origin_token') or _bridge_chain_default_token(origin_chain) or '')
+    dest_token   = str(data.get('dest_token') or _bridge_chain_default_token(dest_chain) or '')
+    bad = _bridge_validate_pair(origin_chain, origin_token, dest_chain, dest_token)
+    if bad:
+        return jsonify({'ok': False, 'msg': bad}), 400
 
     conn = sqlite3.connect(DB_FILE)
     try:
@@ -9712,13 +10116,78 @@ def api_bridge_execute():
         return jsonify({'ok': False, 'msg': 'User not found'}), 404
     user_id = row[0]
 
-    success, result, bridge_id = _execute_bridge_swap(
-        user_id, wallet, source_chain, dest_chain, token_in, token_out, amount)
+    success, result, bridge_id = _execute_cross_chain_bridge(
+        user_id, wallet, origin_chain, dest_chain, origin_token, dest_token, amount)
 
     if not success:
-        return jsonify({'ok': False, 'msg': result, 'bridge_id': bridge_id, 'status': 'failed'}), 502
+        return jsonify({'ok': False, 'msg': result, 'bridge_id': bridge_id}), 502
 
-    return jsonify({'ok': True, 'bridge_id': bridge_id, 'status': 'source_broadcast', 'tx_hash': result})
+    return jsonify({'ok': True, 'bridge_id': bridge_id, 'status': 'origin_tx_pending',
+                     'status_label': BRIDGE_STATUS_LABELS['origin_tx_pending'], 'tx_hash': result})
+
+@app.route('/api/bridge/status/<int:bridge_id>', methods=['GET'])
+@rate_limit(60, 60)
+def api_bridge_status(bridge_id):
+    """Cheap, DB-only status read for one bridge (no live 0x call here --
+    _bridge_status_loop() is what actually refreshes the DB row in the
+    background; this just reports its current state) so a user can refresh
+    the page or poll this from the frontend without losing/re-fetching
+    anything, and without multiplying 0x API calls per page view."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            'SELECT * FROM bridge_transactions WHERE id=? AND wallet=?', (bridge_id, wallet)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': False, 'msg': 'Bridge transaction not found'}), 404
+    d = _bridge_row_to_dict(row)
+    return jsonify({'ok': True, 'status': d['status'], 'status_label': d['status_label'],
+                     'is_terminal': d['is_terminal'], 'source_tx_hash': d['source_tx_hash'],
+                     'dest_tx_hash': d['dest_tx_hash']})
+
+@app.route('/api/bridge/transaction/<int:bridge_id>', methods=['GET'])
+@rate_limit(60, 60)
+def api_bridge_transaction(bridge_id):
+    """Full detail for one bridge transaction (spec's persistence
+    requirements: every stored field, not just the status)."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        row = conn.execute(
+            'SELECT * FROM bridge_transactions WHERE id=? AND wallet=?', (bridge_id, wallet)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row:
+        return jsonify({'ok': False, 'msg': 'Bridge transaction not found'}), 404
+    return jsonify({'ok': True, 'transaction': _bridge_row_to_dict(row)})
+
+@app.route('/api/bridge/transactions', methods=['GET'])
+@rate_limit(30, 60)
+def api_bridge_transactions_list():
+    """This user's bridge history, most recent first -- what the Wallet
+    page's bridge status list renders."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'Not authenticated'}), 401
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    try:
+        rows = conn.execute(
+            'SELECT * FROM bridge_transactions WHERE wallet=? ORDER BY id DESC LIMIT 20', (wallet,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return jsonify({'ok': True, 'transactions': [_bridge_row_to_dict(r) for r in rows]})
 
 @app.route('/api/evm/<chain>/balance', methods=['GET'])
 @rate_limit(20, 60)
@@ -10120,7 +10589,7 @@ def promote_page():
 
 @app.route('/admin/bridge-test')
 def admin_bridge_test():
-    """Manual test harness for _execute_bridge_swap() -- deliberately not
+    """Manual test harness for _execute_cross_chain_bridge() -- deliberately not
     linked from any nav. Guard is stricter than /admin's (which lets any
     non-'user' role in): exact role=='admin' only, no executive/moderator/
     analyst, since this page triggers real signed cross-chain swaps rather

@@ -57,7 +57,7 @@ td.status-refunded{color:var(--amber)}
 <div class="wrap">
   <h1>Bridge Test</h1>
   <div class="sub">{{ wallet }}</div>
-  <div class="warn">This triggers a real, signed cross-chain swap via /api/bridge/execute -- mayan_execute.js and _bridge_status_loop() are both still unverified against Mayan's live API. Use a trivial amount.</div>
+  <div class="warn">This triggers a real, signed cross-chain bridge via /api/bridge/execute (0x Cross-Chain API) -- the exact quote/status field names are still unverified against 0x's live API (docs.0x.org is unreachable from the dev environment that built this). Use a trivial amount.</div>
 
   <div class="card">
     <div class="field">
@@ -65,10 +65,25 @@ td.status-refunded{color:var(--amber)}
       <input type="number" id="bt-amount" min="0" step="any" placeholder="0.0" autocomplete="off">
     </div>
     <div class="field">
-      <label for="bt-direction">Direction</label>
-      <select id="bt-direction">
-        <option value="sol_to_bsc">Solana → BSC</option>
-        <option value="bsc_to_sol">BSC → Solana</option>
+      <label for="bt-origin">Origin chain</label>
+      <select id="bt-origin">
+        <option value="solana">Solana</option>
+        <option value="bsc">BSC</option>
+        <option value="base">Base</option>
+        <option value="arbitrum">Arbitrum</option>
+        <option value="polygon">Polygon</option>
+        <option value="robinhood">Robinhood Chain</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="bt-dest">Destination chain</label>
+      <select id="bt-dest">
+        <option value="base">Base</option>
+        <option value="solana">Solana</option>
+        <option value="bsc">BSC</option>
+        <option value="arbitrum">Arbitrum</option>
+        <option value="polygon">Polygon</option>
+        <option value="robinhood">Robinhood Chain</option>
       </select>
     </div>
     <button class="btn" id="bt-submit" onclick="_btSubmit()">Execute bridge</button>
@@ -101,13 +116,19 @@ var CSRF_TOKEN = {{ csrf_token|tojson }};
 
 async function _btSubmit(){
   var amtEl = document.getElementById('bt-amount');
-  var dirEl = document.getElementById('bt-direction');
+  var originEl = document.getElementById('bt-origin');
+  var destEl = document.getElementById('bt-dest');
   var btn = document.getElementById('bt-submit');
   var resultEl = document.getElementById('bt-result');
   var amount = parseFloat(amtEl.value);
   if(!(amount > 0)){
     resultEl.className = 'err';
     resultEl.textContent = 'Enter a valid amount';
+    return;
+  }
+  if(originEl.value === destEl.value){
+    resultEl.className = 'err';
+    resultEl.textContent = 'Origin and destination chain must be different';
     return;
   }
   btn.disabled = true;
@@ -123,7 +144,7 @@ async function _btSubmit(){
         'X-CSRF-Token': CSRF_TOKEN,
         'X-Requested-With': 'XMLHttpRequest'
       },
-      body: JSON.stringify({ direction: dirEl.value, amount: amount })
+      body: JSON.stringify({ origin_chain: originEl.value, dest_chain: destEl.value, amount: amount })
     });
     var d = await r.json();
     resultEl.className = d.ok ? 'ok' : 'err';
