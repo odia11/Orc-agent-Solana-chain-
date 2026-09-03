@@ -103,8 +103,16 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 
 /* ── deposit card ── */
 .dep-card{background:#101216;border:1px solid rgba(255,255,255,.06);border-radius:18px;padding:18px;box-shadow:0 1px 0 rgba(255,255,255,.03) inset}
-.wlt-bsc-balances{display:flex;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #16191f}
-.wlt-bsc-bal-item{flex:1;background:#0a0b0e;border:1px solid #16191f;border-radius:10px;padding:10px 12px}
+/* flex-wrap + a min-width floor on each tile: with 6 chains (Solana + 5
+   EVM) this row no longer fits unwrapped on a phone-width screen, and a
+   bare flex:1 item won't shrink below its own content's width by default
+   -- without wrapping, the tiles that don't fit were pushed off the right
+   edge entirely (invisible, not just clipped-and-scrollable), which is
+   why Robinhood's (and Polygon's) tile was reported missing when it was
+   really just off-screen. Wraps onto more rows instead on any screen too
+   narrow to fit every chain in one. */
+.wlt-bsc-balances{display:flex;flex-wrap:wrap;gap:12px;margin-top:14px;padding-top:14px;border-top:1px solid #16191f}
+.wlt-bsc-bal-item{flex:1 1 108px;min-width:108px;background:#0a0b0e;border:1px solid #16191f;border-radius:10px;padding:10px 12px}
 .wlt-bsc-bal-lbl{display:block;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#565d68;margin-bottom:4px}
 .wlt-bsc-bal-val{font-family:'JetBrains Mono',monospace;font-size:15px;font-weight:700;color:#eef1f5}
 .dep-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
