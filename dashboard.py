@@ -21678,13 +21678,18 @@ _SCANNER_SAFETY_TTL = 600  # 10 min -- mint/freeze authority + LP-lock state rar
 _AGE_BUCKET_SECONDS = {'1h': 3600, '6h': 21600, '24h': 86400}
 
 # "Graduated" sort mode -- tokens whose pair went live on the open market
-# only minutes ago, across any of the 6 chains this scanner covers. No
-# volume/activity quality bar on purpose: a pair this young hasn't had time
-# to build any (its 24h volume/txn figures are still mostly zero), so
-# requiring one would make this bucket permanently empty. This is
-# deliberately noisier than the other buckets -- catching a token the
-# moment it appears trades an early look for more junk mixed in.
+# only minutes ago, across any of the 6 chains this scanner covers, but
+# already showing real buy pressure: DexScreener's volume.m5 is a ROLLING
+# last-5-minutes figure, not "volume in this token's literal first 5
+# minutes" -- for a token under 5 min old those are the same thing (it
+# hasn't existed long enough for the window to mean anything else), but for
+# one nearer the 10-min age ceiling, volume_5m reflects its most recent 5
+# minutes rather than its very first ones. That's the only 5-minute signal
+# DexScreener exposes; a true "did it hit $20K within its first 5 minutes"
+# would need this app to keep its own per-token volume history from the
+# moment each pair appears, which it doesn't.
 GRADUATED_MAX_AGE_SECONDS = 10 * 60
+GRADUATED_MIN_VOLUME_5M   = 20000
 
 
 def _get_scanner_candidates() -> list:
@@ -21721,6 +21726,7 @@ def _get_scanner_candidates() -> list:
             'market_cap':       _f(p.get('marketCap')) or _f(p.get('fdv')),
             'liquidity_usd':    _f(liq.get('usd')),
             'volume_24h':       _f(vol.get('h24')),
+            'volume_5m':        _f(vol.get('m5')),
             'buys_24h':         int(_f(h24t.get('buys'))),
             'sells_24h':        int(_f(h24t.get('sells'))),
             'price_change_24h': _f(pc.get('h24')),
@@ -21945,7 +21951,8 @@ def api_market_scanner():
     # comment above) -- this is meant to catch a token the instant it appears.
     graduated_set = [t for t in filtered
                       if t.get('pair_created_at')
-                      and (now - t['pair_created_at'] / 1000.0) <= GRADUATED_MAX_AGE_SECONDS]
+                      and (now - t['pair_created_at'] / 1000.0) <= GRADUATED_MAX_AGE_SECONDS
+                      and t.get('volume_5m', 0) >= GRADUATED_MIN_VOLUME_5M]
 
     my_wallet   = _current_wallet()
     friends_set = []
@@ -21981,7 +21988,7 @@ def api_market_scanner():
     elif sort_mode == 'new':
         tokens = sorted(new_set, key=lambda t: t.get('pair_created_at') or 0, reverse=True)
     elif sort_mode == 'graduated':
-        tokens = sorted(graduated_set, key=lambda t: t.get('volume_24h', 0), reverse=True)
+        tokens = sorted(graduated_set, key=lambda t: t.get('volume_5m', 0), reverse=True)
     elif sort_mode == 'volume':
         tokens = sorted(filtered, key=lambda t: t.get('volume_24h', 0), reverse=True)
     elif sort_mode == 'friends':
