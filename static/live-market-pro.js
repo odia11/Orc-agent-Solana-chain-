@@ -117,16 +117,6 @@ var watchSet = new Set();
 var _copyStatus = {copying:false, target:null};
 var _wlEditMode = false;
 var _sellArmed = {};
-// Count of currently-open buy panels -- loadFeed() skips its poll while this
-// is >0 (see loadFeed() below). Without this, the 15s auto-refresh replaces
-// ST.tokens wholesale and rebuilds the entire card list from scratch
-// (renderFeedList's el.innerHTML = ...), which both re-numbers every card's
-// idx (breaking the open panel's own data-idx references) and can drop a
-// card off the list entirely the moment its rank shifts out of the
-// server's top-30 -- exactly the "I'm mid-purchase and the card vanishes"
-// bug this fixes. A card that isn't in the middle of a purchase still
-// refreshes normally.
-var _openBuyPanelCount = 0;
 var _feedInFlight = false;
 
 var SORT_DEFS = [
@@ -383,8 +373,8 @@ function logoTile(imgUrl, symbol, cls, phCls){
   return '<img class="'+cls+'" src="'+esc(imgUrl)+'" onerror="this.style.display=\'none\';this.nextElementSibling.style.display=\'flex\'">'
     + '<div class="'+phCls+'" style="display:none">'+initials+'</div>';
 }
-function statRow(lbl, val){
-  return '<div class="pt-stat-row"><span class="pt-stat-lbl">'+lbl+'</span><span class="pt-stat-val mono">'+val+'</span></div>';
+function statRow(lbl, val, id){
+  return '<div class="pt-stat-row"><span class="pt-stat-lbl">'+lbl+'</span><span class="pt-stat-val mono"'+(id?' id="'+id+'"':'')+'>'+val+'</span></div>';
 }
 function starsHtml(score){
   var n = Math.max(0, Math.min(5, score||0));
@@ -488,11 +478,11 @@ function cardHtml(t, idx){
     + '<div class="pt-card-body">'
     +   '<div class="pt-card-stats">'
     +     '<div class="pt-price mono" id="pt-price-'+idx+'">'+fmtPrice(t.price_usd)+'</div>'
-    +     '<div class="pt-chg mono '+(down?'down':'up')+'">'+fmtPct(t.price_change_24h)+' · 24h</div>'
-    +     statRow('Liquidity', fmtUsd(t.liquidity_usd))
-    +     statRow('Market cap', fmtUsd(t.market_cap))
-    +     statRow('Volume 24h', fmtUsd(t.volume_24h))
-    +     statRow('Buy / Sell', ratioStr(t.buys_24h, t.sells_24h))
+    +     '<div class="pt-chg mono '+(down?'down':'up')+'" id="pt-chg-'+idx+'">'+fmtPct(t.price_change_24h)+' · 24h</div>'
+    +     statRow('Liquidity', fmtUsd(t.liquidity_usd), 'pt-liq-'+idx)
+    +     statRow('Market cap', fmtUsd(t.market_cap), 'pt-mcap-'+idx)
+    +     statRow('Volume 24h', fmtUsd(t.volume_24h), 'pt-vol-'+idx)
+    +     statRow('Buy / Sell', ratioStr(t.buys_24h, t.sells_24h), 'pt-ratio-'+idx)
     +     '<div class="pt-trade-btns">'
     +       '<button class="pt-buy-btn" data-action="buy-open" data-idx="'+idx+'">Buy</button>'
     +       '<button class="pt-sell-btn" data-action="sell" data-idx="'+idx+'">Sell</button>'
@@ -564,12 +554,56 @@ function renderFeedList(){
   observeCards();
 }
 
-// isPoll=true only from the 15s auto-refresh interval below -- a user-
-// initiated reload (changing sort/filters/liquidity) always goes through
-// even while a buy panel is open, since that's an explicit action, not a
-// background refresh that could yank the card out from under them.
+// Applies fresh per-token numbers (by mint) onto the SAME token objects
+// already in ST.tokens, in place -- never adds, removes, or reorders
+// anything. Used only by a background poll (see loadFeed()) so whichever
+// cards are already on screen keep their exact position/identity; only the
+// numbers on them can change.
+function mergeTokenUpdates(freshTokens){
+  var byMint = {};
+  (freshTokens||[]).forEach(function(t){ byMint[t.mint] = t; });
+  ST.tokens.forEach(function(t){
+    var fresh = byMint[t.mint];
+    if(fresh) Object.assign(t, fresh);
+  });
+}
+
+// Updates just the numbers on already-rendered cards (price, 24h change,
+// liquidity/mcap/volume/buy-sell) in place, via their ids -- deliberately
+// NOT touching the buy panel, watch button, chart, or the card node itself,
+// so nothing a user is mid-interaction with (typing a buy amount, reading
+// the chart) is disturbed. Companion to mergeTokenUpdates().
+function patchFeedList(){
+  ST.tokens.forEach(function(t, idx){
+    var el;
+    if((el = document.getElementById('pt-price-'+idx))) el.textContent = fmtPrice(t.price_usd);
+    if((el = document.getElementById('pt-chg-'+idx))){
+      var down = (t.price_change_24h||0) < 0;
+      el.textContent = fmtPct(t.price_change_24h)+' · 24h';
+      el.classList.toggle('down', down);
+      el.classList.toggle('up', !down);
+    }
+    if((el = document.getElementById('pt-liq-'+idx)))  el.textContent = fmtUsd(t.liquidity_usd);
+    if((el = document.getElementById('pt-mcap-'+idx))) el.textContent = fmtUsd(t.market_cap);
+    if((el = document.getElementById('pt-vol-'+idx)))  el.textContent = fmtUsd(t.volume_24h);
+    if((el = document.getElementById('pt-ratio-'+idx))) el.textContent = ratioStr(t.buys_24h, t.sells_24h);
+  });
+}
+
+// isPoll=true only from the 15s auto-refresh interval below. A background
+// poll used to fully replace ST.tokens and rebuild the whole card list
+// (renderFeedList()'s el.innerHTML = ...) every 15 seconds -- since every
+// sort mode re-ranks as prices/volume move, that could drop the exact card
+// someone was reading (or buying on) out of the new top-30, or just
+// reshuffle it to a different position/idx, making it look like it
+// "vanished" mid-view. renderFeedList() also tears down every mounted
+// chart (resetCardState()), so even a card that DIDN'T disappear still had
+// its live chart reset on every poll. Now a poll only patches numbers on
+// the cards already on screen (mergeTokenUpdates + patchFeedList) --
+// nothing is added, removed, or reordered, and no DOM node is recreated.
+// An explicit user action (sort/filter/liquidity change) still does the
+// full, freshly-ordered rebuild, since that's exactly what was asked for.
 function loadFeed(isPoll){
-  if(isPoll && _openBuyPanelCount > 0) return;
   if(_feedInFlight) return;
   _feedInFlight = true;
   var qs = new URLSearchParams({
@@ -585,11 +619,17 @@ function loadFeed(isPoll){
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!d || !d.ok) return;
-      ST.tokens = d.tokens || [];
       ST.counts = d.counts || {};
-      renderSortList();
-      renderStoryRail();
-      renderFeedList();
+      if(isPoll && ST.tokens.length){
+        mergeTokenUpdates(d.tokens);
+        patchFeedList();
+        renderSortList();
+      } else {
+        ST.tokens = d.tokens || [];
+        renderSortList();
+        renderStoryRail();
+        renderFeedList();
+      }
       updateHeaderCounts();
     })
     .catch(function(){})
@@ -602,14 +642,12 @@ function loadFeed(isPoll){
 function closeBuyPanel(idx){
   var p = document.getElementById('pt-buy-panel-'+idx);
   if(p){ p.style.display = 'none'; p.innerHTML = ''; }
-  _openBuyPanelCount = Math.max(0, _openBuyPanelCount - 1);
 }
 
 function openBuyPanel(idx){
   var panel = document.getElementById('pt-buy-panel-'+idx);
   if(!panel) return;
   if(panel.style.display === 'flex'){ closeBuyPanel(idx); return; }
-  _openBuyPanelCount++;
   var t = ST.tokens[Number(idx)];
   var isEvm = t && !!EVM_TRADE_CHAINS[t.chain];
   panel.style.display = 'flex';
