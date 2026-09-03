@@ -21677,6 +21677,22 @@ _scanner_safety_lock = threading.Lock()
 _SCANNER_SAFETY_TTL = 600  # 10 min -- mint/freeze authority + LP-lock state rarely change
 _AGE_BUCKET_SECONDS = {'1h': 3600, '6h': 21600, '24h': 86400}
 
+# "Graduated" sort mode -- chain-agnostic stand-in for Solana's pump.fun-
+# specific "bonding curve -> real pool" graduation concept, which has no
+# equivalent on the other 5 chains this scanner covers (each has its own,
+# not-uniformly-detectable launchpad). A newly created pair that already
+# has real volume and real trading activity is the same underlying signal
+# ("this one made it past the earliest, riskiest phase") without needing a
+# per-chain launchpad integration. GRADUATED_MIN_TXNS_24H (buys+sells) is
+# used as the holder-quality proxy instead of a real per-chain holder count
+# -- that would need a separate API integration per chain (Etherscan-style
+# for each EVM chain, Solana RPC for Solana) that this app doesn't have;
+# real trading activity from real distinct transactions is the strongest
+# holder-quality signal already available from DexScreener on every chain.
+GRADUATED_MAX_AGE_SECONDS = 7 * 86400
+GRADUATED_MIN_VOLUME_24H  = 25000
+GRADUATED_MIN_TXNS_24H    = 50
+
 
 def _get_scanner_candidates() -> list:
     """Boosted + trending Solana + BSC pairs (_MARKET_LIVE_CHAINS), richer
@@ -21931,6 +21947,16 @@ def api_market_scanner():
     # isn't the same signal as a $30K+ one holding a steady uptrend).
     uptrend_set = [t for t in filtered
                    if t.get('price_change_24h', 0) >= 5 and t.get('market_cap', 0) >= 30000]
+    # "Graduated" -- recently-launched (any of the 6 chains), but already
+    # past the earliest/riskiest phase: real volume + real transaction
+    # activity, not just a token that happened to get a pool an hour ago.
+    # See GRADUATED_* constants' comment above for why txns_24h stands in
+    # for a real per-chain holder count.
+    graduated_set = [t for t in filtered
+                      if t.get('pair_created_at')
+                      and (now - t['pair_created_at'] / 1000.0) <= GRADUATED_MAX_AGE_SECONDS
+                      and t.get('volume_24h', 0) >= GRADUATED_MIN_VOLUME_24H
+                      and (t.get('buys_24h', 0) + t.get('sells_24h', 0)) >= GRADUATED_MIN_TXNS_24H]
 
     my_wallet   = _current_wallet()
     friends_set = []
@@ -21950,12 +21976,13 @@ def api_market_scanner():
             friends_set = []
 
     counts = {
-        'trending': len(filtered),
-        'gainers':  len(gainers_set),
-        'uptrend':  len(uptrend_set),
-        'new':      len(new_set),
-        'volume':   len(filtered),
-        'friends':  len(friends_set),
+        'trending':  len(filtered),
+        'gainers':   len(gainers_set),
+        'uptrend':   len(uptrend_set),
+        'new':       len(new_set),
+        'graduated': len(graduated_set),
+        'volume':    len(filtered),
+        'friends':   len(friends_set),
     }
 
     if sort_mode == 'gainers':
@@ -21964,6 +21991,8 @@ def api_market_scanner():
         tokens = sorted(uptrend_set, key=lambda t: t.get('price_change_24h', 0), reverse=True)
     elif sort_mode == 'new':
         tokens = sorted(new_set, key=lambda t: t.get('pair_created_at') or 0, reverse=True)
+    elif sort_mode == 'graduated':
+        tokens = sorted(graduated_set, key=lambda t: t.get('volume_24h', 0), reverse=True)
     elif sort_mode == 'volume':
         tokens = sorted(filtered, key=lambda t: t.get('volume_24h', 0), reverse=True)
     elif sort_mode == 'friends':

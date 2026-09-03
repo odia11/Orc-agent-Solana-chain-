@@ -126,6 +126,10 @@ var SORT_DEFS = [
   // api_market_scanner()'s uptrend_set, not just "gainers" re-labeled.
   {key:'uptrend',  label:'Uptrend (+5%, $30K+ MC)'},
   {key:'new',      label:'New pairs'},
+  // Recently launched (any chain) but already past the riskiest early phase:
+  // real 24h volume + real transaction activity -- server-computed in
+  // api_market_scanner()'s graduated_set (GRADUATED_* constants).
+  {key:'graduated', label:'Graduated'},
   {key:'volume',   label:'Volume leaders'},
   {key:'friends',  label:'Friends buying'}
 ];
