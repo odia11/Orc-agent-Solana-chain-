@@ -392,6 +392,9 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 .br-form-amount-inp{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:11px 66px 11px 14px;font-size:15px;font-family:var(--mono);outline:none;margin-bottom:0}
 .br-form-amount-inp:focus{border-color:var(--accent)}
 .br-form-amount-sym{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;font-weight:700;color:var(--sub);background:var(--bg4);padding:4px 8px;border-radius:6px;pointer-events:none}
+.br-bal-row{display:flex;justify-content:space-between;align-items:center;margin-top:7px;font-size:11px;color:var(--muted);font-family:var(--mono)}
+.br-bal-max{background:var(--bg4);border:1px solid var(--border);color:var(--accent);font-size:10px;font-weight:700;padding:2px 9px;border-radius:6px;cursor:pointer;letter-spacing:.03em;font-family:var(--ui);transition:background .12s,color .12s}
+.br-bal-max:hover{background:var(--accent);color:#0a0b0e}
 
 /* ── Bridge: quote card ── */
 .br-quote-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:4px 16px;margin-top:14px}
@@ -1122,7 +1125,7 @@ function _modalBridge(){
     +'<div class="br-form-card">'
       +'<div class="br-form-box">'
         +'<div class="br-form-box-lbl">From</div>'
-        +'<select class="br-form-select" id="br-origin-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\';_bridgeSyncAmountSym()">'+_bridgeChainOptions('solana')+'</select>'
+        +'<select class="br-form-select" id="br-origin-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\';_bridgeSyncAmountSym();_bridgeSyncBalance()">'+_bridgeChainOptions('solana')+'</select>'
       +'</div>'
       +'<button class="br-form-swap" type="button" title="Swap direction" onclick="_bridgeSwapChains()">⇌</button>'
       +'<div class="br-form-box">'
@@ -1134,6 +1137,10 @@ function _modalBridge(){
       +'<input class="br-form-amount-inp" id="br-amount" type="number" placeholder="0.00" min="0.000001" step="0.01" oninput="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'
       +'<span class="br-form-amount-sym" id="br-amount-sym">USDC</span>'
     +'</div>'
+    +'<div class="br-bal-row" id="br-bal-row">'
+      +'<span id="br-bal-text">Balance: —</span>'
+      +'<button type="button" class="br-bal-max" id="br-bal-max-btn" onclick="_bridgeSetMax()">MAX</button>'
+    +'</div>'
     +'<div class="w-modal-btns" style="margin-top:14px">'
       +'<button class="w-modal-btn w-modal-secondary" onclick="_closeModal()">Cancel</button>'
       +'<button class="w-modal-btn w-modal-primary" id="br-quote-btn" onclick="_bridgeGetQuote()">Get Quote</button>'
@@ -1141,6 +1148,8 @@ function _modalBridge(){
     +'<div id="br-quote"></div>'
   )
   _bridgeSyncAmountSym()
+  _bridgeSyncBalance()
+  if(!_usdcSummaryCache) loadUsdcSummary()   // modal opened before the periodic fetch ever ran once
 }
 function _bridgeSwapChains(){
   var o=document.getElementById('br-origin-chain')
@@ -1151,11 +1160,39 @@ function _bridgeSwapChains(){
   var quoteEl=document.getElementById('br-quote')
   if(quoteEl) quoteEl.innerHTML=''
   _bridgeSyncAmountSym()
+  _bridgeSyncBalance()
 }
 function _bridgeSyncAmountSym(){
   var o=document.getElementById('br-origin-chain')
   var sym=document.getElementById('br-amount-sym')
   if(o&&sym) sym.textContent = o.value==='robinhood' ? 'USDG' : 'USDC'
+}
+// Balance shown is always the ORIGIN chain's own token -- amount is what
+// you SEND, not what you receive, and every bridge chain's default token is
+// its own USDC/USDG (the only thing this Bridge feature ever moves).
+function _bridgeBalanceFor(chain){
+  if(!_usdcSummaryCache) return null
+  if(chain==='solana') return _usdcSummaryCache.solana_usdc
+  return (_usdcSummaryCache.evm_chains||{})[chain]
+}
+function _bridgeSyncBalance(){
+  var txt=document.getElementById('br-bal-text')
+  var o=document.getElementById('br-origin-chain')
+  if(!txt||!o) return
+  var bal=_bridgeBalanceFor(o.value)
+  var sym=o.value==='robinhood'?'USDG':'USDC'
+  txt.textContent = (bal==null) ? 'Balance: —' : 'Balance: '+parseFloat(bal).toFixed(4)+' '+sym
+}
+function _bridgeSetMax(){
+  var o=document.getElementById('br-origin-chain')
+  var amtEl=document.getElementById('br-amount')
+  if(!o||!amtEl) return
+  var bal=_bridgeBalanceFor(o.value)
+  if(bal==null) return
+  amtEl.value = bal>0 ? bal : 0
+  _bridgeQuote=null
+  var quoteEl=document.getElementById('br-quote')
+  if(quoteEl) quoteEl.innerHTML=''
 }
 
 function _brShortHash(h){
@@ -1927,6 +1964,7 @@ function _toggleUsdcTiles(){
 }
 var _usdcLoadedOnce=false
 var _EVM_CHAIN_LABELS={bsc:'BSC',base:'Base',arbitrum:'Arbitrum',polygon:'Polygon',robinhood:'Robinhood'}
+var _usdcSummaryCache=null   // last-fetched {solana_usdc, evm_chains} -- the Bridge modal's balance/MAX reads this instead of its own fetch
 function loadUsdcSummary(){
   fetch('/api/wallet/usdc-summary').then(function(r){return r.json()}).then(function(d){
     if(!d.ok) throw new Error(d.msg||'failed')
@@ -1944,6 +1982,8 @@ function loadUsdcSummary(){
       }).join('')
     }
     _usdcLoadedOnce=true
+    _usdcSummaryCache=d
+    if(typeof _bridgeSyncBalance==='function') _bridgeSyncBalance()
   }).catch(function(){
     // Same "keep the last known value on a transient hiccup" rule as loadBalance() above.
     if(!_usdcLoadedOnce){
