@@ -10759,6 +10759,25 @@ def _bridge_chain_default_token(chain: str) -> str:
     purchase')."""
     return EVM_CHAINS[chain]['usdc'] if chain in EVM_CHAINS else USDC_MINT
 
+def _bridge_real_address_for(chain: str, session_wallet: str) -> str:
+    """This session's actual trading-wallet address on `chain`, if one is
+    configured -- used to give api_bridge_quote() a real taker address
+    instead of a generic placeholder whenever the caller is logged in (see
+    its own call site comment). '' if `chain` isn't recognized or no
+    trading key/EVM wallet is set up yet for this user, so the caller
+    falls back to the placeholder exactly as before."""
+    if chain == 'solana':
+        return _get_trading_wallet_address(session_wallet)
+    if chain in EVM_CHAINS:
+        try:
+            conn = sqlite3.connect(DB_FILE)
+            row = conn.execute('SELECT bsc_wallet_address FROM users WHERE wallet_address=?', (session_wallet,)).fetchone()
+            conn.close()
+            return row[0] if row and row[0] else ''
+        except Exception:
+            return ''
+    return ''
+
 def _bridge_row_to_dict(row: sqlite3.Row) -> dict:
     """Normalizes one bridge_transactions row into the API/frontend-facing
     shape -- one place for this so /status and /transaction can't drift."""
@@ -10810,13 +10829,30 @@ def api_bridge_quote():
 
     decimals = _BRIDGE_SUPPORTED_TOKENS[origin_chain][origin_token]
     amount_raw = int(round(amount * (10 ** decimals)))
+    # Real addresses for a logged-in caller (the overwhelmingly common case
+    # -- this route is only ever actually called from the Wallet page's own
+    # Bridge modal, which never sends origin_address/dest_address itself)
+    # take priority over the placeholder fallback below. Investigating a
+    # user's real "No bridge route found" report (Solana as origin failing
+    # while every EVM-origin route quoted fine) narrowed the cause to the
+    # placeholder Solana "address" used here: SOL_MINT is a real, valid-
+    # format base58 string, but it's a token MINT account, not a wallet --
+    # 0x's Cross-Chain API may reasonably reject or fail to route a quote
+    # for a taker address that isn't an actual funded/ownable wallet on that
+    # chain, which BNB_NATIVE_ADDR's role as 0x's own native-asset sentinel
+    # value doesn't have the same problem with on the EVM side. Using the
+    # caller's own real wallet address removes that guess as a variable
+    # entirely, and produces a more representative quote either way.
+    _session_wallet = _authenticated_wallet()
+    _real_origin = _bridge_real_address_for(origin_chain, _session_wallet) if _session_wallet else ''
+    _real_dest   = _bridge_real_address_for(dest_chain, _session_wallet) if _session_wallet else ''
     # Placeholder addresses -- never signed against, see docstring.
     _placeholder_origin = SOL_MINT if origin_chain == 'solana' else BNB_NATIVE_ADDR
     _placeholder_dest    = SOL_MINT if dest_chain == 'solana' else BNB_NATIVE_ADDR
 
     result = get_0x_bridge_quote(origin_chain, origin_token, amount_raw, dest_chain, dest_token,
-                                  request.args.get('origin_address') or _placeholder_origin,
-                                  request.args.get('dest_address') or _placeholder_dest)
+                                  request.args.get('origin_address') or _real_origin or _placeholder_origin,
+                                  request.args.get('dest_address') or _real_dest or _placeholder_dest)
     if not result['ok']:
         status_code = 429 if result.get('rate_limited') else 502
         return jsonify(result), status_code
