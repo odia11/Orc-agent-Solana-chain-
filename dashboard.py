@@ -2688,6 +2688,16 @@ _HONEYPOT_PATHS = frozenset({'/.env', '/wp-login.php', '/admin', '/phpmyadmin', 
 # Includes DB column names so a runaway SELECT * can never accidentally expose them.
 _FORBIDDEN_RESPONSE_KEYS = frozenset({
     'private_key', 'private_key_raw', 'encrypted_private_key',
+    # encrypted_private_key_bsc is the EVM-chain sibling column (shared by
+    # every chain in EVM_CHAINS, not BSC-specific despite the name -- see
+    # its own "identity across chains" comment near where it's created).
+    # This exact-string set previously only listed the Solana column name,
+    # so a future runaway SELECT * on the users table could have exposed
+    # this one's still-encrypted ciphertext through this same safety net
+    # unchecked -- low real risk on its own (it's Fernet-encrypted, useless
+    # without ENCRYPTION_KEY), but this net exists specifically so a mistake
+    # elsewhere doesn't get to decide that for itself.
+    'encrypted_private_key_bsc',
     'enc_key', 'encrypted_key', 'encryption_key', 'raw_key', 'privkey',
     'secret', 'secret_key',
     'key_hash',
