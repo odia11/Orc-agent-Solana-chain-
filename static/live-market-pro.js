@@ -290,8 +290,21 @@ function attachChartSvgScrub(idx){
     var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
     tip.textContent = fmtPrice(c.c)+'  ·  '+hh+':'+mm;
     tip.style.display = 'block';
+    // Manually centered + clamped here (both axes) rather than via a CSS
+    // transform: a transform:translate(-50%) on top of this same centering
+    // math double-applies the offset, which is what pushed the tooltip
+    // off-screen whenever a scrub landed near either edge -- .pt-chart-
+    // scrub-tip has no such transform, `left`/`top` are the only inputs.
     var tipX = Math.max(4, Math.min(wrapRect.width - tip.offsetWidth - 4, pxX - tip.offsetWidth/2));
     tip.style.left = tipX+'px';
+    // Follows the dragged point vertically (just above the dot) instead of
+    // sitting fixed at the top of the chart, so it actually feels attached
+    // to wherever the finger/cursor is -- clamped to the chart's own band
+    // (4px..svgRect.height) so it never overlaps the LIVE/timeframe pills
+    // above the chart or spills past the bottom into the axis labels.
+    var tipH = tip.offsetHeight || 20;
+    var tipY = Math.max(4, Math.min(svgRect.height - tipH - 4, pxY - tipH - 10));
+    tip.style.top = tipY+'px';
   }
   function clearScrub(){
     line.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none';
