@@ -5727,6 +5727,15 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
         if chain == 'solana':
             ok, exit_price, sold_amt = _sell_and_get_realized(wallet, pk, mint, amount_str, price, sell_amount)
         else:
+            # Auto-refuel from this same wallet's own USDC on `chain` if gas
+            # is running low -- see _ensure_evm_gas()'s own comment for why
+            # this exists. An exit is exactly the case that must NOT just
+            # silently fail for lack of a few cents of gas -- it's how a
+            # losing position actually gets closed.
+            _evm_addr = _EvmAccount.from_key(pk).address
+            _gas_ok, _gas_msg = _ensure_evm_gas(wallet, pk, _evm_addr, chain)
+            if not _gas_ok:
+                return False, 0.0, 0.0
             ok, exit_price, sold_amt = _sell_and_get_realized_evm(wallet, pk, mint, amount_str, price, sell_amount, chain)
     if not ok:
         return False, 0.0, 0.0
@@ -5748,7 +5757,7 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
     return True, exit_price, sold_amt
 
 def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, enc_blob_evm: str,
-                         evm_address: str, min_trade_usdc: float, blacklisted: frozenset,
+                         min_trade_usdc: float, blacklisted: frozenset,
                          m5_min: float, m5_max, pref_scam_filter: bool, short: str) -> bool:
     """One chain's worth of user_trader_loop()'s Pass 2 (entry scanning),
     for any chain in EVM_CHAINS -- the Solana Pass 2 right above this
@@ -5774,15 +5783,14 @@ def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, 
     unvalidated scoring formula for chains this app has no trade-history
     to learn from yet. Returns True if a buy was actually made (so the
     caller can update its per-chain open-position count), False otherwise
-    -- including every "found nothing to buy" case, which is not an error."""
-    try:
-        native_bal = get_evm_native_balance(evm_address, chain)
-    except Exception as e:
-        print(f'[bot-{chain}] {short} gas balance check failed: {e}', flush=True)
-        return False
-    if native_bal <= 0:
-        return False  # _execute_evm_swap itself reports the precise "insufficient X for gas" error if this changes mid-cycle
+    -- including every "found nothing to buy" case, which is not an error.
 
+    The gas balance itself is no longer a hard requirement the user has to
+    maintain by hand: _ensure_evm_gas() (called just before the actual buy,
+    once a real candidate has cleared every other gate) auto-refuels from
+    this same wallet's own USDC on `chain` if native gas is running low --
+    see its own comment for the one case that can't be routed around
+    (bootstrapping a wallet that's at literally zero gas)."""
     candidates = [t for t in _get_scanner_cached()
                   if t.get('chain') == chain
                   and t['mint'] not in blacklisted
@@ -5831,11 +5839,22 @@ def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, 
                 add_user_log(wallet, f'[bot-{chain}] SKIPPING {symbol} — sell tax {_hp["sell_tax"]}% too high')
                 continue
 
-        add_user_log(wallet, f'[bot-{chain}] Best: {symbol} — BUYING (5m:{round(m5,1)}% 1h:{round(h1,1)}%)')
         if mint not in positions:
             positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
         pos = positions[mint]
         with _use_key(enc_blob_evm, wallet) as pk:
+            # Auto-refuel from this same wallet's own USDC on `chain` if gas
+            # is running low, before spending any more effort on this
+            # candidate -- see _ensure_evm_gas()'s own comment for why.
+            # Insufficient gas isn't specific to this one token, so bail out
+            # of the whole chain for this cycle rather than trying the next
+            # qualifying candidate (it would hit the exact same wall).
+            _evm_addr = _EvmAccount.from_key(pk).address
+            _gas_ok, _gas_msg = _ensure_evm_gas(wallet, pk, _evm_addr, chain)
+            if not _gas_ok:
+                add_user_log(wallet, f'[bot-{chain}] Cannot buy {symbol} — {_gas_msg}')
+                return False
+            add_user_log(wallet, f'[bot-{chain}] Best: {symbol} — BUYING (5m:{round(m5,1)}% 1h:{round(h1,1)}%)')
             buy_ok, buy_err, _tx_hash = _execute_evm_swap(wallet, pk, 'buy', mint, str(min_trade_usdc), chain)
             if buy_ok:
                 pos['amount']          = min_trade_usdc / float(_td['price'])
@@ -6974,6 +6993,148 @@ def _execute_bsc_swap(wallet: str, private_key: str, action: str, token_address:
     """Backward-compatible alias -- see _execute_evm_swap() above."""
     return _execute_evm_swap(wallet, private_key, action, token_address, amount_str, 'bsc')
 
+# ── AUTOMATIC EVM GAS TOP-UP (from the user's own USDC) ──
+# Every EVM chain needs its own native gas token (BNB/ETH/POL) to broadcast
+# ANY transaction, on top of the USDC actually being traded -- previously
+# the bot's own trading just silently stalled on a chain once that ran out,
+# and a user had no way to fund it except manually sending BNB/ETH/POL
+# themselves. This closes that gap for the bot's own trading: right before
+# a trade, _ensure_evm_gas() checks whether there's enough gas left for at
+# least one more trade, and if not, swaps a small, flat amount of this same
+# wallet's own USDC on that same chain into native gas -- via the exact
+# same 0x allowance-holder swap machinery every buy/sell already uses, not
+# a new integration. From then on, a user only needs to keep USDC funded.
+#
+# This is NOT the same thing as true gasless trading (that would need
+# account-abstraction/a paymaster, a much bigger rebuild of how wallets and
+# keys work in this app, and was deliberately not chosen for that reason --
+# see the "just USDC" chat thread). The one real limitation a swap-based
+# top-up can't route around: broadcasting the top-up swap ITSELF still
+# costs a small amount of native gas, so this can only ever refill a
+# balance that isn't already at literally zero. A wallet starting from
+# absolute zero on a given chain still needs a tiny, one-time manual
+# deposit of that chain's native token to bootstrap -- after that single
+# top-up, this keeps it funded automatically forever, since each top-up
+# leaves it with more native gas than it just spent broadcasting the swap.
+GAS_TOPUP_TX_GAS_UNITS = 500000  # headroom over a worst-case approve+swap (approve ~50-60k, swap up to 350-400k per _execute_evm_swap's own fallback estimate)
+GAS_TOPUP_USDC_AMOUNT  = 2.0     # flat top-up size, not computed backward from an exact wei target -- 0x's allowance-holder quote endpoint only reliably supports exact-INPUT (sellAmount) quotes, not exact-output, so an exact target isn't cheaply obtainable; a small flat amount is simpler and self-correcting (tops up again next cycle if this undershoots)
+
+def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amount: float) -> tuple:
+    """Buys native gas token with `usdc_amount` of this chain's own USDC, via
+    the exact same 0x allowance-holder quote/approve/sign/send flow
+    _execute_evm_swap() uses for a real token buy -- just with the native
+    gas sentinel (BNB_NATIVE_ADDR) as the buy side instead of a token.
+    Returns (success, message, tx_hash), same convention as
+    _execute_evm_swap(). Never raises."""
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    usdc_addr = EVM_CHAINS[chain]['usdc']
+    usdc_symbol = EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
+    try:
+        w3 = _get_web3(chain)
+        acct = _EvmAccount.from_key(private_key)
+        wallet_cs = w3.to_checksum_address(acct.address)
+
+        usdc_contract = w3.eth.contract(address=w3.to_checksum_address(usdc_addr), abi=_ERC20_MIN_ABI)
+        usdc_decimals = usdc_contract.functions.decimals().call()
+        sell_amount_raw = int(usdc_amount * (10 ** usdc_decimals))
+
+        quote = _get_0x_quote(usdc_addr, BNB_NATIVE_ADDR, sell_amount_raw, wallet_cs, chain)
+
+        issues = quote.get('issues') or {}
+        balance_issue = issues.get('balance')
+        if balance_issue:
+            msg = f'Insufficient {usdc_symbol} balance for gas top-up'
+            add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+            return False, msg, ''
+
+        allowance_issue = issues.get('allowance')
+        if allowance_issue:
+            spender = allowance_issue.get('spender')
+            try:
+                ok = _ensure_evm_allowance(w3, wallet_cs, private_key, usdc_addr, spender, sell_amount_raw, chain)
+            except Exception as e:
+                msg = f'Insufficient {native_symbol} to approve the top-up itself' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
+                add_user_log(wallet, f'{chain} gas top-up error: {msg}: {_redact_keys(str(e))[:100]}')
+                return False, msg, ''
+            if not ok:
+                msg = 'Approval transaction reverted on-chain'
+                add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+                return False, msg, ''
+            # Re-quote after approving -- same reasoning as _execute_evm_swap().
+            quote = _get_0x_quote(usdc_addr, BNB_NATIVE_ADDR, sell_amount_raw, wallet_cs, chain)
+
+        txn = quote.get('transaction')
+        if not txn:
+            msg = 'No liquidity route found for the gas top-up swap'
+            add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+            return False, msg, ''
+
+        tx = {
+            'from': wallet_cs,
+            'to': w3.to_checksum_address(txn['to']),
+            'data': txn['data'],
+            'value': int(txn.get('value', '0')),
+            'gas': int(txn['gas']) if txn.get('gas') else 350000,
+            'gasPrice': int(txn['gasPrice']) if txn.get('gasPrice') else w3.eth.gas_price,
+            'nonce': w3.eth.get_transaction_count(wallet_cs),
+            'chainId': EVM_CHAINS[chain]['chain_id'],
+        }
+        try:
+            signed = acct.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        except Exception as e:
+            msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+            add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+            return False, msg, ''
+        tx_hash_hex = tx_hash.hex()
+        add_user_log(wallet, f'{chain} gas top-up sent: {tx_hash_hex} ({usdc_amount} {usdc_symbol} -> {native_symbol})')
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+        success = receipt.status == 1
+        add_user_log(wallet, f'{chain} gas top-up {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        return success, ('' if success else 'Gas top-up transaction reverted on-chain'), tx_hash_hex
+    except Exception as e:
+        msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+        add_user_log(wallet, f'{chain} gas top-up error: ' + msg)
+        print(f'[{chain}-gas-topup] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
+        return False, msg, ''
+
+def _ensure_evm_gas(wallet: str, private_key: str, evm_address: str, chain: str) -> tuple:
+    """Tops up `evm_address`'s native gas balance on `chain` from its OWN
+    USDC on that chain if it's running low -- see the module comment above
+    for why. Returns (ok, msg): ok=True means the caller can go ahead with
+    its trade (gas was already sufficient, or a top-up just succeeded);
+    ok=False means don't trade this cycle, with a specific reason (already
+    logged via add_user_log, so callers don't need to re-log it)."""
+    try:
+        w3 = _get_web3(chain)
+        native_bal_wei = w3.eth.get_balance(w3.to_checksum_address(evm_address))
+        needed_wei = w3.eth.gas_price * GAS_TOPUP_TX_GAS_UNITS
+    except Exception as e:
+        return False, f'{chain} RPC unreachable for gas check: {e}'
+
+    if native_bal_wei >= needed_wei:
+        return True, ''
+
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    if native_bal_wei <= 0:
+        add_user_log(wallet, f'[bot-{chain}] Out of {native_symbol} for gas and cannot self-fund a top-up from zero — please deposit a small amount of {native_symbol} once to get started')
+        return False, f'no {native_symbol} left to bootstrap a top-up with'
+
+    try:
+        usdc_bal = get_evm_usdc_balance(evm_address, chain)
+    except Exception as e:
+        return False, f'{chain} USDC balance check failed: {e}'
+    topup_amount = min(GAS_TOPUP_USDC_AMOUNT, usdc_bal)
+    if topup_amount <= 0:
+        add_user_log(wallet, f'[bot-{chain}] Low on {native_symbol} for gas and no USDC on {chain} to top it up with')
+        return False, f'no USDC on {chain} to fund a gas top-up'
+
+    add_user_log(wallet, f'[bot-{chain}] Low on {native_symbol} for gas — auto-topping up with {round(topup_amount, 4)} USDC')
+    ok, msg, _tx = _execute_evm_gas_topup(wallet, private_key, chain, topup_amount)
+    if not ok:
+        return False, f'gas top-up failed: {msg}'
+    return True, ''
+
 def _send_evm_usdc_fee(private_key: str, to_address: str, amount_usdc: float, chain: str = 'bsc') -> str:
     """EVM equivalent of send_sol_fee() -- sends amount_usdc of USDC (an ERC20
     transfer, not a native-value transfer) on `chain`, using the same
@@ -7549,7 +7710,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc, bsc_wallet_address FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -7584,11 +7745,6 @@ def user_trader_loop(stop_event, config, wallet: str):
     # and every EVM-entry gas/candidate check below can tell "never set up"
     # apart from "empty string."
     _enc_blob_evm = row[13] if (len(row) > 13 and row[13]) else None
-    # Same wallet address column every manual-buy/bridge EVM route already
-    # reads (set once, at generate-EVM-key time -- see the "identity across
-    # chains" comment near where it's created) -- reused here so Pass 2's
-    # EVM gas-balance check never needs to decrypt the key just to derive it.
-    _evm_address  = row[14] if (len(row) > 14 and row[14]) else None
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -8374,7 +8530,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                 # skipped every cycle, same as Pass 1's EVM exit checks. Each
                 # chain gets its OWN max_positions slot (open_pos_by_chain),
                 # so 5 EVM chains can't crowd out Solana or each other.
-                if (_enc_blob_evm and _evm_address and not stop_event.is_set()
+                if (_enc_blob_evm and not stop_event.is_set()
                         and not _pc_locked and not _streak_paused):
                     for _evm_chain in EVM_CHAINS:
                         if stop_event.is_set():
@@ -8384,7 +8540,7 @@ def user_trader_loop(stop_event, config, wallet: str):
                         try:
                             _bought = _bot_scan_evm_entry(
                                 user_id, wallet, positions, _evm_chain, _enc_blob_evm,
-                                _evm_address, min_trade_usdc, _blacklisted, m5_min, m5_max,
+                                min_trade_usdc, _blacklisted, m5_min, m5_max,
                                 pref_scam_filter, short)
                         except Exception as _evm_e:
                             print(f'[bot-{_evm_chain}] {short} Pass 2 error: {_evm_e}', flush=True)
