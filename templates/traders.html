@@ -282,8 +282,8 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
         {% for e in entries %}
         <div class="card{% if e.is_me %} is-me{% endif %}{% if e.rank == 1 %} top-1{% elif e.rank == 2 %} top-2{% elif e.rank == 3 %} top-3{% endif %}"
              data-rank="{{ e.rank }}"
-             data-pnl="{{ e.total_pnl }}"
-             data-week="{{ e.week_pnl }}"
+             data-pnl="{{ e.total_pnl_usd }}"
+             data-week="{{ e.week_pnl_usd }}"
              data-following="{{ '1' if e.is_following else '0' }}"
              data-name="{{ (e.username|lower) }}{{ (e.wallet_short|lower) }}">
 
@@ -336,7 +336,7 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
               <div class="stat">
                 <div class="stat-label">30D PNL</div>
                 <div class="stat-value acc">
-                  {{ '+' if (e.month_pnl|default(e.total_pnl)) >= 0 else '' }}{{ '%.2f'|format(e.month_pnl|default(e.total_pnl)) }}<span class="stat-unit">SOL</span>
+                  {{ '+$' if e.total_pnl_usd >= 0 else '-$' }}{{ '%.2f'|format(e.total_pnl_usd|abs) }}
                 </div>
               </div>
               <div class="stat">

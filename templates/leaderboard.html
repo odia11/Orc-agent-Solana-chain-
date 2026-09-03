@@ -152,10 +152,10 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 
   <!-- YOUR RANK BANNER -->
   {% for e in entries %}{% if e.is_me %}
-  {% set pnl_str = ('+' if e.total_pnl >= 0 else '') ~ ('%.4f'|format(e.total_pnl)) %}
+  {% set pnl_str = ('+$' if e.total_pnl_usd >= 0 else '-$') ~ ('%.2f'|format(e.total_pnl_usd|abs)) %}
   <div class="rank-banner">
     <span class="rank-banner-check">✓</span>
-    <span>You are ranked <strong>#{{ e.rank }}</strong> with <strong>{{ pnl_str }} SOL</strong> across <strong>{{ e.trade_count }} trade{{ 's' if e.trade_count != 1 else '' }}</strong>.</span>
+    <span>You are ranked <strong>#{{ e.rank }}</strong> with <strong>{{ pnl_str }}</strong> across <strong>{{ e.trade_count }} trade{{ 's' if e.trade_count != 1 else '' }}</strong>.</span>
     <button class="rank-banner-share" onclick="_shareLbRankToX({{ e.rank }},'{{ pnl_str }}',{{ e.trade_count }})" title="Share on X">𝕏 Share</button>
   </div>
   {% endif %}{% endfor %}
@@ -171,8 +171,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
       <div class="podium-medal">{{ medal }}</div>
       <div class="podium-place">{{ lbl }}</div>
       <div class="podium-wallet{{ ' is-me' if e.is_me else '' }}"><a href="/profile/{{ e.wallet_full }}">{{ e.wallet }}</a>{% if e.is_verified %} <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}</div>
-      <div class="podium-pnl {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
-        {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }} SOL
+      <div class="podium-pnl {{ 'pos' if e.total_pnl_usd >= 0 else 'neg' }}">
+        {{ '+$' if e.total_pnl_usd >= 0 else '-$' }}{{ '%.2f'|format(e.total_pnl_usd|abs) }}
       </div>
       <div class="podium-meta">{{ '%.1f'|format(e.win_rate) }}% WR &middot; {{ e.trade_count }} trades</div>
     </div>
@@ -204,12 +204,12 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
             {% if e.is_verified %} <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>{% endif %}
             {% if e.is_me %}<span class="me-chip">YOU</span>{% endif %}
           </td>
-          <td class="td-pnl {{ 'pos' if e.total_pnl >= 0 else 'neg' }}">
-            {{ '+' if e.total_pnl >= 0 else '' }}{{ '%.4f'|format(e.total_pnl) }}
+          <td class="td-pnl {{ 'pos' if e.total_pnl_usd >= 0 else 'neg' }}">
+            {{ '+$' if e.total_pnl_usd >= 0 else '-$' }}{{ '%.2f'|format(e.total_pnl_usd|abs) }}
           </td>
           <td class="td-wr {{ 'pos' if e.win_rate >= 50 else 'neg' }}">{{ '%.1f'|format(e.win_rate) }}%</td>
           <td class="td-num">{{ e.trade_count }}</td>
-          <td class="td-best">+{{ '%.4f'|format(e.best_trade) }}</td>
+          <td class="td-best">{{ '+$' if e.best_trade_usd >= 0 else '-$' }}{{ '%.2f'|format(e.best_trade_usd|abs) }}</td>
         </tr>
         {% endfor %}
       </tbody>
@@ -230,7 +230,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 </div><!-- /page -->
 <script>
 function _shareLbRankToX(rank, pnlStr, tradeCount){
-  var text = 'Ranked #'+rank+' on OrcAgent with '+pnlStr+' SOL across '+tradeCount+' trade'+(tradeCount!==1?'s':'')+' 🚀';
+  var text = 'Ranked #'+rank+' on OrcAgent with '+pnlStr+' across '+tradeCount+' trade'+(tradeCount!==1?'s':'')+' 🚀';
   window.open('https://x.com/intent/tweet?text='+encodeURIComponent(text)+'&url='+encodeURIComponent(window.location.origin+'/leaderboard'), '_blank');
 }
 </script>

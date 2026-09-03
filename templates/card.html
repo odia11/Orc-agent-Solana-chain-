@@ -28,7 +28,7 @@ img{max-width:100%;height:auto}
   --muted:#6e8faf;
   --dim:#a0bcd4;
   --border:#1e3050;
-  {% if stats and stats.total_pnl >= 0 %}
+  {% if stats and stats.total_pnl_usd >= 0 %}
   --accent:#00ff88;
   --accent-rgb:0,255,136;
   --accent-bg:rgba(0,255,136,.06);
@@ -390,7 +390,7 @@ html,body{
     </div>
     <div class="pnl-section">
       <div class="pnl-label">All-Time Total P&amp;L</div>
-      <div class="pnl-value">{{ '+' if stats.total_pnl >= 0 else '' }}{{ '%.4f' | format(stats.total_pnl) }} SOL</div>
+      <div class="pnl-value">{{ '+$' if stats.total_pnl_usd >= 0 else '-$' }}{{ '%.2f' | format(stats.total_pnl_usd|abs) }}</div>
       <div class="pnl-sub">across {{ stats.trade_count }} trade{{ 's' if stats.trade_count != 1 else '' }}</div>
     </div>
   </div>
@@ -407,7 +407,7 @@ html,body{
     </div>
     <div class="stat-tile">
       <div class="stat-tile-lbl">Best Trade</div>
-      <div class="stat-tile-val pos">{{ '+' if stats.best_trade >= 0 else '' }}{{ '%.4f' | format(stats.best_trade) }} SOL</div>
+      <div class="stat-tile-val pos">{{ '+$' if stats.best_trade_usd >= 0 else '-$' }}{{ '%.2f' | format(stats.best_trade_usd|abs) }}</div>
     </div>
   </div>
 

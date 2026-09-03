@@ -2349,6 +2349,16 @@ def run_migrations():
         # Every trade/referral-earning predating BSC support was necessarily Solana --
         # DEFAULT 'solana' backfills existing rows correctly with no separate migration.
         "ALTER TABLE trades ADD COLUMN chain TEXT DEFAULT 'solana'",
+        # Which currency this closed trade's pnl/fee figures are actually
+        # denominated in -- 'SOL' (default, every pre-existing row and every
+        # SOL-based Solana trade) or 'USDC'/'USDG'. Needed because chain alone
+        # is no longer enough to know the unit: chain='solana' can now be
+        # either SOL- or USDC-based (see pref_solana_base_currency), and every
+        # non-Solana chain already trades its own USDC/USDG. Every leaderboard/
+        # profile/history query that sums pnl across trades needs this to
+        # convert to a common USD figure instead of silently adding different
+        # currencies together as if they were the same unit.
+        "ALTER TABLE trades ADD COLUMN base_currency TEXT DEFAULT 'SOL'",
         "ALTER TABLE referral_earnings ADD COLUMN chain TEXT DEFAULT 'solana'",
         # Signature counter for WebAuthn replay protection (see the security-fix
         # comment above this function) -- must increase on every successful
@@ -5391,8 +5401,8 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                     sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds,
                     entry_volume_5m, entry_volume_1h, entry_volume_accel, entry_buy_sell_ratio,
                     entry_unique_traders, entry_market_cap, entry_pair_age_minutes, risk_score,
-                    entry_slippage_pct, exit_slippage_pct, chain)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    entry_slippage_pct, exit_slippage_pct, chain, base_currency)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
                  mint or None, source,
@@ -5402,7 +5412,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                  entry_volume_5m, entry_volume_1h,
                  (int(bool(entry_volume_accel)) if entry_volume_accel is not None else None),
                  entry_buy_sell_ratio, entry_unique_traders, entry_market_cap, entry_pair_age_minutes,
-                 risk_score, entry_slippage_pct, exit_slippage_pct, chain))
+                 risk_score, entry_slippage_pct, exit_slippage_pct, chain, base))
             conn.commit()
             _trade_id = _cur.lastrowid
         finally:
@@ -9999,21 +10009,26 @@ def api_top_trades_week():
 
 def _pnl_card_stats(wallet_addr: str) -> dict | None:
     """Return all-time trade stats for a wallet, or None if no trades exist."""
+    # Same reasoning as leaderboard()/traders() -- only a plain SOL-mode
+    # Solana trade's pnl is SOL-denominated; convert only those to USD
+    # before aggregating instead of summing different currencies as one.
+    _sol_rate = _sol_price_usd if _sol_price_usd > 0 else 1.0
+    _PNL_SOL_CASE = "CASE WHEN t.chain='solana' AND (t.base_currency IS NULL OR t.base_currency='SOL') THEN t.pnl * ? ELSE t.pnl END"
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        c.execute('''
+        c.execute(f'''
             SELECT
-                ROUND(SUM(t.pnl), 4)                                                  AS total_pnl,
+                ROUND(SUM({_PNL_SOL_CASE}), 2)                                        AS total_pnl_usd,
                 ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
                       * 100.0 / COUNT(*), 1)                                          AS win_rate,
                 COUNT(*)                                                               AS trade_count,
-                ROUND(MAX(t.pnl), 4)                                                  AS best_trade,
-                ROUND(MIN(t.pnl), 4)                                                  AS worst_trade
+                ROUND(MAX({_PNL_SOL_CASE}), 2)                                        AS best_trade_usd,
+                ROUND(MIN({_PNL_SOL_CASE}), 2)                                        AS worst_trade_usd
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address = ?
-        ''', (wallet_addr,))
+        ''', (_sol_rate, _sol_rate, _sol_rate, wallet_addr))
         row = c.fetchone()
         conn.close()
     except Exception as e:
@@ -10021,15 +10036,15 @@ def _pnl_card_stats(wallet_addr: str) -> dict | None:
         return None
     if not row or not row[2]:
         return None
-    total_pnl, win_rate, trade_count, best_trade, worst_trade = row
+    total_pnl_usd, win_rate, trade_count, best_trade_usd, worst_trade_usd = row
     anon = (wallet_addr[:4] + '...' + wallet_addr[-4:]) if len(wallet_addr) >= 8 else wallet_addr
     return {
-        'wallet':      anon,
-        'total_pnl':   round(float(total_pnl   or 0), 4),
-        'win_rate':    round(float(win_rate     or 0), 1),
-        'trade_count': int  (trade_count        or 0),
-        'best_trade':  round(float(best_trade   or 0), 4),
-        'worst_trade': round(float(worst_trade  or 0), 4),
+        'wallet':         anon,
+        'total_pnl_usd':  round(float(total_pnl_usd  or 0), 2),
+        'win_rate':       round(float(win_rate        or 0), 1),
+        'trade_count':    int  (trade_count           or 0),
+        'best_trade_usd':  round(float(best_trade_usd  or 0), 2),
+        'worst_trade_usd': round(float(worst_trade_usd or 0), 2),
     }
 
 
@@ -10218,7 +10233,13 @@ def traders():
                 me_id, my_copy_source = row[0], row[1]
                 frows = c.execute('SELECT following_id FROM follows WHERE follower_id=?', (me_id,)).fetchall()
                 following_ids = {r[0] for r in frows}
-        c.execute('''
+        # Same reasoning as leaderboard()'s _PNL_SOL_CASE -- a row's pnl is only
+        # SOL-denominated for a plain SOL-mode Solana trade; everything else
+        # (EVM USDC/USDG, or a USDC-mode Solana trade) is already ~USD, so
+        # only the SOL rows get converted before summing as dollars.
+        _sol_rate = _sol_price_usd if _sol_price_usd > 0 else 1.0
+        _PNL_SOL_CASE = "CASE WHEN t.chain='solana' AND (t.base_currency IS NULL OR t.base_currency='SOL') THEN t.pnl * ? ELSE t.pnl END"
+        c.execute(f'''
             SELECT
                 u.id,
                 u.wallet_address,
@@ -10226,7 +10247,7 @@ def traders():
                 u.avatar_url,
                 u.badges,
                 u.is_verified,
-                ROUND(SUM(t.pnl), 4)                                          AS total_pnl,
+                ROUND(SUM({_PNL_SOL_CASE}), 2)                                AS total_pnl_usd,
                 ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
                       * 100.0 / COUNT(*), 1)                                  AS win_rate,
                 COUNT(*)                                                       AS trade_count,
@@ -10242,23 +10263,23 @@ def traders():
                 (SELECT COUNT(*) FROM follows f
                  WHERE f.following_id = u.id)                                 AS follower_count,
                 ROUND(SUM(CASE WHEN t.timestamp >= datetime(\'now\',\'-7 days\')
-                               THEN t.pnl ELSE 0.0 END), 4)                  AS week_pnl
+                               THEN ({_PNL_SOL_CASE}) ELSE 0.0 END), 2)      AS week_pnl_usd
             FROM trades t
             JOIN users u ON u.id = t.user_id
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
             GROUP BY t.user_id
-            ORDER BY total_pnl DESC
+            ORDER BY total_pnl_usd DESC
             LIMIT 100
-        ''')
+        ''', (_sol_rate, _sol_rate))
         rows = c.fetchall()
         conn.close()
     except Exception as e:
         print(f'[traders] DB error: {e}', flush=True)
         rows = []
     for rank, (uid, wallet, username, avatar_url, badges_str, is_verified,
-               total_pnl, win_rate, trade_count,
+               total_pnl_usd, win_rate, trade_count,
                best_trade_pct, best_token,
-               follower_count, week_pnl) in enumerate(rows, 1):
+               follower_count, week_pnl_usd) in enumerate(rows, 1):
         wallet = wallet or ''
         anon   = (wallet[:4] + '…' + wallet[-4:]) if len(wallet) >= 8 else (wallet or '???')
         entries.append({
@@ -10270,13 +10291,13 @@ def traders():
             'avatar_url':     avatar_url or '',
             'badges':         [b.strip() for b in (badges_str or '').split(',') if b.strip()],
             'is_verified':    bool(is_verified),
-            'total_pnl':      round(float(total_pnl      or 0), 4),
+            'total_pnl_usd':  round(float(total_pnl_usd  or 0), 2),
             'win_rate':       round(float(win_rate        or 0), 1),
             'trade_count':    int  (trade_count           or 0),
             'best_trade_pct': round(float(best_trade_pct or 0), 1),
             'best_token':     (best_token or '').upper()[:12],
             'follower_count': int  (follower_count        or 0),
-            'week_pnl':       round(float(week_pnl        or 0), 4),
+            'week_pnl_usd':   round(float(week_pnl_usd    or 0), 2),
             'is_me':          bool(session_wallet and wallet == session_wallet),
             'is_following':   int(uid) in following_ids,
             'is_copying':     bool(my_copy_source and my_copy_source == wallet),
@@ -10559,17 +10580,27 @@ def calls_page():
 def leaderboard():
     session_wallet = _current_wallet()   # may be '' — page is public
     entries = []
+    # A trade's pnl is SOL-denominated only for a plain SOL-mode Solana trade
+    # (chain='solana', base_currency unset/'SOL') -- every other row (an EVM
+    # chain's own USDC/USDG, or a USDC-mode Solana trade) is already ~USD.
+    # Converting only the SOL-denominated rows and summing everything as
+    # dollars avoids silently adding two different currencies together as if
+    # they were the same unit. Falls back to a 1:1 rate (identical to the
+    # previous raw-SOL behavior) on the rare chance the live price hasn't
+    # loaded yet, rather than reporting a bogus $0 leaderboard.
+    _sol_rate = _sol_price_usd if _sol_price_usd > 0 else 1.0
+    _PNL_SOL_CASE = "CASE WHEN t.chain='solana' AND (t.base_currency IS NULL OR t.base_currency='SOL') THEN t.pnl * ? ELSE t.pnl END"
     try:
         conn = sqlite3.connect(DB_FILE)
         c    = conn.cursor()
-        c.execute('''
+        c.execute(f'''
             SELECT
                 u.wallet_address,
-                ROUND(SUM(t.pnl), 4)                                                    AS total_pnl,
+                ROUND(SUM({_PNL_SOL_CASE}), 2)                                          AS total_pnl_usd,
                 ROUND(SUM(CASE WHEN t.pnl >= 0 THEN 1.0 ELSE 0.0 END)
                       * 100.0 / COUNT(*), 1)                                            AS win_rate,
                 COUNT(*)                                                                 AS trade_count,
-                ROUND(MAX(t.pnl), 4)                                                    AS best_trade,
+                ROUND(MAX({_PNL_SOL_CASE}), 2)                                          AS best_trade_usd,
                 u.badges                                                                 AS badges,
                 u.is_verified                                                            AS is_verified
             FROM trades t
@@ -10577,29 +10608,29 @@ def leaderboard():
             WHERE u.wallet_address IS NOT NULL AND u.wallet_address != \'\'
               AND (t.source IN (\'manual\', \'bot\', \'copy\') OR (t.source IS NULL AND t.mint_address IS NOT NULL))
             GROUP BY t.user_id
-            ORDER BY total_pnl DESC
+            ORDER BY total_pnl_usd DESC
             LIMIT 50
-        ''')
+        ''', (_sol_rate, _sol_rate))
         rows = c.fetchall()
         conn.close()
     except Exception as e:
         print(f'[leaderboard] DB error: {e}', flush=True)
         rows = []
-    for rank, (wallet, total_pnl, win_rate, trade_count, best_trade, badges_str, is_verified) in enumerate(rows, 1):
+    for rank, (wallet, total_pnl_usd, win_rate, trade_count, best_trade_usd, badges_str, is_verified) in enumerate(rows, 1):
         wallet = wallet or ''
         is_me  = bool(session_wallet and wallet == session_wallet)
         anon   = (wallet[:4] + '...' + wallet[-4:]) if len(wallet) >= 8 else (wallet or '???')
         entries.append({
-            'rank':        rank,
-            'wallet':      anon,
-            'wallet_full': wallet,
-            'total_pnl':   round(float(total_pnl   or 0), 4),
-            'win_rate':    round(float(win_rate     or 0), 1),
-            'trade_count': int  (trade_count        or 0),
-            'best_trade':  round(float(best_trade   or 0), 4),
-            'is_me':       is_me,
-            'badges':      [b.strip() for b in (badges_str or '').split(',') if b.strip()],
-            'is_verified': bool(is_verified),
+            'rank':          rank,
+            'wallet':        anon,
+            'wallet_full':   wallet,
+            'total_pnl_usd': round(float(total_pnl_usd or 0), 2),
+            'win_rate':      round(float(win_rate       or 0), 1),
+            'trade_count':   int  (trade_count          or 0),
+            'best_trade_usd': round(float(best_trade_usd or 0), 2),
+            'is_me':         is_me,
+            'badges':        [b.strip() for b in (badges_str or '').split(',') if b.strip()],
+            'is_verified':   bool(is_verified),
         })
     wallet_short = ((session_wallet[:4] + '...' + session_wallet[-4:])
                     if len(session_wallet) >= 8 else '')
@@ -10676,15 +10707,22 @@ def history():
                     'mint_address':  mint_addr or '',
                 })
             c.execute(
-                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address, source
+                '''SELECT timestamp, token, entry_price, exit_price, amount, pnl, opened_at, mint_address, source, chain, base_currency
                    FROM trades WHERE user_id=? AND COALESCE(source,'bot') IN ('bot','copy') ORDER BY timestamp DESC''',
                 (user_id,)
             )
-            for ts, token, entry, exit_p, amount, pnl, opened_at, mint_addr, trade_source in c.fetchall():
+            _sol_rate = _sol_price_usd if _sol_price_usd > 0 else 1.0
+            for ts, token, entry, exit_p, amount, pnl, opened_at, mint_addr, trade_source, t_chain, t_base in c.fetchall():
                 pnl     = round(pnl   or 0.0, 6)
                 entry   = entry  or 0.0
                 exit_p  = exit_p or 0.0
                 pnl_pct = round((exit_p - entry) / entry * 100, 2) if entry > 0 else 0.0
+                # Same reasoning as leaderboard()/traders() -- only a plain
+                # SOL-mode Solana trade's pnl is SOL-denominated; an EVM
+                # chain's own USDC/USDG (or a USDC-mode Solana trade) is
+                # already ~USD and needs no conversion.
+                _is_sol = (not t_chain or t_chain == 'solana') and (not t_base or t_base == 'SOL')
+                pnl_usd = round(pnl * _sol_rate, 2) if _is_sol else round(pnl, 2)
                 duration = ''
                 opened_date = ''
                 opened_time = ''
@@ -10710,6 +10748,7 @@ def history():
                     'entry_price':  round(entry,  6),
                     'exit_price':   round(exit_p, 6),
                     'pnl':          pnl,
+                    'pnl_usd':      pnl_usd,
                     'pnl_pct':      pnl_pct,
                     'duration':     duration,
                     'result':       'win' if pnl >= 0 else 'loss',
@@ -10755,15 +10794,25 @@ def _fetch_open_bot_positions(wallet):
             stop_loss   = (float(sl_row) / 100) if sl_row is not None else STOP_LOSS
             c.execute(
                 '''SELECT mint_address, symbol, amount, buy_price, opened_at,
-                          sl_price, tp_price, trailing_enabled
+                          sl_price, tp_price, trailing_enabled, chain, base_currency
                    FROM open_positions WHERE user_id=? AND source='bot' ORDER BY opened_at DESC''',
                 (user_id,)
             )
             live_map = {t['mint']: t for t in state.get('tokens', [])}
-            for mint_addr, symbol, amount, buy_price, opened_at, snap_sl_price, snap_tp_price, snap_trailing in c.fetchall():
+            _sol_rate = _sol_price_usd if _sol_price_usd > 0 else 1.0
+            for mint_addr, symbol, amount, buy_price, opened_at, snap_sl_price, snap_tp_price, snap_trailing, p_chain, p_base in c.fetchall():
                 live       = live_map.get(mint_addr, {})
                 cur_price  = live.get('price', buy_price)
                 pnl_pct    = round((cur_price - buy_price) / buy_price * 100, 2) if buy_price > 0 else 0.0
+                # Same reasoning as history()/leaderboard()/traders() -- only a
+                # plain SOL-mode Solana position's stake/pnl is SOL-denominated;
+                # an EVM chain's own USDC/USDG (or a USDC-mode Solana position)
+                # is already ~USD. stake_sol/pnl_sol are kept exactly as before
+                # (many other consumers -- trade-card images, social embeds,
+                # notifications -- read those field names); stake_usd/pnl_usd
+                # are new, added fields only /live-trades' own display uses.
+                _is_sol = (not p_chain or p_chain == 'solana') and (not p_base or p_base == 'SOL')
+                _rate = _sol_rate if _is_sol else 1.0
                 opened_str = ''
                 if opened_at:
                     try:
@@ -10785,8 +10834,10 @@ def _fetch_open_bot_positions(wallet):
                     'tiered_tp':     bool(snap_trailing) if _has_snap else bool(tiered_tp_enabled),
                     'amount':        round(amount, 4),
                     'stake_sol':     round(buy_price * amount, 4),
+                    'stake_usd':     round(buy_price * amount * _rate, 2),
                     'pnl_pct':       pnl_pct,
                     'pnl_sol':       round((cur_price - buy_price) * amount, 6),
+                    'pnl_usd':       round((cur_price - buy_price) * amount * _rate, 2),
                     'opened_at':     opened_str,
                     'mint_address':  mint_addr or '',
                 })
@@ -21319,6 +21370,7 @@ def _bot_status_summary(wallet: str) -> dict:
     return {
         'running': running,
         'sol_ready': sol_ready,
+        'sol_ready_usd': _sol_usd(sol_ready),
         'open_positions': open_positions,
         'win_rate': win_rate,
     }

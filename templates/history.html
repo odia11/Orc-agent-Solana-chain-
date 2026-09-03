@@ -236,7 +236,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
           <th>Token</th>
           <th>Entry Price</th>
           <th>Exit Price</th>
-          <th>PnL (SOL)</th>
+          <th>PnL</th>
           <th>PnL (%)</th>
           <th>Duration</th>
           <th>Result</th>
@@ -247,7 +247,8 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
         <tr class="hist-row"
             data-token="{{ t.token | lower }}"
             data-result="{{ t.result }}"
-            data-date="{{ t.date }}">
+            data-date="{{ t.date }}"
+            data-pnl="{{ t.pnl_usd }}">
           <td style="color:var(--muted);font-size:10px;font-family:var(--mono)">{{ t.opened_date if t.opened_date else '—' }}<br><span style="font-size:9px;opacity:.7">{{ t.opened_time }}</span></td>
           <td style="color:var(--muted);font-size:10px;font-family:var(--mono)">{{ t.date }}<br><span style="font-size:9px;opacity:.7">{{ t.time }}</span></td>
           <td class="tok">
@@ -258,7 +259,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
           </td>
           <td style="font-family:var(--mono)">${{ '%.6f' | format(t.entry_price) }}</td>
           <td style="font-family:var(--mono)">${{ '%.6f' | format(t.exit_price) }}</td>
-          <td class="{{ 'pos' if t.pnl >= 0 else 'neg' }}" style="font-family:var(--mono);font-size:12px;font-weight:700">{{ '+' if t.pnl >= 0 else '' }}{{ '%.4f' | format(t.pnl) }}</td>
+          <td class="{{ 'pos' if t.pnl_usd >= 0 else 'neg' }}" style="font-family:var(--mono);font-size:12px;font-weight:700">{{ '+$' if t.pnl_usd >= 0 else '-$' }}{{ '%.2f' | format(t.pnl_usd|abs) }}</td>
           <td class="{{ 'pos' if t.pnl_pct >= 0 else 'neg' }}">{{ '+' if t.pnl_pct >= 0 else '' }}{{ '%.2f' | format(t.pnl_pct) }}%</td>
           <td style="color:var(--muted);font-family:var(--mono)">{{ t.duration if t.duration else '—' }}</td>
           <td>
@@ -297,7 +298,7 @@ const TRADE_DATA = ROWS.map(r => ({
   token:  r.dataset.token,
   result: r.dataset.result,
   date:   r.dataset.date,
-  pnl:    parseFloat(r.querySelector('td:nth-child(6)').textContent),
+  pnl:    parseFloat(r.dataset.pnl),
   pnlPct: parseFloat(r.querySelector('td:nth-child(7)').textContent),
 }));
 
@@ -341,9 +342,9 @@ function updateSummary(data) {
 
   set('sum-total', total || '—');
   set('sum-wr',    total ? wr + '%' : '—', wins / total >= 0.5 ? 'pos' : 'neg');
-  set('sum-pnl',   total ? (totalPnl >= 0 ? '+' : '') + totalPnl.toFixed(4) + ' SOL' : '—', totalPnl >= 0 ? 'pos' : 'neg');
-  set('sum-best',  best  != null ? '+' + best.toFixed(4)  + ' SOL' : '—', 'pos');
-  set('sum-worst', worst != null ? worst.toFixed(4) + ' SOL' : '—', 'neg');
+  set('sum-pnl',   total ? (totalPnl >= 0 ? '+$' : '-$') + Math.abs(totalPnl).toFixed(2) : '—', totalPnl >= 0 ? 'pos' : 'neg');
+  set('sum-best',  best  != null ? (best  >= 0 ? '+$' : '-$') + Math.abs(best).toFixed(2)  : '—', 'pos');
+  set('sum-worst', worst != null ? (worst >= 0 ? '+$' : '-$') + Math.abs(worst).toFixed(2) : '—', 'neg');
 }
 
 function clearFilters() {
