@@ -175,10 +175,9 @@ function renderChartSvg(idx, candles, currentPrice){
   var h = 200;
   svg.setAttribute('viewBox', '0 0 '+w+' '+h);
 
-  var oldPill = wrap.querySelector('.pt-price-pill');
-  if(oldPill) oldPill.remove();
-
   if(!candles || candles.length<2){
+    var oldPill0 = wrap.querySelector('.pt-price-pill');
+    if(oldPill0) oldPill0.remove();
     svg.innerHTML = '';
     if(!wrap.querySelector('.pt-chart-empty')){
       var emptyEl = document.createElement('div');
@@ -212,6 +211,14 @@ function renderChartSvg(idx, candles, currentPrice){
   var priceY = h - ((priceVal-min)/(max-min))*h;
   priceY = Math.max(2, Math.min(h-2, priceY));
 
+  // Scrubbing (see attachScrub()) reads these off the timer state -- kept
+  // in the exact same {x,y} pixel space the SVG itself was just drawn in
+  // (viewBox="0 0 w h"), and paired 1:1 with `candles` by index, so a
+  // pointer position maps straight to "nearest x" -> "that candle's price
+  // and time" with no unit conversion.
+  var st = _chartTimers[idx];
+  if(st){ st.pts = pts; st.candles = candles; st.min = min; st.max = max; st.h = h; st.w = w; }
+
   var gradId = 'pt-grad-'+idx;
   svg.innerHTML =
       '<defs><linearGradient id="'+gradId+'" x1="0" y1="0" x2="0" y2="1">'
@@ -222,13 +229,92 @@ function renderChartSvg(idx, candles, currentPrice){
     + '<line x1="0" y1="'+priceY.toFixed(2)+'" x2="'+w+'" y2="'+priceY.toFixed(2)+'" stroke="#f7b955" stroke-width="1" stroke-dasharray="3,4" opacity="0.55" vector-effect="non-scaling-stroke"></line>'
     + '<path d="'+linePath+'" fill="none" stroke="#f7b955" stroke-width="1.6" vector-effect="non-scaling-stroke" stroke-linecap="round"></path>';
 
-  var pill = document.createElement('div');
-  pill.className = 'pt-price-pill';
+  // Reused across renders (not removed+recreated) so the CSS `top`
+  // transition on .pt-price-pill actually animates between positions
+  // instead of jumping -- a fresh element each render has no "previous
+  // value" for the browser to transition from.
+  var pill = wrap.querySelector('.pt-price-pill');
+  if(!pill){
+    pill = document.createElement('div');
+    pill.className = 'pt-price-pill';
+    wrap.insertBefore(pill, wrap.querySelector('.pt-chart-axis'));
+  }
   pill.style.top = priceY+'px';
   pill.textContent = fmtPrice(priceVal);
-  wrap.insertBefore(pill, wrap.querySelector('.pt-chart-axis'));
 
   updateAxis(idx, candles);
+}
+
+// Touch/mouse "chart-scrub" for the hand-rolled SVG chart above (the
+// LightweightCharts-based charts elsewhere in the app already get this via
+// chart-scrub.js's attachChartScrub() -- this one is a plain SVG polyline,
+// not a LightweightCharts instance, so that helper doesn't apply here; this
+// is the same drag/hover -> nearest-point -> crosshair+tooltip idea, done
+// in plain pixel math against the {x,y} points renderChartSvg() already
+// computed (stored on the timer state each render).
+function attachChartSvgScrub(idx){
+  var wrap = document.getElementById('pt-chart-wrap-'+idx);
+  var st   = _chartTimers[idx];
+  if(!wrap || !st) return;
+
+  var line = document.createElement('div'); line.className = 'pt-chart-scrub-line';
+  var dot  = document.createElement('div'); dot.className  = 'pt-chart-scrub-dot';
+  var tip  = document.createElement('div'); tip.className  = 'pt-chart-scrub-tip';
+  wrap.appendChild(line); wrap.appendChild(dot); wrap.appendChild(tip);
+
+  function scrubToX(clientX){
+    var s = _chartTimers[idx];
+    var svg = document.getElementById('pt-chart-svg-'+idx);
+    if(!s || !svg || !s.pts || !s.pts.length) return;
+    var svgRect  = svg.getBoundingClientRect();
+    var wrapRect = wrap.getBoundingClientRect();
+    if(!svgRect.width) return;
+    var localX = Math.max(0, Math.min(svgRect.width, clientX - svgRect.left));
+    // localX is real CSS pixels on the rendered <svg>; s.pts are in the
+    // viewBox's own unit space (0..s.w) -- convert before nearest-point search
+    // since preserveAspectRatio="none" means those two scales only match
+    // when the box happens to render at exactly s.w px wide.
+    var vbX = (localX / svgRect.width) * (s.w || svgRect.width);
+    var pts = s.pts, best = 0, bestDiff = Math.abs(pts[0].x - vbX);
+    for(var i=1;i<pts.length;i++){
+      var diff = Math.abs(pts[i].x - vbX);
+      if(diff < bestDiff){ best = i; bestDiff = diff; }
+    }
+    var c = s.candles && s.candles[best], pt = pts[best];
+    if(!c || !pt) return;
+    var pxX = (pt.x / (s.w||1)) * svgRect.width  + (svgRect.left - wrapRect.left);
+    var pxY = (pt.y / (s.h||1)) * svgRect.height + (svgRect.top  - wrapRect.top);
+    line.style.left = pxX+'px'; line.style.height = svgRect.height+'px'; line.style.display = 'block';
+    dot.style.left  = pxX+'px'; dot.style.top = pxY+'px';                dot.style.display  = 'block';
+    var d = new Date(c.t*1000);
+    var hh = ('0'+d.getHours()).slice(-2), mm = ('0'+d.getMinutes()).slice(-2);
+    tip.textContent = fmtPrice(c.c)+'  ·  '+hh+':'+mm;
+    tip.style.display = 'block';
+    var tipX = Math.max(4, Math.min(wrapRect.width - tip.offsetWidth - 4, pxX - tip.offsetWidth/2));
+    tip.style.left = tipX+'px';
+  }
+  function clearScrub(){
+    line.style.display = 'none'; dot.style.display = 'none'; tip.style.display = 'none';
+  }
+  function onTouchStart(e){ if(e.touches[0]) scrubToX(e.touches[0].clientX); }
+  function onTouchMove(e){ if(e.touches[0]){ e.preventDefault(); scrubToX(e.touches[0].clientX); } }
+  function onMouseMove(e){ scrubToX(e.clientX); }
+  wrap.addEventListener('touchstart', onTouchStart, {passive:true});
+  wrap.addEventListener('touchmove', onTouchMove, {passive:false});
+  wrap.addEventListener('touchend', clearScrub, {passive:true});
+  wrap.addEventListener('touchcancel', clearScrub, {passive:true});
+  wrap.addEventListener('mousemove', onMouseMove);
+  wrap.addEventListener('mouseleave', clearScrub);
+
+  st.scrubTeardown = function(){
+    wrap.removeEventListener('touchstart', onTouchStart);
+    wrap.removeEventListener('touchmove', onTouchMove);
+    wrap.removeEventListener('touchend', clearScrub);
+    wrap.removeEventListener('touchcancel', clearScrub);
+    wrap.removeEventListener('mousemove', onMouseMove);
+    wrap.removeEventListener('mouseleave', clearScrub);
+    [line, dot, tip].forEach(function(el){ if(el.parentNode) el.parentNode.removeChild(el); });
+  };
 }
 
 function fetchChart(mint, tf, pairAddr, chain){
@@ -256,12 +342,14 @@ function mountChart(idx, mint, pairAddr, chain){
   _chartTimers[idx] = st;
   chartTick(idx);
   st.timer = setInterval(function(){ chartTick(idx); }, 5000);
+  attachChartSvgScrub(idx);
 }
 function unmountChart(idx){
   var st = _chartTimers[idx];
   if(!st) return;
   st.destroyed = true;
   if(st.timer) clearInterval(st.timer);
+  if(st.scrubTeardown) st.scrubTeardown();
   delete _chartTimers[idx];
 }
 function setChartTf(idx, tf){
