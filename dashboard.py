@@ -14600,7 +14600,12 @@ def api_make_call():
         return jsonify({'ok': False, 'msg': 'Connect a wallet first'}), 401
     data = request.get_json(silent=True) or {}
     mint = str(data.get('mint', '')).strip()
-    if not is_valid_solana_address(mint):
+    # Was Solana-only -- rejected every BSC/Base/Arbitrum/Polygon/Robinhood
+    # token a caller picked from the (now multi-chain) search dropdown with
+    # a generic "Invalid token address" 400, even though get_token_data()
+    # below and every downstream read of this row (peak-price refresh,
+    # leaderboard, profile feed) is already chain-agnostic.
+    if not (is_valid_solana_address(mint) or is_valid_evm_address(mint)):
         return jsonify({'ok': False, 'msg': 'Invalid token address'}), 400
 
     conn = sqlite3.connect(DB_FILE)
@@ -18569,13 +18574,30 @@ def api_geckoterminal_pools(kind):
 def api_dex_search():
     """Full-pair-shape DexScreener search (name/ticker/address), proxied through the
     shared _dex_get cache+backoff — used by the Live Market search bar to find tokens
-    outside the currently loaded Trending/New/Gainers list."""
+    outside the currently loaded Trending/New/Gainers list.
+
+    Pasting the full address of a token on a brand-new chain (e.g. Robinhood
+    Chain, days old at launch) came back with zero results even though the
+    token is live and tradeable -- DexScreener's fuzzy /search index lags
+    behind its own direct per-token lookup for freshly-indexed chains. When
+    the query is itself a valid address and /search finds nothing, fall back
+    to the direct /tokens/<address> lookup (same one /api/token/info/ uses)
+    and re-shape its pairs into this endpoint's normal {'pairs': [...]}
+    response so the frontend needs no special-casing."""
     q = _sanitize(request.args.get('q', '').strip())[:100]
     if not q:
         return jsonify({'pairs': []})
     r = _dex_get('https://api.dexscreener.com/latest/dex/search?q=' + requests.utils.quote(q, safe=''))
-    if r and r.status_code == 200:
-        return jsonify(r.json())
+    search_ok = bool(r and r.status_code == 200)
+    pairs = (r.json().get('pairs') or []) if search_ok else []
+    if not pairs and (is_valid_solana_address(q) or is_valid_evm_address(q)):
+        r2 = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(q, safe=''))
+        if r2 and r2.status_code == 200:
+            pairs = r2.json().get('pairs') or []
+    if pairs:
+        return jsonify({'pairs': pairs})
+    if search_ok:
+        return jsonify({'pairs': []})
     return jsonify({'pairs': []}), 502
 
 @app.route('/api/token/info/<mint_address>', methods=['GET'])

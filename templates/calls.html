@@ -320,17 +320,27 @@ function _callSearchInput(){
   _callSearchTimer = setTimeout(function(){
     dd.style.display = 'block';
     dd.innerHTML = '<div class="call-dd-row" style="cursor:default;color:var(--muted)">Searching…</div>';
-    fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+    // Was a hardcoded chainId==='solana' filter hitting DexScreener directly
+    // from the browser -- every BSC/Base/Arbitrum/Polygon/Robinhood token
+    // was silently thrown away here, so picking one to call was impossible
+    // even after /api/calls itself learned to accept non-Solana addresses.
+    // Now goes through our own proxy (same cache+backoff as the navbar
+    // search, plus its address-lookup fallback for brand-new chains) and
+    // keeps every chain this app actually supports trading on.
+    var _liveChains = (typeof _NB_LIVE_CHAINS!=='undefined') ? _NB_LIVE_CHAINS : ['solana'];
+    var _chainLbls  = (typeof _NB_CHAIN_LABELS!=='undefined') ? _NB_CHAIN_LABELS : {solana:'SOL'};
+    fetch('/api/dexscreener/search?q='+encodeURIComponent(q))
     .then(function(r){ return r.json(); })
     .then(function(d){
-      var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,6);
-      if(!pairs.length){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--muted)">No Solana tokens found</div>'; return; }
+      var pairs = (d.pairs||[]).filter(function(p){ return _liveChains.indexOf(p.chainId)!==-1; }).slice(0,6);
+      if(!pairs.length){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--muted)">No tokens found</div>'; return; }
       dd.innerHTML = pairs.map(function(p,i){
         var sym = (p.baseToken&&p.baseToken.symbol)||'?';
         var name = (p.baseToken&&p.baseToken.name)||'';
+        var chainLbl = _chainLbls[p.chainId] || p.chainId;
         var price = p.priceUsd ? _fmtCallPrice(parseFloat(p.priceUsd)) : '—';
         return '<div class="call-dd-row" onclick="_pickCallToken('+i+')">'
-          +'<div><div class="call-dd-sym">'+esc(sym)+'</div><div class="call-dd-name">'+esc(name)+'</div></div>'
+          +'<div><div class="call-dd-sym">'+esc(sym)+' <span style="color:var(--muted);font-weight:400">'+esc(chainLbl)+'</span></div><div class="call-dd-name">'+esc(name)+'</div></div>'
           +'<div class="call-dd-price">'+price+'</div></div>';
       }).join('');
       window._callDdPairs = pairs;
