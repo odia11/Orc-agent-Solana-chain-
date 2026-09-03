@@ -1022,11 +1022,6 @@ function _modalBridge(){
   )
 }
 
-function _bridgeFmtUsd(n){
-  var v=parseFloat(n)
-  return isNaN(v)?'—':'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:6})
-}
-
 function _bridgeGetQuote(){
   var origin=document.getElementById('br-origin-chain').value
   var dest=document.getElementById('br-dest-chain').value
@@ -1058,7 +1053,7 @@ function _bridgeGetQuote(){
           +'You receive: <b>≈ '+receive+' '+destSym+'</b> on '+destLabel+'<br>'
           +(d.route_name?('Route: '+d.route_name+'<br>'):'')
           +(d.estimated_seconds?('Estimated time: ~'+Math.round(d.estimated_seconds)+'s<br>'):'Estimated time: seconds to minutes<br>')
-          +(d.fee_usd!=null?('Fees: '+_bridgeFmtUsd(d.fee_usd)+'<br>'):'')
+          +'Fees: bridge/network fees are deducted automatically — the "You receive" amount above is already net of them<br>'
           +'Quote ID: <span style="font-size:10px;color:var(--muted)">'+(d.quote_id||'—')+'</span>'
         +'</div>'
         +'<div class="w-modal-btns">'

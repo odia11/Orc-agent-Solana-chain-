@@ -3189,9 +3189,17 @@ _BRIDGE_STATUS_INTERVAL = 15
 # with everything known so far (quote id, origin tx hash), so nothing about
 # the transaction itself is lost, just the automatic tracking of it.
 _BRIDGE_MAX_POLL_SECONDS = 1800
-# 0x Cross-Chain API's own status vocabulary (see _get_0x_bridge_status()) --
-# these three are the only ones that stop polling; every other status (incl.
-# 'unknown') is retried next cycle.
+# 0x Cross-Chain API's own status vocabulary -- verified against 0x's own
+# example code (github.com/0xProject/0x-examples, schemas.ts's
+# CrossChainStatusResponseSchema), 8 values total. _BRIDGE_TERMINAL_STATUSES
+# (3 of the 8) are the only ones that stop polling -- taken directly from
+# that same example's own monitorTransaction() terminal-state list; every
+# other status (incl. 'unknown' and the newly-added 'origin_tx_succeeded')
+# is retried next cycle.
+_BRIDGE_ALL_STATUSES = {
+    'origin_tx_pending', 'origin_tx_succeeded', 'origin_tx_confirmed', 'origin_tx_reverted',
+    'bridge_pending', 'bridge_filled', 'bridge_failed', 'unknown',
+}
 _BRIDGE_TERMINAL_STATUSES = {'bridge_filled', 'bridge_failed', 'origin_tx_reverted'}
 _BRIDGE_STATUS_NOTIFICATIONS = {
     'bridge_filled':       'Bridge complete — funds have arrived on the destination chain.',
@@ -3199,23 +3207,23 @@ _BRIDGE_STATUS_NOTIFICATIONS = {
     'origin_tx_reverted':  'Bridge transaction reverted on the origin chain before any funds left your wallet.',
 }
 
-def _get_0x_bridge_status(quote_id: str, origin_tx_hash: str) -> dict:
+def _get_0x_bridge_status(origin_chain: str, origin_tx_hash: str) -> dict:
     """Polls 0x's Cross-Chain API status endpoint for one in-flight bridge.
 
-    ── UNVERIFIED ── the exact endpoint path, query parameter names, and
-    response field names below are this project's best inference from 0x's
-    own public "How It Works" documentation (GET /status, keyed by the
-    origin tx hash + quoteId) plus the same-chain Swap API's already-
-    integrated response conventions (0x states the Cross-Chain API mirrors
-    that shape) -- NOT confirmed against a live response, since docs.0x.org
-    itself is unreachable from this environment. Treat this as the one
-    piece of the bridge feature that needs a real, small test transaction
-    run against it before being trusted at scale; every other status this
-    doesn't recognize returns 'unknown' rather than being guessed into a
-    terminal state, so a wrong field name here fails safe (endless "still
-    checking") rather than unsafe (falsely marked complete/failed).
+    ── Verified against 0x's own official example code ──
+    (github.com/0xProject/0x-examples, cross-chain-headless-example/src/
+    {crossChainClient.ts,schemas.ts}) after an earlier version of this
+    function was built from documentation alone. Endpoint, params
+    (originChain + originTxHash -- NOT quoteId, despite 0x's own "How It
+    Works" prose saying to poll with "the origin tx hash and quoteId"; the
+    working example code takes only these two), and the full 8-value status
+    enum below are all read directly from that example's Zod schemas, not
+    inferred. Any status this doesn't recognize still returns 'unknown'
+    rather than being guessed into a terminal state, so a genuinely new
+    status 0x adds later fails safe (endless "still checking") rather than
+    unsafe (falsely marked complete/failed).
 
-    Returns {'ok': True, 'status': <one of the 7 spec statuses>,
+    Returns {'ok': True, 'status': <one of the 8 real statuses>,
     'dest_tx_hash': str|None, 'actual_amount_out': float|None,
     'error_reason': str|None, 'recovery_info': dict|None} on a parseable
     response, or {'ok': False, 'rate_limited': bool, 'msg': str} on a
@@ -3226,8 +3234,8 @@ def _get_0x_bridge_status(quote_id: str, origin_tx_hash: str) -> dict:
     try:
         r = requests.get(
             'https://api.0x.org/cross-chain/status',
-            params={'quoteId': quote_id, 'originTxHash': origin_tx_hash},
-            headers={'0x-api-key': ZEROX_API_KEY, '0x-version': 'v2'},
+            params={'originChain': _zerox_chain_param(origin_chain), 'originTxHash': origin_tx_hash},
+            headers={'0x-api-key': ZEROX_API_KEY},
             timeout=10,
         )
     except requests.exceptions.RequestException as e:
@@ -3239,15 +3247,34 @@ def _get_0x_bridge_status(quote_id: str, origin_tx_hash: str) -> dict:
     try:
         data = r.json()
         status = str(data.get('status') or 'unknown').lower()
-        if status not in ({'origin_tx_pending', 'origin_tx_confirmed', 'bridge_pending'} | _BRIDGE_TERMINAL_STATUSES):
+        if status not in _BRIDGE_ALL_STATUSES:
             status = 'unknown'
+        # Real response shape (verified, see docstring): {status, bridge,
+        # steps[], failure: {reason, status, recovery, transactions} | null,
+        # transactions: [{chainId, chain, txHash, timestamp}, ...], zid} --
+        # no destinationTxHash/actualAmountOut/errorReason fields exist at
+        # all, unlike this function's first (unverified) version assumed.
+        txs = data.get('transactions') or []
+        dest_tx_hash = None
+        for _tx in txs:
+            if _tx.get('txHash') and _tx.get('txHash') != origin_tx_hash:
+                dest_tx_hash = _tx['txHash']
+                break
+        actual_amount_out = None
+        for _step in (data.get('steps') or []):
+            if _step.get('type') == 'bridge' and _step.get('settledBuyAmount') is not None:
+                try:
+                    actual_amount_out = float(_step['settledBuyAmount'])
+                except (TypeError, ValueError):
+                    pass
+        failure = data.get('failure')
         return {
             'ok': True,
             'status': status,
-            'dest_tx_hash': data.get('destinationTxHash') or data.get('destTxHash') or None,
-            'actual_amount_out': float(data['actualAmountOut']) if data.get('actualAmountOut') is not None else None,
-            'error_reason': data.get('errorReason') or data.get('failureReason') or None,
-            'recovery_info': data.get('recovery') or data.get('refund') or None,
+            'dest_tx_hash': dest_tx_hash,
+            'actual_amount_out': actual_amount_out,
+            'error_reason': (failure or {}).get('reason'),
+            'recovery_info': (failure or {}).get('recovery'),
         }
     except Exception as e:
         return {'ok': False, 'rate_limited': False, 'msg': f'unparseable response: {e}'}
@@ -3272,7 +3299,7 @@ def _bridge_status_loop():
             conn = sqlite3.connect(DB_FILE)
             try:
                 rows = conn.execute(
-                    "SELECT id, user_id, wallet, source_tx_hash, quote_id, poll_attempts, "
+                    "SELECT id, user_id, wallet, source_tx_hash, source_chain, quote_id, poll_attempts, "
                     "       polling_started_at FROM bridge_transactions "
                     "WHERE provider='0x' AND status NOT IN "
                     "      ('bridge_filled','bridge_failed','origin_tx_reverted','timed_out') "
@@ -3282,7 +3309,7 @@ def _bridge_status_loop():
                 conn.close()
 
             _rate_limited_this_cycle = False
-            for row_id, user_id, wallet, source_tx_hash, quote_id, poll_attempts, polling_started_at in rows:
+            for row_id, user_id, wallet, source_tx_hash, source_chain, quote_id, poll_attempts, polling_started_at in rows:
                 if _rate_limited_this_cycle:
                     break  # back off the whole cycle rather than hammering a 429'ing API
                 try:
@@ -3314,7 +3341,7 @@ def _bridge_status_loop():
                         finally:
                             conn_ts.close()
 
-                    result = _get_0x_bridge_status(quote_id, source_tx_hash)
+                    result = _get_0x_bridge_status(source_chain, source_tx_hash)
                     conn_pa = sqlite3.connect(DB_FILE)
                     try:
                         conn_pa.execute(
@@ -5698,7 +5725,9 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, wallet, origin_chain, dest_chain, origin_token, dest_token, amount,
                  'initiated', initiated_by, '0x', quote.get('quote_id'), quote.get('route_name'),
-                 quote.get('expected_amount_out'), quote.get('fee_usd'), quote.get('estimated_seconds')))
+                 quote.get('expected_amount_out'),
+                 None,  # 0x's cross-chain fee schema has no single USD total (see get_0x_bridge_quote's 'fees' dict)
+                 quote.get('estimated_seconds')))
             conn2.commit()
             row_id = cur.lastrowid
         finally:
@@ -5714,7 +5743,7 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
             if origin_chain == 'solana':
                 tx_hash = _bridge_sign_send_solana(txn, private_key)
             else:
-                tx_hash = _bridge_sign_send_evm(txn, raw_quote, private_key, origin_chain, origin_address)
+                tx_hash = _bridge_sign_send_evm(txn, raw_quote, private_key, origin_chain, origin_address, origin_token)
         except Exception as e:
             err_msg = _redact_keys(str(e))[:300]
             _bridge_tx_mark_failed(row_id, err_msg)
@@ -5737,29 +5766,32 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
     add_user_log(wallet, f'Bridge {origin_chain}->{dest_chain} origin tx broadcast: {tx_hash}')
     return True, tx_hash, row_id
 
-def _bridge_sign_send_evm(txn: dict, raw_quote: dict, private_key: str, chain: str, origin_address: str) -> str:
+def _bridge_sign_send_evm(txn: dict, raw_quote: dict, private_key: str, chain: str,
+                           origin_address: str, origin_token: str) -> str:
     """Signs and sends the origin-chain transaction 0x's quote returned, for
     an EVM origin chain -- same build/sign/send flow _execute_evm_swap()
-    already uses for same-chain swaps (this is the same 0x product family;
-    the transaction object's shape is assumed to match). Handles the
-    allowance step first if the quote flagged one needed (issues.allowance),
-    exactly like _execute_evm_swap() does."""
+    already uses for same-chain swaps. Verified against 0x-examples'
+    schemas.ts EvmTransactionSchema: the fields to sign are nested under
+    txn['details'] (to/data/gas/gasPrice/value), not flat on txn itself.
+    Handles the allowance step first if the quote flagged one needed
+    (issues.allowance -- AllowanceIssueSchema {actual, spender}), exactly
+    like _execute_evm_swap() does."""
     w3 = _get_web3(chain)
     wallet_cs = w3.to_checksum_address(origin_address)
     allowance_issue = (raw_quote.get('issues') or {}).get('allowance')
     if allowance_issue:
         spender = allowance_issue.get('spender')
-        sell_token = raw_quote.get('sellToken') or (raw_quote.get('sell') or {}).get('token')
         sell_amount_raw = int(raw_quote.get('sellAmount') or 0)
-        if spender and sell_token and sell_amount_raw:
-            _ensure_evm_allowance(w3, wallet_cs, private_key, sell_token, spender, sell_amount_raw, chain)
+        if spender and origin_token and sell_amount_raw:
+            _ensure_evm_allowance(w3, wallet_cs, private_key, origin_token, spender, sell_amount_raw, chain)
+    details = txn.get('details') or {}
     tx = {
         'from': wallet_cs,
-        'to': w3.to_checksum_address(txn['to']),
-        'data': txn['data'],
-        'value': int(txn.get('value', '0')),
-        'gas': int(txn['gas']) if txn.get('gas') else 400000,
-        'gasPrice': int(txn['gasPrice']) if txn.get('gasPrice') else w3.eth.gas_price,
+        'to': w3.to_checksum_address(details['to']),
+        'data': details['data'],
+        'value': int(details.get('value', '0')),
+        'gas': int(details['gas']) if details.get('gas') else 400000,
+        'gasPrice': int(details['gasPrice']) if details.get('gasPrice') else w3.eth.gas_price,
         'nonce': w3.eth.get_transaction_count(wallet_cs),
         'chainId': EVM_CHAINS[chain]['chain_id'],
     }
@@ -5775,13 +5807,11 @@ def _bridge_sign_send_solana(txn, private_key: str) -> str:
     (VersionedTransaction.from_bytes -> re-sign -> base64 -> sendTransaction),
     reimplemented inline here since dashboard.py doesn't otherwise sign
     Solana transactions itself (every other Solana swap goes through that
-    file's own subprocess). `txn` is assumed to be a base64-encoded
-    serialized transaction string, matching every other 0x/Jupiter-style
-    swap response already integrated in this codebase -- UNVERIFIED for
-    this specific endpoint, see get_0x_bridge_quote()'s module note."""
+    file's own subprocess). Verified against 0x-examples' schemas.ts
+    SvmTransactionSchema: the base64 string is at txn['details']['serializedTransaction']."""
     from solders.keypair import Keypair as _BridgeSolKP2
     from solders.transaction import VersionedTransaction as _BridgeVTx
-    tx_b64 = txn if isinstance(txn, str) else txn.get('transaction') or txn.get('data')
+    tx_b64 = (txn.get('details') or {}).get('serializedTransaction') if isinstance(txn, dict) else None
     if not tx_b64:
         raise ValueError('no base64 transaction in quote response')
     keypair = _BridgeSolKP2.from_base58_string(private_key)
@@ -6289,30 +6319,35 @@ def _get_0x_quote(sell_token: str, buy_token: str, sell_amount_raw: int, taker: 
 # (0x's own announcement: "now available across EVM, Solana, HyperCore, and
 # Tron chains").
 #
-# ── UNVERIFIED, READ BEFORE ENABLING REAL TRADES ──
+# ── VERIFIED AGAINST 0x's OFFICIAL EXAMPLE CODE ──
 # docs.0x.org is unreachable from this development environment (network
-# policy blocks it), so this integration is built from: (a) 0x's public
-# "How It Works" page (quote -> sign & submit -> bridge -> poll /status
-# with the origin tx hash + quoteId; EVM allowance handled the same way as
-# the same-chain Swap API's `issues.allowance`), and (b) one third-party
-# blog's worked example of a same-chain-style quote request (params:
-# originChain, destinationChain, sellToken, buyToken, sellAmount,
-# originAddress). NOT confirmed: the exact base URL path used below, the
-# string 0x expects for Solana as originChain/destinationChain (guessed as
-# the literal 'solana'), and the exact quote/status response field names.
-# Every guessed field is read defensively (falls back to None/'unknown'
-# rather than raising) so a wrong field name surfaces as "quote/status
+# policy blocks it), so this integration was cross-checked against 0x's own
+# GitHub examples repo instead (github.com/0xProject/0x-examples,
+# cross-chain-headless-example/src/{crossChainClient.ts,schemas.ts,
+# config.ts,fromSolanaToEvm.ts}) -- the endpoint paths, request params
+# (including the required `sortQuotesBy`), the full quote/status response
+# shapes (quotes is an array; transaction fields live under `.details`;
+# fees has no single USD total), the 8-value status enum, the 3-value
+# terminal-state set, and Solana's two different chain-id representations
+# (literal 'solana' in quote requests, numeric 999999999991 in status
+# responses) are all read directly from that source, not guessed. Every
+# field is still read defensively (falls back to None/'unknown' rather than
+# raising) so any future 0x API change surfaces as "quote/status
 # unavailable," never as a misread amount or a falsely-confirmed transfer.
-# Run one small real bridge end-to-end and fix whatever the live API
-# actually returns before this carries real user-scale amounts.
+# Still recommended: one small real bridge end-to-end before this carries
+# real user-scale amounts, since example code is not a live-traffic
+# guarantee.
 def _zerox_chain_param(chain: str) -> str:
     """0x's Cross-Chain API originChain/destinationChain value for `chain`.
     EVM chains use their numeric chain ID as a string (confirmed by the
     worked example: originChain='8453' for Base) -- this reuses
     EVM_CHAINS[chain]['zerox_chain_id'], the exact same value _get_0x_quote()
     already sends for same-chain swaps on that chain. 'solana' is passed
-    through as the literal string 'solana' -- UNVERIFIED, see the module
-    note above."""
+    through as the literal string 'solana' -- verified against
+    0x-examples/cross-chain-headless-example's config.ts (CHAIN_IDS.solana =
+    "solana"). Note this differs from the STATUS response's numeric
+    pseudo-chain-id for Solana (999999999991, STATUS_CHAIN_IDS.solana) --
+    that field is only read out of transactions[].chainId, never sent."""
     if chain == 'solana':
         return 'solana'
     return str(EVM_CHAINS[chain]['zerox_chain_id'])
@@ -6337,10 +6372,12 @@ def get_0x_bridge_quote(origin_chain: str, origin_token: str, origin_amount_raw:
                 'sellToken':          origin_token,
                 'buyToken':           dest_token,
                 'sellAmount':         str(origin_amount_raw),
+                'sortQuotesBy':       'price',
                 'originAddress':      origin_address,
                 'destinationAddress': dest_address,
+                'maxNumQuotes':       1,
             },
-            headers={'0x-api-key': ZEROX_API_KEY, '0x-version': 'v2'},
+            headers={'0x-api-key': ZEROX_API_KEY},
             timeout=15,
         )
     except requests.exceptions.RequestException as e:
@@ -6353,29 +6390,35 @@ def get_0x_bridge_quote(origin_chain: str, origin_token: str, origin_amount_raw:
         data = r.json()
     except Exception as e:
         return {'ok': False, 'msg': f'unparseable response: {e}'}
-    # Defensive: accept either a single quote object or a {'routes': [...]}
-    # list (the same-chain Swap API returns a single object; 0x's own docs
-    # examples for Cross-Chain describe "the best routes" plural, so this
-    # doesn't assume either shape is the only one that can come back).
-    routes = data.get('routes') if isinstance(data.get('routes'), list) else None
-    quote = routes[0] if routes else data
-    if not quote or (not quote.get('transaction') and not quote.get('issues')):
-        return {'ok': False, 'msg': quote.get('message') if isinstance(quote, dict) else None
-                                     or 'No bridge route found for this pair/amount'}
+    # Verified against 0x-examples/cross-chain-headless-example's schemas.ts:
+    # CrossChainQuotesResponseSchema is a discriminated union on
+    # liquidityAvailable. When true, the quotes are an ARRAY (`quotes`), not
+    # a single object -- take the first (only requested via maxNumQuotes=1).
+    if not data.get('liquidityAvailable'):
+        return {'ok': False, 'msg': 'No bridge route found for this pair/amount'}
+    quotes = data.get('quotes')
+    if not isinstance(quotes, list) or not quotes:
+        return {'ok': False, 'msg': 'No bridge route found for this pair/amount'}
+    quote = quotes[0]
     try:
+        # FeesSchema has no total-USD field; each fee sub-object carries its
+        # own {amount, token} in that token's own units, not USD -- surfaced
+        # as-is rather than inventing a USD figure the API doesn't provide.
+        fees = quote.get('fees') or {}
+        bridge_step = next((s for s in (quote.get('steps') or []) if s.get('type') == 'bridge'), None)
         return {
             'ok': True,
-            'quote_id':               quote.get('quoteId') or quote.get('id'),
+            'quote_id':               quote.get('quoteId'),
             'origin_chain':           origin_chain,
             'origin_token':           origin_token,
             'origin_amount_raw':      origin_amount_raw,
             'dest_chain':             dest_chain,
             'dest_token':             dest_token,
-            'expected_amount_out':    quote.get('buyAmount') or quote.get('minBuyAmount'),
-            'route_name':             (quote.get('route') or {}).get('name') if isinstance(quote.get('route'), dict) else quote.get('route'),
-            'estimated_seconds':      quote.get('estimatedFillTimeSec') or quote.get('estimatedDurationSeconds'),
-            'fee_usd':                (quote.get('fees') or {}).get('totalUsd') if isinstance(quote.get('fees'), dict) else None,
-            'price_impact_pct':       quote.get('priceImpactPct') or quote.get('estimatedPriceImpact'),
+            'expected_amount_out':    quote.get('buyAmount'),
+            'min_amount_out':         quote.get('minBuyAmount'),
+            'route_name':             bridge_step.get('provider') if bridge_step else None,
+            'estimated_seconds':      quote.get('estimatedTimeSeconds'),
+            'fees':                   fees,
             'needs_allowance':        bool((quote.get('issues') or {}).get('allowance')),
             'raw_quote':              quote,  # kept for _execute_cross_chain_bridge() -- it needs the live object, not just the displayed numbers
         }
