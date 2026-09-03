@@ -375,6 +375,24 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 }
 .w-modal-qr-cell{border-radius:1.5px}
 
+/* ── Bridge: origin/destination form ── */
+.br-form-card{background:var(--bg2);border:1px solid var(--border);border-radius:14px;padding:14px 16px;position:relative;margin-top:14px}
+.br-form-box{background:var(--bg3);border:1px solid var(--border);border-radius:10px;padding:9px 12px}
+.br-form-box + .br-form-box{margin-top:14px}
+.br-form-box-lbl{font-size:10px;font-weight:700;letter-spacing:.06em;color:var(--muted);text-transform:uppercase;margin-bottom:3px}
+.br-form-select{width:100%;background:transparent;border:none;color:var(--text);font-size:14px;font-weight:600;font-family:var(--ui);outline:none;padding:1px 0 0;cursor:pointer}
+.br-form-swap{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);
+  width:30px;height:30px;border-radius:50%;background:var(--bg4);border:3px solid var(--bg2);
+  color:var(--accent);font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .15s,color .15s,transform .15s;z-index:2;padding:0;
+}
+.br-form-swap:hover{background:var(--accent);color:#0a0b0e;transform:translate(-50%,-50%) rotate(180deg)}
+.br-form-amount-wrap{position:relative;margin-top:14px}
+.br-form-amount-inp{width:100%;background:var(--bg3);border:1px solid var(--border);border-radius:10px;color:var(--text);padding:11px 66px 11px 14px;font-size:15px;font-family:var(--mono);outline:none;margin-bottom:0}
+.br-form-amount-inp:focus{border-color:var(--accent)}
+.br-form-amount-sym{position:absolute;right:10px;top:50%;transform:translateY(-50%);font-family:var(--mono);font-size:11px;font-weight:700;color:var(--sub);background:var(--bg4);padding:4px 8px;border-radius:6px;pointer-events:none}
+
 /* ── Bridge: quote card ── */
 .br-quote-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:4px 16px;margin-top:14px}
 .br-quote-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid var(--divider)}
@@ -1098,17 +1116,43 @@ function _modalBridge(){
   _showModal(
     '<div class="w-modal-title">Bridge</div>'
     +'<div class="w-modal-note" style="margin-top:0">Move USDC (USDG on Robinhood Chain) from one chain to another. Funds may leave your origin wallet before the bridge itself finishes -- the status view below tracks that separately.</div>'
-    +'<div class="w-modal-label">FROM</div>'
-    +'<select class="w-modal-inp" id="br-origin-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'+_bridgeChainOptions('solana')+'</select>'
-    +'<input class="w-modal-inp" id="br-amount" type="number" placeholder="Amount" min="0.000001" step="0.01" oninput="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'
-    +'<div class="w-modal-label">TO</div>'
-    +'<select class="w-modal-inp" id="br-dest-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'+_bridgeChainOptions('base')+'</select>'
-    +'<div class="w-modal-btns">'
+    +'<div class="br-form-card">'
+      +'<div class="br-form-box">'
+        +'<div class="br-form-box-lbl">From</div>'
+        +'<select class="br-form-select" id="br-origin-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\';_bridgeSyncAmountSym()">'+_bridgeChainOptions('solana')+'</select>'
+      +'</div>'
+      +'<button class="br-form-swap" type="button" title="Swap direction" onclick="_bridgeSwapChains()">⇌</button>'
+      +'<div class="br-form-box">'
+        +'<div class="br-form-box-lbl">To</div>'
+        +'<select class="br-form-select" id="br-dest-chain" onchange="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'+_bridgeChainOptions('base')+'</select>'
+      +'</div>'
+    +'</div>'
+    +'<div class="br-form-amount-wrap">'
+      +'<input class="br-form-amount-inp" id="br-amount" type="number" placeholder="0.00" min="0.000001" step="0.01" oninput="_bridgeQuote=null;document.getElementById(\'br-quote\').innerHTML=\'\'">'
+      +'<span class="br-form-amount-sym" id="br-amount-sym">USDC</span>'
+    +'</div>'
+    +'<div class="w-modal-btns" style="margin-top:14px">'
       +'<button class="w-modal-btn w-modal-secondary" onclick="_closeModal()">Cancel</button>'
       +'<button class="w-modal-btn w-modal-primary" id="br-quote-btn" onclick="_bridgeGetQuote()">Get Quote</button>'
     +'</div>'
     +'<div id="br-quote"></div>'
   )
+  _bridgeSyncAmountSym()
+}
+function _bridgeSwapChains(){
+  var o=document.getElementById('br-origin-chain')
+  var d=document.getElementById('br-dest-chain')
+  if(!o||!d) return
+  var tmp=o.value; o.value=d.value; d.value=tmp
+  _bridgeQuote=null
+  var quoteEl=document.getElementById('br-quote')
+  if(quoteEl) quoteEl.innerHTML=''
+  _bridgeSyncAmountSym()
+}
+function _bridgeSyncAmountSym(){
+  var o=document.getElementById('br-origin-chain')
+  var sym=document.getElementById('br-amount-sym')
+  if(o&&sym) sym.textContent = o.value==='robinhood' ? 'USDG' : 'USDC'
 }
 
 function _brShortHash(h){
