@@ -5221,7 +5221,18 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                        entry_volume_accel: bool = None, entry_buy_sell_ratio: float = None,
                        entry_unique_traders: int = None, entry_market_cap: float = None,
                        entry_pair_age_minutes: float = None, risk_score: float = None,
-                       entry_slippage_pct: float = None, exit_slippage_pct: float = None):
+                       entry_slippage_pct: float = None, exit_slippage_pct: float = None,
+                       chain: str = 'solana'):
+    """chain defaults to 'solana' so every pre-existing caller (all of them,
+    until user_trader_loop()'s bot-driven EVM exits) keeps behaving exactly
+    as before. The only genuinely chain-specific pieces are which fee
+    function actually moves value (_charge_txn_fee sends SOL,
+    _charge_evm_txn_fee sends that chain's own USDC/USDG) and the currency
+    label in user-facing text -- pnl/pnl_pct/daily_stats math, the
+    loss-streak throttle, badges, and notifications are all already
+    currency-agnostic (a USD-valued price ratio) and apply identically to
+    both."""
+    currency_label = 'SOL' if chain == 'solana' else EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
     check_daily_reset_user(us)
     now   = datetime.datetime.utcnow()
     today = now.strftime('%Y-%m-%d')
@@ -5265,14 +5276,15 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         us['loss_streak'] = 0
         us['loss_streak_pause_until'] = 0
 
-    # 0.75% transaction fee on the sell leg, charged on the SOL amount of the sell
-    # swap itself (amount * exit_price) -- not on profit -- so it applies whether the
-    # trade won or lost. The matching 0.75% buy-leg fee was already charged when this
-    # position was opened -- see _charge_txn_fee() call at position-open time.
+    # 0.75% transaction fee on the sell leg, charged on the swap's own value
+    # (amount * exit_price, in that chain's quote currency -- SOL for
+    # Solana, USDC/USDG for an EVM chain) -- not on profit -- so it applies
+    # whether the trade won or lost. The matching 0.75% buy-leg fee was
+    # already charged when this position was opened.
     fee_amount = 0.0
     short_w    = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
     swap_sol_amount = round(amount * exit_price, 6)
-    print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} SOL  swap_amount={swap_sol_amount:.6f} SOL  '
+    print(f'[fee] {short_w} {symbol} pnl={pnl:.6f} {currency_label}  swap_amount={swap_sol_amount:.6f} {currency_label}  '
           f'has_key={bool(private_key and wallet)}  '
           f'fee_wallet={FEE_WALLET[:8]}…', flush=True)
 
@@ -5280,12 +5292,18 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     # already charged at position-open time). Applies regardless of who the session
     # wallet belongs to, and regardless of pnl (win, loss, or break-even all pay it,
     # since it's charged on the swap amount, not the profit).
-    # bundled=True: the sell swap already folded this fee into its own transaction via
-    # Jupiter's platform fee (see orcagent_solana.py), so there's no separate transfer
-    # left for users to notice leaving their wallet — just record it.
+    # Solana: bundled=True -- the sell swap already folded this fee into its own
+    # transaction via Jupiter's platform fee (see orcagent_solana.py), so there's no
+    # separate transfer left for users to notice leaving their wallet, just record it.
+    # EVM: _charge_evm_txn_fee sends a real separate on-chain USDC/USDG transfer --
+    # that chain's swap (0x) has no equivalent bundled-platform-fee mechanism.
     if wallet and private_key:
-        _charge_txn_fee(private_key, wallet, user_id, symbol, swap_sol_amount, 'sell',
-                         trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl, bundled=True)
+        if chain == 'solana':
+            _charge_txn_fee(private_key, wallet, user_id, symbol, swap_sol_amount, 'sell',
+                             trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl, bundled=True)
+        else:
+            _charge_evm_txn_fee(private_key, wallet, user_id, symbol, swap_sol_amount, 'sell', chain,
+                                 trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl)
         fee_amount = round(swap_sol_amount * FEE_RATE_TXN, 6)
     else:
         print(f'[fee] {short_w} {symbol} no fee — no private key available (sell may have failed)', flush=True)
@@ -5323,8 +5341,8 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                     sl_pct, tp_pct, sl_price, tp_price, entry_score, highest_price, lowest_price, hold_seconds,
                     entry_volume_5m, entry_volume_1h, entry_volume_accel, entry_buy_sell_ratio,
                     entry_unique_traders, entry_market_cap, entry_pair_age_minutes, risk_score,
-                    entry_slippage_pct, exit_slippage_pct)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    entry_slippage_pct, exit_slippage_pct, chain)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, symbol, entry, exit_price, amount, pnl, fee_amount, 0,
                  now.strftime('%Y-%m-%dT%H:%M:%SZ'), opened_at if opened_at else None,
                  mint or None, source,
@@ -5334,7 +5352,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                  entry_volume_5m, entry_volume_1h,
                  (int(bool(entry_volume_accel)) if entry_volume_accel is not None else None),
                  entry_buy_sell_ratio, entry_unique_traders, entry_market_cap, entry_pair_age_minutes,
-                 risk_score, entry_slippage_pct, exit_slippage_pct))
+                 risk_score, entry_slippage_pct, exit_slippage_pct, chain))
             conn.commit()
             _trade_id = _cur.lastrowid
         finally:
@@ -5359,7 +5377,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
         if _xrow and _xrow[0]:
             _sign  = '+' if pnl_pct >= 0 else ''
             _link  = f'https://orcagent.fun/share/t{_trade_id}' if _trade_id else ''
-            _tweet = f'Just closed ${symbol} {_sign}{pnl_pct:.1f}% ({_sign}{pnl:.4f} SOL) on @OrcAgent 🐋'
+            _tweet = f'Just closed ${symbol} {_sign}{pnl_pct:.1f}% ({_sign}{pnl:.4f} {currency_label}) on @OrcAgent 🐋'
             if _link:
                 _room = 280 - len(_link) - 1   # -1 for the joining space
                 if len(_tweet) > _room:
@@ -5369,8 +5387,8 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     if pref_notifications and user_id:
         pnl_sign     = '+' if pnl >= 0 else ''
         notif_content = (f'Trade closed: ${symbol} '
-                         f'{pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL) — {exit_reason}' if exit_reason
-                         else f'Trade closed: ${symbol} {pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} SOL)')
+                         f'{pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} {currency_label}) — {exit_reason}' if exit_reason
+                         else f'Trade closed: ${symbol} {pnl_sign}{pnl_pct:.1f}% ({pnl_sign}{pnl:.4f} {currency_label})')
         notif_link = ('/notifications?mint=' + requests.utils.quote(mint, safe='') +
                       f'&entry={entry}&exit={exit_price}'
                       if mint else '/notifications')
@@ -5654,6 +5672,80 @@ def _sell_and_get_realized(wallet: str, private_key: str, mint: str, amount_str:
     if ok and token_amount > 0 and sol_amount > 0:
         return True, sol_amount / token_amount, token_amount
     return ok, quoted_price, quoted_amount
+
+def _sell_and_get_realized_evm(wallet: str, private_key: str, token_address: str, amount_str: str,
+                                quoted_price: float, quoted_amount: float, chain: str) -> tuple:
+    """EVM sibling of _sell_and_get_realized() -- _execute_evm_swap() has no
+    'sell my whole on-chain balance' convention the way orcagent_solana.py's
+    amount_str='0' does for Solana, and doesn't parse a realized fill
+    either, so this always reports the given quoted_price/quoted_amount on
+    success -- the same on-chain-balance-is-truth caveat api_evm_trade_sell()
+    already accepts for a manual EVM sell. Returns (ok, exit_price, sold_amount)."""
+    ok, _err, _tx_hash = _execute_evm_swap(wallet, private_key, 'sell', token_address, amount_str, chain)
+    return ok, quoted_price, quoted_amount
+
+def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict, price: float,
+                       symbol: str, sell_amount: float, spend_amount: float, exit_reason: str,
+                       pref_notifications: bool, enc_blob_solana: str, enc_blob_evm: str,
+                       full_close: bool, **record_kwargs) -> tuple:
+    """Shared chain-dispatch for user_trader_loop()'s several exit paths
+    (crash-exit, rugpull, stop-loss, take-profit, tiered TP1/TP2, trailing
+    stop, momentum-deterioration, startup force-sell) -- every one of them
+    used to assume Solana outright (the Solana key, _sell_and_get_realized(),
+    and '0'-means-sell-everything). This picks the right encrypted key and
+    sell function for pos['chain'], and NEVER reports success or lets the
+    caller record a trade unless the swap itself actually confirmed
+    on-chain -- a failed/timed-out sell always returns ok=False so the
+    caller keeps the position open and retries next scan, exactly like
+    every pre-existing call site already did (see the standing rule: never
+    create a successful trade record merely because a transaction was
+    submitted).
+
+    sell_amount is this exit's target token quantity (the position's full
+    remaining pos['amount'] for a full close, or a computed fraction of it
+    for a partial TP1/TP2 sale). full_close=True on Solana sends the
+    literal string '0' instead of that number -- sell the REAL on-chain
+    balance, which can drift from the tracked amount via dust/fee-on-
+    transfer quirks -- exactly as every pre-existing full-close call site
+    already did; every other case (EVM in general, or a Solana partial
+    sale) sends the exact computed amount, matching the TP1/TP2 call
+    sites' existing behavior for Solana partials, and the only option
+    _execute_evm_swap() has at all (it has no '0' convention).
+
+    Returns (ok, exit_price, sold_amount) -- exit_price/sold_amount are
+    meaningless when ok is False. Does NOT call _close_open_position() or
+    _upsert_open_position() itself -- a full close vs. a partial TP1/TP2
+    trim update the position differently, so that stays the caller's job,
+    same as before this helper existed."""
+    chain = pos.get('chain', 'solana')
+    enc_blob = enc_blob_solana if chain == 'solana' else enc_blob_evm
+    if not enc_blob:
+        add_user_log(wallet, f'[bot] Cannot close {chain} position {mint[:8]}… — no {chain} trading key configured')
+        return False, 0.0, 0.0
+    amount_str = '0' if (chain == 'solana' and full_close) else str(sell_amount)
+    with _use_key(enc_blob, wallet) as pk:
+        if chain == 'solana':
+            ok, exit_price, sold_amt = _sell_and_get_realized(wallet, pk, mint, amount_str, price, sell_amount)
+        else:
+            ok, exit_price, sold_amt = _sell_and_get_realized_evm(wallet, pk, mint, amount_str, price, sell_amount, chain)
+    if not ok:
+        return False, 0.0, 0.0
+    # Exit slippage (Trade Analytics V2): deviation between the last-polled
+    # price this exit was decided on and the realized fill -- previously
+    # only one of this loop's several exit paths bothered to compute this;
+    # now every one does, for free, since every path funnels through here.
+    # Always ~0 for an EVM exit (see _sell_and_get_realized_evm()'s own
+    # docstring: it echoes the quoted price back, it doesn't parse a real
+    # fill), which honestly reflects that this app has no EVM realized-fill
+    # parsing yet, rather than fabricating a nonzero number.
+    record_kwargs.setdefault('exit_slippage_pct',
+                              round(abs(exit_price - price) / price * 100, 4) if price else None)
+    with _use_key(enc_blob, wallet) as pk:
+        _record_user_trade(user_id, us, symbol, pos['buy_price'], exit_price, sold_amt, spend_amount,
+                            wallet=wallet, private_key=pk, mint=mint, exit_reason=exit_reason,
+                            opened_at=pos.get('opened_at', 0.0), pref_notifications=pref_notifications,
+                            source=pos.get('source', 'bot'), chain=chain, **record_kwargs)
+    return True, exit_price, sold_amt
 
 # Bridging is deliberately scoped to each chain's own native gas asset and
 # its own USDC/USDG -- NOT arbitrary tokens. This is a funding mechanism
@@ -7351,7 +7443,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -7379,6 +7471,13 @@ def user_trader_loop(stop_event, config, wallet: str):
     pref_notifications = bool(row[10] if row[10] is not None else 1)
     user_trade_pct = float(row[11]) if (len(row) > 11 and row[11] is not None) else 0.20
     tiered_tp_enabled = bool(row[12]) if (len(row) > 12 and row[12] is not None) else False
+    # This user's EVM trading key, if they've configured one -- lets this
+    # loop's exit checks (and, below, entry scanning) also handle a
+    # position/candidate on any of EVM_CHAINS, not just Solana. None (not
+    # '') when absent, so _bot_execute_exit()'s "no key configured" guard
+    # and every EVM-entry gas/candidate check below can tell "never set up"
+    # apart from "empty string."
+    _enc_blob_evm = row[13] if (len(row) > 13 and row[13]) else None
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -7406,16 +7505,17 @@ def user_trader_loop(stop_event, config, wallet: str):
 
     # ── Immediate stop-loss pass on startup ──────────────────────────────────
     # Catches any positions that breached the stop-loss while the bot was offline.
+    # Runs across every chain a position can be on (Solana or any EVM_CHAINS
+    # entry) via _bot_execute_exit()'s per-chain dispatch -- previously
+    # Solana-only, so a BSC/Base/Arbitrum/Polygon/Robinhood position (opened
+    # manually or by the narrative agent) sat with zero startup protection.
     for _mint, _pos in list(positions.items()):
         if stop_event.is_set(): break
-        # This is the Solana bot loop -- _execute_user_swap() below assumes a
-        # Solana mint + the Solana private key. A BSC position sitting in the
-        # same shared us['positions'] dict must never reach it (wrong swap
-        # pipeline entirely, not just a wrong-chain address).
-        if _pos.get('chain', 'solana') != 'solana':
-            continue
         if _pos.get('amount', 0) <= 0 or _pos.get('buy_price', 0) <= 0:
             continue
+        _chain = _pos.get('chain', 'solana')
+        if _chain != 'solana' and not _enc_blob_evm:
+            continue  # no EVM trading key configured -- can't touch this position at all
         _td = get_token_data(_mint)
         _price = float(_td['price']) if _td else 0.0
         if _price <= 0:
@@ -7426,38 +7526,27 @@ def user_trader_loop(stop_event, config, wallet: str):
             _cpct = str(round(_chg*100,1)) + '%'
             add_user_log(wallet, f'[{short}] 🚨 [crash-exit] {_label} {_cpct} — price crashed >{int(crash_exit*100)}% from entry, emergency sell on startup')
             print(f'[crash-exit] {short} STARTUP {_label} {_cpct} price={_price} entry={_pos["buy_price"]}', flush=True)
-            with _use_key(_enc_blob, wallet) as _pk:
-                # '0' = sell the actual on-chain balance, not the tracked _pos['amount']
-                # -- they can drift, and this is a full close so no dust should remain.
-                _sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, _mint, '0', _price, _pos['amount'])
+            _sell_ok, _exit_price, _sold_amt = _bot_execute_exit(
+                user_id, us, wallet, _mint, _pos, _price, _label, _pos['amount'], _pos.get('spend', 0),
+                'CRASH EXIT ' + _cpct, pref_notifications, _enc_blob, _enc_blob_evm, True,
+                entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
+                entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
+                entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
             if _sell_ok:
-                with _use_key(_enc_blob, wallet) as _pk:
-                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _exit_price,
-                                       _sold_amt, _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
-                                       exit_reason='CRASH EXIT ' + _cpct, opened_at=_pos.get('opened_at', 0.0),
-                                       pref_notifications=pref_notifications, source=_pos.get('source', 'bot'),
-                                       entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
-                                       entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
-                                       entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
-                _close_open_position(user_id, wallet, _mint)
+                _close_open_position(user_id, wallet, _mint, chain=_chain)
             else:
                 add_user_log(wallet, f'[{short}] ✗ [crash-exit] {_label} sell failed — position kept open, will retry next scan')
             continue  # skip normal stop-loss check — crash exit already handled (or will retry)
         if _chg <= -_pos_sl_frac(_pos, stop_loss):
             add_user_log(wallet, f'[{short}] STARTUP FORCE SELL {_label} {round(_chg*100,1)}% (stop loss missed while bot was offline)')
-            with _use_key(_enc_blob, wallet) as _pk:
-                # '0' = sell the actual on-chain balance -- see crash-exit branch above.
-                _sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, _mint, '0', _price, _pos['amount'])
+            _sell_ok, _exit_price, _sold_amt = _bot_execute_exit(
+                user_id, us, wallet, _mint, _pos, _price, _label, _pos['amount'], _pos.get('spend', 0),
+                'STOP LOSS', pref_notifications, _enc_blob, _enc_blob_evm, True,
+                entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
+                entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
+                entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
             if _sell_ok:
-                with _use_key(_enc_blob, wallet) as _pk:
-                    _record_user_trade(user_id, us, _label, _pos['buy_price'], _exit_price,
-                                       _sold_amt, _pos.get('spend', 0), wallet=wallet, private_key=_pk, mint=_mint,
-                                       exit_reason='STOP LOSS', opened_at=_pos.get('opened_at', 0.0),
-                                       pref_notifications=pref_notifications, source=_pos.get('source', 'bot'),
-                                       entry_liquidity=_pos.get('entry_liquidity'), entry_lp_locked_pct=_pos.get('entry_lp_locked_pct'),
-                                       entry_mint_authority_active=_pos.get('entry_mint_authority_active'),
-                                       entry_freeze_authority_active=_pos.get('entry_freeze_authority_active'))
-                _close_open_position(user_id, wallet, _mint)
+                _close_open_position(user_id, wallet, _mint, chain=_chain)
             else:
                 add_user_log(wallet, f'[{short}] ✗ STARTUP FORCE SELL {_label} failed — position kept open, will retry next scan')
 
@@ -7519,10 +7608,16 @@ def user_trader_loop(stop_event, config, wallet: str):
                     stop_event.wait(300)
                     continue
                 live     = state['tokens']  # already sorted by score desc
-                # max_positions is this user's Solana-bot setting -- a BSC position
-                # must not count against it (or vice versa, once a BSC bot exists).
-                open_pos = sum(1 for p in positions.values()
-                                if p.get('amount', 0) > 0 and p.get('chain', 'solana') == 'solana')
+                # max_positions is a per-chain cap, not one shared pool -- a
+                # BSC position doesn't count against the Solana slot budget
+                # or vice versa (each chain gets its own max_positions
+                # headroom, evaluated independently in Pass 2 below).
+                open_pos_by_chain = {}
+                for p in positions.values():
+                    if p.get('amount', 0) > 0:
+                        _c = p.get('chain', 'solana')
+                        open_pos_by_chain[_c] = open_pos_by_chain.get(_c, 0) + 1
+                open_pos = open_pos_by_chain.get('solana', 0)
                 us_sol  = _get_user_sol(_trading_wallet)
                 total_live = len(live)
                 print(f'[bot] {short} running=True tokens={total_live} pos={open_pos}/5 sol={round(us_sol,4)} scanning...', flush=True)
@@ -7547,10 +7642,10 @@ def user_trader_loop(stop_event, config, wallet: str):
                 # DexScreener trending list still get stop-loss/take-profit every cycle.
                 for mint, pos in list(positions.items()):
                     if stop_event.is_set(): break
-                    if pos.get('chain', 'solana') != 'solana':
-                        continue
                     if pos.get('amount', 0) <= 0 or pos.get('buy_price', 0) <= 0:
                         continue
+                    if pos.get('chain', 'solana') != 'solana' and not _enc_blob_evm:
+                        continue  # no EVM trading key configured -- can't touch this position at all
                     # Every open position stays fast-polled for as long as it's held, not
                     # just once it's already close to a trigger -- a real rugpull can crash
                     # a token from healthy to way past stop-loss within a single normal
@@ -7644,26 +7739,26 @@ def user_trader_loop(stop_event, config, wallet: str):
                         add_user_log(wallet, '[' + short + '] ⚠ Rugpull detected — emergency exit ' + label + ' | ' + _rug_reason)
                         print(f'[rugpull-detected] {short} {label} — {_rug_reason}', flush=True)
                         cooldown_tokens[label] = time.time() + 7200  # 2-hour cooldown
-                        with _use_key(_enc_blob, wallet) as _pk:
-                            # '0' = sell the actual on-chain balance, not the tracked
-                            # pos['amount'] -- they can drift (fee-on-transfer tokens,
-                            # rounding), and this is a full close, so no dust left behind.
-                            sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
+                        # '0' (Solana)/full pos['amount'] (EVM) = sell the actual on-chain
+                        # balance, not blindly the tracked pos['amount'] -- they can drift
+                        # (fee-on-transfer tokens, rounding), and this is a full close, so
+                        # no dust left behind. See _bot_execute_exit()'s own docstring.
+                        sell_ok, _exit_price, _sold_amt = _bot_execute_exit(
+                            user_id, us, wallet, mint, pos, price, label, pos['amount'], pos['spend'],
+                            'RUGPULL ' + _rug_reason[:40], pref_notifications, _enc_blob, _enc_blob_evm, True,
+                            entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                            entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                            entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                            sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                            sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                            entry_score=pos.get('entry_score'),
+                            highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                         if sell_ok:
-                            with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
-                                                   wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason='RUGPULL ' + _rug_reason[:40], opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
-                                                   entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
-                                                   entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
-                                                   sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
-                                                   sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
-                                                   entry_score=pos.get('entry_score'),
-                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
-                            _close_open_position(user_id, wallet, mint)
-                            open_pos -= 1
+                            _pos_chain = pos.get('chain', 'solana')
+                            _close_open_position(user_id, wallet, mint, chain=_pos_chain)
+                            open_pos_by_chain[_pos_chain] = max(0, open_pos_by_chain.get(_pos_chain, 0) - 1)
+                            if _pos_chain == 'solana':
+                                open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [rugpull] Sell failed — position kept open, will retry next scan')
                         continue  # skip crash-exit and TP/SL
@@ -7671,24 +7766,22 @@ def user_trader_loop(stop_event, config, wallet: str):
                         crash_pct = str(round(chg*100,1)) + '%'
                         add_user_log(wallet, '[' + short + '] 🚨 [crash-exit] ' + label + ' ' + crash_pct + ' — price crashed >' + str(int(crash_exit*100)) + '% from entry, emergency exit')
                         print(f'[crash-exit] {short} {label} {crash_pct} price={price} entry={pos["buy_price"]}', flush=True)
-                        with _use_key(_enc_blob, wallet) as _pk:
-                            # '0' = sell the actual on-chain balance -- see rugpull branch above.
-                            sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
+                        sell_ok, _exit_price, _sold_amt = _bot_execute_exit(
+                            user_id, us, wallet, mint, pos, price, label, pos['amount'], pos['spend'],
+                            'CRASH EXIT ' + crash_pct, pref_notifications, _enc_blob, _enc_blob_evm, True,
+                            entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                            entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                            entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                            sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                            sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                            entry_score=pos.get('entry_score'),
+                            highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                         if sell_ok:
-                            with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
-                                                   wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason='CRASH EXIT ' + crash_pct, opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
-                                                   entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
-                                                   entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
-                                                   sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
-                                                   sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
-                                                   entry_score=pos.get('entry_score'),
-                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
-                            _close_open_position(user_id, wallet, mint)
-                            open_pos -= 1
+                            _pos_chain = pos.get('chain', 'solana')
+                            _close_open_position(user_id, wallet, mint, chain=_pos_chain)
+                            open_pos_by_chain[_pos_chain] = max(0, open_pos_by_chain.get(_pos_chain, 0) - 1)
+                            if _pos_chain == 'solana':
+                                open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ [crash-exit] Sell failed — position kept open, will retry next scan')
                         continue  # skip normal TP/SL — crash exit already handled (or will retry)
@@ -7718,24 +7811,19 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 add_user_log(wallet, '[' + short + '] TAKE PROFIT 1 (' + str(round(chg*100,1)) +
                                              '%) — selling ' + str(int(_tp1_fraction*100)) + '% of ' + label +
                                              ', trailing the rest')
-                                with _use_key(_enc_blob, wallet) as _pk:
-                                    _tp1_ok, _tp1_exit_price, _tp1_sold_amt = _sell_and_get_realized(
-                                        wallet, _pk, mint, str(_tp1_amount), price, _tp1_amount)
+                                _tp1_ok, _tp1_exit_price, _tp1_sold_amt = _bot_execute_exit(
+                                    user_id, us, wallet, mint, pos, price, label, _tp1_amount, _tp1_spend,
+                                    ('TAKE PROFIT 1 (' + str(TP1_MULTIPLE) + 'x)' if not _has_snapshot
+                                     else 'TAKE PROFIT 1 (' + str(round(_eff_tp*TP_STAGE1_FRACTION_OF_TARGET*100,1)) + '%)'),
+                                    pref_notifications, _enc_blob, _enc_blob_evm, False,
+                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                    entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                    sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                    sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                    entry_score=pos.get('entry_score'),
+                                    highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                                 if _tp1_ok:
-                                    with _use_key(_enc_blob, wallet) as _pk:
-                                        _record_user_trade(user_id, us, label, pos['buy_price'], _tp1_exit_price, _tp1_sold_amt, _tp1_spend,
-                                                           wallet=wallet, private_key=_pk, mint=mint,
-                                                           exit_reason=('TAKE PROFIT 1 (' + str(TP1_MULTIPLE) + 'x)' if not _has_snapshot
-                                                                        else 'TAKE PROFIT 1 (' + str(round(_eff_tp*TP_STAGE1_FRACTION_OF_TARGET*100,1)) + '%)'),
-                                                           opened_at=pos.get('opened_at', 0.0),
-                                                           pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
-                                                           entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
-                                                           entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
-                                                           sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
-                                                           sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
-                                                           entry_score=pos.get('entry_score'),
-                                                           highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                                     pos['amount']     = round(pos['amount'] - _tp1_amount, 6)
                                     pos['spend']      = round(pos['spend']  - _tp1_spend, 6)
                                     pos['tp1_hit']    = True
@@ -7758,23 +7846,18 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 add_user_log(wallet, '[' + short + '] TAKE PROFIT 2 (' + str(round(chg*100,1)) +
                                              '%) — selling another ' + str(int(TP_STAGE2_SELL_FRACTION*100)) + '% of ' + label +
                                              ', remainder runs')
-                                with _use_key(_enc_blob, wallet) as _pk:
-                                    _tp2_ok, _tp2_exit_price, _tp2_sold_amt = _sell_and_get_realized(
-                                        wallet, _pk, mint, str(_tp2_amount), price, _tp2_amount)
+                                _tp2_ok, _tp2_exit_price, _tp2_sold_amt = _bot_execute_exit(
+                                    user_id, us, wallet, mint, pos, price, label, _tp2_amount, _tp2_spend,
+                                    'TAKE PROFIT 2 (' + str(round(_eff_tp*100,1)) + '%)',
+                                    pref_notifications, _enc_blob, _enc_blob_evm, False,
+                                    entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                                    entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                                    entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                    sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                                    sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                                    entry_score=pos.get('entry_score'),
+                                    highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                                 if _tp2_ok:
-                                    with _use_key(_enc_blob, wallet) as _pk:
-                                        _record_user_trade(user_id, us, label, pos['buy_price'], _tp2_exit_price, _tp2_sold_amt, _tp2_spend,
-                                                           wallet=wallet, private_key=_pk, mint=mint,
-                                                           exit_reason='TAKE PROFIT 2 (' + str(round(_eff_tp*100,1)) + '%)',
-                                                           opened_at=pos.get('opened_at', 0.0),
-                                                           pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
-                                                           entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
-                                                           entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
-                                                           sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
-                                                           sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
-                                                           entry_score=pos.get('entry_score'),
-                                                           highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'))
                                     pos['amount']     = round(pos['amount'] - _tp2_amount, 6)
                                     pos['spend']      = round(pos['spend']  - _tp2_spend, 6)
                                     pos['tp2_hit']    = True
@@ -7815,35 +7898,29 @@ def user_trader_loop(stop_event, config, wallet: str):
                               f'confirmed downtrend ({[round(p, 8) for p in _hist]}), cutting loss early', flush=True)
                     if exit_reason:
                         add_user_log(wallet, '[' + short + '] ' + exit_reason + ' ' + label)
-                        with _use_key(_enc_blob, wallet) as _pk:
-                            # '0' = sell the actual on-chain balance -- see rugpull branch above.
-                            sell_ok, _exit_price, _sold_amt = _sell_and_get_realized(wallet, _pk, mint, '0', price, pos['amount'])
+                        sell_ok, _exit_price, _sold_amt = _bot_execute_exit(
+                            user_id, us, wallet, mint, pos, price, label, pos['amount'], pos['spend'],
+                            exit_reason, pref_notifications, _enc_blob, _enc_blob_evm, True,
+                            entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
+                            entry_mint_authority_active=pos.get('entry_mint_authority_active'),
+                            entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                            sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
+                            sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
+                            entry_score=pos.get('entry_score'),
+                            highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'),
+                            entry_volume_5m=pos.get('entry_volume_5m'), entry_volume_1h=pos.get('entry_volume_1h'),
+                            entry_volume_accel=pos.get('entry_volume_accel'),
+                            entry_buy_sell_ratio=pos.get('entry_buy_sell_ratio'),
+                            entry_unique_traders=pos.get('entry_unique_traders'),
+                            entry_market_cap=pos.get('entry_market_cap'),
+                            entry_pair_age_minutes=pos.get('entry_pair_age_minutes'),
+                            risk_score=pos.get('risk_score'), entry_slippage_pct=pos.get('entry_slippage_pct'))
                         if sell_ok:
-                            # Exit slippage (Trade Analytics V2): deviation between the last
-                            # polled price used to decide this exit and the realized fill.
-                            _exit_slip = round(abs(_exit_price - price) / price * 100, 4) if price else None
-                            with _use_key(_enc_blob, wallet) as _pk:
-                                _record_user_trade(user_id, us, label, pos['buy_price'], _exit_price, _sold_amt, pos['spend'],
-                                                   wallet=wallet, private_key=_pk, mint=mint,
-                                                   exit_reason=exit_reason, opened_at=pos.get('opened_at', 0.0),
-                                                   pref_notifications=pref_notifications, source=pos.get('source', 'bot'),
-                                                   entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
-                                                   entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                                   entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
-                                                   sl_pct=pos.get('sl_pct'), tp_pct=pos.get('tp_pct'),
-                                                   sl_price=pos.get('sl_price'), tp_price=pos.get('tp_price'),
-                                                   entry_score=pos.get('entry_score'),
-                                                   highest_price=pos.get('highest_price'), lowest_price=pos.get('lowest_price'),
-                                                   entry_volume_5m=pos.get('entry_volume_5m'), entry_volume_1h=pos.get('entry_volume_1h'),
-                                                   entry_volume_accel=pos.get('entry_volume_accel'),
-                                                   entry_buy_sell_ratio=pos.get('entry_buy_sell_ratio'),
-                                                   entry_unique_traders=pos.get('entry_unique_traders'),
-                                                   entry_market_cap=pos.get('entry_market_cap'),
-                                                   entry_pair_age_minutes=pos.get('entry_pair_age_minutes'),
-                                                   risk_score=pos.get('risk_score'),
-                                                   entry_slippage_pct=pos.get('entry_slippage_pct'), exit_slippage_pct=_exit_slip)
-                            _close_open_position(user_id, wallet, mint)
-                            open_pos -= 1
+                            _pos_chain = pos.get('chain', 'solana')
+                            _close_open_position(user_id, wallet, mint, chain=_pos_chain)
+                            open_pos_by_chain[_pos_chain] = max(0, open_pos_by_chain.get(_pos_chain, 0) - 1)
+                            if _pos_chain == 'solana':
+                                open_pos -= 1
                         else:
                             add_user_log(wallet, '[' + short + '] ✗ Sell failed — position kept open, will retry next scan')
 
