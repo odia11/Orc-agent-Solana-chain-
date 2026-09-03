@@ -568,6 +568,17 @@ function confirmBuy(idx){
     method:'POST', credentials:'include', headers: authHeaders(),
     body: JSON.stringify(body)
   }).then(function(r){ return r.json(); }).then(function(d){
+    // If this chain's own balance couldn't cover the trade, the server
+    // already started an automatic top-up from whichever chain has enough
+    // and attached this buy to it -- {ok:true, pending:true, bridge_id:...}.
+    // Poll silently until the purchase actually happens; the user only ever
+    // sees "Buying..." then a normal Bought/failed message, never bridge
+    // terminology, matching every other buy on this page.
+    if(d && d.ok && d.pending && d.bridge_id){
+      showMsg(msgEl, 'Buying $'+t.symbol+'…', true);
+      _pollAutoBuyBridge(d.bridge_id, idx, t, amt, msgEl, input);
+      return;
+    }
     // /api/instant-trade's real success shape is {success:true, tx:<sig>, ...};
     // /api/bsc/trade/buy's and /api/evm/trade/buy's is {ok:true, tx_hash:<sig>, ...}
     // -- checking every one of success/tx/ok/sig/tx_hash covers all of them
@@ -581,8 +592,61 @@ function confirmBuy(idx){
     } else {
       showMsg(msgEl, (d && (d.error||d.msg)) || 'Buy failed', false);
     }
-  }).catch(function(){ showMsg(msgEl, 'Network error — buy not sent', false); })
-    .finally(function(){ if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; } });
+    if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
+  }).catch(function(){
+    showMsg(msgEl, 'Network error — buy not sent', false);
+    if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
+  });
+}
+
+// Polls a background auto-bridge-then-buy through to completion, purely so
+// confirmBuy() can show the same Bought/failed message it always would have
+// -- the bridge itself (and the wait, up to a few minutes) is never
+// surfaced to the user, per the "no friction from bridging" requirement.
+// The button stays disabled/'…' for the whole wait, same as any other
+// in-flight buy, rather than re-enabling and inviting a duplicate click.
+function _pollAutoBuyBridge(bridgeId, idx, t, amt, msgEl, input){
+  var attempts = 0;
+  var maxAttempts = 150; // ~150 * 8s = 20 minutes outer ceiling, generous over the bridge's own 30-min timeout
+  var btn = document.querySelector('#pt-buy-panel-'+idx+' .pt-buy-confirm');
+  function tick(){
+    attempts++;
+    fetch('/api/bridge/status/'+bridgeId, {credentials:'include', headers: authHeaders()})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        if(!d || !d.ok){ return scheduleNext(); }
+        if(d.auto_buy_status === 'done'){
+          var res = d.auto_buy_result || {};
+          showMsg(msgEl, 'Bought $'+(res.symbol||t.symbol)+' for '+(res.amount_usdc!=null?res.amount_usdc:amt)+' '+evmCurrencyLabel(t.chain), true);
+          if(input) input.value = '';
+          if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
+          setTimeout(function(){ var p=document.getElementById('pt-buy-panel-'+idx); if(p){ p.style.display='none'; p.innerHTML=''; } }, 2200);
+          return;
+        }
+        if(d.auto_buy_status === 'failed'){
+          var err = (d.auto_buy_result && d.auto_buy_result.error) || 'Buy failed after funds arrived — your balance is safe, try again';
+          showMsg(msgEl, err, false);
+          if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
+          return;
+        }
+        if(d.status === 'bridge_failed' || d.status === 'origin_tx_reverted' || d.status === 'timed_out'){
+          showMsg(msgEl, 'Buy failed — could not move funds to this chain', false);
+          if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
+          return;
+        }
+        scheduleNext();
+      })
+      .catch(scheduleNext);
+  }
+  function scheduleNext(){
+    if(attempts >= maxAttempts){
+      showMsg(msgEl, 'Still buying… check your Wallet page shortly', true);
+      if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
+      return;
+    }
+    setTimeout(tick, 8000);
+  }
+  tick();
 }
 
 function handleSell(idx, btn){

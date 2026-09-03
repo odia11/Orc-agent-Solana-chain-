@@ -2448,6 +2448,18 @@ def run_migrations():
         "ALTER TABLE bridge_transactions ADD COLUMN recovery_info TEXT DEFAULT ''",
         "ALTER TABLE bridge_transactions ADD COLUMN poll_attempts INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE bridge_transactions ADD COLUMN polling_started_at TIMESTAMP DEFAULT NULL",
+        # Auto-bridge-then-buy: set only when a bridge row was created by the
+        # buy flow itself (not a user-initiated manual bridge) to top up an
+        # insufficient balance on the destination chain. auto_buy_status is
+        # '' for every ordinary bridge; 'pending' -> 'processing' -> 'done'/
+        # 'failed' for one attached to a buy, with the 'pending'->'processing'
+        # transition done as a conditional UPDATE (WHERE auto_buy_status=
+        # 'pending') so _bridge_status_loop() can never run the same buy twice
+        # even if a status row is somehow re-read before it commits.
+        "ALTER TABLE bridge_transactions ADD COLUMN auto_buy_token_address TEXT DEFAULT ''",
+        "ALTER TABLE bridge_transactions ADD COLUMN auto_buy_requested_usdc REAL DEFAULT NULL",
+        "ALTER TABLE bridge_transactions ADD COLUMN auto_buy_status TEXT NOT NULL DEFAULT ''",
+        "ALTER TABLE bridge_transactions ADD COLUMN auto_buy_result TEXT DEFAULT ''",
     ]:
         try:
             con.execute(sql)
@@ -3300,7 +3312,8 @@ def _bridge_status_loop():
             try:
                 rows = conn.execute(
                     "SELECT id, user_id, wallet, source_tx_hash, source_chain, quote_id, poll_attempts, "
-                    "       polling_started_at FROM bridge_transactions "
+                    "       polling_started_at, dest_chain, auto_buy_token_address, "
+                    "       auto_buy_requested_usdc, auto_buy_status FROM bridge_transactions "
                     "WHERE provider='0x' AND status NOT IN "
                     "      ('bridge_filled','bridge_failed','origin_tx_reverted','timed_out') "
                     "      AND source_tx_hash != ''"
@@ -3309,7 +3322,9 @@ def _bridge_status_loop():
                 conn.close()
 
             _rate_limited_this_cycle = False
-            for row_id, user_id, wallet, source_tx_hash, source_chain, quote_id, poll_attempts, polling_started_at in rows:
+            for (row_id, user_id, wallet, source_tx_hash, source_chain, quote_id, poll_attempts,
+                 polling_started_at, dest_chain, auto_buy_token_address, auto_buy_requested_usdc,
+                 auto_buy_status) in rows:
                 if _rate_limited_this_cycle:
                     break  # back off the whole cycle rather than hammering a 429'ing API
                 try:
@@ -3377,7 +3392,51 @@ def _bridge_status_loop():
                     if new_status not in _BRIDGE_TERMINAL_STATUSES:
                         continue  # e.g. origin_tx_confirmed/bridge_pending -- keep polling, no notification yet
 
-                    notif_content = _BRIDGE_STATUS_NOTIFICATIONS[new_status]
+                    # Auto-bridge-then-buy: the buy itself runs here, right after the
+                    # bridge fills, never in the request handler that kicked the bridge
+                    # off. The 'pending'->'processing' UPDATE only succeeds once (its
+                    # WHERE clause requires the row still be 'pending'), so a row can
+                    # never trigger _execute_auto_buy_after_bridge() twice even if this
+                    # loop somehow saw the same bridge_filled row again.
+                    auto_buy_notif = None
+                    if new_status == 'bridge_filled' and auto_buy_status == 'pending':
+                        conn_ab = sqlite3.connect(DB_FILE)
+                        try:
+                            _ab_cur = conn_ab.execute(
+                                "UPDATE bridge_transactions SET auto_buy_status='processing' "
+                                "WHERE id=? AND auto_buy_status='pending'", (row_id,))
+                            conn_ab.commit()
+                            claimed = _ab_cur.rowcount > 0
+                        finally:
+                            conn_ab.close()
+                        if claimed:
+                            try:
+                                _execute_auto_buy_after_bridge(
+                                    row_id, user_id, wallet, dest_chain,
+                                    auto_buy_token_address, float(auto_buy_requested_usdc or 0))
+                            except Exception as _abe:
+                                print(f'[bridge-status] auto-buy failed for row {row_id}: {_abe}', flush=True)
+                            conn_ab2 = sqlite3.connect(DB_FILE)
+                            try:
+                                ab_row = conn_ab2.execute(
+                                    "SELECT auto_buy_status, auto_buy_result FROM bridge_transactions WHERE id=?",
+                                    (row_id,)).fetchone()
+                            finally:
+                                conn_ab2.close()
+                            if ab_row and ab_row[0] == 'done':
+                                try:
+                                    ab_result = json.loads(ab_row[1] or '{}')
+                                except Exception:
+                                    ab_result = {}
+                                auto_buy_notif = (
+                                    f'Purchase complete — bought {ab_result.get("symbol", "your token")} '
+                                    f'on {dest_chain} for ${ab_result.get("amount_usdc", 0):.2f}.')
+                            elif ab_row:
+                                auto_buy_notif = (
+                                    'Funds arrived, but the automatic purchase could not complete — '
+                                    'your balance is safe on the destination chain. Check your bridge history.')
+
+                    notif_content = auto_buy_notif or _BRIDGE_STATUS_NOTIFICATIONS[new_status]
                     try:
                         _nc = sqlite3.connect(DB_FILE)
                         _nc.execute(
@@ -5628,7 +5687,9 @@ def _bridge_validate_pair(origin_chain: str, origin_token: str, dest_chain: str,
 
 def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, dest_chain: str,
                                  origin_token: str, dest_token: str, amount: float,
-                                 initiated_by: str = 'user') -> tuple:
+                                 initiated_by: str = 'user',
+                                 auto_buy_token_address: str = None,
+                                 auto_buy_requested_usdc: float = None) -> tuple:
     """Bridge equivalent of _execute_user_swap()/_execute_evm_swap() -- gets
     a live 0x Cross-Chain quote, then signs and broadcasts the ORIGIN leg
     only (see _bridge_status_loop() for how the destination leg is tracked
@@ -5640,7 +5701,13 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
 
     Unlike the single-chain swap functions, this one decrypts its own key --
     origin_chain determines which column/format (Solana vs EVM), so that
-    branch has to live here rather than at each call site."""
+    branch has to live here rather than at each call site.
+
+    auto_buy_token_address/auto_buy_requested_usdc are set only when a buy
+    endpoint (not a user's manual Bridge action) created this row to top up
+    an insufficient destination-chain balance -- see
+    _execute_auto_buy_after_bridge() for how _bridge_status_loop() picks
+    these back up once the bridge reaches bridge_filled."""
     bad = _bridge_validate_pair(origin_chain, origin_token, dest_chain, dest_token)
     if bad:
         return False, bad, None
@@ -5721,13 +5788,16 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
                 '''INSERT INTO bridge_transactions
                    (user_id, wallet, source_chain, dest_chain, token_in, token_out, amount_in,
                     status, initiated_by, provider, quote_id, route_name, expected_amount_out,
-                    fee_usd, estimated_seconds)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    fee_usd, estimated_seconds, auto_buy_token_address, auto_buy_requested_usdc,
+                    auto_buy_status)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (user_id, wallet, origin_chain, dest_chain, origin_token, dest_token, amount,
                  'initiated', initiated_by, '0x', quote.get('quote_id'), quote.get('route_name'),
                  quote.get('expected_amount_out'),
                  None,  # 0x's cross-chain fee schema has no single USD total (see get_0x_bridge_quote's 'fees' dict)
-                 quote.get('estimated_seconds')))
+                 quote.get('estimated_seconds'),
+                 auto_buy_token_address or '', auto_buy_requested_usdc,
+                 'pending' if auto_buy_token_address else ''))
             conn2.commit()
             row_id = cur.lastrowid
         finally:
@@ -5765,6 +5835,143 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
 
     add_user_log(wallet, f'Bridge {origin_chain}->{dest_chain} origin tx broadcast: {tx_hash}')
     return True, tx_hash, row_id
+
+# Bridge amounts include this buffer over the requested buy so the
+# destination chain still has enough after 0x's bridge fees/slippage are
+# deducted -- the actual buy afterwards always re-checks the real on-chain
+# balance rather than trusting this figure, so this only needs to be
+# "enough", never exact.
+_AUTO_BRIDGE_BUFFER_PCT = 0.05
+
+def _find_bridge_source_chain(wallet: str, evm_address: str, dest_chain: str, needed_usdc: float):
+    """Looks for a chain (Solana or any other EVM chain in EVM_CHAINS) whose
+    own USDC/USDG balance can cover `needed_usdc` plus the bridge buffer,
+    for a buy that's short on `dest_chain`. Returns (chain, token_address,
+    balance) for whichever qualifying chain currently holds the MOST (so
+    repeated auto-bridges don't always drain the same one first), or None if
+    no chain has enough. Never touches Solana's native-SOL balance -- that
+    funds the separate SOL-based /api/instant-trade path, not this USDC/USDG
+    system, and mixing the two would cross a boundary this feature doesn't
+    own."""
+    needed_with_buffer = needed_usdc * (1 + _AUTO_BRIDGE_BUFFER_PCT)
+    candidates = []
+    try:
+        solana_wallet = _get_trading_wallet_address(wallet) or wallet
+        solana_balance = _get_solana_usdc_balance(solana_wallet)
+        if solana_balance >= needed_with_buffer:
+            candidates.append(('solana', USDC_MINT, solana_balance))
+    except Exception as e:
+        print(f'[auto-bridge] solana balance check failed: {e}', flush=True)
+    if evm_address:
+        for chain in EVM_CHAINS:
+            if chain == dest_chain:
+                continue
+            try:
+                bal = get_evm_usdc_balance(evm_address, chain)
+                if bal >= needed_with_buffer:
+                    candidates.append((chain, EVM_CHAINS[chain]['usdc'], bal))
+            except Exception as e:
+                print(f'[auto-bridge] {chain} balance check failed: {e}', flush=True)
+    if not candidates:
+        return None
+    return max(candidates, key=lambda c: c[2])
+
+def _maybe_start_auto_bridge_for_buy(user_id: int, wallet: str, evm_address: str, dest_chain: str,
+                                      token_address: str, amount_usdc: float) -> dict:
+    """Called by an EVM buy route when `dest_chain`'s own USDC/USDG balance
+    can't cover the trade. Looks for a chain that has enough (Solana or any
+    other EVM chain -- see _find_bridge_source_chain()) and, if one exists,
+    kicks off a bridge with this buy attached, so _bridge_status_loop() runs
+    the actual purchase once funds land (_execute_auto_buy_after_bridge()) --
+    the calling route never blocks waiting for the bridge itself. Returns
+    {'started': True, 'bridge_id':...} if a bridge was kicked off, or
+    {'started': False, 'msg':...} (a normal, honest insufficient-balance
+    message) if no chain has enough or starting the bridge itself failed."""
+    source = _find_bridge_source_chain(wallet, evm_address, dest_chain, amount_usdc)
+    if not source:
+        return {'started': False,
+                'msg': f'Insufficient {EVM_CHAINS[dest_chain].get("usdc_symbol", "USDC")} on {dest_chain}, '
+                       f'and no other chain has enough balance to bridge from automatically.'}
+    source_chain, source_token, _source_balance = source
+    bridge_amount = amount_usdc * (1 + _AUTO_BRIDGE_BUFFER_PCT)
+    ok, msg_or_tx, bridge_id = _execute_cross_chain_bridge(
+        user_id, wallet, source_chain, dest_chain, source_token, EVM_CHAINS[dest_chain]['usdc'],
+        bridge_amount, initiated_by='auto_buy',
+        auto_buy_token_address=token_address, auto_buy_requested_usdc=amount_usdc)
+    if not ok:
+        return {'started': False, 'msg': f'Could not start automatic bridge from {source_chain}: {msg_or_tx}'}
+    return {'started': True, 'bridge_id': bridge_id, 'source_chain': source_chain}
+
+def _execute_auto_buy_after_bridge(bridge_id: int, user_id: int, wallet: str, dest_chain: str,
+                                    token_address: str, requested_usdc: float) -> None:
+    """Runs the token purchase a bridge was created to feed, once that
+    bridge's status reaches bridge_filled -- called from
+    _bridge_status_loop(), never from a request handler (the user is never
+    blocked waiting on this). Re-checks the destination chain's real
+    on-chain USDC/USDG balance rather than trusting the bridge's quoted
+    output amount (0x's settled amount can differ slightly from the quote),
+    the same on-chain-balance-is-truth principle every other buy in this app
+    already follows, and spends at most `requested_usdc` even if more
+    arrived. Never calls _upsert_open_position()/_charge_evm_txn_fee() on any
+    failure path -- a transaction merely being submitted is never enough to
+    record a trade, matching every other buy path in this app."""
+    def _finish(status: str, result: dict):
+        conn_r = sqlite3.connect(DB_FILE)
+        try:
+            conn_r.execute(
+                "UPDATE bridge_transactions SET auto_buy_status=?, auto_buy_result=?, "
+                "updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (status, json.dumps(result), bridge_id))
+            conn_r.commit()
+        finally:
+            conn_r.close()
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT encrypted_private_key_bsc FROM users WHERE id=?', (user_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        _finish('failed', {'error': 'No EVM trading wallet configured'})
+        return
+
+    try:
+        with _use_key(row[0], wallet) as private_key:
+            acct = _EvmAccount.from_key(private_key)
+            w3 = _get_web3(dest_chain)
+            evm_address = w3.to_checksum_address(acct.address)
+            available = get_evm_usdc_balance(evm_address, dest_chain)
+            amount_usdc = min(requested_usdc, available)
+            if amount_usdc <= 0:
+                _finish('failed', {'error': f'No {EVM_CHAINS[dest_chain].get("usdc_symbol","USDC")} arrived on {dest_chain} yet'})
+                return
+            buy_ok, buy_err, buy_tx_hash = _execute_evm_swap(
+                wallet, private_key, 'buy', token_address, str(amount_usdc), dest_chain)
+            if not buy_ok:
+                _finish('failed', {'error': buy_err or 'Swap failed'})
+                return
+
+            td          = get_token_data(token_address)
+            entry_price = float(td['price']) if td and td.get('price') else 0.0
+            symbol      = (td.get('symbol') or token_address[:8]) if td else token_address[:8]
+            pos = {
+                'amount':    (amount_usdc / entry_price) if entry_price > 0 else 0.0,
+                'buy_price': entry_price,
+                'spend':     amount_usdc,
+                'symbol':    symbol,
+                'opened_at': time.time(),
+            }
+            _upsert_open_position(user_id, wallet, token_address, pos, source='manual', chain=dest_chain)
+            _charge_evm_txn_fee(private_key, wallet, user_id, symbol, amount_usdc, 'buy', dest_chain)
+    except Exception as e:
+        _finish('failed', {'error': _redact_keys(str(e))[:300]})
+        return
+
+    add_user_log(wallet, f'Auto-buy after bridge (row {bridge_id}) completed: {symbol} on {dest_chain}, ${amount_usdc}')
+    _finish('done', {'symbol': symbol, 'amount_usdc': amount_usdc, 'entry_price': entry_price,
+                      'token_address': token_address, 'chain': dest_chain, 'tx_hash': buy_tx_hash})
 
 def _bridge_sign_send_evm(txn: dict, raw_quote: dict, private_key: str, chain: str,
                            origin_address: str, origin_token: str) -> str:
@@ -10190,9 +10397,21 @@ def api_bridge_status(bridge_id):
     if not row:
         return jsonify({'ok': False, 'msg': 'Bridge transaction not found'}), 404
     d = _bridge_row_to_dict(row)
+    auto_buy_status = d.get('auto_buy_status') or ''
+    try:
+        auto_buy_result = json.loads(d['auto_buy_result']) if d.get('auto_buy_result') else None
+    except Exception:
+        auto_buy_result = None
+    # For an auto-bridge-then-buy row, the bridge reaching a terminal state
+    # is not the same as the flow being done -- the buy itself still has to
+    # run (or fail to). Only report is_terminal once that's also settled, so
+    # frontend polling doesn't stop (or show a false "complete") the instant
+    # bridge_filled lands but before the purchase has actually happened.
+    is_terminal = d['is_terminal'] and auto_buy_status in ('', 'done', 'failed')
     return jsonify({'ok': True, 'status': d['status'], 'status_label': d['status_label'],
-                     'is_terminal': d['is_terminal'], 'source_tx_hash': d['source_tx_hash'],
-                     'dest_tx_hash': d['dest_tx_hash']})
+                     'is_terminal': is_terminal, 'source_tx_hash': d['source_tx_hash'],
+                     'dest_tx_hash': d['dest_tx_hash'],
+                     'auto_buy_status': auto_buy_status, 'auto_buy_result': auto_buy_result})
 
 @app.route('/api/bridge/transaction/<int:bridge_id>', methods=['GET'])
 @rate_limit(60, 60)
@@ -10296,7 +10515,8 @@ def api_evm_trade_buy():
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            'SELECT id, encrypted_private_key_bsc, min_trade_size, max_trade_size FROM users WHERE wallet_address=?',
+            'SELECT id, encrypted_private_key_bsc, min_trade_size, max_trade_size, bsc_wallet_address '
+            'FROM users WHERE wallet_address=?',
             (wallet,)
         ).fetchone()
     finally:
@@ -10306,6 +10526,7 @@ def api_evm_trade_buy():
     enc_blob = row[1]
     min_size = float(row[2]) if row[2] is not None else 1.0
     max_size = float(row[3]) if row[3] is not None else 10.0
+    evm_address = row[4]
     if amount_usdc is None:
         amount_usdc = max_size
     try:
@@ -10314,6 +10535,28 @@ def api_evm_trade_buy():
         return jsonify({'ok': False, 'msg': 'Invalid amount'}), 400
     amount_usdc = max(min_size, min(max_size, amount_usdc))
     user_id = row[0]
+
+    # Auto-bridge-then-buy: if this chain's own balance can't cover the
+    # trade, look for a chain that has enough and bridge it here in the
+    # background rather than failing outright -- see
+    # _maybe_start_auto_bridge_for_buy()/_execute_auto_buy_after_bridge().
+    # The happy-path branch below (balance already sufficient) is completely
+    # unchanged from before this feature existed.
+    try:
+        current_balance = get_evm_usdc_balance(evm_address, chain) if evm_address else 0.0
+    except Exception as e:
+        current_balance = 0.0
+        print(f'[evm-buy] balance check failed for {chain}: {e}', flush=True)
+    if current_balance < amount_usdc:
+        bridge_result = _maybe_start_auto_bridge_for_buy(user_id, wallet, evm_address, chain, token_address, amount_usdc)
+        if bridge_result['started']:
+            return jsonify({
+                'ok': True, 'pending': True, 'bridge_id': bridge_result['bridge_id'],
+                'chain': chain, 'token_address': token_address, 'amount_usdc': amount_usdc,
+                'msg': 'Buying...',
+            })
+        return jsonify({'ok': False, 'msg': bridge_result['msg']}), 400
+
     with _use_key(enc_blob, wallet) as pk:
         buy_ok, buy_err, buy_tx_hash = _execute_evm_swap(wallet, pk, 'buy', token_address, str(amount_usdc), chain)
     if not buy_ok:
@@ -10412,7 +10655,8 @@ def api_bsc_trade_buy():
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute(
-            'SELECT id, encrypted_private_key_bsc, min_trade_size, max_trade_size FROM users WHERE wallet_address=?',
+            'SELECT id, encrypted_private_key_bsc, min_trade_size, max_trade_size, bsc_wallet_address '
+            'FROM users WHERE wallet_address=?',
             (wallet,)
         ).fetchone()
     finally:
@@ -10422,6 +10666,7 @@ def api_bsc_trade_buy():
     enc_blob = row[1]
     min_size = float(row[2]) if row[2] is not None else 1.0
     max_size = float(row[3]) if row[3] is not None else 10.0
+    evm_address = row[4]
     if amount_usdc is None:
         amount_usdc = max_size
     try:
@@ -10433,6 +10678,24 @@ def api_bsc_trade_buy():
     # separate BSC-specific limit setting.
     amount_usdc = max(min_size, min(max_size, amount_usdc))
     user_id = row[0]
+
+    # Auto-bridge-then-buy -- see api_evm_trade_buy()'s identical block above
+    # for the full reasoning; not repeated here to avoid drift.
+    try:
+        current_balance = get_evm_usdc_balance(evm_address, 'bsc') if evm_address else 0.0
+    except Exception as e:
+        current_balance = 0.0
+        print(f'[bsc-buy] balance check failed: {e}', flush=True)
+    if current_balance < amount_usdc:
+        bridge_result = _maybe_start_auto_bridge_for_buy(user_id, wallet, evm_address, 'bsc', token_address, amount_usdc)
+        if bridge_result['started']:
+            return jsonify({
+                'ok': True, 'pending': True, 'bridge_id': bridge_result['bridge_id'],
+                'chain': 'bsc', 'token_address': token_address, 'amount_usdc': amount_usdc,
+                'msg': 'Buying...',
+            })
+        return jsonify({'ok': False, 'msg': bridge_result['msg']}), 400
+
     with _use_key(enc_blob, wallet) as pk:
         buy_ok, buy_err, buy_tx_hash = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
     if not buy_ok:
