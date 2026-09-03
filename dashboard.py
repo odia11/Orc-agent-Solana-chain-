@@ -5747,6 +5747,112 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
                             source=pos.get('source', 'bot'), chain=chain, **record_kwargs)
     return True, exit_price, sold_amt
 
+def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, enc_blob_evm: str,
+                         evm_address: str, min_trade_usdc: float, blacklisted: frozenset,
+                         m5_min: float, m5_max, pref_scam_filter: bool, short: str) -> bool:
+    """One chain's worth of user_trader_loop()'s Pass 2 (entry scanning),
+    for any chain in EVM_CHAINS -- the Solana Pass 2 right above this
+    function is a much deeper, more mature pipeline (AI last-look decision,
+    net-expected-edge filter, learned liquidity/LP-lock bias, weighted-
+    random diversification across a qualifying pool, RugCheck holder-
+    concentration + LP-lock checks, a real Jupiter price-impact quote) built
+    up over a long time -- this intentionally does NOT try to clone every
+    one of those refinements for 5 more chains in one pass. What it DOES
+    keep, because these are the load-bearing safety checks, not
+    refinements: a real rug/scam gate before ever buying
+    (_check_evm_honeypot -- honeypot.is SIMULATES a buy+sell against the
+    live contract, which is arguably a stronger signal than Solana's
+    static mint/freeze-authority read), the same market-cap-floor/
+    liquidity/pair-age minimums, the same momentum+volume-rising entry
+    trigger (via a fresh get_token_data() fetch, the same function Pass 1
+    already uses for exit monitoring), the user's own blacklist, and --
+    like every other buy path in this app -- never registering a position
+    unless the swap itself actually confirmed on-chain.
+
+    Position sizing is deliberately flat (this user's own min_trade_usdc,
+    not Solana's score-scaled 1x-3x stake) rather than inventing an
+    unvalidated scoring formula for chains this app has no trade-history
+    to learn from yet. Returns True if a buy was actually made (so the
+    caller can update its per-chain open-position count), False otherwise
+    -- including every "found nothing to buy" case, which is not an error."""
+    try:
+        native_bal = get_evm_native_balance(evm_address, chain)
+    except Exception as e:
+        print(f'[bot-{chain}] {short} gas balance check failed: {e}', flush=True)
+        return False
+    if native_bal <= 0:
+        return False  # _execute_evm_swap itself reports the precise "insufficient X for gas" error if this changes mid-cycle
+
+    candidates = [t for t in _get_scanner_cached()
+                  if t.get('chain') == chain
+                  and t['mint'] not in blacklisted
+                  and positions.get(t['mint'], {}).get('amount', 0) == 0]
+    if not candidates:
+        return False
+
+    _ai_filters = get_ai_active_filters()
+    _min_mcap = _min_marketcap_for_stake(min_trade_usdc)
+    now_ts = time.time()
+    qualifying = []
+    for t in candidates:
+        if t.get('market_cap', 0) < _min_mcap:
+            continue
+        if t.get('liquidity_usd', 0) < _ai_filters['min_liquidity_usd']:
+            continue
+        _created = t.get('pair_created_at') or 0
+        _age_min = (now_ts - _created / 1000) / 60 if _created > 0 else 0
+        if _created > 0 and _age_min < _ai_filters['min_pair_age_minutes']:
+            continue
+        qualifying.append(t)
+    if not qualifying:
+        return False
+    # Highest 24h volume first -- no learned-bias/weighted pool for this
+    # first cut, just the strongest-liquidity signal available up front.
+    qualifying.sort(key=lambda t: t.get('volume_24h', 0), reverse=True)
+
+    for t in qualifying[:5]:  # bounded fresh-data lookups, same reasoning as Solana's BUY_POOL_SIZE cap
+        mint, symbol = t['mint'], t.get('symbol') or t['mint'][:8]
+        _td = get_token_data(mint, fast=True)
+        if not _td or not _td.get('price'):
+            continue
+        m5, h1 = _td.get('change5m', 0), _td.get('change1h', 0)
+        v5m, v1h = _td.get('volume5m', 0), _td.get('volume1h', 0)
+        m5_ok = (m5 >= m5_min or h1 >= m5_min) if m5_max is None else (m5_min <= m5 <= m5_max or m5_min <= h1 <= m5_max)
+        if not m5_ok:
+            continue
+        if not (v5m > 0 and v1h > 0 and v5m > v1h / 12):
+            continue
+        if pref_scam_filter:
+            _hp = _check_evm_honeypot(mint, chain)
+            if not _hp['ok'] or _hp['is_honeypot']:
+                add_user_log(wallet, f'[bot-{chain}] SKIPPING {symbol} — honeypot check failed or flagged it as one')
+                continue
+            if _hp['sell_tax'] >= 15:
+                add_user_log(wallet, f'[bot-{chain}] SKIPPING {symbol} — sell tax {_hp["sell_tax"]}% too high')
+                continue
+
+        add_user_log(wallet, f'[bot-{chain}] Best: {symbol} — BUYING (5m:{round(m5,1)}% 1h:{round(h1,1)}%)')
+        if mint not in positions:
+            positions[mint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
+        pos = positions[mint]
+        with _use_key(enc_blob_evm, wallet) as pk:
+            buy_ok, buy_err, _tx_hash = _execute_evm_swap(wallet, pk, 'buy', mint, str(min_trade_usdc), chain)
+            if buy_ok:
+                pos['amount']          = min_trade_usdc / float(_td['price'])
+                pos['buy_price']       = float(_td['price'])
+                pos['spend']           = min_trade_usdc
+                pos['symbol']          = symbol
+                pos['chain']           = chain
+                pos['opened_at']       = time.time()
+                pos['entry_liquidity'] = t.get('liquidity_usd', 0)
+                _upsert_open_position(user_id, wallet, mint, pos, source='bot', chain=chain)
+                _charge_evm_txn_fee(pk, wallet, user_id, symbol, min_trade_usdc, 'buy', chain)
+        if buy_ok:
+            return True
+        add_user_log(wallet, f'[bot-{chain}] ✗ BUY failed — {symbol}: {buy_err or "unknown error"} — position NOT recorded')
+        positions.pop(mint, None)
+    return False
+
 # Bridging is deliberately scoped to each chain's own native gas asset and
 # its own USDC/USDG -- NOT arbitrary tokens. This is a funding mechanism
 # ("get USDC/USDG onto the chain I want to buy a token on"), not a
@@ -7443,7 +7549,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc, bsc_wallet_address FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -7478,6 +7584,11 @@ def user_trader_loop(stop_event, config, wallet: str):
     # and every EVM-entry gas/candidate check below can tell "never set up"
     # apart from "empty string."
     _enc_blob_evm = row[13] if (len(row) > 13 and row[13]) else None
+    # Same wallet address column every manual-buy/bridge EVM route already
+    # reads (set once, at generate-EVM-key time -- see the "identity across
+    # chains" comment near where it's created) -- reused here so Pass 2's
+    # EVM gas-balance check never needs to decrypt the key just to derive it.
+    _evm_address  = row[14] if (len(row) > 14 and row[14]) else None
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -7958,19 +8069,24 @@ def user_trader_loop(stop_event, config, wallet: str):
                 _streak_paused  = time.time() < us.get('loss_streak_pause_until', 0)
                 _streak_tighten = (not _streak_paused) and _loss_streak >= LOSS_STREAK_TIGHTEN_AT
 
+                # Re-fetch blacklist each scan so additions take effect
+                # immediately -- hoisted above both Pass 2 blocks (Solana
+                # and, below, each EVM chain) since both need it and either
+                # one can run independently of the other (e.g. Solana's own
+                # max_positions is full but an EVM chain still has room).
+                try:
+                    _bl_conn = sqlite3.connect(DB_FILE)
+                    _blacklisted = frozenset(
+                        r[0] for r in _bl_conn.execute(
+                            'SELECT mint FROM user_blacklist WHERE user_id=?',
+                            (user_id,)).fetchall())
+                    _bl_conn.close()
+                except Exception:
+                    _blacklisted = frozenset()
+
                 # ── Pass 2: pick the single best entry ──
                 if (not stop_event.is_set() and open_pos < max_positions and us_sol >= _GAS_MIN
                         and not _pc_locked and not _streak_paused):
-                    # Re-fetch blacklist each scan so additions take effect immediately
-                    try:
-                        _bl_conn = sqlite3.connect(DB_FILE)
-                        _blacklisted = frozenset(
-                            r[0] for r in _bl_conn.execute(
-                                'SELECT mint FROM user_blacklist WHERE user_id=?',
-                                (user_id,)).fetchall())
-                        _bl_conn.close()
-                    except Exception:
-                        _blacklisted = frozenset()
                     # Trained from this wallet's own trade history -- see
                     # _learned_liquidity_bias()/_learned_lp_bias() -- {} until
                     # there's enough closed-trade evidence to say anything.
@@ -8251,6 +8367,30 @@ def user_trader_loop(stop_event, config, wallet: str):
                             else:
                                 add_user_log(wallet, '[' + short + '] ✗ BUY failed — ' + label + ' position NOT recorded')
                                 positions.pop(bmint, None)
+
+                # ── Pass 2 (EVM): same idea, once per configured EVM chain ──
+                # Only runs at all if this user ever generated an EVM trading
+                # key (_enc_blob_evm) -- otherwise every chain below is
+                # skipped every cycle, same as Pass 1's EVM exit checks. Each
+                # chain gets its OWN max_positions slot (open_pos_by_chain),
+                # so 5 EVM chains can't crowd out Solana or each other.
+                if (_enc_blob_evm and _evm_address and not stop_event.is_set()
+                        and not _pc_locked and not _streak_paused):
+                    for _evm_chain in EVM_CHAINS:
+                        if stop_event.is_set():
+                            break
+                        if open_pos_by_chain.get(_evm_chain, 0) >= max_positions:
+                            continue
+                        try:
+                            _bought = _bot_scan_evm_entry(
+                                user_id, wallet, positions, _evm_chain, _enc_blob_evm,
+                                _evm_address, min_trade_usdc, _blacklisted, m5_min, m5_max,
+                                pref_scam_filter, short)
+                        except Exception as _evm_e:
+                            print(f'[bot-{_evm_chain}] {short} Pass 2 error: {_evm_e}', flush=True)
+                            _bought = False
+                        if _bought:
+                            open_pos_by_chain[_evm_chain] = open_pos_by_chain.get(_evm_chain, 0) + 1
             except Exception as e:
                 print(f'[bot] {short} LOOP ERROR: {e}', flush=True)
                 add_user_log(wallet, '[' + short + '] Trader error: ' + str(e))
