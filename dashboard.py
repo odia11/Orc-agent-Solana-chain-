@@ -21677,21 +21677,14 @@ _scanner_safety_lock = threading.Lock()
 _SCANNER_SAFETY_TTL = 600  # 10 min -- mint/freeze authority + LP-lock state rarely change
 _AGE_BUCKET_SECONDS = {'1h': 3600, '6h': 21600, '24h': 86400}
 
-# "Graduated" sort mode -- chain-agnostic stand-in for Solana's pump.fun-
-# specific "bonding curve -> real pool" graduation concept, which has no
-# equivalent on the other 5 chains this scanner covers (each has its own,
-# not-uniformly-detectable launchpad). A newly created pair that already
-# has real volume and real trading activity is the same underlying signal
-# ("this one made it past the earliest, riskiest phase") without needing a
-# per-chain launchpad integration. GRADUATED_MIN_TXNS_24H (buys+sells) is
-# used as the holder-quality proxy instead of a real per-chain holder count
-# -- that would need a separate API integration per chain (Etherscan-style
-# for each EVM chain, Solana RPC for Solana) that this app doesn't have;
-# real trading activity from real distinct transactions is the strongest
-# holder-quality signal already available from DexScreener on every chain.
-GRADUATED_MAX_AGE_SECONDS = 7 * 86400
-GRADUATED_MIN_VOLUME_24H  = 25000
-GRADUATED_MIN_TXNS_24H    = 50
+# "Graduated" sort mode -- tokens whose pair went live on the open market
+# only minutes ago, across any of the 6 chains this scanner covers. No
+# volume/activity quality bar on purpose: a pair this young hasn't had time
+# to build any (its 24h volume/txn figures are still mostly zero), so
+# requiring one would make this bucket permanently empty. This is
+# deliberately noisier than the other buckets -- catching a token the
+# moment it appears trades an early look for more junk mixed in.
+GRADUATED_MAX_AGE_SECONDS = 10 * 60
 
 
 def _get_scanner_candidates() -> list:
@@ -21947,16 +21940,12 @@ def api_market_scanner():
     # isn't the same signal as a $30K+ one holding a steady uptrend).
     uptrend_set = [t for t in filtered
                    if t.get('price_change_24h', 0) >= 5 and t.get('market_cap', 0) >= 30000]
-    # "Graduated" -- recently-launched (any of the 6 chains), but already
-    # past the earliest/riskiest phase: real volume + real transaction
-    # activity, not just a token that happened to get a pool an hour ago.
-    # See GRADUATED_* constants' comment above for why txns_24h stands in
-    # for a real per-chain holder count.
+    # "Graduated" -- pairs that went live in the last GRADUATED_MAX_AGE_SECONDS
+    # (10 min), any of the 6 chains. No volume/activity bar (see constant's
+    # comment above) -- this is meant to catch a token the instant it appears.
     graduated_set = [t for t in filtered
                       if t.get('pair_created_at')
-                      and (now - t['pair_created_at'] / 1000.0) <= GRADUATED_MAX_AGE_SECONDS
-                      and t.get('volume_24h', 0) >= GRADUATED_MIN_VOLUME_24H
-                      and (t.get('buys_24h', 0) + t.get('sells_24h', 0)) >= GRADUATED_MIN_TXNS_24H]
+                      and (now - t['pair_created_at'] / 1000.0) <= GRADUATED_MAX_AGE_SECONDS]
 
     my_wallet   = _current_wallet()
     friends_set = []
