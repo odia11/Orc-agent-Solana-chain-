@@ -43,6 +43,8 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 .st-amber-inp{width:60px;background:#1a1d23;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:14px;font-weight:600;border-radius:8px;padding:6px 8px;text-align:center;outline:none;-moz-appearance:textfield;transition:opacity .15s;flex-shrink:0}
 .st-amber-inp:focus{opacity:.85}
 .st-amber-inp::-webkit-inner-spin-button,.st-amber-inp::-webkit-outer-spin-button{-webkit-appearance:none}
+.st-amber-select{width:auto;min-width:88px;background:#1a1d23;border:1px solid var(--accent);color:var(--accent);font-family:var(--mono);font-size:13px;font-weight:600;border-radius:8px;padding:6px 10px;text-align:center;outline:none;transition:opacity .15s;flex-shrink:0;cursor:pointer}
+.st-amber-select:focus{opacity:.85}
 .st-save-row{padding-top:16px;display:flex;align-items:center;gap:10px}
 .st-save-btn{background:var(--accent);color:#0a0b0e;border:none;border-radius:9px;padding:9px 22px;font-size:13px;font-weight:700;font-family:var(--ui);cursor:pointer;transition:opacity .15s}
 .st-save-btn:hover{opacity:.88}
@@ -205,6 +207,17 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
             <div class="st-row-sub">Inzet per trade (bij een sterk signaal tot 2x hoger)</div>
           </div>
           <input id="s-minusdc" class="st-amber-inp" type="number" value="1" min="1" max="10000" step="1">
+        </div>
+
+        <div class="st-row">
+          <div class="st-row-left">
+            <div class="st-row-label">Solana trade currency</div>
+            <div class="st-row-sub">Waarmee de bot koopt/verkoopt op Solana. Er blijft altijd een klein beetje SOL nodig voor netwerkkosten, ook in USDC-modus.</div>
+          </div>
+          <select id="s-solbase" class="st-amber-select">
+            <option value="SOL">SOL</option>
+            <option value="USDC">USDC</option>
+          </select>
         </div>
 
         <div class="st-row">
@@ -457,6 +470,8 @@ async function _initPage(){
     if(d.take_profit!=null)      document.getElementById('s-tp').value=d.take_profit;
     if(d.stop_loss!=null)        document.getElementById('s-sl').value=d.stop_loss;
     if(d.max_positions!=null)    document.getElementById('s-maxpos').value=d.max_positions;
+    var solBaseEl=document.getElementById('s-solbase');
+    if(solBaseEl) solBaseEl.value = (d.pref_solana_base_currency==='USDC') ? 'USDC' : 'SOL';
     /* key status */
     _setKeyStatus(d.has_trading_key);
     /* preference toggles */
@@ -501,7 +516,8 @@ async function _saveStrategy(){
       min_trade_size:   parseFloat(document.getElementById('s-minusdc').value)||1,
       take_profit:      parseFloat(document.getElementById('s-tp').value)||15,
       stop_loss:        parseFloat(document.getElementById('s-sl').value)||8,
-      max_positions:    parseInt(document.getElementById('s-maxpos').value)||3
+      max_positions:    parseInt(document.getElementById('s-maxpos').value)||3,
+      pref_solana_base_currency: (document.getElementById('s-solbase')||{}).value==='USDC' ? 'USDC' : 'SOL'
     };
     var d=await _post('/api/settings/save', submitted);
     var adjusted = d.ok && d.max_positions !== undefined && d.max_positions !== submitted.max_positions;

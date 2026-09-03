@@ -1689,6 +1689,15 @@ def init_db():
         c.execute('ALTER TABLE open_positions ADD COLUMN entry_freeze_authority_active INTEGER DEFAULT NULL')
     except sqlite3.OperationalError:
         pass
+    # Which currency this Solana position was actually opened with -- 'SOL'
+    # (default, every pre-existing row) or 'USDC'. Needed so the eventual
+    # close routes the sell back into the SAME currency the buy spent,
+    # rather than always assuming SOL. Meaningless for a non-Solana
+    # (EVM) row, which already always trades its own chain's USDC/USDG.
+    try:
+        c.execute("ALTER TABLE open_positions ADD COLUMN base_currency TEXT DEFAULT 'SOL'")
+    except sqlite3.OperationalError:
+        pass
     c.execute('CREATE INDEX IF NOT EXISTS idx_open_positions_user ON open_positions(user_id)')
     # Bridge transactions: one row per Solana<->BSC bridge attempt (Mayan Finance),
     # from quote-acceptance through on-chain confirmation. Kept even after
@@ -2291,6 +2300,13 @@ def run_migrations():
         # so the background job doesn't redundantly re-convert on every pass.
         "ALTER TABLE users ADD COLUMN bsc_gas_reserved_at TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN bot_enabled_bsc INTEGER DEFAULT 0",
+        # Which currency the SOLANA bot itself trades with -- 'SOL' (default,
+        # unchanged behavior) or 'USDC'. orcagent_solana.py's execute_single_swap()
+        # has supported a USDC base since it was written; this is what actually
+        # lets a user opt into it instead of it sitting unreachable. Still needs
+        # a small SOL balance for Solana's own network fees either way -- this
+        # only changes which currency funds the TRADE itself.
+        "ALTER TABLE users ADD COLUMN pref_solana_base_currency TEXT DEFAULT 'SOL'",
         # USDC-denominated -- deliberately separate from min_trade_size/max_trade_size
         # (SOL-denominated, Solana-only) rather than reinterpreting those columns,
         # since a single column meaning "SOL amount" for one chain and "USDC amount"
@@ -3678,24 +3694,29 @@ def _hydrate_positions_from_db(wallet: str, us: dict):
                 return
             rows = conn.execute(
                 '''SELECT mint_address, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain,
-                          entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active, source
+                          entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active, source,
+                          base_currency
                    FROM open_positions WHERE user_id=?''', (row[0],)
             ).fetchall()
         finally:
             conn.close()
         for (mint, symbol, amount, buy_price, spend, entry_liquidity, opened_at, chain,
-             entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active, source) in rows:
+             entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active, source,
+             base_currency) in rows:
             # chain must be carried into the restored dict, not just the DB row --
             # every place that iterates us['positions'] and calls the Solana-only
             # _execute_user_swap() relies on pos['chain'] to skip BSC entries.
             # source likewise -- otherwise a copy-traded position that survives
             # a restart loses its 'copy' tag and the SL/TP monitor records its
             # eventual close as a regular 'bot' trade (see _upsert_open_position).
+            # base likewise -- a Solana position opened with USDC must still
+            # sell back into USDC after a restart, not silently fall back to SOL.
             us['positions'][mint] = {
                 'amount': amount, 'buy_price': buy_price, 'spend': spend,
                 'symbol': symbol, 'opened_at': opened_at, 'entry_liquidity': entry_liquidity,
                 'source': source or 'bot',
                 'chain': chain or 'solana',
+                'base': base_currency or 'SOL',
                 'entry_lp_locked_pct': entry_lp_locked_pct,
                 'entry_mint_authority_active': bool(entry_mint_authority_active) if entry_mint_authority_active is not None else None,
                 'entry_freeze_authority_active': bool(entry_freeze_authority_active) if entry_freeze_authority_active is not None else None,
@@ -5025,13 +5046,13 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                 '''INSERT INTO open_positions
                    (user_id, mint_address, symbol, amount, buy_price, spend, entry_liquidity,
                     entry_lp_locked_pct, entry_mint_authority_active, entry_freeze_authority_active,
-                    opened_at, source, copy_of_wallet, chain,
+                    opened_at, source, copy_of_wallet, chain, base_currency,
                     sl_pct, tp_pct, sl_price, tp_price, trailing_enabled, entry_score,
                     highest_price, lowest_price,
                     entry_volume_5m, entry_volume_1h, entry_volume_accel, entry_buy_sell_ratio,
                     entry_unique_traders, entry_market_cap, entry_pair_age_minutes, risk_score,
                     updated_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
+                   VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP)
                    ON CONFLICT(user_id, mint_address) DO UPDATE SET
                        symbol=excluded.symbol, amount=excluded.amount, buy_price=excluded.buy_price,
                        spend=excluded.spend, entry_liquidity=excluded.entry_liquidity,
@@ -5040,6 +5061,7 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                        entry_freeze_authority_active=excluded.entry_freeze_authority_active,
                        opened_at=excluded.opened_at, source=excluded.source,
                        copy_of_wallet=excluded.copy_of_wallet, chain=excluded.chain,
+                       base_currency=excluded.base_currency,
                        sl_pct=excluded.sl_pct, tp_pct=excluded.tp_pct,
                        sl_price=excluded.sl_price, tp_price=excluded.tp_price,
                        trailing_enabled=excluded.trailing_enabled, entry_score=excluded.entry_score,
@@ -5053,7 +5075,7 @@ def _upsert_open_position(user_id: int, wallet: str, mint: str, pos: dict, sourc
                  pos.get('spend', 0.0), pos.get('entry_liquidity', 0.0),
                  pos.get('entry_lp_locked_pct'), pos.get('entry_mint_authority_active'),
                  pos.get('entry_freeze_authority_active'),
-                 pos.get('opened_at', 0.0), source, copy_of_wallet, chain,
+                 pos.get('opened_at', 0.0), source, copy_of_wallet, chain, pos.get('base', 'SOL'),
                  pos.get('sl_pct'), pos.get('tp_pct'), pos.get('sl_price'), pos.get('tp_price'),
                  int(bool(pos.get('trailing_enabled'))), pos.get('entry_score'),
                  pos.get('highest_price'), pos.get('lowest_price'),
@@ -5232,7 +5254,7 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
                        entry_unique_traders: int = None, entry_market_cap: float = None,
                        entry_pair_age_minutes: float = None, risk_score: float = None,
                        entry_slippage_pct: float = None, exit_slippage_pct: float = None,
-                       chain: str = 'solana'):
+                       chain: str = 'solana', base: str = 'SOL'):
     """chain defaults to 'solana' so every pre-existing caller (all of them,
     until user_trader_loop()'s bot-driven EVM exits) keeps behaving exactly
     as before. The only genuinely chain-specific pieces are which fee
@@ -5307,7 +5329,15 @@ def _record_user_trade(user_id: int, us: dict, symbol: str, entry: float, exit_p
     # separate transfer left for users to notice leaving their wallet, just record it.
     # EVM: _charge_evm_txn_fee sends a real separate on-chain USDC/USDG transfer --
     # that chain's swap (0x) has no equivalent bundled-platform-fee mechanism.
-    if wallet and private_key:
+    if wallet and private_key and chain == 'solana' and base == 'USDC':
+        # orcagent_solana.py's execute_single_swap() doesn't bundle a platform
+        # fee into a USDC-denominated swap yet (its own docstring: "a disclosed
+        # v1 limitation, not a bug" -- bundling one would need a raw SPL-token-
+        # transfer instruction it doesn't build). bundled=True below would
+        # otherwise fabricate a fee record for money nothing actually
+        # collected, so this mode charges no fee rather than lying about it.
+        print(f'[fee] {short_w} {symbol} sell — USDC-based Solana trade, no platform fee bundled (not yet supported for this mode)', flush=True)
+    elif wallet and private_key:
         if chain == 'solana':
             _charge_txn_fee(private_key, wallet, user_id, symbol, swap_sol_amount, 'sell',
                              trade_ts=now.strftime('%Y-%m-%dT%H:%M:%SZ'), gross_profit=pnl, bundled=True)
@@ -5570,7 +5600,7 @@ def _parse_swap_realized_amounts(action: str, amount_str: str, stdout: str) -> t
             break
     return token_amount, sol_amount
 
-def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> tuple:
+def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str, amount_str: str, base: str = 'SOL') -> tuple:
     """Same subprocess call as _execute_user_swap(), but also returns the
     transaction signature -- parsed from orcagent_solana.py's own stdout
     (a 'TX:<sig>' token), same parsing /api/instant-trade already does.
@@ -5593,6 +5623,14 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
     entirely and every failure surfaced to the user as the same generic
     'Swap failed — check logs' with no actual logs for them to check."""
     try:
+        # orcagent_solana.py's execute_single_swap() has accepted an optional
+        # 4th CLI arg (BASE: 'SOL' or 'USDC') since it was built -- every
+        # caller here just never passed it, so every Solana buy/sell has
+        # always been SOL-denominated even though the underlying engine
+        # (and _parse_swap_realized_amounts()'s currency-agnostic 'sol:'/
+        # 'got:' parsing above) already supports USDC. Normalized here so a
+        # bad/unexpected value from a caller can never reach the subprocess.
+        _base = 'USDC' if str(base).upper() == 'USDC' else 'SOL'
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
         env['WALLET_PRIVATE_KEY'] = private_key
@@ -5600,7 +5638,7 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
         env['FEE_RATE_TXN']       = str(FEE_RATE_TXN)
         _ext_hit('jupiter')
         result = subprocess.run(
-            [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), action, mint, amount_str],
+            [sys.executable, os.path.join(BASE, 'orcagent_solana.py'), action, mint, amount_str, _base],
             env=env, capture_output=True, text=True, timeout=120
         )
         env['WALLET_PRIVATE_KEY'] = ''  # clear from local dict immediately after subprocess returns
@@ -5647,14 +5685,14 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
         add_user_log(wallet, 'Swap error: ' + str(e)[:80])
         return False, '', str(e)[:200], 0.0, 0.0
 
-def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str) -> bool:
+def _execute_user_swap(wallet: str, private_key: str, action: str, mint: str, amount_str: str, base: str = 'SOL') -> bool:
     """Execute a Jupiter swap. Returns True only if the subprocess exited 0 with output.
     Key is passed via env var to the subprocess and the env dict is discarded after launch.
     Thin wrapper over _execute_user_swap_ex() -- see that function if you also need the tx hash."""
-    ok, _tx_hash, _err_msg, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str)
+    ok, _tx_hash, _err_msg, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, private_key, action, mint, amount_str, base=base)
     return ok
 
-def _buy_and_get_realized(wallet: str, private_key: str, mint: str, spend_sol: float, quoted_price: float) -> tuple:
+def _buy_and_get_realized(wallet: str, private_key: str, mint: str, spend_sol: float, quoted_price: float, base: str = 'SOL') -> tuple:
     """Execute a buy swap and return (ok, entry_price, token_amount) using the
     swap's own realized fill (actual tokens received for the SOL spent, from
     orcagent_solana.py's stdout) instead of the last polled quoted_price --
@@ -5662,23 +5700,28 @@ def _buy_and_get_realized(wallet: str, private_key: str, mint: str, spend_sol: f
     (and every PNL computed from it later) looks better than what the wallet
     actually paid. Falls back to (quoted_price, spend/quoted_price) if the
     realized amount can't be parsed, so a parsing miss never blocks a buy
-    that already succeeded on-chain."""
-    ok, _tx, _err, token_amount, _sol_amt = _execute_user_swap_ex(wallet, private_key, 'buy', mint, str(spend_sol))
+    that already succeeded on-chain. `base` ('SOL' or 'USDC') selects which
+    currency spend_sol is actually denominated in and spent -- named
+    spend_sol for backward compatibility with every pre-existing SOL-only
+    caller, not because it's SOL-only anymore."""
+    ok, _tx, _err, token_amount, _sol_amt = _execute_user_swap_ex(wallet, private_key, 'buy', mint, str(spend_sol), base=base)
     if ok and token_amount > 0:
         return True, spend_sol / token_amount, token_amount
     fallback_amount = (spend_sol / quoted_price) if quoted_price > 0 else 0.0
     return ok, quoted_price, fallback_amount
 
 def _sell_and_get_realized(wallet: str, private_key: str, mint: str, amount_str: str,
-                            quoted_price: float, quoted_amount: float) -> tuple:
+                            quoted_price: float, quoted_amount: float, base: str = 'SOL') -> tuple:
     """Execute a sell swap and return (ok, exit_price, sold_amount) using the
     swap's own realized fill (actual SOL received for the actual tokens sold,
     from orcagent_solana.py's stdout) instead of the last polled quoted_price
     -- same rationale as _buy_and_get_realized() for the sell side. Falls
     back to (quoted_price, quoted_amount) if the realized amounts can't be
     parsed, so a parsing miss never blocks a sell that already succeeded
-    on-chain."""
-    ok, _tx, _err, token_amount, sol_amount = _execute_user_swap_ex(wallet, private_key, 'sell', mint, amount_str)
+    on-chain. `base` must match whatever currency the position was actually
+    opened with (SOL or USDC) -- see pos['base'] -- so the sell routes back
+    into the same currency the buy spent, not the app-wide default."""
+    ok, _tx, _err, token_amount, sol_amount = _execute_user_swap_ex(wallet, private_key, 'sell', mint, amount_str, base=base)
     if ok and token_amount > 0 and sol_amount > 0:
         return True, sol_amount / token_amount, token_amount
     return ok, quoted_price, quoted_amount
@@ -5735,7 +5778,8 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
     amount_str = '0' if (chain == 'solana' and full_close) else str(sell_amount)
     with _use_key(enc_blob, wallet) as pk:
         if chain == 'solana':
-            ok, exit_price, sold_amt = _sell_and_get_realized(wallet, pk, mint, amount_str, price, sell_amount)
+            ok, exit_price, sold_amt = _sell_and_get_realized(wallet, pk, mint, amount_str, price, sell_amount,
+                                                               base=pos.get('base', 'SOL'))
         else:
             # Auto-refuel from this same wallet's own USDC on `chain` if gas
             # is running low -- see _ensure_evm_gas()'s own comment for why
@@ -5763,7 +5807,7 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
         _record_user_trade(user_id, us, symbol, pos['buy_price'], exit_price, sold_amt, spend_amount,
                             wallet=wallet, private_key=pk, mint=mint, exit_reason=exit_reason,
                             opened_at=pos.get('opened_at', 0.0), pref_notifications=pref_notifications,
-                            source=pos.get('source', 'bot'), chain=chain, **record_kwargs)
+                            source=pos.get('source', 'bot'), chain=chain, base=pos.get('base', 'SOL'), **record_kwargs)
     return True, exit_price, sold_amt
 
 def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, enc_blob_evm: str,
@@ -7534,7 +7578,7 @@ def _check_lp_locked(mint_address: str) -> dict:
         print(f'[rugcheck] error for {mint_address[:8]}: {e}', flush=True)
         return {'lp_locked_pct': 0, 'holder_concentration_risk': False, 'ok': False}
 
-def _check_price_impact(mint_address: str, spend_sol: float) -> dict:
+def _check_price_impact(mint_address: str, spend_sol: float, input_mint: str = None, input_decimals: int = 9) -> dict:
     """Pre-trade price-impact/slippage estimate (Trading Engine V2, section
     5) -- a real Jupiter quote sized to THIS trade's actual spend, not a
     fixed probe amount, since impact scales with position size against a
@@ -7546,9 +7590,14 @@ def _check_price_impact(mint_address: str, spend_sol: float) -> dict:
     {'ok': bool, 'price_impact_pct': float|None} -- ok=False (fails CLOSED,
     unlike the optional rug-risk signals above) on any quote failure: an
     unpriceable trade is itself a reason not to trade blind, and the actual
-    swap needs this same Jupiter route to exist anyway."""
+    swap needs this same Jupiter route to exist anyway.
+
+    input_mint/input_decimals default to native SOL (every pre-existing
+    caller) -- pass USDC_MINT/6 for a USDC-denominated buy so the quote is
+    actually sized/routed in the currency that will really be spent."""
     try:
-        amount_raw = int(round(spend_sol * 1_000_000_000))  # SOL = 9 decimals
+        input_mint = input_mint or SOL_MINT
+        amount_raw = int(round(spend_sol * (10 ** input_decimals)))
         if amount_raw <= 0:
             return {'ok': False, 'price_impact_pct': None}
         jup_url = (JUPITER_PROXY + '/quote') if JUPITER_PROXY else 'https://api.jup.ag/swap/v1/quote'
@@ -7556,7 +7605,7 @@ def _check_price_impact(mint_address: str, spend_sol: float) -> dict:
         if PROXY_SECRET:
             headers['X-Proxy-Secret'] = PROXY_SECRET
         r = requests.get(jup_url, params={
-            'inputMint': SOL_MINT, 'outputMint': mint_address,
+            'inputMint': input_mint, 'outputMint': mint_address,
             'amount': amount_raw, 'slippageBps': 300,
         }, headers=headers, timeout=6)
         if r.status_code != 200:
@@ -7923,7 +7972,7 @@ def user_trader_loop(stop_event, config, wallet: str):
         conn = sqlite3.connect(DB_FILE)
         try:
             c   = conn.cursor()
-            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc FROM users WHERE wallet_address=?', (wallet,))
+            c.execute('SELECT id, encrypted_private_key, daily_loss_limit, min_trade_size, max_trade_size, breakout_trigger, take_profit, stop_loss, max_positions, pref_scam_filter, pref_notifications, trade_pct, tiered_tp_enabled, encrypted_private_key_bsc, pref_solana_base_currency FROM users WHERE wallet_address=?', (wallet,))
             row = c.fetchone()
         finally:
             conn.close()
@@ -7958,6 +8007,12 @@ def user_trader_loop(stop_event, config, wallet: str):
     # and every EVM-entry gas/candidate check below can tell "never set up"
     # apart from "empty string."
     _enc_blob_evm = row[13] if (len(row) > 13 and row[13]) else None
+    # Which currency the Solana bot itself trades with -- 'SOL' (default) or
+    # 'USDC'. A small SOL balance is still required for Solana's own network
+    # fees regardless (see _GAS_MIN below); this only changes what funds the
+    # TRADE. Re-read fresh every loop start, never cached beyond that, so a
+    # Settings change takes effect the next time the bot is (re)started.
+    _solana_base = 'USDC' if (len(row) > 14 and row[14] and str(row[14]).upper() == 'USDC') else 'SOL'
 
     # Keep only the encrypted blob — never store decrypted key across loop iterations.
     # Each trade decrypts at the moment of signing and clears immediately after.
@@ -8099,8 +8154,16 @@ def user_trader_loop(stop_event, config, wallet: str):
                         open_pos_by_chain[_c] = open_pos_by_chain.get(_c, 0) + 1
                 open_pos = open_pos_by_chain.get('solana', 0)
                 us_sol  = _get_user_sol(_trading_wallet)
+                # Solana's own network fees are always paid in native SOL no matter
+                # what currency the TRADE itself is in, so us_sol/_GAS_MIN below stay
+                # a SOL check unconditionally. us_solana_avail is the separate
+                # TRADING-capital balance Pass 2 actually sizes/gates a new entry
+                # against -- SOL itself in SOL mode (no extra call), or this
+                # wallet's own Solana USDC balance in USDC mode.
+                us_solana_avail = us_sol if _solana_base == 'SOL' else _get_solana_usdc_balance(_trading_wallet)
                 total_live = len(live)
-                print(f'[bot] {short} running=True tokens={total_live} pos={open_pos}/5 sol={round(us_sol,4)} scanning...', flush=True)
+                print(f'[bot] {short} running=True tokens={total_live} pos={open_pos}/5 sol={round(us_sol,4)} '
+                      f'{_solana_base.lower()}_avail={round(us_solana_avail,4)} scanning...', flush=True)
 
                 _GAS_MIN = 0.005  # minimum SOL needed to pay transaction fees
                 if us_sol < _GAS_MIN:
@@ -8111,11 +8174,17 @@ def user_trader_loop(stop_event, config, wallet: str):
                     print(f'[bot] {short} SKIPPING BUYS — insufficient SOL ({round(us_sol,6)}) '
                           f'in trading wallet {_trading_wallet}', flush=True)
                     # Exit checks (Pass 1) still run below — sells return SOL.
-                elif total_live == 0:
-                    add_user_log(wallet, '[' + short + '] Waiting for token data... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/' + str(max_positions))
                 else:
-                    add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
-                                 ' tokens... SOL:' + str(round(us_sol, 4)) + ' Pos:' + str(open_pos) + '/' + str(max_positions))
+                    # In USDC mode, the trading-capital balance shown is Solana
+                    # USDC, not SOL -- SOL is still tracked above purely for the
+                    # gas check, and showing it here too would just be confusing
+                    # ("SOL:0.03" next to a bot that's buying with USDC).
+                    _avail_label = _solana_base + ':' + str(round(us_solana_avail, 4))
+                    if total_live == 0:
+                        add_user_log(wallet, '[' + short + '] Waiting for token data... ' + _avail_label + ' Pos:' + str(open_pos) + '/' + str(max_positions))
+                    else:
+                        add_user_log(wallet, '[' + short + '] Scanning ' + str(total_live) +
+                                     ' tokens... ' + _avail_label + ' Pos:' + str(open_pos) + '/' + str(max_positions))
 
                 # ── Pass 1: exit checks for ALL open positions ──
                 # Iterates positions dict (not live scan) so tokens that drop off the
@@ -8636,7 +8705,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                         # clamp).
                         _sc_clamped = max(5.0, min(10.0, sc))
                         factor = 1 + (_sc_clamped - 5.0) / 5.0 * 2
-                        min_spend_sol = min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02
+                        # min_trade_usdc is already USD-denominated -- in USDC mode
+                        # that IS the spend amount directly (USDC ≈ $1, no price
+                        # lookup needed); SOL mode still converts it through the
+                        # live SOL/USD rate exactly as before.
+                        min_spend_sol = (min_trade_usdc if _solana_base == 'USDC'
+                                         else (min_trade_usdc / _sol_price_usd if _sol_price_usd > 0 else 0.02))
                         spend = round(min_spend_sol * factor, 4)
                         # Risk cap: never put more than MAX_RISK_PCT_PER_TRADE of this
                         # wallet's trading capital into a single position, full stop.
@@ -8655,16 +8729,17 @@ def user_trader_loop(stop_event, config, wallet: str):
                         # small trading balance, 2% can be less than their own min trade
                         # size, and silently shrinking every trade toward zero there would
                         # make the bot stop trading meaningfully rather than manage risk.
-                        _risk_cap_spend = max(min_spend_sol, round(us_sol * MAX_RISK_PCT_PER_TRADE, 4))
+                        _risk_cap_spend = max(min_spend_sol, round(us_solana_avail * MAX_RISK_PCT_PER_TRADE, 4))
                         spend = min(spend, _risk_cap_spend)
-                        if spend >= 0.001 and spend <= us_sol:
+                        if spend >= 0.001 and spend <= us_solana_avail:
                             # Dynamic risk management (section 5): estimated price impact
                             # / slippage for THIS spend size, via a real Jupiter quote --
                             # a hard DO-NOT-TRADE gate, not just an AI/score veto. Fails
                             # CLOSED (unlike the rug-risk signals above): an unpriceable
                             # trade is itself a reason not to trade blind, and the real
                             # swap needs this same route to exist anyway.
-                            _impact = _check_price_impact(bmint, spend)
+                            _impact = (_check_price_impact(bmint, spend, input_mint=USDC_MINT, input_decimals=6)
+                                       if _solana_base == 'USDC' else _check_price_impact(bmint, spend))
                             if not _impact['ok']:
                                 add_user_log(wallet, '[' + short + '] SKIPPING ' + label +
                                              ' — could not get a price quote (no route / illiquid)')
@@ -8704,11 +8779,12 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 positions[bmint] = {'amount': 0.0, 'buy_price': 0.0, 'spend': 0.0}
                             pos = positions[bmint]
                             with _use_key(_enc_blob, wallet) as _pk:
-                                _buy_ok, _entry_price, _tok_amt = _buy_and_get_realized(wallet, _pk, bmint, spend, best['price'])
+                                _buy_ok, _entry_price, _tok_amt = _buy_and_get_realized(wallet, _pk, bmint, spend, best['price'], base=_solana_base)
                             if _buy_ok:
                                 pos['amount']          = _tok_amt
                                 pos['buy_price']       = _entry_price
                                 pos['spend']           = spend
+                                pos['base']            = _solana_base
                                 pos['symbol']          = label
                                 pos['opened_at']       = time.time()
                                 pos['entry_liquidity'] = float(best.get('liquidity', 0) or 0)
@@ -8730,7 +8806,14 @@ def user_trader_loop(stop_event, config, wallet: str):
                                 pos['entry_mint_authority_active'] = _safety.get('mint_authority_active') if _safety.get('ok') else None
                                 pos['entry_freeze_authority_active'] = _safety.get('freeze_authority_active') if _safety.get('ok') else None
                                 _upsert_open_position(user_id, wallet, bmint, pos, source='bot')
-                                _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy', bundled=True)
+                                if _solana_base == 'SOL':
+                                    _charge_txn_fee(_pk, wallet, user_id, label, spend, 'buy', bundled=True)
+                                else:
+                                    # See _record_user_trade()'s matching guard on the sell
+                                    # side: orcagent_solana.py bundles no platform fee into a
+                                    # USDC-denominated swap yet, so charging one here would
+                                    # fabricate a fee record for money nothing collected.
+                                    print(f'[fee] {short} {label} buy — USDC-based Solana trade, no platform fee bundled (not yet supported for this mode)', flush=True)
                                 open_pos += 1
                                 _trigger_copy_buy(wallet, bmint, best['price'], label, float(best.get('liquidity', 0) or 0))
                             else:
@@ -14142,7 +14225,7 @@ def settings_get():
                       stop_loss, max_positions, pref_notifications,
                       pref_scam_filter, pref_sound_alerts, bot_enabled,
                       avatar_url, username, is_verified, bio, min_trade_size,
-                      tiered_tp_enabled
+                      tiered_tp_enabled, pref_solana_base_currency
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
@@ -14154,7 +14237,8 @@ def settings_get():
                         'stop_loss': 8.0, 'max_positions': 3,
                         'pref_notifications': True, 'pref_scam_filter': True,
                         'pref_sound_alerts': False, 'bot_running': bot_running,
-                        'min_trade_size': 1.0, 'tiered_tp_enabled': False})
+                        'min_trade_size': 1.0, 'tiered_tp_enabled': False,
+                        'pref_solana_base_currency': 'SOL'})
     return jsonify({
         'ok': True,
         'has_trading_key': bool(row[0]),
@@ -14172,6 +14256,7 @@ def settings_get():
         'bio': row[12] or '',
         'min_trade_size': row[13] if row[13] is not None else 1.0,
         'tiered_tp_enabled': bool(row[14] if row[14] is not None else 0),
+        'pref_solana_base_currency': (row[15] or 'SOL') if len(row) > 15 else 'SOL',
     })
 
 @app.route('/api/settings/save', methods=['POST'])
@@ -14252,6 +14337,14 @@ def settings_save():
     if 'tiered_tp_enabled' in data:
         updates.append('tiered_tp_enabled=?')
         params.append(1 if data['tiered_tp_enabled'] else 0)
+    if 'pref_solana_base_currency' in data:
+        # Never trust the frontend value outright -- only these two literal
+        # strings are ever accepted, anything else silently falls back to
+        # 'SOL' rather than writing an unvalidated value user_trader_loop()
+        # would then have to re-guard against anyway.
+        _v = str(data['pref_solana_base_currency']).strip().upper()
+        updates.append('pref_solana_base_currency=?')
+        params.append('USDC' if _v == 'USDC' else 'SOL')
     if not updates:
         return jsonify({'ok': True, 'msg': 'Nothing to update'})
     params.append(wallet)
@@ -18812,7 +18905,11 @@ def api_trade_sell():
     with _use_key(enc_blob, wallet) as pk:
         # '0' = sell the actual on-chain balance, not the tracked pos['amount']
         # -- they can drift, and this is a full close so no dust should remain.
-        sell_ok, exit_price, sold_amount = _sell_and_get_realized(wallet, pk, mint, '0', exit_price, pos['amount'])
+        # base matches whatever currency this position was actually opened
+        # with (SOL or USDC), so a manual sell routes proceeds back into the
+        # same currency the bot's own buy spent, not always SOL.
+        sell_ok, exit_price, sold_amount = _sell_and_get_realized(wallet, pk, mint, '0', exit_price, pos['amount'],
+                                                                   base=pos.get('base', 'SOL'))
     entry     = pos.get('buy_price', 0.0)
     pnl       = round(sold_amount * (exit_price - entry), 4) if entry > 0 else 0.0
     opened_at = pos.get('opened_at', 0.0)
@@ -18824,7 +18921,8 @@ def api_trade_sell():
                                exit_reason='MANUAL SELL', opened_at=opened_at, source='manual',
                                entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                               entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
+                               entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                               base=pos.get('base', 'SOL'))
         _close_open_position(user_id, wallet, mint)
     return jsonify({'ok': True, 'pnl': pnl, 'exit_price': exit_price, 'sell_executed': sell_ok})
 
@@ -21126,7 +21224,8 @@ def _liquidate_all_positions(wallet: str):
                 with _use_key(enc_blob, wallet) as pk:
                     # '0' = sell the actual on-chain balance, not the tracked pos['amount']
                     # -- they can drift, and this is a full close so no dust should remain.
-                    sell_ok, exit_price, sold_amount = _sell_and_get_realized(wallet, pk, mint, '0', exit_price, pos['amount'])
+                    sell_ok, exit_price, sold_amount = _sell_and_get_realized(wallet, pk, mint, '0', exit_price, pos['amount'],
+                                                                              base=pos.get('base', 'SOL'))
                 if sell_ok:
                     entry = pos.get('buy_price', 0.0)
                     opened_at = pos.get('opened_at', 0.0)
@@ -21137,7 +21236,8 @@ def _liquidate_all_positions(wallet: str):
                                            exit_reason='STOP TRADING', opened_at=opened_at, source='manual',
                                            entry_liquidity=pos.get('entry_liquidity'), entry_lp_locked_pct=pos.get('entry_lp_locked_pct'),
                                            entry_mint_authority_active=pos.get('entry_mint_authority_active'),
-                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'))
+                                           entry_freeze_authority_active=pos.get('entry_freeze_authority_active'),
+                                           base=pos.get('base', 'SOL'))
                     _close_open_position(user_id, wallet, mint)
                     add_user_log(wallet, f'[stop] {short} sold {symbol} (Stop Trading)')
                 else:
