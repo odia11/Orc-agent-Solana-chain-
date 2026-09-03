@@ -117,6 +117,16 @@ var watchSet = new Set();
 var _copyStatus = {copying:false, target:null};
 var _wlEditMode = false;
 var _sellArmed = {};
+// Count of currently-open buy panels -- loadFeed() skips its poll while this
+// is >0 (see loadFeed() below). Without this, the 15s auto-refresh replaces
+// ST.tokens wholesale and rebuilds the entire card list from scratch
+// (renderFeedList's el.innerHTML = ...), which both re-numbers every card's
+// idx (breaking the open panel's own data-idx references) and can drop a
+// card off the list entirely the moment its rank shifts out of the
+// server's top-30 -- exactly the "I'm mid-purchase and the card vanishes"
+// bug this fixes. A card that isn't in the middle of a purchase still
+// refreshes normally.
+var _openBuyPanelCount = 0;
 var _feedInFlight = false;
 
 var SORT_DEFS = [
@@ -554,7 +564,12 @@ function renderFeedList(){
   observeCards();
 }
 
-function loadFeed(){
+// isPoll=true only from the 15s auto-refresh interval below -- a user-
+// initiated reload (changing sort/filters/liquidity) always goes through
+// even while a buy panel is open, since that's an explicit action, not a
+// background refresh that could yank the card out from under them.
+function loadFeed(isPoll){
+  if(isPoll && _openBuyPanelCount > 0) return;
   if(_feedInFlight) return;
   _feedInFlight = true;
   var qs = new URLSearchParams({
@@ -582,10 +597,19 @@ function loadFeed(){
 }
 
 /* ── trade actions ── */
+// Shared close path so every way a buy panel can close (manual toggle, or
+// auto-hide after a completed buy below) keeps _openBuyPanelCount accurate.
+function closeBuyPanel(idx){
+  var p = document.getElementById('pt-buy-panel-'+idx);
+  if(p){ p.style.display = 'none'; p.innerHTML = ''; }
+  _openBuyPanelCount = Math.max(0, _openBuyPanelCount - 1);
+}
+
 function openBuyPanel(idx){
   var panel = document.getElementById('pt-buy-panel-'+idx);
   if(!panel) return;
-  if(panel.style.display === 'flex'){ panel.style.display = 'none'; panel.innerHTML=''; return; }
+  if(panel.style.display === 'flex'){ closeBuyPanel(idx); return; }
+  _openBuyPanelCount++;
   var t = ST.tokens[Number(idx)];
   var isEvm = t && !!EVM_TRADE_CHAINS[t.chain];
   panel.style.display = 'flex';
@@ -639,7 +663,7 @@ function confirmBuy(idx){
     if(d && (d.success || d.tx || d.ok || d.sig || d.tx_hash)){
       showMsg(msgEl, 'Bought $'+t.symbol+' for '+amt+' '+(isEvm?evmCurrencyLabel(t.chain):'SOL'), true);
       if(input) input.value = '';
-      setTimeout(function(){ var p=document.getElementById('pt-buy-panel-'+idx); if(p){ p.style.display='none'; p.innerHTML=''; } }, 2200);
+      setTimeout(function(){ closeBuyPanel(idx); }, 2200);
     } else {
       showMsg(msgEl, (d && (d.error||d.msg)) || 'Buy failed', false);
     }
@@ -671,7 +695,7 @@ function _pollAutoBuyBridge(bridgeId, idx, t, amt, msgEl, input){
           showMsg(msgEl, 'Bought $'+(res.symbol||t.symbol)+' for '+(res.amount_usdc!=null?res.amount_usdc:amt)+' '+evmCurrencyLabel(t.chain), true);
           if(input) input.value = '';
           if(btn){ btn.disabled=false; btn.textContent='Confirm Buy'; }
-          setTimeout(function(){ var p=document.getElementById('pt-buy-panel-'+idx); if(p){ p.style.display='none'; p.innerHTML=''; } }, 2200);
+          setTimeout(function(){ closeBuyPanel(idx); }, 2200);
           return;
         }
         if(d.auto_buy_status === 'failed'){
@@ -1015,7 +1039,7 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 
   renderSortList();
-  loadWatchlistSet().then(loadFeed);
+  loadWatchlistSet().then(function(){ loadFeed(); });
   loadTape();
   loadTraders();
   loadWatchlist();
@@ -1035,7 +1059,7 @@ document.addEventListener('DOMContentLoaded', function(){
     setTimeout(function(){ prependSearchedToken(_qMint, '', ''); }, 900);
   }
 
-  setInterval(loadFeed, 15000);
+  setInterval(function(){ loadFeed(true); }, 15000);
   setInterval(loadTape, 8000);
   setInterval(loadTraders, 30000);
   setInterval(loadPulse, 20000);
