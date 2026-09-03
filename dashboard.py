@@ -21677,19 +21677,49 @@ _scanner_safety_lock = threading.Lock()
 _SCANNER_SAFETY_TTL = 600  # 10 min -- mint/freeze authority + LP-lock state rarely change
 _AGE_BUCKET_SECONDS = {'1h': 3600, '6h': 21600, '24h': 86400}
 
-# "Graduated" sort mode -- tokens whose pair went live on the open market
-# only minutes ago, across any of the 6 chains this scanner covers, but
-# already showing real buy pressure: DexScreener's volume.m5 is a ROLLING
-# last-5-minutes figure, not "volume in this token's literal first 5
-# minutes" -- for a token under 5 min old those are the same thing (it
-# hasn't existed long enough for the window to mean anything else), but for
-# one nearer the 10-min age ceiling, volume_5m reflects its most recent 5
-# minutes rather than its very first ones. That's the only 5-minute signal
-# DexScreener exposes; a true "did it hit $20K within its first 5 minutes"
-# would need this app to keep its own per-token volume history from the
-# moment each pair appears, which it doesn't.
-GRADUATED_MAX_AGE_SECONDS = 10 * 60
-GRADUATED_MIN_VOLUME_5M   = 20000
+# "Graduated" sort mode -- tokens that moved onto a real, open-market pool
+# only minutes ago. Two different signals feed this, per chain:
+#
+# 1) A REAL graduation event, for the 2 chains where DexScreener's dexId
+#    reliably tells a bonding-curve pool apart from the real AMM pool a
+#    token migrates to: Solana (pump.fun -> Raydium/PumpSwap -- ('raydium',
+#    'pumpswap') is the same check already used elsewhere in this app, e.g.
+#    the PUMPFUN-DEGEN route's _is_graduated) and BSC (four.meme ->
+#    PancakeSwap). When the dexId shows a token IS on that real post-
+#    graduation DEX, it counts regardless of volume -- the graduation event
+#    itself is the signal, and requiring $20K on top of it would exclude
+#    real graduations that haven't been noticed by the market yet. A token
+#    still showing a bonding-curve dexId (still pre-graduation) is excluded
+#    even with huge volume -- it hasn't graduated yet.
+#    ── UNVERIFIED: BSC's four.meme/PancakeSwap dexId strings ──
+#    'fourmeme' and the 'pancakeswap' substring match are this project's
+#    best inference (four.meme's own DexScreener page URL is
+#    dexscreener.com/bsc/fourmeme), not confirmed against a live API
+#    response -- check a real four.meme->PancakeSwap graduation once
+#    deployed and fix the exact string here if it doesn't match.
+# 2) For every other chain (Base, Arbitrum, Polygon, Robinhood), there is no
+#    known uniformly-detectable bonding-curve launchpad -- Base's dominant
+#    one (Clanker) deploys straight to Uniswap with no separate bonding-
+#    curve phase to graduate from, and no dominant equivalent was found for
+#    Arbitrum/Polygon/Robinhood. These chains keep the age+volume proxy
+#    from before: a pair created in the window with real 5-minute volume.
+GRADUATED_MAX_AGE_SECONDS  = 10 * 60
+GRADUATED_MIN_VOLUME_5M    = 20000
+_GRADUATION_DEX_IDS        = {'solana': ('raydium', 'pumpswap')}
+_GRADUATION_DEX_SUBSTRINGS = {'bsc': 'pancakeswap'}  # substring match to tolerate pancakeswap-v2/v3 variants
+
+def _is_recent_graduation(t: dict):
+    """True/False when this chain has a real, dexId-detectable bonding-curve
+    graduation event (see constants above) -- True if `t`'s pair IS on the
+    post-graduation DEX, False if it's still pre-graduation (on the bonding-
+    curve program itself). None when this chain has no such signal at all,
+    so the caller knows to fall back to the age+volume proxy instead."""
+    chain, dex_id = t.get('chain'), t.get('dex_id', '')
+    if chain in _GRADUATION_DEX_IDS:
+        return dex_id in _GRADUATION_DEX_IDS[chain]
+    if chain in _GRADUATION_DEX_SUBSTRINGS:
+        return _GRADUATION_DEX_SUBSTRINGS[chain] in dex_id
+    return None
 
 
 def _get_scanner_candidates() -> list:
@@ -21720,6 +21750,7 @@ def _get_scanner_candidates() -> list:
             'symbol':           base.get('symbol', ''),
             'name':             base.get('name', '') or base.get('symbol', ''),
             'chain':            p.get('chainId', 'solana'),
+            'dex_id':           (p.get('dexId', '') or '').lower(),
             'pair_address':     p.get('pairAddress', ''),
             'image_url':        info.get('imageUrl') or '',
             'price_usd':        _f(p.get('priceUsd')),
@@ -21949,10 +21980,19 @@ def api_market_scanner():
     # "Graduated" -- pairs that went live in the last GRADUATED_MAX_AGE_SECONDS
     # (10 min), any of the 6 chains. No volume/activity bar (see constant's
     # comment above) -- this is meant to catch a token the instant it appears.
-    graduated_set = [t for t in filtered
-                      if t.get('pair_created_at')
-                      and (now - t['pair_created_at'] / 1000.0) <= GRADUATED_MAX_AGE_SECONDS
-                      and t.get('volume_5m', 0) >= GRADUATED_MIN_VOLUME_5M]
+    def _passes_graduated(t):
+        if not t.get('pair_created_at'):
+            return False
+        if (now - t['pair_created_at'] / 1000.0) > GRADUATED_MAX_AGE_SECONDS:
+            return False
+        grad = _is_recent_graduation(t)
+        if grad is True:
+            return True   # confirmed real graduation (see _is_recent_graduation) -- volume bar not required
+        if grad is False:
+            return False  # still pre-graduation (on the bonding-curve program itself) -- not graduated yet
+        return t.get('volume_5m', 0) >= GRADUATED_MIN_VOLUME_5M  # no graduation signal on this chain -- volume proxy
+
+    graduated_set = [t for t in filtered if _passes_graduated(t)]
 
     my_wallet   = _current_wallet()
     friends_set = []
