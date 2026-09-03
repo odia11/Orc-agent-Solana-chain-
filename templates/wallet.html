@@ -361,6 +361,46 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 }
 .w-modal-qr-cell{border-radius:1.5px}
 
+/* ── Bridge: quote card ── */
+.br-quote-card{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:4px 16px;margin-top:14px}
+.br-quote-row{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:10px 0;border-bottom:1px solid var(--divider)}
+.br-quote-row:last-child{border-bottom:none}
+.br-quote-row-lbl{font-size:11px;color:var(--muted);letter-spacing:.02em;flex-shrink:0}
+.br-quote-row-val{font-size:13px;font-weight:700;color:var(--text);text-align:right;font-family:var(--mono)}
+.br-quote-row-val.accent{color:var(--accent)}
+.br-quote-meta{font-size:10.5px;color:var(--muted);line-height:1.6;margin-top:10px}
+.br-quote-meta b{color:var(--sub);font-weight:600}
+
+/* ── Bridge: status stepper ── */
+.br-steps{background:var(--bg2);border:1px solid var(--border);border-radius:12px;padding:16px 16px 2px;margin-top:14px}
+.br-step{display:flex;align-items:flex-start;gap:11px;position:relative;padding-bottom:16px}
+.br-step:last-child{padding-bottom:14px}
+.br-step-line{position:absolute;left:9px;top:20px;bottom:-2px;width:1.5px;background:var(--border)}
+.br-step:last-child .br-step-line{display:none}
+.br-step-dot{width:19px;height:19px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;flex-shrink:0;z-index:1;line-height:1}
+.br-step-dot.done{background:var(--green);color:var(--bg)}
+.br-step-dot.active{background:var(--accent);color:var(--bg);animation:brPulse 1.4s ease-in-out infinite}
+.br-step-dot.pending{background:var(--bg3);color:var(--muted);border:1px solid var(--border)}
+.br-step-lbl{font-size:12.5px;font-weight:600;padding-top:2px}
+.br-step-lbl.done{color:var(--text)}
+.br-step-lbl.active{color:var(--accent)}
+.br-step-lbl.pending{color:var(--muted)}
+@keyframes brPulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* ── Bridge: tx hash chip + meta footer ── */
+.br-tx-block{margin-top:14px;padding-top:12px;border-top:1px solid var(--border)}
+.br-tx-row{display:flex;justify-content:space-between;align-items:center;gap:8px;font-size:10.5px;color:var(--muted);margin-bottom:6px}
+.br-tx-chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);color:var(--sub);cursor:pointer;padding:3px 8px;border-radius:6px;background:var(--bg3);border:1px solid var(--border);transition:background .12s,color .12s}
+.br-tx-chip:hover{background:var(--bg4);color:var(--text)}
+.br-note-foot{font-size:10.5px;color:var(--muted);line-height:1.5;margin-top:10px}
+
+/* ── Bridge: failure panel ── */
+.br-fail-card{background:rgba(247,107,98,.08);border:1px solid rgba(247,107,98,.3);border-radius:12px;padding:14px 16px;margin-top:14px}
+.br-fail-title{font-size:11px;font-weight:700;color:var(--red);letter-spacing:.04em;margin-bottom:8px}
+.br-fail-row{display:flex;justify-content:space-between;gap:12px;padding:5px 0;font-size:12px}
+.br-fail-row-lbl{color:var(--muted)}
+.br-fail-row-val{color:var(--text);font-weight:600;text-align:right}
+
 /* ── swap modal ── */
 .sw-hdr{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
 .sw-hdr-title{font-size:17px;font-weight:700;color:var(--text)}
@@ -1056,6 +1096,15 @@ function _modalBridge(){
   )
 }
 
+function _brShortHash(h){
+  h=String(h||'')
+  return h.length>14 ? h.slice(0,8)+'…'+h.slice(-6) : h
+}
+function _brCopyTx(text, el){
+  navigator.clipboard.writeText(text).then(function(){
+    if(el){ var orig=el.textContent; el.textContent='Copied ✓'; setTimeout(function(){el.textContent=orig},1200) }
+  })
+}
 function _bridgeGetQuote(){
   var origin=document.getElementById('br-origin-chain').value
   var dest=document.getElementById('br-dest-chain').value
@@ -1080,16 +1129,17 @@ function _bridgeGetQuote(){
       var originSym=origin==='robinhood'?'USDG':'USDC'
       var receiveRaw=d.expected_amount_out
       var receive=receiveRaw!=null?(parseFloat(receiveRaw)/Math.pow(10, dest==='solana'?6:(dest==='bsc'?18:6))).toFixed(4):'—'
+      var etaLabel=d.estimated_seconds?('~'+Math.round(d.estimated_seconds)+'s'):'seconds to minutes'
       quoteEl.innerHTML=(
         '<div class="w-modal-label" style="margin-top:16px">QUOTE</div>'
-        +'<div class="w-modal-note" style="margin-top:4px;color:var(--text)">'
-          +'You send: <b>'+amount+' '+originSym+'</b><br>'
-          +'You receive: <b>≈ '+receive+' '+destSym+'</b> on '+destLabel+'<br>'
-          +(d.route_name?('Route: '+d.route_name+'<br>'):'')
-          +(d.estimated_seconds?('Estimated time: ~'+Math.round(d.estimated_seconds)+'s<br>'):'Estimated time: seconds to minutes<br>')
-          +'Fees: bridge/network fees are deducted automatically — the "You receive" amount above is already net of them<br>'
-          +'Quote ID: <span style="font-size:10px;color:var(--muted)">'+(d.quote_id||'—')+'</span>'
+        +'<div class="br-quote-card">'
+          +'<div class="br-quote-row"><span class="br-quote-row-lbl">You send</span><span class="br-quote-row-val">'+amount+' '+originSym+'</span></div>'
+          +'<div class="br-quote-row"><span class="br-quote-row-lbl">You receive</span><span class="br-quote-row-val accent">≈ '+receive+' '+destSym+'</span></div>'
+          +'<div class="br-quote-row"><span class="br-quote-row-lbl">On</span><span class="br-quote-row-val">'+destLabel+'</span></div>'
+          +(d.route_name?('<div class="br-quote-row"><span class="br-quote-row-lbl">Route</span><span class="br-quote-row-val">'+d.route_name+'</span></div>'):'')
+          +'<div class="br-quote-row"><span class="br-quote-row-lbl">Estimated time</span><span class="br-quote-row-val">'+etaLabel+'</span></div>'
         +'</div>'
+        +'<div class="br-quote-meta">Fees: bridge/network fees are deducted automatically — the <b>You receive</b> amount above is already net of them. Quote ID: '+(d.quote_id||'—')+'</div>'
         +'<div class="w-modal-btns">'
           +'<button class="w-modal-btn w-modal-primary" onclick="_bridgeConfirm()">Confirm Bridge</button>'
         +'</div>'
@@ -1130,11 +1180,11 @@ function _bridgeRenderStatus(bridgeId, status, sourceTxHash, destTxHash){
   if(FAILURES[status]){
     quoteEl.innerHTML=(
       '<div class="w-modal-label" style="margin-top:16px;color:var(--red)">BRIDGE FAILED</div>'
-      +'<div class="w-modal-note" style="color:var(--text)">'
-        +'Status: <b>'+(status==='origin_tx_reverted'?'Transaction Reverted':status==='bridge_failed'?'Bridge Failed':'Status Unknown (timed out)')+'</b><br>'
-        +'Bridge ID: '+bridgeId+'<br>'
-        +(sourceTxHash?('Origin TX: <span style="font-size:10px">'+sourceTxHash+'</span><br>'):'')
-        +'If funds already left your origin wallet, check Bridge History below for recovery details before retrying — never resubmit blindly.'
+      +'<div class="br-fail-card">'
+        +'<div class="br-fail-title">'+(status==='origin_tx_reverted'?'TRANSACTION REVERTED':status==='bridge_failed'?'BRIDGE FAILED':'STATUS UNKNOWN (TIMED OUT)')+'</div>'
+        +'<div class="br-fail-row"><span class="br-fail-row-lbl">Bridge ID</span><span class="br-fail-row-val">'+bridgeId+'</span></div>'
+        +(sourceTxHash?('<div class="br-fail-row"><span class="br-fail-row-lbl">Origin TX</span><span class="br-fail-row-val"><span class="br-tx-chip" onclick="_brCopyTx(\''+sourceTxHash+'\',this)" title="'+sourceTxHash+'">'+_brShortHash(sourceTxHash)+' ⧉</span></span></div>'):'')
+        +'<div class="br-note-foot" style="margin-top:10px">If funds already left your origin wallet, check Bridge History below for recovery details before retrying — never resubmit blindly.</div>'
       +'</div>'
     )
     if(_bridgeStatusTimer){clearInterval(_bridgeStatusTimer);_bridgeStatusTimer=null}
@@ -1148,17 +1198,18 @@ function _bridgeRenderStatus(bridgeId, status, sourceTxHash, destTxHash){
     {key:'complete', label:'Destination completed', done:status==='bridge_filled'},
   ]
   var stepsHtml=steps.map(function(s){
-    var mark=s.done?'✓':(s.active?'●':'○')
-    return '<div style="color:'+(s.done?'var(--green)':(s.active?'var(--accent)':'var(--muted)'))+'">'+mark+' '+s.label+'</div>'
+    var state=s.done?'done':(s.active?'active':'pending')
+    var mark=s.done?'✓':(s.active?'●':'')
+    return '<div class="br-step"><span class="br-step-dot '+state+'">'+mark+'</span><span class="br-step-line"></span><span class="br-step-lbl '+state+'">'+s.label+'</span></div>'
   }).join('')
+  var txRows=''
+  if(sourceTxHash) txRows+='<div class="br-tx-row"><span>Origin TX</span><span class="br-tx-chip" onclick="_brCopyTx(\''+sourceTxHash+'\',this)" title="'+sourceTxHash+'">'+_brShortHash(sourceTxHash)+' ⧉</span></div>'
+  if(destTxHash) txRows+='<div class="br-tx-row"><span>Destination TX</span><span class="br-tx-chip" onclick="_brCopyTx(\''+destTxHash+'\',this)" title="'+destTxHash+'">'+_brShortHash(destTxHash)+' ⧉</span></div>'
   quoteEl.innerHTML=(
     '<div class="w-modal-label" style="margin-top:16px">TRANSACTION STATUS</div>'
-    +'<div class="w-modal-note" style="color:var(--text);line-height:1.9">'+stepsHtml+'</div>'
-    +'<div class="w-modal-note" style="font-size:10px">'
-      +(sourceTxHash?('Origin TX: '+sourceTxHash+'<br>'):'')
-      +(destTxHash?('Destination TX: '+destTxHash+'<br>'):'')
-      +'Funds may already have left your origin wallet even while this still shows "processing."'
-    +'</div>'
+    +'<div class="br-steps">'+stepsHtml+'</div>'
+    +(txRows?('<div class="br-tx-block">'+txRows+'</div>'):'')
+    +'<div class="br-note-foot">Funds may already have left your origin wallet even while this still shows "processing."</div>'
   )
   if(status==='bridge_filled'){
     if(_bridgeStatusTimer){clearInterval(_bridgeStatusTimer);_bridgeStatusTimer=null}
@@ -1180,9 +1231,9 @@ function _loadBridgeHistory(){
     if(!d.ok || !d.transactions || !d.transactions.length){el.innerHTML='<div class="state-msg">No bridges yet.</div>';return}
     el.innerHTML=d.transactions.map(function(t){
       var color=t.status==='bridge_filled'?'var(--green)':(['origin_tx_reverted','bridge_failed','timed_out'].indexOf(t.status)>=0?'var(--red)':'var(--accent)')
-      return '<div style="display:flex;justify-content:space-between;padding:8px 0;border-top:1px solid #16191f;font-size:12px">'
-        +'<span>'+t.source_chain+' → '+t.dest_chain+' · '+t.amount_in+'</span>'
-        +'<span style="color:'+color+'">'+(t.status_label||t.status)+'</span>'
+      return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 2px;border-top:1px solid var(--divider);font-size:12.5px">'
+        +'<span style="color:var(--text)">'+t.source_chain+' <span style="color:var(--muted)">→</span> '+t.dest_chain+' <span style="color:var(--muted);font-family:var(--mono)">· '+t.amount_in+'</span></span>'
+        +'<span style="color:'+color+';font-weight:600;font-size:11px">'+(t.status_label||t.status)+'</span>'
         +'</div>'
     }).join('')
   }).catch(function(){ el.innerHTML='<div class="state-msg">Failed to load</div>' })
