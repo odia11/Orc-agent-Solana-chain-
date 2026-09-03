@@ -22250,6 +22250,15 @@ def _get_scanner_candidates() -> list:
         h24t    = txns.get('h24') or {}
         socials = info.get('socials') or []
         websites = info.get('websites') or []
+        # Real links for the Live Market card's social row (see
+        # cardHtml()/socialsHtml() in live-market-pro.js) -- 'verified_socials'
+        # below only ever fed the filter toggle, never the actual URLs, so a
+        # card had no way to link out to them even when it knew they existed.
+        # Same {type, url} shape api_token_info() already reads (line ~18432)
+        # -- reused here rather than re-deriving it differently.
+        twitter_url  = next((s.get('url') for s in socials if (s.get('type') or '').lower() in ('twitter', 'x')), None)
+        telegram_url = next((s.get('url') for s in socials if (s.get('type') or '').lower() == 'telegram'), None)
+        website_url  = next((w.get('url') for w in websites if w.get('url')), None)
         return {
             'mint':             addr,
             'symbol':           base.get('symbol', ''),
@@ -22268,6 +22277,9 @@ def _get_scanner_candidates() -> list:
             'price_change_24h': _f(pc.get('h24')),
             'pair_created_at':  int(p.get('pairCreatedAt')) if p.get('pairCreatedAt') else None,
             'verified_socials': bool(socials or websites),
+            'twitter_url':      twitter_url,
+            'telegram_url':     telegram_url,
+            'website_url':      website_url,
         }
 
     # Solana + BSC, same _MARKET_LIVE_CHAINS set _get_narrative_candidates()

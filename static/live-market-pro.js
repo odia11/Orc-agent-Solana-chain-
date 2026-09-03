@@ -547,6 +547,24 @@ function chainBadgeHtml(chain){
   var c = CHAIN_LABELS[chain] ? chain : 'solana';
   return '<span class="pt-chain-badge chain-'+c+'"><span class="pt-chain-dot"></span>'+chainLabel(c)+'</span>';
 }
+// http(s)-only -- these URLs come from DexScreener's token metadata, which
+// anyone launching a token controls, so a javascript:/data: URI slipped in
+// as a "website" link must never make it into an href.
+function isSafeUrl(u){
+  return typeof u === 'string' && /^https?:\/\//i.test(u);
+}
+// Only rendered when a token actually has at least one link -- no empty
+// placeholder row for tokens without socials.
+function socialsHtml(t){
+  var links = [];
+  if(isSafeUrl(t.twitter_url))  links.push({url:t.twitter_url,  cls:'x',   label:'𝕏', title:'X (Twitter)'});
+  if(isSafeUrl(t.telegram_url)) links.push({url:t.telegram_url, cls:'tg',  label:'✈', title:'Telegram'});
+  if(isSafeUrl(t.website_url))  links.push({url:t.website_url,  cls:'web', label:'🌐', title:'Website'});
+  if(!links.length) return '';
+  return '<div class="pt-tok-socials">' + links.map(function(l){
+    return '<a class="pt-tok-social pt-tok-social-'+l.cls+'" href="'+esc(l.url)+'" target="_blank" rel="noopener noreferrer" title="'+esc(l.title)+'">'+l.label+'</a>';
+  }).join('') + '</div>';
+}
 
 function storyHtml(t, idx){
   var down = (t.price_change_24h||0) < 0;
@@ -567,9 +585,12 @@ function cardHtml(t, idx){
     +   logoTile(t.image_url, t.symbol, 'pt-tok-logo', 'pt-tok-logo-ph')
     +   '<div class="pt-tok-id"><div class="pt-tok-sym">$'+esc(t.symbol)+' '+starsHtml(t.score)+chainBadgeHtml(t.chain)+'</div>'
     +   '<div class="pt-tok-meta">'+esc(t.name||t.symbol)+' · '+fmtAge(t.pair_created_at)+' old</div>'
-    +   '<div class="pt-tok-ca" data-action="copy-ca" data-mint="'+esc(t.mint)+'" title="'+esc(t.mint)+'">'
-    +     '<span class="pt-tok-ca-text mono">'+esc(shortAddr(t.mint))+'</span>'
-    +     '<span class="pt-tok-ca-icon">⧉</span>'
+    +   '<div class="pt-tok-ca-row">'
+    +     '<div class="pt-tok-ca" data-action="copy-ca" data-mint="'+esc(t.mint)+'" title="'+esc(t.mint)+'">'
+    +       '<span class="pt-tok-ca-text mono">'+esc(shortAddr(t.mint))+'</span>'
+    +       '<span class="pt-tok-ca-icon">⧉</span>'
+    +     '</div>'
+    +     socialsHtml(t)
     +   '</div></div>'
     +   '<div class="pt-card-hd-right">'
     +     '<span id="pt-safety-'+idx+'"></span>'
