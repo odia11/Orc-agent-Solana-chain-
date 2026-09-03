@@ -623,6 +623,8 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
             <span class="wlt-bsc-bal-val" id="bsc-bnb-val">—</span>
           </div>
         </div>
+        <button onclick="convertGasToUsdc('bsc')" id="bsc-convert-btn" title="Convert your BNB to USDC (a small amount is always kept for gas)"
+                style="background:none;border:none;color:#f7b955;font-size:12px;font-weight:700;cursor:pointer;padding:0;margin-top:10px;text-decoration:underline dotted">Convert BNB to USDC →</button>
       </div>
       {% endif %}
     </div>
@@ -910,6 +912,36 @@ async function _loadBscBalance(){
   }
 }
 if(_bscAddr) _loadBscBalance()
+
+// One-tap "convert my gas back to USDC" -- the reverse of the automatic
+// gas top-up (which pulls USDC->gas as needed): for a user who's ended up
+// holding native gas they'd rather have as USDC. Always keeps a small
+// reserve for future gas (server-enforced, see GAS_CONVERT_RESERVE_UNITS),
+// so this never leaves the wallet unable to broadcast its own next trade.
+async function convertGasToUsdc(chain){
+  var btn = document.getElementById(chain+'-convert-btn')
+  var origText = btn ? btn.textContent : ''
+  if(btn){ btn.disabled = true; btn.textContent = 'Converting…' }
+  try{
+    var r = await fetch('/api/evm/convert-to-usdc', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json', 'X-CSRF-Token': _csrf},
+      body: JSON.stringify({chain: chain}),
+      credentials: 'include',
+    })
+    var d = await r.json()
+    if(d.ok){
+      _wToast('Converted '+d.converted_native.toFixed(4)+' '+d.native_symbol+' to USDC', true)
+      if(chain === 'bsc') _loadBscBalance()
+    } else {
+      _wToast(d.msg || 'Conversion failed', false)
+    }
+  }catch(e){
+    _wToast('Conversion failed', false)
+  }finally{
+    if(btn){ btn.disabled = false; btn.textContent = origText }
+  }
+}
 
 // ── modals ────────────────────────────────────────────────
 function _showModal(html){

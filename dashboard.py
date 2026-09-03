@@ -7179,6 +7179,69 @@ def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amoun
         print(f'[{chain}-gas-topup] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
+GAS_CONVERT_RESERVE_UNITS = GAS_TOPUP_TX_GAS_UNITS  # how much native gas api_evm_convert_to_usdc() always leaves behind -- same headroom _ensure_evm_gas() itself targets for one more trade, so converting "the rest" to USDC never leaves the wallet unable to broadcast its own next transaction
+
+def _execute_evm_native_to_usdc(wallet: str, private_key: str, chain: str, native_amount: float) -> tuple:
+    """The reverse of _execute_evm_gas_topup(): swaps `native_amount` of
+    this chain's own native gas token (BNB/ETH/POL) into its USDC/USDG, via
+    the same 0x allowance-holder same-chain quote/sign/send flow
+    _execute_evm_swap() uses for a real token buy. Selling the native asset
+    itself needs no ERC20 approve() step at all -- there is no allowance to
+    grant on a native balance, unlike selling a token -- so this is simpler
+    than the USDC-side top-up it mirrors. Returns (success, message,
+    tx_hash), same convention as every other EVM swap helper in this file."""
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    usdc_addr = EVM_CHAINS[chain]['usdc']
+    try:
+        w3 = _get_web3(chain)
+        acct = _EvmAccount.from_key(private_key)
+        wallet_cs = w3.to_checksum_address(acct.address)
+
+        sell_amount_raw = int(native_amount * (10 ** 18))  # every native gas asset here (BNB/ETH/POL) is 18 decimals
+        quote = _get_0x_quote(BNB_NATIVE_ADDR, usdc_addr, sell_amount_raw, wallet_cs, chain)
+
+        issues = quote.get('issues') or {}
+        balance_issue = issues.get('balance')
+        if balance_issue:
+            msg = f'Insufficient {native_symbol} balance'
+            add_user_log(wallet, f'{chain} convert-to-usdc error: {msg} ({balance_issue})')
+            return False, msg, ''
+
+        txn = quote.get('transaction')
+        if not txn:
+            msg = 'No liquidity route found for this conversion'
+            add_user_log(wallet, f'{chain} convert-to-usdc error: {msg}')
+            return False, msg, ''
+
+        tx = {
+            'from': wallet_cs,
+            'to': w3.to_checksum_address(txn['to']),
+            'data': txn['data'],
+            'value': int(txn.get('value', '0')),
+            'gas': int(txn['gas']) if txn.get('gas') else 350000,
+            'gasPrice': int(txn['gasPrice']) if txn.get('gasPrice') else w3.eth.gas_price,
+            'nonce': w3.eth.get_transaction_count(wallet_cs),
+            'chainId': EVM_CHAINS[chain]['chain_id'],
+        }
+        try:
+            signed = acct.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        except Exception as e:
+            msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+            add_user_log(wallet, f'{chain} convert-to-usdc error: {msg}')
+            return False, msg, ''
+        tx_hash_hex = tx_hash.hex()
+        add_user_log(wallet, f'{chain} convert-to-usdc sent: {tx_hash_hex} ({native_amount} {native_symbol} -> USDC)')
+        receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+        success = receipt.status == 1
+        add_user_log(wallet, f'{chain} convert-to-usdc {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        return success, ('' if success else 'Conversion transaction reverted on-chain'), tx_hash_hex
+    except Exception as e:
+        msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+        add_user_log(wallet, f'{chain} convert-to-usdc error: ' + msg)
+        print(f'[{chain}-convert-to-usdc] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
+        return False, msg, ''
+
 GAS_BOOTSTRAP_SOL_USD = 5.0  # small, fixed USD-equivalent amount of the user's OWN SOL bridged to bootstrap a completely empty EVM gas balance -- kept a bit larger than the ongoing USDC top-up amount since a cross-chain bridge's own fees eat a bigger share of a very small transfer
 
 def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, chain: str) -> tuple:
@@ -10762,6 +10825,57 @@ def api_bsc_balance():
         'usdc': balances['usdc'],
         'error': balances['error'],
     })
+
+@app.route('/api/evm/convert-to-usdc', methods=['POST'])
+@rate_limit(5, 60)
+def api_evm_convert_to_usdc():
+    """Converts this wallet's own native gas token (BNB/ETH/POL) on `chain`
+    into that chain's USDC/USDG -- the reverse direction of the automatic
+    gas top-up (_ensure_evm_gas), for a user who's ended up holding gas
+    they'd rather have as USDC (e.g. it arrived as part of a deposit, or
+    they're moving off a chain). Always reserves GAS_CONVERT_RESERVE_UNITS
+    worth of native gas (the same headroom _ensure_evm_gas() itself targets
+    for one more trade) rather than sweeping the whole balance, so the
+    wallet can still broadcast its own next transaction afterward."""
+    wallet = _authenticated_wallet()
+    if not wallet:
+        return jsonify({'ok': False, 'msg': 'No wallet connected'}), 401
+    data  = request.get_json(silent=True) or {}
+    chain = str(data.get('chain', '')).strip().lower()
+    if chain not in EVM_CHAINS:
+        return jsonify({'ok': False, 'msg': f'Unsupported chain {chain!r}'}), 400
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        row = conn.execute(
+            'SELECT encrypted_private_key_bsc, bsc_wallet_address FROM users WHERE wallet_address=?',
+            (wallet,)
+        ).fetchone()
+    finally:
+        conn.close()
+    if not row or not row[0]:
+        return jsonify({'ok': False, 'msg': 'No EVM trading wallet configured'}), 400
+    enc_blob, evm_address = row
+    if not evm_address:
+        return jsonify({'ok': False, 'msg': 'No EVM wallet address on record'}), 400
+
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    try:
+        w3 = _get_web3(chain)
+        native_bal_wei = w3.eth.get_balance(w3.to_checksum_address(evm_address))
+        keep_wei = w3.eth.gas_price * GAS_CONVERT_RESERVE_UNITS
+    except Exception as e:
+        return jsonify({'ok': False, 'msg': f'Balance check failed: {e}'}), 502
+    convert_wei = native_bal_wei - keep_wei
+    if convert_wei <= 0:
+        return jsonify({'ok': False, 'msg': f'Not enough {native_symbol} to convert -- a small amount is always kept for gas'}), 400
+    convert_amount = float(w3.from_wei(convert_wei, 'ether'))
+
+    with _use_key(enc_blob, wallet) as pk:
+        ok, err, tx_hash = _execute_evm_native_to_usdc(wallet, pk, chain, convert_amount)
+    if not ok:
+        return jsonify({'ok': False, 'msg': err or 'Conversion failed'}), 502
+    return jsonify({'ok': True, 'chain': chain, 'converted_native': convert_amount,
+                     'native_symbol': native_symbol, 'tx_hash': tx_hash})
 
 # Spec's exact status-vocabulary -> UI label mapping, reused by both the
 # status/transaction routes below and the bridge frontend (which fetches
