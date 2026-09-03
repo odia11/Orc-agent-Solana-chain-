@@ -684,6 +684,9 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
               <button class="dep-btn dep-copy" onclick="_copyAddrBsc()">Copy Address</button>
               <a class="dep-btn dep-scan" href="https://bscscan.com/address/{{ bsc_deposit_address }}" target="_blank" rel="noopener">View on BscScan ↗</a>
             </div>
+            <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.5">
+              This is one shared EVM wallet — the same address also receives deposits on Base, Arbitrum, Polygon and Robinhood Chain. Starting a new chain from a completely empty wallet needs a tiny bit of <em>that chain's own</em> native gas token sent here first (e.g. ETH for Base/Arbitrum/Robinhood, POL for Polygon) — after that, the bot tops up its own gas automatically from your USDC.
+            </div>
           </div>
         </div>
         <div class="wlt-bsc-balances">
