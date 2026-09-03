@@ -6834,7 +6834,12 @@ def get_0x_bridge_quote(origin_chain: str, origin_token: str, origin_amount_raw:
                 'destinationAddress': dest_address,
                 'maxNumQuotes':       1,
             },
-            headers={'0x-api-key': ZEROX_API_KEY},
+            # '0x-version': 'v2' -- same header _get_0x_quote() (the same-chain
+            # Swap API call) already sends and this call was missing; added
+            # defensively while diagnosing the "no route" reports below, on
+            # the chance the Cross-Chain API defaults to an older response
+            # shape/behavior without it. Harmless if this endpoint ignores it.
+            headers={'0x-api-key': ZEROX_API_KEY, '0x-version': 'v2'},
             timeout=15,
         )
     except requests.exceptions.RequestException as e:
@@ -6842,6 +6847,7 @@ def get_0x_bridge_quote(origin_chain: str, origin_token: str, origin_amount_raw:
     if r.status_code == 429:
         return {'ok': False, 'msg': 'Bridge quote service is rate-limited — try again shortly', 'rate_limited': True}
     if r.status_code != 200:
+        print(f'[bridge-quote] HTTP {r.status_code} for {origin_chain}->{dest_chain}: {r.text[:500]}', flush=True)
         return {'ok': False, 'msg': f'HTTP {r.status_code}: {r.text[:300]}'}
     try:
         data = r.json()
@@ -6851,10 +6857,26 @@ def get_0x_bridge_quote(origin_chain: str, origin_token: str, origin_amount_raw:
     # CrossChainQuotesResponseSchema is a discriminated union on
     # liquidityAvailable. When true, the quotes are an ARRAY (`quotes`), not
     # a single object -- take the first (only requested via maxNumQuotes=1).
+    #
+    # This whole integration was built from 0x's example code (docs.0x.org
+    # was unreachable from the dev environment at the time -- see the module
+    # comment above) and had never been exercised against the live API until
+    # a real "No bridge route found" report came back identically for both a
+    # brand-new chain (Robinhood) and a long-established, high-liquidity one
+    # (Base) -- two completely different liquidity situations producing the
+    # exact same generic error strongly suggests the request itself, not
+    # actual liquidity, so the FULL raw response is logged here (previously
+    # discarded entirely) to see whatever real reason 0x's API is giving.
     if not data.get('liquidityAvailable'):
-        return {'ok': False, 'msg': 'No bridge route found for this pair/amount'}
+        print(f'[bridge-quote] no liquidity for {origin_chain}({origin_token})->{dest_chain}({dest_token}) '
+              f'amount_raw={origin_amount_raw}: full response={json.dumps(data)[:1500]}', flush=True)
+        extra = data.get('reason') or data.get('message') or (data.get('errors') and str(data['errors'])[:200])
+        msg = 'No bridge route found for this pair/amount' + (f' ({extra})' if extra else '')
+        return {'ok': False, 'msg': msg}
     quotes = data.get('quotes')
     if not isinstance(quotes, list) or not quotes:
+        print(f'[bridge-quote] liquidityAvailable=True but no quotes[] for {origin_chain}->{dest_chain}: '
+              f'full response={json.dumps(data)[:1500]}', flush=True)
         return {'ok': False, 'msg': 'No bridge route found for this pair/amount'}
     quote = quotes[0]
     try:
