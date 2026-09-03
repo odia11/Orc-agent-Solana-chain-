@@ -6164,6 +6164,17 @@ def _execute_auto_buy_after_bridge(bridge_id: int, user_id: int, wallet: str, de
             if amount_usdc <= 0:
                 _finish('failed', {'error': f'No {EVM_CHAINS[dest_chain].get("usdc_symbol","USDC")} arrived on {dest_chain} yet'})
                 return
+            # This buy fires right after USDC just landed via a bridge --
+            # exactly the case where the destination wallet may never have
+            # held any native gas at all yet. Same auto-gas mechanism as
+            # every other manual/bot trade path (see _ensure_evm_gas's own
+            # module comment): tops up from this wallet's own USDC, or
+            # bridges a small bootstrap from the user's own SOL if it's at
+            # literal zero.
+            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, private_key, evm_address, dest_chain)
+            if not _gas_ok:
+                _finish('failed', {'error': f'Cannot buy on {dest_chain} yet — {_gas_msg}'})
+                return
             buy_ok, buy_err, buy_tx_hash = _execute_evm_swap(
                 wallet, private_key, 'buy', token_address, str(amount_usdc), dest_chain)
             if not buy_ok:
@@ -6511,7 +6522,19 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
         if chain == 'solana':
             ok, tx_hash, err, _tok_amt, _sol_amt = _execute_user_swap_ex(wallet, pk, 'buy', mint, str(amount_sol))
         else:
-            ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
+            # Same auto-gas mechanism every other EVM buy path uses (see
+            # _ensure_evm_gas's own module comment) -- the narrative agent's
+            # own auto-buy must not fail purely for lack of gas either.
+            # _execute_bsc_swap() below is hardcoded to 'bsc' regardless of
+            # `chain` (a pre-existing limitation of this function, not
+            # introduced here), so the gas check targets 'bsc' to match
+            # exactly what actually gets broadcast.
+            _evm_addr = _EvmAccount.from_key(pk).address
+            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, 'bsc')
+            if not _gas_ok:
+                ok, err, tx_hash = False, _gas_msg, ''
+            else:
+                ok, err, tx_hash = _execute_bsc_swap(wallet, pk, 'buy', mint, str(amount))
 
     if ok:
         # Register the new position so user_trader_loop()'s SL/TP monitor
@@ -11000,6 +11023,16 @@ def api_evm_trade_buy():
         return jsonify({'ok': False, 'msg': bridge_result['msg']}), 400
 
     with _use_key(enc_blob, wallet) as pk:
+        # Same auto-gas mechanism the autonomous bot already uses (see
+        # _ensure_evm_gas's own module comment): tops up this chain's native
+        # gas from the user's own USDC on it if it's running low, or
+        # bridges a small bootstrap from their own SOL if it's at literal
+        # zero -- so a manual buy never fails purely because a brand-new
+        # EVM wallet has never held any gas token directly.
+        if evm_address:
+            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, evm_address, chain)
+            if not _gas_ok:
+                return jsonify({'ok': False, 'msg': f'Cannot trade on {chain} yet — {_gas_msg}'}), 400
         buy_ok, buy_err, buy_tx_hash = _execute_evm_swap(wallet, pk, 'buy', token_address, str(amount_usdc), chain)
     if not buy_ok:
         return jsonify({'ok': False, 'msg': buy_err or 'Swap failed'}), 502
@@ -11052,6 +11085,14 @@ def api_evm_trade_sell():
     symbol     = pos.get('symbol') or (td.get('symbol', token_address[:8]) if td else token_address[:8])
     amount     = pos['amount']
     with _use_key(enc_blob, wallet) as pk:
+        # Same auto-gas mechanism the autonomous bot's own exit path uses
+        # (see _ensure_evm_gas's module comment) -- a sell must not fail
+        # purely for lack of gas, since that's how a user actually closes a
+        # position and realizes (or cuts) a loss.
+        _evm_addr = _EvmAccount.from_key(pk).address
+        _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
+        if not _gas_ok:
+            return jsonify({'ok': False, 'msg': f'Cannot sell on {chain} yet — {_gas_msg}'}), 400
         sell_ok, sell_err, sell_tx_hash = _execute_evm_swap(wallet, pk, 'sell', token_address, str(amount), chain)
     entry     = pos.get('buy_price', 0.0)
     pnl       = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
@@ -11139,6 +11180,12 @@ def api_bsc_trade_buy():
         return jsonify({'ok': False, 'msg': bridge_result['msg']}), 400
 
     with _use_key(enc_blob, wallet) as pk:
+        # Same auto-gas mechanism as api_evm_trade_buy() -- see its comment
+        # and _ensure_evm_gas's own module comment for the full reasoning.
+        if evm_address:
+            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, evm_address, 'bsc')
+            if not _gas_ok:
+                return jsonify({'ok': False, 'msg': f'Cannot trade on bsc yet — {_gas_msg}'}), 400
         buy_ok, buy_err, buy_tx_hash = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
     if not buy_ok:
         return jsonify({'ok': False, 'msg': buy_err or 'Swap failed'}), 502
@@ -11189,6 +11236,12 @@ def api_bsc_trade_sell():
     symbol     = pos.get('symbol') or (td.get('symbol', token_address[:8]) if td else token_address[:8])
     amount     = pos['amount']
     with _use_key(enc_blob, wallet) as pk:
+        # Same auto-gas mechanism as api_evm_trade_sell() -- see its comment
+        # and _ensure_evm_gas's own module comment for the full reasoning.
+        _evm_addr = _EvmAccount.from_key(pk).address
+        _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, 'bsc')
+        if not _gas_ok:
+            return jsonify({'ok': False, 'msg': f'Cannot sell on bsc yet — {_gas_msg}'}), 400
         sell_ok, sell_err, sell_tx_hash = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
     entry     = pos.get('buy_price', 0.0)
     pnl       = round(amount * (exit_price - entry), 4) if entry > 0 else 0.0
