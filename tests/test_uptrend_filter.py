@@ -16,7 +16,7 @@ import ast
 import os
 import time
 
-DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), 'dashboard.py')
+DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), '..', 'dashboard.py')
 with open(DASHBOARD_PATH, encoding='utf-8') as f:
     _SRC = f.read()
 _TREE = ast.parse(_SRC)

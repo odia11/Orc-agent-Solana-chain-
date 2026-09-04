@@ -13,7 +13,7 @@ Run with: python3 test_trade_counterfactual.py
 import ast
 import os
 
-DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), 'dashboard.py')
+DASHBOARD_PATH = os.path.join(os.path.dirname(__file__), '..', 'dashboard.py')
 
 
 def _load_real_function():
