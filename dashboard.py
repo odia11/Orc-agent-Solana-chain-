@@ -2372,6 +2372,12 @@ def run_migrations():
         # need to join the UNIQUE(user_id, mint_address) constraint.
         "ALTER TABLE open_positions ADD COLUMN chain TEXT DEFAULT 'solana'",
         "ALTER TABLE fees ADD COLUMN chain TEXT DEFAULT 'solana'",
+        # Which wallet this fee was actually paid to -- the normal fee wallet,
+        # or the gas sponsor wallet on the trades where that one still needed
+        # topping up (see _evm_fee_recipient). Blank on every pre-existing row,
+        # which predates the sponsor wallet existing at all, so those are all
+        # normal fee-wallet income by definition.
+        "ALTER TABLE fees ADD COLUMN recipient TEXT DEFAULT ''",
         # Every trade/referral-earning predating BSC support was necessarily Solana --
         # DEFAULT 'solana' backfills existing rows correctly with no separate migration.
         "ALTER TABLE trades ADD COLUMN chain TEXT DEFAULT 'solana'",
@@ -7971,9 +7977,9 @@ def _charge_evm_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str
             fee_tx = tx_sig if tx_sig else ('FAILED: ' + (err_msg or 'unknown')[:80])
             conn2  = sqlite3.connect(DB_FILE)
             conn2.execute(
-                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind, chain) '
-                'VALUES (?,?,?,?,?,?,?,?)',
-                (wlt, sym, gross, fee, fee_tx, status, kind_, chn))
+                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind, chain, recipient) '
+                'VALUES (?,?,?,?,?,?,?,?,?)',
+                (wlt, sym, gross, fee, fee_tx, status, kind_, chn, fee_recipient))
             if tx_sig:
                 if kind_ == 'sell' and t_ts:
                     row = conn2.execute(
@@ -24312,6 +24318,102 @@ def admin_fee_stats():
         return jsonify({'ok': True, 'collected': collected, 'pending': pending, 'today': today_sol})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+@app.route('/api/admin/gas-sponsor')
+@rate_limit(20, 60)
+def admin_gas_sponsor():
+    """Everything the owner needs to see about the gas sponsor wallet at a
+    glance: what's actually in it right now on each chain, how much fee
+    income has been routed into it instead of the normal fee wallet, and
+    what it has handed out to users.
+
+    Live balances come straight from each chain's RPC, so one unreachable
+    chain reports its own error rather than failing the whole panel."""
+    _log_readonly_attempt()
+    wallet = _authenticated_wallet()
+    if not wallet or not _is_owner(wallet):
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    sponsor_address = _gas_sponsor_address()
+    if not sponsor_address:
+        return jsonify({'ok': True, 'enabled': False, 'sponsor_address': '',
+                        'fee_wallet': EVM_CHAIN_FEE_WALLET or '', 'chains': [],
+                        'totals': {'fees_to_sponsor': 0.0, 'fees_to_fee_wallet': 0.0,
+                                   'granted_count': 0, 'users_helped': 0}})
+
+    ok_filter = "(status IS NULL OR status='ok') AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')"
+    per_chain_fees, per_chain_grants = {}, {}
+    totals = {'fees_to_sponsor': 0.0, 'fees_to_fee_wallet': 0.0, 'granted_count': 0, 'users_helped': 0}
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            for chain, amount in conn.execute(
+                    f'SELECT chain, COALESCE(SUM(fee_amount),0) FROM fees '
+                    f'WHERE {ok_filter} AND recipient=? GROUP BY chain', (sponsor_address,)):
+                per_chain_fees[chain] = round(float(amount or 0), 6)
+                totals['fees_to_sponsor'] += float(amount or 0)
+            row = conn.execute(
+                f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_filter} '
+                f"AND chain!='solana' AND (recipient IS NULL OR recipient!=?)", (sponsor_address,)).fetchone()
+            totals['fees_to_fee_wallet'] = round(float((row or (0,))[0] or 0), 6)
+            for chain, cnt, amt in conn.execute(
+                    "SELECT chain, COUNT(*), COALESCE(SUM(amount_native),0) FROM gas_sponsorships "
+                    "WHERE status='sent' GROUP BY chain"):
+                per_chain_grants[chain] = {'count': cnt, 'native': float(amt or 0)}
+                totals['granted_count'] += cnt
+            totals['users_helped'] = conn.execute(
+                "SELECT COUNT(DISTINCT user_id) FROM gas_sponsorships WHERE status='sent'").fetchone()[0]
+        finally:
+            conn.close()
+    except Exception as e:
+        return jsonify({'error': f'could not read sponsorship totals: {e}'}), 500
+    totals['fees_to_sponsor'] = round(totals['fees_to_sponsor'], 6)
+
+    chains = []
+    for chain, cfg in EVM_CHAINS.items():
+        grants = per_chain_grants.get(chain, {'count': 0, 'native': 0.0})
+        entry = {
+            'chain':          chain,
+            'native_symbol':  cfg['native_symbol'],
+            'usdc_symbol':    cfg.get('usdc_symbol', 'USDC'),
+            'fees_received':  per_chain_fees.get(chain, 0.0),
+            'granted_count':  grants['count'],
+            'granted_native': round(grants['native'], 8),
+            'native_balance': None,
+            'usdc_balance':   None,
+            'grants_left':    None,
+            'status':         'ok',
+            'error':          '',
+        }
+        try:
+            w3 = _get_web3(chain)
+            bal_wei = w3.eth.get_balance(w3.to_checksum_address(sponsor_address))
+            one_grant = w3.eth.gas_price * GAS_TOPUP_TX_GAS_UNITS * GAS_SPONSOR_TX_MULTIPLIER
+            entry['native_balance'] = float(w3.from_wei(bal_wei, 'ether'))
+            entry['grants_left'] = int(bal_wei // one_grant) if one_grant else 0
+            entry['usdc_balance'] = round(get_evm_usdc_balance(sponsor_address, chain), 6)
+            # Same thresholds the fee router and the self-refill use, so the
+            # panel explains itself rather than showing an unexplained state.
+            if bal_wei <= 0:
+                entry['status'] = 'empty'
+            elif entry['grants_left'] < GAS_SPONSOR_REFILL_BELOW_GRANTS:
+                entry['status'] = 'low'
+            elif entry['grants_left'] < GAS_SPONSOR_TARGET_GRANTS:
+                entry['status'] = 'filling'
+        except Exception as e:
+            entry['status'] = 'unreachable'
+            entry['error'] = f'{type(e).__name__}'
+        chains.append(entry)
+
+    return jsonify({
+        'ok': True,
+        'enabled': True,
+        'sponsor_address': sponsor_address,
+        'fee_wallet': EVM_CHAIN_FEE_WALLET or '',
+        'chains': chains,
+        'totals': totals,
+        'target_grants': GAS_SPONSOR_TARGET_GRANTS,
+    })
 
 @app.route('/api/admin/collect-fees', methods=['POST'])
 @rate_limit(5, 60)

@@ -126,6 +126,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .col-staleroles{grid-template-columns:minmax(0,1fr) 90px 100px 140px 130px}
 .col-readonly{grid-template-columns:130px minmax(0,.9fr) 110px minmax(0,1.3fr)}
 .col-perf{grid-template-columns:minmax(0,1.4fr) 90px 90px 100px}
+.col-gassponsor{grid-template-columns:minmax(0,1fr) 130px 100px 110px 110px 110px 110px}
+.gs-pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em}
+.gs-ok{background:rgba(58,210,155,.14);color:#3ad29b}
+.gs-filling{background:rgba(124,140,255,.16);color:#8f9dff}
+.gs-low{background:rgba(247,185,85,.16);color:var(--amber)}
+.gs-empty{background:rgba(247,107,98,.16);color:#f76b62}
+.gs-unreachable{background:rgba(255,255,255,.07);color:var(--txt3)}
 
 /* cell types */
 .cell-user{display:flex;align-items:center;gap:9px;min-width:0}
@@ -566,6 +573,47 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
         <div class="chart-legend">
           <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(247,185,85,.55)"></div>Success</div>
           <div class="chart-legend-item"><div class="chart-legend-dot" style="background:rgba(247,107,98,.4)"></div>Failed</div>
+        </div>
+      </div>
+
+      <div class="sec-hdr">
+        <div class="sec-title">⛽ Gas sponsor wallet</div>
+        <div class="sec-count" id="gs-address">—</div>
+      </div>
+      <div id="gs-disabled" class="tbl-empty" style="display:none">
+        Gas sponsorship is off — set GAS_SPONSOR_PRIVATE_KEY in Railway to enable it.
+      </div>
+      <div id="gs-panel" style="display:none">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-lbl">In gas wallet now</div>
+            <div class="stat-val" id="gs-total-left">—</div>
+            <div class="stat-sub">User top-ups it can still pay for</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Fees routed to gas wallet</div>
+            <div class="stat-val" id="gs-fees-in" style="color:var(--amber)">—</div>
+            <div class="stat-sub">Instead of your fee wallet</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Fees to your fee wallet</div>
+            <div class="stat-val pos" id="gs-fees-normal">—</div>
+            <div class="stat-sub">All other EVM fee income</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-lbl">Gas given to users</div>
+            <div class="stat-val" id="gs-granted">—</div>
+            <div class="stat-sub" id="gs-users-helped">—</div>
+          </div>
+        </div>
+        <div class="tbl-wrap" style="margin-top:14px">
+          <div class="tbl">
+            <div class="tbl-hdr col-gassponsor">
+              <div>Chain</div><div>Gas balance</div><div>Top-ups left</div><div>USDC waiting</div>
+              <div>Fees received</div><div>Given out</div><div>Status</div>
+            </div>
+            <div id="gs-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
+          </div>
         </div>
       </div>
 
@@ -1428,8 +1476,74 @@ function renderTrades() {
 function filterTrades() { renderTrades(); }
 
 // ══════════════════ REVENUE ══════════════════
+// ── GAS SPONSOR WALLET ──
+// The wallet the platform fronts users' native gas from. Shown here in the
+// Revenue view because it's funded straight out of fee income: fees go to it
+// only while it's below its gas target, and to the normal fee wallet the rest
+// of the time (see _evm_fee_recipient in dashboard.py).
+var _GS_STATUS = {
+  ok:          ['gs-ok',          'Healthy'],
+  filling:     ['gs-filling',     'Filling up'],
+  low:         ['gs-low',         'Running low'],
+  empty:       ['gs-empty',       'EMPTY — send gas'],
+  unreachable: ['gs-unreachable', 'RPC unreachable'],
+};
+function _gsNum(v, d) { return v == null ? '—' : (+v).toFixed(d == null ? 5 : d).replace(/0+$/, '').replace(/\.$/, ''); }
+async function loadGasSponsor() {
+  var body = document.getElementById('gs-body');
+  if (body) body.innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  var r = await _a('/api/admin/gas-sponsor');
+  var panel = document.getElementById('gs-panel'), off = document.getElementById('gs-disabled');
+  if (!r || r.error) {
+    if (body) body.innerHTML = '<div class="tbl-empty">Could not load gas sponsor status</div>';
+    return;
+  }
+  if (!r.enabled) {
+    if (panel) panel.style.display = 'none';
+    if (off) off.style.display = '';
+    document.getElementById('gs-address').textContent = 'not configured';
+    return;
+  }
+  if (off) off.style.display = 'none';
+  if (panel) panel.style.display = '';
+  document.getElementById('gs-address').textContent = r.sponsor_address;
+
+  var chains = r.chains || [], t = r.totals || {};
+  // "Top-ups left" summed across chains is the number that actually answers
+  // "is my gas wallet fine?" -- a raw balance means nothing across chains
+  // whose native tokens are worth wildly different amounts.
+  var totalLeft = chains.reduce(function(s, c) { return s + (c.grants_left || 0); }, 0);
+  var anyEmpty  = chains.some(function(c) { return c.status === 'empty'; });
+  var anyLow    = chains.some(function(c) { return c.status === 'low'; });
+  var el = document.getElementById('gs-total-left');
+  el.textContent = totalLeft + (totalLeft === 1 ? ' top-up' : ' top-ups');
+  el.style.color = anyEmpty ? '#f76b62' : (anyLow ? 'var(--amber)' : '#3ad29b');
+
+  document.getElementById('gs-fees-in').textContent     = _gsNum(t.fees_to_sponsor, 4) + ' USDC';
+  document.getElementById('gs-fees-normal').textContent = _gsNum(t.fees_to_fee_wallet, 4) + ' USDC';
+  document.getElementById('gs-granted').textContent     = (t.granted_count || 0) + 'x';
+  document.getElementById('gs-users-helped').textContent =
+    'to ' + (t.users_helped || 0) + (t.users_helped === 1 ? ' user' : ' users');
+
+  body.innerHTML = chains.length ? chains.map(function(c) {
+    var st = _GS_STATUS[c.status] || _GS_STATUS.unreachable;
+    var left = c.grants_left == null ? '—' : c.grants_left + 'x';
+    var leftCls = c.grants_left == null ? '' : (c.grants_left <= 0 ? ' neg' : (c.grants_left < 10 ? '' : ' pos'));
+    return '<div class="tbl-row col-gassponsor">' +
+      '<div class="mono-sm">' + _escHtml(c.chain) + '</div>' +
+      '<div class="mono">' + _gsNum(c.native_balance) + ' ' + _escHtml(c.native_symbol) + '</div>' +
+      '<div class="mono' + leftCls + '">' + left + '</div>' +
+      '<div class="mono">' + _gsNum(c.usdc_balance, 2) + ' ' + _escHtml(c.usdc_symbol) + '</div>' +
+      '<div class="mono">' + _gsNum(c.fees_received, 4) + '</div>' +
+      '<div class="mono">' + (c.granted_count || 0) + 'x</div>' +
+      '<div><span class="gs-pill ' + st[0] + '">' + st[1] + '</span></div>' +
+      '</div>';
+  }).join('') : '<div class="tbl-empty">No EVM chains configured</div>';
+}
+
 async function loadRevenue() {
   document.getElementById('rev-body').innerHTML = '<div class="tbl-loading"><span class="spinner"></span></div>';
+  loadGasSponsor();
   var r = await _a('/api/admin/revenue');
   if (r?.ok) {
     document.getElementById('rev-today').textContent   = _fmt(r.today) + ' SOL';
