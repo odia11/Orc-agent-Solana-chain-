@@ -333,20 +333,56 @@ function _callSearchInput(){
     .then(function(r){ return r.json(); })
     .then(function(d){
       var pairs = (d.pairs||[]).filter(function(p){ return _liveChains.indexOf(p.chainId)!==-1; }).slice(0,6);
-      if(!pairs.length){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--muted)">No tokens found</div>'; return; }
-      dd.innerHTML = pairs.map(function(p,i){
-        var sym = (p.baseToken&&p.baseToken.symbol)||'?';
-        var name = (p.baseToken&&p.baseToken.name)||'';
-        var chainLbl = _chainLbls[p.chainId] || p.chainId;
-        var price = p.priceUsd ? _fmtCallPrice(parseFloat(p.priceUsd)) : '—';
-        return '<div class="call-dd-row" onclick="_pickCallToken('+i+')">'
-          +'<div><div class="call-dd-sym">'+esc(sym)+' <span style="color:var(--muted);font-weight:400">'+esc(chainLbl)+'</span></div><div class="call-dd-name">'+esc(name)+'</div></div>'
-          +'<div class="call-dd-price">'+price+'</div></div>';
-      }).join('');
+      if(!pairs.length){
+        // DexScreener's fuzzy /search index can lag behind its own direct
+        // per-token lookup for a brand-new pair (Robinhood Chain days old) --
+        // /api/dexscreener/search already has its own address-lookup
+        // fallback for that, but the query has to actually BE an address
+        // for it to trigger. If the user pasted one and still got nothing
+        // back (this pair genuinely isn't indexed by DexScreener at all
+        // yet), fall back to /api/token/info/, the same robust,
+        // chain-agnostic direct lookup the navbar search's click-through
+        // and Live Market's ?mint= deep link already rely on.
+        if(_looksLikeTokenAddress(q)){ _callDirectLookup(q, dd, _chainLbls); return; }
+        dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--muted)">No tokens found</div>';
+        return;
+      }
+      dd.innerHTML = _callDdRowsHtml(pairs, _chainLbls);
       window._callDdPairs = pairs;
     })
     .catch(function(){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--red)">Search failed</div>'; });
   }, 300);
+}
+
+function _looksLikeTokenAddress(q){
+  return /^0x[0-9a-fA-F]{40}$/.test(q) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
+}
+
+function _callDdRowsHtml(pairs, chainLbls){
+  return pairs.map(function(p,i){
+    var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+    var name = (p.baseToken&&p.baseToken.name)||'';
+    var chainLbl = chainLbls[p.chainId] || p.chainId;
+    var price = p.priceUsd ? _fmtCallPrice(parseFloat(p.priceUsd)) : '—';
+    return '<div class="call-dd-row" onclick="_pickCallToken('+i+')">'
+      +'<div><div class="call-dd-sym">'+esc(sym)+' <span style="color:var(--muted);font-weight:400">'+esc(chainLbl)+'</span></div><div class="call-dd-name">'+esc(name)+'</div></div>'
+      +'<div class="call-dd-price">'+price+'</div></div>';
+  }).join('');
+}
+
+function _callDirectLookup(addr, dd, chainLbls){
+  fetch('/api/token/info/'+encodeURIComponent(addr))
+  .then(function(r){ return r.json(); })
+  .then(function(info){
+    if(!info.ok){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--muted)">No tokens found</div>'; return; }
+    // Reshaped into the same {chainId, baseToken:{symbol,address,name}, priceUsd}
+    // pair shape /api/dexscreener/search returns, so _pickCallToken() and the
+    // row renderer above need no special-casing for where a result came from.
+    var pairs = [{chainId: info.chain, priceUsd: info.price, baseToken: {symbol: info.symbol, address: info.address || addr, name: info.name}}];
+    dd.innerHTML = _callDdRowsHtml(pairs, chainLbls);
+    window._callDdPairs = pairs;
+  })
+  .catch(function(){ dd.innerHTML='<div class="call-dd-row" style="cursor:default;color:var(--red)">Search failed</div>'; });
 }
 
 function _pickCallToken(idx){
