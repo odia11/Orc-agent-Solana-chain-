@@ -1726,6 +1726,24 @@ def init_db():
         FOREIGN KEY (user_id) REFERENCES users(id)
     )''')
     c.execute('CREATE INDEX IF NOT EXISTS idx_bridge_transactions_user ON bridge_transactions(user_id)')
+    # Every native-gas grant the platform has fronted to a user's EVM wallet
+    # (see _sponsor_evm_gas) -- the record the per-user caps are enforced
+    # against, and the audit trail for what the sponsor wallet has spent.
+    c.execute('''CREATE TABLE IF NOT EXISTS gas_sponsorships (
+        id             INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id        INTEGER NOT NULL,
+        wallet         TEXT NOT NULL,
+        chain          TEXT NOT NULL,
+        to_address     TEXT NOT NULL,
+        amount_native  REAL NOT NULL,
+        amount_usd     REAL DEFAULT 0,
+        tx_hash        TEXT DEFAULT '',
+        status         TEXT DEFAULT 'sent',
+        error_msg      TEXT DEFAULT '',
+        created_at     TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (user_id) REFERENCES users(id)
+    )''')
+    c.execute('CREATE INDEX IF NOT EXISTS idx_gas_sponsorships_user ON gas_sponsorships(user_id, chain)')
     c.execute('''CREATE TABLE IF NOT EXISTS agent_journal (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         mint          TEXT,
@@ -6120,11 +6138,17 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
             except Exception:
                 _origin_native = None
             if _origin_native is not None and _origin_native <= 0:
-                _native_symbol = EVM_CHAINS[origin_chain]['native_symbol']
-                return False, (f'Insufficient {_native_symbol} gas on your {origin_chain} trading wallet to broadcast '
-                                f'a bridge — deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet, it '
-                                f'funds {origin_chain} gas automatically (right away on your next Buy/Sell there, or '
-                                f'within a few minutes on its own) — then try this bridge again'), None
+                # Same self-healing order every trade path uses: let the
+                # platform sponsor the few cents of gas this bridge needs, and
+                # only report a dead end if that isn't available.
+                _sp_ok, _sp_msg, _ = _sponsor_evm_gas(user_id, wallet, origin_address, origin_chain)
+                if not _sp_ok:
+                    _native_symbol = EVM_CHAINS[origin_chain]['native_symbol']
+                    print(f'[bridge] gas sponsorship unavailable for {origin_chain} ({_sp_msg})', flush=True)
+                    return False, (f'Insufficient {_native_symbol} gas on your {origin_chain} trading wallet to broadcast '
+                                    f'a bridge — deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet, it '
+                                    f'funds {origin_chain} gas automatically (right away on your next Buy/Sell there, or '
+                                    f'within a few minutes on its own) — then try this bridge again'), None
 
         if dest_chain == 'solana':
             dest_address = _get_trading_wallet_address(wallet) or wallet
@@ -7363,6 +7387,185 @@ def _execute_evm_native_to_usdc(wallet: str, private_key: str, chain: str, nativ
         print(f'[{chain}-convert-to-usdc] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
+# ── PLATFORM GAS SPONSORSHIP ──
+# The one thing that genuinely unblocks "I just want to buy with USDC": an
+# EVM wallet at zero native gas can't broadcast anything at all, so it can't
+# swap its own USDC into gas either (see _bootstrap_evm_gas_via_bridge's
+# comment for the full chicken-and-egg). Bridging the user's own SOL solves
+# it, but only for a user who happens to hold SOL. This closes the gap for
+# everyone else: the platform's own funded wallet sends a few cents of that
+# chain's native token straight to the user's trading wallet, which is the
+# only way to fund a from-zero wallet on a chain the user holds nothing else
+# on. Works on every chain in EVM_CHAINS (it's a plain native transfer, no
+# third-party relayer/paymaster coverage needed), so it covers new chains
+# like Robinhood Chain that gasless-relayer APIs don't support.
+#
+# The cost is real platform money, so it is bounded on every axis: only for
+# a wallet that already holds real USDC on that chain (never a fresh empty
+# account -- that's the anti-farming gate), only enough gas for a couple of
+# transactions, capped per user per day and per user lifetime, and every
+# grant is recorded in gas_sponsorships for both the caps and the audit
+# trail. It is NOT automatically clawed back -- it's recouped indirectly
+# through the platform's existing per-trade fee (FEE_RATE_TXN), which only
+# a wallet that can actually trade ever generates.
+GAS_SPONSOR_PRIVATE_KEY   = os.environ.get('GAS_SPONSOR_PRIVATE_KEY', '').strip()
+GAS_SPONSOR_TX_MULTIPLIER = 3     # fund ~3 worst-case transactions' worth (approve + swap + headroom), so one grant covers a full buy AND its later sell
+GAS_SPONSOR_MAX_PER_DAY   = 3     # per user, per chain
+GAS_SPONSOR_MAX_LIFETIME  = 25    # per user, per chain -- generous for a real trader, still bounded
+GAS_SPONSOR_MIN_USDC      = 1.0   # the anti-farming gate: only wallets already holding real trading capital on that chain
+
+_gas_sponsor_lock = threading.Lock()  # serializes sponsor-wallet sends so concurrent grants can't collide on the same nonce
+
+def _gas_sponsor_address() -> str:
+    """The platform sponsor wallet's own EVM address (same address on every
+    EVM chain). Returns '' when no sponsor key is configured -- sponsorship
+    is then simply off and every caller falls back to what it did before."""
+    if not GAS_SPONSOR_PRIVATE_KEY:
+        return ''
+    try:
+        return _EvmAccount.from_key(GAS_SPONSOR_PRIVATE_KEY).address
+    except Exception as e:
+        print(f'[gas-sponsor] GAS_SPONSOR_PRIVATE_KEY is not a valid EVM key: {type(e).__name__}', flush=True)
+        return ''
+
+def _has_open_position_on_chain(user_id: int, chain: str) -> bool:
+    """Whether this user still holds an open position on `chain` -- the case
+    where a wallet can legitimately hold 0 USDC and still need gas (to sell)."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            row = conn.execute(
+                'SELECT 1 FROM open_positions WHERE user_id=? AND chain=? LIMIT 1', (user_id, chain)).fetchone()
+        finally:
+            conn.close()
+        return row is not None
+    except Exception:
+        return False
+
+def _gas_sponsor_caps_ok(user_id: int, chain: str) -> tuple:
+    """(allowed, reason) against this user's own grant history on `chain`."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            today = conn.execute(
+                "SELECT COUNT(*) FROM gas_sponsorships WHERE user_id=? AND chain=? AND status='sent' "
+                "AND created_at > datetime('now', '-1 day')", (user_id, chain)).fetchone()[0]
+            lifetime = conn.execute(
+                "SELECT COUNT(*) FROM gas_sponsorships WHERE user_id=? AND chain=? AND status='sent'",
+                (user_id, chain)).fetchone()[0]
+        finally:
+            conn.close()
+    except Exception as e:
+        return False, f'could not read sponsorship history: {e}'
+    if today >= GAS_SPONSOR_MAX_PER_DAY:
+        return False, f'daily gas sponsorship cap reached for {chain} ({today}/{GAS_SPONSOR_MAX_PER_DAY})'
+    if lifetime >= GAS_SPONSOR_MAX_LIFETIME:
+        return False, f'lifetime gas sponsorship cap reached for {chain} ({lifetime}/{GAS_SPONSOR_MAX_LIFETIME})'
+    return True, ''
+
+def _sponsor_evm_gas(user_id: int, wallet: str, evm_address: str, chain: str) -> tuple:
+    """Sends a small amount of `chain`'s native gas token from the platform
+    sponsor wallet to this user's own EVM trading wallet. Returns
+    (ok, msg, tx_hash) -- ok=True only once the transfer is actually
+    confirmed on-chain, never merely broadcast. Never raises.
+
+    evm_address must be the address derived from THIS user's stored trading
+    key by the caller -- this function never accepts a user-supplied
+    destination, so a grant can only ever land in a wallet the app itself
+    controls the key for."""
+    if not GAS_SPONSOR_PRIVATE_KEY:
+        return False, 'gas sponsorship not configured', ''
+    if chain not in EVM_CHAINS:
+        return False, f'unknown chain {chain}', ''
+
+    # Anti-farming gate: real trading capital on this exact chain, or an
+    # open position there. A wallet with neither has nothing to trade, so
+    # there's nothing for the platform to earn back on. An open position
+    # qualifies on its own precisely BECAUSE such a wallet can be fully
+    # invested with 0 USDC left -- that user needs gas to EXIT, and being
+    # unable to sell is far worse than being unable to buy.
+    try:
+        usdc_bal = get_evm_usdc_balance(evm_address, chain)
+    except Exception as e:
+        return False, f'{chain} USDC balance check failed: {e}', ''
+    if usdc_bal < GAS_SPONSOR_MIN_USDC and not _has_open_position_on_chain(user_id, chain):
+        _usdc_sym = EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
+        return False, (f'no {_usdc_sym} on {chain} to trade with yet '
+                       f'(holds {usdc_bal:.4f}, needs at least {GAS_SPONSOR_MIN_USDC:.0f}) and no open position there'), ''
+
+    allowed, cap_reason = _gas_sponsor_caps_ok(user_id, chain)
+    if not allowed:
+        return False, cap_reason, ''
+
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    with _gas_sponsor_lock:
+        try:
+            w3 = _get_web3(chain)
+            sponsor = _EvmAccount.from_key(GAS_SPONSOR_PRIVATE_KEY)
+            sponsor_cs = w3.to_checksum_address(sponsor.address)
+            to_cs = w3.to_checksum_address(evm_address)
+
+            gas_price = w3.eth.gas_price
+            grant_wei = gas_price * GAS_TOPUP_TX_GAS_UNITS * GAS_SPONSOR_TX_MULTIPLIER
+            transfer_cost_wei = gas_price * 21000  # the sponsor's own send is a plain native transfer
+            sponsor_bal = w3.eth.get_balance(sponsor_cs)
+            if sponsor_bal < grant_wei + transfer_cost_wei:
+                # Operational alert, not a user problem -- the sponsor wallet
+                # needs topping up by the platform owner.
+                print(f'[gas-sponsor] ⚠ sponsor wallet {sponsor_cs[:10]}... is out of {native_symbol} on {chain} '
+                      f'(has {w3.from_wei(sponsor_bal, "ether")}, needs {w3.from_wei(grant_wei + transfer_cost_wei, "ether")}) '
+                      f'-- top it up to keep gas sponsorship working', flush=True)
+                return False, f'gas sponsor wallet is out of {native_symbol} on {chain}', ''
+
+            tx = {
+                'from': sponsor_cs,
+                'to': to_cs,
+                'value': grant_wei,
+                'gas': 21000,
+                'gasPrice': gas_price,
+                'nonce': w3.eth.get_transaction_count(sponsor_cs),
+                'chainId': EVM_CHAINS[chain]['chain_id'],
+            }
+            signed = sponsor.sign_transaction(tx)
+            tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+            tx_hash_hex = tx_hash.hex()
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
+            success = receipt.status == 1
+            grant_native = float(w3.from_wei(grant_wei, 'ether'))
+        except Exception as e:
+            msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+            print(f'[gas-sponsor] {chain} grant failed for {wallet[:8]}...: {msg}', flush=True)
+            _record_gas_sponsorship(user_id, wallet, chain, evm_address, 0.0, '', 'failed', msg)
+            return False, msg, ''
+
+    _record_gas_sponsorship(user_id, wallet, chain, evm_address, grant_native, tx_hash_hex,
+                             'sent' if success else 'failed',
+                             '' if success else 'sponsor transfer reverted on-chain')
+    if not success:
+        print(f'[gas-sponsor] {chain} grant reverted on-chain: {tx_hash_hex}', flush=True)
+        return False, 'gas sponsor transfer reverted on-chain', tx_hash_hex
+    print(f'[gas-sponsor] {chain} granted {grant_native} {native_symbol} to {wallet[:8]}... '
+          f'TX:{tx_hash_hex[:20]}...', flush=True)
+    return True, '', tx_hash_hex
+
+def _record_gas_sponsorship(user_id: int, wallet: str, chain: str, to_address: str,
+                             amount_native: float, tx_hash: str, status: str, error_msg: str = ''):
+    """Audit row for every grant ATTEMPT, successful or not -- only 'sent'
+    rows count against the caps (see _gas_sponsor_caps_ok), so a failed
+    attempt never burns a user's allowance."""
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            conn.execute(
+                'INSERT INTO gas_sponsorships (user_id, wallet, chain, to_address, amount_native, '
+                'tx_hash, status, error_msg) VALUES (?,?,?,?,?,?,?,?)',
+                (user_id, wallet, chain, to_address, amount_native, tx_hash, status, error_msg[:200]))
+            conn.commit()
+        finally:
+            conn.close()
+    except Exception as e:
+        print(f'[gas-sponsor] could not record sponsorship row: {e}', flush=True)
+
 GAS_BOOTSTRAP_SOL_USD = 5.0  # small, fixed USD-equivalent amount of the user's OWN SOL bridged to bootstrap a completely empty EVM gas balance -- kept a bit larger than the ongoing USDC top-up amount since a cross-chain bridge's own fees eat a bigger share of a very small transfer
 
 def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, chain: str,
@@ -7537,6 +7740,18 @@ def _ensure_evm_gas_locked(user_id: int, wallet: str, private_key: str, evm_addr
 
     native_symbol = EVM_CHAINS[chain]['native_symbol']
     if native_bal_wei <= 0:
+        # Platform gas sponsorship first: it's the only path that fixes a
+        # from-zero wallet WITHOUT the user needing to hold SOL, it lands in
+        # seconds (a plain native transfer, not a cross-chain bridge), and it
+        # works on every chain -- so a user whose capital is entirely USDC on
+        # one chain can just trade. Falls through to the SOL bridge below
+        # whenever it's unavailable (not configured, capped, sponsor wallet
+        # empty, or no USDC on this chain to qualify), so nothing that worked
+        # before this existed stops working.
+        _sp_ok, _sp_msg, _sp_tx = _sponsor_evm_gas(user_id, wallet, evm_address, chain)
+        if _sp_ok:
+            return True, '', None
+        print(f'[bot-{chain}] gas sponsorship unavailable ({_sp_msg}) — falling back to a SOL bootstrap bridge', flush=True)
         return _bootstrap_evm_gas_via_bridge(user_id, wallet, evm_address, chain,
                                               auto_buy_token_address, auto_buy_requested_usdc)
 
@@ -11399,6 +11614,29 @@ def api_bridge_quote():
             _origin_native = None
         if _origin_native is not None and _origin_native <= 0:
             _native_symbol = EVM_CHAINS[origin_chain]['native_symbol']
+            # Kick off the platform gas grant in the background rather than
+            # inline: this route stays a fast read (a native transfer takes
+            # seconds to confirm) and the user just retries. Bounded and
+            # audited by _sponsor_evm_gas's own caps, so a user hammering
+            # refresh can't turn this into repeated spend, and the
+            # destination is always this user's own stored wallet.
+            _uid_row = None
+            try:
+                _conn_u = sqlite3.connect(DB_FILE)
+                try:
+                    _uid_row = _conn_u.execute('SELECT id FROM users WHERE wallet_address=?',
+                                               (_session_wallet,)).fetchone()
+                finally:
+                    _conn_u.close()
+            except Exception:
+                pass
+            if _uid_row:
+                threading.Thread(target=_sponsor_evm_gas,
+                                 args=(_uid_row[0], _session_wallet, _real_origin, origin_chain),
+                                 daemon=True).start()
+                return jsonify({'ok': False, 'msg':
+                    f'Your {origin_chain} wallet has no {_native_symbol} gas yet — funding it automatically now, '
+                    f'try again in about half a minute'}), 400
             return jsonify({'ok': False, 'msg':
                 f'Insufficient {_native_symbol} gas on your {origin_chain} trading wallet to broadcast a bridge — '
                 f'deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet, it funds {origin_chain} gas '
@@ -25688,6 +25926,14 @@ threading.Thread(target=_audit_loop,           daemon=True).start()
 threading.Thread(target=_security_check_loop,  daemon=True).start()
 import gas_manager
 threading.Thread(target=gas_manager.gas_sweep_loop, daemon=True).start()
+# Tells the operator, at a glance, which address to keep funded with native
+# gas on each EVM chain (or that sponsorship is simply off). Never prints the
+# key itself -- only the public address derived from it.
+_gs_addr = _gas_sponsor_address()
+print(f'[startup] gas sponsor wallet: {_gs_addr} — keep this funded with native gas on each EVM chain'
+      if _gs_addr else
+      '[startup] gas sponsorship DISABLED (no GAS_SPONSOR_PRIVATE_KEY) — empty EVM wallets fall back to a SOL bootstrap bridge',
+      flush=True)
 _security_selftest()
 add_log('OrcAgent started')
 def _autostart_bots():
