@@ -1,6 +1,6 @@
-# OrcAgent — Social Solana Trading Platform
+# OrcAgent — Multi-Chain Social Trading Platform
 
-A social meme coin trading platform on Solana. Follow traders, copy their trades, share wins to X, and let an AI-scored automated bot trade on your behalf — all in one wallet-native app.
+A social meme coin trading platform across Solana, BSC, Base, Arbitrum, Polygon, and Robinhood Chain. Follow traders, copy their trades, share wins to X, and let an AI-scored automated bot trade on your behalf — all in one wallet-native app.
 
 
 
@@ -75,6 +75,7 @@ Optional:
 
 - Python / Flask backend, SQLite storage
 - Solana via solders + Jupiter DEX API
+- BSC, Base, Arbitrum, Polygon, and Robinhood Chain via web3.py + 0x API (swaps and cross-chain bridging)
 - Claude AI (Anthropic) for token scoring
 - X (Twitter) API v2 for social sharing
 - Deployed on Railway via Docker
