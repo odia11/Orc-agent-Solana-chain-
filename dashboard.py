@@ -3494,7 +3494,12 @@ def _bridge_status_loop():
                     except Exception as _ne:
                         print(f'[bridge-status] notify failed for row {row_id}: {_ne}', flush=True)
 
-                    add_user_log(wallet, f'Bridge row {row_id} -> {new_status}')
+                    # No add_user_log() here on purpose -- the notifications
+                    # row/push above (a clean "Purchase complete" or bridge
+                    # status label) is the one user-facing surface for this;
+                    # a raw "Bridge row 42 -> bridge_filled" line would just
+                    # be background plumbing leaking into the activity log.
+                    print(f'[bridge-status] row {row_id} -> {new_status}', flush=True)
                 except Exception as e:
                     print(f'[bridge-status] check failed for row {row_id} (tx={source_tx_hash[:12]}...): {e}', flush=True)
         except Exception as e:
@@ -6164,7 +6169,10 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
     finally:
         conn3.close()
 
-    add_user_log(wallet, f'Bridge {origin_chain}->{dest_chain} origin tx broadcast: {tx_hash}')
+    # Background plumbing, not a user-facing event -- the bridge's own
+    # notifications row (see _bridge_status_loop) tells the user when it
+    # actually lands or fails, which is what they care about.
+    print(f'[bridge] {origin_chain}->{dest_chain} origin tx broadcast (row {row_id}): {tx_hash}', flush=True)
     return True, tx_hash, row_id
 
 # Bridge amounts include this buffer over the requested buy so the
@@ -6311,7 +6319,9 @@ def _execute_auto_buy_after_bridge(bridge_id: int, user_id: int, wallet: str, de
         _finish('failed', {'error': _redact_keys(str(e))[:300]})
         return
 
-    add_user_log(wallet, f'Auto-buy after bridge (row {bridge_id}) completed: {symbol} on {dest_chain}, ${amount_usdc}')
+    # Final outcome, not a bridge-mechanics detail -- worded like every other
+    # buy confirmation in this app, with no mention of the bridge that funded it.
+    add_user_log(wallet, f'✓ Bought {symbol} on {dest_chain} for ${amount_usdc}')
     _finish('done', {'symbol': symbol, 'amount_usdc': amount_usdc, 'entry_price': entry_price,
                       'token_address': token_address, 'chain': dest_chain, 'tx_hash': buy_tx_hash})
 
@@ -7072,7 +7082,7 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
             sell_token, buy_token, sell_symbol = token_cs, usdc_addr, 'token'
         else:
             msg = f'Unknown action {action!r}'
-            add_user_log(wallet, f'{chain} swap error: {msg}')
+            print(f'[{chain}-swap] {msg}', flush=True)
             return False, msg, ''
 
         sell_contract = w3.eth.contract(address=w3.to_checksum_address(sell_token), abi=_ERC20_MIN_ABI)
@@ -7083,14 +7093,14 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
             quote = _get_0x_quote(sell_token, buy_token, sell_amount_raw, wallet_cs, chain)
         except RuntimeError as e:
             # _get_0x_quote's own "ZEROX_API_KEY not configured" is already specific
-            add_user_log(wallet, f'{chain} swap error: {e}')
+            print(f'[{chain}-swap] {e}', flush=True)
             return False, str(e), ''
 
         issues = quote.get('issues') or {}
         balance_issue = issues.get('balance')
         if balance_issue:
             msg = f'Insufficient {sell_symbol} balance'
-            add_user_log(wallet, f'{chain} swap error: {msg} ({balance_issue})')
+            print(f'[{chain}-swap] {msg} ({balance_issue})', flush=True)
             return False, msg, ''
 
         allowance_issue = issues.get('allowance')
@@ -7100,11 +7110,11 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
                 ok = _ensure_evm_allowance(w3, wallet_cs, private_key, sell_token, spender, sell_amount_raw, chain)
             except Exception as e:
                 msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
-                add_user_log(wallet, f'{chain} swap error: {msg}: {_redact_keys(str(e))[:100]}')
+                print(f'[{chain}-swap] {msg}: {_redact_keys(str(e))[:100]}', flush=True)
                 return False, msg, ''
             if not ok:
                 msg = 'Token approval transaction reverted on-chain'
-                add_user_log(wallet, f'{chain} swap error: {msg}')
+                print(f'[{chain}-swap] {msg}', flush=True)
                 return False, msg, ''
             # Re-quote after approving -- the first quote's tx.data assumed the
             # allowance issue was still open; a stale quote can revert on-chain.
@@ -7113,7 +7123,7 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
         txn = quote.get('transaction')
         if not txn:
             msg = 'No liquidity route found for this trade' if not issues else f'Trade not possible: {issues}'
-            add_user_log(wallet, f'{chain} swap error: {msg}')
+            print(f'[{chain}-swap] {msg}', flush=True)
             return False, msg, ''
 
         tx = {
@@ -7131,20 +7141,19 @@ def _execute_evm_swap(wallet: str, private_key: str, action: str, token_address:
             tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         except Exception as e:
             msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-            add_user_log(wallet, f'{chain} swap error: {msg}')
+            print(f'[{chain}-swap] {msg}', flush=True)
             return False, msg, ''
         tx_hash_hex = tx_hash.hex()
-        add_user_log(wallet, f'{chain} swap sent: {tx_hash_hex}')
+        print(f'[{chain}-swap] sent: {tx_hash_hex}', flush=True)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
         success = receipt.status == 1
-        add_user_log(wallet, f'{chain} swap {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        print(f'[{chain}-swap] {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}', flush=True)
         # tx_hash_hex is returned even on-chain-revert -- the transaction did
         # broadcast and has a real hash, it just didn't succeed; only the
         # never-broadcast failure paths above return ''.
         return success, ('' if success else 'Swap transaction reverted on-chain'), tx_hash_hex
     except Exception as e:
         msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-        add_user_log(wallet, f'{chain} swap error: ' + msg)
         print(f'[{chain}-swap] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
@@ -7203,7 +7212,7 @@ def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amoun
         balance_issue = issues.get('balance')
         if balance_issue:
             msg = f'Insufficient {usdc_symbol} balance for gas top-up'
-            add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+            print(f'[{chain}-gas-topup] {msg}', flush=True)
             return False, msg, ''
 
         allowance_issue = issues.get('allowance')
@@ -7213,11 +7222,11 @@ def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amoun
                 ok = _ensure_evm_allowance(w3, wallet_cs, private_key, usdc_addr, spender, sell_amount_raw, chain)
             except Exception as e:
                 msg = f'Insufficient {native_symbol} to approve the top-up itself' if 'insufficient funds' in str(e).lower() else 'Token approval failed'
-                add_user_log(wallet, f'{chain} gas top-up error: {msg}: {_redact_keys(str(e))[:100]}')
+                print(f'[{chain}-gas-topup] {msg}: {_redact_keys(str(e))[:100]}', flush=True)
                 return False, msg, ''
             if not ok:
                 msg = 'Approval transaction reverted on-chain'
-                add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+                print(f'[{chain}-gas-topup] {msg}', flush=True)
                 return False, msg, ''
             # Re-quote after approving -- same reasoning as _execute_evm_swap().
             quote = _get_0x_quote(usdc_addr, BNB_NATIVE_ADDR, sell_amount_raw, wallet_cs, chain)
@@ -7225,7 +7234,7 @@ def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amoun
         txn = quote.get('transaction')
         if not txn:
             msg = 'No liquidity route found for the gas top-up swap'
-            add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+            print(f'[{chain}-gas-topup] {msg}', flush=True)
             return False, msg, ''
 
         tx = {
@@ -7243,17 +7252,16 @@ def _execute_evm_gas_topup(wallet: str, private_key: str, chain: str, usdc_amoun
             tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         except Exception as e:
             msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-            add_user_log(wallet, f'{chain} gas top-up error: {msg}')
+            print(f'[{chain}-gas-topup] {msg}', flush=True)
             return False, msg, ''
         tx_hash_hex = tx_hash.hex()
-        add_user_log(wallet, f'{chain} gas top-up sent: {tx_hash_hex} ({usdc_amount} {usdc_symbol} -> {native_symbol})')
+        print(f'[{chain}-gas-topup] sent: {tx_hash_hex} ({usdc_amount} {usdc_symbol} -> {native_symbol})', flush=True)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
         success = receipt.status == 1
-        add_user_log(wallet, f'{chain} gas top-up {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        print(f'[{chain}-gas-topup] {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}', flush=True)
         return success, ('' if success else 'Gas top-up transaction reverted on-chain'), tx_hash_hex
     except Exception as e:
         msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-        add_user_log(wallet, f'{chain} gas top-up error: ' + msg)
         print(f'[{chain}-gas-topup] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
@@ -7282,13 +7290,13 @@ def _execute_evm_native_to_usdc(wallet: str, private_key: str, chain: str, nativ
         balance_issue = issues.get('balance')
         if balance_issue:
             msg = f'Insufficient {native_symbol} balance'
-            add_user_log(wallet, f'{chain} convert-to-usdc error: {msg} ({balance_issue})')
+            print(f'[{chain}-convert-to-usdc] {msg} ({balance_issue})', flush=True)
             return False, msg, ''
 
         txn = quote.get('transaction')
         if not txn:
             msg = 'No liquidity route found for this conversion'
-            add_user_log(wallet, f'{chain} convert-to-usdc error: {msg}')
+            print(f'[{chain}-convert-to-usdc] {msg}', flush=True)
             return False, msg, ''
 
         tx = {
@@ -7306,17 +7314,16 @@ def _execute_evm_native_to_usdc(wallet: str, private_key: str, chain: str, nativ
             tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
         except Exception as e:
             msg = f'Insufficient {native_symbol} for gas fees' if 'insufficient funds' in str(e).lower() else f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-            add_user_log(wallet, f'{chain} convert-to-usdc error: {msg}')
+            print(f'[{chain}-convert-to-usdc] {msg}', flush=True)
             return False, msg, ''
         tx_hash_hex = tx_hash.hex()
-        add_user_log(wallet, f'{chain} convert-to-usdc sent: {tx_hash_hex} ({native_amount} {native_symbol} -> USDC)')
+        print(f'[{chain}-convert-to-usdc] sent: {tx_hash_hex} ({native_amount} {native_symbol} -> USDC)', flush=True)
         receipt = w3.eth.wait_for_transaction_receipt(tx_hash, timeout=90)
         success = receipt.status == 1
-        add_user_log(wallet, f'{chain} convert-to-usdc {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}')
+        print(f'[{chain}-convert-to-usdc] {"confirmed" if success else "reverted on-chain"}: {tx_hash_hex}', flush=True)
         return success, ('' if success else 'Conversion transaction reverted on-chain'), tx_hash_hex
     except Exception as e:
         msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
-        add_user_log(wallet, f'{chain} convert-to-usdc error: ' + msg)
         print(f'[{chain}-convert-to-usdc] error for {wallet[:8]}...: {type(e).__name__}: {e}', flush=True)
         return False, msg, ''
 
@@ -7365,7 +7372,10 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
     except Exception as e:
         return False, f'could not check for an in-flight gas bootstrap bridge: {e}'
     if in_flight:
-        add_user_log(wallet, f'[bot-{chain}] Waiting for a {native_symbol} gas bootstrap bridge (row {in_flight[0]}) to land')
+        # Transient "still waiting" status, not something the user needs to
+        # see or act on -- the bridge lands or fails on its own; the balance
+        # check at the top of _ensure_evm_gas() notices once it does.
+        print(f'[bot-{chain}] waiting for gas bootstrap bridge (row {in_flight[0]}) to land', flush=True)
         return False, f'gas bootstrap bridge already in flight (row {in_flight[0]})'
 
     try:
@@ -7377,6 +7387,8 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
     sol_amount = round(GAS_BOOTSTRAP_SOL_USD / _sol_price_usd, 6) if _sol_price_usd > 0 else 0.0
     _sol_gas_buffer = 0.005  # leaves enough SOL behind to cover the bridge's own Solana-side network fee plus a little headroom
     if sol_amount <= 0 or sol_bal < sol_amount + _sol_gas_buffer:
+        # This IS a genuine dead end the user must act on (deposit more SOL) --
+        # unlike the other lines in this function, kept visible on purpose.
         add_user_log(wallet, f'[bot-{chain}] Out of {native_symbol} for gas and not enough SOL ({round(sol_bal,4)}) to bootstrap it via bridge — deposit a bit more SOL')
         return False, f'not enough SOL to bootstrap {chain} gas via bridge'
 
@@ -7385,9 +7397,13 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
         origin_token=SOL_MINT, dest_token=BNB_NATIVE_ADDR, amount=sol_amount,
         initiated_by='bot_gas_bootstrap')
     if ok:
-        add_user_log(wallet, f'[bot-{chain}] Bootstrapping {native_symbol} gas from {sol_amount} SOL via bridge (row {row_id}) — this can take a minute, paid entirely from your own SOL')
+        # Routine background progress, not a dead end -- it'll simply land
+        # (or the next cycle's balance check will retry) with no action needed.
+        print(f'[bot-{chain}] bootstrapping gas from {sol_amount} SOL via bridge (row {row_id})', flush=True)
         return False, 'gas bootstrap bridge just submitted, not landed yet'
-    add_user_log(wallet, f'[bot-{chain}] Gas bootstrap bridge failed to submit: {msg}')
+    # Submission failures here are transient/retried next cycle, not a dead
+    # end -- see the "not enough SOL" branch above for the one that is.
+    print(f'[bot-{chain}] gas bootstrap bridge failed to submit: {msg}', flush=True)
     return False, f'gas bootstrap bridge failed: {msg}'
 
 def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: str, chain: str) -> tuple:
@@ -7395,8 +7411,12 @@ def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: st
     USDC on that chain if it's running low -- see the module comment above
     for why. Returns (ok, msg): ok=True means the caller can go ahead with
     its trade (gas was already sufficient, or a top-up just succeeded);
-    ok=False means don't trade this cycle, with a specific reason (already
-    logged via add_user_log, so callers don't need to re-log it)."""
+    ok=False means don't trade this cycle, with a specific reason. Gas
+    plumbing is meant to stay invisible to the user -- only the two genuine
+    dead ends (no SOL to bootstrap from zero, no USDC to top up from low)
+    are already surfaced via add_user_log inside this call chain; every
+    other step here is transient/auto-retrying and only goes to the server
+    console, so callers don't need to re-log `msg` themselves."""
     try:
         w3 = _get_web3(chain)
         native_bal_wei = w3.eth.get_balance(w3.to_checksum_address(evm_address))
@@ -7417,10 +7437,12 @@ def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: st
         return False, f'{chain} USDC balance check failed: {e}'
     topup_amount = min(GAS_TOPUP_USDC_AMOUNT, usdc_bal)
     if topup_amount <= 0:
+        # Genuine dead end (nothing left to auto-fund gas with) -- kept visible.
         add_user_log(wallet, f'[bot-{chain}] Low on {native_symbol} for gas and no USDC on {chain} to top it up with')
         return False, f'no USDC on {chain} to fund a gas top-up'
 
-    add_user_log(wallet, f'[bot-{chain}] Low on {native_symbol} for gas — auto-topping up with {round(topup_amount, 4)} USDC')
+    # Routine, self-correcting background step -- server console only.
+    print(f'[bot-{chain}] low on {native_symbol} for gas, auto-topping up with {round(topup_amount, 4)} USDC', flush=True)
     ok, msg, _tx = _execute_evm_gas_topup(wallet, private_key, chain, topup_amount)
     if not ok:
         return False, f'gas top-up failed: {msg}'
