@@ -562,7 +562,9 @@ function _shareGroupLink(){
 }
 
 function _loadPriceChange(symbol){
-  fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol))
+  // Routed through this app's own cached, rate-limit-protected proxy
+  // instead of an unproxied direct call to DexScreener.
+  fetch('/api/dexscreener/search?q='+encodeURIComponent(symbol))
     .then(function(r){return r.json();}).then(function(d){
       var pairs = (d && d.pairs) || [];
       if(!pairs.length) return;

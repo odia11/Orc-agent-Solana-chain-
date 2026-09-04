@@ -591,7 +591,7 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
       <div class="wlt-title">Wallet</div>
       <div class="wlt-sub">Your dedicated trading wallet</div>
     </div>
-    <span class="net-pill"><span class="net-dot"></span>SOLANA · MAINNET</span>
+    <span class="net-pill"><span class="net-dot"></span>MULTI-CHAIN · MAINNET</span>
   </div>
 
   <!-- scrollable content -->
@@ -1747,12 +1747,19 @@ async function _loadSidebarMarket(){
   var el=document.getElementById('sb-market-list')
   if(!el) return
   try{
-    var boosts=await fetch('https://api.dexscreener.com/token-boosts/top/v1').then(function(r){return r.json()})
-    var solToks=(Array.isArray(boosts)?boosts:[]).filter(function(t){return t.chainId==='solana'}).slice(0,5)
+    // Used to call DexScreener directly and hard-filter to chainId==='solana',
+    // so a trending BSC/Base/Arbitrum/Polygon/Robinhood token never showed up
+    // here even though this app trades all of them. Routed through this
+    // app's own proxies (cached + rate-limit-protected) and kept to every
+    // chain this app actually supports instead of Solana only -- same
+    // _NB_LIVE_CHAINS guard used everywhere else this session.
+    var liveChains=(typeof _NB_LIVE_CHAINS!=='undefined')?_NB_LIVE_CHAINS:['solana']
+    var boosts=await fetch('/api/dexscreener/token-boosts').then(function(r){return r.json()})
+    var solToks=(Array.isArray(boosts)?boosts:[]).filter(function(t){return liveChains.indexOf(t.chainId)!==-1}).slice(0,5)
     if(!solToks.length){el.innerHTML='<div style="color:var(--muted);font-size:12px;padding:6px 0">No data</div>';return}
 
     var addrs=solToks.map(function(t){return t.tokenAddress}).join(',')
-    var pairsRaw=await fetch('https://api.dexscreener.com/tokens/v1/solana/'+addrs).then(function(r){return r.json()})
+    var pairsRaw=await fetch('/api/dexscreener/tokens/'+addrs).then(function(r){return r.json()})
     var pairs=Array.isArray(pairsRaw)?pairsRaw:(pairsRaw.pairs||[])
 
     // best pair per token address (highest liquidity)
