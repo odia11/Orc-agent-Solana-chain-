@@ -7284,10 +7284,16 @@ async function _hydrateTradeBanner(cardEl){
     return;
   }
   try{
-    var r = await fetch('https://api.dexscreener.com/latest/dex/tokens/'+encodeURIComponent(mint));
-    var d = await r.json();
-    var p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
-    var header = (p && p.info && p.info.header) || null;
+    // Used to fetch DexScreener's raw /tokens/<mint> directly and hard-filter
+    // to chainId==='solana' -- so a trade on any other chain (BSC/Base/
+    // Arbitrum/Polygon/Robinhood) always found nothing, cached that null
+    // forever for this page session, and the card's banner never loaded.
+    // /api/token/info/<mint> is this app's own chain-agnostic lookup
+    // (already used by showTokenCard()'s known-address path and the
+    // composer's own chart embed) -- one request, no chain guessing needed.
+    var r = await fetch('/api/token/info/'+encodeURIComponent(mint));
+    var info = await r.json();
+    var header = (info && info.ok && info.banner_url) || null;
     _tradeBannerCache[mint] = header;
     if(bannerEl && header && !bannerEl.style.backgroundImage){
       bannerEl.style.backgroundImage = 'url('+header+')';
@@ -7689,7 +7695,8 @@ function _selectCashtagResult(idx){
     mint:        (p.baseToken&&p.baseToken.address)||'',
     pairAddress: p.pairAddress||'',
     chain:       p.chainId||'',
-    image:       (p.info&&p.info.imageUrl)||''
+    image:       (p.info&&p.info.imageUrl)||'',
+    banner:      (p.info&&p.info.header)||''
   };
   var chartBtn = document.getElementById('chart-pill-btn');
   if(chartBtn) chartBtn.style.background = '#f7b95522';
@@ -7776,7 +7783,8 @@ function _attachChartEmbed(idx){
     mint:        (p.baseToken&&p.baseToken.address)||'',
     pairAddress: p.pairAddress||'',
     chain:       p.chainId||'',
-    image:       (p.info&&p.info.imageUrl)||''
+    image:       (p.info&&p.info.imageUrl)||'',
+    banner:      (p.info&&p.info.header)||''
   };
   document.getElementById('composer-chart-search').style.display = 'none';
   document.getElementById('chart-pill-btn').style.background = '#f7b95522';
@@ -8739,7 +8747,7 @@ function _renderFeedCard(e){
           +' data-sym="'+esc(_c.symbol||'')+'" style="background:#101216;border-radius:16px;overflow:hidden;margin:8px 0 10px;cursor:pointer;position:relative" onclick="event.stopPropagation();showTokenCard(this.dataset.sym,'+_mintJs+')">'
           +'<span class="live-dot" style="position:absolute;top:10px;right:12px;z-index:3;color:#00ff88;font-size:12px">●</span>'
           +'<div style="position:relative;min-height:90px;overflow:hidden;background:#0d1117">'
-          +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
+          +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center'+(_c.banner?';background-image:url('+esc(_c.banner)+')':'')+'"></div>'
           +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.45),rgba(16,18,22,0.97))"></div>'
           +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 12px">'
           +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#f7b955;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+(_c.image?'<img src="'+esc(_c.image)+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">':esc((_c.symbol||'??').slice(0,2).toUpperCase()))+'</div>'
