@@ -126,7 +126,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
 .col-staleroles{grid-template-columns:minmax(0,1fr) 90px 100px 140px 130px}
 .col-readonly{grid-template-columns:130px minmax(0,.9fr) 110px minmax(0,1.3fr)}
 .col-perf{grid-template-columns:minmax(0,1.4fr) 90px 90px 100px}
-.col-gassponsor{grid-template-columns:minmax(0,1fr) 130px 100px 110px 110px 110px 110px}
+.col-gassponsor{grid-template-columns:minmax(0,1fr) 130px 100px 130px 120px 90px 130px 110px}
 .gs-pill{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em}
 .gs-ok{background:rgba(58,210,155,.14);color:#3ad29b}
 .gs-filling{background:rgba(124,140,255,.16);color:#8f9dff}
@@ -610,8 +610,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
         <div class="tbl-wrap" style="margin-top:14px">
           <div class="tbl">
             <div class="tbl-hdr col-gassponsor">
-              <div>Chain</div><div>Gas balance</div><div>Top-ups left</div><div>USDC waiting</div>
-              <div>Fees received</div><div>Given out</div><div>Status</div>
+              <div>Chain</div><div>Gas balance</div><div>Top-ups left</div><div>Waiting to convert</div>
+              <div>Fees received</div><div>Given out</div><div>Last converted</div><div>Status</div>
             </div>
             <div id="gs-body"><div class="tbl-loading"><span class="spinner"></span></div></div>
           </div>
@@ -1535,13 +1535,18 @@ async function loadGasSponsor() {
     var st = _GS_STATUS[c.status] || _GS_STATUS.unreachable;
     var left = c.grants_left == null ? '—' : c.grants_left + 'x';
     var leftCls = c.grants_left == null ? '' : (c.grants_left <= 0 ? ' neg' : (c.grants_left < 10 ? '' : ' pos'));
+    // Solana needs no conversion step (its fees are already SOL), so it has
+    // no "waiting to convert" balance and no conversion history -- shown as
+    // an explicit dash rather than a misleading 0.
+    var waiting = c.usdc_balance == null ? '—' : _gsNum(c.usdc_balance, 2) + ' ' + _escHtml(c.usdc_symbol);
     return '<div class="tbl-row col-gassponsor">' +
       '<div class="mono-sm">' + _escHtml(c.chain) + '</div>' +
       '<div class="mono">' + _gsNum(c.native_balance) + ' ' + _escHtml(c.native_symbol) + '</div>' +
       '<div class="mono' + leftCls + '">' + left + '</div>' +
-      '<div class="mono">' + _gsNum(c.usdc_balance, 2) + ' ' + _escHtml(c.usdc_symbol) + '</div>' +
-      '<div class="mono">' + _gsNum(c.fees_received, 4) + '</div>' +
+      '<div class="mono">' + waiting + '</div>' +
+      '<div class="mono">' + _gsNum(c.fees_received, 4) + ' ' + _escHtml(c.fees_currency || '') + '</div>' +
       '<div class="mono">' + (c.granted_count || 0) + 'x</div>' +
+      '<div class="mono-sm" style="color:var(--txt3)">' + _escHtml(c.last_refill || 'never') + '</div>' +
       '<div><span class="gs-pill ' + st[0] + '">' + st[1] + '</span></div>' +
       '</div>';
   }).join('') : '<div class="tbl-empty">No EVM chains configured</div>';

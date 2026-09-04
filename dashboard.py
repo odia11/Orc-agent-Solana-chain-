@@ -5196,6 +5196,10 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
     """
     fee_amount = round(sol_amount * FEE_RATE_TXN, 6)
     short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    # Solana fees are charged in SOL, which is already the gas token -- so
+    # while the Solana gas sponsor wallet is below target this fee simply
+    # goes there instead, and no conversion is needed at all.
+    fee_recipient = _sol_fee_recipient()
     print(f'[fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} SOL '
           f'({FEE_RATE_TXN * 100:.2f}% of {sol_amount:.6f} SOL {kind})', flush=True)
     if not (wallet and private_key) or fee_amount <= 0:
@@ -5213,8 +5217,9 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
         else:
             # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
             time.sleep(12)
-            print(f'[fee] → attempting {fee:.6f} SOL {kind_} fee transfer from trading wallet to FEE_WALLET '
-                  f'for {sw} {sym}', flush=True)
+            _dest_label = 'gas sponsor wallet' if fee_recipient == _sol_gas_sponsor_address() else 'fee wallet'
+            print(f'[fee] → attempting {fee:.6f} SOL {kind_} fee transfer from trading wallet to '
+                  f'{_dest_label} {fee_recipient[:10]}... for {sw} {sym}', flush=True)
             try:
                 from solders.keypair import Keypair as _KP_fee
                 signer_pub = str(_KP_fee.from_base58_string(pk).pubkey())
@@ -5225,7 +5230,7 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
                                f'(need {fee:.6f} + {NET_FEE} network fee)')
                     print(f'[fee] ✗ {sw} {sym} {err_msg}', flush=True)
                 else:
-                    tx_sig = send_sol_fee(pk, FEE_WALLET, fee)
+                    tx_sig = send_sol_fee(pk, fee_recipient, fee)
                     print(f'[fee] ✓ {sw} {sym} {kind_} {fee:.6f} SOL sent  TX:{tx_sig[:20]}...', flush=True)
             except Exception as e:
                 err_msg = _redact_keys(str(e))
@@ -5237,9 +5242,9 @@ def _charge_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
             fee_tx = tx_sig if tx_sig else ('FAILED: ' + (err_msg or 'unknown')[:80])
             conn2  = sqlite3.connect(DB_FILE)
             conn2.execute(
-                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind) '
-                'VALUES (?,?,?,?,?,?,?)',
-                (wlt, sym, gross, fee, fee_tx, status, kind_))
+                'INSERT INTO fees (user_wallet, token, gross_profit, fee_amount, fee_tx, status, kind, recipient) '
+                'VALUES (?,?,?,?,?,?,?,?)',
+                (wlt, sym, gross, fee, fee_tx, status, kind_, fee_recipient))
             if tx_sig:
                 if kind_ == 'sell' and t_ts:
                     # FIX 2: mark fee_paid by row ID, not timestamp (timestamp is second-level
@@ -5705,7 +5710,11 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
         env = os.environ.copy()
         env['WALLET_ADDRESS']     = wallet
         env['WALLET_PRIVATE_KEY'] = private_key
-        env['FEE_WALLET']         = FEE_WALLET
+        # Same routing rule the separate-transfer fee path uses: a sell's fee
+        # collected atomically inside the swap itself (Jupiter's
+        # platformFeeBps) lands wherever this points, so the Solana gas
+        # sponsor wallet is fed by those too while it's below target.
+        env['FEE_WALLET']         = _sol_fee_recipient()
         env['FEE_RATE_TXN']       = str(FEE_RATE_TXN)
         _ext_hit('jupiter')
         result = subprocess.run(
@@ -7606,6 +7615,44 @@ def _sol_gas_sponsor_address() -> str:
         print(f'[gas-sponsor] SOL_GAS_SPONSOR_PRIVATE_KEY is not a valid Solana key: {type(e).__name__}', flush=True)
         return ''
 
+SOL_GAS_SPONSOR_TARGET_GRANTS = 30  # how much SOL the sponsor aims to hold, expressed in grants it could still hand out
+
+_sol_sponsor_need_cache: dict = {}
+
+def _sol_gas_sponsor_needs_funding() -> bool:
+    """Whether the Solana sponsor wallet still needs fee income, i.e. it holds
+    less than SOL_GAS_SPONSOR_TARGET_GRANTS grants' worth of SOL. Cached for
+    the same window as the EVM check, so this costs one balance read every
+    couple of minutes rather than one per trade. Answers False on any RPC
+    failure -- the conservative side, sending the fee to the normal fee
+    wallet rather than parking it in the gas wallet on a guess."""
+    cached = _sol_sponsor_need_cache.get('solana')
+    if cached and (time.time() - cached[0]) < _SPONSOR_NEED_TTL:
+        return cached[1]
+    sponsor_address = _sol_gas_sponsor_address()
+    if not sponsor_address:
+        return False
+    try:
+        bal = _get_user_sol(sponsor_address)
+    except Exception:
+        return False
+    target = SOL_GAS_SPONSOR_GRANT * SOL_GAS_SPONSOR_TARGET_GRANTS + SOL_GAS_SPONSOR_MIN_RESERVE
+    needs = bal < target
+    _sol_sponsor_need_cache['solana'] = (time.time(), needs)
+    return needs
+
+def _sol_fee_recipient() -> str:
+    """Where a Solana trading fee is actually sent -- the Solana gas sponsor
+    wallet while that one is still below its target, otherwise the normal
+    FEE_WALLET. Exactly the same rule as _evm_fee_recipient, and the reason
+    the Solana gas wallet keeps itself funded out of fee income instead of
+    the operator topping it up by hand.
+
+    Solana needs no conversion step on the way: its trading fees are charged
+    in SOL, which IS the gas token, so routing them here is all it takes.
+    (The EVM chains charge in USDC and convert -- see _refill_gas_sponsor.)"""
+    return _sol_gas_sponsor_address() if _sol_gas_sponsor_needs_funding() else FEE_WALLET
+
 def _sponsor_solana_gas(user_id: int, wallet: str, trading_address: str) -> tuple:
     """Sends SOL_GAS_SPONSOR_GRANT from the platform's Solana sponsor wallet
     to this user's own Solana TRADING wallet. Returns (ok, msg, tx_sig).
@@ -7751,7 +7798,12 @@ def _refill_gas_sponsor(chain: str) -> tuple:
         return False, f'no {_usdc_sym} fee income on {chain} to convert'
     print(f'[gas-sponsor] refilling sponsor wallet on {chain}: converting {round(amount, 4)} USDC of fee income '
           f'into {native_symbol}', flush=True)
-    ok, msg, _tx = _execute_evm_gas_topup(sponsor_address, GAS_SPONSOR_PRIVATE_KEY, chain, amount)
+    ok, msg, tx = _execute_evm_gas_topup(sponsor_address, GAS_SPONSOR_PRIVATE_KEY, chain, amount)
+    # Recorded with status 'refill' rather than 'sent' so it is a visible
+    # history of when the wallet actually needed converting -- without
+    # counting against any user's grant caps (those only count 'sent').
+    _record_gas_sponsorship(0, 'platform', chain, sponsor_address, amount, tx or '',
+                             'refill' if ok else 'refill_failed', '' if ok else msg)
     return ok, ('' if ok else f'sponsor refill failed: {msg}')
 
 GAS_BOOTSTRAP_SOL_USD = 5.0  # small, fixed USD-equivalent amount of the user's OWN SOL bridged to bootstrap a completely empty EVM gas balance -- kept a bit larger than the ongoing USDC top-up amount since a cross-chain bridge's own fees eat a bigger share of a very small transfer
@@ -24476,16 +24528,27 @@ def admin_gas_sponsor():
                                    'granted_count': 0, 'users_helped': 0}})
 
     ok_filter = "(status IS NULL OR status='ok') AND (fee_tx IS NULL OR fee_tx NOT LIKE 'FAILED:%')"
-    per_chain_fees, per_chain_grants = {}, {}
+    per_chain_fees, per_chain_grants, per_chain_refill = {}, {}, {}
     totals = {'fees_to_sponsor': 0.0, 'fees_to_fee_wallet': 0.0, 'granted_count': 0, 'users_helped': 0}
+    sponsor_recipients = [a for a in (sponsor_address, sol_sponsor_address) if a]
     try:
         conn = sqlite3.connect(DB_FILE)
         try:
+            _ph = ','.join('?' * len(sponsor_recipients)) or "''"
             for chain, amount in conn.execute(
                     f'SELECT chain, COALESCE(SUM(fee_amount),0) FROM fees '
-                    f'WHERE {ok_filter} AND recipient=? GROUP BY chain', (sponsor_address,)):
+                    f'WHERE {ok_filter} AND recipient IN ({_ph}) GROUP BY chain', sponsor_recipients):
                 per_chain_fees[chain] = round(float(amount or 0), 6)
-                totals['fees_to_sponsor'] += float(amount or 0)
+                # Solana's figure is SOL and the EVM ones are USDC, so only the
+                # EVM chains are added into the single USDC headline total --
+                # the Solana row carries its own SOL figure instead.
+                if chain != 'solana':
+                    totals['fees_to_sponsor'] += float(amount or 0)
+            # When each chain's gas wallet last had to convert fee income back
+            # into gas -- the "when was this actually needed" history.
+            for chain, ts in conn.execute(
+                    "SELECT chain, MAX(created_at) FROM gas_sponsorships WHERE status='refill' GROUP BY chain"):
+                per_chain_refill[chain] = ts
             row = conn.execute(
                 f'SELECT COALESCE(SUM(fee_amount),0) FROM fees WHERE {ok_filter} '
                 f"AND chain!='solana' AND (recipient IS NULL OR recipient!=?)", (sponsor_address,)).fetchone()
@@ -24514,11 +24577,13 @@ def admin_gas_sponsor():
             'native_symbol':  cfg['native_symbol'],
             'usdc_symbol':    cfg.get('usdc_symbol', 'USDC'),
             'fees_received':  per_chain_fees.get(chain, 0.0),
+            'fees_currency':  cfg.get('usdc_symbol', 'USDC'),
             'granted_count':  grants['count'],
             'granted_native': round(grants['native'], 8),
             'native_balance': None,
             'usdc_balance':   None,
             'grants_left':    None,
+            'last_refill':    (per_chain_refill.get(chain) or 'never')[:16],
             'status':         'ok',
             'error':          '',
         }
@@ -24544,17 +24609,20 @@ def admin_gas_sponsor():
 
     # Solana sits in the same table rather than a separate panel -- it's the
     # same question ("can this wallet still pay users' fees?"), just funded in
-    # SOL rather than an EVM chain's native token. It has no USDC-fee income
-    # of its own: Solana's own trading fees are charged in SOL to the normal
-    # fee wallet, so 'fees_received' stays 0 here by design and this wallet is
-    # topped up by the operator.
+    # SOL rather than an EVM chain's native token. Its fee income needs no
+    # conversion step at all: Solana's trading fees are charged in SOL, which
+    # already IS the gas token, so 'fees_received' here is SOL rather than the
+    # USDC the EVM rows report.
     if sol_sponsor_address:
         sol_grants = per_chain_grants.get('solana', {'count': 0, 'native': 0.0})
         sol_entry = {
-            'chain': 'solana', 'native_symbol': 'SOL', 'usdc_symbol': 'USDC',
-            'fees_received': 0.0, 'granted_count': sol_grants['count'],
+            'chain': 'solana', 'native_symbol': 'SOL', 'usdc_symbol': 'SOL',
+            'fees_received': per_chain_fees.get('solana', 0.0),
+            'fees_currency': 'SOL',
+            'granted_count': sol_grants['count'],
             'granted_native': round(sol_grants['native'], 8),
             'native_balance': None, 'usdc_balance': None, 'grants_left': None,
+            'last_refill': 'n/a — fees already arrive as SOL',
             'status': 'ok', 'error': '',
         }
         try:
