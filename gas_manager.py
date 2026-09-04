@@ -149,11 +149,32 @@ def _sweep_user_chain(user_id: int, wallet: str, evm_address: str, enc_blob: str
         logger.info('[gas-manager] %s wallet %s... not rebalanced this cycle: %s', chain, wallet[:8], msg)
 
 
+def _refill_sponsor_wallet():
+    """Keeps the platform's own gas sponsor wallet solvent: trading fees land
+    there as USDC, grants go out as native gas, so it periodically converts
+    some of that fee income back into gas (see dashboard._refill_gas_sponsor).
+    A no-op when sponsorship isn't configured or the sponsor is still flush."""
+    for chain in _app.EVM_CHAINS:
+        try:
+            refilled, msg = _app._refill_gas_sponsor(chain)
+        except Exception as e:
+            logger.error('[gas-manager] sponsor refill on %s raised: %s', chain, e)
+            continue
+        if refilled:
+            logger.info('[gas-manager] sponsor wallet refilled with gas on %s from fee income', chain)
+        elif msg:
+            logger.error('[gas-manager] sponsor wallet could not be refilled on %s: %s', chain, msg)
+
+
 def sweep_once():
     """One full pass over every user with an EVM key, across every chain in
     EVM_CHAINS. Safe to call directly (e.g. right after a trade) as well as
     from the periodic loop below -- _ensure_evm_gas()'s own per-(wallet,
     chain) lock keeps overlapping calls from ever double-topping-up."""
+    # Before handing gas out to users, make sure the wallet it comes from
+    # still has some -- otherwise every grant below fails for the same reason.
+    _refill_sponsor_wallet()
+
     users = _users_with_evm_key()
     if not users:
         return

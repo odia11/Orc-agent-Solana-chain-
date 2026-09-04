@@ -7566,6 +7566,55 @@ def _record_gas_sponsorship(user_id: int, wallet: str, chain: str, to_address: s
     except Exception as e:
         print(f'[gas-sponsor] could not record sponsorship row: {e}', flush=True)
 
+GAS_SPONSOR_REFILL_BELOW_GRANTS = 10    # convert fee income back into gas once the sponsor wallet holds less than this many grants' worth
+GAS_SPONSOR_REFILL_USDC         = 20.0  # how much of its USDC the sponsor wallet converts per refill
+
+def _refill_gas_sponsor(chain: str) -> tuple:
+    """Closes the loop on sponsorship: trading fees arrive in the sponsor
+    wallet as USDC (see _evm_fee_recipient), but grants are paid in native
+    gas -- so when the sponsor wallet's native balance runs down, it swaps
+    some of that fee income back into gas for itself, using the exact same
+    0x flow a user's own wallet already uses (_execute_evm_gas_topup).
+
+    Returns (refilled, msg). Never raises. A no-op when sponsorship isn't
+    configured, when the sponsor still has plenty of gas, or when no fees
+    have accumulated on this chain yet."""
+    if not GAS_SPONSOR_PRIVATE_KEY or chain not in EVM_CHAINS:
+        return False, 'sponsorship not configured'
+    sponsor_address = _gas_sponsor_address()
+    if not sponsor_address:
+        return False, 'sponsor key invalid'
+    native_symbol = EVM_CHAINS[chain]['native_symbol']
+    try:
+        w3 = _get_web3(chain)
+        native_bal = w3.eth.get_balance(w3.to_checksum_address(sponsor_address))
+        one_grant  = w3.eth.gas_price * GAS_TOPUP_TX_GAS_UNITS * GAS_SPONSOR_TX_MULTIPLIER
+    except Exception as e:
+        return False, f'{chain} RPC unreachable for sponsor refill check: {e}'
+    if native_bal >= one_grant * GAS_SPONSOR_REFILL_BELOW_GRANTS:
+        return False, ''  # still plenty of gas -- nothing to do
+    if native_bal <= 0:
+        # Can't broadcast its own refill swap from zero -- the operator has
+        # to send this wallet some native gas once; from then on it keeps
+        # itself topped up out of fee income.
+        print(f'[gas-sponsor] ⚠ sponsor wallet is at ZERO {native_symbol} on {chain} — it cannot refill itself '
+              f'from fees until it has a little gas; send some to {sponsor_address}', flush=True)
+        return False, f'sponsor wallet has no {native_symbol} on {chain} to broadcast its own refill'
+    try:
+        sponsor_usdc = get_evm_usdc_balance(sponsor_address, chain)
+    except Exception as e:
+        return False, f'{chain} sponsor USDC check failed: {e}'
+    amount = min(GAS_SPONSOR_REFILL_USDC, sponsor_usdc)
+    if amount <= 0:
+        _usdc_sym = EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
+        print(f'[gas-sponsor] ⚠ sponsor wallet is low on {native_symbol} on {chain} and has no {_usdc_sym} fee income '
+              f'there to convert — top it up manually at {sponsor_address}', flush=True)
+        return False, f'no {_usdc_sym} fee income on {chain} to convert'
+    print(f'[gas-sponsor] refilling sponsor wallet on {chain}: converting {round(amount, 4)} USDC of fee income '
+          f'into {native_symbol}', flush=True)
+    ok, msg, _tx = _execute_evm_gas_topup(sponsor_address, GAS_SPONSOR_PRIVATE_KEY, chain, amount)
+    return ok, ('' if ok else f'sponsor refill failed: {msg}')
+
 GAS_BOOTSTRAP_SOL_USD = 5.0  # small, fixed USD-equivalent amount of the user's OWN SOL bridged to bootstrap a completely empty EVM gas balance -- kept a bit larger than the ongoing USDC top-up amount since a cross-chain bridge's own fees eat a bigger share of a very small transfer
 
 def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, chain: str,
@@ -7807,33 +7856,52 @@ def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) ->
     """Backward-compatible alias -- see _send_evm_usdc_fee() above."""
     return _send_evm_usdc_fee(private_key, to_address, amount_usdc, 'bsc')
 
+def _evm_fee_recipient() -> str:
+    """Where an EVM chain's USDC trading fee is actually sent.
+
+    When gas sponsorship is configured, that's the sponsor wallet: the
+    platform fronts native gas to users out of it (see _sponsor_evm_gas),
+    and routing the fees back into the same wallet is what settles that up
+    -- the fee income lands exactly where the gas is spent from, instead of
+    the operator having to move money over by hand. It's the operator's own
+    wallet either way, so this parks revenue there, it never gives it away.
+    The sponsor wallet turns that USDC back into spendable gas itself (see
+    gas_manager's sponsor self-refill).
+
+    Falls back to the pre-existing EVM_CHAIN_FEE_WALLET whenever
+    sponsorship isn't configured, so nothing changes without a sponsor key."""
+    return _gas_sponsor_address() or EVM_CHAIN_FEE_WALLET
+
 def _charge_evm_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
                          usdc_amount: float, kind: str, chain: str = 'bsc',
                          trade_ts: str = None, gross_profit: float = 0.0):
     """EVM equivalent of _charge_txn_fee(): same FEE_RATE_TXN (0.75%), charged on
     BOTH the buy and the sell leg regardless of profit -- but the fee itself is
-    USDC, sent to EVM_CHAIN_FEE_WALLET via _send_evm_usdc_fee()'s web3
+    USDC, sent to _evm_fee_recipient() (the gas sponsor wallet when one is
+    configured, else EVM_CHAIN_FEE_WALLET) via _send_evm_usdc_fee()'s web3
     build/sign/send_raw_transaction flow instead of a SOL transfer. Shares the
     fees/referral_earnings tables with the Solana path, tagged with `chain` so
     a USDC amount is never mistaken for a SOL one (or one EVM chain's for
     another's -- each chain's USDC is a fully separate on-chain balance)."""
     fee_amount = round(usdc_amount * FEE_RATE_TXN, 6)
     short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
+    fee_recipient = _evm_fee_recipient()
     print(f'[{chain}-fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} USDC '
           f'({FEE_RATE_TXN * 100:.2f}% of {usdc_amount:.6f} USDC {kind})', flush=True)
     if not (wallet and private_key) or fee_amount <= 0:
         print(f'[{chain}-fee] {short_w} {symbol} {kind} no fee — no private key or nothing to collect', flush=True)
         return
-    if not EVM_CHAIN_FEE_WALLET:
-        print(f'[{chain}-fee] {short_w} {symbol} {kind} no fee — EVM_CHAIN_FEE_WALLET not configured', flush=True)
+    if not fee_recipient:
+        print(f'[{chain}-fee] {short_w} {symbol} {kind} no fee — no EVM fee recipient configured '
+              f'(set GAS_SPONSOR_PRIVATE_KEY or BSC_FEE_WALLET)', flush=True)
         return
 
     def _do_fee(pk, sym, gross, fee, wlt, uid, kind_, t_ts, chn):
         sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
         # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
         time.sleep(12)
-        print(f'[{chn}-fee] → attempting {fee:.6f} USDC {kind_} fee transfer from trading wallet to EVM_CHAIN_FEE_WALLET '
-              f'for {sw} {sym}', flush=True)
+        print(f'[{chn}-fee] → attempting {fee:.6f} USDC {kind_} fee transfer from trading wallet to '
+              f'{fee_recipient[:10]}... for {sw} {sym}', flush=True)
         tx_sig  = None
         err_msg = None
         try:
@@ -7843,7 +7911,7 @@ def _charge_evm_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str
                 err_msg = f'insufficient balance: {signer_usdc:.6f} USDC (need {fee:.6f})'
                 print(f'[{chn}-fee] ✗ {sw} {sym} {err_msg}', flush=True)
             else:
-                tx_sig = _send_evm_usdc_fee(pk, EVM_CHAIN_FEE_WALLET, fee, chn)
+                tx_sig = _send_evm_usdc_fee(pk, fee_recipient, fee, chn)
                 print(f'[{chn}-fee] ✓ {sw} {sym} {kind_} {fee:.6f} USDC sent  TX:{tx_sig[:20]}...', flush=True)
         except Exception as e:
             err_msg = _redact_keys(str(e))
