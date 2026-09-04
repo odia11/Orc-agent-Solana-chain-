@@ -7238,12 +7238,13 @@ function _renderTradeTerminalCard(t){
   // esc() alone isn't safe once spliced into the single-quoted showTokenCard(...) JS-string
   // argument below -- see the identical comment in renderLiveMarket() (static/dashboard.js).
   var symJs  = esc(JSON.stringify(t.symbol||''));
+  var mintJs = esc(JSON.stringify(t.token_address||''));
   var amtStr = '';
   if(t.amount && parseFloat(t.amount) > 0){
     var _amt = parseFloat(t.amount);
     amtStr = '<div style="color:#565d68;font-size:11px;margin-top:3px">'+(_amt>=1000?_amt.toLocaleString('en-US',{maximumFractionDigits:0}):_amt.toFixed(4))+' tokens</div>';
   }
-  return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard('+symJs+')">'
+  return '<div data-mint="'+esc(t.token_address||'')+'" style="position:relative;overflow:hidden;background:#0d1117;border:1px solid #1a1f2e;border-radius:10px;padding:14px 16px;margin:8px 0 10px;font-family:\'JetBrains Mono\',monospace;cursor:pointer" onclick="event.stopPropagation();showTokenCard('+symJs+','+mintJs+')">'
     +'<div data-cc="banner" class="tc-banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
     +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(13,17,23,0.55),rgba(13,17,23,0.92))"></div>'
     +'<div style="position:relative;z-index:1">'
@@ -7593,7 +7594,13 @@ function _composerReshapeTokenInfo(info, addr){
     liquidity:   {usd: info.liquidity_usd},
     txns:        {h24: {buys: info.buyers_24h, sells: info.sellers_24h}},
     pairAddress: info.pair_address || '',
-    baseToken:   {symbol: info.symbol, name: info.name, address: info.address || addr}
+    baseToken:   {symbol: info.symbol, name: info.name, address: info.address || addr},
+    // Not read by the composer preview itself, but showTokenCard()'s
+    // direct-address lookup reuses this same reshape and does want them.
+    marketCap:   info.market_cap,
+    fdv:         info.fdv,
+    dexId:       info.dex_name || '',
+    info:        {imageUrl: info.image_url || '', header: info.banner_url || ''}
   };
 }
 
@@ -7680,7 +7687,8 @@ function _selectCashtagResult(idx){
     buys:        p.txns&&p.txns.h24 ? p.txns.h24.buys  : null,
     sells:       p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
     mint:        (p.baseToken&&p.baseToken.address)||'',
-    pairAddress: p.pairAddress||''
+    pairAddress: p.pairAddress||'',
+    chain:       p.chainId||''
   };
   var chartBtn = document.getElementById('chart-pill-btn');
   if(chartBtn) chartBtn.style.background = '#f7b95522';
@@ -7765,7 +7773,8 @@ function _attachChartEmbed(idx){
     buys:        p.txns&&p.txns.h24 ? p.txns.h24.buys  : null,
     sells:       p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
     mint:        (p.baseToken&&p.baseToken.address)||'',
-    pairAddress: p.pairAddress||''
+    pairAddress: p.pairAddress||'',
+    chain:       p.chainId||''
   };
   document.getElementById('composer-chart-search').style.display = 'none';
   document.getElementById('chart-pill-btn').style.background = '#f7b95522';
@@ -8480,7 +8489,7 @@ function fmtTokenPrice(p){
   return '$0.0'+zeros+sig;
 }
 
-async function showTokenCard(symbol){
+async function showTokenCard(symbol,knownAddr){
   const modal=document.getElementById('tokenCard')
   const body=document.getElementById('tc-body')
   modal.style.display='flex'
@@ -8488,11 +8497,30 @@ async function showTokenCard(symbol){
   var _ctrl=new AbortController();
   var _timeout=setTimeout(function(){_ctrl.abort();},10000);
   try{
-    const r=await fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol),{signal:_ctrl.signal})
-    clearTimeout(_timeout);
-    const d=await r.json()
-    const p=(d.pairs||[]).find(x=>x.chainId==='solana')
-    if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No Solana pair found for <b style="color:#eef1f5">$'+esc(symbol)+'</b></div>';return}
+    // Used to search DexScreener directly and hard-filter to chainId==='solana',
+    // so a token attached/mentioned from any other chain (BSC/Base/Arbitrum/
+    // Polygon/Robinhood) always showed "No Solana pair found" even when it
+    // was live and tradeable. Fixed the same way as the composer's own
+    // search this session: go through this app's own multichain-aware
+    // endpoints instead. When the caller already knows the exact mint
+    // (the embedded chart card, a trade record) this is one direct,
+    // chain-agnostic lookup -- no symbol-search ambiguity at all.
+    var p;
+    if(knownAddr){
+      const r=await fetch('/api/token/info/'+encodeURIComponent(knownAddr),{signal:_ctrl.signal})
+      clearTimeout(_timeout);
+      const info=await r.json()
+      if(!info || !info.ok){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No tokens found for <b style="color:#eef1f5">$'+esc(symbol)+'</b></div>';return}
+      p=_composerReshapeTokenInfo(info,knownAddr)
+    } else {
+      const r=await fetch('/api/dexscreener/search?q='+encodeURIComponent(symbol),{signal:_ctrl.signal})
+      clearTimeout(_timeout);
+      const d=await r.json()
+      var liveChains=_composerLiveChains()
+      p=(d.pairs||[]).find(x=>liveChains.indexOf(x.chainId)!==-1)
+      if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No tokens found for <b style="color:#eef1f5">$'+esc(symbol)+'</b></div>';return}
+    }
+    const chainLbl=_composerChainLabels()[p.chainId]||(p.chainId||'').toUpperCase()||'SOL'
     const fmt=n=>n==null?'—':parseFloat(n)<0.0001?'$'+parseFloat(n).toExponential(3):'$'+parseFloat(n).toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:6})
     const fmtBig=n=>n==null?'—':'$'+parseInt(n).toLocaleString('en-US')
     const pctBadge=(v,lbl)=>{const n=parseFloat(v||0),c=n>=0?'#3ad29b':'#f76b62',bg=n>=0?'rgba(58,210,155,0.12)':'rgba(247,107,98,0.12)';return`<span style="background:${bg};color:${c};border-radius:6px;padding:3px 8px;font-size:11px;font-family:\'JetBrains Mono\',monospace;font-weight:700">${lbl} ${n>=0?'+':''}${n.toFixed(2)}%</span>`}
@@ -8511,7 +8539,7 @@ async function showTokenCard(symbol){
           <div style="font-size:18px;font-weight:700;color:#eef1f5;font-family:\'JetBrains Mono\',monospace">$${esc(p.baseToken?.symbol||symbol)}</div>
           <div style="display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-top:3px">
             <span style="font-size:12px;color:#565d68">${esc(p.baseToken?.name||'')}</span>
-            <span style="background:rgba(247,185,85,0.12);color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">SOLANA</span>
+            <span style="background:rgba(247,185,85,0.12);color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700">${esc(chainLbl)}</span>
             ${p.dexId?`<span style="background:#1a1f2e;border:1px solid #21252c;color:#f7b955;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:700;letter-spacing:.04em">${esc(p.dexId.toUpperCase())}</span>`:''}
             ${(p.labels||[]).map(lb=>`<span style="background:#1a1f2e;border:1px solid #21252c;color:#8a919c;border-radius:5px;padding:1px 7px;font-size:10px;font-weight:600">${esc(lb)}</span>`).join('')}
           </div>
@@ -8677,6 +8705,11 @@ function _renderFeedCard(e){
         var _initSells   = _c.sells!=null?_c.sells:'—';
         var _initBuysPct = (_c.buys!=null&&_c.sells!=null&&(_c.buys+_c.sells)>0)?((_c.buys/(_c.buys+_c.sells))*100).toFixed(1):'50';
         var _gradId = 'scg-'+_ccId;
+        var _chartChainLbl = esc(_composerChainLabels()[_c.chain] || _c.chain || 'SOL');
+        // esc() alone isn't safe once spliced into the single-quoted
+        // showTokenCard(...) JS-string argument below -- same reasoning as
+        // symJs elsewhere in this file.
+        var _mintJs = esc(JSON.stringify(_c.mint||''));
         textBody += '<div id="'+_ccId+'"'
           +' data-chart-sym="'+esc(_c.symbol||'')+'"'
           +' data-chart-pair="'+esc(_c.pairAddress||'')+'"'
@@ -8685,7 +8718,7 @@ function _renderFeedCard(e){
           +' data-chart-chg1h="'+_safeNum(_c.chg1h)+'"'
           +' data-chart-chg6h="'+_safeNum(_c.chg6h)+'"'
           +' data-chart-chg24h="'+_safeNum(_c.chg24h)+'"'
-          +' data-sym="'+esc(_c.symbol||'')+'" style="background:#101216;border-radius:16px;overflow:hidden;margin:8px 0 10px;cursor:pointer;position:relative" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">'
+          +' data-sym="'+esc(_c.symbol||'')+'" style="background:#101216;border-radius:16px;overflow:hidden;margin:8px 0 10px;cursor:pointer;position:relative" onclick="event.stopPropagation();showTokenCard(this.dataset.sym,'+_mintJs+')">'
           +'<span class="live-dot" style="position:absolute;top:10px;right:12px;z-index:3;color:#00ff88;font-size:12px">●</span>'
           +'<div style="position:relative;min-height:90px;overflow:hidden;background:#0d1117">'
           +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
@@ -8693,7 +8726,7 @@ function _renderFeedCard(e){
           +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 12px">'
           +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#f7b955;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+esc((_c.symbol||'??').slice(0,2).toUpperCase())+'</div>'
           +'<div style="font-size:20px;font-weight:700;color:#eef1f5;letter-spacing:-.01em;margin-bottom:5px">$'+esc(_c.symbol||'')+'</div>'
-          +'<span style="background:rgba(247,185,85,0.15);color:#f7b955;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">SOL</span>'
+          +'<span style="background:rgba(247,185,85,0.15);color:#f7b955;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">'+_chartChainLbl+'</span>'
           +'</div>'
           +'</div>'
           +'<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none" style="display:block;background:#101216">'

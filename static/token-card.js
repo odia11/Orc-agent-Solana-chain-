@@ -169,7 +169,7 @@ async function _lmtdFetchTokenInfo(addr){
    needs a symbol + mint + (if already known from the table row) pair
    address. Everything else renders as '—' via the existing
    _fmtPrice/_fmtNum null-handling until the real pair data replaces it. */
-function _lmtdSkeletonPair(symbol, addr, pairAddr){
+function _lmtdSkeletonPair(symbol, addr, pairAddr, chainId){
   return {
     baseToken:   {symbol: symbol || '', name: symbol || '', address: addr || ''},
     info:        {imageUrl: ''},
@@ -181,6 +181,7 @@ function _lmtdSkeletonPair(symbol, addr, pairAddr){
     liquidity:   {usd: null},
     txns:        {h24: null},
     pairAddress: pairAddr || '',
+    chainId:     chainId || '',
   };
 }
 
@@ -199,6 +200,7 @@ function _lmtdPairFromTokenInfo(d){
     liquidity:   {usd: d.liquidity_usd},
     txns:        {h24: {buys: d.buyers_24h, sells: d.sellers_24h}},
     pairAddress: d.pair_address || '',
+    chainId:     d.chain || '',
   };
 }
 
@@ -243,21 +245,27 @@ async function showTokenCard(symbol, knownAddr, knownPair){
         return;
       }
       if(!info.ok){
-        if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        if(!_lmtdChart) body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No tokens found for $'+_esc(symbol)+'</div>';
         return;
       }
       p = _lmtdPairFromTokenInfo(info);
     } else {
       // No pre-known address (e.g. opened via ?token= URL param) — fall
-      // back to the symbol search.
+      // back to the symbol search. Used to hard-filter to chainId==='solana'
+      // here, so a symbol that only resolves on another chain this app
+      // trades (BSC/Base/Arbitrum/Polygon/Robinhood) always came back "No
+      // Solana pair found" even when DexScreener's own search found it fine.
+      // _NB_LIVE_CHAINS/_NB_CHAIN_LABELS come from navbar.js when it's
+      // loaded on this page; fall back to Solana-only if it isn't.
+      var _liveChains = (typeof _NB_LIVE_CHAINS!=='undefined') ? _NB_LIVE_CHAINS : ['solana'];
       var d = await _lmtdSearchPair(symbol);
       if(d === null){
         body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
         return;
       }
-      p = (d.pairs||[]).find(function(x){ return x.chainId==='solana'; });
+      p = (d.pairs||[]).find(function(x){ return _liveChains.indexOf(x.chainId)!==-1; });
       if(!p){
-        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No Solana pair found for $'+_esc(symbol)+'</div>';
+        body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No tokens found for $'+_esc(symbol)+'</div>';
         return;
       }
     }
@@ -359,6 +367,10 @@ function _lmtdRenderModal(){
   var logo = imgUrl
     ? '<img class="lmtd-logo" src="'+_esc(imgUrl)+'">'
     : '<div class="lmtd-logo-ph">'+_esc(sym.slice(0,2))+'</div>';
+  // Was hardcoded "SOLANA" regardless of the pair's real chain -- see
+  // showTokenCard()'s own comment above for the full reasoning.
+  var chainLbls = (typeof _NB_CHAIN_LABELS!=='undefined') ? _NB_CHAIN_LABELS : {solana:'SOLANA'};
+  var chainBadge = (chainLbls[p.chainId]||(p.chainId||'').toUpperCase()||'SOL');
 
   var price    = _fmtPrice(p.priceUsd);
   var chg24    = p.priceChange&&p.priceChange.h24!=null?p.priceChange.h24:null;
@@ -379,7 +391,7 @@ function _lmtdRenderModal(){
       +'<div class="lmtd-title-wrap">'
         +'<div class="lmtd-name">'
           +'<span class="lmtd-name-text">'+_esc(name||sym)+'</span>'
-          +'<span class="lmtd-chain-badge">SOLANA</span>'
+          +'<span class="lmtd-chain-badge">'+_esc(chainBadge)+'</span>'
           +'<span class="lmtd-live-dot-wrap"><span class="lmtd-live-dot"></span>LIVE</span>'
         +'</div>'
         +'<div class="lmtd-sym">$'+_esc(sym)+'</div>'
