@@ -6103,6 +6103,28 @@ def _execute_cross_chain_bridge(user_id: int, wallet: str, origin_chain: str, de
             if _origin_sol is not None and _origin_sol < 0.002:
                 return False, (f'Insufficient SOL for network fees on your Solana trading wallet '
                                f'({_origin_sol:.4f} SOL) — deposit a small amount of SOL first'), None
+        else:
+            # EVM equivalent of the Solana check above -- an EVM wallet with
+            # zero native gas can't broadcast ANY outgoing transaction,
+            # bridging included, no matter how much USDC/USDG it holds (see
+            # _bootstrap_evm_gas_via_bridge's own module comment for why).
+            # Caught here, before ever getting a quote, for the same reason:
+            # left unchecked this surfaced as 0x's own raw simulation error
+            # ("{'code': -32000, 'message': 'insufficient funds for
+            # transfer'}") once get_0x_bridge_quote() tried to quote against
+            # a gas-less real address -- technically accurate but meaningless
+            # to read, and the same class of bug the Solana check above was
+            # already written to avoid.
+            try:
+                _origin_native = get_evm_native_balance(origin_address, origin_chain)
+            except Exception:
+                _origin_native = None
+            if _origin_native is not None and _origin_native <= 0:
+                _native_symbol = EVM_CHAINS[origin_chain]['native_symbol']
+                return False, (f'Insufficient {_native_symbol} gas on your {origin_chain} trading wallet to broadcast '
+                                f'a bridge — deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet, it '
+                                f'funds {origin_chain} gas automatically (right away on your next Buy/Sell there, or '
+                                f'within a few minutes on its own) — then try this bridge again'), None
 
         if dest_chain == 'solana':
             dest_address = _get_trading_wallet_address(wallet) or wallet
@@ -11359,6 +11381,29 @@ def api_bridge_quote():
     # Placeholder addresses -- never signed against, see docstring.
     _placeholder_origin = SOL_MINT if origin_chain == 'solana' else BNB_NATIVE_ADDR
     _placeholder_dest    = SOL_MINT if dest_chain == 'solana' else BNB_NATIVE_ADDR
+
+    # Same EVM-gas pre-check _execute_cross_chain_bridge() does before
+    # actually signing -- only meaningful here when this quote is about to
+    # use the caller's REAL wallet (an explicit origin_address override or
+    # the anonymous placeholder is never actually funded, so a balance
+    # check against either would be either wrong or a needless RPC call).
+    # Without this, a real EVM wallet with zero native gas got 0x's own raw
+    # simulation failure back verbatim (e.g. "{'code': -32000, 'message':
+    # 'insufficient funds for transfer'}") right on the Get Quote button,
+    # since 0x can't build a real quote against an address that can't pay
+    # for the transaction it would need to sign.
+    if origin_chain != 'solana' and not request.args.get('origin_address') and _real_origin:
+        try:
+            _origin_native = get_evm_native_balance(_real_origin, origin_chain)
+        except Exception:
+            _origin_native = None
+        if _origin_native is not None and _origin_native <= 0:
+            _native_symbol = EVM_CHAINS[origin_chain]['native_symbol']
+            return jsonify({'ok': False, 'msg':
+                f'Insufficient {_native_symbol} gas on your {origin_chain} trading wallet to broadcast a bridge — '
+                f'deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet, it funds {origin_chain} gas '
+                f'automatically (right away on your next Buy/Sell there, or within a few minutes on its own) — '
+                f'then try this bridge again'}), 400
 
     result = get_0x_bridge_quote(origin_chain, origin_token, amount_raw, dest_chain, dest_token,
                                   request.args.get('origin_address') or _real_origin or _placeholder_origin,
