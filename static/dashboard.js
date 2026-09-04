@@ -8127,6 +8127,17 @@ async function _liveChartPoll(cardEl, pairAddress, symbol, mint){
     var buysBarEl = cardEl.querySelector('[data-cc="buysbar"]');
     var bannerEl  = cardEl.querySelector('[data-cc="banner"]');
     var logoEl    = cardEl.querySelector('[data-cc="logo"]');
+    var chainEl   = cardEl.querySelector('[data-cc="chain"]');
+
+    // Corrects the chain badge once the real chain is known -- a post
+    // attached before this field existed on _composerChart (or one whose
+    // chain simply wasn't resolved yet at render time) shows a "SOL"
+    // fallback initially; this replaces it with the token's real chain the
+    // moment the first live poll resolves it, same as price/logo/banner.
+    if(chainEl && p.chainId){
+      var _liveChainLbl = _composerChainLabels()[p.chainId] || p.chainId.toUpperCase();
+      if(chainEl.textContent !== _liveChainLbl) chainEl.textContent = _liveChainLbl;
+    }
 
     if(priceEl) priceEl.textContent = _ccFmtPrice(p.priceUsd);
     if(chgEl){
@@ -8752,7 +8763,7 @@ function _renderFeedCard(e){
           +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 12px">'
           +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#f7b955;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+(_c.image?'<img src="'+esc(_c.image)+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">':esc((_c.symbol||'??').slice(0,2).toUpperCase()))+'</div>'
           +'<div style="font-size:20px;font-weight:700;color:#eef1f5;letter-spacing:-.01em;margin-bottom:5px">$'+esc(_c.symbol||'')+'</div>'
-          +'<span style="background:rgba(247,185,85,0.15);color:#f7b955;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">'+_chartChainLbl+'</span>'
+          +'<span data-cc="chain" style="background:rgba(247,185,85,0.15);color:#f7b955;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">'+_chartChainLbl+'</span>'
           +'</div>'
           +'</div>'
           +'<svg viewBox="0 0 300 80" width="100%" height="80" preserveAspectRatio="none" style="display:block;background:#101216">'
