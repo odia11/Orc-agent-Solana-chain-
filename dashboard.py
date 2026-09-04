@@ -17106,6 +17106,21 @@ def api_instant_trade():
         return jsonify({'error': str(e)}), 500
 
 
+FEED_POST_TEXT_MAX  = 500    # what a user actually types -- matches the composer textarea's own maxlength
+FEED_POST_TOTAL_MAX = 4000   # hard ceiling on the whole stored string, embed included, so a direct API caller can't post an unbounded blob
+
+def _feed_text_part(content: str) -> str:
+    """The user's own typed text, with any machine-appended __CHART__/
+    __TRADE__ embed stripped off. The embed is added by submitPost() in
+    dashboard.js AFTER the user's text -- it is app-generated metadata, not
+    something the user wrote, so it must not be counted against their
+    character limit (a chart embed alone is easily a few hundred characters,
+    which silently ate most of the allowance and then rejected the post with
+    'Too long' while the composer's own counter still showed room left)."""
+    content = content or ''
+    idxs = [i for i in (content.find('__CHART__'), content.find('__TRADE__')) if i != -1]
+    return content[:min(idxs)].strip() if idxs else content
+
 def _parse_feed_embed(content):
     """Parses a feed_posts.content string for a __CHART__/__TRADE__ embed (appended
     by submitPost() in dashboard.js after the user's own text). Returns the embed
@@ -17156,8 +17171,14 @@ def feed_post_create():
     image_data = str(body.get('image_data', '')).strip()
     if not content and not image_data:
         return jsonify({'ok': False, 'msg': 'Content cannot be empty'}), 400
-    if len(content) > 500:
-        return jsonify({'ok': False, 'msg': 'Too long (max 500)'}), 400
+    # Two separate limits, both enforced here regardless of what the client
+    # sent: the user's own text against the same 500 the composer shows them,
+    # and the whole stored string against a hard ceiling so an attached
+    # chart/trade embed (or a hand-crafted API call) can't be unbounded.
+    if len(_feed_text_part(content)) > FEED_POST_TEXT_MAX:
+        return jsonify({'ok': False, 'msg': f'Your post is too long — max {FEED_POST_TEXT_MAX} characters'}), 400
+    if len(content) > FEED_POST_TOTAL_MAX:
+        return jsonify({'ok': False, 'msg': 'That attachment is too large to post'}), 400
     if image_data:
         # Same validation as /api/avatar and /api/banner (base64 data-URI, magic-byte
         # checked). GIF gets a higher size cap than static formats -- an animated GIF
@@ -17267,8 +17288,12 @@ def feed_post_edit(post_id):
     content = _sanitize(str(body.get('content', '')))
     if not content:
         return jsonify({'ok': False, 'msg': 'Content cannot be empty'}), 400
-    if len(content) > 500:
-        return jsonify({'ok': False, 'msg': 'Too long (max 500 chars)'}), 400
+    # Same split as feed_post_create() -- an edit must not fail on an embed
+    # the user never typed and can't shorten.
+    if len(_feed_text_part(content)) > FEED_POST_TEXT_MAX:
+        return jsonify({'ok': False, 'msg': f'Your post is too long — max {FEED_POST_TEXT_MAX} characters'}), 400
+    if len(content) > FEED_POST_TOTAL_MAX:
+        return jsonify({'ok': False, 'msg': 'That attachment is too large to post'}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
         row = conn.execute('SELECT wallet FROM feed_posts WHERE id=?', (post_id,)).fetchone()

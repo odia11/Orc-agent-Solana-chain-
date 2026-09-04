@@ -6940,7 +6940,7 @@ async function submitPost(){
     var tdd=document.getElementById('composer-trade-dropdown')
     if(tdd) tdd.style.display='none'
     window.location.reload()
-  } else openAlertModal({text:'Error: '+JSON.stringify(d)})
+  } else openAlertModal({text: (d && d.msg) ? d.msg : 'Could not post — please try again'})
 }
 
 var _deletePostId=null
