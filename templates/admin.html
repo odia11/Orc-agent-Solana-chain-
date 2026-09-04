@@ -581,7 +581,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
         <div class="sec-count" id="gs-address">—</div>
       </div>
       <div id="gs-disabled" class="tbl-empty" style="display:none">
-        Gas sponsorship is off — set GAS_SPONSOR_PRIVATE_KEY in Railway to enable it.
+        Gas sponsorship is off — set GAS_SPONSOR_PRIVATE_KEY (EVM chains) and/or
+        SOL_GAS_SPONSOR_PRIVATE_KEY (Solana) in Railway to enable it.
       </div>
       <div id="gs-panel" style="display:none">
         <div class="stat-grid">
@@ -1506,7 +1507,12 @@ async function loadGasSponsor() {
   }
   if (off) off.style.display = 'none';
   if (panel) panel.style.display = '';
-  document.getElementById('gs-address').textContent = r.sponsor_address;
+  // Two wallets can be configured independently (EVM and Solana), so name
+  // whichever ones are actually live rather than implying a single address.
+  var addrs = [];
+  if (r.sponsor_address) addrs.push('EVM ' + r.sponsor_address);
+  if (r.sol_sponsor_address) addrs.push('SOL ' + r.sol_sponsor_address);
+  document.getElementById('gs-address').textContent = addrs.join('  ·  ') || 'not configured';
 
   var chains = r.chains || [], t = r.totals || {};
   // "Top-ups left" summed across chains is the number that actually answers

@@ -74,6 +74,43 @@ SWEEP_INTERVAL_SECONDS = int(os.environ.get('GAS_MANAGER_INTERVAL_MINUTES', '15'
 _MIN_USDC_TO_PROTECT = 1.0
 
 
+def _users_with_solana_key():
+    """Every (user_id, wallet_address, encrypted_private_key) row with a
+    Solana trading key configured -- the Solana side of the same sweep."""
+    conn = sqlite3.connect(_app.DB_FILE)
+    try:
+        return conn.execute(
+            "SELECT id, wallet_address, encrypted_private_key FROM users "
+            "WHERE encrypted_private_key IS NOT NULL AND encrypted_private_key != ''"
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def _sweep_solana():
+    """Keeps Solana trading wallets able to pay their own network fees, the
+    same way _sweep_user_chain does for the EVM chains -- so a wallet holding
+    only USDC gets topped up before the user hits a failing trade, not at the
+    moment of one. A no-op unless a Solana gas sponsor is configured."""
+    if not getattr(_app, 'SOL_GAS_SPONSOR_PRIVATE_KEY', ''):
+        return
+    for user_id, wallet, enc_blob in _users_with_solana_key():
+        try:
+            with _app._use_key(enc_blob, wallet) as pk:
+                from solders.keypair import Keypair as _KP
+                trading_address = str(_KP.from_base58_string(pk).pubkey())
+            if _app._get_user_sol(trading_address) >= _app.SOL_GAS_MIN_BALANCE:
+                continue
+            logger.info('[gas-manager] solana wallet %s... is low on SOL -- rebalancing', wallet[:8])
+            ok, msg, _tx = _app._sponsor_solana_gas(user_id, wallet, trading_address)
+            if ok:
+                logger.info('[gas-manager] solana wallet %s... topped up with SOL', wallet[:8])
+            else:
+                logger.info('[gas-manager] solana wallet %s... not topped up this cycle: %s', wallet[:8], msg)
+        except Exception as e:
+            logger.error('[gas-manager] unexpected error sweeping solana for %s...: %s', wallet[:8], e)
+
+
 def _users_with_evm_key():
     """Every (user_id, wallet_address, bsc_wallet_address, encrypted_private_key_bsc)
     row with an EVM trading key configured. One EVM key/address is shared
@@ -174,6 +211,8 @@ def sweep_once():
     # Before handing gas out to users, make sure the wallet it comes from
     # still has some -- otherwise every grant below fails for the same reason.
     _refill_sponsor_wallet()
+
+    _sweep_solana()
 
     users = _users_with_evm_key()
     if not users:

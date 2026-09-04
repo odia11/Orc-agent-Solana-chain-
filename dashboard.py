@@ -5685,6 +5685,14 @@ def _execute_user_swap_ex(wallet: str, private_key: str, action: str, mint: str,
     'insufficient funds', a Jupiter error) -- previously this was discarded
     entirely and every failure surfaced to the user as the same generic
     'Swap failed — check logs' with no actual logs for them to check."""
+    # Every Solana buy and sell in this app funnels through here, so this is
+    # the one place the wallet's ability to pay Solana's own network fee has
+    # to be guaranteed -- the exact role _ensure_evm_gas plays for the EVM
+    # chains. A no-op unless a Solana gas sponsor is configured, and it never
+    # blocks a trade on a flaky balance read (see _ensure_solana_gas).
+    _sol_gas_ok, _sol_gas_msg = _ensure_solana_gas(wallet, private_key)
+    if not _sol_gas_ok:
+        return False, '', _sol_gas_msg, 0.0, 0.0
     try:
         # orcagent_solana.py's execute_single_swap() has accepted an optional
         # 4th CLI arg (BASE: 'SOL' or 'USDC') since it was built -- every
@@ -7571,6 +7579,131 @@ def _record_gas_sponsorship(user_id: int, wallet: str, chain: str, to_address: s
             conn.close()
     except Exception as e:
         print(f'[gas-sponsor] could not record sponsorship row: {e}', flush=True)
+
+# ── SOLANA GAS SPONSORSHIP ──
+# Solana's own version of the same problem: a trading wallet holding only
+# USDC still can't pay the network fee (and the ~0.002 SOL rent for a token
+# account it hasn't held before), so a USDC-only user is stuck exactly as
+# they were on an empty EVM chain. Same shape as _sponsor_evm_gas: a
+# platform wallet sends the user's own trading wallet a small amount of SOL,
+# gated on them actually holding USDC (or an open position) and capped per
+# user, sharing the same gas_sponsorships table and caps.
+SOL_GAS_SPONSOR_PRIVATE_KEY = os.environ.get('SOL_GAS_SPONSOR_PRIVATE_KEY', '').strip()
+SOL_GAS_SPONSOR_GRANT       = 0.01   # SOL per grant -- covers a token account's rent (~0.00204) plus many transactions
+SOL_GAS_MIN_BALANCE         = 0.003  # below this a wallet can't reliably cover a swap plus a new token account's rent
+SOL_GAS_SPONSOR_MIN_RESERVE = 0.01   # the sponsor keeps at least this much for its own transfer fees
+
+_sol_gas_sponsor_lock = threading.Lock()  # serializes sponsor sends -- Solana has no nonce, but back-to-back sends off one blockhash still race
+
+def _sol_gas_sponsor_address() -> str:
+    """The Solana sponsor wallet's own address, or '' when not configured."""
+    if not SOL_GAS_SPONSOR_PRIVATE_KEY:
+        return ''
+    try:
+        from solders.keypair import Keypair as _KP
+        return str(_KP.from_base58_string(SOL_GAS_SPONSOR_PRIVATE_KEY).pubkey())
+    except Exception as e:
+        print(f'[gas-sponsor] SOL_GAS_SPONSOR_PRIVATE_KEY is not a valid Solana key: {type(e).__name__}', flush=True)
+        return ''
+
+def _sponsor_solana_gas(user_id: int, wallet: str, trading_address: str) -> tuple:
+    """Sends SOL_GAS_SPONSOR_GRANT from the platform's Solana sponsor wallet
+    to this user's own Solana TRADING wallet. Returns (ok, msg, tx_sig).
+    Never raises.
+
+    trading_address must be derived by the caller from the user's stored
+    trading key -- never a user-supplied destination, same rule as the EVM
+    side, so a grant can only land in a wallet this app holds the key for."""
+    if not SOL_GAS_SPONSOR_PRIVATE_KEY:
+        return False, 'Solana gas sponsorship not configured', ''
+    if not is_valid_solana_address(trading_address):
+        return False, 'invalid destination address', ''
+
+    # Same anti-farming gate as EVM: real capital, or an open position that
+    # still has to be sold (which needs gas more urgently than any buy).
+    try:
+        usdc_bal = _get_solana_usdc_balance(trading_address)
+    except Exception as e:
+        return False, f'Solana USDC balance check failed: {e}', ''
+    if usdc_bal < GAS_SPONSOR_MIN_USDC and not _has_open_position_on_chain(user_id, 'solana'):
+        return False, (f'no USDC on Solana to trade with yet (holds {usdc_bal:.4f}, '
+                       f'needs at least {GAS_SPONSOR_MIN_USDC:.0f}) and no open position there'), ''
+
+    allowed, cap_reason = _gas_sponsor_caps_ok(user_id, 'solana')
+    if not allowed:
+        return False, cap_reason, ''
+
+    sponsor_address = _sol_gas_sponsor_address()
+    if not sponsor_address:
+        return False, 'Solana sponsor key invalid', ''
+
+    with _sol_gas_sponsor_lock:
+        try:
+            sponsor_bal = _get_user_sol(sponsor_address)
+            if sponsor_bal < SOL_GAS_SPONSOR_GRANT + SOL_GAS_SPONSOR_MIN_RESERVE:
+                print(f'[gas-sponsor] ⚠ Solana sponsor wallet {sponsor_address[:10]}... is out of SOL '
+                      f'(has {sponsor_bal:.4f}, needs {SOL_GAS_SPONSOR_GRANT + SOL_GAS_SPONSOR_MIN_RESERVE:.4f}) '
+                      f'-- top it up to keep Solana gas sponsorship working', flush=True)
+                return False, 'Solana gas sponsor wallet is out of SOL', ''
+            tx_sig = send_sol_fee(SOL_GAS_SPONSOR_PRIVATE_KEY, trading_address, SOL_GAS_SPONSOR_GRANT)
+        except Exception as e:
+            msg = f'{type(e).__name__}: {_redact_keys(str(e))[:100]}'
+            print(f'[gas-sponsor] Solana grant failed for {wallet[:8]}...: {msg}', flush=True)
+            _record_gas_sponsorship(user_id, wallet, 'solana', trading_address, 0.0, '', 'failed', msg)
+            return False, msg, ''
+
+    _record_gas_sponsorship(user_id, wallet, 'solana', trading_address,
+                             SOL_GAS_SPONSOR_GRANT, tx_sig, 'sent')
+    print(f'[gas-sponsor] Solana granted {SOL_GAS_SPONSOR_GRANT} SOL to {wallet[:8]}... TX:{str(tx_sig)[:20]}...',
+          flush=True)
+    return True, '', tx_sig
+
+def _ensure_solana_gas(wallet: str, private_key: str) -> tuple:
+    """Solana counterpart of _ensure_evm_gas: makes sure this user's Solana
+    trading wallet can actually pay for the swap it's about to make, topping
+    it up from the platform sponsor wallet when it can't. Returns (ok, msg)
+    -- ok=True means go ahead (there was already enough SOL, or a grant just
+    landed). A no-op returning True whenever sponsorship isn't configured,
+    so behaviour without a sponsor key is exactly what it was before."""
+    if not SOL_GAS_SPONSOR_PRIVATE_KEY:
+        return True, ''
+    try:
+        from solders.keypair import Keypair as _KP
+        trading_address = str(_KP.from_base58_string(private_key).pubkey())
+    except Exception:
+        return True, ''  # can't derive it -- let the swap itself report the real problem
+    try:
+        if _get_user_sol(trading_address) >= SOL_GAS_MIN_BALANCE:
+            return True, ''
+    except Exception:
+        return True, ''  # balance unknown -- don't block a trade on a flaky RPC read
+
+    conn = None
+    try:
+        conn = sqlite3.connect(DB_FILE)
+        row = conn.execute('SELECT id FROM users WHERE wallet_address=?', (wallet,)).fetchone()
+    except Exception:
+        row = None
+    finally:
+        if conn:
+            conn.close()
+    if not row:
+        return True, ''
+    with _get_evm_gas_lock(wallet, 'solana'):
+        # Re-check inside the lock: a grant from a concurrent trade may have
+        # landed while this one was waiting, and a second grant would just
+        # burn the user's daily allowance for nothing.
+        try:
+            if _get_user_sol(trading_address) >= SOL_GAS_MIN_BALANCE:
+                return True, ''
+        except Exception:
+            return True, ''
+        ok, msg, _tx = _sponsor_solana_gas(row[0], wallet, trading_address)
+    if ok:
+        return True, ''
+    print(f'[solana] gas sponsorship unavailable for {wallet[:8]}... ({msg})', flush=True)
+    return False, ('Not enough SOL in your trading wallet to pay Solana network fees — '
+                   'deposit a small amount of SOL')
 
 GAS_SPONSOR_REFILL_BELOW_GRANTS = 10    # convert fee income back into gas once the sponsor wallet holds less than this many grants' worth
 GAS_SPONSOR_REFILL_USDC         = 20.0  # how much of its USDC the sponsor wallet converts per refill
@@ -24335,8 +24468,9 @@ def admin_gas_sponsor():
         return jsonify({'error': 'Unauthorized'}), 403
 
     sponsor_address = _gas_sponsor_address()
-    if not sponsor_address:
-        return jsonify({'ok': True, 'enabled': False, 'sponsor_address': '',
+    sol_sponsor_address = _sol_gas_sponsor_address()
+    if not sponsor_address and not sol_sponsor_address:
+        return jsonify({'ok': True, 'enabled': False, 'sponsor_address': '', 'sol_sponsor_address': '',
                         'fee_wallet': EVM_CHAIN_FEE_WALLET or '', 'chains': [],
                         'totals': {'fees_to_sponsor': 0.0, 'fees_to_fee_wallet': 0.0,
                                    'granted_count': 0, 'users_helped': 0}})
@@ -24370,7 +24504,10 @@ def admin_gas_sponsor():
     totals['fees_to_sponsor'] = round(totals['fees_to_sponsor'], 6)
 
     chains = []
-    for chain, cfg in EVM_CHAINS.items():
+    # The two sponsors are configured independently, so an EVM row is only
+    # meaningful when an EVM sponsor exists -- otherwise these would be
+    # balance lookups against an empty address.
+    for chain, cfg in (EVM_CHAINS.items() if sponsor_address else []):
         grants = per_chain_grants.get(chain, {'count': 0, 'native': 0.0})
         entry = {
             'chain':          chain,
@@ -24405,10 +24542,41 @@ def admin_gas_sponsor():
             entry['error'] = f'{type(e).__name__}'
         chains.append(entry)
 
+    # Solana sits in the same table rather than a separate panel -- it's the
+    # same question ("can this wallet still pay users' fees?"), just funded in
+    # SOL rather than an EVM chain's native token. It has no USDC-fee income
+    # of its own: Solana's own trading fees are charged in SOL to the normal
+    # fee wallet, so 'fees_received' stays 0 here by design and this wallet is
+    # topped up by the operator.
+    if sol_sponsor_address:
+        sol_grants = per_chain_grants.get('solana', {'count': 0, 'native': 0.0})
+        sol_entry = {
+            'chain': 'solana', 'native_symbol': 'SOL', 'usdc_symbol': 'USDC',
+            'fees_received': 0.0, 'granted_count': sol_grants['count'],
+            'granted_native': round(sol_grants['native'], 8),
+            'native_balance': None, 'usdc_balance': None, 'grants_left': None,
+            'status': 'ok', 'error': '',
+        }
+        try:
+            sol_bal = _get_user_sol(sol_sponsor_address)
+            sol_entry['native_balance'] = sol_bal
+            sol_entry['grants_left'] = int(max(sol_bal - SOL_GAS_SPONSOR_MIN_RESERVE, 0) / SOL_GAS_SPONSOR_GRANT)
+            if sol_bal <= 0:
+                sol_entry['status'] = 'empty'
+            elif sol_entry['grants_left'] < GAS_SPONSOR_REFILL_BELOW_GRANTS:
+                sol_entry['status'] = 'low'
+            elif sol_entry['grants_left'] < GAS_SPONSOR_TARGET_GRANTS:
+                sol_entry['status'] = 'filling'
+        except Exception as e:
+            sol_entry['status'] = 'unreachable'
+            sol_entry['error'] = f'{type(e).__name__}'
+        chains.append(sol_entry)
+
     return jsonify({
         'ok': True,
         'enabled': True,
         'sponsor_address': sponsor_address,
+        'sol_sponsor_address': sol_sponsor_address,
         'fee_wallet': EVM_CHAIN_FEE_WALLET or '',
         'chains': chains,
         'totals': totals,
@@ -26148,9 +26316,14 @@ threading.Thread(target=gas_manager.gas_sweep_loop, daemon=True).start()
 # gas on each EVM chain (or that sponsorship is simply off). Never prints the
 # key itself -- only the public address derived from it.
 _gs_addr = _gas_sponsor_address()
-print(f'[startup] gas sponsor wallet: {_gs_addr} — keep this funded with native gas on each EVM chain'
+print(f'[startup] gas sponsor wallet (EVM): {_gs_addr} — keep this funded with native gas on each EVM chain'
       if _gs_addr else
-      '[startup] gas sponsorship DISABLED (no GAS_SPONSOR_PRIVATE_KEY) — empty EVM wallets fall back to a SOL bootstrap bridge',
+      '[startup] EVM gas sponsorship DISABLED (no GAS_SPONSOR_PRIVATE_KEY) — empty EVM wallets fall back to a SOL bootstrap bridge',
+      flush=True)
+_gs_sol_addr = _sol_gas_sponsor_address()
+print(f'[startup] gas sponsor wallet (Solana): {_gs_sol_addr} — keep this funded with SOL'
+      if _gs_sol_addr else
+      '[startup] Solana gas sponsorship DISABLED (no SOL_GAS_SPONSOR_PRIVATE_KEY) — users need their own SOL for network fees',
       flush=True)
 _security_selftest()
 add_log('OrcAgent started')
