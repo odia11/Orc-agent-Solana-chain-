@@ -5822,7 +5822,7 @@ def _bot_execute_exit(user_id: int, us: dict, wallet: str, mint: str, pos: dict,
             # silently fail for lack of a few cents of gas -- it's how a
             # losing position actually gets closed.
             _evm_addr = _EvmAccount.from_key(pk).address
-            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
+            _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
             if not _gas_ok:
                 return False, 0.0, 0.0
             ok, exit_price, sold_amt = _sell_and_get_realized_evm(wallet, pk, mint, amount_str, price, sell_amount, chain)
@@ -5953,7 +5953,7 @@ def _bot_scan_evm_entry(user_id: int, wallet: str, positions: dict, chain: str, 
             # of the whole chain for this cycle rather than trying the next
             # qualifying candidate (it would hit the exact same wall).
             _evm_addr = _EvmAccount.from_key(pk).address
-            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
+            _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
             if not _gas_ok:
                 add_user_log(wallet, f'[bot-{chain}] Cannot buy {symbol} — {_gas_msg}')
                 return False
@@ -6303,7 +6303,7 @@ def _execute_auto_buy_after_bridge(bridge_id: int, user_id: int, wallet: str, de
             # module comment): tops up from this wallet's own USDC, or
             # bridges a small bootstrap from the user's own SOL if it's at
             # literal zero.
-            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, private_key, evm_address, dest_chain)
+            _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(user_id, wallet, private_key, evm_address, dest_chain)
             if not _gas_ok:
                 _finish('failed', {'error': f'Cannot buy on {dest_chain} yet — {_gas_msg}'})
                 return
@@ -6664,7 +6664,7 @@ def _narrative_agent_process_candidate(user_id: int, wallet: str, mint: str, cha
             # introduced here), so the gas check targets 'bsc' to match
             # exactly what actually gets broadcast.
             _evm_addr = _EvmAccount.from_key(pk).address
-            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, 'bsc')
+            _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, 'bsc')
             if not _gas_ok:
                 ok, err, tx_hash = False, _gas_msg, ''
             else:
@@ -7339,7 +7339,9 @@ def _execute_evm_native_to_usdc(wallet: str, private_key: str, chain: str, nativ
 
 GAS_BOOTSTRAP_SOL_USD = 5.0  # small, fixed USD-equivalent amount of the user's OWN SOL bridged to bootstrap a completely empty EVM gas balance -- kept a bit larger than the ongoing USDC top-up amount since a cross-chain bridge's own fees eat a bigger share of a very small transfer
 
-def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, chain: str) -> tuple:
+def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, chain: str,
+                                   auto_buy_token_address: str = None,
+                                   auto_buy_requested_usdc: float = None) -> tuple:
     """A completely empty (0) native gas balance on `chain` can't be
     refueled by a same-chain swap -- broadcasting that swap itself needs
     gas that doesn't exist yet (see _ensure_evm_gas's own top comment). The
@@ -7358,10 +7360,22 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
     Bridging takes real time (seconds to a couple of minutes), so this
     never blocks waiting for it: if a bootstrap bridge to this chain isn't
     already in flight for this user, it submits exactly one and returns
-    (False, ...) for THIS cycle regardless -- the plain balance check at
-    the top of _ensure_evm_gas() picks up the native balance on its own
-    once the bridge actually lands, no separate "is it done yet" polling
-    needed here."""
+    (False, ..., bridge_id) for THIS cycle regardless -- the plain balance
+    check at the top of _ensure_evm_gas() picks up the native balance on its
+    own once the bridge actually lands, no separate "is it done yet" polling
+    needed here.
+
+    auto_buy_token_address/auto_buy_requested_usdc let a manual Buy click
+    that triggered this bootstrap ride along on the SAME bridge row -- once
+    it lands, _execute_auto_buy_after_bridge() (driven by
+    _bridge_status_loop()) completes that exact purchase automatically using
+    the wallet's own already-present USDC/USDG on `chain` (this bridge only
+    ever delivers native gas, never the trade's own funds), so the user
+    never has to come back and press Buy a second time. Returns a bridge_id
+    (as the 3rd tuple element) whenever ANY bridge -- fresh or already in
+    flight -- is now the thing to wait on, so a caller can attach a pending
+    buy to it even on a retry; returns None there on a genuine dead end or
+    an unrelated failure, since there's nothing to attach to."""
     native_symbol = EVM_CHAINS[chain]['native_symbol']
 
     # Don't submit a second bootstrap bridge while one is still in flight --
@@ -7372,27 +7386,39 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
         conn = sqlite3.connect(DB_FILE)
         try:
             in_flight = conn.execute(
-                "SELECT id FROM bridge_transactions WHERE user_id=? AND dest_chain=? AND token_out=? "
+                "SELECT id, auto_buy_token_address FROM bridge_transactions WHERE user_id=? AND dest_chain=? AND token_out=? "
                 "AND status NOT IN ('bridge_filled','bridge_failed','origin_tx_reverted','timed_out') "
                 "ORDER BY id DESC LIMIT 1",
                 (user_id, chain, BNB_NATIVE_ADDR)
             ).fetchone()
+            # A retried Buy click for a bootstrap that's already in flight --
+            # attach it now so it still completes automatically once this
+            # bridge lands, rather than the user needing to click Buy again
+            # right as it finishes. Never overwrites an already-attached buy
+            # (first click wins; a second, different token/amount on the
+            # same in-flight bridge is simply told to wait, same as before).
+            if in_flight and auto_buy_token_address and not in_flight[1]:
+                conn.execute(
+                    "UPDATE bridge_transactions SET auto_buy_token_address=?, auto_buy_requested_usdc=?, "
+                    "auto_buy_status='pending' WHERE id=?",
+                    (auto_buy_token_address, auto_buy_requested_usdc, in_flight[0]))
+                conn.commit()
         finally:
             conn.close()
     except Exception as e:
-        return False, f'could not check for an in-flight gas bootstrap bridge: {e}'
+        return False, f'could not check for an in-flight gas bootstrap bridge: {e}', None
     if in_flight:
         # Transient "still waiting" status, not something the user needs to
         # see or act on -- the bridge lands or fails on its own; the balance
         # check at the top of _ensure_evm_gas() notices once it does.
         print(f'[bot-{chain}] waiting for gas bootstrap bridge (row {in_flight[0]}) to land', flush=True)
-        return False, f'gas bootstrap bridge already in flight (row {in_flight[0]})'
+        return False, f'gas bootstrap bridge already in flight (row {in_flight[0]})', in_flight[0]
 
     try:
         trading_wallet = _get_trading_wallet_address(wallet)
         sol_bal = _get_user_sol(trading_wallet) if trading_wallet else 0.0
     except Exception as e:
-        return False, f'could not check SOL balance to fund a gas bootstrap: {e}'
+        return False, f'could not check SOL balance to fund a gas bootstrap: {e}', None
 
     sol_amount = round(GAS_BOOTSTRAP_SOL_USD / _sol_price_usd, 6) if _sol_price_usd > 0 else 0.0
     _sol_gas_buffer = 0.005  # leaves enough SOL behind to cover the bridge's own Solana-side network fee plus a little headroom
@@ -7405,67 +7431,83 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
         add_user_log(wallet, f'[bot-{chain}] Cannot activate {chain} yet — deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL '
                               f'(you currently have {round(sol_bal,4)} SOL) — it gets converted into {native_symbol} gas automatically')
         return False, (f'deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet — '
-                        f'that funds your first bit of {native_symbol} gas here automatically')
+                        f'that funds your first bit of {native_symbol} gas here automatically'), None
 
     ok, msg, row_id = _execute_cross_chain_bridge(
         user_id, wallet, origin_chain='solana', dest_chain=chain,
         origin_token=SOL_MINT, dest_token=BNB_NATIVE_ADDR, amount=sol_amount,
-        initiated_by='bot_gas_bootstrap')
+        initiated_by='bot_gas_bootstrap',
+        auto_buy_token_address=auto_buy_token_address, auto_buy_requested_usdc=auto_buy_requested_usdc)
     if ok:
         # Routine background progress, not a dead end -- it'll simply land
         # (or the next cycle's balance check will retry) with no action needed.
         print(f'[bot-{chain}] bootstrapping gas from {sol_amount} SOL via bridge (row {row_id})', flush=True)
-        return False, 'gas bootstrap bridge just submitted, not landed yet'
+        return False, 'gas bootstrap bridge just submitted, not landed yet', row_id
     # Submission failures here are transient/retried next cycle, not a dead
     # end -- see the "not enough SOL" branch above for the one that is.
     print(f'[bot-{chain}] gas bootstrap bridge failed to submit: {msg}', flush=True)
-    return False, f'gas bootstrap bridge failed: {msg}'
+    return False, f'gas bootstrap bridge failed: {msg}', None
 
-def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: str, chain: str) -> tuple:
+def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: str, chain: str,
+                     auto_buy_token_address: str = None, auto_buy_requested_usdc: float = None) -> tuple:
     """Tops up `evm_address`'s native gas balance on `chain` from its OWN
     USDC on that chain if it's running low -- see the module comment above
-    for why. Returns (ok, msg): ok=True means the caller can go ahead with
-    its trade (gas was already sufficient, or a top-up just succeeded);
-    ok=False means don't trade this cycle, with a specific reason. Gas
-    plumbing is meant to stay invisible to the user -- only the two genuine
-    dead ends (no SOL to bootstrap from zero, no USDC to top up from low)
-    are already surfaced via add_user_log inside this call chain; every
-    other step here is transient/auto-retrying and only goes to the server
-    console, so callers don't need to re-log `msg` themselves."""
+    for why. Returns (ok, msg, bridge_id): ok=True means the caller can go
+    ahead with its trade right now (gas was already sufficient, or a
+    same-chain top-up just succeeded); ok=False means don't trade this
+    cycle, with a specific reason. Gas plumbing is meant to stay invisible
+    to the user -- only the two genuine dead ends (no SOL to bootstrap from
+    zero, no USDC to top up from low) are already surfaced via add_user_log
+    inside this call chain; every other step here is transient/auto-
+    retrying and only goes to the server console, so callers don't need to
+    re-log `msg` themselves.
+
+    bridge_id is non-None exactly when a gas-bootstrap bridge (fresh or
+    already in flight) is the thing standing between the caller and its
+    trade -- a manual Buy route can pass auto_buy_token_address/
+    auto_buy_requested_usdc through here and, on getting a bridge_id back,
+    tell the user their buy is pending instead of erroring out, since
+    _execute_auto_buy_after_bridge() will complete it automatically once
+    that bridge lands. bridge_id is always None on the genuine "deposit
+    more X" dead ends and on any other failure -- there's nothing to
+    attach a pending buy to in those cases."""
     try:
         w3 = _get_web3(chain)
         native_bal_wei = w3.eth.get_balance(w3.to_checksum_address(evm_address))
         needed_wei = w3.eth.gas_price * GAS_TOPUP_TX_GAS_UNITS
     except Exception as e:
-        return False, f'{chain} RPC unreachable for gas check: {e}'
+        return False, f'{chain} RPC unreachable for gas check: {e}', None
 
     if native_bal_wei >= needed_wei:
-        return True, ''
+        return True, '', None
 
     native_symbol = EVM_CHAINS[chain]['native_symbol']
     if native_bal_wei <= 0:
-        return _bootstrap_evm_gas_via_bridge(user_id, wallet, evm_address, chain)
+        return _bootstrap_evm_gas_via_bridge(user_id, wallet, evm_address, chain,
+                                              auto_buy_token_address, auto_buy_requested_usdc)
 
     try:
         usdc_bal = get_evm_usdc_balance(evm_address, chain)
     except Exception as e:
-        return False, f'{chain} USDC balance check failed: {e}'
+        return False, f'{chain} USDC balance check failed: {e}', None
     topup_amount = min(GAS_TOPUP_USDC_AMOUNT, usdc_bal)
     if topup_amount <= 0:
         # Genuine dead end (nothing left to auto-fund gas with) -- kept
         # visible, worded as a concrete instruction rather than "top-up"
-        # jargon, same reasoning as the bootstrap dead end above.
+        # jargon, same reasoning as the bootstrap dead end above. This one
+        # never gets a bridge_id -- it's a same-chain shortfall, not
+        # something a bridge (pending) can fix.
         _usdc_sym = EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
         add_user_log(wallet, f'[bot-{chain}] Cannot keep trading on {chain} — deposit a little {_usdc_sym} '
                               f'there to top up {native_symbol} gas automatically')
-        return False, f'deposit a little {_usdc_sym} on {chain} — it tops up your {native_symbol} gas automatically'
+        return False, f'deposit a little {_usdc_sym} on {chain} — it tops up your {native_symbol} gas automatically', None
 
     # Routine, self-correcting background step -- server console only.
     print(f'[bot-{chain}] low on {native_symbol} for gas, auto-topping up with {round(topup_amount, 4)} USDC', flush=True)
     ok, msg, _tx = _execute_evm_gas_topup(wallet, private_key, chain, topup_amount)
     if not ok:
-        return False, f'gas top-up failed: {msg}'
-    return True, ''
+        return False, f'gas top-up failed: {msg}', None
+    return True, '', None
 
 def _send_evm_usdc_fee(private_key: str, to_address: str, amount_usdc: float, chain: str = 'bsc') -> str:
     """EVM equivalent of send_sol_fee() -- sends amount_usdc of USDC (an ERC20
@@ -11529,10 +11571,24 @@ def api_evm_trade_buy():
         # gas from the user's own USDC on it if it's running low, or
         # bridges a small bootstrap from their own SOL if it's at literal
         # zero -- so a manual buy never fails purely because a brand-new
-        # EVM wallet has never held any gas token directly.
+        # EVM wallet has never held any gas token directly. A from-zero
+        # bootstrap needs a real bridge (see _bootstrap_evm_gas_via_bridge),
+        # which can't complete inside this one request -- passing this buy's
+        # own token_address/amount_usdc through means it rides along on that
+        # SAME bridge and completes automatically once gas lands (via
+        # _execute_auto_buy_after_bridge()), instead of the user seeing a
+        # dead error and having to press Buy again once it's ready.
         if evm_address:
-            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, evm_address, chain)
+            _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(
+                user_id, wallet, pk, evm_address, chain,
+                auto_buy_token_address=token_address, auto_buy_requested_usdc=amount_usdc)
             if not _gas_ok:
+                if _gas_bridge_id is not None:
+                    return jsonify({
+                        'ok': True, 'pending': True, 'bridge_id': _gas_bridge_id,
+                        'chain': chain, 'token_address': token_address, 'amount_usdc': amount_usdc,
+                        'msg': 'Activating this chain for your wallet — your buy will complete automatically once ready.',
+                    })
                 return jsonify({'ok': False, 'msg': f'Cannot trade on {chain} yet — {_gas_msg}'}), 400
         buy_ok, buy_err, buy_tx_hash = _execute_evm_swap(wallet, pk, 'buy', token_address, str(amount_usdc), chain)
     if not buy_ok:
@@ -11591,7 +11647,7 @@ def api_evm_trade_sell():
         # purely for lack of gas, since that's how a user actually closes a
         # position and realizes (or cuts) a loss.
         _evm_addr = _EvmAccount.from_key(pk).address
-        _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
+        _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, chain)
         if not _gas_ok:
             return jsonify({'ok': False, 'msg': f'Cannot sell on {chain} yet — {_gas_msg}'}), 400
         sell_ok, sell_err, sell_tx_hash = _execute_evm_swap(wallet, pk, 'sell', token_address, str(amount), chain)
@@ -11682,10 +11738,20 @@ def api_bsc_trade_buy():
 
     with _use_key(enc_blob, wallet) as pk:
         # Same auto-gas mechanism as api_evm_trade_buy() -- see its comment
-        # and _ensure_evm_gas's own module comment for the full reasoning.
+        # and _ensure_evm_gas's own module comment for the full reasoning,
+        # including why this buy's own token/amount rides along on a
+        # from-zero bootstrap bridge instead of erroring out.
         if evm_address:
-            _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, evm_address, 'bsc')
+            _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(
+                user_id, wallet, pk, evm_address, 'bsc',
+                auto_buy_token_address=token_address, auto_buy_requested_usdc=amount_usdc)
             if not _gas_ok:
+                if _gas_bridge_id is not None:
+                    return jsonify({
+                        'ok': True, 'pending': True, 'bridge_id': _gas_bridge_id,
+                        'chain': 'bsc', 'token_address': token_address, 'amount_usdc': amount_usdc,
+                        'msg': 'Activating this chain for your wallet — your buy will complete automatically once ready.',
+                    })
                 return jsonify({'ok': False, 'msg': f'Cannot trade on bsc yet — {_gas_msg}'}), 400
         buy_ok, buy_err, buy_tx_hash = _execute_bsc_swap(wallet, pk, 'buy', token_address, str(amount_usdc))
     if not buy_ok:
@@ -11740,7 +11806,7 @@ def api_bsc_trade_sell():
         # Same auto-gas mechanism as api_evm_trade_sell() -- see its comment
         # and _ensure_evm_gas's own module comment for the full reasoning.
         _evm_addr = _EvmAccount.from_key(pk).address
-        _gas_ok, _gas_msg = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, 'bsc')
+        _gas_ok, _gas_msg, _gas_bridge_id = _ensure_evm_gas(user_id, wallet, pk, _evm_addr, 'bsc')
         if not _gas_ok:
             return jsonify({'ok': False, 'msg': f'Cannot sell on bsc yet — {_gas_msg}'}), 400
         sell_ok, sell_err, sell_tx_hash = _execute_bsc_swap(wallet, pk, 'sell', token_address, str(amount))
