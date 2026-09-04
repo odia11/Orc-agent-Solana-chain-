@@ -147,7 +147,7 @@ def _tc_build_canvas(banner_url=None):
             pass
     return canvas
 
-def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol):
+def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, pnl_currency='SOL'):
     """Draw the trade-card overlay (gradient, badge, symbol/prices, PNL) in-place
     onto img (as produced by _tc_build_canvas). Returns nothing."""
     W, H = img.size
@@ -208,7 +208,11 @@ def _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_so
 
     sol_y = price_y + 42
     sol_sign = '+' if pnl_sol >= 0 else ''
-    sol_str  = f'{sol_sign}{pnl_sol:.4f} SOL'
+    # pnl_currency is whatever this trade was actually denominated in --
+    # SOL only for a plain SOL-mode Solana trade, USDC/USDG for everything
+    # else (an EVM chain's own stablecoin, or a USDC-mode Solana trade).
+    # See _trade_currency_symbol()'s own comment for the full reasoning.
+    sol_str  = f'{sol_sign}{pnl_sol:.4f} {pnl_currency}'
     draw.text((bx, sol_y), sol_str, font=sol_font, fill=(247, 185, 85))
 
     # PNL percentage, right-aligned, vertically centered against the text
@@ -277,9 +281,9 @@ def _tc_draw_chart_content(img, symbol, price, chg24h):
     pct_y = (by + block_bottom) // 2 - pth // 2
     draw.text((W - 60 - ptw, pct_y), pct_text, font=pct_font, fill=chg_col)
 
-def _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url=None):
+def _generate_trade_card_image(symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, banner_url=None, pnl_currency='SOL'):
     img = _tc_build_canvas(banner_url)
-    _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol)
+    _tc_draw_content(img, symbol, side, entry_price, exit_price, pnl_pct, pnl_sol, pnl_currency)
     buf = io.BytesIO()
     img.save(buf, format='PNG')
     return buf.getvalue()
@@ -9607,7 +9611,7 @@ def api_my_trades():
             return jsonify({'trades': []})
         user_id = row['id']
         trades = conn.execute(
-            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, opened_at, mint_address '
+            'SELECT token, entry_price, exit_price, amount, pnl, timestamp, opened_at, mint_address, chain, base_currency '
             'FROM trades WHERE user_id=? AND exit_price IS NOT NULL AND exit_price != 0 '
             'ORDER BY timestamp DESC LIMIT 5',
             (user_id,)
@@ -9629,6 +9633,9 @@ def api_my_trades():
                 'opened_at':     t['opened_at'],
                 'timestamp':     t['timestamp'],
                 'token_address': t['mint_address'] or '',
+                'chain':         t['chain'] or 'solana',
+                'base_currency': t['base_currency'] or 'SOL',
+                'pnl_currency':  _trade_currency_symbol(t['chain'], t['base_currency']),
             })
         return jsonify({'trades': result})
     finally:
@@ -16500,21 +16507,24 @@ def _parse_feed_embed(content):
         except Exception:
             pass
         return {'kind': 'chart', 'text_part': content[:chart_idx].strip(),
-                'symbol': symbol, 'pnl_pct': 0.0, 'pnl_sol': 0.0}
+                'symbol': symbol, 'pnl_pct': 0.0, 'pnl_sol': 0.0, 'pnl_currency': 'SOL'}
     if trade_idx != -1:
-        symbol, pnl_pct, pnl_sol = '', 0.0, 0.0
+        symbol, pnl_pct, pnl_sol, pnl_currency = '', 0.0, 0.0, 'SOL'
         try:
             trade_data = json.loads(content[trade_idx + len('__TRADE__'):])
             symbol  = trade_data.get('symbol', '')
             pnl_pct = float(trade_data.get('pnl_pct', 0))
             pnl_sol = float(trade_data.get('pnl_sol', 0))
+            # A post shared before this fix embedded no chain/base_currency at
+            # all -- defaults to 'SOL', the same unit this always assumed.
+            pnl_currency = _trade_currency_symbol(trade_data.get('chain'), trade_data.get('base_currency'))
         except Exception:
             pass
         return {'kind': 'trade', 'text_part': content[:trade_idx].strip(),
-                'symbol': symbol, 'pnl_pct': pnl_pct, 'pnl_sol': pnl_sol}
+                'symbol': symbol, 'pnl_pct': pnl_pct, 'pnl_sol': pnl_sol, 'pnl_currency': pnl_currency}
     if content.strip():
-        return {'kind': 'text', 'text_part': content.strip(), 'symbol': '', 'pnl_pct': 0.0, 'pnl_sol': 0.0}
-    return {'kind': 'photo', 'text_part': '', 'symbol': '', 'pnl_pct': 0.0, 'pnl_sol': 0.0}
+        return {'kind': 'text', 'text_part': content.strip(), 'symbol': '', 'pnl_pct': 0.0, 'pnl_sol': 0.0, 'pnl_currency': 'SOL'}
+    return {'kind': 'photo', 'text_part': '', 'symbol': '', 'pnl_pct': 0.0, 'pnl_sol': 0.0, 'pnl_currency': 'SOL'}
 
 
 @app.route('/api/feed/post', methods=['POST'])
@@ -17298,7 +17308,7 @@ def share_feed_to_x(post_id):
             else:
                 sign = '+' if embed['pnl_pct'] >= 0 else ''
                 text = (f"Just closed ${embed['symbol']} {sign}{embed['pnl_pct']:.1f}% "
-                        f"({sign}{embed['pnl_sol']:.4f} SOL) on @OrcAgent") if embed['symbol'] else ''
+                        f"({sign}{embed['pnl_sol']:.4f} {embed.get('pnl_currency', 'SOL')}) on @OrcAgent") if embed['symbol'] else ''
             wants_media = True
         elif embed['kind'] == 'photo':
             # Image-only post, no caption to draw from. The actual photo (as
@@ -17355,6 +17365,23 @@ def share_feed_to_x(post_id):
     ok = _post_to_x(wallet, text, media_ids=media_ids)
     return jsonify({'ok': ok, 'msg': 'Shared to X!' if ok else 'Failed to share to X'})
 
+def _trade_currency_symbol(chain: str, base_currency: str) -> str:
+    """The real unit `pnl`/`pnl_sol` is denominated in for a trades-table row
+    or a __TRADE__-embedded share -- SOL only for a plain SOL-mode Solana
+    trade (chain='solana', base_currency unset/'SOL'); every other trade (an
+    EVM chain's own USDC/USDG, or a USDC-mode Solana trade) is already in
+    that chain's own USD-pegged stablecoin. Same chain/base_currency
+    convention _PNL_SOL_CASE already uses for leaderboard/stats totals --
+    this just picks the right LABEL, no value conversion needed since a
+    single trade's own pnl is already correct in its own currency."""
+    chain = (chain or 'solana').lower()
+    base_currency = (base_currency or 'SOL').upper()
+    if chain == 'solana' and base_currency == 'SOL':
+        return 'SOL'
+    if chain in EVM_CHAINS:
+        return EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
+    return 'USDC'
+
 def _tc_lookup(id):
     """Resolve a t<id>/p<id> share id (native trade row, or a __TRADE__-embedded
     or __CHART__-embedded feed post — same id scheme as get_single_post/
@@ -17365,12 +17392,12 @@ def _tc_lookup(id):
     try:
         if id.startswith('t') and id[1:].isdigit():
             row = conn.execute(
-                'SELECT token, entry_price, exit_price, pnl, mint_address FROM trades WHERE id=?',
+                'SELECT token, entry_price, exit_price, pnl, mint_address, chain, base_currency FROM trades WHERE id=?',
                 (id[1:],)
             ).fetchone()
             if not row:
                 return None
-            symbol, entry_price, exit_price, pnl_sol, mint = row
+            symbol, entry_price, exit_price, pnl_sol, mint, chain, base_currency = row
             entry_price = float(entry_price or 0)
             exit_price  = float(exit_price or 0)
             pnl_sol     = float(pnl_sol or 0)
@@ -17380,6 +17407,7 @@ def _tc_lookup(id):
                 'symbol': symbol or '', 'side': 'SELL',
                 'entry_price': entry_price, 'exit_price': exit_price,
                 'pnl_pct': pnl_pct, 'pnl_sol': pnl_sol, 'mint': mint or '',
+                'pnl_currency': _trade_currency_symbol(chain, base_currency),
             }
         elif id.startswith('p') and id[1:].isdigit():
             row = conn.execute('SELECT content FROM feed_posts WHERE id=?', (id[1:],)).fetchone()
@@ -17406,6 +17434,10 @@ def _tc_lookup(id):
                     'entry_price': _tc_safe_float(trade_data.get('entry_price')),
                     'exit_price':  _tc_safe_float(trade_data.get('exit_price')),
                     'mint': str(trade_data.get('token_address') or ''),
+                    # A post shared before this fix embedded no chain/base_currency
+                    # at all -- defaults to the same 'SOL' this always assumed, so
+                    # old posts render exactly as they always did.
+                    'pnl_currency': _trade_currency_symbol(trade_data.get('chain'), trade_data.get('base_currency')),
                 }
             chart_idx = content.find('__CHART__')
             if chart_idx != -1:
@@ -17447,11 +17479,17 @@ def _render_trade_card_png(id):
     banner_url = None
     if tc.get('mint'):
         try:
+            # Used to hard-filter to chainId=='solana', so a BSC/Base/
+            # Arbitrum/Polygon/Robinhood trade's share card never got a
+            # banner image at all -- picks the highest-liquidity pair on
+            # any chain this app actually trades instead (same fallback
+            # /api/token/info/<mint> itself uses), same one request either way.
             r = _dex_get('https://api.dexscreener.com/latest/dex/tokens/' + requests.utils.quote(tc['mint'], safe=''), timeout=8)
             if r and r.status_code == 200:
-                pairs_sol = [p for p in (r.json().get('pairs') or []) if p.get('chainId') == 'solana']
-                if pairs_sol:
-                    best = max(pairs_sol, key=lambda p: float((p.get('liquidity') or {}).get('usd') or 0))
+                pairs = r.json().get('pairs') or []
+                pairs_supported = [p for p in pairs if p.get('chainId') in _MARKET_LIVE_CHAINS] or pairs
+                if pairs_supported:
+                    best = max(pairs_supported, key=lambda p: float((p.get('liquidity') or {}).get('usd') or 0))
                     banner_url = (best.get('info') or {}).get('header') or None
         except Exception:
             banner_url = None
@@ -17464,7 +17502,7 @@ def _render_trade_card_png(id):
         return buf.getvalue()
     return _generate_trade_card_image(
         tc['symbol'], tc['side'], tc['entry_price'], tc['exit_price'],
-        tc['pnl_pct'], tc['pnl_sol'], banner_url)
+        tc['pnl_pct'], tc['pnl_sol'], banner_url, tc.get('pnl_currency', 'SOL'))
 
 
 @app.route('/api/trade-card/<id>.png')
@@ -17568,11 +17606,12 @@ def share_trade_page(id):
         sign        = '+' if chg24h >= 0 else ''
         description = _html_lib.escape(f'{sign}{chg24h:.2f}% (24h) on OrcAgent')
     else:
-        title       = f'${symbol} closed on OrcAgent'
-        pnl_pct     = tc.get('pnl_pct', 0) or 0
-        pnl_sol     = tc.get('pnl_sol', 0) or 0
-        sign        = '+' if pnl_pct >= 0 else ''
-        description = _html_lib.escape(f'{sign}{pnl_pct:.2f}% ({sign}{pnl_sol:.4f} SOL) on OrcAgent')
+        title        = f'${symbol} closed on OrcAgent'
+        pnl_pct      = tc.get('pnl_pct', 0) or 0
+        pnl_sol      = tc.get('pnl_sol', 0) or 0
+        pnl_currency = tc.get('pnl_currency', 'SOL')
+        sign         = '+' if pnl_pct >= 0 else ''
+        description  = _html_lib.escape(f'{sign}{pnl_pct:.2f}% ({sign}{pnl_sol:.4f} {pnl_currency}) on OrcAgent')
     image_url   = f'https://orcagent.fun/api/trade-card/{_html_lib.escape(id)}.png'
     post_link   = f'/#post-{_html_lib.escape(id)}'
     page_url    = f'https://orcagent.fun/share/{_html_lib.escape(id)}'

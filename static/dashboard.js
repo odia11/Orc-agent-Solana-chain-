@@ -7215,6 +7215,7 @@ function _renderTradeTerminalCard(t){
       exit:         t.exit_price  || 0,
       exit_price:   t.exit_price  || 0,
       pnl_sol:      t.pnl_sol     || 0,
+      pnl_currency: t.pnl_currency || 'SOL',
       amount:       t.amount      || 0,
       duration:     t.duration    || '',
       token_address:t.token_address || '',
@@ -7229,7 +7230,11 @@ function _renderTradeTerminalCard(t){
   var pctCol  = pct >= 0 ? '#00d084' : '#ff4757';
   var pctStr  = (pct >= 0 ? '+' : '') + pct.toFixed(2) + '%';
   var sol     = parseFloat(t.pnl_sol != null ? t.pnl_sol : (t.sol_profit || 0));
-  var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(4) + ' SOL';
+  // pnl_currency is whatever this trade was actually denominated in --
+  // 'SOL' only for a plain SOL-mode Solana trade, the real chain's own
+  // USDC/USDG otherwise. Defaults to 'SOL' for a trade shared before this
+  // field existed, matching what this always assumed.
+  var solStr  = (sol >= 0 ? '+' : '') + sol.toFixed(4) + ' ' + (t.pnl_currency || 'SOL');
   var _fp = function(n){ n=parseFloat(n||0); return n ? (n<0.001 ? '$'+n.toFixed(8).replace(/\.?0+$/,'') : '$'+n.toFixed(6)) : '—'; };
   var entry  = _fp(entryN);
   var exit_p = _fp(exitN);
@@ -7365,7 +7370,7 @@ function _attachTradeEmbed(idx){
     dur = (h>0 ? h+'h ' : '') + m + 'm';
   }
   var amount = parseFloat(t.amount || 0);
-  _composerTrade = {symbol:sym, side:side, entry_price:entry, exit_price:exit, pnl_pct:pct, pnl_sol:sol, amount:amount, duration:dur, token_address:t.token_address||''};
+  _composerTrade = {symbol:sym, side:side, entry_price:entry, exit_price:exit, pnl_pct:pct, pnl_sol:sol, amount:amount, duration:dur, token_address:t.token_address||'', pnl_currency:t.pnl_currency||'SOL'};
   document.getElementById('composer-trade-dropdown').style.display = 'none';
   document.getElementById('trade-pill-btn').style.background = '#00d08422';
   _renderComposerTradePreview();
