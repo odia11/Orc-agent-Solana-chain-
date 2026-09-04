@@ -3915,7 +3915,18 @@ def get_token_data(mint, fast: bool = False):
             return None
         pairs = r.json().get('pairs', [])
         if not pairs: return None
-        p    = pairs[0]
+        # DexScreener's pair order is NOT liquidity-sorted, so pairs[0] is
+        # frequently a small or dead pool while the token's real market sits
+        # further down the list (confirmed for BONK: pairs[0] was a $123k Orca
+        # pool with a $1.5M Meteora pool at pairs[2]). Reading that pool meant
+        # this function's price, market cap and volume could all describe a
+        # pool nobody trades in -- and since the scanner, the live SL/TP
+        # monitor and every entry price read it, the bot acted on those
+        # numbers too. Pick the deepest pool on a chain this app actually
+        # trades, exactly as /api/token/info and _get_deepest_pair_info
+        # already do, so every surface agrees on one price.
+        _supported = [x for x in pairs if x.get('chainId') in _MARKET_LIVE_CHAINS] or pairs
+        p    = max(_supported, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
         base = p.get('baseToken', {})
         txns = p.get('txns', {})
         m5_buys   = int(txns.get('m5',  {}).get('buys',  0) or 0)
@@ -10500,7 +10511,12 @@ def api_token_candles(mint):
         if r:
             pairs = r.json().get('pairs') or []
             if pairs:
-                pair_address = pairs[0].get('pairAddress') or ''
+                # Deepest pool on a supported chain, same rule get_token_data()
+                # and /api/token/info use -- charting pairs[0] could plot a dead
+                # pool's flat line next to the real pool's price in the header.
+                _sup = [x for x in pairs if x.get('chainId') in _MARKET_LIVE_CHAINS] or pairs
+                _best = max(_sup, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0))
+                pair_address = _best.get('pairAddress') or ''
     except Exception:
         pass
     candles = []
@@ -23970,7 +23986,12 @@ def api_chart(mint):
             pairs = [p for p in pairs if p.get('chainId') == dex_chain_id] or pairs
             if not pairs:
                 return jsonify({'candles': [], 'error': 'no pairs'})
-            pair_address = pairs[0].get('pairAddress', '')
+            # Deepest pool, not whichever DexScreener listed first -- see
+            # get_token_data()'s own note. Charting a dead pool produced a flat
+            # line beside a header price taken from the real one.
+            pair_address = max(
+                pairs, key=lambda x: float((x.get('liquidity') or {}).get('usd') or 0)
+            ).get('pairAddress', '')
             if not pair_address:
                 return jsonify({'candles': [], 'error': 'no pair address'})
 
