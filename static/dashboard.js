@@ -7688,7 +7688,8 @@ function _selectCashtagResult(idx){
     sells:       p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
     mint:        (p.baseToken&&p.baseToken.address)||'',
     pairAddress: p.pairAddress||'',
-    chain:       p.chainId||''
+    chain:       p.chainId||'',
+    image:       (p.info&&p.info.imageUrl)||''
   };
   var chartBtn = document.getElementById('chart-pill-btn');
   if(chartBtn) chartBtn.style.background = '#f7b95522';
@@ -7774,7 +7775,8 @@ function _attachChartEmbed(idx){
     sells:       p.txns&&p.txns.h24 ? p.txns.h24.sells : null,
     mint:        (p.baseToken&&p.baseToken.address)||'',
     pairAddress: p.pairAddress||'',
-    chain:       p.chainId||''
+    chain:       p.chainId||'',
+    image:       (p.info&&p.info.imageUrl)||''
   };
   document.getElementById('composer-chart-search').style.display = 'none';
   document.getElementById('chart-pill-btn').style.background = '#f7b95522';
@@ -8058,7 +8060,7 @@ function _ccDrawSparkline(lineEl, pts){
   lineEl.setAttribute('stroke', pts[pts.length-1] >= pts[0] ? '#f7b955' : '#f76b62');
 }
 
-async function _liveChartPoll(cardEl, pairAddress, symbol){
+async function _liveChartPoll(cardEl, pairAddress, symbol, mint){
   /* stop if card left DOM -- but only clear the registry entry if it's still
      ours (a newer node for the same id may have already taken over, via
      startLiveChart()'s stale-entry replacement below) */
@@ -8072,14 +8074,29 @@ async function _liveChartPoll(cardEl, pairAddress, symbol){
     return;
   }
   try{
-    var url = pairAddress
-      ? 'https://api.dexscreener.com/latest/dex/pairs/solana/'+encodeURIComponent(pairAddress)
-      : 'https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(symbol);
-    var r = await fetch(url);
-    var d = await r.json();
-    var p = pairAddress
-      ? (d.pair || (d.pairs&&d.pairs[0]) || null)
-      : ((d.pairs||[]).find(function(x){ return x.chainId==='solana'; }) || null);
+    // Used to always hit DexScreener's Solana-specific /pairs/solana/<addr>
+    // path (or, with no pairAddress, hard-filter a symbol search to
+    // chainId==='solana') -- so a card for a token on any other chain
+    // (BSC/Base/Arbitrum/Polygon/Robinhood) could never refresh: every poll
+    // silently found nothing and returned, leaving price/chart AND the real
+    // token logo (set from p.info.imageUrl below) stuck forever on the
+    // initial placeholder. mint (this card's own token address, now stored
+    // in data-chart-mint) gives a direct, chain-agnostic lookup instead --
+    // same one-request-shape reuse as showTokenCard()'s known-address path.
+    var p;
+    if(mint){
+      var r = await fetch('/api/token/info/'+encodeURIComponent(mint));
+      var info = await r.json();
+      if(!info || !info.ok) return;
+      p = _composerReshapeTokenInfo(info, mint);
+    } else {
+      var r2 = await fetch('/api/dexscreener/search?q='+encodeURIComponent(symbol));
+      var d = await r2.json();
+      var liveChains = _composerLiveChains();
+      p = pairAddress
+        ? (d.pairs||[]).find(function(x){ return x.pairAddress===pairAddress; })
+        : (d.pairs||[]).find(function(x){ return liveChains.indexOf(x.chainId)!==-1; });
+    }
     if(!p) return;
 
     var key = cardEl.id;
@@ -8126,7 +8143,7 @@ async function _liveChartPoll(cardEl, pairAddress, symbol){
   }catch(e){}
 }
 
-function startLiveChart(cardEl, pairAddress, symbol){
+function startLiveChart(cardEl, pairAddress, symbol, mint){
   var key = cardEl.id;
   var existing = _liveChartTimers[key];
   if(existing){
@@ -8146,9 +8163,9 @@ function startLiveChart(cardEl, pairAddress, symbol){
     _liveChartHistory[key] = snap;
     _ccDrawSparkline(cardEl.querySelector('[data-cc="line"]'), snap);
   }
-  _liveChartPoll(cardEl, pairAddress, symbol);
+  _liveChartPoll(cardEl, pairAddress, symbol, mint);
   var timer = setInterval(function(){
-    _liveChartPoll(cardEl, pairAddress, symbol);
+    _liveChartPoll(cardEl, pairAddress, symbol, mint);
   }, 10000);
   _liveChartTimers[key] = {timer: timer, cardEl: cardEl};
 }
@@ -8196,7 +8213,7 @@ function _initLiveCharts(){
     _liveChartObserver = new IntersectionObserver(function(entries){
       entries.forEach(function(entry){
         if(entry.isIntersecting){
-          startLiveChart(entry.target, entry.target.getAttribute('data-chart-pair'), entry.target.getAttribute('data-chart-sym'));
+          startLiveChart(entry.target, entry.target.getAttribute('data-chart-pair'), entry.target.getAttribute('data-chart-sym'), entry.target.getAttribute('data-chart-mint'));
         } else {
           stopLiveChart(entry.target);
         }
@@ -8712,6 +8729,7 @@ function _renderFeedCard(e){
         var _mintJs = esc(JSON.stringify(_c.mint||''));
         textBody += '<div id="'+_ccId+'"'
           +' data-chart-sym="'+esc(_c.symbol||'')+'"'
+          +' data-chart-mint="'+esc(_c.mint||'')+'"'
           +' data-chart-pair="'+esc(_c.pairAddress||'')+'"'
           +' data-chart-price="'+_safeNum(_c.price)+'"'
           +' data-chart-chg5m="'+_safeNum(_c.chg5m)+'"'
@@ -8724,7 +8742,7 @@ function _renderFeedCard(e){
           +'<div data-cc="banner" style="position:absolute;inset:0;background-size:cover;background-position:center"></div>'
           +'<div style="position:absolute;inset:0;background:linear-gradient(to bottom,rgba(0,0,0,0.45),rgba(16,18,22,0.97))"></div>'
           +'<div style="position:relative;z-index:1;display:flex;flex-direction:column;align-items:center;padding:18px 16px 12px">'
-          +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#f7b955;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+esc((_c.symbol||'??').slice(0,2).toUpperCase())+'</div>'
+          +'<div data-cc="logo" style="width:64px;height:64px;border-radius:50%;background:#21252c;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px;color:#f7b955;margin-bottom:10px;overflow:hidden;flex-shrink:0">'+(_c.image?'<img src="'+esc(_c.image)+'" style="width:100%;height:100%;object-fit:cover;border-radius:50%" onerror="this.remove()">':esc((_c.symbol||'??').slice(0,2).toUpperCase()))+'</div>'
           +'<div style="font-size:20px;font-weight:700;color:#eef1f5;letter-spacing:-.01em;margin-bottom:5px">$'+esc(_c.symbol||'')+'</div>'
           +'<span style="background:rgba(247,185,85,0.15);color:#f7b955;border-radius:5px;padding:2px 10px;font-size:10px;font-weight:700;letter-spacing:.06em">'+_chartChainLbl+'</span>'
           +'</div>'
