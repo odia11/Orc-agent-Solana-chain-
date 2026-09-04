@@ -2300,13 +2300,17 @@ def run_migrations():
         # so the background job doesn't redundantly re-convert on every pass.
         "ALTER TABLE users ADD COLUMN bsc_gas_reserved_at TIMESTAMP DEFAULT NULL",
         "ALTER TABLE users ADD COLUMN bot_enabled_bsc INTEGER DEFAULT 0",
-        # Which currency the SOLANA bot itself trades with -- 'SOL' (default,
-        # unchanged behavior) or 'USDC'. orcagent_solana.py's execute_single_swap()
-        # has supported a USDC base since it was written; this is what actually
-        # lets a user opt into it instead of it sitting unreachable. Still needs
-        # a small SOL balance for Solana's own network fees either way -- this
-        # only changes which currency funds the TRADE itself.
-        "ALTER TABLE users ADD COLUMN pref_solana_base_currency TEXT DEFAULT 'SOL'",
+        # Which currency the SOLANA bot itself trades with -- 'SOL' or 'USDC'
+        # (now the default for every brand-new account -- see
+        # get_or_create_user()'s own comment; this column-level DEFAULT only
+        # still matters for a genuinely fresh, never-migrated DB, since every
+        # INSERT OR IGNORE that creates a user row sets the value explicitly).
+        # orcagent_solana.py's execute_single_swap() has supported a USDC base
+        # since it was written; this is what actually lets a user use it
+        # instead of it sitting unreachable. Still needs a small SOL balance
+        # for Solana's own network fees either way -- this only changes which
+        # currency funds the TRADE itself.
+        "ALTER TABLE users ADD COLUMN pref_solana_base_currency TEXT DEFAULT 'USDC'",
         # USDC-denominated -- deliberately separate from min_trade_size/max_trade_size
         # (SOL-denominated, Solana-only) rather than reinterpreting those columns,
         # since a single column meaning "SOL amount" for one chain and "USDC amount"
@@ -3069,7 +3073,13 @@ def _generate_referral_code(cursor) -> str:
 def get_or_create_user(wallet: str, ref_code: str = None) -> int:
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-    c.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+    # pref_solana_base_currency defaults to USDC for every brand-new account --
+    # the column's own SQLite DEFAULT stays 'SOL' for backward compatibility
+    # (ALTER TABLE can't change an existing column's default), so it's set
+    # explicitly here instead. INSERT OR IGNORE never touches this for a
+    # wallet that already has a row, so an existing user's own saved
+    # preference (SOL or USDC) is never silently overwritten.
+    c.execute("INSERT OR IGNORE INTO users (wallet_address, pref_solana_base_currency) VALUES (?, 'USDC')", (wallet,))
     conn.commit()
     c.execute('SELECT id, referral_code, referred_by FROM users WHERE wallet_address=?', (wallet,))
     row = c.fetchone()
@@ -14353,7 +14363,10 @@ def save_settings():
         # rows for one wallet_address and splitting that account's trade
         # history across two user_id values. INSERT OR IGNORE is a no-op if
         # the row already exists, so this is safe under concurrency.
-        c.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        # pref_solana_base_currency defaults to USDC for every brand-new account
+        # -- see get_or_create_user()'s own comment; an existing user's saved
+        # preference is never touched by INSERT OR IGNORE.
+        c.execute("INSERT OR IGNORE INTO users (wallet_address, pref_solana_base_currency) VALUES (?, 'USDC')", (wallet,))
         c.execute('SELECT encrypted_private_key FROM users WHERE wallet_address=?', (wallet,))
         row = c.fetchone()
         if private_key_raw:
@@ -14429,7 +14442,7 @@ def settings_get():
                         'pref_notifications': True, 'pref_scam_filter': True,
                         'pref_sound_alerts': False, 'bot_running': bot_running,
                         'min_trade_size': 1.0, 'tiered_tp_enabled': False,
-                        'pref_solana_base_currency': 'SOL'})
+                        'pref_solana_base_currency': 'USDC'})
     return jsonify({
         'ok': True,
         'has_trading_key': bool(row[0]),
@@ -14447,7 +14460,7 @@ def settings_get():
         'bio': row[12] or '',
         'min_trade_size': row[13] if row[13] is not None else 1.0,
         'tiered_tp_enabled': bool(row[14] if row[14] is not None else 0),
-        'pref_solana_base_currency': (row[15] or 'SOL') if len(row) > 15 else 'SOL',
+        'pref_solana_base_currency': (row[15] or 'USDC') if len(row) > 15 else 'USDC',
     })
 
 @app.route('/api/settings/save', methods=['POST'])
@@ -14541,7 +14554,9 @@ def settings_save():
     params.append(wallet)
     conn = sqlite3.connect(DB_FILE)
     try:
-        conn.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        # See get_or_create_user()'s own comment -- USDC is the default for a
+        # brand-new row only; an existing user's saved preference is untouched.
+        conn.execute("INSERT OR IGNORE INTO users (wallet_address, pref_solana_base_currency) VALUES (?, 'USDC')", (wallet,))
         conn.execute(f'UPDATE users SET {", ".join(updates)} WHERE wallet_address=?', params)
         conn.commit()
     finally:
@@ -14583,7 +14598,9 @@ def api_trading_profile():
         return jsonify({'ok': False, 'msg': err}), 400
     conn = sqlite3.connect(DB_FILE)
     try:
-        conn.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        # See get_or_create_user()'s own comment -- USDC is the default for a
+        # brand-new row only; an existing user's saved preference is untouched.
+        conn.execute("INSERT OR IGNORE INTO users (wallet_address, pref_solana_base_currency) VALUES (?, 'USDC')", (wallet,))
         conn.execute(
             'UPDATE users SET stop_loss=?, take_profit=?, tiered_tp_enabled=?, sl_tp_preset=? WHERE wallet_address=?',
             (sl, tp, int(trailing), preset, wallet))
@@ -14628,7 +14645,9 @@ def wallet_set_key():
     _log_security_event('key_saved', wallet)
     conn = sqlite3.connect(DB_FILE)
     try:
-        conn.execute('INSERT OR IGNORE INTO users (wallet_address) VALUES (?)', (wallet,))
+        # See get_or_create_user()'s own comment -- USDC is the default for a
+        # brand-new row only; an existing user's saved preference is untouched.
+        conn.execute("INSERT OR IGNORE INTO users (wallet_address, pref_solana_base_currency) VALUES (?, 'USDC')", (wallet,))
         conn.execute('UPDATE users SET encrypted_private_key=?, key_hash=? WHERE wallet_address=?',
                      (encrypted, new_hash, wallet))
         conn.commit()
