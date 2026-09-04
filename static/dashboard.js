@@ -7559,6 +7559,44 @@ document.addEventListener('DOMContentLoaded', function(){
   });
 });
 
+// Both the $cashtag composer dropdown and the "attach a chart" search below
+// used to hit DexScreener's search endpoint directly from the client and
+// hard-filter to chainId==='solana' -- so a Robinhood/BSC/Base/Arbitrum/
+// Polygon token (or an address pasted straight in) could never be found or
+// posted from the feed, even though the app trades all of those chains.
+// Fixed the same way the Calls page's search already was this session:
+// go through /api/dexscreener/search (this app's own proxy, which already
+// falls back to a direct address lookup DexScreener's fuzzy index can miss)
+// and keep every chain this app actually supports instead of Solana only.
+// _NB_LIVE_CHAINS/_NB_CHAIN_LABELS come from navbar.js when it's loaded on
+// this page; fall back to Solana-only labels if it isn't, same guard the
+// Calls page uses.
+function _composerLiveChains(){
+  return (typeof _NB_LIVE_CHAINS!=='undefined') ? _NB_LIVE_CHAINS : ['solana'];
+}
+function _composerChainLabels(){
+  return (typeof _NB_CHAIN_LABELS!=='undefined') ? _NB_CHAIN_LABELS : {solana:'SOL'};
+}
+function _looksLikeTokenAddress(q){
+  return /^0x[0-9a-fA-F]{40}$/.test(q) || /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(q);
+}
+// Reshapes /api/token/info/<address>'s flat response into the same
+// {chainId, baseToken:{...}, priceUsd, priceChange, volume, liquidity, txns}
+// shape DexScreener's /search pairs already come in, so every consumer
+// below (_selectCashtagResult, _attachChartEmbed) works unmodified either way.
+function _composerReshapeTokenInfo(info, addr){
+  return {
+    chainId:     info.chain || 'solana',
+    priceUsd:    info.price_usd,
+    priceChange: info.price_change || {},
+    volume:      {h24: info.volume_24h},
+    liquidity:   {usd: info.liquidity_usd},
+    txns:        {h24: {buys: info.buyers_24h, sells: info.sellers_24h}},
+    pairAddress: info.pair_address || '',
+    baseToken:   {symbol: info.symbol, name: info.name, address: info.address || addr}
+  };
+}
+
 function _ptcdSearch(q){
   clearTimeout(_ptcdTimer);
   var dd = document.getElementById('postText-cashtag-dropdown');
@@ -7570,26 +7608,45 @@ function _ptcdSearch(q){
   _ptcdPosition(ta);
   dd.style.display = 'block';
   dd.innerHTML = '<div class="ptcd-empty">Searching…</div>';
+  var liveChains = _composerLiveChains(), chainLbls = _composerChainLabels();
+  var _ptcdRenderPairs = function(pairs){
+    dd.innerHTML = pairs.map(function(p,i){
+      var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
+      var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
+      var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
+      var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+      var name = (p.baseToken&&p.baseToken.name)||'';
+      var chainLbl = chainLbls[p.chainId] || p.chainId;
+      return '<div class="ptcd-row" data-idx="'+i+'" onmousedown="event.preventDefault();_selectCashtagResult('+i+')">'
+        +'<div><div class="ptcd-sym">'+_ptcdHighlight(sym,q)+'</div><div class="ptcd-name">'+_ptcdHighlight(name,q)+' · '+esc(chainLbl)+'</div></div>'
+        +'<div><div class="ptcd-price">'+price+'</div><div class="ptcd-chg">'+chgStr+'</div></div></div>';
+    }).join('');
+    _ptcdPairs = pairs;
+    _ptcdActiveIdx = 0;
+    _ptcdRenderActive();
+  };
   _ptcdTimer = setTimeout(function(){
-    fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+    fetch('/api/dexscreener/search?q='+encodeURIComponent(q))
     .then(function(r){ return r.json(); })
     .then(function(d){
       if(!_ptcdRange) return; // dropdown was closed while the request was in flight
-      var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,5);
-      if(!pairs.length){ dd.innerHTML='<div class="ptcd-empty">No Solana tokens found</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; return; }
-      dd.innerHTML = pairs.map(function(p,i){
-        var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
-        var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
-        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
-        var sym = (p.baseToken&&p.baseToken.symbol)||'?';
-        var name = (p.baseToken&&p.baseToken.name)||'';
-        return '<div class="ptcd-row" data-idx="'+i+'" onmousedown="event.preventDefault();_selectCashtagResult('+i+')">'
-          +'<div><div class="ptcd-sym">'+_ptcdHighlight(sym,q)+'</div><div class="ptcd-name">'+_ptcdHighlight(name,q)+'</div></div>'
-          +'<div><div class="ptcd-price">'+price+'</div><div class="ptcd-chg">'+chgStr+'</div></div></div>';
-      }).join('');
-      _ptcdPairs = pairs;
-      _ptcdActiveIdx = 0;
-      _ptcdRenderActive();
+      var pairs = (d.pairs||[]).filter(function(p){ return liveChains.indexOf(p.chainId)!==-1; }).slice(0,5);
+      if(pairs.length){ _ptcdRenderPairs(pairs); return; }
+      if(!_looksLikeTokenAddress(q)){
+        dd.innerHTML='<div class="ptcd-empty">No tokens found</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; return;
+      }
+      // Query itself is a real address -- DexScreener's fuzzy search (and
+      // this proxy's own address-fallback) can still miss a brand-new
+      // token, so try the same direct, chain-agnostic lookup the navbar
+      // search and Live Market's deep link already rely on.
+      fetch('/api/token/info/'+encodeURIComponent(q))
+      .then(function(r){ return r.json(); })
+      .then(function(info){
+        if(!_ptcdRange) return;
+        if(!info || !info.ok){ dd.innerHTML='<div class="ptcd-empty">No tokens found</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; return; }
+        _ptcdRenderPairs([_composerReshapeTokenInfo(info, q)]);
+      })
+      .catch(function(){ dd.innerHTML='<div class="ptcd-empty">No tokens found</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; });
     })
     .catch(function(){ dd.innerHTML='<div class="ptcd-empty" style="color:#f76b62">Search failed</div>'; _ptcdPairs = null; _ptcdActiveIdx = -1; });
   }, 300);
@@ -7655,22 +7712,37 @@ function _chartSearch(q){
   if(!q || q.length < 1){ res.style.display='none'; return; }
   res.style.display = 'block';
   res.innerHTML = '<div style="padding:10px;color:#565d68;font-size:13px">Searching…</div>';
+  var liveChains = _composerLiveChains(), chainLbls = _composerChainLabels();
+  var _chartRenderPairs = function(pairs){
+    res.innerHTML = pairs.map(function(p,i){
+      var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
+      var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
+      var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
+      var sym = (p.baseToken&&p.baseToken.symbol)||'?';
+      var name = (p.baseToken&&p.baseToken.name)||'';
+      var chainLbl = chainLbls[p.chainId] || p.chainId;
+      return '<div onclick="_attachChartEmbed('+i+')" data-pair-idx="'+i+'" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;transition:background .1s" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div><div style="font-weight:700;color:#eef1f5;font-size:13px">'+esc(sym)+'</div><div style="color:#565d68;font-size:11px">'+esc(name)+' · '+esc(chainLbl)+'</div></div><div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#eef1f5">'+price+'</div><div style="font-size:11px">'+chgStr+'</div></div></div>';
+    }).join('');
+    window._chartSearchPairs = pairs;
+  };
   _chartSearchTimer = setTimeout(function(){
-    fetch('https://api.dexscreener.com/latest/dex/search?q='+encodeURIComponent(q))
+    fetch('/api/dexscreener/search?q='+encodeURIComponent(q))
     .then(function(r){ return r.json(); })
     .then(function(d){
-      var pairs = (d.pairs||[]).filter(function(p){ return p.chainId==='solana'; }).slice(0,5);
-      if(!pairs.length){ res.innerHTML='<div style="padding:10px;color:#565d68;font-size:13px">No Solana tokens found</div>'; return; }
-      res.innerHTML = pairs.map(function(p,i){
-        var chg = p.priceChange && p.priceChange.h24 != null ? p.priceChange.h24 : null;
-        var chgStr = chg != null ? (chg>=0?'<span style="color:#3ad29b">+'+chg.toFixed(2)+'%</span>':'<span style="color:#f76b62">'+chg.toFixed(2)+'%</span>') : '';
-        var price = p.priceUsd ? '$'+parseFloat(p.priceUsd).toLocaleString('en-US',{maximumSignificantDigits:6}) : '—';
-        var sym = (p.baseToken&&p.baseToken.symbol)||'?';
-        var name = (p.baseToken&&p.baseToken.name)||'';
-        var safeIdx = i;
-        return '<div onclick="_attachChartEmbed('+i+')" data-pair-idx="'+i+'" style="padding:11px 14px;cursor:pointer;border-bottom:1px solid #16191f;display:flex;align-items:center;justify-content:space-between;transition:background .1s" onmouseover="this.style.background=\'#16191f\'" onmouseout="this.style.background=\'\'"><div><div style="font-weight:700;color:#eef1f5;font-size:13px">'+esc(sym)+'</div><div style="color:#565d68;font-size:11px">'+esc(name)+'</div></div><div style="text-align:right"><div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:#eef1f5">'+price+'</div><div style="font-size:11px">'+chgStr+'</div></div></div>';
-      }).join('');
-      window._chartSearchPairs = pairs;
+      var pairs = (d.pairs||[]).filter(function(p){ return liveChains.indexOf(p.chainId)!==-1; }).slice(0,5);
+      if(pairs.length){ _chartRenderPairs(pairs); return; }
+      if(!_looksLikeTokenAddress(q)){
+        res.innerHTML='<div style="padding:10px;color:#565d68;font-size:13px">No tokens found</div>'; return;
+      }
+      // Same second-chance direct lookup _ptcdSearch() uses -- a brand-new
+      // token's own address can outrun DexScreener's fuzzy search index.
+      fetch('/api/token/info/'+encodeURIComponent(q))
+      .then(function(r){ return r.json(); })
+      .then(function(info){
+        if(!info || !info.ok){ res.innerHTML='<div style="padding:10px;color:#565d68;font-size:13px">No tokens found</div>'; return; }
+        _chartRenderPairs([_composerReshapeTokenInfo(info, q)]);
+      })
+      .catch(function(){ res.innerHTML='<div style="padding:10px;color:#565d68;font-size:13px">No tokens found</div>'; });
     })
     .catch(function(){ res.innerHTML='<div style="padding:10px;color:#f76b62;font-size:13px">Search failed</div>'; });
   }, 300);
