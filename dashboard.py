@@ -7399,8 +7399,13 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
     if sol_amount <= 0 or sol_bal < sol_amount + _sol_gas_buffer:
         # This IS a genuine dead end the user must act on (deposit more SOL) --
         # unlike the other lines in this function, kept visible on purpose.
-        add_user_log(wallet, f'[bot-{chain}] Out of {native_symbol} for gas and not enough SOL ({round(sol_bal,4)}) to bootstrap it via bridge — deposit a bit more SOL')
-        return False, f'not enough SOL to bootstrap {chain} gas via bridge'
+        # Worded as a concrete instruction (how much, and what happens next),
+        # not "bootstrap"/"bridge" jargon -- this is what actually reaches
+        # the Buy panel via "Cannot trade on {chain} yet -- {this message}".
+        add_user_log(wallet, f'[bot-{chain}] Cannot activate {chain} yet — deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL '
+                              f'(you currently have {round(sol_bal,4)} SOL) — it gets converted into {native_symbol} gas automatically')
+        return False, (f'deposit at least ${GAS_BOOTSTRAP_SOL_USD:.0f} of SOL to your wallet — '
+                        f'that funds your first bit of {native_symbol} gas here automatically')
 
     ok, msg, row_id = _execute_cross_chain_bridge(
         user_id, wallet, origin_chain='solana', dest_chain=chain,
@@ -7447,9 +7452,13 @@ def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: st
         return False, f'{chain} USDC balance check failed: {e}'
     topup_amount = min(GAS_TOPUP_USDC_AMOUNT, usdc_bal)
     if topup_amount <= 0:
-        # Genuine dead end (nothing left to auto-fund gas with) -- kept visible.
-        add_user_log(wallet, f'[bot-{chain}] Low on {native_symbol} for gas and no USDC on {chain} to top it up with')
-        return False, f'no USDC on {chain} to fund a gas top-up'
+        # Genuine dead end (nothing left to auto-fund gas with) -- kept
+        # visible, worded as a concrete instruction rather than "top-up"
+        # jargon, same reasoning as the bootstrap dead end above.
+        _usdc_sym = EVM_CHAINS[chain].get('usdc_symbol', 'USDC')
+        add_user_log(wallet, f'[bot-{chain}] Cannot keep trading on {chain} — deposit a little {_usdc_sym} '
+                              f'there to top up {native_symbol} gas automatically')
+        return False, f'deposit a little {_usdc_sym} on {chain} — it tops up your {native_symbol} gas automatically'
 
     # Routine, self-correcting background step -- server console only.
     print(f'[bot-{chain}] low on {native_symbol} for gas, auto-topping up with {round(topup_amount, 4)} USDC', flush=True)
