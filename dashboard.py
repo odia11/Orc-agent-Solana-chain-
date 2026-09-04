@@ -7856,36 +7856,83 @@ def _send_bsc_usdc_fee(private_key: str, to_address: str, amount_usdc: float) ->
     """Backward-compatible alias -- see _send_evm_usdc_fee() above."""
     return _send_evm_usdc_fee(private_key, to_address, amount_usdc, 'bsc')
 
-def _evm_fee_recipient() -> str:
+GAS_SPONSOR_TARGET_GRANTS = 30    # how much native gas the sponsor wallet aims to hold, expressed in grants it could still hand out
+GAS_SPONSOR_USDC_BUFFER   = 50.0  # ...plus at most this much unconverted fee income already queued up to become gas
+_SPONSOR_NEED_TTL         = 120   # seconds a chain's "does the sponsor need funding" answer is reused for, so this costs ~2 RPC reads per chain per 2 minutes rather than per trade
+
+_sponsor_need_cache: dict = {}
+
+def _gas_sponsor_needs_funding(chain: str) -> bool:
+    """Whether the sponsor wallet still needs fee income on `chain`, i.e. it
+    holds less than GAS_SPONSOR_TARGET_GRANTS grants' worth of native gas AND
+    hasn't already got GAS_SPONSOR_USDC_BUFFER of fee income waiting to be
+    converted into gas. Once both are satisfied it needs nothing more, and
+    fees go to the operator's normal fee wallet instead.
+
+    On any RPC failure this answers False -- the conservative side, since it
+    routes the fee to the pre-existing revenue wallet rather than parking it
+    in the gas wallet on a guess."""
+    cached = _sponsor_need_cache.get(chain)
+    if cached and (time.time() - cached[0]) < _SPONSOR_NEED_TTL:
+        return cached[1]
+    sponsor_address = _gas_sponsor_address()
+    if not sponsor_address or chain not in EVM_CHAINS:
+        return False
+    try:
+        w3 = _get_web3(chain)
+        native_bal = w3.eth.get_balance(w3.to_checksum_address(sponsor_address))
+        one_grant  = w3.eth.gas_price * GAS_TOPUP_TX_GAS_UNITS * GAS_SPONSOR_TX_MULTIPLIER
+        needs = native_bal < one_grant * GAS_SPONSOR_TARGET_GRANTS
+        if needs:
+            # Already holding plenty of fee income to convert -- it doesn't
+            # need more USDC, it just needs to run its own refill swap.
+            needs = get_evm_usdc_balance(sponsor_address, chain) < GAS_SPONSOR_USDC_BUFFER
+    except Exception as e:
+        print(f'[gas-sponsor] could not check whether the sponsor wallet needs funding on {chain} '
+              f'({type(e).__name__}) — sending this fee to the normal fee wallet', flush=True)
+        return False
+    _sponsor_need_cache[chain] = (time.time(), needs)
+    return needs
+
+def _evm_fee_recipient(chain: str) -> str:
     """Where an EVM chain's USDC trading fee is actually sent.
 
-    When gas sponsorship is configured, that's the sponsor wallet: the
-    platform fronts native gas to users out of it (see _sponsor_evm_gas),
-    and routing the fees back into the same wallet is what settles that up
-    -- the fee income lands exactly where the gas is spent from, instead of
-    the operator having to move money over by hand. It's the operator's own
-    wallet either way, so this parks revenue there, it never gives it away.
-    The sponsor wallet turns that USDC back into spendable gas itself (see
-    gas_manager's sponsor self-refill).
+    The gas sponsor wallet is a working wallet, not a revenue wallet: it
+    only ever needs enough to keep fronting users their native gas (see
+    _sponsor_evm_gas). So a fee goes there only while it's actually short --
+    below its target gas balance with no fee income already queued to
+    convert -- and every other fee goes to EVM_CHAIN_FEE_WALLET, the normal
+    revenue wallet, exactly as before.
 
-    Falls back to the pre-existing EVM_CHAIN_FEE_WALLET whenever
-    sponsorship isn't configured, so nothing changes without a sponsor key."""
-    return _gas_sponsor_address() or EVM_CHAIN_FEE_WALLET
+    Routing whole fees this way rather than splitting each one in two keeps
+    it at ONE transfer per trade: a split would mean two ERC20 transfers,
+    doubling the gas the user's own wallet pays on every single trade to
+    move the same total amount.
+
+    With no sponsor configured, or no fee wallet configured, this is simply
+    whichever one exists."""
+    sponsor = _gas_sponsor_address()
+    if not sponsor:
+        return EVM_CHAIN_FEE_WALLET
+    if not EVM_CHAIN_FEE_WALLET:
+        return sponsor
+    return sponsor if _gas_sponsor_needs_funding(chain) else EVM_CHAIN_FEE_WALLET
 
 def _charge_evm_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str,
                          usdc_amount: float, kind: str, chain: str = 'bsc',
                          trade_ts: str = None, gross_profit: float = 0.0):
     """EVM equivalent of _charge_txn_fee(): same FEE_RATE_TXN (0.75%), charged on
     BOTH the buy and the sell leg regardless of profit -- but the fee itself is
-    USDC, sent to _evm_fee_recipient() (the gas sponsor wallet when one is
-    configured, else EVM_CHAIN_FEE_WALLET) via _send_evm_usdc_fee()'s web3
-    build/sign/send_raw_transaction flow instead of a SOL transfer. Shares the
-    fees/referral_earnings tables with the Solana path, tagged with `chain` so
-    a USDC amount is never mistaken for a SOL one (or one EVM chain's for
-    another's -- each chain's USDC is a fully separate on-chain balance)."""
+    USDC, sent to _evm_fee_recipient() (the normal fee wallet, or the gas
+    sponsor wallet while that one is still short on gas) via
+    _send_evm_usdc_fee()'s web3 build/sign/send_raw_transaction flow instead of
+    a SOL transfer. Shares the fees/referral_earnings tables with the Solana
+    path, tagged with `chain` so a USDC amount is never mistaken for a SOL one
+    (or one EVM chain's for another's -- each chain's USDC is a fully separate
+    on-chain balance)."""
     fee_amount = round(usdc_amount * FEE_RATE_TXN, 6)
     short_w = (wallet[:6] + '...' + wallet[-4:]) if len(wallet) >= 10 else wallet
-    fee_recipient = _evm_fee_recipient()
+    fee_recipient = _evm_fee_recipient(chain)
     print(f'[{chain}-fee] {short_w} {symbol} {kind} fee owed = {fee_amount:.6f} USDC '
           f'({FEE_RATE_TXN * 100:.2f}% of {usdc_amount:.6f} USDC {kind})', flush=True)
     if not (wallet and private_key) or fee_amount <= 0:
@@ -7900,8 +7947,9 @@ def _charge_evm_txn_fee(private_key: str, wallet: str, user_id: int, symbol: str
         sw = (wlt[:6] + '...' + wlt[-4:]) if len(wlt) >= 10 else wlt
         # Wait for the buy/sell TX to confirm on-chain before we try to spend from that balance
         time.sleep(12)
+        _dest_label = 'gas sponsor wallet' if fee_recipient == _gas_sponsor_address() else 'fee wallet'
         print(f'[{chn}-fee] → attempting {fee:.6f} USDC {kind_} fee transfer from trading wallet to '
-              f'{fee_recipient[:10]}... for {sw} {sym}', flush=True)
+              f'{_dest_label} {fee_recipient[:10]}... for {sw} {sym}', flush=True)
         tx_sig  = None
         err_msg = None
         try:

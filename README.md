@@ -57,7 +57,7 @@ Optional:
 | `BIRDEYE_API_KEY` | BirdEye API key for token data. |
 | `TELEGRAM_BOT_TOKEN` | Telegram bot token (from @BotFather) for uptime alerts. |
 | `TELEGRAM_CHAT_ID` | Telegram chat or channel ID to receive uptime alerts. |
-| `GAS_SPONSOR_PRIVATE_KEY` | EVM private key of a platform-funded wallet used to send users a few cents of native gas (BNB/ETH/POL) when their EVM wallet is empty, so trading capital held purely in USDC can still be traded. The same address works on every EVM chain — keep it funded on each one. Its address is printed at startup. Leave unset to disable sponsorship (empty wallets then fall back to bridging the user's own SOL). |
+| `GAS_SPONSOR_PRIVATE_KEY` | EVM private key of a platform-funded wallet used to send users a few cents of native gas (BNB/ETH/POL) when their EVM wallet is empty, so trading capital held purely in USDC can still be traded. The same address works on every EVM chain — fund it once per chain; its address is printed at startup. It tops itself up after that: EVM trading fees are routed to it only while it is below its gas target, and it converts that income back into gas itself; every other fee goes to `OWNER_WALLET`/`BSC_FEE_WALLET` as usual. Leave unset to disable sponsorship (empty wallets then fall back to bridging the user's own SOL). |
 | `X_CLIENT_ID` / `X_CLIENT_SECRET` | X (Twitter) OAuth 2.0 app credentials, for the Connect X / auto-share feature. |
 | `X_CALLBACK_URL` | OAuth callback URL, must match exactly what's registered in the X Developer Portal. |
 
