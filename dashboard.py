@@ -7452,6 +7452,22 @@ def _bootstrap_evm_gas_via_bridge(user_id: int, wallet: str, evm_address: str, c
     print(f'[bot-{chain}] gas bootstrap bridge failed to submit: {msg}', flush=True)
     return False, f'gas bootstrap bridge failed: {msg}', None
 
+_evm_gas_locks: dict = {}
+_evm_gas_locks_guard = threading.Lock()
+
+def _get_evm_gas_lock(wallet: str, chain: str) -> threading.Lock:
+    """One lock per (wallet, chain) so two callers checking gas for the same
+    wallet at once -- e.g. a live trade's own pre-trade check racing the
+    periodic background sweep in gas_manager.py -- can't both see the same
+    stale low balance and each fire off their own top-up/bootstrap, wasting
+    the user's USDC or SOL on a redundant swap."""
+    with _evm_gas_locks_guard:
+        lock = _evm_gas_locks.get((wallet, chain))
+        if lock is None:
+            lock = threading.Lock()
+            _evm_gas_locks[(wallet, chain)] = lock
+        return lock
+
 def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: str, chain: str,
                      auto_buy_token_address: str = None, auto_buy_requested_usdc: float = None) -> tuple:
     """Tops up `evm_address`'s native gas balance on `chain` from its OWN
@@ -7474,7 +7490,19 @@ def _ensure_evm_gas(user_id: int, wallet: str, private_key: str, evm_address: st
     _execute_auto_buy_after_bridge() will complete it automatically once
     that bridge lands. bridge_id is always None on the genuine "deposit
     more X" dead ends and on any other failure -- there's nothing to
-    attach a pending buy to in those cases."""
+    attach a pending buy to in those cases.
+
+    Serialized per (wallet, chain) -- see _get_evm_gas_lock() -- so this is
+    never entered twice concurrently for the same wallet."""
+    with _get_evm_gas_lock(wallet, chain):
+        return _ensure_evm_gas_locked(user_id, wallet, private_key, evm_address, chain,
+                                       auto_buy_token_address, auto_buy_requested_usdc)
+
+def _ensure_evm_gas_locked(user_id: int, wallet: str, private_key: str, evm_address: str, chain: str,
+                            auto_buy_token_address: str = None, auto_buy_requested_usdc: float = None) -> tuple:
+    """Actual _ensure_evm_gas body -- see that function's docstring. Split out
+    so the lock in _ensure_evm_gas() wraps the whole check-then-act sequence
+    below without this function needing to know about locking itself."""
     try:
         w3 = _get_web3(chain)
         native_bal_wei = w3.eth.get_balance(w3.to_checksum_address(evm_address))
@@ -25613,6 +25641,8 @@ threading.Thread(target=totd_loop,             daemon=True).start()
 threading.Thread(target=_cleanup_loop,         daemon=True).start()
 threading.Thread(target=_audit_loop,           daemon=True).start()
 threading.Thread(target=_security_check_loop,  daemon=True).start()
+import gas_manager
+threading.Thread(target=gas_manager.gas_sweep_loop, daemon=True).start()
 _security_selftest()
 add_log('OrcAgent started')
 def _autostart_bots():
