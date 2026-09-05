@@ -108,9 +108,24 @@ function closeAllOverlays(){
   if(results) results.classList.remove('open');
 }
 
+/* Marks the destination you are currently on. The five primary links get
+   their active class server-side from the page's own active_nav, but the
+   secondary ones (Traders, Bot, Referrals, Settings…) had no way to say so,
+   so the menu never reflected where you were once you left the main five.
+   Done from the real pathname, matching exactly rather than by prefix so
+   "/" doesn't light up on every page. */
+function markCurrentNavItem(){
+  var here = location.pathname.replace(/\/+$/, '') || '/';
+  document.querySelectorAll('.pt-nb-more-item[href]').forEach(function(a){
+    var href = (a.getAttribute('href') || '').replace(/\/+$/, '') || '/';
+    a.classList.toggle('current', href === here);
+  });
+}
+
 document.addEventListener('DOMContentLoaded', function(){
   var root = document.querySelector('.pt-nb-topbar');
   if(!root) return; // navbar not on this page
+  markCurrentNavItem();
 
   var menuBtn    = document.getElementById('pt-nb-menu-btn');
   var navEl      = document.getElementById('pt-nb-nav');

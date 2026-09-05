@@ -14510,10 +14510,12 @@ _NAVBAR_MORE_LINKS = [
     ('/bot', 'Bot'),
     ('/live-trades', 'Live Trades'),
     None,  # separator
+    # Account/meta destinations in one group. About used to sit alone behind
+    # its own separator, which put three divider lines within a few rows of
+    # each other and made the menu look busier than it is.
     ('/profile', 'Profile'),
     ('/settings', 'Settings'),
     ('/admin', 'Admin Console', 'pt-nb-admin-link', 'display:none'),
-    None,
     ('/info', 'About'),
 ]
 
