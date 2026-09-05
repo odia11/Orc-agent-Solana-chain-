@@ -39,6 +39,9 @@ CASES = [
     '<script>alert(1)</script>',
     'https://averyveryverylongdomainname.example.com/with/a/very/long/path/that/goes/on',
     'plain text, no link',
+    '$OPENBELL is up but I only made $500 profit',
+    'price is $0.000002346 not $0.052345',
+    '$verylongtickernamethatisnotarealticker',
     '',
 ]
 
@@ -112,6 +115,16 @@ check('an email address is not mangled into a profile link — an @ has to start
 check('text with no URL is unchanged apart from escaping',
       R['plain text, no link'] == 'plain text, no link')
 check('empty content produces nothing rather than an error', R[''] == '')
+
+# ── a $ is not always a ticker ──
+_amt = R['$OPENBELL is up but I only made $500 profit']
+check('a real ticker still becomes a token tag', 'data-sym="OPENBELL"' in _amt)
+check('a dollar AMOUNT does not — "$500 profit" was becoming a clickable tag '
+      'that resolves to no token at all', 'data-sym="500"' not in _amt and '$500' in _amt)
+check('a quoted price is left alone too, so a post can talk about prices',
+      'token-tag' not in R['price is $0.000002346 not $0.052345'])
+check('a ticker is length-bounded — forty characters after a $ is not a symbol',
+      'token-tag' not in R['$verylongtickernamethatisnotarealticker'])
 
 # ── every place a post is rendered uses it ──
 check('the feed post, the post-with-chart, the inline edit and the replies all '

@@ -6,7 +6,11 @@ function esc(s){
 }
 function _fcTagText(t){
   if(!t) return '';
-  var out = esc(t).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
+  // A ticker starts with a LETTER. /\$([^\s<]+)/ matched anything after a
+  // dollar sign, so "$500 profit" and "$0.000002346" became clickable token
+  // tags that resolve to nothing -- any post quoting a price or an amount
+  // got them. Bounded length too: a ticker is not forty characters long.
+  var out = esc(t).replace(/\$([A-Za-z][A-Za-z0-9_]{0,19})\b/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
   // The @ has to START a word. Without that guard "me@example.com" renders as
   // "me" followed by a link to /profile/example -- the same class of bug the
   // URL split above exists to prevent, one character earlier.
@@ -48,7 +52,7 @@ function _fcRichText(raw){
   return out + _fcTagText(s.slice(last));
 }
 var out = [];
-var CASES = ["https://openbell.market/", "check this https://openbell.market/ out", "www.openbell.market", "see https://a.com/x.", "(see https://a.com/x)", "https://en.wikipedia.org/wiki/Foo_(bar)", "https://x.com/@someone", "mail me at me@example.com", "$OPENBELL is at 200k https://openbell.market/", "@degentrader1990 look https://a.com", "javascript:alert(1)", "https://a.com/?a=1&b=2", "https://a.com/\" onmouseover=\"alert(1)", "<script>alert(1)</script>", "https://averyveryverylongdomainname.example.com/with/a/very/long/path/that/goes/on", "plain text, no link", ""];
+var CASES = ["https://openbell.market/", "check this https://openbell.market/ out", "www.openbell.market", "see https://a.com/x.", "(see https://a.com/x)", "https://en.wikipedia.org/wiki/Foo_(bar)", "https://x.com/@someone", "mail me at me@example.com", "$OPENBELL is at 200k https://openbell.market/", "@degentrader1990 look https://a.com", "javascript:alert(1)", "https://a.com/?a=1&b=2", "https://a.com/\" onmouseover=\"alert(1)", "<script>alert(1)</script>", "https://averyveryverylongdomainname.example.com/with/a/very/long/path/that/goes/on", "plain text, no link", "$OPENBELL is up but I only made $500 profit", "price is $0.000002346 not $0.052345", "$verylongtickernamethatisnotarealticker", ""];
 
 CASES.forEach(function(c){ out.push(_fcRichText(c)); });
 console.log(JSON.stringify(out));

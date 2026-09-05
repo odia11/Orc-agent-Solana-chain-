@@ -1347,7 +1347,11 @@ function renderLog(lines){
    never become a link however they are typed. */
 function _fcTagText(t){
   if(!t) return '';
-  var out = esc(t).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
+  // A ticker starts with a LETTER. /\$([^\s<]+)/ matched anything after a
+  // dollar sign, so "$500 profit" and "$0.000002346" became clickable token
+  // tags that resolve to nothing -- any post quoting a price or an amount
+  // got them. Bounded length too: a ticker is not forty characters long.
+  var out = esc(t).replace(/\$([A-Za-z][A-Za-z0-9_]{0,19})\b/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
   // The @ has to START a word. Without that guard "me@example.com" renders as
   // "me" followed by a link to /profile/example -- the same class of bug the
   // URL split above exists to prevent, one character earlier.
