@@ -14303,6 +14303,12 @@ SURGE_ALERT_MAX_FOLLOWUPS_PER_HOUR = 8   # follow-ups spend their OWN budget, so
 # their own that it is well below where they were told is worse than one more
 # buzz. It is exactly one per token, it reports a price, and it is explicitly
 # not advice to sell.
+#
+# It does NOT retire the token. A drop notice used up is the only thing it
+# means: if the token climbs back ABOVE the price of the last alert that
+# reported a rise, that is news again and it is sent again. What it can never
+# do is buzz on a bounce that is still below where the user was last told --
+# the baseline for that is the last rise, never the crash it fell to.
 SURGE_ALERT_DROP_PCT           = 20.0  # % below the highest price it was alerted at
 SURGE_ALERT_MAX_DROPS_PER_HOUR = 3     # a market-wide sell-off must not become 30 buzzes
 
@@ -14343,16 +14349,18 @@ def _surge_alert_allowed(surge: dict):
         state = _surge_alerted_mints.get(mint)
         gain = 0.0
         if state is not None:
-            # A token that has had its closing drop notice is finished: it
-            # would otherwise alert again on the bounce off its own crash.
-            if state.get('dropped'):
-                return None
             if now - state['ts'] < SURGE_ALERT_MIN_GAP:
                 return None
             if state['followups'] >= SURGE_ALERT_MAX_FOLLOWUPS:
                 return None
             if not price or not state['price']:
                 return None
+            # Always measured from the price at the last alert that reported a
+            # RISE -- _surge_drop_allowed deliberately does not touch
+            # state['price']. So after a drop notice the token has to climb
+            # back above where it was last reported up, not merely bounce off
+            # the bottom: a fall to -30% and a recovery to -10% is still below
+            # what the user was told, and says nothing new.
             gain = (price - state['price']) / state['price'] * 100
             if gain < SURGE_ALERT_FOLLOWUP_GAIN:
                 return None
@@ -14367,11 +14375,16 @@ def _surge_alert_allowed(surge: dict):
         if len(_surge_followups_sent) >= SURGE_ALERT_MAX_FOLLOWUPS_PER_HOUR:
             return None
         _surge_followups_sent.append(now)
+        # A token that already had its drop notice and has now climbed back
+        # ABOVE where it was last reported is a comeback, not more of the same
+        # climb -- worth saying differently, since the last thing sent about
+        # it said it was down.
+        recovered = bool(state.get('dropped'))
         state['ts'] = now
         state['price'] = price
         state['peak_price'] = max(state.get('peak_price') or 0, price)
         state['followups'] += 1
-        return {'kind': 'followup', 'gain': gain}
+        return {'kind': 'followup', 'gain': gain, 'recovered': recovered}
 
 def _surge_drop_allowed(mint: str, price: float):
     """The fall in percent when this token has dropped far enough below the
@@ -14396,6 +14409,11 @@ def _surge_drop_allowed(mint: str, price: float):
             return None
         _surge_drops_sent.append(now)
         state['dropped'] = True
+        # Spends the token's gap too, so a drop notice and a recovery alert
+        # can never land seconds apart. Deliberately does NOT touch
+        # state['price']: the bar for being heard from again stays the price
+        # at the last alert that reported a rise.
+        state['ts'] = now
         return fall
 
 def surge_alert_tracked_mints() -> set:
@@ -14484,7 +14502,8 @@ def _surge_alert_text(surge: dict, decision: dict = None) -> tuple:
     # bearing field.
     parts = []
     if followup:
-        parts.append('Still climbing')
+        parts.append('Back above its last alert' if (decision or {}).get('recovered')
+                     else 'Still climbing')
     name = (surge.get('name') or '').strip()
     # DexScreener falls back to the ticker when a pair has no name, and
     # "STONKCAT · Solana" under a title already reading "$STONKCAT" wastes a
