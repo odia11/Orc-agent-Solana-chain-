@@ -308,6 +308,17 @@ html,body{min-height:100%;background:var(--bg);font-family:var(--ui);color:var(-
             <span class="st-track"></span>
           </label>
         </div>
+
+        <div class="st-tog-row">
+          <div>
+            <div class="st-tog-label">Surge Alerts</div>
+            <div class="st-tog-sub">Phone notification when a token's volume suddenly explodes · off by default</div>
+          </div>
+          <label class="st-toggle">
+            <input type="checkbox" id="pref-surge" onchange="_savePref('surge_alerts',this.checked)">
+            <span class="st-track"></span>
+          </label>
+        </div>
       </div>
 
       <!-- ── CARD 3: Account & Wallet ── -->
@@ -481,6 +492,8 @@ async function _initPage(){
     if(notifs) notifs.checked=!!d.pref_notifications;
     if(scam)   scam.checked  =!!d.pref_scam_filter;
     if(sound)  sound.checked =!!d.pref_sound_alerts;
+    var surge=document.getElementById('pref-surge');
+    if(surge)  surge.checked =!!d.pref_surge_alerts;
     if(d.is_verified){
       var sbName=document.querySelector('.sb-user-name');
       if(sbName) sbName.innerHTML='You <svg width="14" height="14" viewBox="0 0 24 24" style="vertical-align:-2px;margin-left:2px"><circle cx="12" cy="12" r="12" fill="#f7b955"/><path d="M7 12.5l3.2 3.2L17 9" stroke="#0a0b0e" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>';

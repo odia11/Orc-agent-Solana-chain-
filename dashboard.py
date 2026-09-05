@@ -2324,6 +2324,11 @@ def run_migrations():
         "ALTER TABLE users ADD COLUMN stop_loss REAL DEFAULT 8.0",
         "ALTER TABLE users ADD COLUMN max_positions INTEGER DEFAULT 3",
         "ALTER TABLE users ADD COLUMN pref_notifications INTEGER DEFAULT 1",
+        # Phone alerts when a token starts surging (see surge_radar.py).
+        # OFF by default, unlike the other preferences: this one fires from
+        # the market rather than from something the user did, so nobody
+        # should start receiving it without asking.
+        "ALTER TABLE users ADD COLUMN pref_surge_alerts INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN pref_scam_filter INTEGER DEFAULT 1",
         "ALTER TABLE users ADD COLUMN pref_sound_alerts INTEGER DEFAULT 0",
         "ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user'",
@@ -14262,6 +14267,76 @@ def _send_push_notifications_bulk(user_ids, title, body, url='/'):
             _send_push_notification_sync(uid, title, body, url)
     threading.Thread(target=_run, daemon=True).start()
 
+# ── SURGE ALERTS ──
+# A phone buzz when a token's activity explodes (see surge_radar.py). This is
+# the one notification in the app that isn't caused by something the user did,
+# so it is throttled hard: an alert that fires too often stops being read, and
+# a market scanner can produce a lot of "interesting" in a busy hour.
+SURGE_ALERT_MIN_VOL_RATIO = 10.0   # well above the 3x the strip itself shows -- a phone buzz needs a higher bar than a card
+SURGE_ALERT_MIN_VOLUME_5M = 15000.0
+SURGE_ALERT_MAX_PER_HOUR  = 4      # across all tokens, for everyone
+SURGE_ALERT_REPEAT_HOURS  = 6      # never alert twice for the same token inside this window
+
+_surge_alert_lock = threading.Lock()
+_surge_alerts_sent: list = []      # timestamps, for the hourly cap
+_surge_alerted_mints: dict = {}    # mint -> timestamp of the last alert
+
+def _surge_alert_allowed(surge: dict) -> bool:
+    """Whether this surge is worth interrupting someone for. Checked before
+    any recipient lookup so a rejected surge costs nothing."""
+    if float(surge.get('vol_ratio') or 0) < SURGE_ALERT_MIN_VOL_RATIO:
+        return False
+    if float(surge.get('volume_5m') or 0) < SURGE_ALERT_MIN_VOLUME_5M:
+        return False
+    now = time.time()
+    mint = surge.get('mint') or ''
+    with _surge_alert_lock:
+        _surge_alerts_sent[:] = [t for t in _surge_alerts_sent if now - t < 3600]
+        if len(_surge_alerts_sent) >= SURGE_ALERT_MAX_PER_HOUR:
+            return False
+        last = _surge_alerted_mints.get(mint)
+        if last and now - last < SURGE_ALERT_REPEAT_HOURS * 3600:
+            return False
+        # Reserved here rather than after sending, so two surges arriving in
+        # the same sweep can't both pass a cap that only has room for one.
+        _surge_alerts_sent.append(now)
+        _surge_alerted_mints[mint] = now
+        for m, t in list(_surge_alerted_mints.items()):
+            if now - t > SURGE_ALERT_REPEAT_HOURS * 3600:
+                _surge_alerted_mints.pop(m, None)
+    return True
+
+def notify_surge(surge: dict):
+    """Push a surging token to everyone who asked for these alerts. Called by
+    the surge radar for newly-detected surges only. Never raises -- a failed
+    alert must not disturb the radar that produced it."""
+    try:
+        if not _surge_alert_allowed(surge):
+            return
+        conn = sqlite3.connect(DB_FILE)
+        try:
+            rows = conn.execute(
+                'SELECT DISTINCT u.id FROM users u '
+                'JOIN push_subscriptions p ON p.user_id = u.id '
+                'WHERE u.pref_surge_alerts = 1'
+            ).fetchall()
+        finally:
+            conn.close()
+        user_ids = [r[0] for r in rows]
+        if not user_ids:
+            return
+        symbol = surge.get('symbol') or '?'
+        title = f"${symbol} is surging"
+        body = (f"{surge.get('vol_ratio')}x its usual volume on {surge.get('chain')} — "
+                f"${round(float(surge.get('volume_5m') or 0)):,} in 5m, "
+                f"{surge.get('txns_5m')} transactions, {surge.get('buy_pct')}% buys")
+        # Deliberately points at Live Market rather than a buy screen: this
+        # says something is happening, not that it is worth buying.
+        _send_push_notifications_bulk(user_ids, title, body, '/live-market')
+        print(f'[surge-alert] pushed ${symbol} ({surge.get("vol_ratio")}x) to {len(user_ids)} user(s)', flush=True)
+    except Exception as e:
+        print(f'[surge-alert] failed for {surge.get("symbol")}: {e}', flush=True)
+
 def _notify_staff(title: str, body: str, link: str = '/admin#support', actor_wallet: str = None):
     """Fan out a notification + push to every current admin/moderator so a new
     support message doesn't rely on one specific mod having the inbox open."""
@@ -15268,7 +15343,8 @@ def settings_get():
                       stop_loss, max_positions, pref_notifications,
                       pref_scam_filter, pref_sound_alerts, bot_enabled,
                       avatar_url, username, is_verified, bio, min_trade_size,
-                      tiered_tp_enabled, pref_solana_base_currency
+                      tiered_tp_enabled, pref_solana_base_currency,
+                      pref_surge_alerts
                FROM users WHERE wallet_address=?''', (wallet,)).fetchone()
     finally:
         conn.close()
@@ -15281,7 +15357,8 @@ def settings_get():
                         'pref_notifications': True, 'pref_scam_filter': True,
                         'pref_sound_alerts': False, 'bot_running': bot_running,
                         'min_trade_size': 1.0, 'tiered_tp_enabled': False,
-                        'pref_solana_base_currency': 'USDC'})
+                        'pref_solana_base_currency': 'USDC',
+                        'pref_surge_alerts': False})
     return jsonify({
         'ok': True,
         'has_trading_key': bool(row[0]),
@@ -15300,6 +15377,7 @@ def settings_get():
         'min_trade_size': row[13] if row[13] is not None else 1.0,
         'tiered_tp_enabled': bool(row[14] if row[14] is not None else 0),
         'pref_solana_base_currency': (row[15] or 'USDC') if len(row) > 15 else 'USDC',
+        'pref_surge_alerts': bool(row[16]) if len(row) > 16 and row[16] is not None else False,
     })
 
 @app.route('/api/settings/save', methods=['POST'])
@@ -15369,6 +15447,9 @@ def settings_save():
     if 'pref_sound_alerts' in data:
         updates.append('pref_sound_alerts=?')
         params.append(1 if data['pref_sound_alerts'] else 0)
+    if 'pref_surge_alerts' in data:
+        updates.append('pref_surge_alerts=?')
+        params.append(1 if data['pref_surge_alerts'] else 0)
     if 'min_trade_size' in data:
         try:
             v = float(data['min_trade_size'])
