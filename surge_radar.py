@@ -95,6 +95,15 @@ def _evaluate(tok, samples, now):
 
     buys, sells = int(tok.get('buys_5m') or 0), int(tok.get('sells_5m') or 0)
     total = buys + sells
+    # The price move we watched happen ourselves. DexScreener's own m5 field
+    # is the number the cards elsewhere use and is preferred when it is
+    # there, but it is missing or flat-zero often enough on new pairs that a
+    # surge would show no percentage at all -- which is the one figure people
+    # look for. This is measured from our own samples, so it always exists
+    # once a token has any history, and obs_seconds says over what period so
+    # it can never be passed off as a 5-minute number.
+    price_first = next((sm[3] for sm in samples if sm[3] > 0), 0.0)
+    obs_change = ((price_now - price_first) / price_first * 100) if (price_first and price_now) else 0.0
     return {
         'mint':          tok.get('mint'),
         'symbol':        tok.get('symbol') or '',
@@ -111,6 +120,8 @@ def _evaluate(tok, samples, now):
         'sells_5m':      sells,
         'buy_pct':       round(buys / total * 100, 1) if total else 0.0,
         'price_change_5m': float(tok.get('price_change_5m') or 0),
+        'price_change_obs': round(obs_change, 2),
+        'obs_seconds':      int(now - ts_first),
         'vol_ratio':     round(vol_ratio, 1),
         'txn_ratio':     round(txn_ratio, 1),
         'score':         round(vol_ratio * min(txn_ratio, 10.0), 2),

@@ -1020,6 +1020,24 @@ function surgeCardHtml(s){
     : '<span class="pt-surge-img"></span>';
   var age = s.age_seconds < 60 ? (s.age_seconds+'s')
           : (Math.floor(s.age_seconds/60)+'m');
+  // The price move is what people come to this strip for, so it takes the
+  // card's most prominent slot and the volume multiplier drops to the meta
+  // line. Prefer DexScreener's 5m figure so the card agrees with the rest of
+  // the site; fall back to the move the radar measured across its own
+  // samples, labelled with the period it actually covers rather than
+  // borrowed as "5m".
+  var chg = Number(s.price_change_5m)||0, chgWin = '5m';
+  if(Math.abs(chg) < 0.05){
+    chg = Number(s.price_change_obs)||0;
+    chgWin = Math.max(1, Math.round((Number(s.obs_seconds)||0)/60))+'m';
+  }
+  // On its own line, not squeezed into the header row: five items sharing
+  // 172px was clipping tickers to "$A..." and left no room to make the
+  // percentage the largest thing on the card, which is the whole point.
+  var chgHtml = Math.abs(chg) >= 0.05
+    ? '<div class="pt-surge-chg '+(chg>=0?'up':'down')+'" title="Price move over '+chgWin+'">'
+        + (chg>=0?'+':'')+chg.toFixed(1)+'%<i>'+chgWin+'</i></div>'
+    : '<div class="pt-surge-chg none" title="No price move measured yet">—</div>';
   return '<div class="pt-surge-card'+(s.cooling?' cooling':'')+'" data-action="open-surge" data-mint="'+esc(s.mint)+'"'
        + ' data-pair="'+esc(s.pair_address||'')+'" data-chain="'+esc(s.chain||'')+'" data-symbol="'+esc(s.symbol||'')+'">'
     + '<div class="pt-surge-top">'+img
@@ -1027,12 +1045,15 @@ function surgeCardHtml(s){
       // Being talked about on X is a bonus signal, never why a token is
       // here -- the badge only appears on something that already surged.
       + (s.x_buzz ? '<span class="pt-surge-x" title="Also being talked about on X">𝕏</span>' : '')
-      + '<span class="pt-surge-chain">'+esc(s.chain||'')+'</span>'
-      + '<span class="pt-surge-mult">'+(s.vol_ratio||0)+'x</span>'
+      // The short badge the rest of the page uses -- "ROBINHOOD" spelled out
+      // here ate the ticker's width and left cards reading "$A...".
+      + '<span class="pt-surge-chain">'+esc(CHAIN_LABELS[s.chain] || (s.chain||'').toUpperCase())+'</span>'
     + '</div>'
+    + chgHtml
     + '<div class="pt-surge-meta">'
+      + '<span class="pt-surge-mult" title="Volume versus this token\'s own recent average">'+(s.vol_ratio||0)+'x</span><span>·</span>'
       + '<span>'+fmtUsd(s.volume_5m||0)+'/5m</span><span>·</span>'
-      + '<span>'+tot+' txns</span><span>·</span>'
+      + '<span>'+tot+' tx</span><span>·</span>'
       + '<span>'+age+'</span>'
     + '</div>'
     + '<div class="pt-surge-bar"><i style="width:'+buyPct.toFixed(0)+'%"></i><i class="s" style="width:'+(100-buyPct).toFixed(0)+'%"></i></div>'

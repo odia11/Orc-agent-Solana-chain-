@@ -136,11 +136,23 @@ input{font-family:inherit}
 .pt-surge-card.cooling{border-color:var(--line);opacity:.62}
 .pt-surge-top{display:flex;align-items:center;gap:8px;min-width:0}
 .pt-surge-img{width:26px;height:26px;border-radius:50%;background:var(--line);flex-shrink:0;object-fit:cover}
-.pt-surge-sym{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.pt-surge-chain{font-size:9px;font-family:var(--mono);color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
+.pt-surge-sym{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.pt-surge-chain{margin-left:auto;font-size:9px;font-family:var(--mono);color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
 .pt-surge-x{font-size:10px;line-height:1;padding:2px 4px;border-radius:5px;background:rgba(255,255,255,.09);color:var(--text);flex-shrink:0}
-.pt-surge-mult{margin-left:auto;font-family:var(--mono);font-size:14px;font-weight:800;color:#ff6b5e;flex-shrink:0}
-.pt-surge-meta{display:flex;align-items:center;gap:8px;margin-top:7px;font-family:var(--mono);font-size:10px;color:var(--muted2);white-space:nowrap}
+/* The percentage move now holds the card's prominent slot -- it is the
+   figure people actually scan the strip for. The <i> carries the period it
+   covers, small and dim, so a nine-minute move can never be read as a
+   five-minute one. */
+.pt-surge-chg{display:flex;align-items:baseline;gap:4px;margin-top:7px;font-family:var(--mono);font-size:21px;font-weight:800;line-height:1;letter-spacing:-.03em}
+.pt-surge-chg.up{color:#3ad29b}
+.pt-surge-chg.down{color:#f76b62}
+.pt-surge-chg.none{color:var(--muted2);font-size:15px}
+.pt-surge-chg i{font-style:normal;font-size:9px;font-weight:600;opacity:.55;letter-spacing:.02em}
+/* Demoted to the meta line: still the reason the card is here, but no longer
+   competing with the number above it. */
+.pt-surge-mult{font-weight:800;color:#ff6b5e}
+/* overflow:hidden keeps a very busy token ($241K, four-digit trade count) clipping its last field inside the card instead of spilling past the border. */
+.pt-surge-meta{display:flex;align-items:center;gap:5px;margin-top:7px;font-family:var(--mono);font-size:9.5px;color:var(--muted2);white-space:nowrap;overflow:hidden}
 .pt-surge-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.09);margin-top:7px;overflow:hidden;display:flex}
 .pt-surge-bar i{display:block;height:100%;background:#3ad29b}
 .pt-surge-bar i.s{background:#f76b62}

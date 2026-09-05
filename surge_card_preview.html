@@ -1,0 +1,98 @@
+<html><head><meta charset=utf-8><style>
+:root{--card:#12141a;--line:#252a35;--muted:#8b93a7;--muted2:#6b7280;--text:#e8eaf0;--mono:ui-monospace,Menlo,monospace}
+body{background:#0b0d12;color:var(--text);font:14px system-ui;margin:0;padding:20px}
+.pt-surge-wrap{border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(247,107,98,.07),transparent 70%)}
+.pt-surge-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 22px 0}
+.pt-surge-title{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;letter-spacing:.09em;color:#ff6b5e;font-family:var(--mono)}
+.pt-surge-dot{width:7px;height:7px;border-radius:50%;background:#ff6b5e;animation:pt-surge-pulse 1.1s infinite}
+.pt-surge-sub{font-size:10.5px;color:var(--muted2);font-family:var(--mono);white-space:nowrap}
+.pt-surge-rail{display:flex;gap:10px;padding:11px 22px 14px;overflow-x:auto;scrollbar-width:none}
+.pt-surge-rail::-webkit-scrollbar{display:none}
+.pt-surge-card{flex:0 0 auto;width:196px;background:var(--card);border:1px solid rgba(255,107,94,.32);border-radius:12px;padding:10px 12px;cursor:pointer;transition:border-color .12s,transform .12s}
+.pt-surge-card:hover{border-color:rgba(255,107,94,.6);transform:translateY(-1px)}
+.pt-surge-card.cooling{border-color:var(--line);opacity:.62}
+.pt-surge-top{display:flex;align-items:center;gap:8px;min-width:0}
+.pt-surge-img{width:26px;height:26px;border-radius:50%;background:var(--line);flex-shrink:0;object-fit:cover}
+.pt-surge-sym{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+.pt-surge-chain{margin-left:auto;font-size:9px;font-family:var(--mono);color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
+.pt-surge-x{font-size:10px;line-height:1;padding:2px 4px;border-radius:5px;background:rgba(255,255,255,.09);color:var(--text);flex-shrink:0}
+.pt-surge-chg{display:flex;align-items:baseline;gap:4px;margin-top:7px;font-family:var(--mono);font-size:21px;font-weight:800;line-height:1;letter-spacing:-.03em}
+.pt-surge-chg.up{color:#3ad29b}
+.pt-surge-chg.down{color:#f76b62}
+.pt-surge-chg.none{color:var(--muted2);font-size:15px}
+.pt-surge-chg i{font-style:normal;font-size:9px;font-weight:600;opacity:.55;letter-spacing:.02em}
+.pt-surge-mult{font-weight:800;color:#ff6b5e}
+.pt-surge-meta{display:flex;align-items:center;gap:5px;margin-top:7px;font-family:var(--mono);font-size:9.5px;color:var(--muted2);white-space:nowrap;overflow:hidden}
+.pt-surge-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.09);margin-top:7px;overflow:hidden;display:flex}
+.pt-surge-bar i{display:block;height:100%;background:#3ad29b}
+.pt-surge-bar i.s{background:#f76b62}
+</style></head><body>
+<div class="pt-surge-rail" id="rail"></div>
+<script>
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];});}
+var CHAIN_LABELS = {bsc:'BSC', base:'BASE', arbitrum:'ARB', polygon:'POLY', robinhood:'HOOD'};
+function fmtUsd(n){
+  n = Number(n)||0;
+  if(!n) return '—';
+  var sign = n<0?'-':''; n=Math.abs(n);
+  if(n>=1e9) return sign+'$'+(n/1e9).toFixed(2)+'B';
+  if(n>=1e6) return sign+'$'+(n/1e6).toFixed(2)+'M';
+  if(n>=1e3) return sign+'$'+(n/1e3).toFixed(1)+'K';
+  return sign+'$'+n.toFixed(0);
+}
+function surgeCardHtml(s){
+  var buys = s.buys_5m || 0, sells = s.sells_5m || 0, tot = buys + sells;
+  var buyPct = tot ? (buys / tot * 100) : 50;
+  var img = s.image_url
+    ? '<img class="pt-surge-img" src="'+esc(s.image_url)+'" alt="" onerror="this.style.visibility=\'hidden\'">'
+    : '<span class="pt-surge-img"></span>';
+  var age = s.age_seconds < 60 ? (s.age_seconds+'s')
+          : (Math.floor(s.age_seconds/60)+'m');
+  // The price move is what people come to this strip for, so it takes the
+  // card's most prominent slot and the volume multiplier drops to the meta
+  // line. Prefer DexScreener's 5m figure so the card agrees with the rest of
+  // the site; fall back to the move the radar measured across its own
+  // samples, labelled with the period it actually covers rather than
+  // borrowed as "5m".
+  var chg = Number(s.price_change_5m)||0, chgWin = '5m';
+  if(Math.abs(chg) < 0.05){
+    chg = Number(s.price_change_obs)||0;
+    chgWin = Math.max(1, Math.round((Number(s.obs_seconds)||0)/60))+'m';
+  }
+  // On its own line, not squeezed into the header row: five items sharing
+  // 172px was clipping tickers to "$A..." and left no room to make the
+  // percentage the largest thing on the card, which is the whole point.
+  var chgHtml = Math.abs(chg) >= 0.05
+    ? '<div class="pt-surge-chg '+(chg>=0?'up':'down')+'" title="Price move over '+chgWin+'">'
+        + (chg>=0?'+':'')+chg.toFixed(1)+'%<i>'+chgWin+'</i></div>'
+    : '<div class="pt-surge-chg none" title="No price move measured yet">—</div>';
+  return '<div class="pt-surge-card'+(s.cooling?' cooling':'')+'" data-action="open-surge" data-mint="'+esc(s.mint)+'"'
+       + ' data-pair="'+esc(s.pair_address||'')+'" data-chain="'+esc(s.chain||'')+'" data-symbol="'+esc(s.symbol||'')+'">'
+    + '<div class="pt-surge-top">'+img
+      + '<span class="pt-surge-sym">$'+esc(s.symbol||'?')+'</span>'
+      // Being talked about on X is a bonus signal, never why a token is
+      // here -- the badge only appears on something that already surged.
+      + (s.x_buzz ? '<span class="pt-surge-x" title="Also being talked about on X">𝕏</span>' : '')
+      // The short badge the rest of the page uses -- "ROBINHOOD" spelled out
+      // here ate the ticker's width and left cards reading "$A...".
+      + '<span class="pt-surge-chain">'+esc(CHAIN_LABELS[s.chain] || (s.chain||'').toUpperCase())+'</span>'
+    + '</div>'
+    + chgHtml
+    + '<div class="pt-surge-meta">'
+      + '<span class="pt-surge-mult" title="Volume versus this token\'s own recent average">'+(s.vol_ratio||0)+'x</span><span>·</span>'
+      + '<span>'+fmtUsd(s.volume_5m||0)+'/5m</span><span>·</span>'
+      + '<span>'+tot+' tx</span><span>·</span>'
+      + '<span>'+age+'</span>'
+    + '</div>'
+    + '<div class="pt-surge-bar"><i style="width:'+buyPct.toFixed(0)+'%"></i><i class="s" style="width:'+(100-buyPct).toFixed(0)+'%"></i></div>'
+  + '</div>';
+}
+var data=[
+ {symbol:'ROBIN',chain:'robinhood',vol_ratio:4.3,volume_5m:4257,buys_5m:37,sells_5m:19,age_seconds:132,price_change_5m:18.24,x_buzz:1},
+ {symbol:'AMC',chain:'robinhood',vol_ratio:12.4,volume_5m:241000,buys_5m:912,sells_5m:372,age_seconds:47,price_change_5m:-4.5},
+ {symbol:'VERYLONGTICKER',chain:'arbitrum',vol_ratio:3.1,volume_5m:3120,buys_5m:13,sells_5m:13,age_seconds:620,price_change_5m:0,price_change_obs:137.4,obs_seconds:540},
+ {symbol:'FLAT',chain:'solana',vol_ratio:3.0,volume_5m:3000,buys_5m:12,sells_5m:13,age_seconds:95,price_change_5m:0,price_change_obs:0,cooling:1},
+ {symbol:'MEGA',chain:'polygon',vol_ratio:88.0,volume_5m:4210000,buys_5m:9120,sells_5m:3720,age_seconds:8,price_change_5m:1240.5}
+];
+document.getElementById('rail').innerHTML=data.map(surgeCardHtml).join('');
+</script></body></html>

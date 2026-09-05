@@ -14351,12 +14351,23 @@ def _surge_alert_text(surge: dict) -> tuple:
             return default
 
     vol_ratio = _f('vol_ratio')
-    change = _f('price_change_5m')
-    title = f"${symbol} · {vol_ratio:.1f}x volume"
+    # The percentage move leads: it is the first thing anyone looks for, and
+    # on a phone banner the first thing is the only thing guaranteed to be
+    # read. Prefer DexScreener's 5-minute figure so the alert agrees with the
+    # cards on the site; fall back to the move the radar measured across its
+    # own samples, which exists whenever the token has history at all.
     # Guard on the ROUNDED figure, not the raw one: a 0.04% move is truthfully
     # non-zero and would print as "+0.0%", which reads as a broken field.
+    change, window = _f('price_change_5m'), '5m'
+    if abs(change) < 0.05:
+        change = _f('price_change_obs')
+        # Label the real period rather than borrowing "5m" -- a move measured
+        # over nine minutes is not a five-minute move.
+        window = f"{max(1, round(_f('obs_seconds') / 60))}m"
     if abs(change) >= 0.05:
-        title += f" · {change:+.1f}%"
+        title = f"${symbol} {change:+.1f}% ({window}) · {vol_ratio:.1f}x volume"
+    else:
+        title = f"${symbol} · {vol_ratio:.1f}x volume"
 
     parts = [chain_name, f"{_surge_fmt_usd(_f('volume_5m'))} volume (5m)"]
     txns = int(_f('txns_5m'))
