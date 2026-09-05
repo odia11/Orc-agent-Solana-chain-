@@ -86,25 +86,41 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
 .calls-tab.active{background:var(--accent-dim);color:var(--accent);border-color:var(--accent-border)}
 
 /* ── CALLS LIST ── */
-.call-row{display:flex;align-items:center;gap:14px;padding:14px 16px;background:var(--bg2);border:1px solid var(--bg4);border-radius:13px;margin-bottom:8px}
-.call-rank{width:24px;text-align:center;font-family:var(--mono);font-weight:700;color:var(--muted);flex-shrink:0}
+.call-row{display:flex;align-items:center;gap:12px;padding:12px 14px;background:var(--bg2);border:1px solid var(--bg4);border-radius:13px;margin-bottom:8px;transition:border-color .12s,background .12s}
+.call-row:hover{border-color:var(--bg3);background:var(--bg3)}
+.call-rank{width:26px;text-align:center;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--muted);flex-shrink:0}
 .call-rank.top1{color:#f7b955}
 .call-rank.top2{color:#c8c8d4}
 .call-rank.top3{color:#cd8c52}
 .call-avatar{width:34px;height:34px;border-radius:50%;background:var(--bg4);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--sub);overflow:hidden}
 .call-avatar img{width:100%;height:100%;object-fit:cover}
-.call-info{flex:1;min-width:0}
-.call-caller{font-size:12px;color:var(--sub);display:flex;align-items:center;gap:4px}
-.call-token{font-weight:700;font-size:14px;margin-top:2px}
-.call-mcap{font-size:11px;color:var(--muted);margin-top:2px}
-.call-multi{text-align:right;flex-shrink:0}
-.call-multi-val{font-family:var(--mono);font-size:17px;font-weight:700;color:var(--green)}
+/* Every text line here is single-line-or-ellipsis on purpose: these rows sit
+   in a ranked list, and a card that grows a line taller than its neighbours
+   breaks the rhythm of the whole column. min-width:0 lets the flex child
+   actually shrink so the ellipsis can happen at all. */
+.call-info{flex:1;min-width:0;overflow:hidden}
+.call-mcap,.call-token{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* The username is the only part allowed to lose characters -- the time and
+   the call's entry mcap are the point of the line, so they never shrink.
+   Ellipsising the whole line instead cut the mcap off behind long names. */
+.call-caller{font-size:11.5px;color:var(--sub);line-height:1.35;display:flex;min-width:0}
+.call-caller-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto}
+.call-caller-meta{white-space:nowrap;flex-shrink:0}
+.call-token-line{display:flex;align-items:center;gap:7px;margin-top:1px;min-width:0}
+.call-token{font-weight:700;font-size:14.5px;line-height:1.25;letter-spacing:-.01em;min-width:0}
+.call-mcap{font-size:11px;color:var(--muted);margin-top:1px;line-height:1.35;font-family:var(--mono)}
+/* Only the multiplier sits on the right. The entry→peak pair used to live
+   here too, but two full-precision prices are ~125px of unshrinkable text --
+   on a phone that starved the name column and pushed the whole row off
+   screen. It now runs along the left column's own line, where the width
+   actually exists. */
+.call-multi{text-align:right;flex-shrink:0;display:flex;align-items:center}
+.call-multi-val{font-family:var(--mono);font-size:18px;font-weight:700;color:var(--green);line-height:1.1;letter-spacing:-.02em}
 .call-multi-val.neg{color:var(--red)}
-.call-multi-sub{font-size:10.5px;color:var(--muted);margin-top:2px;font-family:var(--mono)}
 .calls-empty{text-align:center;padding:50px 20px;color:var(--muted);font-size:13px}
 
 /* ── LIKE BUTTON ── */
-.call-like-btn{display:flex;align-items:center;gap:4px;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:11px;cursor:pointer;padding:4px 2px;flex-shrink:0}
+.call-like-btn{display:flex;align-items:center;gap:3px;background:none;border:none;color:var(--muted);font-family:var(--mono);font-size:10.5px;cursor:pointer;padding:0;flex-shrink:0;line-height:1}
 .call-like-btn svg{width:15px;height:15px;stroke:currentColor;fill:none;transition:transform .12s}
 .call-like-btn.liked{color:var(--red)}
 .call-like-btn.liked svg{fill:var(--red);stroke:var(--red)}
@@ -129,6 +145,17 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
   .podium-card .podium-caller{margin-top:0}
   .podium-card .podium-multi{margin-left:auto;flex-shrink:0}
   .podium-card.p1 .podium-multi{font-size:19px}
+
+  /* Phone widths are where this list was breaking: the entry→peak price pair
+     is the widest fixed element in the row, and at the old size it starved
+     the text column until it wrapped. Trim the fixed side, tighten the
+     gutters, and the flexible side gets the space back. */
+  .call-row{gap:10px;padding:11px 12px}
+  .call-rank{width:20px;font-size:11px}
+  .call-avatar{width:30px;height:30px;font-size:12px}
+  .call-token{font-size:14px}
+  .call-multi-val{font-size:16px}
+
 }
 </style>
 </head>
@@ -290,18 +317,26 @@ async function _loadCallsList(){
       var avatarHtml = c.caller_avatar
         ? '<img src="'+esc(c.caller_avatar)+'" alt="">'
         : esc((c.caller_username||'?').slice(0,2).toUpperCase());
+      // The like button lives on the symbol's own line rather than in the
+      // row's flex flow: sitting between the text and the multiplier, it
+      // squeezed the text column until "Called at … mcap" wrapped onto three
+      // lines and no two cards were the same height.
       return '<div class="call-row" onclick="_goToToken(\''+esc(c.mint)+'\')">'
         +'<div class="call-rank">#'+rank+'</div>'
         +'<div class="call-avatar">'+avatarHtml+'</div>'
         +'<div class="call-info">'
-          +'<div class="call-caller">'+esc(c.caller_username||'')+(c.caller_verified?' ✓':'')+' · '+_timeAgo(c.timestamp)+'</div>'
-          +'<div class="call-token">$'+esc(c.symbol||'?')+'</div>'
-          +'<div class="call-mcap">Called at '+_fmtMcap(c.mcap_at_call||0)+' mcap</div>'
+          +'<div class="call-caller">'
+            +'<span class="call-caller-name">'+esc(c.caller_username||'')+(c.caller_verified?' ✓':'')+'</span>'
+            +'<span class="call-caller-meta"> · '+_timeAgo(c.timestamp)+' · @ '+_fmtMcap(c.mcap_at_call||0)+'</span>'
+          +'</div>'
+          +'<div class="call-token-line">'
+            +'<span class="call-token">$'+esc(c.symbol||'?')+'</span>'
+            +_likeBtnHtml(c)
+          +'</div>'
+          +'<div class="call-mcap">'+_fmtCallPrice(c.price_at_call)+' → '+_fmtCallPrice(c.peak_price)+'</div>'
         +'</div>'
-        +_likeBtnHtml(c)
         +'<div class="call-multi">'
           +'<div class="call-multi-val'+neg+'">'+_fmtMultiplier(c.multiplier)+'</div>'
-          +'<div class="call-multi-sub">'+_fmtCallPrice(c.price_at_call)+' → '+_fmtCallPrice(c.peak_price)+'</div>'
         +'</div>'
       +'</div>';
     }).join('');
