@@ -14351,11 +14351,12 @@ def _surge_alert_text(surge: dict) -> tuple:
             return default
 
     vol_ratio = _f('vol_ratio')
-    # The percentage move leads: it is the first thing anyone looks for, and
-    # on a phone banner the first thing is the only thing guaranteed to be
-    # read. Prefer DexScreener's 5-minute figure so the alert agrees with the
-    # cards on the site; fall back to the move the radar measured across its
-    # own samples, which exists whenever the token has history at all.
+    # The percentage move leads: it is the first thing anyone looks for.
+    # Prefer DexScreener's 5-minute figure so the alert agrees with the cards
+    # on the site; fall back to the move the radar measured across its own
+    # samples, which exists whenever the token has history at all -- m5 comes
+    # back absent or flat zero often enough on new pairs that relying on it
+    # alone left real surges with no percentage at all.
     # Guard on the ROUNDED figure, not the raw one: a 0.04% move is truthfully
     # non-zero and would print as "+0.0%", which reads as a broken field.
     change, window = _f('price_change_5m'), '5m'
@@ -14364,21 +14365,37 @@ def _surge_alert_text(surge: dict) -> tuple:
         # Label the real period rather than borrowing "5m" -- a move measured
         # over nine minutes is not a five-minute move.
         window = f"{max(1, round(_f('obs_seconds') / 60))}m"
-    if abs(change) >= 0.05:
-        title = f"${symbol} {change:+.1f}% ({window}) · {vol_ratio:.1f}x volume"
-    else:
-        title = f"${symbol} · {vol_ratio:.1f}x volume"
 
-    parts = [chain_name, f"{_surge_fmt_usd(_f('volume_5m'))} volume (5m)"]
-    txns = int(_f('txns_5m'))
-    if txns:
-        parts.append(f"{txns} trades · {_f('buy_pct'):.0f}% buys")
-    liq = _f('liquidity_usd')
-    if liq:
-        parts.append(f"{_surge_fmt_usd(liq)} liquidity")
+    # TITLE: ticker and percentage, nothing else. A phone shows roughly 25
+    # characters of title before it truncates, and it truncates from the
+    # right -- so anything a third field would push past that is simply lost.
+    # "$STONKCAT · 7.4x vo..." is what happens when the title tries to carry
+    # more; everything else belongs in the body, which gets three lines.
+    ticker = symbol if len(symbol) <= 12 else symbol[:11] + '…'
+    title = f"${ticker} {change:+.1f}% ({window})" if abs(change) >= 0.05 else f"${ticker} surge"
+
+    # BODY: identity first, then the two figures that answer "is this real or
+    # is this dust", then the evidence that it is surging at all. Ordered so
+    # that if a phone truncates the tail, what it drops is the least load-
+    # bearing field.
+    parts = []
+    name = (surge.get('name') or '').strip()
+    # DexScreener falls back to the ticker when a pair has no name, and
+    # "STONKCAT · Solana" under a title already reading "$STONKCAT" wastes a
+    # line saying nothing.
+    if name and name.upper() != symbol:
+        parts.append(name if len(name) <= 26 else name[:25] + '…')
+    parts.append(chain_name)
     mcap = _f('market_cap')
     if mcap:
         parts.append(f"{_surge_fmt_usd(mcap)} mcap")
+    liq = _f('liquidity_usd')
+    if liq:
+        parts.append(f"{_surge_fmt_usd(liq)} liquidity")
+    parts.append(f"{vol_ratio:.1f}x volume · {_surge_fmt_usd(_f('volume_5m'))} (5m)")
+    txns = int(_f('txns_5m'))
+    if txns:
+        parts.append(f"{txns} trades · {_f('buy_pct'):.0f}% buys")
     return title, ' · '.join(parts)
 
 def notify_surge(surge: dict):
