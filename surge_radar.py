@@ -191,8 +191,9 @@ def _sample_once():
         logger.info('[surge-radar] %s on %s — %sx volume, %sx transactions, $%s in 5m, %s%% buys',
                     s['symbol'], s['chain'], s['vol_ratio'], s['txn_ratio'],
                     round(s['volume_5m']), s['buy_pct'])
-        # Phone alert for the big ones only -- notify_surge applies its own
-        # thresholds and rate limits, and never raises, so a failing alert
+        # Same bar as the strip: every surge detected here is sent. The only
+        # thing notify_surge decides is how often a phone may be interrupted,
+        # not whether the surge counts. It never raises, so a failing alert
         # cannot interrupt sampling.
         try:
             _app.notify_surge(s)

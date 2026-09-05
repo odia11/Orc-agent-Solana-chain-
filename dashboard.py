@@ -14268,13 +14268,21 @@ def _send_push_notifications_bulk(user_ids, title, body, url='/'):
     threading.Thread(target=_run, daemon=True).start()
 
 # ── SURGE ALERTS ──
-# A phone buzz when a token's activity explodes (see surge_radar.py). This is
-# the one notification in the app that isn't caused by something the user did,
-# so it is throttled hard: an alert that fires too often stops being read, and
-# a market scanner can produce a lot of "interesting" in a busy hour.
-SURGE_ALERT_MIN_VOL_RATIO = 10.0   # well above the 3x the strip itself shows -- a phone buzz needs a higher bar than a card
-SURGE_ALERT_MIN_VOLUME_5M = 15000.0
-SURGE_ALERT_MAX_PER_HOUR  = 4      # across all tokens, for everyone
+# A phone buzz when a token's activity explodes (see surge_radar.py).
+#
+# WHAT QUALIFIES: exactly what the SURGING NOW strip on Live Market shows --
+# nothing more. surge_radar has already applied its own bar (several times the
+# token's own normal volume AND transactions, above absolute floors) before it
+# calls in here, so there is deliberately no second, stricter threshold: if a
+# token is good enough to be pinned on the page, it is good enough to send.
+# Adding a bar here would silently split the two apart, which is the one thing
+# this must not do.
+#
+# WHAT IS STILL LIMITED: how OFTEN. This is the only notification in the app
+# that isn't caused by something the user did, and a busy hour produces a lot
+# of surges. The caps below are about the reader's patience, not about the
+# quality of the surge -- a different question, so they stay.
+SURGE_ALERT_MAX_PER_HOUR  = 10     # across all tokens, for everyone
 SURGE_ALERT_REPEAT_HOURS  = 6      # never alert twice for the same token inside this window
 
 _surge_alert_lock = threading.Lock()
@@ -14282,12 +14290,11 @@ _surge_alerts_sent: list = []      # timestamps, for the hourly cap
 _surge_alerted_mints: dict = {}    # mint -> timestamp of the last alert
 
 def _surge_alert_allowed(surge: dict) -> bool:
-    """Whether this surge is worth interrupting someone for. Checked before
-    any recipient lookup so a rejected surge costs nothing."""
-    if float(surge.get('vol_ratio') or 0) < SURGE_ALERT_MIN_VOL_RATIO:
-        return False
-    if float(surge.get('volume_5m') or 0) < SURGE_ALERT_MIN_VOLUME_5M:
-        return False
+    """Whether to send this surge now. It is NOT a judgement on the surge
+    itself -- the radar already made that call, and every surge it hands over
+    is one the Live Market strip is showing. This only enforces the rate
+    limits. Checked before any recipient lookup so a throttled surge costs
+    nothing."""
     now = time.time()
     mint = surge.get('mint') or ''
     with _surge_alert_lock:
