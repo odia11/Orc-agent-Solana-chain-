@@ -8583,10 +8583,37 @@ function fmtTokenPrice(p){
   if(p>=1) return '$'+p.toFixed(2);
   if(p>=0.01) return '$'+p.toFixed(4);
   if(p>=0.0001) return '$'+p.toFixed(6);
-  var s=p.toFixed(12);
-  var zeros=s.match(/^0\.0*/)[0].length-2;
-  var sig=s.replace(/^0\.0*/,'').slice(0,4);
-  return '$0.0'+zeros+sig;
+  // Below that this used to return '$0.0'+zeroCount+digits -- the subscript
+  // notation without the subscript. A price of 0.0000023456 came out as
+  // "$0.052345", which reads as five cents and is off by four orders of
+  // magnitude. Print the actual decimal instead, to four significant digits.
+  return '$'+_fmtTinyDecimal(p);
+}
+function _fmtTinyDecimal(p){
+  var m = p.toFixed(20).match(/^0\.(0*)/);
+  var zeros = m ? m[1].length : 0;
+  return p.toFixed(Math.min(zeros + 4, 18)).replace(/0+$/,'').replace(/\.$/,'');
+}
+
+/* Which token does "$D" in a post mean?
+   DexScreener's search returns every pair whose symbol or name matches,
+   ordered by its own relevance, and we used to take the first one on a chain
+   we trade. For a common ticker that is a coin flip -- "$D" opened whichever
+   "D" DexScreener happened to rank first, not the one the post was about.
+   There is no chain in the text to disambiguate with, so this picks the one
+   a reader almost certainly means: the symbol has to match EXACTLY (a search
+   for "D" also returns "DOGE", whose name merely contains it), and among
+   those the deepest pool wins -- the same rule the market data itself uses
+   for choosing a pair. Falls back to the deepest partial match rather than
+   nothing, so an inexact ticker still opens something. */
+function _pickPairForSymbol(pairs, symbol, liveChains){
+  var wanted = String(symbol||'').trim().toUpperCase();
+  var liq = function(x){ return parseFloat((x.liquidity||{}).usd || 0) || 0; };
+  var ok = (pairs||[]).filter(function(x){ return liveChains.indexOf(x.chainId) !== -1; });
+  var exact = ok.filter(function(x){ return String((x.baseToken||{}).symbol||'').toUpperCase() === wanted; });
+  var pool = exact.length ? exact : ok;
+  if(!pool.length) return undefined;
+  return pool.reduce(function(best, x){ return liq(x) > liq(best) ? x : best; }, pool[0]);
 }
 
 async function showTokenCard(symbol,knownAddr){
@@ -8616,8 +8643,7 @@ async function showTokenCard(symbol,knownAddr){
       const r=await fetch('/api/dexscreener/search?q='+encodeURIComponent(symbol),{signal:_ctrl.signal})
       clearTimeout(_timeout);
       const d=await r.json()
-      var liveChains=_composerLiveChains()
-      p=(d.pairs||[]).find(x=>liveChains.indexOf(x.chainId)!==-1)
+      p=_pickPairForSymbol(d.pairs,symbol,_composerLiveChains())
       if(!p){body.innerHTML='<div style="text-align:center;padding:40px 0;color:#565d68;font-size:14px">No tokens found for <b style="color:#eef1f5">$'+esc(symbol)+'</b></div>';return}
     }
     const chainLbl=_composerChainLabels()[p.chainId]||(p.chainId||'').toUpperCase()||'SOL'

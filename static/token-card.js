@@ -263,7 +263,10 @@ async function showTokenCard(symbol, knownAddr, knownPair){
         body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#ff4d6a;font-size:13px;font-family:\'JetBrains Mono\',monospace">Token lookup timed out — try again</div>';
         return;
       }
-      p = (d.pairs||[]).find(function(x){ return _liveChains.indexOf(x.chainId)!==-1; });
+      // Deepest EXACT symbol match, not DexScreener's first result -- see
+      // _lmtdPickPair. A search for "D" returns dozens of pairs and the
+      // first one is rarely the token the link meant.
+      p = _lmtdPickPair(d.pairs, symbol, _liveChains);
       if(!p){
         body.innerHTML='<div style="text-align:center;padding:48px 20px;color:#565d68;font-size:13px">No tokens found for $'+_esc(symbol)+'</div>';
         return;
@@ -1091,13 +1094,31 @@ async function executeTrade(symbol, pairAddress, side, amountStr, tokenAddress, 
 }
 
 /* ── helpers ── */
+function _lmtdPickPair(pairs, symbol, liveChains){
+  // A ticker in a post or a ?token= URL carries no chain, so the search can
+  // match many different coins. Require an exact symbol match (a search for
+  // "D" also returns every token whose NAME contains a D) and among those
+  // take the deepest pool -- the same rule the market data uses to choose a
+  // pair. Deepest partial match as a fallback, so something still opens.
+  var wanted = String(symbol||'').trim().toUpperCase();
+  var liq = function(x){ return parseFloat((x.liquidity||{}).usd || 0) || 0; };
+  var ok = (pairs||[]).filter(function(x){ return liveChains.indexOf(x.chainId) !== -1; });
+  var exact = ok.filter(function(x){ return String((x.baseToken||{}).symbol||'').toUpperCase() === wanted; });
+  var pool = exact.length ? exact : ok;
+  if(!pool.length) return undefined;
+  return pool.reduce(function(best, x){ return liq(x) > liq(best) ? x : best; }, pool[0]);
+}
 function _fmtPrice(p){
   if(!p) return '—';
   p = parseFloat(p);
   if(isNaN(p)||p<=0) return '—';
   if(p>=1) return '$'+p.toFixed(2);
   if(p>=0.0001) return '$'+p.toFixed(6);
-  return '$'+p.toFixed(10).replace(/0+$/,'');
+  // Four significant digits of the REAL decimal. toFixed(10) silently
+  // truncated anything smaller than 1e-10 to "$0." -- a price of zero.
+  var m = p.toFixed(20).match(/^0\.(0*)/);
+  var zeros = m ? m[1].length : 0;
+  return '$'+p.toFixed(Math.min(zeros + 4, 18)).replace(/0+$/,'').replace(/\.$/,'');
 }
 function _fmtNum(n){
   if(n==null||isNaN(n)) return '—';
