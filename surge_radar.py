@@ -242,23 +242,6 @@ def _sample_once():
         except Exception as e:
             logger.error('[surge-radar] surge alert failed for %s: %s', s.get('symbol'), e)
 
-    # The drop watch reads the scanner list directly rather than the surge
-    # list: a token usually gives its gains back AFTER it stops surging, by
-    # which point it has expired out of _surges entirely. Reading the raw
-    # tokens keeps it watched for the full alert-tracking window.
-    try:
-        tracked = _app.surge_alert_tracked_mints()
-    except Exception as e:
-        logger.error('[surge-radar] could not read tracked mints: %s', e)
-        tracked = set()
-    if tracked:
-        for tok in tokens or []:
-            if tok.get('mint') in tracked:
-                try:
-                    _app.notify_surge_drop(tok)
-                except Exception as e:
-                    logger.error('[surge-radar] drop alert failed for %s: %s', tok.get('symbol'), e)
-
 
 def current_surges(limit: int = 12) -> list:
     """The live surge list, hottest first. Safe to call from a request

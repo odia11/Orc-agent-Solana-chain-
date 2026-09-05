@@ -14298,28 +14298,18 @@ SURGE_ALERT_MAX_FOLLOWUPS_PER_HOUR = 8   # follow-ups spend their OWN budget, so
                                          # keeps running cannot crowd out new surges, and a
                                          # busy hour of new surges cannot silence a runner
 
-# And one closing notice if it gives it back. This exists because the app
-# already interrupted someone about this token: leaving them to find out on
-# their own that it is well below where they were told is worse than one more
-# buzz. It is exactly one per token, it reports a price, and it is explicitly
-# not advice to sell.
-#
-# It does NOT retire the token. A drop notice used up is the only thing it
-# means: if the token climbs back ABOVE the price of the last alert that
-# reported a rise, that is news again and it is sent again. What it can never
-# do is buzz on a bounce that is still below where the user was last told --
-# the baseline for that is the last rise, never the crash it fell to.
-SURGE_ALERT_DROP_PCT           = 20.0  # % below the highest price it was alerted at
-SURGE_ALERT_MAX_DROPS_PER_HOUR = 3     # a market-wide sell-off must not become 30 buzzes
+# A FALLING token never produces a notification of any kind. Only rises are
+# pushed: the radar refuses to call a falling token a surge at all (see
+# _evaluate in surge_radar.py), and there is deliberately no second kind of
+# alert here for a token giving its gains back. A phone buzz in this app
+# means one thing -- something is going up -- and nothing else.
 
 _surge_alert_lock = threading.Lock()
-# Three separate hourly budgets, because they answer three different
-# questions. A first alert, "it is still running", and "it gave it back" are
-# not interchangeable, so one must never be able to spend another's room.
+# Two separate hourly budgets: a first alert and "it is still running" answer
+# different questions, so neither should be able to spend the other's room.
 _surge_alerts_sent: list = []      # timestamps, for NEW surges
 _surge_followups_sent: list = []   # timestamps, for follow-ups on a climbing token
-_surge_drops_sent: list = []       # timestamps, for closing notices
-_surge_alerted_mints: dict = {}    # mint -> {ts, price, peak_price, followups, dropped}
+_surge_alerted_mints: dict = {}    # mint -> {ts, price, followups}
 
 def _surge_price(d: dict) -> float:
     try:
@@ -14355,12 +14345,10 @@ def _surge_alert_allowed(surge: dict):
                 return None
             if not price or not state['price']:
                 return None
-            # Always measured from the price at the last alert that reported a
-            # RISE -- _surge_drop_allowed deliberately does not touch
-            # state['price']. So after a drop notice the token has to climb
-            # back above where it was last reported up, not merely bounce off
-            # the bottom: a fall to -30% and a recovery to -10% is still below
-            # what the user was told, and says nothing new.
+            # Measured from the price at the last alert, so a token that fell
+            # and recovered has to climb back ABOVE where it was last
+            # reported before it is news again -- a bounce that is still
+            # below what the user was told says nothing new.
             gain = (price - state['price']) / state['price'] * 100
             if gain < SURGE_ALERT_FOLLOWUP_GAIN:
                 return None
@@ -14369,59 +14357,15 @@ def _surge_alert_allowed(surge: dict):
             if len(_surge_alerts_sent) >= SURGE_ALERT_MAX_PER_HOUR:
                 return None
             _surge_alerts_sent.append(now)
-            _surge_alerted_mints[mint] = {'ts': now, 'price': price, 'peak_price': price,
-                                          'followups': 0, 'dropped': False}
+            _surge_alerted_mints[mint] = {'ts': now, 'price': price, 'followups': 0}
             return {'kind': 'new'}
         if len(_surge_followups_sent) >= SURGE_ALERT_MAX_FOLLOWUPS_PER_HOUR:
             return None
         _surge_followups_sent.append(now)
-        # A token that already had its drop notice and has now climbed back
-        # ABOVE where it was last reported is a comeback, not more of the same
-        # climb -- worth saying differently, since the last thing sent about
-        # it said it was down.
-        recovered = bool(state.get('dropped'))
         state['ts'] = now
         state['price'] = price
-        state['peak_price'] = max(state.get('peak_price') or 0, price)
         state['followups'] += 1
-        return {'kind': 'followup', 'gain': gain, 'recovered': recovered}
-
-def _surge_drop_allowed(mint: str, price: float):
-    """The fall in percent when this token has dropped far enough below the
-    highest price it was ALERTED at -- the number the user was actually shown,
-    not a peak they never heard about -- else None. One per token, ever."""
-    now = time.time()
-    with _surge_alert_lock:
-        state = _surge_alerted_mints.get(mint)
-        if not state or state.get('dropped') or not price:
-            return None
-        base = state.get('peak_price') or state.get('price') or 0
-        if not base:
-            return None
-        fall = (base - price) / base * 100
-        if fall < SURGE_ALERT_DROP_PCT:
-            return None
-        _surge_drops_sent[:] = [t for t in _surge_drops_sent if now - t < 3600]
-        if len(_surge_drops_sent) >= SURGE_ALERT_MAX_DROPS_PER_HOUR:
-            # Deliberately NOT marked as dropped. A once-per-token notice that
-            # got throttled would otherwise be lost for good; leaving the flag
-            # clear means it simply goes out on a later sweep.
-            return None
-        _surge_drops_sent.append(now)
-        state['dropped'] = True
-        # Spends the token's gap too, so a drop notice and a recovery alert
-        # can never land seconds apart. Deliberately does NOT touch
-        # state['price']: the bar for being heard from again stays the price
-        # at the last alert that reported a rise.
-        state['ts'] = now
-        return fall
-
-def surge_alert_tracked_mints() -> set:
-    """Mints still owed a possible drop notice. The radar reads this to know
-    which tokens to keep feeding prices for -- a token usually falls AFTER it
-    stops surging, by which point it has left the surge list entirely."""
-    with _surge_alert_lock:
-        return {m for m, st in _surge_alerted_mints.items() if not st.get('dropped')}
+        return {'kind': 'followup', 'gain': gain}
 
 SURGE_ALERT_CHAIN_NAMES = {
     'solana': 'Solana', 'bsc': 'BNB Chain', 'base': 'Base',
@@ -14502,8 +14446,7 @@ def _surge_alert_text(surge: dict, decision: dict = None) -> tuple:
     # bearing field.
     parts = []
     if followup:
-        parts.append('Back above its last alert' if (decision or {}).get('recovered')
-                     else 'Still climbing')
+        parts.append('Still climbing')
     name = (surge.get('name') or '').strip()
     # DexScreener falls back to the ticker when a pair has no name, and
     # "STONKCAT · Solana" under a title already reading "$STONKCAT" wastes a
@@ -14543,48 +14486,6 @@ def notify_surge(surge: dict):
               f'({surge.get("vol_ratio")}x) to {len(user_ids)} user(s)', flush=True)
     except Exception as e:
         print(f'[surge-alert] failed for {surge.get("symbol")}: {e}', flush=True)
-
-def notify_surge_drop(tok: dict):
-    """One closing notice when a token this app alerted on falls far enough
-    below the price it was alerted at.
-
-    It exists because we already interrupted someone about this token: letting
-    them discover on their own that it is well under where they were told is
-    worse than one more buzz. Exactly one per token, ever. It reports a price
-    and nothing else -- it is not advice to sell, and there is no buy or sell
-    link on it. Never raises, for the same reason notify_surge does not."""
-    try:
-        mint = tok.get('mint') or ''
-        fall = _surge_drop_allowed(mint, _surge_price(tok))
-        if fall is None:
-            return
-        user_ids = _surge_alert_recipients()
-        if not user_ids:
-            return
-        symbol = (tok.get('symbol') or '?').upper()
-        ticker = symbol if len(symbol) <= 12 else symbol[:11] + '…'
-        chain = tok.get('chain') or ''
-        title = f"${ticker} down {fall:.0f}%"
-
-        parts = ['Below the price it was alerted at']
-        name = (tok.get('name') or '').strip()
-        if name and name.upper() != symbol:
-            parts.append(name if len(name) <= 26 else name[:25] + '…')
-        parts.append(SURGE_ALERT_CHAIN_NAMES.get(chain, chain.title() or 'Unknown chain'))
-        for key, label in (('market_cap', 'mcap'), ('liquidity_usd', 'liquidity')):
-            try:
-                v = float(tok.get(key) or 0)
-            except (TypeError, ValueError):
-                v = 0.0
-            if v:
-                parts.append(f'{_surge_fmt_usd(v)} {label}')
-        # Says out loud that it will not repeat, so silence afterwards reads
-        # as "that was the notice", not as "the alerts broke".
-        parts.append('One-time notice')
-        _send_push_notifications_bulk(user_ids, title, ' · '.join(parts), '/live-market')
-        print(f'[surge-alert] pushed drop ${symbol} (-{fall:.0f}%) to {len(user_ids)} user(s)', flush=True)
-    except Exception as e:
-        print(f'[surge-alert] drop failed for {tok.get("symbol")}: {e}', flush=True)
 
 def _surge_alert_recipients() -> list:
     """User ids that opted into surge alerts AND have a device registered.
