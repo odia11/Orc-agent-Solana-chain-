@@ -1008,6 +1008,54 @@ function loadWatchlist(){
 }
 
 /* ── live trades tape ── */
+/* ── SURGE STRIP ──
+   Tokens whose 5-minute activity just jumped far above their own recent
+   normal (see surge_radar.py). Pinned above the sorted feed because this is
+   the one thing on the page that stops being useful within minutes. */
+function surgeCardHtml(s){
+  var buys = s.buys_5m || 0, sells = s.sells_5m || 0, tot = buys + sells;
+  var buyPct = tot ? (buys / tot * 100) : 50;
+  var img = s.image_url
+    ? '<img class="pt-surge-img" src="'+esc(s.image_url)+'" alt="" onerror="this.style.visibility=\'hidden\'">'
+    : '<span class="pt-surge-img"></span>';
+  var age = s.age_seconds < 60 ? (s.age_seconds+'s')
+          : (Math.floor(s.age_seconds/60)+'m');
+  return '<div class="pt-surge-card'+(s.cooling?' cooling':'')+'" data-action="open-surge" data-mint="'+esc(s.mint)+'"'
+       + ' data-pair="'+esc(s.pair_address||'')+'" data-chain="'+esc(s.chain||'')+'" data-symbol="'+esc(s.symbol||'')+'">'
+    + '<div class="pt-surge-top">'+img
+      + '<span class="pt-surge-sym">$'+esc(s.symbol||'?')+'</span>'
+      + '<span class="pt-surge-chain">'+esc(s.chain||'')+'</span>'
+      + '<span class="pt-surge-mult">'+(s.vol_ratio||0)+'x</span>'
+    + '</div>'
+    + '<div class="pt-surge-meta">'
+      + '<span>'+fmtUsd(s.volume_5m||0)+'/5m</span><span>·</span>'
+      + '<span>'+tot+' txns</span><span>·</span>'
+      + '<span>'+age+'</span>'
+    + '</div>'
+    + '<div class="pt-surge-bar"><i style="width:'+buyPct.toFixed(0)+'%"></i><i class="s" style="width:'+(100-buyPct).toFixed(0)+'%"></i></div>'
+  + '</div>';
+}
+
+function loadSurges(){
+  fetch('/api/market/surges', {credentials:'include'})
+    .then(function(r){ return r.json(); })
+    .then(function(d){
+      var wrap = document.getElementById('pt-surge-wrap');
+      var rail = document.getElementById('pt-surge-rail');
+      if(!wrap || !rail) return;
+      var list = (d && d.surges) || [];
+      // Hidden entirely when nothing is surging -- an empty "SURGING NOW"
+      // strip would read as a broken feature rather than a quiet market.
+      if(!list.length){ wrap.style.display = 'none'; return; }
+      wrap.style.display = '';
+      rail.innerHTML = list.map(surgeCardHtml).join('');
+      var sub = document.getElementById('pt-surge-sub');
+      if(sub) sub.textContent = list.length + (list.length === 1 ? ' token' : ' tokens')
+        + ' · vs their own 5m average';
+    })
+    .catch(function(){});
+}
+
 function loadTape(){
   fetch('/api/market/tape').then(function(r){ return r.json(); }).then(function(d){
     var el = document.getElementById('pt-tape-list');
@@ -1167,6 +1215,13 @@ document.addEventListener('click', function(e){
   if((el = e.target.closest('[data-action="sell"]'))){ handleSell(el.dataset.idx, el); return; }
   if((el = e.target.closest('[data-action="copy"]'))){ toggleCopy(el); return; }
   if((el = e.target.closest('[data-action="copy-ca"]'))){ copyCA(el.dataset.mint, el); return; }
+  if((el = e.target.closest('[data-action="open-surge"]'))){
+    // Reuses the same path the navbar search uses -- a surging token is
+    // usually not in the current sorted feed yet, so it has to be injected
+    // rather than scrolled to.
+    prependSearchedToken(el.dataset.mint, el.dataset.symbol || '', el.dataset.pair || '');
+    return;
+  }
   if((el = e.target.closest('[data-action="trader-profile"]'))){
     if(el.dataset.wallet) location.href = '/profile/' + encodeURIComponent(el.dataset.wallet);
     return;
@@ -1222,6 +1277,7 @@ document.addEventListener('DOMContentLoaded', function(){
 
   renderSortList();
   loadWatchlistSet().then(function(){ loadFeed(); });
+  loadSurges();
   loadTape();
   loadTraders();
   loadWatchlist();
@@ -1242,6 +1298,9 @@ document.addEventListener('DOMContentLoaded', function(){
   }
 
   setInterval(function(){ loadFeed(true); }, 15000);
+  // Polled faster than the feed: the whole point of a surge is that it is
+  // happening right now, and the radar itself re-samples every 30s.
+  setInterval(loadSurges, 12000);
   setInterval(loadTape, 8000);
   setInterval(loadTraders, 30000);
   setInterval(loadPulse, 20000);

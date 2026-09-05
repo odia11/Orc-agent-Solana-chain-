@@ -121,6 +121,28 @@ input{font-family:inherit}
 
 /* ── poster cards ── */
 .pt-feed-list{padding:16px 22px 32px;display:flex;flex-direction:column;gap:16px}
+
+/* ── SURGE STRIP ── */
+.pt-surge-wrap{border-bottom:1px solid var(--line);background:linear-gradient(180deg,rgba(247,107,98,.07),transparent 70%)}
+.pt-surge-hd{display:flex;align-items:baseline;justify-content:space-between;gap:10px;padding:13px 22px 0}
+.pt-surge-title{display:flex;align-items:center;gap:7px;font-size:11.5px;font-weight:800;letter-spacing:.09em;color:#ff6b5e;font-family:var(--mono)}
+.pt-surge-dot{width:7px;height:7px;border-radius:50%;background:#ff6b5e;animation:pt-surge-pulse 1.1s infinite}
+@keyframes pt-surge-pulse{0%{box-shadow:0 0 0 0 rgba(255,107,94,.6)}70%{box-shadow:0 0 0 7px rgba(255,107,94,0)}100%{box-shadow:0 0 0 0 rgba(255,107,94,0)}}
+.pt-surge-sub{font-size:10.5px;color:var(--muted2);font-family:var(--mono);white-space:nowrap}
+.pt-surge-rail{display:flex;gap:10px;padding:11px 22px 14px;overflow-x:auto;scrollbar-width:none}
+.pt-surge-rail::-webkit-scrollbar{display:none}
+.pt-surge-card{flex:0 0 auto;width:196px;background:var(--card);border:1px solid rgba(255,107,94,.32);border-radius:12px;padding:10px 12px;cursor:pointer;transition:border-color .12s,transform .12s}
+.pt-surge-card:hover{border-color:rgba(255,107,94,.6);transform:translateY(-1px)}
+.pt-surge-card.cooling{border-color:var(--line);opacity:.62}
+.pt-surge-top{display:flex;align-items:center;gap:8px;min-width:0}
+.pt-surge-img{width:26px;height:26px;border-radius:50%;background:var(--line);flex-shrink:0;object-fit:cover}
+.pt-surge-sym{font-weight:700;font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.pt-surge-chain{font-size:9px;font-family:var(--mono);color:var(--muted2);text-transform:uppercase;letter-spacing:.05em;flex-shrink:0}
+.pt-surge-mult{margin-left:auto;font-family:var(--mono);font-size:14px;font-weight:800;color:#ff6b5e;flex-shrink:0}
+.pt-surge-meta{display:flex;align-items:center;gap:8px;margin-top:7px;font-family:var(--mono);font-size:10px;color:var(--muted2);white-space:nowrap}
+.pt-surge-bar{height:3px;border-radius:2px;background:rgba(255,255,255,.09);margin-top:7px;overflow:hidden;display:flex}
+.pt-surge-bar i{display:block;height:100%;background:#3ad29b}
+.pt-surge-bar i.s{background:#f76b62}
 .pt-empty{text-align:center;color:var(--muted2);font-size:13px;padding:50px 0}
 .pt-card{border:1px solid var(--line2);border-radius:18px;overflow:hidden;background:var(--card)}
 .pt-card.hi{border-color:var(--accent-border);box-shadow:0 0 0 1px rgba(247,185,85,.22)}
@@ -353,6 +375,16 @@ input{font-family:inherit}
         </div>
         <button class="pt-mobile-filters-btn" id="pt-mobile-filters-btn">⚙ Filters</button>
         <div class="pt-scanning-pill"><span class="pt-scan-dot"></span>SCANNING</div>
+      </div>
+
+      <!-- Surges sit above everything else in this column on purpose: they
+           are time-critical in a way the sorted feed below is not. -->
+      <div class="pt-surge-wrap" id="pt-surge-wrap" style="display:none">
+        <div class="pt-surge-hd">
+          <span class="pt-surge-title"><span class="pt-surge-dot"></span>SURGING NOW</span>
+          <span class="pt-surge-sub" id="pt-surge-sub"></span>
+        </div>
+        <div class="pt-surge-rail" id="pt-surge-rail"></div>
       </div>
 
       <div class="pt-story-rail" id="pt-story-rail"></div>

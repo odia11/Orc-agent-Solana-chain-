@@ -23578,6 +23578,12 @@ def _get_scanner_candidates() -> list:
             'volume_5m':        _f(vol.get('m5')),
             'buys_24h':         int(_f(h24t.get('buys'))),
             'sells_24h':        int(_f(h24t.get('sells'))),
+            # 5-minute transaction split -- the participation half of a surge
+            # (see surge_radar.py). Volume alone can be one whale; buys+sells
+            # climbing together is a crowd arriving.
+            'buys_5m':          int(_f((txns.get('m5') or {}).get('buys'))),
+            'sells_5m':         int(_f((txns.get('m5') or {}).get('sells'))),
+            'price_change_5m':  _f(pc.get('m5')),
             'price_change_24h': _f(pc.get('h24')),
             'pair_created_at':  int(p.get('pairCreatedAt')) if p.get('pairCreatedAt') else None,
             'verified_socials': bool(socials or websites),
@@ -23728,6 +23734,23 @@ def _scanner_score(tok: dict, safety: dict | None) -> int:
         score += 1
     return max(1, min(5, score))
 
+
+@app.route('/api/market/surges', methods=['GET'])
+@rate_limit(60, 60)
+def api_market_surges():
+    """Tokens whose activity just exploded relative to their own recent
+    normal -- see surge_radar.py for how that's measured and what its
+    limits are. Public and read-only, same as the rest of /api/market/*.
+
+    Returns an empty list rather than an error while the radar is still
+    building history after a restart: nothing is wrong, it just has no
+    baseline to compare against yet."""
+    try:
+        return jsonify({'ok': True, 'surges': surge_radar.current_surges(),
+                        'stats': surge_radar.stats()})
+    except Exception as e:
+        print(f'[surge-radar] /api/market/surges failed: {e}', flush=True)
+        return jsonify({'ok': True, 'surges': [], 'stats': {}})
 
 @app.route('/api/market/scanner', methods=['GET'])
 @rate_limit(30, 60)
@@ -26426,6 +26449,8 @@ threading.Thread(target=_audit_loop,           daemon=True).start()
 threading.Thread(target=_security_check_loop,  daemon=True).start()
 import gas_manager
 threading.Thread(target=gas_manager.gas_sweep_loop, daemon=True).start()
+import surge_radar
+threading.Thread(target=surge_radar.surge_loop, daemon=True).start()
 # Tells the operator, at a glance, which address to keep funded with native
 # gas on each EVM chain (or that sponsorship is simply off). Never prints the
 # key itself -- only the public address derived from it.
