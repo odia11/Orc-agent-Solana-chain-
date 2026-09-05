@@ -1,0 +1,36 @@
+[Unit]
+Description=OrcAgent uptime monitor — Telegram alert when the app stops writing its heartbeat
+After=orcagent.service
+Wants=orcagent.service
+
+[Service]
+Type=exec
+User=orcagent
+Group=orcagent
+WorkingDirectory=/opt/orcagent
+EnvironmentFile=/etc/orcagent.env
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+
+# A separate unit rather than a background process inside start.sh. In a
+# container the app process IS the container, so backgrounding it there is
+# fine; here systemd is the supervisor, and giving it its own unit means the
+# monitor restarting can't take the app down with it -- or the reverse. It
+# also stays silent by design: with no Telegram token configured it simply
+# does nothing.
+ExecStart=/opt/orcagent/venv/bin/python monitor.py
+
+Restart=always
+RestartSec=15
+
+# Reads the heartbeat file only; it never needs to write anything.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orcagent-monitor
+
+[Install]
+WantedBy=multi-user.target

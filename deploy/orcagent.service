@@ -1,0 +1,57 @@
+[Unit]
+Description=OrcAgent — multi-chain social trading platform
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=exec
+User=orcagent
+Group=orcagent
+WorkingDirectory=/opt/orcagent
+EnvironmentFile=/etc/orcagent.env
+
+# /opt/orcagent is read-only below (ProtectSystem=strict), so let Python skip
+# writing .pyc files rather than failing to on every import.
+Environment=PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+
+# ONE worker, on purpose. Do not raise this.
+#
+# dashboard.py starts its background work in-process at import: the trading
+# bot loops, the bridge status poller, the gas manager sweep and the surge
+# radar. Every extra worker is a second full copy of all of it -- two
+# processes deciding to buy the same token, two gas grants for one empty
+# wallet, two bridges for one shortfall. Concurrency comes from threads
+# instead, which share that single set of loops.
+#
+# start.sh does the same thing (and also launches monitor.py) but is written
+# for a container where the process IS the container. Here systemd is the
+# supervisor, so the two are started as separate units rather than one
+# backgrounding the other.
+ExecStart=/opt/orcagent/venv/bin/gunicorn dashboard:app \
+    --bind 127.0.0.1:8080 \
+    --workers 1 \
+    --threads 4 \
+    --timeout 120 \
+    --access-logfile - \
+    --error-logfile -
+
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+
+# The app only ever writes to /data (database, logs, backups, heartbeat), so
+# everything else can be read-only. If it is ever made to write elsewhere,
+# it fails loudly here rather than quietly scattering state around the disk.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/data
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=orcagent
+
+[Install]
+WantedBy=multi-user.target
