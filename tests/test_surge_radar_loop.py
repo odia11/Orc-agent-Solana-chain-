@@ -41,8 +41,10 @@ def token(mint='M1', price=1.0, vol=20000.0, buys=150, sells=100, liq=50000.0):
 def quiet(**kw):
     return token(vol=1000.0, buys=5, sells=5, **kw)
 
-# Three quiet samples build a baseline, then a spike.
-MARKET[:] = [quiet()]
+# Three quiet samples at a low price build the baseline, then a spike that
+# both explodes on volume AND rises -- a surge is a rise, so a flat price
+# would (correctly) never be detected at all.
+MARKET[:] = [quiet(price=0.5)]
 for _ in range(3):
     R._sample_once()
 check('nothing alerts while the token is merely being watched', calls['surge'] == [])
@@ -74,6 +76,9 @@ check('a cooling surge carries the price from its LAST detection, not the curren
       'quiet one — which is harmless precisely because a follow-up needs a price '
       'ABOVE the last alert, and a stale price is never above itself',
       calls['surge'][0][1] == 2.0)
+check('a falling token is never offered as a surge in the first place, so the '
+      'cooling entry above is the last detected RISE, never a fall',
+      all(px is not None and px > 0 for _, px in calls['surge']))
 
 calls['surge'].clear()
 R._surges.clear()                  # what SURGE_TTL does after five quiet minutes

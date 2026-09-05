@@ -14,6 +14,14 @@ minute. Detection therefore lags the real move by roughly a minute, and a
 token has to be observed for MIN_HISTORY_SECONDS before it can be judged at
 all -- there is no baseline to be several times above otherwise.
 
+WHY ONLY RISES
+Volume and transactions exploding while the price falls is a sell-off. It is
+a real event, but it is not what this strip reports, so a token whose price
+is not up is not a surge here however violent its volume. That rule lives in
+_evaluate, which is the single place anything decides what a surge is -- so
+the Live Market strip, the API and the phone alerts all inherit it and can
+never disagree about it.
+
 WHY TWO SIGNALS, NOT ONE
 Volume alone is one whale buying. Transaction count alone is a bot spamming
 dust. A real surge is both at once: money AND participants climbing together,
@@ -104,6 +112,20 @@ def _evaluate(tok, samples, now):
     # it can never be passed off as a 5-minute number.
     price_first = next((sm[3] for sm in samples if sm[3] > 0), 0.0)
     obs_change = ((price_now - price_first) / price_first * 100) if (price_first and price_now) else 0.0
+
+    # A surge must be a RISE. Volume and transactions exploding while the
+    # price falls is a sell-off -- real, but the opposite of what this strip
+    # is for, and "SURGING NOW / -6.2%" reads as a broken card. Same source
+    # order the card and the alert display: DexScreener's 5-minute figure
+    # when it has one, otherwise the move measured across our own samples.
+    # Judged on the ROUNDED figure so a token that displays as "+0.0%" counts
+    # as flat rather than sneaking in on a fourth decimal.
+    change = float(tok.get('price_change_5m') or 0)
+    if abs(change) < 0.05:
+        change = obs_change
+    if change < 0.05:
+        return None
+
     return {
         'mint':          tok.get('mint'),
         'symbol':        tok.get('symbol') or '',

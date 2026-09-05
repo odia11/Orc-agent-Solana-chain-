@@ -62,16 +62,32 @@ check('a doubling from the first observed price reads as +100%',
 check('the observed window is reported in seconds so the label can name it',
       s and s['obs_seconds'] == 600)
 
+# ── a surge must be a RISE ──
 s = ns['_evaluate'](TOK, samples([2.0, 1.9, 1.8, 1.0]), NOW)
-check('a halving reads as -50%, signed', s and abs(s['price_change_obs'] + 50.0) < 0.01)
+check('a token whose volume explodes while its price HALVES is not a surge — that '
+      'is a sell-off, and "SURGING NOW / -50%" is a broken card', s is None)
 
 s = ns['_evaluate'](TOK, samples([1.0, 1.0, 1.0, 1.0]), NOW)
-check('a flat price reads as exactly 0, not as noise', s and s['price_change_obs'] == 0.0)
+check('a flat price is not a surge either', s is None)
+
+s = ns['_evaluate'](TOK, samples([1.0, 1.0, 1.0, 1.0002]), NOW)
+check('a rise too small to display as anything but +0.0% counts as flat, not as a '
+      'rise sneaking in on a fourth decimal', s is None)
+
+s = ns['_evaluate'](dict(TOK, price_change_5m=14.0), samples([2.0, 1.9, 1.8, 1.0]), NOW)
+check("DexScreener's figure decides when it has one, exactly as the card and the "
+      'alert display it — so the strip can never disagree with the number on it',
+      s is not None)
+
+s = ns['_evaluate'](dict(TOK, price_change_5m=-14.0), samples([1.0, 1.1, 1.2, 2.0]), NOW)
+check('...and it rejects on the same authority: a DexScreener fall outranks a rise '
+      'in our own samples', s is None)
 
 # ── the cases that would otherwise divide by zero or lie ──
 s = ns['_evaluate'](TOK, samples([0.0, 0.0, 0.0, 1.5]), NOW)
-check('a token whose early samples had no price does not divide by zero',
-      s is not None and s['price_change_obs'] == 0.0)
+check('a token whose only priced sample is the newest one cannot be shown as a rise '
+      '— there is nothing to have risen from, and it must not divide by zero either',
+      s is None)
 
 s = ns['_evaluate'](TOK, samples([0.0, 0.0, 2.0, 4.0]), NOW)
 check('the first sample with a REAL price is the baseline, not the zero before it '
@@ -79,8 +95,8 @@ check('the first sample with a REAL price is the baseline, not the zero before i
       s and abs(s['price_change_obs'] - 100.0) < 0.01)
 
 s = ns['_evaluate'](TOK, samples([1.0, 1.2, 1.5, 0.0]), NOW)
-check('a token whose latest price came back empty reports no move rather than -100%',
-      s and s['price_change_obs'] == 0.0)
+check('a token whose latest price came back empty is not shown as a -100% crash, '
+      'and is not shown at all', s is None)
 
 # ── DexScreener's own figure is still carried, untouched ──
 s = ns['_evaluate'](dict(TOK, price_change_5m=13.5), samples([1.0, 1.1, 1.2, 2.0]), NOW)
@@ -96,7 +112,8 @@ check('the card prefers the 5m figure and falls back the same way the alert does
       're.escape' not in JS and 's.price_change_5m' in JS and 's.price_change_obs' in JS)
 check('the card labels the fallback window rather than borrowing "5m"',
       "chgWin = Math.max(1, Math.round((Number(s.obs_seconds)||0)/60))+'m'" in JS)
-check('a rise and a fall get different colours', '.pt-surge-chg.up{' in CSS and '.pt-surge-chg.down{' in CSS)
+check('the card still styles a fall, as a safety net if the rule above ever moves',
+      '.pt-surge-chg.up{' in CSS and '.pt-surge-chg.down{' in CSS)
 _chg_size = int(re.search(r'\.pt-surge-chg\{[^}]*font-size:(\d+)px', CSS).group(1))
 _sym_size = float(re.search(r'\.pt-surge-sym\{[^}]*font-size:([\d.]+)px', CSS).group(1))
 check('the percentage is the largest text on the card — larger than the ticker itself',
