@@ -14289,11 +14289,14 @@ def _send_push_notifications_bulk(user_ids, title, body, url='/'):
 # SURGE_ALERT_FOLLOWUP_GAIN above the price at the last alert. Because each
 # alert resets that baseline, the requirement compounds, and noise around a
 # flat price can never ratchet its way into a second buzz.
-SURGE_ALERT_MAX_PER_HOUR   = 10    # across all tokens, for everyone
+SURGE_ALERT_MAX_PER_HOUR   = 10    # NEW surges, across all tokens, for everyone
 SURGE_ALERT_REPEAT_HOURS   = 6     # how long a token stays tracked after its first alert
-SURGE_ALERT_FOLLOWUP_GAIN  = 25.0  # % above the LAST alerted price before saying it again
-SURGE_ALERT_MAX_FOLLOWUPS  = 3     # so one runaway token can't own the hourly budget
-SURGE_ALERT_MIN_GAP        = 300   # seconds between two alerts on the same token, whatever it did
+SURGE_ALERT_FOLLOWUP_GAIN  = 15.0  # % above the LAST alerted price before saying it again
+SURGE_ALERT_MAX_FOLLOWUPS  = 6     # per token, per episode
+SURGE_ALERT_MIN_GAP        = 180   # seconds between two alerts on the same token, whatever it did
+SURGE_ALERT_MAX_FOLLOWUPS_PER_HOUR = 8   # follow-ups spend their OWN budget, so a token that
+                                         # keeps running cannot crowd out new surges, and a
+                                         # busy hour of new surges cannot silence a runner
 
 # And one closing notice if it gives it back. This exists because the app
 # already interrupted someone about this token: leaving them to find out on
@@ -14304,9 +14307,12 @@ SURGE_ALERT_DROP_PCT           = 20.0  # % below the highest price it was alerte
 SURGE_ALERT_MAX_DROPS_PER_HOUR = 3     # a market-wide sell-off must not become 30 buzzes
 
 _surge_alert_lock = threading.Lock()
-_surge_alerts_sent: list = []      # timestamps, for the hourly cap
-_surge_drops_sent: list = []       # timestamps, for the drop cap (its own budget so a
-                                   # busy hour of surges can't starve a closing notice)
+# Three separate hourly budgets, because they answer three different
+# questions. A first alert, "it is still running", and "it gave it back" are
+# not interchangeable, so one must never be able to spend another's room.
+_surge_alerts_sent: list = []      # timestamps, for NEW surges
+_surge_followups_sent: list = []   # timestamps, for follow-ups on a climbing token
+_surge_drops_sent: list = []       # timestamps, for closing notices
 _surge_alerted_mints: dict = {}    # mint -> {ts, price, peak_price, followups, dropped}
 
 def _surge_price(d: dict) -> float:
@@ -14328,7 +14334,8 @@ def _surge_alert_allowed(surge: dict):
     mint = surge.get('mint') or ''
     price = _surge_price(surge)
     with _surge_alert_lock:
-        _surge_alerts_sent[:] = [t for t in _surge_alerts_sent if now - t < 3600]
+        _surge_alerts_sent[:]    = [t for t in _surge_alerts_sent if now - t < 3600]
+        _surge_followups_sent[:] = [t for t in _surge_followups_sent if now - t < 3600]
         for m, st in list(_surge_alerted_mints.items()):
             if now - st['ts'] > SURGE_ALERT_REPEAT_HOURS * 3600:
                 _surge_alerted_mints.pop(m, None)
@@ -14350,13 +14357,16 @@ def _surge_alert_allowed(surge: dict):
             if gain < SURGE_ALERT_FOLLOWUP_GAIN:
                 return None
 
-        if len(_surge_alerts_sent) >= SURGE_ALERT_MAX_PER_HOUR:
-            return None
-        _surge_alerts_sent.append(now)
         if state is None:
+            if len(_surge_alerts_sent) >= SURGE_ALERT_MAX_PER_HOUR:
+                return None
+            _surge_alerts_sent.append(now)
             _surge_alerted_mints[mint] = {'ts': now, 'price': price, 'peak_price': price,
                                           'followups': 0, 'dropped': False}
             return {'kind': 'new'}
+        if len(_surge_followups_sent) >= SURGE_ALERT_MAX_FOLLOWUPS_PER_HOUR:
+            return None
+        _surge_followups_sent.append(now)
         state['ts'] = now
         state['price'] = price
         state['peak_price'] = max(state.get('peak_price') or 0, price)
