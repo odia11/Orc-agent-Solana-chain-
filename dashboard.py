@@ -787,6 +787,27 @@ BNB_NATIVE_ADDR  = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE'  # 0x's sentinel
 #     or changed via deploy config.
 OWNER_WALLET     = os.environ.get('OWNER_WALLET', '')
 ADMIN_WALLET     = 'HC5ahspSox3XRmDbzXjXVoAASuY89RCmGUKwp87FRJS5'
+
+# Every wallet with FULL owner rights -- fee collection, key rotation, the
+# gas sponsor panel, force-close, all of it.
+#
+# OWNER_WALLET itself may be a comma-separated list, and OWNER_WALLETS can
+# add more, so ownership can be granted or revoked in Railway without a
+# deploy. The operator's own wallet is listed below as well so the platform
+# always has a working owner even if that env var is blank or stale -- which
+# is exactly the state that made every admin button answer "Unauthorized".
+#
+# Publishing these addresses is not a credential leak: an address only names
+# an account. Reaching any of this still requires a signature from that
+# wallet's private key (see _authenticated_wallet), which is never here.
+_BUILTIN_OWNER_WALLETS = ['Cdn8WftaYycdudV9yeeQPY1A1Tgo1bMa9eV4Tv9SeAM9']
+OWNER_WALLETS = {
+    w.strip() for w in (
+        OWNER_WALLET.split(',')
+        + os.environ.get('OWNER_WALLETS', '').split(',')
+        + _BUILTIN_OWNER_WALLETS
+    ) if w.strip()
+}
 WEBAUTHN_RP_ID   = os.environ.get('WEBAUTHN_RP_ID', 'orcagent.fun')
 WEBAUTHN_RP_NAME = 'OrcAgent'
 VAPID_PRIVATE_KEY = os.getenv('VAPID_PRIVATE_KEY', '')
@@ -2640,6 +2661,11 @@ def get_user_role(wallet: str) -> str:
         return 'user'
     if wallet == ADMIN_WALLET:
         return 'admin'
+    # An owner always holds the top role. Without this an owner wallet with
+    # no admin_roles row resolved to 'user' and was redirected straight off
+    # the admin page -- owner rights it could never reach a button to use.
+    if wallet in OWNER_WALLETS:
+        return 'admin'
     try:
         conn = sqlite3.connect(DB_FILE)
         # admin_roles table takes precedence (roles granted via admin panel)
@@ -3140,11 +3166,17 @@ def _authenticated_wallet() -> str:
     return session.get('wallet', '')
 
 def _is_owner(wallet: str) -> bool:
-    """Constant-time comparison: is wallet the OWNER_WALLET?
-    hmac.compare_digest prevents timing oracle attacks on admin auth checks."""
-    if not OWNER_WALLET or not wallet:
+    """Is this wallet one of OWNER_WALLETS? Compared with
+    hmac.compare_digest, which prevents timing oracle attacks on admin auth
+    checks -- and deliberately WITHOUT short-circuiting on the first match,
+    so the time taken doesn't reveal how far down the list a wallet sits."""
+    if not wallet:
         return False
-    return hmac.compare_digest(wallet.encode(), OWNER_WALLET.encode())
+    found = False
+    for owner in OWNER_WALLETS:
+        if hmac.compare_digest(wallet.encode(), owner.encode()):
+            found = True
+    return found
 
 def _owner_denied(wallet: str, action: str = 'This action'):
     """A 403 that says WHY, for the owner-only admin actions.
@@ -3160,14 +3192,14 @@ def _owner_denied(wallet: str, action: str = 'This action'):
     which they already know."""
     short = (wallet[:4] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'not signed in')
     role = get_user_role(wallet) if wallet else 'user'
-    if not OWNER_WALLET:
-        msg = (f'{action} is restricted to the owner wallet, but OWNER_WALLET is not configured '
-               f'on the server — set it in Railway to the wallet you sign in with.')
+    if not OWNER_WALLETS:
+        msg = (f'{action} is restricted to an owner wallet, but none is configured on the '
+               f'server — set OWNER_WALLET in Railway to the wallet you sign in with.')
     else:
-        msg = (f'{action} is restricted to the owner wallet. You are signed in as {short} '
-               f'(role: {role}), which is not it.')
+        msg = (f'{action} is restricted to an owner wallet. You are signed in as {short} '
+               f'(role: {role}), which is not one.')
     print(f'[admin] owner-only action refused for {short} (role={role}, '
-          f'OWNER_WALLET {"set" if OWNER_WALLET else "NOT set"})', flush=True)
+          f'{len(OWNER_WALLETS)} owner wallet(s) configured)', flush=True)
     return jsonify({'ok': False, 'error': msg, 'owner_only': True}), 403
 
 # ── GLOBAL STATE ──
@@ -24534,7 +24566,7 @@ def api_admin():
             'users_trading':     users_trading,
             'total_trades':      total_trades,
             'trades_today':      trades_today,
-            'owner_configured':  bool(OWNER_WALLET),
+            'owner_configured':  bool(OWNER_WALLETS),
             # Being admitted to this page is a ROLE check; the owner-only
             # actions on it check something else entirely. Sending this along
             # lets the page hide the buttons it knows would be refused,
@@ -25013,9 +25045,12 @@ def _recover_uncollected_fees(triggered_by: str = 'manual') -> dict:
     applies to winning and losing trades alike, since the fee is a flat % of the swap
     amount, not of profit.
     Returns a summary dict. Safe to call from a background thread or an API endpoint."""
-    if not OWNER_WALLET:
-        print('[fee-recovery] OWNER_WALLET not set — skipping', flush=True)
-        return {'ok': False, 'error': 'OWNER_WALLET not configured', 'total_sol': 0.0, 'results': []}
+    # A gate, not the destination -- the fees themselves go to FEE_WALLET.
+    # This only refuses to run the sweep on a platform with nobody
+    # configured to own it.
+    if not OWNER_WALLETS:
+        print('[fee-recovery] no owner wallet configured — skipping', flush=True)
+        return {'ok': False, 'error': 'No owner wallet configured', 'total_sol': 0.0, 'results': []}
 
     print(f'[fee-recovery] ── START ({triggered_by}) ──', flush=True)
     try:
@@ -25398,7 +25433,7 @@ def admin_health():
             'ai_disabled':      time.time() < _ai_disabled_until,
             'dex_rate_limited': dex_limited,
             'sec_events_1h':    sec_events_1h,
-            'owner_configured': bool(OWNER_WALLET),
+            'owner_configured': bool(OWNER_WALLETS),
             'jupiter_proxy':    bool(JUPITER_PROXY),
             'anthropic_key':    bool(ANTHROPIC_API_KEY),
             'anthropic_status': anthropic_status,
@@ -25708,7 +25743,7 @@ def admin_whoami():
     # stricter check that the money-moving actions on it use. The page needs
     # both so it can hide buttons it already knows would be refused.
     return jsonify({'ok': True, 'wallet': wallet, 'role': role,
-                    'is_owner': _is_owner(wallet), 'owner_configured': bool(OWNER_WALLET)})
+                    'is_owner': _is_owner(wallet), 'owner_configured': bool(OWNER_WALLETS)})
 
 
 @app.route('/api/admin/roles', methods=['GET'])
@@ -26562,10 +26597,16 @@ threading.Thread(target=surge_radar.surge_loop, daemon=True).start()
 # Tells the operator, at a glance, which address to keep funded with native
 # gas on each EVM chain (or that sponsorship is simply off). Never prints the
 # key itself -- only the public address derived from it.
-if not OWNER_WALLET:
-    print('[startup] ⚠ OWNER_WALLET is not set — every owner-only admin action '
+if not OWNER_WALLETS:
+    print('[startup] ⚠ no owner wallet configured — every owner-only admin action '
           '(Collect Fees, key rotation, the gas sponsor panel) will refuse for everyone, '
           'including you. Set it in Railway to the wallet you sign in with.', flush=True)
+else:
+    # Printed so "why was I refused?" is answerable from the logs alone,
+    # without guessing whether the env var matches the wallet you sign in
+    # with. Addresses only; nothing secret is involved in owning one.
+    print('[startup] owner wallets (full admin rights): '
+          + ', '.join(sorted(OWNER_WALLETS)), flush=True)
 _gs_addr = _gas_sponsor_address()
 print(f'[startup] gas sponsor wallet (EVM): {_gs_addr} — keep this funded with native gas on each EVM chain'
       if _gs_addr else
