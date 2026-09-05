@@ -16,7 +16,7 @@
 <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap"></noscript>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+html,body{min-height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
 :root{
   --bg:#0a0b0e;--bg2:#101216;--bg3:#16191f;--bg4:#21252c;
   --accent:#f7b955;--text:#eef1f5;--muted:#565d68;
@@ -196,7 +196,7 @@ html,body{height:100%;background:#0a0b0e;color:#eef1f5;font-family:'Geist',syste
   .pf-btn-primary,.pf-btn-secondary{min-height:44px}
   .pf-btn-icon{min-height:44px;min-width:44px}
   .pf-copy-btn{min-height:44px;min-width:44px;display:inline-flex;align-items:center;justify-content:center}
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
 }
 /* ── SHARE MODAL ── */
 .spm-back{display:none;position:fixed;inset:0;background:rgba(0,0,0,.72);z-index:600;align-items:flex-start;justify-content:center;padding:60px 16px 20px}

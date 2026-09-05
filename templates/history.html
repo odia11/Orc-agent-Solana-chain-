@@ -116,7 +116,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
   .filter-clear{min-height:44px;display:inline-flex;align-items:center}
   /* mobile inputs: prevent iOS auto-zoom */
   .filter-input,.filter-select,.filter-date{font-size:16px}
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
 }
 </style>
 </head>

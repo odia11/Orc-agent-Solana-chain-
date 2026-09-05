@@ -94,7 +94,7 @@ html,body{min-height:100vh;background:var(--bg);font-family:var(--ui);color:var(
   .stat-grid{grid-template-columns:repeat(2,1fr)}
   .status-bar{flex-direction:column;align-items:stretch}
   .bot-toggle-btn{width:100%;min-height:44px}
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
 }
 </style>
 </head>

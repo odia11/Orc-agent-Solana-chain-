@@ -250,7 +250,7 @@ html,body{background:#0a0b0e;color:#eef1f5;font-family:'Geist',system-ui,sans-se
   .msgs-attach-btn{min-height:44px;min-width:44px}
   .msgs-trade-opt{min-height:44px}
   .msgs-new-btn{width:34px;height:34px;min-height:0;display:inline-flex;align-items:center;justify-content:center}
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
 }
 </style>
 </head>

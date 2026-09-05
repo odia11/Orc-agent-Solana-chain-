@@ -82,7 +82,7 @@
 .s-title{font-size:15px;font-weight:700;color:var(--text);margin-bottom:3px}
 .s-sub{font-size:9px;color:var(--muted);letter-spacing:.1em;margin-bottom:18px}
 @media(max-width:767px){
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
   #app{display:block}
   .ntf-header{position:static;background:none;border-bottom:none;padding:0 16px}
   .ntf-title{display:none}

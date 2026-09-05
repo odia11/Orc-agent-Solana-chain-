@@ -9,7 +9,12 @@
 .pt-nb-topbar{
   display:flex;align-items:center;gap:18px;
   max-width:1440px;margin:0 auto;padding:10px 16px;
-  background:#0a0b0e;position:relative;z-index:200;
+  /* Sticky, not relative: on a long page (a profile, the feed) the navbar
+     used to scroll away entirely, so reaching any destination meant
+     scrolling all the way back to the top first. It now stays put.
+     z-index sits above the menu scrim (190) so the hamburger itself is
+     always tappable, including while the menu is open. */
+  background:#0a0b0e;position:sticky;top:0;z-index:200;
   font-family:'Geist',system-ui,-apple-system,sans-serif;
 }
 .pt-nb-topbar *{box-sizing:border-box}
@@ -74,7 +79,12 @@
 .pt-nb-mobile-only{display:none}
 
 @media (max-width: 900px){
-  .pt-nb-topbar{flex-wrap:wrap;gap:10px;padding:8px 10px;position:relative}
+  /* Stays sticky here too. This used to be position:relative purely so the
+     dropdown below could anchor to it -- but sticky establishes a containing
+     block for absolutely-positioned children just as well, and relative meant
+     the navbar scrolled away on exactly the long pages where reaching it
+     matters most. */
+  .pt-nb-topbar{flex-wrap:wrap;gap:10px;padding:8px 10px;position:sticky;top:0}
   .pt-nb-menu-btn{display:flex}
   /* Two columns, so the whole menu fits on one screen instead of being a
      scrolling list of 15 full-width rows. The five main destinations keep a

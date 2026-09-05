@@ -241,7 +241,7 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 
 /* ── MOBILE (<768px) ── */
 @media(max-width:767px){
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
   #app{display:block}
   .grid{grid-template-columns:1fr}
   .page{padding:16px 12px 80px}

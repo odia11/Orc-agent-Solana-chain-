@@ -124,7 +124,7 @@ html,body{background:var(--bg);font-family:var(--ui);color:var(--text);font-size
 
 /* ── responsive ── */
 @media(max-width:600px){
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
   #app{display:block}
   .ref-hdr{padding:18px 16px 0}
   .ref-content{padding:16px 14px 60px}

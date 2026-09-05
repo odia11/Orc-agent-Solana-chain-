@@ -292,7 +292,7 @@ input{font-family:inherit}
    shared navbar's own, see static/navbar.css) ── */
 @media (max-width: 900px){
   .pt-shell{min-width:0;padding:10px 10px 28px;overflow-x:hidden}
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
 
   /* iOS Safari force-zooms on focusing any input under 16px, regardless of
      the viewport meta or touch-action -- this is the actual fix for that */

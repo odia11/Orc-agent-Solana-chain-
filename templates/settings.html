@@ -20,7 +20,7 @@
   --green:#3ad29b;--red:#ff4d6a;--border:#16191f;--border2:#21252c;--dim:#565d68;
   --mono:'JetBrains Mono',monospace;--ui:'Geist',system-ui,'Apple Color Emoji','Segoe UI Emoji','Noto Color Emoji',sans-serif;
 }
-html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
+html,body{min-height:100%;background:var(--bg);font-family:var(--ui);color:var(--text);font-size:13px;-webkit-font-smoothing:antialiased}
 
 /* ── APP SHELL (nav is now the shared navbar component, static/navbar.css) ── */
 #app{display:flex}
@@ -165,7 +165,7 @@ html,body{height:100%;background:var(--bg);font-family:var(--ui);color:var(--tex
 
 /* ── MOBILE ── */
 @media(max-width:767px){
-  html,body{overflow-x:hidden}
+  html,body{overflow-x:clip}  /* clip, not hidden: hidden makes the root a scroll container, which breaks the sticky navbar */
   #app{display:block}
   .st-content{padding:12px 12px 80px;max-width:100%}
   .st-title{display:none}
