@@ -197,19 +197,45 @@ def _sample_once():
         for mint, s in list(_surges.items()):
             if now - s['last_seen'] > SURGE_TTL:
                 _surges.pop(mint, None)
+        # Copies, taken under the lock and notified outside it -- the alert
+        # path hits sqlite and the push service, which must never run while
+        # holding the sampler's lock.
+        active = [dict(s) for s in _surges.values()]
 
     for s in fresh:
         logger.info('[surge-radar] %s on %s — %sx volume, %sx transactions, $%s in 5m, %s%% buys',
                     s['symbol'], s['chain'], s['vol_ratio'], s['txn_ratio'],
                     round(s['volume_5m']), s['buy_pct'])
-        # Same bar as the strip: every surge detected here is sent. The only
-        # thing notify_surge decides is how often a phone may be interrupted,
-        # not whether the surge counts. It never raises, so a failing alert
-        # cannot interrupt sampling.
+
+    # Same bar as the strip: every surge detected here is offered. The only
+    # thing notify_surge decides is how often a phone may be interrupted, not
+    # whether the surge counts. EVERY live surge is re-offered, not just the
+    # newly-detected ones, so a token that keeps climbing past where we last
+    # said so can earn a second alert -- notify_surge is what decides that,
+    # on price, and it returns on a dict lookup long before touching the
+    # database. It never raises, so a failing alert cannot interrupt sampling.
+    for s in active:
         try:
             _app.notify_surge(s)
         except Exception as e:
-            logger.error('[surge-radar] surge alert failed for %s: %s', s['symbol'], e)
+            logger.error('[surge-radar] surge alert failed for %s: %s', s.get('symbol'), e)
+
+    # The drop watch reads the scanner list directly rather than the surge
+    # list: a token usually gives its gains back AFTER it stops surging, by
+    # which point it has expired out of _surges entirely. Reading the raw
+    # tokens keeps it watched for the full alert-tracking window.
+    try:
+        tracked = _app.surge_alert_tracked_mints()
+    except Exception as e:
+        logger.error('[surge-radar] could not read tracked mints: %s', e)
+        tracked = set()
+    if tracked:
+        for tok in tokens or []:
+            if tok.get('mint') in tracked:
+                try:
+                    _app.notify_surge_drop(tok)
+                except Exception as e:
+                    logger.error('[surge-radar] drop alert failed for %s: %s', tok.get('symbol'), e)
 
 
 def current_surges(limit: int = 12) -> list:
