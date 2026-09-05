@@ -14313,6 +14313,63 @@ def _surge_alert_allowed(surge: dict) -> bool:
                 _surge_alerted_mints.pop(m, None)
     return True
 
+SURGE_ALERT_CHAIN_NAMES = {
+    'solana': 'Solana', 'bsc': 'BNB Chain', 'base': 'Base',
+    'arbitrum': 'Arbitrum', 'polygon': 'Polygon', 'robinhood': 'Robinhood Chain',
+}
+
+def _surge_fmt_usd(v: float) -> str:
+    """Compact dollars for a notification line: $4.3K, $128K, $1.2M. A phone
+    shows two lines before it truncates, so every character spent on '4,257'
+    instead of '4.3K' is a fact further down that never gets read."""
+    try:
+        v = float(v or 0)
+    except (TypeError, ValueError):
+        return '$0'
+    for cutoff, div, suffix in ((1e9, 1e9, 'B'), (1e6, 1e6, 'M'), (1e3, 1e3, 'K')):
+        if v >= cutoff:
+            n = v / div
+            return f'${n:.1f}{suffix}' if n < 100 else f'${n:.0f}{suffix}'
+    return f'${v:.0f}'
+
+def _surge_alert_text(surge: dict) -> tuple:
+    """The alert as a trader reads it: identity and size of the move in the
+    title, the numbers that justify it in the body, hardest evidence first.
+
+    No sentence, no verb, no "its usual" -- a notification is glanced at, not
+    read, and the separators let the eye jump straight to the figure it wants.
+    Anything the radar could not measure is dropped rather than printed as a
+    zero, so every field on screen is a real reading."""
+    symbol = (surge.get('symbol') or '?').upper()
+    chain = surge.get('chain') or ''
+    chain_name = SURGE_ALERT_CHAIN_NAMES.get(chain, chain.title() or 'Unknown chain')
+
+    def _f(key, default=0.0):
+        try:
+            return float(surge.get(key) or default)
+        except (TypeError, ValueError):
+            return default
+
+    vol_ratio = _f('vol_ratio')
+    change = _f('price_change_5m')
+    title = f"${symbol} · {vol_ratio:.1f}x volume"
+    # Guard on the ROUNDED figure, not the raw one: a 0.04% move is truthfully
+    # non-zero and would print as "+0.0%", which reads as a broken field.
+    if abs(change) >= 0.05:
+        title += f" · {change:+.1f}%"
+
+    parts = [chain_name, f"{_surge_fmt_usd(_f('volume_5m'))} volume (5m)"]
+    txns = int(_f('txns_5m'))
+    if txns:
+        parts.append(f"{txns} trades · {_f('buy_pct'):.0f}% buys")
+    liq = _f('liquidity_usd')
+    if liq:
+        parts.append(f"{_surge_fmt_usd(liq)} liquidity")
+    mcap = _f('market_cap')
+    if mcap:
+        parts.append(f"{_surge_fmt_usd(mcap)} mcap")
+    return title, ' · '.join(parts)
+
 def notify_surge(surge: dict):
     """Push a surging token to everyone who asked for these alerts. Called by
     the surge radar for newly-detected surges only. Never raises -- a failed
@@ -14333,10 +14390,7 @@ def notify_surge(surge: dict):
         if not user_ids:
             return
         symbol = surge.get('symbol') or '?'
-        title = f"${symbol} is surging"
-        body = (f"{surge.get('vol_ratio')}x its usual volume on {surge.get('chain')} — "
-                f"${round(float(surge.get('volume_5m') or 0)):,} in 5m, "
-                f"{surge.get('txns_5m')} transactions, {surge.get('buy_pct')}% buys")
+        title, body = _surge_alert_text(surge)
         # Deliberately points at Live Market rather than a buy screen: this
         # says something is happening, not that it is worth buying.
         _send_push_notifications_bulk(user_ids, title, body, '/live-market')
