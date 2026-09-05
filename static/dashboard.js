@@ -1329,6 +1329,66 @@ function renderLog(lines){
 }
 
 // ── SECURITY HELPERS ──
+/* ── post text: escape, then link ──────────────────────────────────────
+   Three call sites used to do this inline and identically. The URL half is
+   why it is one function now: getting the ORDER wrong here is a security
+   bug, not a cosmetic one.
+
+   The order that matters:
+     1. Find URLs in the RAW text. Escaping first would leave &amp; inside
+        hrefs; escaping the pieces afterwards is what keeps them correct.
+     2. Emit the URL span and the text span SEPARATELY. The cashtag and
+        @mention rules must never run over a URL -- /@([a-zA-Z0-9_]+)/ would
+        happily rewrite the middle of https://x.com/@someone, and inside an
+        href that is an injected link, not a mention.
+     3. esc() everything on the way out, href and label alike.
+
+   Only http(s) and bare www. can match, so javascript: and data: URLs can
+   never become a link however they are typed. */
+function _fcTagText(t){
+  if(!t) return '';
+  var out = esc(t).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
+  // The @ has to START a word. Without that guard "me@example.com" renders as
+  // "me" followed by a link to /profile/example -- the same class of bug the
+  // URL split above exists to prevent, one character earlier.
+  return out.replace(/(^|[^A-Za-z0-9_])@([a-zA-Z0-9_]+)/g,'$1<a href="/profile/$2" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$2</a>');
+}
+function _fcLinkHtml(url){
+  // Trailing punctuation is almost always the sentence's, not the URL's:
+  // "see https://a.com/x." should not link the full stop. Unmatched closers
+  // go back too, so "(see https://a.com/x)" keeps its bracket.
+  var trail = '';
+  var m = url.match(/[.,!?;:'"\)\]]+$/);
+  if(m){
+    var cut = m[0];
+    // ...unless the URL genuinely contains the bracket, e.g. a wiki link.
+    while(cut && cut[0] === ')' && (url.slice(0, url.length - cut.length).split('(').length >
+                                    url.slice(0, url.length - cut.length).split(')').length)){
+      cut = cut.slice(1);
+    }
+    if(cut){ trail = cut; url = url.slice(0, url.length - cut.length); }
+  }
+  if(!url) return esc(trail);
+  var href = /^https?:\/\//i.test(url) ? url : 'https://' + url;
+  // A long URL wraps to three lines and buries the post. Show the host and
+  // enough path to recognise it, exactly as the platforms people came from do.
+  var label = url.replace(/^https?:\/\//i,'').replace(/\/$/,'');
+  if(label.length > 42) label = label.slice(0, 41) + '…';
+  return '<a href="'+esc(href)+'" target="_blank" rel="noopener noreferrer nofollow" '
+       + 'onclick="event.stopPropagation()" '
+       + 'style="color:#f7b955;text-decoration:none;word-break:break-word">'+esc(label)+'</a>'
+       + esc(trail);
+}
+function _fcRichText(raw){
+  var s = String(raw == null ? '' : raw), out = '', last = 0, m;
+  var re = /\b(?:https?:\/\/|www\.)[^\s<>"'`]+/gi;
+  while((m = re.exec(s)) !== null){
+    out += _fcTagText(s.slice(last, m.index)) + _fcLinkHtml(m[0]);
+    last = m.index + m[0].length;
+  }
+  return out + _fcTagText(s.slice(last));
+}
+
 function esc(s){
   // HTML-encode external data before injecting into innerHTML
   return String(s==null?'':s)
@@ -7099,8 +7159,7 @@ async function _fcEditSave(postId,dbId){
       // update the visible text div with escaped + $TOKEN-linked content
       var textEl=document.getElementById('fc-text-'+postId);
       if(textEl){
-        var safe=esc(text).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
-        safe = safe.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
+        var safe = _fcRichText(text);
         textEl.innerHTML='<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+safe+'</div>';
       }
       _fcEditCancel(postId);
@@ -8729,8 +8788,7 @@ function _renderFeedCard(e){
       var _chartData = null;
       try{ _chartData = JSON.parse(_chartJson); }catch(ex){}
       if(_textPart){
-        var _safeText = esc(_textPart).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
-        _safeText = _safeText.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
+        var _safeText = _fcRichText(_textPart);
         textBody += '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeText+'</div>';
       }
       if(_chartData){
@@ -8805,8 +8863,7 @@ function _renderFeedCard(e){
           +'</div>';
       }
     } else if(_rawContent.trim()) {
-      var _safeContent = esc(_rawContent).replace(/\$([^\s<]+)/g,'<span class="token-tag" data-sym="$1" onclick="event.stopPropagation();showTokenCard(this.dataset.sym)">$$$1</span>');
-      _safeContent = _safeContent.replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
+      var _safeContent = _fcRichText(_rawContent);
       textBody += '<div style="font-size:14.5px;line-height:1.55;color:#c7ccd4;margin:6px 0 10px">'+_safeContent+'</div>';
     }
   }
@@ -9312,7 +9369,7 @@ function _renderReplyRow(r, postId, depth){
   var avatarClick = r.avatar_url
     ? 'event.stopPropagation();_showAvatarLightbox('+esc(JSON.stringify(r.avatar_url))+')'
     : (r.wallet ? 'event.stopPropagation();location.href=\'/profile/'+encodeURIComponent(r.wallet)+'\'' : '');
-  var msgHtml = esc(r.message).replace(/@([a-zA-Z0-9_]+)/g,'<a href="/profile/$1" onclick="event.stopPropagation()" style="color:#f7b955;font-weight:600;text-decoration:none">@$1</a>');
+  var msgHtml = _fcRichText(r.message);
   var indentStyle = depth>0 ? ' style="margin-left:'+Math.min(depth,3)*24+'px;border-left:2px solid #21252c;padding-left:10px"' : '';
   // Instagram/Facebook-style row: avatar, then username flowing directly
   // into the message as one paragraph (not a separate header line), a quiet
