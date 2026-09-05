@@ -119,6 +119,19 @@ def _evaluate(tok, samples, now):
     }
 
 
+def _buzz_mints() -> dict:
+    """Mints currently being talked about on X, across every chain the
+    platform trades -- {mint: symbol}. Purely a badge: it never creates,
+    ranks or blocks a surge, so the radar keeps working exactly the same
+    when this is unavailable (no API key, no Anthropic credit, a bad
+    response). Failing to a plain empty dict is what guarantees that."""
+    try:
+        return {c['mint']: c.get('symbol', '') for c in _app.get_multichain_x_buzz() if c.get('mint')}
+    except Exception as e:
+        logger.error('[surge-radar] X buzz unavailable, continuing without it: %s', e)
+        return {}
+
+
 def _sample_once():
     """One pass: read the scanner's current view of the market, append a
     sample per token, and re-evaluate. Reuses _get_scanner_cached() so this
@@ -131,6 +144,7 @@ def _sample_once():
         return
     now = time.time()
     fresh = []
+    buzz = _buzz_mints()
 
     with _lock:
         seen = set()
@@ -148,6 +162,7 @@ def _sample_once():
 
             surge = _evaluate(tok, hist, now)
             if surge:
+                surge['x_buzz'] = mint in buzz
                 prev = _surges.get(mint)
                 # Keep the peak of the episode, so a surge that is already
                 # cooling still shows how big it actually got rather than

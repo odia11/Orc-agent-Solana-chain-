@@ -4471,10 +4471,16 @@ def _discover_x_buzz() -> list[str]:
     if not ANTHROPIC_API_KEY:
         return []
     try:
+        # Asks across every chain the platform trades, not just Solana: the
+        # cashtags come back chain-agnostic anyway, and each consumer decides
+        # for itself which chains it will accept when resolving them (see
+        # _resolve_buzz_pairs). Asking Solana-only meant a token blowing up on
+        # Base or Robinhood Chain could never be discovered here at all.
         prompt = (
-            'Zoek naar Solana-memecoins die op dit moment opvallend veel besproken '
-            'worden op X/Twitter, ook als ze nog klein zijn qua volume. Geef ALLEEN '
-            'een JSON-array van cashtags terug, max 10, bv ["$FOO", "$BAR"].'
+            'Zoek naar memecoins die op dit moment opvallend veel besproken worden op '
+            'X/Twitter, ook als ze nog klein zijn qua volume. Kijk naar Solana, BNB Chain '
+            '(BSC), Base, Arbitrum, Polygon en Robinhood Chain. Geef ALLEEN een JSON-array '
+            'van cashtags terug, max 10, bv ["$FOO", "$BAR"].'
         )
         resp = requests.post(
             _ANTHROPIC_URL,
@@ -4520,21 +4526,21 @@ def _discover_x_buzz() -> list[str]:
         print(f'[x-buzz] error: {e}{body}', flush=True)
         return []
 
-def _match_buzz_to_mints(tickers: list[str]) -> list[dict]:
-    """Resolves _discover_x_buzz()'s cashtags to actual Solana mints, using
-    the same DexScreener search endpoint search_tokens() (line ~13617)
-    calls. Multiple pairs can share the same ticker text -- ticker-
-    squatting with clone tokens is common for memecoins, as seen tonight
-    testing CATE/ANSEM. search_tokens() just takes DexScreener's result
-    order as-is; this instead filters to pairs whose symbol actually
-    matches the ticker (falling back to the raw search results if nothing
-    matches exactly), then picks whichever of those has the highest
-    liquidity -- that's the one actually being traded, not whichever the
-    search API happened to list first.
+def _resolve_buzz_pairs(tickers: list[str], allowed_chains) -> list[dict]:
+    """Shared resolver behind both buzz consumers: turns cashtags into real
+    tokens on whichever of `allowed_chains` they actually trade on, and
+    reports the chain it found rather than assuming one.
 
-    Returns a list of {'mint': str, 'symbol': str, 'source': 'x_buzz'},
-    one entry per ticker that resolved to at least one Solana pair.
-    Tickers with no match are silently skipped."""
+    The chain matters because the two callers need different things.
+    _match_buzz_to_mints() passes {'solana'} because the narrative trading
+    agent it feeds can only execute a Solana buy from that path; the Live
+    Market buzz layer passes every supported chain because it only ever
+    displays. Keeping the chain in the result is what stops a Base token
+    from being handed to a caller that would treat it as a Solana mint.
+
+    Same ticker-squatting defence as before: prefer pairs whose symbol
+    matches the cashtag exactly, then take the deepest of those, since a
+    clone token sharing a ticker is common for memecoins."""
     results = []
     for ticker in tickers:
         query = str(ticker).lstrip('$').strip()
@@ -4545,25 +4551,84 @@ def _match_buzz_to_mints(tickers: list[str]) -> list[dict]:
             r = _dex_get(url, timeout=6)
             if not r or r.status_code != 200:
                 continue
-            pairs = r.json().get('pairs') or []
-            solana_pairs = [p for p in pairs if (p.get('chainId') or '').lower() == 'solana']
-            if not solana_pairs:
+            pairs = [p for p in (r.json().get('pairs') or [])
+                     if (p.get('chainId') or '').lower() in allowed_chains]
+            if not pairs:
                 continue
             symbol_matches = [
-                p for p in solana_pairs
+                p for p in pairs
                 if ((p.get('baseToken') or {}).get('symbol', '') or '').lower() == query.lower()
             ]
-            candidates = symbol_matches or solana_pairs
-            best = max(candidates, key=lambda p: float((p.get('liquidity') or {}).get('usd', 0) or 0))
+            best = max(symbol_matches or pairs,
+                       key=lambda p: float((p.get('liquidity') or {}).get('usd', 0) or 0))
             base = best.get('baseToken') or {}
             addr = base.get('address', '')
             if not addr:
                 continue
-            results.append({'mint': addr, 'symbol': base.get('symbol', '') or query, 'source': 'x_buzz'})
+            results.append({
+                'mint':          addr,
+                'symbol':        base.get('symbol', '') or query,
+                'chain':         (best.get('chainId') or '').lower(),
+                'liquidity_usd': float((best.get('liquidity') or {}).get('usd', 0) or 0),
+                'source':        'x_buzz',
+            })
         except Exception as e:
             print(f'[x-buzz-match] error for {ticker}: {e}', flush=True)
             continue
     return results
+
+_BUZZ_TTL = int(os.environ.get('X_BUZZ_TTL_SECONDS', '900'))  # 15 min -- buzz moves in minutes, and each refresh costs an Anthropic web-search call
+_buzz_cache = {'ts': 0.0, 'data': []}
+_buzz_lock = threading.Lock()
+
+def get_multichain_x_buzz() -> list:
+    """Tokens being talked about on X right now, across every chain the
+    platform trades -- display only, never a trading input.
+
+    Cached hard on purpose. The surge radar consults this every 30s, but
+    each refresh is a paid Claude web-search call, so a miss would otherwise
+    burn credits continuously. On any failure (no API key, no credit, a bad
+    response) this returns the last good list rather than nothing, so a
+    billing lapse degrades the badge quietly instead of making it flicker."""
+    now = time.time()
+    with _buzz_lock:
+        if now - _buzz_cache['ts'] < _BUZZ_TTL and _buzz_cache['data']:
+            return _buzz_cache['data']
+        stale = _buzz_cache['data']
+    try:
+        found = _resolve_buzz_pairs(_discover_x_buzz(), set(_MARKET_LIVE_CHAINS))
+    except Exception as e:
+        print(f'[x-buzz] multichain resolve failed: {e}', flush=True)
+        return stale
+    if not found:
+        # Keep whatever we had rather than blanking the badge on one bad
+        # cycle; the timestamp still advances so this backs off properly.
+        with _buzz_lock:
+            _buzz_cache['ts'] = now
+        return stale
+    with _buzz_lock:
+        _buzz_cache['ts'] = now
+        _buzz_cache['data'] = found
+    by_chain = {}
+    for c in found:
+        by_chain[c['chain']] = by_chain.get(c['chain'], 0) + 1
+    print(f'[x-buzz] {len(found)} token(s) buzzing on X: ' +
+          ', '.join(f'{n} on {ch}' for ch, n in sorted(by_chain.items())), flush=True)
+    return found
+
+def _match_buzz_to_mints(tickers: list[str]) -> list[dict]:
+    """Solana-only view of the buzz, for the narrative trading agent.
+
+    Deliberately narrower than the buzz layer the Live Market page shows:
+    the agent's buy path from here executes as a Solana swap, so handing it
+    a token that actually lives on Base or Robinhood Chain would mean
+    trading the wrong thing entirely. The multi-chain result belongs to the
+    display layer (see _resolve_buzz_pairs), which never spends anything.
+
+    Returns the same {'mint', 'symbol', 'source'} shape it always did, so
+    its caller is unchanged."""
+    return [{'mint': c['mint'], 'symbol': c['symbol'], 'source': 'x_buzz'}
+            for c in _resolve_buzz_pairs(tickers, {'solana'})]
 
 def score_token(data: dict) -> tuple:
     """Multi-factor signal scoring. Returns (score 0–10, breakdown dict).
@@ -23746,8 +23811,16 @@ def api_market_surges():
     building history after a restart: nothing is wrong, it just has no
     baseline to compare against yet."""
     try:
+        # The buzz list rides along so the page can show what X is talking
+        # about even when none of it is surging yet. Cached upstream, so
+        # this adds no per-request cost.
+        try:
+            buzz = [{'mint': c['mint'], 'symbol': c.get('symbol', ''), 'chain': c.get('chain', '')}
+                    for c in get_multichain_x_buzz()]
+        except Exception:
+            buzz = []
         return jsonify({'ok': True, 'surges': surge_radar.current_surges(),
-                        'stats': surge_radar.stats()})
+                        'buzz': buzz, 'stats': surge_radar.stats()})
     except Exception as e:
         print(f'[surge-radar] /api/market/surges failed: {e}', flush=True)
         return jsonify({'ok': True, 'surges': [], 'stats': {}})

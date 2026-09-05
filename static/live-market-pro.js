@@ -1024,6 +1024,9 @@ function surgeCardHtml(s){
        + ' data-pair="'+esc(s.pair_address||'')+'" data-chain="'+esc(s.chain||'')+'" data-symbol="'+esc(s.symbol||'')+'">'
     + '<div class="pt-surge-top">'+img
       + '<span class="pt-surge-sym">$'+esc(s.symbol||'?')+'</span>'
+      // Being talked about on X is a bonus signal, never why a token is
+      // here -- the badge only appears on something that already surged.
+      + (s.x_buzz ? '<span class="pt-surge-x" title="Also being talked about on X">𝕏</span>' : '')
       + '<span class="pt-surge-chain">'+esc(s.chain||'')+'</span>'
       + '<span class="pt-surge-mult">'+(s.vol_ratio||0)+'x</span>'
     + '</div>'
