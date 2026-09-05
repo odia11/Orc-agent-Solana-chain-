@@ -565,7 +565,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column}
       <div class="chart-wrap">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
           <div class="chart-title" style="margin-bottom:0">Revenue — Last 7 Days</div>
-          <button class="btn btn-amber" id="collect-btn" onclick="collectFees()">💰 Collect Fees</button>
+          <button class="btn btn-amber" id="collect-btn" data-owner-only onclick="collectFees()">💰 Collect Fees</button>
+          <div id="owner-only-note" style="display:none;font-size:11px;color:var(--muted);max-width:260px;text-align:right"></div>
         </div>
         <div class="chart-bars" id="rev-chart">
           <div class="tbl-loading"><span class="spinner"></span></div>
@@ -1190,6 +1191,24 @@ var _clientSecret = {{ client_secret|tojson }};
 var _loaded = {};
 var _allUsers = [], _allTrades = [], _allRevTx = [];
 var _userRole = 'user';
+/* Being on this page is a role check; the money-moving actions on it are
+   restricted to the OWNER_WALLET specifically. Those two disagreeing is why
+   Collect Fees could sit there fully enabled and answer "Unauthorized" --
+   so the buttons now reflect what this wallet can actually do. */
+var _isOwner = false, _ownerConfigured = true;
+function _applyOwnerUI(){
+  document.querySelectorAll('[data-owner-only]').forEach(function(el){
+    if(_isOwner){ el.style.display = ''; return; }
+    el.style.display = 'none';
+  });
+  var note = document.getElementById('owner-only-note');
+  if(note){
+    note.style.display = _isOwner ? 'none' : '';
+    note.textContent = _ownerConfigured
+      ? 'Fee collection is limited to the owner wallet — you are signed in with a different one.'
+      : 'Fee collection is unavailable: OWNER_WALLET is not configured on the server.';
+  }
+}
 
 // ── ROLE ACCESS ──
 // Every tab listed here must actually be backed by endpoints that role can
@@ -1239,6 +1258,9 @@ function _applyRoleUI(role) {
 async function _initRoleBasedUI() {
   var r = await fetch('/api/admin/whoami', {credentials:'include'}).then(r => r.json()).catch(() => null);
   _userRole = (r && r.ok && r.role) ? r.role : 'user';
+  _isOwner = !!(r && r.is_owner);
+  _ownerConfigured = !!(r && r.owner_configured);
+  _applyOwnerUI();
   _applyRoleUI(_userRole);
   var allowed = _ROLE_TABS[_userRole] || ['overview'];
   var wanted = location.hash === '#support' && allowed.indexOf('support') >= 0 ? 'support' : allowed[0];

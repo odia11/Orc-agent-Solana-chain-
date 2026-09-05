@@ -3146,6 +3146,30 @@ def _is_owner(wallet: str) -> bool:
         return False
     return hmac.compare_digest(wallet.encode(), OWNER_WALLET.encode())
 
+def _owner_denied(wallet: str, action: str = 'This action'):
+    """A 403 that says WHY, for the owner-only admin actions.
+
+    The admin page admits anyone whose ROLE isn't 'user', but these actions
+    check a different thing entirely: whether you are the one OWNER_WALLET.
+    So an admin or moderator could open the page, see the buttons, press one
+    and get a bare "Unauthorized" with nothing to act on -- the two checks
+    disagreeing looked like a broken button rather than a permission.
+
+    Never reveals OWNER_WALLET's value to someone who isn't it; it only says
+    whether it is configured at all, plus the caller's own wallet and role,
+    which they already know."""
+    short = (wallet[:4] + '…' + wallet[-4:]) if wallet and len(wallet) >= 10 else (wallet or 'not signed in')
+    role = get_user_role(wallet) if wallet else 'user'
+    if not OWNER_WALLET:
+        msg = (f'{action} is restricted to the owner wallet, but OWNER_WALLET is not configured '
+               f'on the server — set it in Railway to the wallet you sign in with.')
+    else:
+        msg = (f'{action} is restricted to the owner wallet. You are signed in as {short} '
+               f'(role: {role}), which is not it.')
+    print(f'[admin] owner-only action refused for {short} (role={role}, '
+          f'OWNER_WALLET {"set" if OWNER_WALLET else "NOT set"})', flush=True)
+    return jsonify({'ok': False, 'error': msg, 'owner_only': True}), 403
+
 # ── GLOBAL STATE ──
 def _fresh_daily():
     return {
@@ -24511,6 +24535,11 @@ def api_admin():
             'total_trades':      total_trades,
             'trades_today':      trades_today,
             'owner_configured':  bool(OWNER_WALLET),
+            # Being admitted to this page is a ROLE check; the owner-only
+            # actions on it check something else entirely. Sending this along
+            # lets the page hide the buttons it knows would be refused,
+            # instead of offering them and failing on press.
+            'is_owner':          _is_owner(_authenticated_wallet()),
             'security_log':      sec_log,
         })
     except Exception as e:
@@ -24629,7 +24658,7 @@ def admin_fee_stats():
     _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+        return _owner_denied(wallet, 'Fee statistics')
     today = datetime.datetime.utcnow().strftime('%Y-%m-%d')
     try:
         conn = sqlite3.connect(DB_FILE)
@@ -24661,7 +24690,7 @@ def admin_gas_sponsor():
     _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+        return _owner_denied(wallet, 'The gas sponsor panel')
 
     sponsor_address = _gas_sponsor_address()
     sol_sponsor_address = _sol_gas_sponsor_address()
@@ -24801,7 +24830,7 @@ def admin_collect_fees():
     _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+        return _owner_denied(wallet, 'Collecting fees')
     result = _recover_uncollected_fees(triggered_by='admin-panel')
     if result.get('ok'):
         return jsonify({'ok': True, 'msg': f"Collected {result.get('total_sol', 0):.4f} SOL",
@@ -25261,7 +25290,7 @@ def admin_recover_fees():
     _log_readonly_attempt()
     wallet = _authenticated_wallet()
     if not wallet or not _is_owner(wallet):
-        return jsonify({'error': 'Unauthorized'}), 403
+        return _owner_denied(wallet, 'Recovering fees')
     result = _recover_uncollected_fees(triggered_by='admin-button')
     status = 200 if result.get('ok') else 500
     return jsonify(result), status
@@ -25675,7 +25704,11 @@ def admin_whoami():
     role = get_user_role(wallet)
     if role == 'user':
         return jsonify({'ok': False, 'msg': 'Forbidden'}), 403
-    return jsonify({'ok': True, 'wallet': wallet, 'role': role})
+    # Role admits you to the page; being the OWNER_WALLET is a separate,
+    # stricter check that the money-moving actions on it use. The page needs
+    # both so it can hide buttons it already knows would be refused.
+    return jsonify({'ok': True, 'wallet': wallet, 'role': role,
+                    'is_owner': _is_owner(wallet), 'owner_configured': bool(OWNER_WALLET)})
 
 
 @app.route('/api/admin/roles', methods=['GET'])
@@ -26529,6 +26562,10 @@ threading.Thread(target=surge_radar.surge_loop, daemon=True).start()
 # Tells the operator, at a glance, which address to keep funded with native
 # gas on each EVM chain (or that sponsorship is simply off). Never prints the
 # key itself -- only the public address derived from it.
+if not OWNER_WALLET:
+    print('[startup] ⚠ OWNER_WALLET is not set — every owner-only admin action '
+          '(Collect Fees, key rotation, the gas sponsor panel) will refuse for everyone, '
+          'including you. Set it in Railway to the wallet you sign in with.', flush=True)
 _gs_addr = _gas_sponsor_address()
 print(f'[startup] gas sponsor wallet (EVM): {_gs_addr} — keep this funded with native gas on each EVM chain'
       if _gs_addr else
